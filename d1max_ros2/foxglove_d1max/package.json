@@ -1,0 +1,31 @@
+{
+  "name": "d1max-console",
+  "displayName": "D1 Max 状态监控",
+  "description": "状态监控、静态 PCD 与实时感知；仅保留单向软件急停",
+  "publisher": "dndx",
+  "version": "0.7.4",
+  "license": "UNLICENSED",
+  "main": "dist/extension.js",
+  "files": ["dist", "layouts", "SINGLE_FLOOR_MAPS.md"],
+  "scripts": {
+    "build": "tsc --noEmit && node scripts/build-layout.mjs && node scripts/build-live-layout.mjs && node scripts/build-monitor-layout.mjs && node scripts/build.mjs",
+    "test": "tsx --test tests/*.test.ts",
+    "preview": "node scripts/preview.mjs",
+    "package": "foxglove-extension package",
+    "local-install": "foxglove-extension install"
+  },
+  "dependencies": {
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "lucide-react": "1.43.0"
+  },
+  "devDependencies": {
+    "@foxglove/extension": "3.1.1",
+    "@types/react": "19.2.2",
+    "@types/react-dom": "19.2.2",
+    "create-foxglove-extension": "1.3.2",
+    "esbuild": "0.25.9",
+    "typescript": "5.9.2",
+    "tsx": "4.20.5"
+  }
+}

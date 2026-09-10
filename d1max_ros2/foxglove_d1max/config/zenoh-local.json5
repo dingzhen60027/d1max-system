@@ -1,0 +1,6 @@
+{
+  mode: "client",
+  connect: { endpoints: ["tcp/127.0.0.1:7447"], exit_on_failure: true },
+  scouting: { multicast: { enabled: false }, gossip: { enabled: false } },
+  timestamping: { enabled: true, drop_future_timestamp: false },
+}

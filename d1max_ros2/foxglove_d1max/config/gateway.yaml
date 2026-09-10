@@ -1,0 +1,12 @@
+# Default is monitoring only. Live controls require explicit --live-controls.
+namespace: /d1max/console
+sdk_namespace: /d1max_sdk_bridge
+cmd_vel_output: /d1max/console/guarded_velocity
+state_stale_seconds: 2.5
+lease_seconds: 1.5
+command_timeout_seconds: 0.25
+service_timeout_seconds: 4.0
+max_forward: 0.30
+max_lateral: 0.20
+max_yaw: 0.50
+status_hz: 5

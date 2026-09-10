@@ -1,0 +1,14 @@
+# 仅用于可视化。不会修改 PCD，也不会发布 map -> odom 或机器人定位 TF。
+# 可以添加多个已分层 PCD；不同地图只有经测量配准后才可以共用 frame_id。
+# 修改文件后重启 start_live_monitor.sh；也可单独重启地图发布器。
+enabled: true  # 只显示已核对的单楼层候选，不加载历史多层地图。
+node_name: d1max_floor1_map_view
+status_topic: /d1max/maps/floor1/status
+publish_period_seconds: 10
+maps:
+  - id: floor1
+    label: "单层候选 PCD · SC-PGO · 08-25"
+    path: /home/dndx/d1max_nav_ws/maps/runs/20260825_235024/sc_pgo/optimized_map.pcd
+    frame_id: d1max_floor1_map
+    voxel_size: 0.0  # 0 = 显示全部有效点；非零只降低显示密度，不改原文件
+    # 这次日志没有接受回环；文件名 optimized 不表示回环成功。

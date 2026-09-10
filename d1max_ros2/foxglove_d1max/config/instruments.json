@@ -1,0 +1,12 @@
+{
+  "sceneHeightPercent": 68,
+  "bottomCamerasWidthPercent": 40,
+  "bottomPlotsRemainingPercent": 50,
+  "batteryGroupWidthPercent": 50,
+  "batteryColorMap": "red-yellow-green",
+  "linearRange": 1,
+  "yawRange": 1,
+  "historySeconds": 30,
+  "blue": "#55b9ec",
+  "gold": "#edbc71"
+}

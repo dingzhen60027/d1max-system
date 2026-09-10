@@ -1,0 +1,23 @@
+/build/
+/install/
+/log/
+
+# Runtime maps and recordings are large generated artifacts.
+/maps/*
+!/maps/.gitkeep
+*.pcd
+*.bag
+*.db3
+*.mcap
+
+# Faster-LIO writes its trajectory to this fixed source-tree directory.
+/src/faster_lio/Log/*
+!/src/faster_lio/Log/.gitkeep
+
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.vscode/
+.idea/
+*~
+

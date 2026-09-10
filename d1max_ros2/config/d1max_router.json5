@@ -1,0 +1,36 @@
+{
+  mode: "router",
+
+  connect: {
+    endpoints: [
+      "tcp/192.168.168.100:7447"
+    ],
+    exit_on_failure: false,
+  },
+
+  listen: {
+    endpoints: [
+      "tcp/[::]:7447"
+    ],
+    exit_on_failure: true,
+  },
+
+  scouting: {
+    multicast: {
+      enabled: false,
+    },
+    gossip: {
+      enabled: true,
+      multihop: false,
+    },
+  },
+
+  timestamping: {
+    enabled: {
+      router: true,
+      peer: true,
+      client: true,
+    },
+    drop_future_timestamp: false,
+  },
+}

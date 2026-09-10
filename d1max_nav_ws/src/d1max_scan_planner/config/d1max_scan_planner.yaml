@@ -1,0 +1,76 @@
+/d1max/scan/scan_planner_node:
+  ros__parameters:
+    use_sim_time: false
+
+    # 1: RViz PoseStamped goal, 2: preset keypoints, 3: external 3D path.
+    fsm.navi_mode: 1
+    fsm.thresh_replan: 1.0
+    fsm.thresh_no_replan: 0.15
+    fsm.planning_horizon: 6.0
+    fsm.emergency_time: 1.2
+    fsm.fail_safe: true
+    fsm.max_replan_fail_count: 1000
+
+    # Rolling 3D map for the two Airy96 lidars. The LIO cloud is already in map.
+    grid_map.resolution: 0.08
+    grid_map.sliding_map_size_x: 12.0
+    grid_map.sliding_map_size_y: 12.0
+    grid_map.sliding_map_size_z: 6.4
+    grid_map.local_update_range_x: 6.0
+    grid_map.local_update_range_y: 6.0
+    grid_map.local_update_range_z: 3.2
+    grid_map.map_sliding_en: true
+    grid_map.map_sliding_thresh: 0.32
+
+    # Conservative D1 Max envelope from the supplied URDF.
+    # Two radius-0.29 m cylinders at x=+/-0.20 m: 0.98 x 0.58 m footprint.
+    grid_map.double_cylinder_radius: 0.29
+    grid_map.double_cylinder_offset: 0.20
+    grid_map.body_height: 0.55
+    grid_map.obstacles_inflation_z_up: 0.15
+    grid_map.obstacles_inflation_z_down: 0.45
+
+    grid_map.frame_id: map
+    grid_map.sliding_map_frame_id: d1max_scan_local
+    # LIO starts at sensor height, so include the floor below the initial origin.
+    grid_map.ground_height: -0.8
+    grid_map.sensor_type: lidar
+    grid_map.cloud_is_world: true
+    grid_map.need_extrinsic: false
+
+    # Unused in lidar mode, retained because plan_env declares the full schema.
+    grid_map.cx: 321.04638671875
+    grid_map.cy: 243.44969177246094
+    grid_map.fx: 387.229248046875
+    grid_map.fy: 387.229248046875
+    grid_map.depth_filter_maxdist: 8.0
+    grid_map.depth_filter_mindist: 0.25
+    grid_map.depth_filter_margin: 1
+    grid_map.k_depth_scaling_factor: 1000.0
+    grid_map.skip_pixel: 2
+
+    grid_map.p_hit: 0.85
+    grid_map.p_miss: 0.30
+    grid_map.p_min: 0.12
+    grid_map.p_max: 0.98
+    grid_map.p_occ: 0.80
+    grid_map.max_ray_length: 8.0
+    grid_map.vis_height: 0.35
+    grid_map.show_occ_time: false
+
+    # Initial planning limits are deliberately below the robot's control limits.
+    manager.max_vel: 0.45
+    manager.max_acc: 0.35
+    manager.max_jerk: 2.0
+    manager.control_points_distance: 0.20
+    manager.feasibility_tolerance: 0.35
+    manager.planning_horizon: 6.0
+
+    optimization.lambda_smooth: 1.0
+    optimization.lambda_collision: 1.5
+    optimization.lambda_feasibility: 0.2
+    optimization.lambda_fitness: 1.0
+    optimization.dist0: 0.28
+    optimization.max_vel: 0.45
+    optimization.max_acc: 0.35
+    optimization.order: 3

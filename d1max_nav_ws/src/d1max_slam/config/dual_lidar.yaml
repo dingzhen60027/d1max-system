@@ -1,0 +1,23 @@
+dual_lidar_adapter:
+  ros__parameters:
+    front_topic: /front_lidar
+    rear_topic: /rear_lidar
+    # dual is the production default. front/rear are isolated bag diagnostics.
+    lidar_mode: dual
+    input_imu_topic: /front_lidar/imu
+    output_cloud_topic: /d1max/slam/points
+    output_livox_topic: /d1max/slam/livox_points
+    output_imu_topic: /d1max/slam/imu
+    # Airy96 native coordinates are Y-up.  The launch file provides this
+    # ROS-standard Z-up frame and TF transforms both clouds into it.
+    target_frame: d1max_lidar
+    # Normal front/rear skew is about 0.02 ms. Reject a stale scan instead of
+    # pairing it after one LiDAR drops a 100 ms frame.
+    max_sync_delta_sec: 0.005
+    transform_timeout_sec: 0.15
+    scan_period_sec: 0.10
+    relative_timestamp_scale: 1.0
+    min_range: 0.35
+    max_range: 120.0
+    rear_ring_offset: 96
+    imu_acceleration_scale: 9.80665

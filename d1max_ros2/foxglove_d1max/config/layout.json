@@ -1,0 +1,32 @@
+{
+  "name": "D1 Max · 感知工作台",
+  "frontImageTopic": "/front_camera/image_compressed",
+  "rearImageTopic": "/rear_camera/image_compressed",
+  "frontCloudTopic": "/front_lidar",
+  "rearCloudTopic": "/rear_lidar",
+  "frontImuTopic": "/front_lidar/imu",
+  "rearImuTopic": "/rear_lidar/imu",
+  "displayFrame": "d1max_lidar",
+  "frontFrame": "rslidar_head",
+  "rearFrame": "rslidar_tail",
+  "frontRotation": [
+    -0.499867275,
+    0.50318662,
+    0.49795331,
+    0.498977388
+  ],
+  "rearRotation": [
+    1,
+    0,
+    0,
+    0
+  ],
+  "rearTranslation": [
+    0,
+    0,
+    -0.7323
+  ],
+  "topHeightPercent": 66,
+  "sceneWidthPercent": 76,
+  "distance": 24
+}

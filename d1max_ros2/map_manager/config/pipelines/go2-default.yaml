@@ -1,0 +1,37 @@
+schema: d1max.pointcloud_pipeline/v1
+id: go2-default
+name: Go2 默认滤波
+description: 兼容之前参考 Go2 的参数；0.15 m 体素对建筑细节较强，建议先对比后使用。
+input:
+  path: null
+  format: pcd
+  required_fields: [x, y, z]
+output:
+  path: null
+  format: pcd
+  storage: binary
+  preserve_intensity: true
+modules:
+  - id: crop-height
+    type: crop_z
+    enabled: false
+    parameters:
+      min_z: -10.0
+      max_z: 10.0
+  - id: statistical-filter
+    type: statistical_outlier
+    enabled: true
+    parameters:
+      neighbors: 20
+      std_ratio: 0.5
+  - id: radius-filter
+    type: radius_outlier
+    enabled: true
+    parameters:
+      radius: 0.3
+      min_points: 4
+  - id: voxel-output
+    type: voxel_downsample
+    enabled: true
+    parameters:
+      voxel_size: 0.15

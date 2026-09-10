@@ -1,0 +1,38 @@
+schema: d1max.pointcloud_pipeline/v1
+id: structural-preservation
+name: 结构保真（推荐）
+description: 先以 5 cm 体素均匀密度，再进行保守离群点清理；适合作为建筑主体和全局规划的起点。
+recommended: true
+input:
+  path: null
+  format: pcd
+  required_fields: [x, y, z]
+output:
+  path: null
+  format: pcd
+  storage: binary
+  preserve_intensity: true
+modules:
+  - id: crop-height
+    type: crop_z
+    enabled: false
+    parameters:
+      min_z: -10.0
+      max_z: 10.0
+  - id: uniform-density
+    type: voxel_downsample
+    enabled: true
+    parameters:
+      voxel_size: 0.05
+  - id: remove-statistical-noise
+    type: statistical_outlier
+    enabled: true
+    parameters:
+      neighbors: 24
+      std_ratio: 1.2
+  - id: remove-isolated-noise
+    type: radius_outlier
+    enabled: true
+    parameters:
+      radius: 0.16
+      min_points: 6

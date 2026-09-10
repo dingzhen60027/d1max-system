@@ -1,0 +1,15 @@
+.d1-panel{--bg:#18191e;--surface:#202229;--line:#333842;--ink:#dfe7ed;--muted:#818b9a;--blue:#55b9ec;--red:#f48287;box-sizing:border-box;width:100%;height:100%;min-width:0;padding:12px;display:flex;flex-direction:column;gap:12px;background:var(--bg);color:var(--ink);font:14px/1.3 Inter,"Noto Sans CJK SC",system-ui,sans-serif;color-scheme:dark}
+.d1-panel.d1-light{--bg:#fff;--surface:#f2f5f8;--line:#d5dde5;--ink:#24374a;--muted:#6b7784;--blue:#0877b2;--red:#bd2839;color-scheme:light}
+.d1-panel *{box-sizing:border-box}.d1-signals{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));grid-template-rows:repeat(2,minmax(0,1fr));gap:8px;flex:1;min-height:0}
+.d1-signal{position:relative;display:flex;align-items:center;justify-content:center;min-width:0;min-height:32px;border:1px solid var(--line);border-radius:9px;background:var(--surface);color:var(--muted)}
+.d1-signal>svg,.d1-map-symbol>svg:first-child{width:clamp(24px,10cqw,38px);height:clamp(24px,10cqw,38px);stroke-width:1.6}
+.d1-signal.good{color:var(--blue)}.d1-signal.stop{color:var(--red);border-color:color-mix(in srgb,var(--red) 40%,var(--line));background:color-mix(in srgb,var(--red) 8%,var(--surface))}
+.d1-signal-mark{position:absolute;right:4px;bottom:3px;display:flex;background:var(--surface);border-radius:50%}.d1-signal-mark svg{width:13px;height:13px;stroke-width:2.5}
+.d1-map-symbol{position:relative;display:flex}.d1-map-symbol>svg:last-child{width:18px;height:18px;position:absolute;bottom:-5px;right:-9px;background:var(--surface)}
+.d1-crouched{transform:scaleY(.62);transform-origin:center 70%}
+.d1-panel .d1-estop{display:flex;align-items:center;justify-content:center;gap:12px;min-height:52px;flex-shrink:0;border:1px solid #a94450;border-radius:10px;background:#512730;color:#ffb3ba;font-family:inherit;font-size:16px;font-weight:600;cursor:pointer;letter-spacing:1px}
+.d1-estop>svg{width:27px;height:27px;stroke-width:2}.d1-panel .d1-estop:disabled{cursor:not-allowed;background:var(--surface);border-color:var(--line);color:var(--muted)}
+.d1-panel .d1-estop.is-stopped{color:var(--red);border-color:color-mix(in srgb,var(--red) 65%,var(--line));background:color-mix(in srgb,var(--red) 14%,var(--bg))}
+.d1-panel .d1-estop:not(:disabled):hover{background:#70303c}.d1-panel .d1-estop:focus-visible{outline:3px solid var(--blue);outline-offset:2px}.d1-light .d1-estop:not(:disabled){background:#ffe5e8;color:#a52332}
+.d1-pending{animation:d1-spin 1s linear infinite}@keyframes d1-spin{to{transform:rotate(360deg)}}@media(prefers-reduced-motion:reduce){.d1-pending{animation:none}}
+@container(max-width:260px){.d1-panel{padding:8px;gap:8px}.d1-signals{gap:5px}.d1-panel .d1-estop{min-height:44px}}

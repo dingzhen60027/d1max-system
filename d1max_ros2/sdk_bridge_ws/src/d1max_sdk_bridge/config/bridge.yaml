@@ -1,0 +1,16 @@
+d1max_sdk_bridge:
+  ros__parameters:
+    robot_ip: "192.168.168.168"
+    robot_port: 8081
+    connect_timeout_ms: 5000
+    reconnect_interval_ms: 1000
+    command_timeout_ms: 3000
+    transition_timeout_sec: 15.0
+    robot_state_stale_sec: 2.5
+    cmd_vel_topic: "/cmd_vel"
+    cmd_vel_timeout_sec: 0.30
+    cmd_vel_rate_hz: 20.0
+    max_forward_speed: 0.45
+    max_lateral_speed: 0.35
+    max_yaw_speed: 0.80
+    navigation_speed_level: 1

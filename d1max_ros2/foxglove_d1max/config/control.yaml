@@ -1,0 +1,12 @@
+# Console-only SDK adapter. No automatic motion, control acquisition or recovery.
+d1max_sdk_bridge:
+  ros__parameters:
+    robot_ip: "192.168.168.168"
+    robot_port: 8081
+    state_stale_seconds: 2.5
+    lease_timeout_seconds: 0.6
+    command_timeout_seconds: 0.25
+    transition_timeout_seconds: 15.0
+    max_forward: 0.30
+    max_lateral: 0.20
+    max_yaw: 0.50

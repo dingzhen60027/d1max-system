@@ -1,0 +1,4 @@
+fastapi==0.141.1
+uvicorn[standard]==0.52.1
+PyYAML>=5.4
+open3d>=0.14

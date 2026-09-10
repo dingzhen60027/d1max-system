@@ -1,0 +1,44 @@
+Panels:
+  - Class: rviz_common/Displays
+    Name: Displays
+Visualization Manager:
+  Class: ""
+  Global Options:
+    Background Color: 20; 24; 28
+    Fixed Frame: map
+  Displays:
+    - Class: rviz_default_plugins/Grid
+      Name: Grid
+      Enabled: true
+      Plane: XY
+      Cell Size: 1
+    - Class: rviz_default_plugins/PointCloud2
+      Name: PCT Global Map
+      Enabled: true
+      Topic:
+        Value: /pct/global_map
+      Size (Pixels): 2
+      Style: Points
+      Color Transformer: AxisColor
+      Axis: Z
+    - Class: rviz_default_plugins/Path
+      Name: PCT Global Path
+      Enabled: true
+      Topic:
+        Value: /pct/global_path
+      Line Style: Lines
+      Line Width: 0.08
+      Color: 255; 196; 0
+  Tools:
+    - Class: rviz_default_plugins/Interact
+    - Class: rviz_default_plugins/MoveCamera
+    - Class: rviz_default_plugins/Select
+  Views:
+    Current:
+      Class: rviz_default_plugins/Orbit
+      Distance: 35
+      Pitch: 0.65
+      Yaw: 0.8
+Window Geometry:
+  Width: 1600
+  Height: 1000

@@ -1,0 +1,12 @@
+{
+  "robotName": "D1 Max",
+  "stateTopic": "/d1max_sdk_bridge/robot_state",
+  "behaviorTopic": "/d1max_sdk_bridge/behavior_state",
+  "connectionTopic": "/d1max_sdk_bridge/connection_state_text",
+  "faultTopic": "/d1max_sdk_bridge/faults",
+  "eventTopic": "/d1max_sdk_bridge/transition_event",
+  "velocityTopic": "/d1max_sdk_bridge/velocity",
+  "gatewayTopic": "/d1max/monitor/status",
+  "mapTopic": "/d1max/maps/floor1/status",
+  "staleSeconds": 2.5
+}

@@ -1,0 +1,467 @@
+{
+  "configById": {
+    "Tab!d1workspace": {
+      "activeTabIdx": 0,
+      "tabs": [
+        {
+          "title": "感知总览",
+          "layout": {
+            "direction": "row",
+            "first": {
+              "direction": "column",
+              "first": "3D!d1scene",
+              "second": {
+                "direction": "row",
+                "first": {
+                  "direction": "row",
+                  "first": "Image!d1front",
+                  "second": "Image!d1rear",
+                  "splitPercentage": 50
+                },
+                "second": "Plot!d1speed",
+                "splitPercentage": 68
+              },
+              "splitPercentage": 66
+            },
+            "second": "d1max-console.D1 状态监控!d1status",
+            "splitPercentage": 76
+          }
+        },
+        {
+          "title": "状态诊断",
+          "layout": {
+            "direction": "row",
+            "first": {
+              "direction": "column",
+              "first": "Plot!d1linear",
+              "second": "Plot!d1yaw",
+              "splitPercentage": 50
+            },
+            "second": {
+              "direction": "column",
+              "first": "Plot!d1battery",
+              "second": "RawMessages!d1state",
+              "splitPercentage": 50
+            },
+            "splitPercentage": 64
+          }
+        },
+        {
+          "title": "雷达与 IMU",
+          "layout": {
+            "direction": "row",
+            "first": "3D!d1inspect",
+            "second": {
+              "direction": "column",
+              "first": "Plot!d1imu",
+              "second": "RawMessages!d1imu",
+              "splitPercentage": 50
+            },
+            "splitPercentage": 65
+          }
+        }
+      ]
+    },
+    "3D!d1scene": {
+      "cameraState": {
+        "distance": 24,
+        "perspective": true,
+        "phi": 55,
+        "target": [
+          0,
+          0,
+          0
+        ],
+        "targetOffset": [
+          0,
+          0,
+          0
+        ],
+        "targetOrientation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "thetaOffset": 135,
+        "fovy": 45,
+        "near": 0.1,
+        "far": 5000
+      },
+      "followMode": "follow-pose",
+      "scene": {
+        "backgroundColor": "#111218",
+        "meshUpAxis": "z_up"
+      },
+      "transforms": {},
+      "topics": {
+        "/front_lidar": {
+          "visible": true,
+          "colorMode": "colormap",
+          "colorField": "z",
+          "colorMap": "turbo",
+          "pointSize": 2,
+          "minValue": -2,
+          "maxValue": 4,
+          "decayTime": 0
+        },
+        "/rear_lidar": {
+          "visible": true,
+          "colorMode": "colormap",
+          "colorField": "z",
+          "colorMap": "turbo",
+          "pointSize": 2,
+          "minValue": -2,
+          "maxValue": 4,
+          "decayTime": 0
+        }
+      },
+      "layers": {
+        "d1-grid": {
+          "visible": true,
+          "frameLocked": true,
+          "label": "地面参考 · 1 m",
+          "instanceId": "d1-grid",
+          "layerId": "foxglove.Grid",
+          "size": 50,
+          "divisions": 50,
+          "lineWidth": 1,
+          "color": "#343641",
+          "position": [
+            0,
+            0,
+            -0.8
+          ],
+          "rotation": [
+            0,
+            0,
+            0
+          ],
+          "order": 1
+        }
+      },
+      "synchronize": false,
+      "imageMode": {},
+      "foxglovePanelTitle": "双雷达 · 3D 感知",
+      "followTf": "d1max_lidar"
+    },
+    "3D!d1inspect": {
+      "cameraState": {
+        "distance": 24,
+        "perspective": true,
+        "phi": 55,
+        "target": [
+          0,
+          0,
+          0
+        ],
+        "targetOffset": [
+          0,
+          0,
+          0
+        ],
+        "targetOrientation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "thetaOffset": 135,
+        "fovy": 45,
+        "near": 0.1,
+        "far": 5000
+      },
+      "followMode": "follow-pose",
+      "scene": {
+        "backgroundColor": "#111218",
+        "meshUpAxis": "z_up"
+      },
+      "transforms": {},
+      "topics": {
+        "/front_lidar": {
+          "visible": true,
+          "colorMode": "colormap",
+          "colorField": "z",
+          "colorMap": "turbo",
+          "pointSize": 2,
+          "minValue": -2,
+          "maxValue": 4,
+          "decayTime": 0
+        },
+        "/rear_lidar": {
+          "visible": true,
+          "colorMode": "colormap",
+          "colorField": "z",
+          "colorMap": "turbo",
+          "pointSize": 2,
+          "minValue": -2,
+          "maxValue": 4,
+          "decayTime": 0
+        }
+      },
+      "layers": {
+        "d1-grid": {
+          "visible": true,
+          "frameLocked": true,
+          "label": "地面参考 · 1 m",
+          "instanceId": "d1-grid",
+          "layerId": "foxglove.Grid",
+          "size": 50,
+          "divisions": 50,
+          "lineWidth": 1,
+          "color": "#343641",
+          "position": [
+            0,
+            0,
+            -0.8
+          ],
+          "rotation": [
+            0,
+            0,
+            0
+          ],
+          "order": 1
+        }
+      },
+      "synchronize": false,
+      "imageMode": {},
+      "foxglovePanelTitle": "双雷达 · 标定检查",
+      "followTf": "d1max_lidar"
+    },
+    "d1max-console.D1 状态监控!d1status": {
+      "config": {
+        "robotName": "D1 Max",
+        "stateTopic": "/d1max_sdk_bridge/robot_state",
+        "behaviorTopic": "/d1max_sdk_bridge/behavior_state",
+        "connectionTopic": "/d1max_sdk_bridge/connection_state_text",
+        "faultTopic": "/d1max_sdk_bridge/faults",
+        "eventTopic": "/d1max_sdk_bridge/transition_event",
+        "velocityTopic": "/d1max_sdk_bridge/velocity",
+        "gatewayTopic": "/d1max/monitor/status",
+        "mapTopic": "/d1max/maps/floor1/status",
+        "staleSeconds": 2.5
+      },
+      "foxglovePanelTitle": "D1 Max · 状态监控"
+    },
+    "Image!d1front": {
+      "cameraState": {
+        "distance": 24,
+        "perspective": true,
+        "phi": 55,
+        "target": [
+          0,
+          0,
+          0
+        ],
+        "targetOffset": [
+          0,
+          0,
+          0
+        ],
+        "targetOrientation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "thetaOffset": 135,
+        "fovy": 45,
+        "near": 0.1,
+        "far": 5000
+      },
+      "followMode": "follow-pose",
+      "scene": {
+        "backgroundColor": "#111218",
+        "meshUpAxis": "z_up"
+      },
+      "transforms": {},
+      "topics": {},
+      "layers": {},
+      "synchronize": false,
+      "imageMode": {
+        "imageTopic": "/front_camera/image_compressed"
+      },
+      "foxglovePanelTitle": "前视相机"
+    },
+    "Image!d1rear": {
+      "cameraState": {
+        "distance": 24,
+        "perspective": true,
+        "phi": 55,
+        "target": [
+          0,
+          0,
+          0
+        ],
+        "targetOffset": [
+          0,
+          0,
+          0
+        ],
+        "targetOrientation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "thetaOffset": 135,
+        "fovy": 45,
+        "near": 0.1,
+        "far": 5000
+      },
+      "followMode": "follow-pose",
+      "scene": {
+        "backgroundColor": "#111218",
+        "meshUpAxis": "z_up"
+      },
+      "transforms": {},
+      "topics": {},
+      "layers": {},
+      "synchronize": false,
+      "imageMode": {
+        "imageTopic": "/rear_camera/image_compressed"
+      },
+      "foxglovePanelTitle": "后视相机"
+    },
+    "Plot!d1speed": {
+      "foxglovePanelTitle": "平移速度 · m/s",
+      "paths": [
+        {
+          "value": "/d1max/view/telemetry.forward_speed",
+          "label": "纵向",
+          "color": "#ab94f7",
+          "enabled": true,
+          "timestampMethod": "receiveTime"
+        },
+        {
+          "value": "/d1max/view/telemetry.lateral_speed",
+          "label": "横向",
+          "color": "#50c8a4",
+          "enabled": true,
+          "timestampMethod": "receiveTime"
+        }
+      ],
+      "showLegend": true,
+      "legendDisplay": "top",
+      "isSynced": true,
+      "xAxisVal": "timestamp",
+      "followingViewWidth": 30
+    },
+    "Plot!d1linear": {
+      "foxglovePanelTitle": "纵向 / 横向速度 · m/s",
+      "paths": [
+        {
+          "value": "/d1max/view/telemetry.forward_speed",
+          "label": "纵向",
+          "color": "#ab94f7",
+          "enabled": true,
+          "timestampMethod": "receiveTime"
+        },
+        {
+          "value": "/d1max/view/telemetry.lateral_speed",
+          "label": "横向",
+          "color": "#50c8a4",
+          "enabled": true,
+          "timestampMethod": "receiveTime"
+        }
+      ],
+      "showLegend": true,
+      "legendDisplay": "top",
+      "isSynced": true,
+      "xAxisVal": "timestamp",
+      "followingViewWidth": 30
+    },
+    "Plot!d1yaw": {
+      "foxglovePanelTitle": "转向速度 · rad/s",
+      "paths": [
+        {
+          "value": "/d1max/view/telemetry.yaw_speed",
+          "label": "转向",
+          "color": "#edbc71",
+          "enabled": true,
+          "timestampMethod": "receiveTime"
+        }
+      ],
+      "showLegend": true,
+      "legendDisplay": "top",
+      "isSynced": true,
+      "xAxisVal": "timestamp",
+      "followingViewWidth": 30
+    },
+    "Plot!d1battery": {
+      "foxglovePanelTitle": "双电池电量 · %",
+      "paths": [
+        {
+          "value": "/d1max/view/telemetry.battery_power_1",
+          "label": "电池 1",
+          "color": "#ab94f7",
+          "enabled": true,
+          "timestampMethod": "receiveTime"
+        },
+        {
+          "value": "/d1max/view/telemetry.battery_power_2",
+          "label": "电池 2",
+          "color": "#50c8a4",
+          "enabled": true,
+          "timestampMethod": "receiveTime"
+        }
+      ],
+      "showLegend": true,
+      "legendDisplay": "top",
+      "isSynced": true,
+      "xAxisVal": "timestamp",
+      "followingViewWidth": 30,
+      "minYValue": 0,
+      "maxYValue": 100
+    },
+    "RawMessages!d1state": {
+      "topicPath": "/d1max/view/telemetry",
+      "defaultExpanded": true,
+      "foxglovePanelTitle": "SDK 遥测 · 只读解析"
+    },
+    "Plot!d1imu": {
+      "foxglovePanelTitle": "双 IMU · 角速度 Z · rad/s",
+      "paths": [
+        {
+          "value": "/front_lidar/imu.angular_velocity.z",
+          "label": "前雷达",
+          "color": "#ab94f7",
+          "enabled": true,
+          "timestampMethod": "receiveTime"
+        },
+        {
+          "value": "/rear_lidar/imu.angular_velocity.z",
+          "label": "后雷达",
+          "color": "#50c8a4",
+          "enabled": true,
+          "timestampMethod": "receiveTime"
+        }
+      ],
+      "showLegend": true,
+      "legendDisplay": "top",
+      "isSynced": true,
+      "xAxisVal": "timestamp",
+      "followingViewWidth": 30
+    },
+    "RawMessages!d1imu": {
+      "topicPath": "/front_lidar/imu",
+      "defaultExpanded": false,
+      "foxglovePanelTitle": "前雷达 IMU"
+    }
+  },
+  "globalVariables": {},
+  "userNodes": {
+    "d1-telemetry": {
+      "name": "D1 SDK 遥测解析（只读）",
+      "sourceCode": "// Foxglove-local structured telemetry: does NOT publish ROS messages.\nimport { Input } from \"./types.ts\";\nexport const inputs = [\"/d1max_sdk_bridge/robot_state\"];\nexport const output = \"/d1max/view/telemetry\";\ntype Telemetry = {forward_speed:number;lateral_speed:number;yaw_speed:number;battery_power_1:number;battery_power_2:number;motion_status:number;control_source:number};\nexport default function script(event:Input<\"/d1max_sdk_bridge/robot_state\">):Telemetry|undefined {\n  try {\n    const r=JSON.parse(event.message.data);\n    if (!r || typeof r!==\"object\" || Array.isArray(r)) return;\n    const finite=(v:unknown):number=>typeof v===\"number\"&&Number.isFinite(v)?v:NaN;\n    return {forward_speed:finite(r.forward_speed),lateral_speed:finite(r.lateral_speed),yaw_speed:finite(r.yaw_speed),battery_power_1:finite(r.battery_power_1),battery_power_2:finite(r.battery_power_2),motion_status:finite(r.motion_status),control_source:finite(r.control_source)};\n  } catch { return; }\n}\n"
+    },
+    "d1-calibration": {
+      "name": "D1 双雷达显示标定（不发布 ROS）",
+      "sourceCode": "// Display-only calibration copied from D1 mapping launch; no ROS /tf publisher.\n// Sensor/TF header times differ from bag receive times; no verified base-to-lidar link.\n// This view intentionally shows sensor-local perception, not SLAM odometry.\nimport { Input, Message } from \"./types.ts\";\nexport const inputs = [\"/front_lidar\",\"/rear_lidar\"];\nexport const output = \"/d1max/view/calibration\";\nconst c = {\"name\":\"D1 Max · 感知工作台\",\"frontImageTopic\":\"/front_camera/image_compressed\",\"rearImageTopic\":\"/rear_camera/image_compressed\",\"frontCloudTopic\":\"/front_lidar\",\"rearCloudTopic\":\"/rear_lidar\",\"frontImuTopic\":\"/front_lidar/imu\",\"rearImuTopic\":\"/rear_lidar/imu\",\"displayFrame\":\"d1max_lidar\",\"frontFrame\":\"rslidar_head\",\"rearFrame\":\"rslidar_tail\",\"frontRotation\":[-0.499867275,0.50318662,0.49795331,0.498977388],\"rearRotation\":[1,0,0,0],\"rearTranslation\":[0,0,-0.7323],\"topHeightPercent\":66,\"sceneWidthPercent\":76,\"distance\":24};\nexport default function script(event:Input<\"/front_lidar\">|Input<\"/rear_lidar\">):Message<\"tf2_msgs/msg/TFMessage\"> {\n  const stamp=event.message.header.stamp;\n  return {transforms:[\n    {header:{stamp,frame_id:c.displayFrame},child_frame_id:c.frontFrame,transform:{translation:{x:0,y:0,z:0},rotation:{x:c.frontRotation[0],y:c.frontRotation[1],z:c.frontRotation[2],w:c.frontRotation[3]}}},\n    {header:{stamp,frame_id:c.frontFrame},child_frame_id:c.rearFrame,transform:{translation:{x:c.rearTranslation[0],y:c.rearTranslation[1],z:c.rearTranslation[2]},rotation:{x:c.rearRotation[0],y:c.rearRotation[1],z:c.rearRotation[2],w:c.rearRotation[3]}}}\n  ]};\n}\n"
+    }
+  },
+  "playbackConfig": {
+    "speed": 1
+  },
+  "layout": "Tab!d1workspace"
+}

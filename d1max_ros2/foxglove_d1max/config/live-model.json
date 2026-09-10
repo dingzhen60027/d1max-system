@@ -1,0 +1,11 @@
+{
+  "name": "D1 Max · 实机工作台",
+  "urdfUrl": "http://127.0.0.1:8770/max_description/urdf/max.urdf",
+  "framePrefix": "d1max_model/",
+  "rootLink": "BASE_LINK",
+  "frontMountXYZ": [0.4043, 0.0, -0.0377],
+  "mainViewDistance": 9,
+  "modelViewDistance": 2.5,
+  "poseLabel": "URDF 参考姿态 · 无关节反馈",
+  "alignmentNote": "机体朝向由已用双雷达基线推导，挂载位置按 CAD 前雷达原点近似，仅用于显示，不用于规划或控制。"
+}

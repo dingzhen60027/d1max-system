@@ -1,0 +1,82 @@
+Panels:
+  - Class: rviz_common/Displays
+    Name: Displays
+  - Class: rviz_common/Views
+    Name: Views
+Visualization Manager:
+  Class: ""
+  Displays:
+    - Alpha: 0.45
+      Cell Size: 1
+      Class: rviz_default_plugins/Grid
+      Color: 90; 95; 100
+      Name: Grid
+      Plane: XY
+      Value: true
+    - Class: rviz_default_plugins/PointCloud2
+      Alpha: 1
+      Color Transformer: AxisColor
+      Name: Accumulated voxel map
+      Position Transformer: XYZ
+      Queue Size: 1
+      Size (Pixels): 2
+      Style: Points
+      Topic:
+        Depth: 1
+        Durability Policy: Transient Local
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /d1max/slam/map_cloud
+      Use Fixed Frame: true
+      Value: true
+    - Class: rviz_default_plugins/PointCloud2
+      Alpha: 0.35
+      Color Transformer: FlatColor
+      Color: 80; 220; 255
+      Name: Current registered scan
+      Position Transformer: XYZ
+      Queue Size: 1
+      Size (Pixels): 2
+      Style: Points
+      Topic:
+        Depth: 1
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Best Effort
+        Value: /d1max/fastlio2/world_cloud
+      Use Fixed Frame: true
+      Value: false
+    - Class: rviz_default_plugins/Path
+      Color: 255; 110; 45
+      Name: LIO path
+      Topic:
+        Depth: 10
+        Reliability Policy: Reliable
+        Value: /d1max/fastlio2/path
+      Value: true
+    - Class: rviz_default_plugins/TF
+      Name: TF
+      Value: true
+  Global Options:
+    Background Color: 18; 22; 25
+    Fixed Frame: map
+    Frame Rate: 30
+  Name: root
+  Tools:
+    - Class: rviz_default_plugins/Interact
+    - Class: rviz_default_plugins/MoveCamera
+    - Class: rviz_default_plugins/Select
+  Views:
+    Current:
+      Class: rviz_default_plugins/Orbit
+      Distance: 18
+      Focal Point:
+        X: 0
+        Y: 0
+        Z: 0
+      Name: Current View
+      Pitch: 0.55
+      Yaw: 0.8
+Window Geometry:
+  Height: 900
+  Width: 1440

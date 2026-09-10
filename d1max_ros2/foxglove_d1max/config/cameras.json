@@ -1,0 +1,55 @@
+{
+  "calibrationStatus": "nominal_spec_unverified",
+  "source": "D1 Max产品规格书_v2.0_20260224.pdf: HFOV 111°, VFOV 70°; mount positions from max.urdf F/R_IMX415_JOINT",
+  "notice": "前后弧面 · 标称视场近似，未标定；侧面为盲区，非 360° 拼接或测量结果",
+  "projectionDistance": 2,
+  "imageOpacity": 0.72,
+  "planarProjectionFactor": 0,
+  "viewDistance": 7,
+  "viewPolarAngleDeg": 28,
+  "viewAzimuthDeg": 25,
+  "front": {
+    "imageTopic": "/front_camera/image_compressed",
+    "calibrationTopic": "/d1max/view/front_camera_nominal_calibration",
+    "frame": "camera_front",
+    "mountXYZ": [
+      0.4123,
+      0,
+      0.0378
+    ],
+    "opticalRotation": [
+      -0.5,
+      0.5,
+      -0.5,
+      0.5
+    ],
+    "horizontalFovDeg": 111,
+    "verticalFovDeg": 70,
+    "calibrated": null
+  },
+  "rear": {
+    "imageTopic": "/rear_camera/image_compressed",
+    "calibrationTopic": "/d1max/view/rear_camera_nominal_calibration",
+    "frame": "camera_back",
+    "mountXYZ": [
+      -0.4123,
+      0,
+      0.0378
+    ],
+    "opticalRotation": [
+      -0.5,
+      -0.5,
+      0.5,
+      0.5
+    ],
+    "horizontalFovDeg": 111,
+    "verticalFovDeg": 70,
+    "calibrated": null
+  },
+  "rigFrame": "d1max_sensor_rig",
+  "frontLidarMountXYZ": [
+    0.4043,
+    0,
+    -0.0377
+  ]
+}

@@ -1,0 +1,21 @@
+pct:
+  resolution: 0.10
+  slice_dh: 0.50
+  simplify_layers: false
+  ground_height: -1.0
+  height_filter:
+    min: -1.0
+    max: 3.6
+  traversability:
+    kernel_size: 7
+    interval_min: 0.50
+    interval_free: 0.65
+    slope_max_rad: 0.40
+    step_max: 0.17
+    standable_ratio: 0.20
+    cost_barrier: 50.0
+    safe_margin: 0.40
+    inflation: 0.20
+  planner:
+    use_quintic: true
+    max_heading_rate: 10.0
