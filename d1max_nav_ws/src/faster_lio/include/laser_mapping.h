@@ -23,6 +23,9 @@
 #include "sensor_msgs/msg/point_cloud2.h"
 #include <condition_variable>
 #include <thread>
+#include <atomic>
+#include "std_msgs/msg/string.hpp"
+#include "imu_recovery.hpp"
 #include "imu_processing.hpp"
 #include "ivox3d/ivox3d.h"
 #include "options.h"
@@ -65,6 +68,7 @@ class LaserMapping : public rclcpp::Node {
     bool InitWithoutROS(const std::string &config_yaml);
 
     void Run();
+    bool RobustMode() const { return robust_mode_; }
 
     // callbacks of lidar and imu
     // void StandardPCLCallBack(const sensor_msgs::PointCloud2::ConstPtr &msg);
@@ -103,6 +107,31 @@ class LaserMapping : public rclcpp::Node {
     void Finish();
 
    private:
+    void InitRobustRuntime();
+    bool RobustSync();
+    void RobustStatus();
+    void RobustRecovery();
+    void PublishRobustSample(bool valid);
+    void RequestImuRecovery(const std::string& reason);
+    bool robust_mode_{false},publish_tf_{true};
+    std::atomic<bool> robust_fault_{false};
+    std::atomic<bool> robust_imu_clock_reset_{false};
+    std::atomic<uint64_t> robust_imu_received_{0},robust_scans_replaced_{0};
+    uint64_t robust_short_gaps_{0};
+    double robust_soft_gap_{.015},robust_gap_rotation_{.08},robust_observed_gap_{0};
+    double robust_max_gap_{.03},robust_max_age_{.3},robust_last_end_{0},robust_last_good_{0},robust_last_status_{0};
+    uint64_t robust_gap_rejections_{0};
+    ImuRecoveryBudget robust_recovery_budget_;
+    bool robust_reset_pending_{false},robust_recovering_{false};
+    uint64_t robust_epoch_{1},robust_resets_{0};
+    double robust_epoch_start_{0},robust_last_gap_{0};
+    std::string robust_last_reset_reason_;
+    int robust_min_features_{40};
+    std::string robust_reason_{"initializing"};
+    livox_ros_driver2::msg::CustomMsg::SharedPtr robust_pending_;
+    rclcpp::CallbackGroup::SharedPtr robust_imu_group_;
+    rclcpp::Publisher<std_msgs::msg::String>::SharedPtr robust_status_pub_;
+    rclcpp::Publisher<std_msgs::msg::String>::SharedPtr robust_sample_pub_;
     std::shared_ptr<tf2_ros::TransformBroadcaster> br;
     template <typename T>
     void SetPosestamp(T &out);
@@ -149,7 +178,7 @@ class LaserMapping : public rclcpp::Node {
     common::VV4F corr_norm_;                          // inlier plane norms
     pcl::VoxelGrid<PointType> voxel_scan_;            // voxel filter for current scan
     std::vector<float> residuals_;                    // point-to-plane residuals
-    std::vector<bool> point_selected_surf_;           // selected points
+    std::vector<uint8_t> point_selected_surf_;        // independent bytes for parallel point evaluation
     common::VV4F plane_coef_;                         // plane coeffs
 
     /// ros pub and sub stuffs

@@ -1,0 +1,432 @@
+# D1 Max 3D LIO + PCD. Public dynamic TF has one verified publisher.
+# Default: LIO + PCD. Legacy EKF sections below are retained only for explicit regression/rollback.
+localization_pipeline:
+  ros__parameters:
+    backend: lio_pcd
+
+/d1max/localization/lio/laserMapping:
+  ros__parameters:
+    localization.enabled: true
+    localization.max_imu_gap_sec: 0.05  # raw bag contains a measured 40 ms source gap
+    localization.reinitialize_on_imu_gap: true  # new local epoch, NOT propagation across missing IMU
+    localization.max_imu_reinitializations: 3  # at most three resets per rolling minute
+    localization.imu_recovery_window_sec: 60.0
+    localization.imu_gap_warning_sec: 0.015
+    localization.max_gap_rotation_rad: 0.08
+    localization.processing_threads: 4
+    localization.map_capacity: 100000
+    localization.max_scan_age_sec: 0.30
+    localization.min_features: 40
+    localization.initialization_samples: 200
+    common.lid_topic: /d1max/localization/livox_points
+    common.imu_topic: /d1max/localization/imu
+    common.time_sync_en: false
+    common.dataset: nclt
+    preprocess.lidar_type: 1
+    preprocess.scan_line: 192
+    preprocess.blind: 0.5
+    preprocess.time_scale: 1.0
+    mapping.acc_cov: 0.1
+    mapping.gyr_cov: 0.01
+    mapping.b_acc_cov: 0.0001
+    mapping.b_gyr_cov: 0.0001
+    mapping.det_range: 60.0
+    mapping.extrinsic_est_en: false
+    mapping.extrinsic_T: [0.0, 0.0, 0.0]
+    mapping.extrinsic_R: [1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0]
+    publish.world_frame: d1max_loc_odom
+    publish.body_frame: d1max_loc_tracking
+    publish.tf_enabled: false  # single TF authority: navigation_output
+    publish.path_publish_en: false
+    publish.scan_publish_en: true
+    publish.dense_publish_en: true
+    publish.scan_bodyframe_pub_en: true
+    publish.scan_effect_pub_en: false
+    path_save_en: false
+    pcd_save.pcd_save_en: false
+    pcd_save.interval: -1
+    runtime_pos_log_enable: false
+    feature_extract_enable: false
+    point_filter_num: 4
+    max_iteration: 4
+    filter_size_surf: 0.20
+    filter_size_map: 0.20
+    cube_side_length: 200.0
+    ivox_grid_resolution: 0.20
+    ivox_nearby_type: 18
+    esti_plane_threshold: 0.1
+
+lio_global_matcher:
+  ros__parameters:
+    scan_topic: /d1max/localization/lio/deskewed
+    imu_topic: /d1max/localization/imu
+    input_deskewed: true
+    deskew_enabled: false
+    translation_deskew_enabled: false
+    world_frame: d1max_loc_map
+    tracking_frame: d1max_loc_tracking
+    lidar_frame: d1max_loc_tracking
+    initial_pose_topic: /d1max/localization/fused_icp/initialpose
+    prediction_topic: /d1max/localization/fused_icp/prediction
+    output_pose_topic: /d1max/localization/fused_icp/pose_raw
+    map_cloud_topic: /d1max/localization/map_cloud
+    min_information_ratio: 0.002
+    voxel_leaf: 0.20
+    max_corr_dist: 1.5
+    max_iterations: 20
+    num_threads: 4
+    max_scan_age_sec: 0.5
+    max_tilt: 0.70
+    acquisition_max_tilt: 0.70
+    acquisition_max_iterations: 50
+    acquisition_max_translation_delta: 2.5
+    acquisition_confirmation_count: 3
+    confirmation_max_gap_sec: 0.35
+    prediction_timeout_sec: 0.25
+    quality_inlier_distance: 0.5
+    min_inlier_ratio: 0.4
+    max_inlier_rmse: 0.25
+
+lio_localizer:
+  ros__parameters:
+    map_frame: d1max_loc_map
+    odom_frame: d1max_loc_odom
+    tracking_frame: d1max_loc_tracking
+    lidar_frame: d1max_loc_lidar
+    sdk_to_tracking_yaw: 1.56646
+    tracking_offset_body: [0.4043, 0.0, -0.0377]
+    extrinsics_verified: false
+    time_alignment_verified: false
+    trajectory_rate_hz: 5.0
+    trajectory_max_points: 1800
+    limits.local_timeout: 0.3
+    limits.correction_timeout: 0.75
+    limits.max_speed: 4.0  # anomaly guard, NOT an accepted operating speed
+    limits.max_angular_rate: 5.0
+    limits.recovery_after: 1.0
+    limits.recovery_interval: 3.0
+    limits.recovery_horizon: 15.0
+    limits.recovery_attempts: 3
+    limits.recovery_xy: 1.5
+    limits.recovery_z: 0.5
+    limits.recovery_rotation: 0.7
+
+# One rate and one bounded prediction policy for all navigation adapters.
+# Native Faster-LIO estimates biases/gravity; robot_localization does not.
+navigation_estimation:
+  ros__parameters:
+    enabled: true
+    output_rate_hz: 50.0
+    body_frame: d1max_loc_base_link
+    prediction.max_horizon: 0.25
+    prediction.max_extrapolation: 0.025
+    prediction.max_imu_gap: 0.05
+    prediction.soft_imu_gap: 0.015
+    prediction.max_gap_rotation: 0.08
+    prediction.history_sec: 2.0
+    limits.local_timeout: 0.08
+    limits.correction_timeout: 0.75
+    limits.contract_timeout: 0.6
+    limits.filter_timeout: 0.08
+    limits.max_prediction_horizon: 0.25
+    limits.max_imu_age: 0.05
+    limits.max_history_gap: 0.08
+    limits.max_map_error: 0.5
+    limits.max_map_angle: 0.3
+    limits.max_correction_step: 0.10
+    limits.max_correction_angle: 0.08
+    limits.max_speed: 4.0
+    limits.max_angular_rate: 5.0
+    limits.reset_timeout: 2.0
+    limits.warmup_sec: 0.15
+    filter_process_noise_diagonal: [0.03, 0.03, 0.04, 0.02, 0.02, 0.04,
+                                    0.15, 0.15, 0.15, 0.05, 0.05, 0.08,
+                                    0.2, 0.2, 0.2]
+
+# PRIVATE global estimate. navigation_output owns SetPose, input admission,
+# common-time TF composition and expiry. sensor_timeout alone never stops EKF.
+ekf_navigation:
+  ros__parameters:
+    sensor_timeout: 0.05
+    two_d_mode: false
+    publish_tf: false
+    publish_acceleration: false
+    predict_to_current_time: true
+    smooth_lagged_data: true
+    history_length: 2.0
+    permit_corrected_publication: false
+    transform_time_offset: 0.0
+    transform_timeout: 0.0
+    print_diagnostics: true
+    use_control: false
+    twist0: /d1max/localization/estimator/motion
+    twist0_config: [false, false, false, false, false, false,
+                    true, true, true, true, true, true,
+                    false, false, false]
+    twist0_queue_size: 100
+    twist0_rejection_threshold: 5.0
+    pose0: /d1max/localization/estimator/map_pose
+    pose0_config: [true, true, true, true, true, true,
+                   false, false, false, false, false, false,
+                   false, false, false]
+    pose0_differential: false
+    pose0_relative: false
+    pose0_queue_size: 20
+    pose0_rejection_threshold: 5.0
+
+# Fixed tracking origin/basis = normalized front Airy IMU. No cloud-only gravity leveling.
+# Local odom has an arbitrary startup orientation and integrates 6D twist;
+# only accepted 6D map registration observes absolute orientation/height.
+fused_icp_matcher:
+  ros__parameters:
+    map_pcd: ""
+    scan_topic: "/d1max/localization/livox_points"
+    imu_topic: "/d1max/localization/body_imu"
+    world_frame: "d1max_loc_map"
+    tracking_frame: "d1max_loc_tracking"
+    lidar_frame: "d1max_loc_lidar"
+    initial_pose_topic: "/d1max/localization/fused_icp/initialpose"
+    prediction_topic: "/d1max/localization/fused_icp/prediction"
+    output_pose_topic: "/d1max/localization/fused_icp/pose_raw"
+    map_cloud_topic: "/d1max/localization/map_cloud"
+    raw_scan_topic: "/d1max/localization/scan_converted"
+    leveled_scan_topic: "/d1max/localization/scan_leveled"
+    # Unverified initial-seed overlay in map coordinates, never a localization TF.
+    preview_scan_topic: "/d1max/localization/scan_initial_preview"
+    deskew_enabled: true
+    translation_deskew_enabled: true
+    velocity_topic: "/d1max/localization/body_twist"
+    max_velocity_gap_sec: 0.06
+    max_imu_gap_sec: 0.02
+    max_scan_duration_sec: 0.15
+    max_scan_age_sec: 0.50
+    imu_buffer_duration_sec: 2.0
+    rotation_lidar_from_imu: [1.0, 0.0, 0.0,
+                              0.0, 1.0, 0.0,
+                              0.0, 0.0, 1.0]
+    voxel_leaf: 0.15
+    max_corr_dist: 1.5
+    max_translation_delta: 0.45
+    max_translation_z_delta: 0.35
+    max_yaw_delta: 0.60
+    max_tilt: 0.35
+    max_rotation_delta: 0.70
+    max_fitness_score: 1.0
+    quality_inlier_distance: 0.50  # meters, independent of acquisition search radius
+    min_inlier_ratio: 0.35
+    max_inlier_rmse: 0.30  # meters; fitness score above is squared meters
+    confirmation_max_gap_sec: 0.35
+    max_iterations: 15
+    num_threads: 4
+    acquisition_max_corr_dist: 3.0
+    acquisition_max_translation_delta: 2.5
+    acquisition_max_translation_z_delta: 1.0
+    acquisition_max_yaw_delta: 1.57
+    acquisition_max_tilt: 0.35
+    acquisition_max_rotation_delta: 1.80
+    acquisition_max_fitness_score: 1.0
+    acquisition_max_iterations: 50
+    acquisition_confirmation_count: 3
+    prediction_timeout_sec: 0.25
+    prediction_buffer_duration_sec: 2.0
+
+icp_fusion_bridge:
+  ros__parameters:
+    map_frame: "d1max_loc_map"
+    tracking_translation: [0.0, 0.0, 0.0]
+    tracking_rotation: [0.0, 0.0, 0.0, 1.0]
+    max_translation_xy: 0.60
+    max_translation_z: 0.35
+    max_yaw: 0.55
+    max_rotation: 0.70
+    alignment_max_translation_xy: 3.0
+    alignment_max_translation_z: 1.0
+    alignment_max_yaw: 1.75
+    alignment_max_rotation: 1.80
+    ekf_reset_holdoff_sec: 0.50
+    max_prediction_age_sec: 0.50
+    max_measurement_age_sec: 0.75
+    icp_stale_timeout_sec: 1.0
+    local_odom_frame: "d1max_loc_odom"
+    local_odom_history_sec: 3.0
+    max_local_odom_age_sec: 0.50
+    max_local_odom_sync_error_sec: 0.15
+    seed_rate_hz: 15.0
+    position_stddev_xy: 0.15
+    position_stddev_z: 0.25
+    orientation_stddev_roll_pitch: 0.12
+    orientation_stddev_yaw: 0.15
+
+ekf_local:
+  ros__parameters:
+    frequency: 50.0
+    sensor_timeout: 0.20
+    two_d_mode: false
+    transform_time_offset: 0.0
+    transform_timeout: 0.05
+    print_diagnostics: true
+    publish_tf: true
+    publish_acceleration: false
+    reset_on_time_jump: true
+    predict_to_current_time: true
+
+    map_frame: d1max_loc_map
+    odom_frame: d1max_loc_odom
+    base_link_frame: d1max_loc_tracking
+    world_frame: d1max_loc_odom
+
+    twist0: /d1max/localization/body_twist
+    twist0_config: [false, false, false,
+                    false, false, false,
+                    true,  true,  true,
+                    false, false, false,
+                    false, false, false]
+    twist0_queue_size: 10
+    twist0_nodelay: true
+    twist0_rejection_threshold: 4.0
+
+    imu0: /d1max/localization/body_imu
+    imu0_config: [false, false, false,
+                  false, false, false,
+                  false, false, false,
+                  true,  true,  true,
+                  false, false, false]
+    imu0_differential: false
+    imu0_relative: false
+    imu0_queue_size: 50
+    imu0_nodelay: true
+    imu0_pose_rejection_threshold: 4.0
+    imu0_twist_rejection_threshold: 4.0
+    imu0_remove_gravitational_acceleration: false
+
+    use_control: false
+
+ekf_global:
+  ros__parameters:
+    frequency: 30.0
+    sensor_timeout: 0.30
+    two_d_mode: false
+    transform_time_offset: 0.0
+    transform_timeout: 0.05
+    print_diagnostics: true
+    publish_tf: false
+    publish_acceleration: false
+    reset_on_time_jump: true
+    predict_to_current_time: true
+
+    map_frame: d1max_loc_map
+    odom_frame: d1max_loc_odom
+    base_link_frame: d1max_loc_tracking
+    world_frame: d1max_loc_map
+
+    odom0: /d1max/localization/odometry/local
+    odom0_config: [false, false, false,
+                   false, false, false,
+                   true,  true,  true,
+                   true,  true,  true,
+                   false, false, false]
+    odom0_differential: false
+    odom0_relative: false
+    odom0_queue_size: 20
+    odom0_nodelay: true
+    odom0_twist_rejection_threshold: 4.0
+
+    # Replay bounded filter history for delayed GICP corrections.
+    smooth_lagged_data: true
+    history_length: 2.0
+    permit_corrected_publication: false
+
+    pose0: /d1max/localization/icp_pose
+    # This filter is 3D: retain accepted GICP roll/pitch as well as XYZ/yaw.
+    # Leaving roll/pitch unobserved permits attitude drift in map -> odom.
+    pose0_config: [true,  true,  true,
+                   true,  true,  true,
+                   false, false, false,
+                   false, false, false,
+                   false, false, false]
+    pose0_differential: false
+    pose0_relative: false
+    pose0_queue_size: 10
+    pose0_nodelay: true
+    pose0_rejection_threshold: 5.0
+
+    use_control: false
+
+dual_lidar_adapter:
+  ros__parameters:
+    # Live debug only: one fixed offset learned from advancing front-IMU stamps.
+    # Preserves front/rear/point/IMU timing. NOT hardware clock synchronization.
+    # Use strict once robot and host clocks are actually synchronized.
+    input_clock_mode: estimate_shared_epoch
+    input_clock_samples: 100
+    input_clock_min_span: 1.0
+    front_topic: /front_lidar
+    rear_topic: /rear_lidar
+    lidar_mode: dual
+    front_fallback: true  # preserve front scans when the rear lidar drops frames
+    front_wait_sec: 0.03
+    input_imu_topic: /front_lidar/imu
+    output_cloud_topic: /d1max/localization/points
+    output_livox_topic: /d1max/localization/livox_points
+    output_imu_topic: /d1max/localization/imu
+    target_frame: d1max_loc_lidar
+    front_frame: rslidar_head
+    rear_frame: rslidar_tail
+    # Copied from D1 mapping calibration; no public sensor TF is overridden.
+    front_translation: [0.0, 0.0, 0.0]
+    front_rotation: [-0.499867275, 0.503186620, 0.497953310, 0.498977388]
+    rear_to_front_translation: [0.0, 0.0, -0.7323]
+    rear_to_front_rotation: [1.0, 0.0, 0.0, 0.0]
+    max_sync_delta_sec: 0.005
+    scan_period_sec: 0.10
+    relative_timestamp_scale: 1.0
+    min_range: 0.5
+    max_range: 60.0
+    rear_ring_offset: 96
+    imu_acceleration_scale: 9.80665
+
+localization_supervisor:
+  ros__parameters:
+    session_dir: ""
+    map_frame: d1max_loc_map
+    odom_frame: d1max_loc_odom
+    tracking_frame: d1max_loc_tracking
+    lidar_frame: d1max_loc_lidar
+    output_rate_hz: 30.0
+    trajectory_rate_hz: 5.0
+    # Added to MC aligned stamps, not a per-packet receipt-time rewrite.
+    mc_time_offset_sec: 0.0
+    time_alignment_verified: false
+    sdk_state_topic: /d1max_sdk_bridge/robot_state
+    sdk_velocity_topic: /d1max_sdk_bridge/velocity
+    # Dedicated SDK callbacks only. Ordinary RobotState still supplies heading
+    # and safety/battery state, but its 1 Hz speed is not a localization input.
+    allow_sdk_state_velocity_fallback: false
+    gyro_bias_samples: 100
+    gyro_bias_max_rate: 0.04
+    # 2026-09-11: operator-confirmed standstill MC norm 0.027-0.038 m/s.
+    # Calibration tolerance only; never zero or replace the measured velocity.
+    stationary_speed: 0.05  # m/s
+    stationary_angular_rate: 0.025  # rad/s; independent of linear tolerance
+    gyro_deadband: 0.01
+    max_sdk_speed: 3.0
+    max_gyro: 4.0
+    imu_timeout: 0.3
+    cloud_timeout: 0.6
+    sdk_fast_timeout: 0.3
+    sdk_state_timeout: 1.5
+    # Single source for both SDK velocity conversion and initial body->tracking pose.
+    # R_tracking_body yaw; the pose transform uses its inverse (Go2 SE(3) convention).
+    sdk_to_tracking_yaw: 1.56646
+    # CAD approximate front sensor location relative to body origin (NOT calibrated).
+    tracking_offset_body: [0.4043, 0.0, -0.0377]
+    extrinsics_verified: false
+    velocity_stddev_z: 0.30
+    velocity_stddev_xy: 0.20
+    fallback_velocity_stddev_xy: 0.45
+    angular_velocity_stddev: 0.04
+    # Compare global EKF tilt with time-adjacent accepted ICP before TF output.
+    # A relative check preserves the map's actual slope and height.
+    max_output_tilt_error_deg: 10.0
+    max_output_icp_sync_sec: 0.20
+    max_output_icp_age_sec: 0.75

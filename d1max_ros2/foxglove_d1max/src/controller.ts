@@ -1,6 +1,8 @@
 import type {PanelExtensionContext,MessageEvent} from "@foxglove/extension";
+import type {LifecycleClient,Component} from "./lifecycle";
 import {cleanConfig,decode,fresh,logEvent,measuredSpeed,newState,object,validGateway,type Config} from "./model";
 export class Controller {
+ lifecycle?:LifecycleClient;
  state=newState();config:Config;colorScheme:"light"|"dark"="dark";preview=false;pending=false;
  version=0;listeners=new Set<()=>void>();private alive=true;private timer:ReturnType<typeof setInterval>;
  constructor(public context:PanelExtensionContext){
@@ -17,17 +19,17 @@ export class Controller {
   }finally{done();}};
   this.subscribe();this.timer=setInterval(()=>this.emit(),200);
  }
- subscribe(){const c=this.config;this.context.subscribe([...new Set([c.stateTopic,c.behaviorTopic,c.connectionTopic,c.faultTopic,c.eventTopic,c.velocityTopic,c.gatewayTopic,c.mapTopic,"/clock"])].filter(Boolean).map(topic=>({topic})));}
+ subscribe(){const c=this.config;this.context.subscribe([...new Set([c.stateTopic,c.behaviorTopic,c.connectionTopic,c.faultTopic,c.eventTopic,c.velocityTopic,c.gatewayTopic,c.mapTopic,c.localizationTopic,"/clock"])].filter(Boolean).map(topic=>({topic})));}
  saveConfig(value:unknown){this.config=cleanConfig(value);this.state=newState();this.context.saveState({config:this.config});this.subscribe();this.emit();}
  ingest({topic,message}:Pick<MessageEvent,"topic"|"message">){
   const now=performance.now(),c=this.config;this.state.lastSeen.set(topic,now);this.state.counts.set(topic,(this.state.counts.get(topic)??0)+1);
   if(topic==="/clock")this.state.replay=true;
-  const key=topic===c.stateTopic?"robot":topic===c.behaviorTopic?"behavior":topic===c.gatewayTopic?"gateway":topic===c.velocityTopic?"velocity":topic===c.mapTopic?"map":undefined;
+  const key=topic===c.stateTopic?"robot":topic===c.behaviorTopic?"behavior":topic===c.gatewayTopic?"gateway":topic===c.velocityTopic?"velocity":topic===c.mapTopic?"map":topic===c.localizationTopic?"localization":undefined;
   if(key){const value=decode(message);if(value){this.state[key]={value,at:now};if(value.replay_latched===true||(key==="gateway"&&value.mode==="replay"))this.state.replay=true;}}
   if(topic===c.connectionTopic)this.state.connection={value:String(object(message)?.data??"unknown"),at:now};
   if(topic===c.eventTopic)logEvent(this.state,String(object(message)?.data??"事件"));
   if(topic===c.faultTopic)logEvent(this.state,String(object(message)?.data??"故障"),"error");
-  if(key==="robot"){const s=measuredSpeed(this.state,now,c.staleSeconds);if(s.x!==undefined&&s.y!==undefined)this.state.speedHistory=[...this.state.speedHistory,Math.hypot(s.x,s.y)].slice(-80);}
+  if(key==="velocity"){const s=measuredSpeed(this.state,now,c.staleSeconds);if(s.x!==undefined&&s.y!==undefined)this.state.speedHistory=[...this.state.speedHistory,Math.hypot(s.x,s.y)].slice(-80);}
  }
  onChange=(listener:()=>void)=>{this.listeners.add(listener);return()=>{this.listeners.delete(listener);};};
  snapshot=()=>this.version;
@@ -35,7 +37,13 @@ export class Controller {
  get gateway(){return validGateway(this.state.gateway,performance.now());}
  get safetyAvailable(){return !this.preview&&!this.state.replay&&this.gateway?.mode==="monitor"&&this.gateway.safety_available===true&&!!this.context.callService;}
  get estopTriggered(){return fresh(this.state.robot,performance.now(),this.config.staleSeconds)&&this.state.robot?.value.software_emergency_status===2;}
- // Sole outbound operation: no generic command, arm, advertise or velocity API.
+ async toggleService(name:Component){
+  if(this.preview||(name==="monitor"&&this.state.replay)||!this.lifecycle?.available)return;
+  if(name==="monitor"&&(this.pending||(fresh(this.state.behavior,performance.now())&&this.state.behavior?.value.estop_pending===true)))return;
+  const service=this.lifecycle.value![name];
+  await this.lifecycle.action(name,service.active||service.owned?"stop":"start");
+ }
+ // Sole robot command: no generic command, arm, advertise or velocity API.
  async triggerEstop(){
   const gateway=this.gateway;
   if(!this.safetyAvailable||!gateway||this.pending||this.estopTriggered)return;
@@ -47,5 +55,5 @@ export class Controller {
   }catch(error){logEvent(this.state,error instanceof Error?error.message:String(error),"error");}
   finally{if(timer)clearTimeout(timer);this.pending=false;this.emit();}
  }
- destroy(){this.alive=false;clearInterval(this.timer);this.context.onRender=undefined;this.context.unsubscribeAll();this.listeners.clear();}
+ destroy(){this.alive=false;this.lifecycle?.destroy();clearInterval(this.timer);this.context.onRender=undefined;this.context.unsubscribeAll();this.listeners.clear();}
 }

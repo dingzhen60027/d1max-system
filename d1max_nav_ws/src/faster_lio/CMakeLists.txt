@@ -36,6 +36,7 @@ find_package(pcl_conversions REQUIRED)
 find_package(livox_ros_driver2 REQUIRED)
 find_package(rosidl_default_generators REQUIRED)
 find_package(builtin_interfaces REQUIRED)
+find_package(nlohmann_json REQUIRED)
 
 rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/Pose6D.msg"
@@ -105,6 +106,7 @@ add_library(${PROJECT_NAME}_lib SHARED
 
 
 target_link_libraries(${PROJECT_NAME}_lib
+        nlohmann_json::nlohmann_json
         ${PCL_LIBRARIES}
         ${PYTHON_LIBRARIES}
         tbb
@@ -157,4 +159,9 @@ install(DIRECTORY
   DESTINATION share/${PROJECT_NAME}
 )
 
+if(BUILD_TESTING)
+  find_package(ament_cmake_gtest REQUIRED)
+  ament_add_gtest(test_imu_recovery test/test_imu_recovery.cpp)
+  target_include_directories(test_imu_recovery PRIVATE include)
+endif()
 ament_package()

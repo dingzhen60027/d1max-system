@@ -15,11 +15,12 @@ test('unknown telemetry stays unknown; malformed JSON rejected',()=>{
  for(const data of ['garbage','[]','null'])assert.equal(decode({data}),undefined);
  assert.match(motionName(1),/未完成/);
 });
-test('velocity telemetry falls back to SDK and stale values clear',()=>{
+test('velocity accepts only MC, never RobotState fallback; stale values clear',()=>{
  const s=newState(),now=performance.now();s.robot={at:now,value:{forward_speed:.3,lateral_speed:0,yaw_speed:.2}};
- s.velocity={at:now,value:{bad:true}};assert.equal(measuredSpeed(s,now,2.5).x,.3);
- s.velocity.value={twist:{linear:{x:.5,y:0},angular:{z:.1}}};assert.equal(measuredSpeed(s,now,2.5).x,.5);
- assert.equal(measuredSpeed(s,now+3000,2.5).x,undefined);
+ s.velocity={at:now,value:{bad:true}};assert.equal(measuredSpeed(s,now,2.5).x,undefined);
+ s.velocity.value={source:'sdk_mc',forward_speed:.5,lateral_speed:0,yaw_speed:.1};assert.equal(measuredSpeed(s,now,2.5).x,.5);
+ s.velocity.value.source='sdk_speed_report';assert.equal(measuredSpeed(s,now,2.5).x,undefined);
+ s.velocity.value.source='sdk_mc';assert.equal(measuredSpeed(s,now+301,2.5).x,undefined);
 });
 test('monitor status rejects old controls, forged namespace, stale timestamps and malformed flags',()=>{
  const at=performance.now();assert.ok(validGateway({at,value:gateway()},at));

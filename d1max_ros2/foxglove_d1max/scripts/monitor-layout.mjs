@@ -2,6 +2,8 @@
 import {readFileSync} from 'node:fs';
 const settings=JSON.parse(readFileSync(new URL('../config/instruments.json',import.meta.url),'utf8'));
 const guard=readFileSync(new URL('../config/scripts/instruments.ts',import.meta.url),'utf8');
+const speedParser=readFileSync(new URL('../config/scripts/telemetry.ts',import.meta.url),'utf8')
+ .replaceAll('__STATE_TOPIC__','/d1max_sdk_bridge/velocity');
 // Window presence is independent of static-file loading. No topic means no PCD subscription.
 export function emptyMapPanel(previous={}) {
  return {foxglovePanelTitle:'PCD · MAP',
@@ -79,5 +81,8 @@ export function monitorLayout(original, metadata, panel) {
  }
  walk(data.layout);data.configById=Object.fromEntries(Object.entries(configs).filter(([id])=>used.has(id)));
  data.userNodes['d1-instruments']={name:'D1 仪表新鲜度（只读）',sourceCode:guard.replaceAll('__STATE_TOPIC__',panel.stateTopic).replaceAll('__MONITOR_TOPIC__',panel.gatewayTopic).replaceAll('__STALE_SECONDS__',String(panel.staleSeconds))};
+ // Existing velocity plots consume only true SDK speed callbacks. Batteries
+ // stay on the separate RobotState instrument parser; no duplicated panels.
+ data.userNodes['d1-telemetry']={name:'D1 SDK 遥测解析（只读）',sourceCode:speedParser};
  return data;
 }

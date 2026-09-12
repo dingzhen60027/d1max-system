@@ -1,0 +1,13 @@
+{
+  "host": "127.0.0.1",
+  "port": 8771,
+  "monitor_unit": "d1max-monitor-managed.service",
+  "web_unit": "d1max-web-managed.service",
+  "monitor_port": 8769,
+  "web_port": 8766,
+  "robot_endpoints": [["192.168.168.100", 7447], ["192.168.168.168", 8081]],
+  "robot_interface": "enx6c1ff7bc241e",
+  "start_timeout_seconds": 22,
+  "stop_timeout_seconds": 40,
+  "stale_seconds": 3
+}

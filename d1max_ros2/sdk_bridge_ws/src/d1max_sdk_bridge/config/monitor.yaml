@@ -1,0 +1,18 @@
+d1max_sdk_monitor:
+  ros__parameters:
+    # Operator authorized APP -> SDK handoff. Only OnControlAvailable may arm
+    # TakeControl; never infer availability from MC absence or control_source.
+    # No motion/posture/mode/e-stop-release commands are enabled by this option.
+    auto_take_control_on_available: true
+    takeover_settle_sec: 0.5
+    takeover_ack_timeout_sec: 3.0
+    takeover_confirmation_timeout_sec: 4.0
+    # SetMcConfig switches reporting on/off; it has NO frequency argument.
+    mc_report_ready_delay_sec: 1.0
+    mc_report_retry_sec: 3.0
+    mc_report_max_attempts: 3
+    # Three requests per burst, then 15 / 30 / 60 s cooldown. Only re-enable
+    # telemetry; do not cycle the SDK socket or retry TakeControl / estop.
+    mc_report_cooldown_sec: 15.0
+    mc_report_max_cooldown_sec: 60.0
+    mc_report_stream_timeout_sec: 1.0

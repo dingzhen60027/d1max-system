@@ -33,6 +33,8 @@ from .pointcloud_pipeline import (
     write_pipeline,
 )
 from .runtime import RuntimeManager
+from .grid_maps import GridWorkspace, create_router
+from .localization import LocalizationRuntime, create_localization_router
 
 
 APP_ROOT = Path(__file__).resolve().parents[1]
@@ -87,6 +89,10 @@ preview_lock = threading.Lock()
 archive_delete_lock = threading.Lock()
 processing_lock = threading.Lock()
 processing_cancel_event = threading.Event()
+processing_thread: threading.Thread | None = None
+grid_workspace = GridWorkspace(DATA_ROOT / "navigation2d")
+localization_runtime = LocalizationRuntime(DATA_ROOT / "localization", PROJECT_ROOT, NAV_ROOT)
+grid_workspace.protected_version = lambda: localization_runtime.pinned_id
 processing_job: dict[str, Any] = {
     "running": False,
     "status": "idle",
@@ -890,11 +896,31 @@ def process_point_cloud_worker(
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     runtime_manager.recover_stale_state()
+    grid_workspace.recover()
+    localization_runtime.recover()
+    # An interrupted worker must never appear to have completed after Web restarts.
+    for path in PROCESSED_ROOT.glob("*/manifest.json"):
+        if path.is_symlink() or path.parent.is_symlink():
+            continue
+        try:
+            manifest = json.loads(path.read_text(encoding="utf-8"))
+            if manifest.get("status") in {"running", "cancelling"}:
+                manifest.update(status="interrupted", completed_at=now_iso(),
+                                error="Web 上次退出时处理未完成；原始 PCD 未改动，请手动重新处理")
+                write_processing_manifest(path.parent, manifest)
+        except (OSError, ValueError, AttributeError):
+            continue
     yield
+    # Web Stop also cancels in-flight point-cloud work before the owned cgroup exits.
+    processing_cancel_event.set()
+    localization_runtime.close()
+    grid_workspace.close()
+    if processing_thread is not None and processing_thread.is_alive():
+        processing_thread.join(timeout=5)
     runtime_manager.close()
 
 
-app = FastAPI(title="D1 Max 3D Map Workspace", version="1.0.0", lifespan=lifespan)
+app = FastAPI(title="D1 Max Map Workspace · 2D / 3D", version="1.1.0", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://127.0.0.1:5173", "http://localhost:5173"],
@@ -932,7 +958,7 @@ def overview() -> dict[str, Any]:
             "project_root": str(PROJECT_ROOT),
             "nav_root": str(NAV_ROOT),
             "maps_root": str(MAPS_ROOT),
-            "mode": "3d-only",
+            "mode": "2d-and-3d",
         },
         "summary": {
             "map_count": sum(item["category"] == "maps" and not item["archived"] for item in items),
@@ -1095,6 +1121,7 @@ def delete_archived(request: ArchiveDeleteRequest) -> dict[str, Any]:
 
 @app.post("/api/processing/start", status_code=202)
 def start_processing(request: ProcessingRequest) -> dict[str, Any]:
+    global processing_thread
     source = find_item(request.source_id)
     if source["category"] != "maps":
         raise HTTPException(status_code=409, detail="请选择建图结果中的原始 PCD 作为处理输入")
@@ -1117,6 +1144,10 @@ def start_processing(request: ProcessingRequest) -> dict[str, Any]:
     with processing_lock:
         if processing_job.get("running"):
             raise HTTPException(status_code=409, detail="已有点云处理任务正在运行")
+        if grid_workspace.job.get("running"):
+            raise HTTPException(status_code=409, detail="2D 生成任务运行中，请完成后再处理点云")
+        if localization_runtime.pinned_id:
+            raise HTTPException(status_code=409, detail="定位运行中，请先停止再处理点云")
         processing_cancel_event.clear()
         processing_job.clear()
         processing_job.update({
@@ -1138,6 +1169,7 @@ def start_processing(request: ProcessingRequest) -> dict[str, Any]:
         name=f"point-cloud-processing-{job_id}",
         daemon=True,
     )
+    processing_thread = thread
     thread.start()
     return processing_snapshot()
 
@@ -1177,7 +1209,10 @@ def download_processing_config(config_id: str) -> FileResponse:
 @app.post("/api/runtime/start", status_code=202)
 def start_runtime(request: RuntimeRequest) -> dict[str, Any]:
     try:
-        return runtime_manager.start(request.algorithm)
+        with processing_lock:
+            if localization_runtime.pinned_id:
+                raise HTTPException(status_code=409, detail="请先停止定位，再启动建图")
+            return runtime_manager.start(request.algorithm)
     except (RuntimeError, ValueError) as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except OSError as exc:
@@ -1214,6 +1249,9 @@ def cleanup_runtime() -> dict[str, Any]:
 async def unhandled_error(_, exc: Exception) -> JSONResponse:
     return JSONResponse(status_code=500, content={"detail": str(exc)})
 
+
+app.include_router(create_router(grid_workspace, find_item, processing_lock, lambda: processing_job.get("running", False) or bool(localization_runtime.pinned_id)))
+app.include_router(create_localization_router(localization_runtime, grid_workspace, processing_lock, lambda: processing_job.get("running", False) or runtime_manager.snapshot().get("status") in {'running','stopping','detached'}))
 
 DIST_ROOT = APP_ROOT / "frontend" / "dist"
 if DIST_ROOT.is_dir():

@@ -1,0 +1,8 @@
+// Owned by the monitor cgroup. Exactly one upstream; no LAN discovery/listener.
+{
+  mode: "router",
+  connect: { endpoints: ["tcp/192.168.168.100:7447"], exit_on_failure: true },
+  listen: { endpoints: ["tcp/127.0.0.1:7448"], exit_on_failure: true },
+  scouting: { multicast: { enabled: false }, gossip: { enabled: false } },
+  timestamping: { enabled: { router: true, peer: true, client: true }, drop_future_timestamp: false },
+}

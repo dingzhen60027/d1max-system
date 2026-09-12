@@ -4,6 +4,7 @@
 #include <gflags/gflags.h>
 #include <unistd.h>
 #include <csignal>
+#include <tbb/global_control.h>
 
 #include "laser_mapping.h"
 
@@ -47,6 +48,24 @@ int main(int argc, char **argv) {
     RCLCPP_INFO(LM->get_logger(), "\033[1;32m---->\033[0m Started.");
 
     signal(SIGINT, SigHandle);
+    if(LM->RobustMode()){
+        tbb::global_control parallel_budget(tbb::global_control::max_allowed_parallelism,
+            static_cast<size_t>(LM->get_parameter("localization.processing_threads").as_int()));
+        rclcpp::executors::MultiThreadedExecutor executor(rclcpp::ExecutorOptions(),2);
+        executor.add_node(LM);
+        std::atomic<bool> receiver_failed{false};
+        std::thread receiver([&]{
+            try { executor.spin(); }
+            catch(const std::exception& e) { LOG(ERROR)<<"LIO receiver failed: "<<e.what();receiver_failed=true; }
+        });
+        rclcpp::WallRate worker_rate(500);
+        bool failed=false;
+        try {
+            while(rclcpp::ok()&&!faster_lio::options::FLAG_EXIT&&!receiver_failed){LM->Run();worker_rate.sleep();}
+        } catch(const std::exception& e) { LOG(ERROR)<<"LIO worker failed: "<<e.what();failed=true; }
+        executor.cancel();receiver.join();executor.remove_node(LM);LM.reset();
+        if(rclcpp::ok())rclcpp::shutdown();google::ShutdownGoogleLogging();return failed||receiver_failed?1:0;
+    }
 
     // online, almost same with offline, just receive the messages from ros
     rclcpp::ExecutorOptions options;

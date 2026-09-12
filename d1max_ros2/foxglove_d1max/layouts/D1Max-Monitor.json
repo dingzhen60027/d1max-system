@@ -130,6 +130,7 @@
         "velocityTopic": "/d1max_sdk_bridge/velocity",
         "gatewayTopic": "/d1max/monitor/status",
         "mapTopic": "/d1max/maps/floor1/status",
+        "localizationTopic": "/d1max/localization/status",
         "staleSeconds": 2.5
       },
       "foxglovePanelTitle": "◉"
@@ -269,7 +270,7 @@
       "showYAxisLabels": true
     },
     "3D!d1map": {
-      "foxglovePanelTitle": "PCD · MAP",
+      "foxglovePanelTitle": "PCD · LOCALIZATION",
       "cameraState": {
         "distance": 100.15795595218351,
         "perspective": true,
@@ -295,7 +296,7 @@
         "near": 0.1,
         "far": 5000
       },
-      "followTf": "d1max_floor1_map",
+      "followTf": "d1max_loc_map",
       "followMode": "follow-pose",
       "scene": {
         "backgroundColor": "#111218",
@@ -303,15 +304,36 @@
       },
       "transforms": {},
       "topics": {
-        "/d1max/maps/floor1/points": {
+        "/d1max/localization/map_cloud": {
           "visible": true,
-          "colorMode": "colormap",
-          "colorField": "z",
-          "colorMap": "turbo",
-          "pointSize": 2,
-          "minValue": -3.247183084487915,
-          "maxValue": 7.282114028930664,
+          "colorMode": "flat",
+          "flatColor": "#8294a5",
+          "pointSize": 1.5,
           "decayTime": 0
+        },
+        "/d1max/localization/scan_initial_preview": {
+          "visible": true,
+          "colorMode": "flat",
+          "flatColor": "#f59e0b",
+          "pointSize": 2,
+          "decayTime": 0.5
+        },
+        "/d1max/localization/scan_leveled": {
+          "visible": true,
+          "colorMode": "flat",
+          "flatColor": "#38e8c6",
+          "pointSize": 3,
+          "decayTime": 0
+        },
+        "/d1max/localization/pose": {
+          "visible": true,
+          "color": "#fbbf24",
+          "scale": 1
+        },
+        "/d1max/localization/trajectory": {
+          "visible": true,
+          "color": "#fbbf24",
+          "lineWidth": 0.03
         }
       },
       "layers": {},
@@ -363,7 +385,7 @@
   "userNodes": {
     "d1-telemetry": {
       "name": "D1 SDK 遥测解析（只读）",
-      "sourceCode": "// Foxglove-local structured telemetry: does NOT publish ROS messages.\nimport { Input } from \"./types.ts\";\nexport const inputs = [\"/d1max_sdk_bridge/robot_state\"];\nexport const output = \"/d1max/view/telemetry\";\ntype Telemetry = {forward_speed:number;lateral_speed:number;yaw_speed:number;battery_power_1:number;battery_power_2:number;motion_status:number;control_source:number};\nexport default function script(event:Input<\"/d1max_sdk_bridge/robot_state\">):Telemetry|undefined {\n  try {\n    const r=JSON.parse(event.message.data);\n    if (!r || typeof r!==\"object\" || Array.isArray(r)) return;\n    const finite=(v:unknown):number=>typeof v===\"number\"&&Number.isFinite(v)?v:NaN;\n    return {forward_speed:finite(r.forward_speed),lateral_speed:finite(r.lateral_speed),yaw_speed:finite(r.yaw_speed),battery_power_1:finite(r.battery_power_1),battery_power_2:finite(r.battery_power_2),motion_status:finite(r.motion_status),control_source:finite(r.control_source)};\n  } catch { return; }\n}\n"
+      "sourceCode": "// Foxglove-local structured telemetry: does NOT publish ROS messages.\nimport { Input } from \"./types.ts\";\nexport const inputs = [\"/d1max_sdk_bridge/velocity\"];\nexport const output = \"/d1max/view/telemetry\";\ntype Telemetry = {forward_speed:number;lateral_speed:number;yaw_speed:number;battery_power_1:number;battery_power_2:number;motion_status:number;control_source:number};\nexport default function script(event:Input<\"/d1max_sdk_bridge/velocity\">):Telemetry|undefined {\n  try {\n    const r=JSON.parse(event.message.data);\n    if (!r || typeof r!==\"object\" || Array.isArray(r)) return;\n    const finite=(v:unknown):number=>typeof v===\"number\"&&Number.isFinite(v)?v:NaN;\n    return {forward_speed:finite(r.forward_speed),lateral_speed:finite(r.lateral_speed),yaw_speed:finite(r.yaw_speed),battery_power_1:finite(r.battery_power_1),battery_power_2:finite(r.battery_power_2),motion_status:finite(r.motion_status),control_source:finite(r.control_source)};\n  } catch { return; }\n}\n"
     },
     "d1-calibration": {
       "name": "D1 双雷达与相机显示标定（不发布 ROS）",

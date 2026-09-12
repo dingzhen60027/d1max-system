@@ -9,7 +9,7 @@ export type Gateway = {
   motion_control_enabled: false; wall_time: number; safety_available: boolean;
 };
 export type State = {
-  robot?: Sample; behavior?: Sample; gateway?: Sample; velocity?: Sample; map?: Sample;
+  robot?: Sample; behavior?: Sample; gateway?: Sample; velocity?: Sample; map?: Sample; localization?: Sample;
   connection?: { value: string; at: number }; topics: Set<string>;
   lastSeen: Map<string, number>; counts: Map<string, number>;
   events: EventRow[]; speedHistory: number[]; replay: boolean; frameTime?: number;
@@ -40,14 +40,12 @@ export function validGateway(sample: Sample | undefined, now: number): Gateway |
   return g as Gateway;
 }
 export function measuredSpeed(state: State, now: number, stale: number) {
-  if (fresh(state.velocity, now, stale)) {
-    const twist = object(state.velocity!.value.twist);
-    const linear = object(twist?.linear); const angular = object(twist?.angular);
-    const x=number(linear?.x), y=number(linear?.y), yaw=number(angular?.z);
-    if(x!==undefined&&y!==undefined&&yaw!==undefined) return { x, y, yaw, source: "速度遥测" };
+  if (fresh(state.velocity, now, Math.min(stale,.3))) {
+    const mc = state.velocity!.value;
+    const x=number(mc.forward_speed), y=number(mc.lateral_speed), yaw=number(mc.yaw_speed);
+    if(mc.source==='sdk_mc'&&x!==undefined&&y!==undefined&&yaw!==undefined) return { x, y, yaw, source: "OnMcData" };
   }
-  const r = fresh(state.robot, now, stale) ? state.robot!.value : undefined;
-  return { x: number(r?.forward_speed), y: number(r?.lateral_speed), yaw: number(r?.yaw_speed), source: "SDK 状态 · 约 1 Hz" };
+  return { x: undefined, y: undefined, yaw: undefined, source: "等待 OnMcData" };
 }
 export const motionName = (v: unknown) => ({ 1:"站立中（未完成）", 2:"趴下", 3:"匍匐", 4:"锁定", 5:"通用运动", 6:"原地模式", 7:"楼梯模式", 8:"攀爬", 9:"窄道", 10:"步态切换" }[Number(v)] || "未知");
 export const controlName = (v: unknown) => ({ 1:"遥控器", 2:"SDK" }[Number(v)] || "未知");

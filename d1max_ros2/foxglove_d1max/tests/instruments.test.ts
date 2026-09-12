@@ -4,6 +4,19 @@ import {readFileSync} from 'node:fs';
 import ts from 'typescript';
 import {monitorLayout,restoreMapWindow,selectConfiguredMap} from '../scripts/monitor-layout.mjs';
 const layout=JSON.parse(readFileSync('layouts/D1Max-Monitor.json','utf8'));
+test('velocity plots use dedicated callbacks, while batteries keep RobotState',async()=>{
+ for(const name of ['D1Max-Monitor.json','D1Max-Current.json']){
+  const saved=JSON.parse(readFileSync('layouts/'+name,'utf8'));
+  const source=saved.userNodes['d1-telemetry'].sourceCode;
+  assert.ok(!source.includes('/d1max_sdk_bridge/robot_state'));
+  const code=ts.transpileModule(source,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ES2022}}).outputText;
+  const parser=await import('data:text/javascript;base64,'+Buffer.from(code).toString('base64'));
+  assert.deepEqual(parser.inputs,['/d1max_sdk_bridge/velocity']);
+  const value=parser.default({topic:parser.inputs[0],message:{data:JSON.stringify({forward_speed:.4,lateral_speed:.1,yaw_speed:-.2})}});
+  assert.equal(value.forward_speed,.4);assert.equal(value.yaw_speed,-.2);
+  assert.ok(saved.userNodes['d1-instruments'].sourceCode.includes('/d1max_sdk_bridge/robot_state'));
+ }
+});
 test('motion appears once in plots; both batteries use the same charge-dependent colors',()=>{
  const cfg=layout.configById;
  assert.deepEqual(Object.keys(cfg).filter(id=>id.startsWith('Gauge!')),['Gauge!d1b1','Gauge!d1b2']);

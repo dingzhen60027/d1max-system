@@ -12,18 +12,19 @@ try{
  const report={time:new Date().toISOString(),url:page.url(),errors:[],assetRequests:[],layoutId:new URLSearchParams(page.url().split('?')[1]).get('layoutId')};
  page.on('pageerror',e=>report.errors.push(e.message));
  page.on('request',r=>{if(/127.0.0.1:8770|\.urdf(?:\?|$)|\.stl(?:\?|$)/i.test(r.url()))report.assetRequests.push(r.url());});
- await page.reload({waitUntil:'domcontentloaded'});await page.locator('.d1-signals').waitFor();
+ await page.reload({waitUntil:'domcontentloaded'});await page.locator('.d1-lifecycle').waitFor();
  await page.getByText('LiDAR + RGB · LIVE',{exact:true}).waitFor();await page.getByText('B2 · %',{exact:true}).waitFor();
  await page.getByText('PCD · MAP',{exact:true}).waitFor();
  await page.waitForTimeout(loadedMap?11000:1500);
- assert.equal(await page.locator('.d1-panel button').count(),1);
- assert.equal(await page.locator('.d1-signal').count(),6);
+ assert.equal(await page.locator('.d1-panel button').count(),3);
+ assert.equal(await page.locator('.d1-service').count(),2);
+ assert.equal(await page.locator('.d1-signal').count(),0);
  assert.equal(await page.locator('.d1-panel nav,.d1-panel p,.d1-panel textarea').count(),0);
  for(const label of ['操作','申请控制权','站立','趴下','解除软件急停','准备低速运动'])assert.equal(await page.getByRole('button',{name:label,exact:true}).count(),0,label);
  report.telemetry=await page.locator('.d1-panel').getAttribute('data-telemetry');
- report.stateIcons=await page.locator('.d1-signal').evaluateAll(es=>es.map(e=>({state:e.dataset.state,label:e.getAttribute('aria-label')})));
+ report.services=await page.locator('.d1-service').evaluateAll(es=>es.map(e=>({name:e.dataset.service,phase:e.dataset.phase})));
  report.safetyDisabled=await page.locator('.d1-estop').isDisabled();
- report.overflow=await page.evaluate(()=>[...document.querySelectorAll('.d1-panel,.d1-signals,.d1-signal,.d1-estop')].filter(e=>e.scrollWidth>e.clientWidth+2||e.scrollHeight>e.clientHeight+2).map(e=>e.className));
+ report.overflow=await page.evaluate(()=>[...document.querySelectorAll('.d1-panel,.d1-lifecycle,.d1-service,.d1-service-copy,.d1-estop')].filter(e=>e.scrollWidth>e.clientWidth+2||e.scrollHeight>e.clientHeight+2).map(e=>e.className));
  assert.deepEqual(report.overflow,[]);
  let data;
  for(const file of await readdir(dir)){let r;try{r=JSON.parse(await readFile(dir+'/'+file,'utf8'));}catch{continue;}if(r.id===report.layoutId){data=r.working?.data??r.baseline.data;break;}}

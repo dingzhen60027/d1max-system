@@ -1,9 +1,9 @@
 {
   "name": "d1max-console",
   "displayName": "D1 Max 状态监控",
-  "description": "状态监控、静态 PCD 与实时感知；仅保留单向软件急停",
+  "description": "本机通信连接、Web 启停、静态 PCD 与实时感知；仅保留单向软件急停",
   "publisher": "dndx",
-  "version": "0.7.4",
+  "version": "0.8.0",
   "license": "UNLICENSED",
   "main": "dist/extension.js",
   "files": ["dist", "layouts", "SINGLE_FLOOR_MAPS.md"],

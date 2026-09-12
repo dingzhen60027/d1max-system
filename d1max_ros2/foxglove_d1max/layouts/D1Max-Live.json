@@ -281,6 +281,7 @@
         "velocityTopic": "/d1max_sdk_bridge/velocity",
         "gatewayTopic": "/d1max/monitor/status",
         "mapTopic": "/d1max/maps/floor1/status",
+        "localizationTopic": "/d1max/localization/status",
         "staleSeconds": 2.5
       },
       "foxglovePanelTitle": "D1 Max · 状态监控"

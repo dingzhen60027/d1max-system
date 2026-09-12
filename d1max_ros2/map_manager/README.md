@@ -1,7 +1,15 @@
-# D1 Max 3D 地图工作台
+# D1 Max 地图工作台 · 2D / 3D
 
 该工具参考 `/home/dndx/go2_nav/tools/map_manager` 的 Web 工作台布局和交互，面向
-D1 Max 当前真实可用的 3D 建图链路做了适配。
+D1 Max 当前建图链路做了适配。首页提供独立的 **2D 导航** 与 **3D 地图** 入口。
+
+## 页面层级
+
+- 首页 `/#/`：仅加载地图索引，不加载 Three.js、PCD 或 ROS。
+- 3D `/#/3d/maps`：全局侧栏切换原始点云、处理结果、规划产物、归档、异常；中间始终是当前类别的列表、预览和详情。建图启停/保存收进“建图管理”对话框。
+- 2D `/#/2d/versions`：地图版本、生成 2D 地图、导航准备、独立归档。可从 3D 详情直接携带源 PCD 进入生成表单。
+- 使用真实 shadcn/ui Base 组件：Sidebar、Breadcrumb、Card、Select、Dialog、AlertDialog、DropdownMenu、ScrollArea 等，保留现有 3D 数据和点云处理功能。参考 [Sidebar](https://ui.shadcn.com/docs/components/base/sidebar) 与 [Breadcrumb](https://ui.shadcn.com/docs/components/base/breadcrumb)。
+- 首屏按需加载；只有进入 3D 才下载点云渲染模块，只有点击修整才加载 2D 编辑器。
 
 ## 范围
 
@@ -55,8 +63,49 @@ PYTHONPATH=d1max_ros2/map_manager \
   --input /path/to/raw.pcd --output /path/to/processed.pcd
 ```
 
-本版本刻意不包含 PGM/YAML 栅格地图、2D 编辑器、2D 地图构建、Nav2 激活或
-2D 目标点功能。D1 Max 尚未接好对应定位/导航链路之前，页面不会显示虚假的可用操作。
+## Go2 2D 地图流程迁移
+
+已迁移的是 Go2 **离线地图准备与版本管理**，不是 Go2 机器人的导航启动脚本，也不会复制或修改 Go2 地图数据。
+
+1. 选择未归档的原始/处理后 PCD；配置可选统计与半径滤波、Z 高度切片、XY 栅格分辨率、边界、每格点数阈值。
+2. 生成完整候选版本；不自动选用。定位 PCD 保留 3D 高度与强度，只有投影阶段切 Z，禁用滤波时原样复制 PCD。
+3. 修整支持画墙、擦除杂点、未知区域、自由笔刷、直线、撤销/重做、缩放；坐标按原始 PGM 像素保存，不保存浏览器截图。编辑永远另存版本，原图、原坐标与定位 PCD 不变。
+4. 检查修订对比，再手动选用；支持回退上一版本、重命名、下载完整 ZIP、无损归档与恢复。
+5. 归档区可删除所选或全部永久删除。只删除明确列出的已归档版本及其配套文件，禁止删除当前选用版本；不会删除源 PCD。
+
+默认配置位于 `config/navigation2d.yaml`；用户方案为 `data/navigation2d/profiles/*.yaml`。
+版本位于 `data/navigation2d/versions/grid-<id>/`，包含：
+
+- `map.pgm` / `map.yaml`：ROS 栅格及分辨率、原点、阈值。
+- `localization.pcd`：该版本配套定位点云。
+- `pipeline.yaml`：输入点云、完整滤波与投影参数、累计修整笔画、输出路径。
+- `manifest.json`：来源、父版本、参数、像素统计、生成时间。
+
+`data/navigation2d/state.json` 只记录本工作区选用与归档，不写 `maps/active`，不启动 Nav2。
+`D1MAX_MAP_MANAGER_DATA` 可以为测试指定完全独立的数据目录。
+
+**坐标与可通行性注意：** Z 上下限是 PCD 绝对坐标，不是离地高度，必须先确定单层范围。静态点云没有射线观测信息，空白不等于可通行：默认保留未知，也提供 Go2 兼容的空白设自由方案。输出占据=0、自由=254、未知=205；`free_thresh=0.196`，修正 Go2 原 `.25` 阈值会把 205 误识别为自由的问题。地图文件格式参考 [Nav2 Map Server](https://api.nav2.org/nav2-rolling/html/md_nav2_map_server_README.html)。
+
+单个 YAML 可以重放从原始 PCD 到地图及全部手工修订的流程，输出目录必须不存在，防止覆盖：
+
+```bash
+cd d1max_ros2/map_manager
+/path/to/map_manager_venv/bin/python -m backend.grid_maps \
+  --config /path/to/version/pipeline.yaml \
+  --output-dir /path/to/new-output-directory
+```
+
+原始 PCD 必须仍存在。输出不自动注册或选用，不发送机器人指令。2D 生成与 3D 点云处理共用单任务锁，重复请求返回 409；取消/关闭会请求停止，重启后未完成任务标记中断，不自动重跑。
+
+**定位已集成，导航执行仍未接入：** `/#/2d/navigation` 现在为“定位调试”。Web 可连接只读数据后台、启动 D1 双 EKF + GICP，并像 RViz2 一样按下选位置、拖动指向机头、松开提交初值（Esc 取消）。离线仅记录箭头；精确 XYZ / 角度在高级设置。Foxglove 原左侧 PCD 窗口看结果。不启动 Nav2、不发送速度 / 姿态目标，`navigation_ready` 始终为 false。
+
+定位读取当前版本的 `localization.pcd`，源点云不覆盖；运行期间锁住选用版本，禁止切图、取消选用、归档 / 删除该版本。初值仅进入匹配种子，连续确认后才发布全局 TF / 可信位姿。断流不冒充成功，失败不自动重试。机身到前雷达外参仍为 CAD 近似，实机精度尚未验证。
+
+初值 API 显式传 `reference: body`，位置和方向都指机身，后台依据同一份 YAML 组合一次固定机身→tracking 外参；不自动估计地面、不附加 Z 偏移、不修改地图。像素/地图坐标纯函数在 `frontend/src/lib/pose-estimate.js`，手势组件在 `PoseEstimateMap.jsx`，ROS 变换在导航包 `initial_pose.py`，职责分离。匹配器诊断显示未收敛 / 门限拒绝 / 过期等原因；橙色 `scan_initial_preview` 是未验证的显示数据，不能用于导航。
+
+唯一算法配置为 `/home/dndx/d1max_nav_ws/src/d1max_localization/config/localization.yaml`，每次启动保存到 `data/localization/<session>/`，另存状态、初值回执与日志。`d1max-localization-managed.service` 使用独立 cgroup，绑定 Web 生命周期；停止等待 12 秒后清理其全部子孙节点。停止定位不关闭共享监看链路，关闭 Web 会停止定位。API 为 `/api/localization/{overview,config,connect,start,stop,initial-pose}`，配置凭据仅在后端使用。
+
+离线算法与帧说明见 `/home/dndx/d1max_nav_ws/src/d1max_localization/README.md`。Web 回归：`python -m unittest discover -s tests`；浏览器检查：`frontend/scripts/verify-localization.mjs`（POST 全部拦截，不启动实机）；进程清理检查：`D1MAX_LOCALIZATION_QA=1 python scripts/verify_localization_cgroup.py`（独立 QA 单元，不操作生产服务）。
 
 ## 启动
 
@@ -116,3 +165,11 @@ npm run build
 - 结束建图先发送 `SIGINT`，给地图节点足够时间落盘，之后才升级信号；
 - 无损归档只写 `d1max_ros2/map_manager/data/state.json`，不会删除点云。
 - 点云处理写入独立目录，不覆盖、移动或删除任何原始 PCD；同一时刻只运行一个处理任务。
+
+## 验证
+
+```bash
+/path/to/map_manager_venv/bin/python -m unittest discover -s tests -v
+```
+
+前端 `scripts/verify-portal.mjs` 是包含生成/编辑/删除的浏览器集成测试，**只允许运行在 `/tmp/d1max-web-migration-*` 的隔离地图后端**，拒绝在真实地图目录运行。默认端口 8767，生产端口仍为 8766。验证记录见 `VERIFICATION_2D.md`。

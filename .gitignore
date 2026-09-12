@@ -19,6 +19,7 @@
 *.foxe
 *.deb
 *.tar.gz
+*.tar.zst
 *.tgz
 *.zip
 *.log
@@ -60,5 +61,6 @@ id_rsa*
 id_ed25519*
 credentials*
 hosts.yml
+**/*.local.json
 **/.ssh/
 **/.config/

@@ -38,6 +38,11 @@ class ImuProcess {
                  PointCloudType::Ptr pcl_un_);
 
     common::M3D gravity_rotation_;    // rotation to align IMU up → world +z
+    int initialization_samples{MAX_INI_COUNT};
+    bool debug_file_enabled{true};
+    bool Initialized() const { return !imu_need_init_; }
+    int InitializationSamples() const { return std::max(0, init_iter_num_ - 1); }
+    double AccelerationScale() const { return common::G_m_s2 / mean_acc_.norm(); }
 
     std::ofstream fout_imu_;
     Eigen::Matrix<double, 12, 12> Q_;
@@ -89,9 +94,13 @@ ImuProcess::ImuProcess() : b_first_frame_(true), imu_need_init_(true) {
 ImuProcess::~ImuProcess() {}
 
 void ImuProcess::Reset() {
+    b_first_frame_ = true;
     mean_acc_ = common::V3D(0, 0, -1.0);
     mean_gyr_ = common::V3D(0, 0, 0);
     angvel_last_ = common::Zero3d;
+    acc_s_last_ = common::Zero3d;
+    last_lidar_end_time_ = 0.;
+    gravity_rotation_.setIdentity();
     imu_need_init_ = true;
     init_iter_num_ = 1;
     v_imu_.clear();
@@ -320,14 +329,14 @@ void ImuProcess::Process(const common::MeasureGroup &meas, esekfom::esekf<state_
         last_imu_ = meas.imu_.back();
 
         state_ikfom imu_state = kf_state.get_x();
-        if (init_iter_num_ > MAX_INI_COUNT) {
+        if (init_iter_num_ > initialization_samples) {
             cov_acc_ *= pow(common::G_m_s2 / mean_acc_.norm(), 2);
             imu_need_init_ = false;
 
             cov_acc_ = cov_acc_scale_;
             cov_gyr_ = cov_gyr_scale_;
             LOG(INFO) << "IMU Initial Done";
-            fout_imu_.open(common::DEBUG_FILE_DIR("imu_.txt"), std::ios::out);
+            if(debug_file_enabled)fout_imu_.open(common::DEBUG_FILE_DIR("imu_.txt"), std::ios::out);
         }
 
         return;

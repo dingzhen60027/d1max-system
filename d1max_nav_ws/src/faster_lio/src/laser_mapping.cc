@@ -103,6 +103,10 @@ bool LaserMapping::InitWithoutROS(const std::string &config_yaml) {
 
 // bool LaserMapping::LoadParams(ros::NodeHandle &nh) {
 void LaserMapping::LoadParams() {
+    robust_mode_=declare_parameter("localization.enabled",false);
+    publish_tf_=declare_parameter("publish.tf_enabled",true);
+    tf_world_frame_=declare_parameter<std::string>("publish.world_frame","camera_init");
+    tf_imu_frame_=declare_parameter<std::string>("publish.body_frame","body");
     // get params from param server
     int lidar_type, ivox_nearby_type;
     double gyr_cov, acc_cov, b_gyr_cov, b_acc_cov;
@@ -474,7 +478,8 @@ void LaserMapping::SubAndPubToROS(){
 
     // ROS2
 
-    if (preprocess_->GetLidarType() == LidarType::AVIA) {
+    if(robust_mode_) { InitRobustRuntime(); }
+    else if (preprocess_->GetLidarType() == LidarType::AVIA) {
         sub_livox_ = this->create_subscription<livox_ros_driver2::msg::CustomMsg>(
             lidar_topic, 200000, [this](const livox_ros_driver2::msg::CustomMsg::SharedPtr msg) { LivoxPCLCallBack(msg); });
     } else {
@@ -482,7 +487,7 @@ void LaserMapping::SubAndPubToROS(){
             lidar_topic, 200000, [this](const sensor_msgs::msg::PointCloud2::SharedPtr msg) { StandardPCLCallBack(msg); });
     }
 
-    sub_imu_ = this->create_subscription<sensor_msgs::msg::Imu>(imu_topic, 200000,
+    if(!robust_mode_)sub_imu_ = this->create_subscription<sensor_msgs::msg::Imu>(imu_topic, 200000,
                                               [this](const sensor_msgs::msg::Imu::SharedPtr msg) { IMUCallBack(msg); });
 
     // ROS publisher init
@@ -497,11 +502,12 @@ void LaserMapping::SubAndPubToROS(){
     // ROS2
     path_.header.stamp = rclcpp::Clock().now();
     path_.header.frame_id = "camera_init";
-    pub_laser_cloud_world_ = this->create_publisher<sensor_msgs::msg::PointCloud2>("cloud_registered", 100000);
-    pub_laser_cloud_body_ = this->create_publisher<sensor_msgs::msg::PointCloud2>("cloud_registered_body", 100000);
-    pub_laser_cloud_effect_world_ = this->create_publisher<sensor_msgs::msg::PointCloud2>("cloud_registered_effect_world", 100000);
-    pub_odom_aft_mapped_ = this->create_publisher<nav_msgs::msg::Odometry>("Odometry", 100000);
-    pub_path_ = this->create_publisher<nav_msgs::msg::Path>("path", 100000);
+    const size_t depth=robust_mode_?10:100000;
+    pub_laser_cloud_world_ = this->create_publisher<sensor_msgs::msg::PointCloud2>("cloud_registered", depth);
+    pub_laser_cloud_body_ = this->create_publisher<sensor_msgs::msg::PointCloud2>("cloud_registered_body", depth);
+    pub_laser_cloud_effect_world_ = this->create_publisher<sensor_msgs::msg::PointCloud2>("cloud_registered_effect_world", depth);
+    pub_odom_aft_mapped_ = this->create_publisher<nav_msgs::msg::Odometry>("Odometry", depth);
+    pub_path_ = this->create_publisher<nav_msgs::msg::Path>("path", depth);
     br  = std::make_shared<tf2_ros::TransformBroadcaster>(this);
 }
 
@@ -515,13 +521,15 @@ LaserMapping::LaserMapping(const std::string &name) : Node(name) {
 
 
 void LaserMapping::Run() {
+    if(robust_mode_){RobustRecovery();RobustStatus();}
     if (!SyncPackages()) {
         return;
     }
 
     /// IMU process, kf prediction, undistortion
+    scan_undistort_->clear();
     p_imu_->Process(measures_, kf_, scan_undistort_);
-    if (scan_undistort_->empty() || (scan_undistort_ == nullptr)) {
+    if (!scan_undistort_ || scan_undistort_->empty()) {
         LOG(WARNING) << "No point, skip this scan!";
         return;
     }
@@ -568,6 +576,13 @@ void LaserMapping::Run() {
         },
         "IEKF Solve and Update");
 
+    if(robust_mode_ && (effect_feat_num_<robust_min_features_ || !state_point_.pos.allFinite()
+          || !state_point_.vel.allFinite() || !state_point_.rot.coeffs().allFinite() || !kf_.get_P().allFinite())) {
+        robust_reason_="weak_geometry";
+        if(robust_last_good_>0 && lidar_end_time_-robust_last_good_>.5)robust_fault_=true;
+        return;
+    }
+    if(robust_mode_){robust_last_good_=lidar_end_time_;robust_reason_="tracking";robust_recovering_=false;}
     // update local map
     Timer::Evaluate([&, this]() { MapIncremental(); }, "    Incremental Mapping");
 
@@ -589,7 +604,7 @@ void LaserMapping::Run() {
         if (path_pub_en_ || path_save_en_) {
             PublishPath(pub_path_);
         }
-        if (scan_pub_en_ || pcd_save_en_) {
+        if ((!robust_mode_ && scan_pub_en_) || pcd_save_en_) {
             PublishFrameWorld();
         }
         if (scan_pub_en_ && scan_body_pub_en_) {
@@ -707,6 +722,7 @@ void LaserMapping::IMUCallBack(const sensor_msgs::msg::Imu::SharedPtr msg_in) {
 }
 
 bool LaserMapping::SyncPackages() {
+    if(robust_mode_)return RobustSync();
     if (lidar_buffer_.empty() || imu_buffer_.empty()) {
         return false;
     }
@@ -956,24 +972,42 @@ void LaserMapping::PublishPath(const rclcpp::Publisher<nav_msgs::msg::Path>::Sha
 }
 
 void LaserMapping::PublishOdometry(const rclcpp::Publisher<nav_msgs::msg::Odometry>::SharedPtr pub_odom_aft_mapped) {
-    odom_aft_mapped_.header.frame_id = "camera_init";
-    odom_aft_mapped_.child_frame_id = "body";
+    odom_aft_mapped_.header.frame_id = tf_world_frame_;
+    odom_aft_mapped_.child_frame_id = tf_imu_frame_;
     rclcpp::Time time_stamp(static_cast<uint64_t>(lidar_end_time_ * 1e9));
     odom_aft_mapped_.header.stamp = time_stamp;
     // odom_aft_mapped_.header.stamp = ros::Time().fromSec(lidar_end_time_);  // ros::Time().fromSec(lidar_end_time_);
     SetPosestamp(odom_aft_mapped_.pose);
-    pub_odom_aft_mapped->publish(odom_aft_mapped_);
     auto P = kf_.get_P();
-    for (int i = 0; i < 6; i++) {
-        int k = i < 3 ? i + 3 : i - 3;
-        odom_aft_mapped_.pose.covariance[i * 6 + 0] = P(k, 3);
-        odom_aft_mapped_.pose.covariance[i * 6 + 1] = P(k, 4);
-        odom_aft_mapped_.pose.covariance[i * 6 + 2] = P(k, 5);
-        odom_aft_mapped_.pose.covariance[i * 6 + 3] = P(k, 0);
-        odom_aft_mapped_.pose.covariance[i * 6 + 4] = P(k, 1);
-        odom_aft_mapped_.pose.covariance[i * 6 + 5] = P(k, 2);
-    }
+    // IKFoM state is [position, right-local rotation, extrinsics, velocity, biases].
+    // ROS pose covariance uses [position, fixed-frame rotation], not the inverse ordering.
+    Eigen::Matrix<double,6,6> pose_j=Eigen::Matrix<double,6,6>::Identity();
+    const Eigen::Matrix3d rotation=state_point_.rot.toRotationMatrix();
+    pose_j.block<3,3>(3,3)=rotation;
+    const Eigen::Matrix<double,6,6> pose_cov=pose_j*P.block<6,6>(0,0)*pose_j.transpose();
+    for(int i=0;i<6;++i)for(int j=0;j<6;++j)odom_aft_mapped_.pose.covariance[6*i+j]=pose_cov(i,j);
 
+    const common::V3D body_velocity=state_point_.rot.conjugate()*state_point_.vel;
+    odom_aft_mapped_.twist.twist.linear.x=body_velocity.x();
+    odom_aft_mapped_.twist.twist.linear.y=body_velocity.y();
+    odom_aft_mapped_.twist.twist.linear.z=body_velocity.z();
+    if(!measures_.imu_.empty()){
+        const auto& g=measures_.imu_.back()->angular_velocity;
+        odom_aft_mapped_.twist.twist.angular.x=g.x-state_point_.bg.x();
+        odom_aft_mapped_.twist.twist.angular.y=g.y-state_point_.bg.y();
+        odom_aft_mapped_.twist.twist.angular.z=g.z-state_point_.bg.z();
+    }
+    Eigen::Matrix<double,6,23> twist_j=Eigen::Matrix<double,6,23>::Zero();
+    twist_j.block<3,3>(0,12)=rotation.transpose();
+    Eigen::Matrix3d vskew;vskew<<0,-body_velocity.z(),body_velocity.y(),body_velocity.z(),0,-body_velocity.x(),-body_velocity.y(),body_velocity.x(),0;
+    twist_j.block<3,3>(0,3)=vskew;
+    twist_j.block<3,3>(3,15)=-Eigen::Matrix3d::Identity();
+    Eigen::Matrix<double,6,6> twist_cov=twist_j*P*twist_j.transpose();
+    twist_cov.block<3,3>(3,3).diagonal()+=p_imu_->cov_gyr_;
+    for(int i=0;i<6;++i)for(int j=0;j<6;++j)odom_aft_mapped_.twist.covariance[6*i+j]=twist_cov(i,j);
+    pub_odom_aft_mapped->publish(odom_aft_mapped_);
+    if(robust_mode_)PublishRobustSample(!robust_fault_.load()&&!robust_imu_clock_reset_.load());
+    if(!publish_tf_)return;
     // static tf::TransformBroadcaster br;
     // tf::Transform transform;
     // tf::Quaternion q;
@@ -989,8 +1023,8 @@ void LaserMapping::PublishOdometry(const rclcpp::Publisher<nav_msgs::msg::Odomet
     // ROS2
     geometry_msgs::msg::TransformStamped stampedTransform;
     stampedTransform.header.stamp = odom_aft_mapped_.header.stamp;
-    stampedTransform.header.frame_id =  "camera_init";
-    stampedTransform.child_frame_id =  "body";
+    stampedTransform.header.frame_id = tf_world_frame_;
+    stampedTransform.child_frame_id = tf_imu_frame_;
     stampedTransform.transform.translation.x = odom_aft_mapped_.pose.pose.position.x;
     stampedTransform.transform.translation.y = odom_aft_mapped_.pose.pose.position.y;
     stampedTransform.transform.translation.z = odom_aft_mapped_.pose.pose.position.z;
@@ -1025,7 +1059,7 @@ void LaserMapping::PublishFrameWorld() {
         rclcpp::Time time_stamp(static_cast<uint64_t>(lidar_end_time_ * 1e9));
         laserCloudmsg.header.stamp = time_stamp;
         // laserCloudmsg.header.stamp = ros::Time().fromSec(lidar_end_time_);
-        laserCloudmsg.header.frame_id = "camera_init";
+        laserCloudmsg.header.frame_id = tf_world_frame_;
         pub_laser_cloud_world_->publish(laserCloudmsg);
         publish_count_ -= options::PUBFRAME_PERIOD;
     }
@@ -1065,7 +1099,7 @@ void LaserMapping::PublishFrameBody(const rclcpp::Publisher<sensor_msgs::msg::Po
     rclcpp::Time time_stamp(static_cast<uint64_t>(lidar_end_time_ * 1e9));
     laserCloudmsg.header.stamp = time_stamp;
     // laserCloudmsg.header.stamp = ros::Time().fromSec(lidar_end_time_);
-    laserCloudmsg.header.frame_id = "body";
+    laserCloudmsg.header.frame_id = tf_imu_frame_;
     pub_laser_cloud_body->publish(laserCloudmsg);
     publish_count_ -= options::PUBFRAME_PERIOD;
 }
@@ -1237,3 +1271,4 @@ void LaserMapping::Finish() {
     LOG(INFO) << "finish done";
 }
 }  // namespace faster_lio
+#include "robust_runtime.inc"

@@ -75,4 +75,14 @@ install(DIRECTORY
 install(DIRECTORY launch config
   DESTINATION share/${PROJECT_NAME})
 
+if(BUILD_TESTING)
+  enable_testing()
+  foreach(test_name mc_report monitor_estop sdk_session sdk_ownership)
+    add_executable(test_${test_name} src/test_${test_name}.cpp)
+    # Keep assertions active in Release builds as well.
+    target_compile_options(test_${test_name} PRIVATE -UNDEBUG)
+    add_test(NAME test_${test_name} COMMAND test_${test_name})
+  endforeach()
+endif()
+
 ament_package()

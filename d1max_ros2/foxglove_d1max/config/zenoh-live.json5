@@ -1,8 +1,8 @@
-// Read-only visualization clients connect directly to the known D1 Max router.
-// Separate from the local-only bag router at 127.0.0.1:7447.
+// All live consumers share ONE robot uplink owned by start_live_monitor.sh.
+// Never use the offline bag router (7447) for live localization.
 {
   mode: "client",
-  connect: { endpoints: ["tcp/192.168.168.100:7447"], exit_on_failure: true },
+  connect: { endpoints: ["tcp/127.0.0.1:7448"], exit_on_failure: true },
   scouting: { multicast: { enabled: false }, gossip: { enabled: false } },
   timestamping: { enabled: true, drop_future_timestamp: false },
 }

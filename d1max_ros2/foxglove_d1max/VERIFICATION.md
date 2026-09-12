@@ -1,3 +1,15 @@
+# v0.8.0 Foxglove 连接与 Web 启停 — 2026-09-10
+
+- 原生布局仍为 `lay_0ebT8DAcov9bFrkG`，10 个配置项与全部分割比例保留；只替换状态区内容，不改两侧视角、双电池和相机/曲线配置。
+- 36 项 TypeScript、10 项管理器假服务测试通过；Web 4 项测试通过（含停止取消、残留任务恢复与原有归档删除）。30 组隔离 UI 场景覆盖明暗主题和三种尺寸，无溢出。
+- 原生 Foxglove 在 8769 未启动时仍可直接使用 Connect。实测 Web 两轮启动/停止，各次 PID 不同，停止后 MainPID=0、ControlGroup 为空、端口释放；同步双击只产生一次 POST，刷新页面没有启停 POST 或重复进程。
+- 隔离 cgroup 实测：测试父子进程分属两个 session，均忽略 SIGINT/SIGTERM；使用与工作单元相同的 control-group 策略、测试专用 2 秒上限，2.18 秒后全部退出、cgroup 清空。测试不连接 ROS/SDK，不修改生产服务；脚本为 `scripts/verify-cgroup-cleanup.py`。
+- 已统一停止旧父进程组 61063、独立单层进程组 77803、旧 Web 进程组 78469；包含旧多层发布器，未删除任何地图。保留无关的本机 Zenoh router 与 Foxglove。
+- 实测发现 Meta 代理会接受发往机器狗的 TCP，已增加实际网卡与路由检查。最初通信启动失败后 cgroup 已自动清空；修正后有线网卡 down 的 Connect 直接报网络不可达，不再启动工作进程。
+- 本轮未验证实机在线的完整连接成功：网卡 `enx6c1ff7bc241e` 当前 down。不得把旧截图的在线状态作为本轮结果。没有调用任何机器人动作或实际软件急停。
+- 本轮实际截图 `artifacts/lifecycle-native.png`，按钮启停验收 `artifacts/lifecycle-native-checks.json`。测试结束保留 Web 运行，通信未连接；PCD 窗口配置保留，后台关闭时没有点云输入。
+- 管理器已按用户服务安装，登录时只启动空闲本机 API；不会自动连接机器狗。下面是旧版本历史记录。
+
 # v0.7.4 左侧窗口恢复及单层点云显示 — 2026-09-10 15:27 CST
 
 - 先恢复左侧 PCD 空窗口；随后按用户要求加载 `runs/20260825_235024/sc_pgo/optimized_map.pcd`。当前原生布局 ID 为 `lay_0ebT8DAcov9bFrkG`，已原生保存并刷新验证。

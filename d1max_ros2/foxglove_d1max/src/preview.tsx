@@ -3,6 +3,7 @@ import type { PanelExtensionContext } from "@foxglove/extension";
 import { createRoot } from "react-dom/client";
 import { Controller } from "./controller";
 import { App } from "./App";
+import { LifecycleClient } from "./lifecycle";
 import styles from "./styles.css";
 const style=document.createElement("style");style.textContent=styles;document.head.append(style);
 const root=document.getElementById("root")!;
@@ -11,6 +12,17 @@ const c=new Controller(context);c.preview=true;
 const params=new URLSearchParams(location.search);c.colorScheme=params.get("theme")==="light"?"light":"dark";
 createRoot(root).render(<App controller={c}/>);
 const mode=params.get("mode");c.state.replay=mode==="replay";
+// Isolated fixture only: never call start() or connect to the local manager.
+c.lifecycle=new LifecycleClient("preview-only",()=>c.emit(),async()=>{throw Error("Preview has no transport");});
+const service={phase:"stopped" as const,active:false,owned:false,busy:false,error:"",health:{}};
+const managerFeed=()=>{
+ if(mode==="empty")return;
+ c.lifecycle!.value={api:1,instance:"0123456789abcdef0123456789abcdef",wall_time:Date.now()/1000,
+ monitor:{...service,active:true,owned:true,phase:mode==="stale"?"degraded":"connected"},
+ web:{...service,active:true,owned:true,phase:"running"}};
+ c.lifecycle!.at=performance.now();
+};
+managerFeed();setInterval(managerFeed,200);
 const feed=()=>{
   c.ingest({topic:c.config.stateTopic,message:{data:JSON.stringify({forward_speed:.26,lateral_speed:.02,yaw_speed:.08,battery_power_1:86,battery_power_2:84,motion_status:5,control_source:2,software_emergency_status:1,hardware_emergency_status:1})}});
   c.ingest({topic:c.config.behaviorTopic,message:{data:JSON.stringify({fsm_state:"ready",fault_latched:false,ready_for_navigation:true})}});

@@ -3,3 +3,4 @@ dist/
 artifacts/
 *.foxe
 __pycache__/
+config/manager.local.json
