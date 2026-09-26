@@ -1,9 +1,11 @@
 # D1 Max System
 
-D1 Max 系统源码与配置：建图、PCD 处理、2D 地图准备、单楼层定位、SDK 数据接入和 Foxglove 监控。
-当前整理基线：2026-09-12。主分支 `main`，统一发布仓库 `dingzhen60027/d1max-system`。
+D1 Max 系统源码与配置：建图、地图处理、定位、原生 PCT / SCAN 规划预览、SDK 数据接入及 Foxglove / RViz 监控。
+当前整理基线：2026-09-26。主分支 `main`，统一公开发布仓库 `dingzhen60027/d1max-system`。
 
-## 当前使用边界
+当前定位规划预览采用全局/局部两套 RViz 布局，默认启用双雷达逐束射线 `per_sensor_rays`，仅用于无运动预览。近身占据/未知空间阻塞和机身几何标定仍未解决；已接入原生规划不等于实机闭环通过。见 [当前限制](docs/KNOWN_ISSUES.md) 和 [验证记录](VERIFICATION.md)。本次只同步发布副本，不部署或启动机器人。
+
+## 既有监控入口边界（2026-09-12 记录）
 
 - ROS 2 Humble、Domain 24、`rmw_zenoh_cpp`；不使用 Fast DDS。
 - Foxglove 为单屏：左侧单层候选 PCD，右侧实时双雷达与前后图像，底部相机、速度曲线、紧凑双电池、Connect / Disconnect、Web 启停及单向软件急停。

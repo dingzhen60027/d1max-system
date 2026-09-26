@@ -1,6 +1,8 @@
 #include "pointcloud_preprocess.h"
 
 #include <glog/logging.h>
+#include <algorithm>
+#include <cmath>
 #include <execution>
 
 namespace faster_lio {
@@ -12,11 +14,23 @@ void PointCloudPreprocess::Set(LidarType lid_type, double bld, int pfilt_num) {
 }
 
 void PointCloudPreprocess::Process(const livox_ros_driver2::msg::CustomMsg::SharedPtr msg, PointCloudType::Ptr &pcl_out) {
+    if (!pcl_out) pcl_out.reset(new PointCloudType());
+    if (!msg) {
+        cloud_out_.clear();
+        pcl_out->clear();
+        return;
+    }
     AviaHandler(msg);
     *pcl_out = cloud_out_;
 }
 
 void PointCloudPreprocess::Process(const sensor_msgs::msg::PointCloud2::SharedPtr msg, PointCloudType::Ptr &pcl_out) {
+    if (!pcl_out) pcl_out.reset(new PointCloudType());
+    cloud_out_.clear();
+    if (!msg) {
+        pcl_out->clear();
+        return;
+    }
     switch (lidar_type_) {
         case LidarType::OUST64:
             Oust64Handler(msg);
@@ -81,6 +95,8 @@ void PointCloudPreprocess::AviaHandler(const livox_ros_driver2::msg::CustomMsg::
 void PointCloudPreprocess::Oust64Handler(const sensor_msgs::msg::PointCloud2::SharedPtr msg) {
     cloud_out_.clear();
     cloud_full_.clear();
+    if (point_filter_num_ <= 0 || num_scans_ <= 0 ||
+        !std::isfinite(blind_) || blind_ < 0.0) return;
     pcl::PointCloud<ouster_ros::Point> pl_orig;
     pcl::fromROSMsg(*msg, pl_orig);
     int plsize = pl_orig.size();
@@ -88,6 +104,10 @@ void PointCloudPreprocess::Oust64Handler(const sensor_msgs::msg::PointCloud2::Sh
 
     for (int i = 0; i < pl_orig.points.size(); i++) {
         if (i % point_filter_num_ != 0) continue;
+
+        const auto& raw = pl_orig.points[i];
+        if (!std::isfinite(raw.x) || !std::isfinite(raw.y) || !std::isfinite(raw.z) ||
+            !std::isfinite(raw.intensity) || raw.ring >= num_scans_) continue;
 
         double range = pl_orig.points[i].x * pl_orig.points[i].x + pl_orig.points[i].y * pl_orig.points[i].y +
                        pl_orig.points[i].z * pl_orig.points[i].z;
@@ -112,10 +132,26 @@ void PointCloudPreprocess::Oust64Handler(const sensor_msgs::msg::PointCloud2::Sh
 void PointCloudPreprocess::VelodyneHandler(const sensor_msgs::msg::PointCloud2::SharedPtr msg) {
     cloud_out_.clear();
     cloud_full_.clear();
+    if (point_filter_num_ <= 0 || num_scans_ <= 0 ||
+        !std::isfinite(blind_) || blind_ < 0.0 ||
+        !std::isfinite(time_scale_) || time_scale_ <= 0.0F) return;
+
+    // PCL otherwise ignores an incompatible time field and initializes zeros,
+    // making a supplied-but-unreadable clock look like a timestamp-free cloud.
+    // An absent field still uses the existing legacy yaw-time fallback.
+    for (const auto& field : msg->fields) {
+        if (field.name == "time" &&
+            (field.datatype != sensor_msgs::msg::PointField::FLOAT32 || field.count != 1 ||
+             msg->point_step < sizeof(float) || field.offset > msg->point_step - sizeof(float))) {
+            LOG(WARNING) << "Rejecting point cloud with incompatible time field";
+            return;
+        }
+    }
 
     pcl::PointCloud<velodyne_ros::Point> pl_orig;
     pcl::fromROSMsg(*msg, pl_orig);
     int plsize = pl_orig.points.size();
+    if (plsize == 0) return;
     cloud_out_.reserve(plsize);
 
     /*** These variables only works when no point timestamps given ***/
@@ -126,22 +162,21 @@ void PointCloudPreprocess::VelodyneHandler(const sensor_msgs::msg::PointCloud2::
     std::vector<float> time_last(num_scans_, 0.0);  // last offset time
     /*****************************************************************/
 
-    if (pl_orig.points[plsize - 1].time > 0) {
-        given_offset_time_ = true;
-    } else {
-        given_offset_time_ = false;
-        double yaw_first = atan2(pl_orig.points[0].y, pl_orig.points[0].x) * 57.29578;
-        double yaw_end = yaw_first;
-        int layer_first = pl_orig.points[0].ring;
-        for (uint i = plsize - 1; i > 0; i--) {
-            if (pl_orig.points[i].ring == layer_first) {
-                yaw_end = atan2(pl_orig.points[i].y, pl_orig.points[i].x) * 57.29578;
-                break;
-            }
-        }
-    }
+    // A malformed final point must not make us discard the real timestamps
+    // of every other point and silently synthesize an entire scan's timing.
+    // Clouds without positive timestamps retain the legacy yaw-time fallback.
+    const auto usable = [this](const auto& p) {
+        return std::isfinite(p.x) && std::isfinite(p.y) && std::isfinite(p.z) &&
+               std::isfinite(p.intensity) && p.ring < num_scans_ &&
+               std::isfinite(p.time) && p.time >= 0.0F && std::isfinite(p.time * time_scale_);
+    };
+    given_offset_time_ = std::any_of(pl_orig.begin(), pl_orig.end(), [](const auto& p) {
+        return std::isfinite(p.time) && p.time > 0.0F;
+    });
 
     for (int i = 0; i < plsize; i++) {
+        const auto& raw = pl_orig.points[i];
+        if (!usable(raw)) continue;
         PointType added_pt;
 
         added_pt.normal_x = 0;
@@ -152,6 +187,7 @@ void PointCloudPreprocess::VelodyneHandler(const sensor_msgs::msg::PointCloud2::
         added_pt.z = pl_orig.points[i].z;
         added_pt.intensity = pl_orig.points[i].intensity;
         added_pt.curvature = pl_orig.points[i].time * time_scale_;  // curvature unit: ms
+        if (!std::isfinite(added_pt.curvature)) continue;
 
         if (!given_offset_time_) {
             int layer = pl_orig.points[i].ring;
@@ -185,6 +221,14 @@ void PointCloudPreprocess::VelodyneHandler(const sensor_msgs::msg::PointCloud2::
             }
         }
     }
+
+    // SyncPackages uses the final point's offset as the scan end. Preserve
+    // already ordered input exactly; put valid unordered input in time order.
+    const auto by_time = [](const PointType& a, const PointType& b) {
+        return a.curvature < b.curvature;
+    };
+    if (!std::is_sorted(cloud_out_.begin(), cloud_out_.end(), by_time))
+        std::stable_sort(cloud_out_.begin(), cloud_out_.end(), by_time);
 }
 
 }  // namespace faster_lio

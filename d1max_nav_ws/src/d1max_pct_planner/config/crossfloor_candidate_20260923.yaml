@@ -1,0 +1,7 @@
+# Inspection-only composite for the strict route's rejected measured stair.
+# This never produces a SCAN reference or an executable joined path.
+schema_version: 1
+measured_stair_audit: /home/dndx/d1max_nav_ws/maps/processed/sc_pgo_20260923_pct_crossfloor/measured_stair_audit.json
+output_directory: /home/dndx/d1max_nav_ws/maps/processed/sc_pgo_20260923_pct_crossfloor/candidate_inspection
+max_connector_gap_m: 0.08
+max_sample_spacing_m: 0.15

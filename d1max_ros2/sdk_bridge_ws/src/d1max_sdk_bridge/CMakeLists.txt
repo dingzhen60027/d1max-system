@@ -77,11 +77,13 @@ install(DIRECTORY launch config
 
 if(BUILD_TESTING)
   enable_testing()
-  foreach(test_name mc_report monitor_estop sdk_session sdk_ownership)
+  foreach(test_name mc_report joint_report monitor_estop sdk_session sdk_ownership navigation_motion navigation_dispatch)
     add_executable(test_${test_name} src/test_${test_name}.cpp)
     # Keep assertions active in Release builds as well.
     target_compile_options(test_${test_name} PRIVATE -UNDEBUG)
+    target_link_libraries(test_${test_name} Threads::Threads)
     add_test(NAME test_${test_name} COMMAND test_${test_name})
+    set_tests_properties(test_${test_name} PROPERTIES TIMEOUT 10)
   endforeach()
 endif()
 

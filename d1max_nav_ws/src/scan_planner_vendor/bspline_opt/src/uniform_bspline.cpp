@@ -1,4 +1,6 @@
 #include "bspline_opt/uniform_bspline.h"
+#include <cmath>
+#include <stdexcept>
 
 namespace scan_planner
 {
@@ -202,6 +204,15 @@ namespace scan_planner
       u_(i) += double(i - num1) * t_inc;
     for (int i = num2 + 1; i < u_.rows(); ++i)
       u_(i) += delta_t;
+  }
+
+  void UniformBspline::scaleTime(const double ratio)
+  {
+    if (!std::isfinite(ratio) || ratio < 1.0)
+      throw std::invalid_argument("B-spline time scale must be finite and >= 1");
+    const double origin = u_(p_);
+    u_ = ((u_.array() - origin) * ratio + origin).matrix();
+    interval_ *= ratio;
   }
 
   // void UniformBspline::recomputeInit() {}

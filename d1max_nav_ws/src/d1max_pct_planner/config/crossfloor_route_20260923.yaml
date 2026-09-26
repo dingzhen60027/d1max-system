@@ -1,0 +1,35 @@
+# Offline PCT cross-floor acceptance test: explicit recorded stair A portals.
+# The strict planner must reject this configuration if any measured stair cell
+# or full quintic curve is blocked; it never substitutes an odometry trace.
+schema_version: 1
+tomogram_path: /home/dndx/d1max_nav_ws/maps/processed/sc_pgo_20260923_pct_crossfloor/tomogram.npz
+source_pcd: /home/dndx/智元四足机器人D1 Max二次开发文档资料包v0.1.0/d1max_ros2/map_manager/data/processed/20260923_141005_sc-pgo-0923-crossfloor-structure-v1_2c7218/processed_map.pcd
+vendor_root: /home/dndx/d1max_nav_ws/src/pct_planner_vendor
+output_directory: /home/dndx/d1max_nav_ws/maps/processed/sc_pgo_20260923_pct_crossfloor/route_trial
+frame_id: d1max_loc_map
+anchors:
+  start: {xyz: [-25.3152, 45.7571, -0.6820437312], layer_id: 4}
+  entry: {xyz: [-30.6444, 47.9393, -0.6214673519], layer_id: 4}
+  landing: {xyz: [-28.736, 55.053, 1.37199998], layer_id: 8}
+  exit: {xyz: [-30.668, 48.2146, 3.1496334076], layer_id: 12}
+  goal: {xyz: [-25.6853, 45.8815, 3.1346840858], layer_id: 12}
+stair_roi:
+  min: [-34.0, 47.0, -1.0]
+  max: [-27.0, 56.0, 3.6]
+floor_z_ranges:
+  lower: [-1.0, 0.0]
+  upper: [2.8, 3.5]
+unknown_ceiling_policy: allow_unobserved
+limits:
+  max_ground_step_m: 0.17
+  max_vertical_grade: 1.0
+  vertical_step_allowance_m: 0.17
+  max_reverse_height_m: 0.35
+  min_floor_separation_m: 2.0
+  max_selection_height_error_m: 0.08
+planning:
+  max_heading_rate: 1.0
+  astar_cost_weight: 1.0
+  optimizer_cost_margin: 8.0
+  path_refinement: visibility_c2
+  refinement_corner_cut_m: 1.5

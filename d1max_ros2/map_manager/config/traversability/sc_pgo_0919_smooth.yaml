@@ -1,0 +1,8 @@
+input: /home/dndx/d1max_nav_ws/maps/processed/sc_pgo_20260919_ground_20260921/global_path_reachable
+output: /home/dndx/d1max_nav_ws/maps/processed/sc_pgo_20260919_ground_20260921/global_path_smooth
+control_spacing_m: 0.40
+sample_spacing_m: 0.04
+iterations: 350
+convergence_m: 0.0001
+z_filter_sigma_samples: 4.0
+max_ground_height_deviation_m: 0.08

@@ -1,0 +1,28 @@
+# Humble Collision Monitor. Independent protective stop, not a planner and not
+# a certified emergency stop. The downstream command gate still checks health.
+collision_monitor:
+  ros__parameters:
+    use_sim_time: false
+    base_frame_id: d1max_loc_base_link
+    odom_frame_id: d1max_loc_odom
+    cmd_vel_in_topic: /d1max/navigation/cmd_vel_smoothed
+    cmd_vel_out_topic: /d1max/navigation/cmd_vel_collision_checked
+    transform_tolerance: 0.2
+    source_timeout: 0.5
+    base_shift_correction: true
+    stop_pub_timeout: 0.5
+    polygons: [StopFootprint]
+    StopFootprint:
+      type: polygon
+      # The 0.98 x 0.58 m footprint, its 0.03 m padding, then 0.10 m margin.
+      points: [0.62, 0.42, 0.62, -0.42, -0.62, -0.42, -0.62, 0.42]
+      action_type: stop
+      max_points: 3
+      visualize: true
+      polygon_pub_topic: /d1max/navigation/collision_stop_polygon
+      enabled: true
+    observation_sources: [scan]
+    scan:
+      type: scan
+      topic: /d1max/navigation/scan
+      enabled: true

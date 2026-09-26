@@ -112,3 +112,7 @@ colcon test --packages-select d1max_localization
 完整 smoke 测试自建仅回环的 Zenoh 路由（17447，Domain 214），生成临时非对称房间 PCD，模拟双原始雷达 / IMU / SDK，不访问机器狗，不修改用户地图。验证无初值时无全局 TF、粗初值连续匹配锁定、双 EKF、断流后停止可信输出、退出清理。合成数据误差不代表真实精度。测试报告在其打印的 `/tmp/d1max-localization-smoke-*` 目录。
 
 源实现 / 依赖说明见 `UPSTREAM.md`。robot_localization 官方配置依据：[双滤波坐标系](https://github.com/cra-ros-pkg/robot_localization/blob/ros2/doc/state_estimation_nodes.rst)、[融合变量和重复观测](https://github.com/cra-ros-pkg/robot_localization/blob/ros2/doc/configuring_robot_localization.rst)。
+
+## 可选的原始双雷达射线元数据
+
+`perception_rays.enabled` 默认关闭；独立保留每点的雷达来源、原点与采集时间，不改变现有 LIO 输入。接口与限制见 [PERCEPTION_RAYS.md](PERCEPTION_RAYS.md)。该支路尚未去畸变或接入 SCAN，不能据此宣称地面误阻塞已经解决。

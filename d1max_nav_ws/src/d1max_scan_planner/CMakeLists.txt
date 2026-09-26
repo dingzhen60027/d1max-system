@@ -4,6 +4,7 @@ project(d1max_scan_planner)
 find_package(ament_cmake REQUIRED)
 
 install(DIRECTORY launch config rviz
-  DESTINATION share/${PROJECT_NAME})
+  DESTINATION share/${PROJECT_NAME}
+  PATTERN "__pycache__" EXCLUDE)
 
 ament_package()

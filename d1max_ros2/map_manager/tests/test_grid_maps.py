@@ -165,7 +165,7 @@ class GridTests(unittest.TestCase):
         app=FastAPI()
         app.include_router(create_router(self.store,lambda _id:self.source,threading.RLock(),lambda:False))
         client=TestClient(app)
-        self.assertFalse(client.get("/api/2d/overview").json()["navigation"]["available"])
+        self.assertTrue(client.get("/api/2d/overview").json()["navigation"]["available"])
         self.assertEqual(client.post("/api/2d/navigation/start").status_code,404)
         version=self.build()
         result=client.get(f"/api/2d/versions/{version}/map.png")

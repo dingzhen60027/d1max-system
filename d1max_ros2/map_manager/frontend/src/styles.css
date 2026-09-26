@@ -534,7 +534,7 @@ code { font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace; }
 
 .cloud-view, .cloud-host { width: 100%; height: 100%; min-width: 0; min-height: 0; }
 .cloud-view { position: relative; overflow: hidden; background: #09090b; }
-.cloud-host canvas { display: block; }
+.cloud-host canvas { display: block; width: 100%; height: 100%; }
 .cloud-state { position: absolute; inset: 0; z-index: 2; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; color: #a1a1aa; background: radial-gradient(circle at 50% 42%, #18181b, #09090b 62%); }
 .cloud-state strong { color: #f4f4f5; font-size: 14px; }
 .cloud-state span { color: #8b8b94; font-size: 12px; }

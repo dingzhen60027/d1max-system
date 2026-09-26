@@ -23,9 +23,13 @@ setup(
     entry_points={
         'console_scripts': [
             'pct_build_tomogram = d1max_pct_planner.cpu_tomography:main',
+            'pct_build_official_map = d1max_pct_planner.official_pipeline:main',
             'pct_build_floor_map = d1max_pct_planner.floor_traversability:main',
             'pct_plan_offline = d1max_pct_planner.plan_offline:main',
             'pct_visualize = d1max_pct_planner.visualize:main',
+            'pct_prepare_grid = d1max_pct_planner.measured_grid:main',
+            'pct_route_server = d1max_pct_planner.route_server:main',
+            'pct_preview_server = d1max_pct_planner.preview_server:main',
         ],
     },
 )

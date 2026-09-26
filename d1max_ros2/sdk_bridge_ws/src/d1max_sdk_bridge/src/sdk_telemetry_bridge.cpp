@@ -7,6 +7,7 @@
 #include "rclcpp/rclcpp.hpp"
 #include "std_msgs/msg/string.hpp"
 #include "robot_sdk/sdk_client.hpp"
+#include "sdk_session_core.hpp"
 
 using Json = nlohmann::json;
 using Publisher = rclcpp::Publisher<std_msgs::msg::String>;
@@ -98,10 +99,16 @@ class TelemetryBridge final : public rclcpp::Node {
 };
 
 int main(int argc, char** argv) {
-  rclcpp::init(argc, argv);
-  auto node = std::make_shared<TelemetryBridge>();
-  rclcpp::spin(node);
-  node.reset();
-  rclcpp::shutdown();
+  try {
+    d1monitor::SessionLease lease;
+    rclcpp::init(argc, argv);
+    auto node = std::make_shared<TelemetryBridge>();
+    rclcpp::spin(node);
+    node.reset();
+    rclcpp::shutdown();
+  } catch (const std::exception& error) {
+    fprintf(stderr, "SDK telemetry: %s\n", error.what());
+    return 1;
+  }
   return 0;
 }

@@ -1,15 +1,57 @@
 #include "map_manager/dense_elevation_map.h"
 
+#include <algorithm>
 #include <cmath>
 #include <iostream>
+#include <stdexcept>
+
+namespace {
+
+struct BilinearAxis {
+  int lower;
+  int upper;
+  double fraction;
+  double derivative;
+};
+
+BilinearAxis CellCentreAxis(const double coordinate, const int size) {
+  if (size < 1 || !std::isfinite(coordinate)) {
+    throw std::invalid_argument("Bilinear cost lookup requires a finite coordinate and nonempty map");
+  }
+  if (size == 1) {
+    return {0, 0, 0.0, 0.0};
+  }
+  const double maximum = static_cast<double>(size - 1);
+  const double bounded = std::max(0.0, std::min(coordinate, maximum));
+  const int lower = std::min(static_cast<int>(std::floor(bounded)), size - 2);
+  // A* and GPMP use integer cell centres, not centres displaced by 0.5.
+  // Clamp the scalar lookup and its derivative together at the map boundary.
+  // At the boundary itself the derivative is the interior one-sided value.
+  return {lower, lower + 1, bounded - lower,
+          (coordinate < 0.0 || coordinate > maximum) ? 0.0 : 1.0};
+}
+
+double InterpolateCellCentres(const double value[2][2], const BilinearAxis& x,
+                             const BilinearAxis& y, Eigen::Vector2d* grad) {
+  const double y0 = (1.0 - x.fraction) * value[0][0] + x.fraction * value[1][0];
+  const double y1 = (1.0 - x.fraction) * value[0][1] + x.fraction * value[1][1];
+  if (grad != nullptr) {
+    (*grad)(0) = x.derivative * ((1.0 - y.fraction) * (value[1][0] - value[0][0]) +
+                                y.fraction * (value[1][1] - value[0][1]));
+    (*grad)(1) = y.derivative * (y1 - y0);
+  }
+  return (1.0 - y.fraction) * y0 + y.fraction * y1;
+}
+
+}  // namespace
 
 void DenseElevationMap::Init(const double resolution, const int num_layers,
-                             const Eigen::MatrixXd& cost_map,
-                             const Eigen::MatrixXd& ele_mask,
-                             const Eigen::MatrixXd& height,
-                             const Eigen::MatrixXd& ceiling,
-                             const Eigen::MatrixXd& grad_x,
-                             const Eigen::MatrixXd& grad_y) {
+                             ConstStridedMatrixRef cost_map,
+                             ConstStridedMatrixRef ele_mask,
+                             ConstStridedMatrixRef height,
+                             ConstStridedMatrixRef ceiling,
+                             ConstStridedMatrixRef grad_x,
+                             ConstStridedMatrixRef grad_y) {
   resolution_ = resolution;
   resolution_inv_ = 1.0 / resolution;
   max_layers_ = num_layers;
@@ -335,56 +377,32 @@ double DenseElevationMap::GetCeiling(const int layer, const double x,
 double DenseElevationMap::GetValueBilinear(const int layer, const double x,
                                            const double y,
                                            Eigen::Vector2d* grad) {
-  double x_lb = std::max(std::floor(x - 0.5), 0.0);
-  double y_lb = std::max(std::floor(y - 0.5), 0.0);
-
+  const BilinearAxis axis_x = CellCentreAxis(x, max_x_);
+  const BilinearAxis axis_y = CellCentreAxis(y, max_y_);
+  const int columns[] = {axis_x.lower, axis_x.upper};
+  const int rows[] = {axis_y.lower, axis_y.upper};
   double value[2][2];
-  for (int x = 0; x < 2; ++x) {
-    for (int y = 0; y < 2; ++y) {
-      value[x][y] = GetRealCost(layer, x_lb + x, y_lb + y, grad);
+  for (int i = 0; i < 2; ++i) {
+    for (int j = 0; j < 2; ++j) {
+      value[i][j] = GetRealCost(layer, columns[i], rows[j], nullptr);
     }
   }
-
-  Eigen::Vector2d diff(x - x_lb, y - y_lb);
-
-  double y0 = (1 - diff(0)) * value[0][0] + diff(0) * value[1][0];
-  double y1 = (1 - diff(0)) * value[0][1] + diff(0) * value[1][1];
-  double x0 = (1 - diff(1)) * value[0][0] + diff(1) * value[0][1];
-  double x1 = (1 - diff(1)) * value[1][0] + diff(1) * value[1][1];
-
-  if (grad) {
-    (*grad)(0) = x1 - x0;
-    (*grad)(1) = y1 - y0;
-  }
-
-  return (1 - diff(1)) * y0 + diff(1) * y1;
+  return InterpolateCellCentres(value, axis_x, axis_y, grad);
 }
 
 double DenseElevationMap::GetValueBilinearSafe(const int layer, const double x,
                                                const double y,
                                                const double height_hint,
                                                Eigen::Vector2d* grad) {
-  double x_lb = std::max(std::floor(x - 0.5), 0.0);
-  double y_lb = std::max(std::floor(y - 0.5), 0.0);
-
+  const BilinearAxis axis_x = CellCentreAxis(x, max_x_);
+  const BilinearAxis axis_y = CellCentreAxis(y, max_y_);
+  const int columns[] = {axis_x.lower, axis_x.upper};
+  const int rows[] = {axis_y.lower, axis_y.upper};
   double value[2][2];
-  for (int x = 0; x < 2; ++x) {
-    for (int y = 0; y < 2; ++y) {
-      value[x][y] = GetRealCostSafe(layer, x_lb + x, y_lb + y, height_hint);
+  for (int i = 0; i < 2; ++i) {
+    for (int j = 0; j < 2; ++j) {
+      value[i][j] = GetRealCostSafe(layer, columns[i], rows[j], height_hint);
     }
   }
-
-  Eigen::Vector2d diff(x - x_lb, y - y_lb);
-
-  double y0 = (1 - diff(0)) * value[0][0] + diff(0) * value[1][0];
-  double y1 = (1 - diff(0)) * value[0][1] + diff(0) * value[1][1];
-  double x0 = (1 - diff(1)) * value[0][0] + diff(1) * value[0][1];
-  double x1 = (1 - diff(1)) * value[1][0] + diff(1) * value[1][1];
-
-  if (grad) {
-    (*grad)(0) = x1 - x0;
-    (*grad)(1) = y1 - y0;
-  }
-
-  return (1 - diff(1)) * y0 + diff(1) * y1;
+  return InterpolateCellCentres(value, axis_x, axis_y, grad);
 }

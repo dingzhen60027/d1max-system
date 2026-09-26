@@ -89,6 +89,9 @@ class Manager:
         self.lock = threading.RLock()
         self.jobs = {key: None for key in ("monitor", "web")}
         self.errors = {key: "" for key in self.jobs}
+        # Read-only association outlives the transient worker job. It is never
+        # updated by an already-active no-op start request or adopted on restart.
+        self.last_start = {key: None for key in self.jobs}
         self.requests = OrderedDict()
         self.threads = []
 
@@ -115,6 +118,9 @@ class Manager:
         owned = active or state in {"activating", "deactivating"} or self.system.populated(unit)
         with self.lock:
             job, error = self.jobs[name], self.errors[name]
+            association = self.last_start[name]
+            last_start = dict(association) if (association and state in {"active", "activating"}
+                and association["invocation"] == unit.get("InvocationID")) else None
         details = {}
         if job:
             phase = "starting" if job["desired"] == "start" else "stopping"
@@ -148,10 +154,11 @@ class Manager:
         return {"phase": phase, "active": active, "owned": owned, "error": error,
                 "busy": phase in {"starting", "stopping"}, "health": details,
                 "pid": int(unit.get("MainPID", 0)), "operation": job and job["id"],
+                "last_start": last_start,
                 "unit_state": state, "unit_substate": substate}
 
     def snapshot(self):
-        return {"api": 1, "instance": self.instance, "wall_time": time.time(),
+        return {"api": 1, "motion_start_binding": 1, "instance": self.instance, "wall_time": time.time(),
                 "monitor": self.component("monitor"), "web": self.component("web")}
 
     def request(self, name, desired, request_id, instance):
@@ -181,8 +188,10 @@ class Manager:
             if (desired == "start" and current["active"]) or (desired == "stop" and not current["owned"]):
                 if desired == "stop":
                     self.errors[name] = ""
+                    self.last_start[name] = None
                 return
             self.errors[name] = ""
+            self.last_start[name] = None
             job = {"id": request_id, "desired": desired}
             self.jobs[name] = job
             worker = threading.Thread(target=self._run, args=(name, job), daemon=True)
@@ -225,6 +234,11 @@ class Manager:
             while time.monotonic() < end:
                 unit = self.system.show(self._unit(name))
                 state = unit.get("ActiveState")
+                if state in {"active", "activating"} and unit.get("InvocationID"):
+                    with self.lock:
+                        if self.jobs[name] is job:
+                            self.last_start[name] = {"request_id": job["id"],
+                                                     "invocation": unit["InvocationID"]}
                 if state == "failed" or (seen_active and state == "inactive"):
                     raise RuntimeError("服务启动失败或提前退出，请检查网络和启动日志")
                 seen_active = seen_active or state == "active"
@@ -246,6 +260,7 @@ class Manager:
                     error += "；清理未确认：" + str(cleanup)
             with self.lock:
                 self.errors[name] = error[:600]
+                self.last_start[name] = None
         finally:
             with self.lock:
                 if self.jobs[name] is job:

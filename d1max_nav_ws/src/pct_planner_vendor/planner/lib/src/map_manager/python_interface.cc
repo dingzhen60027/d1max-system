@@ -6,7 +6,7 @@ namespace py = pybind11;
 
 PYBIND11_MODULE(py_map_manager, m) {
   auto pyDenseElevationMap =
-      py::class_<DenseElevationMap>(m, "DenseElevationMap");
+      py::class_<DenseElevationMap, std::shared_ptr<DenseElevationMap>>(m, "DenseElevationMap");
   pyDenseElevationMap.def(py::init<>())
       .def("update_layer", &DenseElevationMap::UpdateLayer)
       .def("update_layer_safe", &DenseElevationMap::UpdateLayerSafe)

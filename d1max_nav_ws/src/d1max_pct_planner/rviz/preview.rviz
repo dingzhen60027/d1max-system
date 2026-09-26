@@ -1,0 +1,159 @@
+Panels:
+  - Class: rviz_common/Displays
+    Name: 图层
+    Property Tree Widget:
+      Expanded:
+        - /全局规划1
+        - /选点1
+      Splitter Ratio: 0.65
+    Tree Height: 300
+    Help Height: 0
+  - Class: d1max_pct_rviz_tools/PlanningPanel
+    Name: 路径规划
+  - Class: rviz_common/Views
+    Name: 视角
+    Splitter Ratio: 0.5
+Preferences:
+  PromptSaveOnExit: false
+Visualization Manager:
+  Class: ""
+  Global Options:
+    Fixed Frame: d1max_loc_map
+    Background Color: 38; 38; 38
+    Frame Rate: 30
+  Displays:
+    - Class: rviz_default_plugins/Grid
+      Name: 参考网格
+      Enabled: true
+      Cell Size: 1.0
+      Plane Cell Count: 40
+      Plane: XY
+      Alpha: 0.35
+      Color: 120; 120; 120
+      Reference Frame: <Fixed Frame>
+      Line Style: {Value: Lines, Line Width: 0.03}
+    # ROS 2 port of legbot_3D_Nav navigation.rviz, f60606a4:
+    # Global PCD / Tomogram / global path. Keep project-specific topics and QoS.
+    - Class: rviz_common/Group
+      Name: 全局规划
+      Enabled: true
+      Displays:
+        - Class: rviz_default_plugins/PointCloud2
+          Name: 规划点云
+          Enabled: true
+          Topic:
+            Value: /d1max/pct_preview/map
+            Depth: 1
+            Reliability Policy: Reliable
+            Durability Policy: Transient Local
+          Style: Points
+          Size (Pixels): 2
+          Alpha: 0.22
+          Color Transformer: AxisColor
+          Axis: Z
+          Autocompute Value Bounds: {Value: true}
+          Use Fixed Frame: true
+          Decay Time: 0
+          Selectable: false
+        - Class: rviz_default_plugins/PointCloud2
+          Name: 分层体素 · 高度
+          Enabled: true
+          Topic:
+            Value: /d1max/pct_preview/tomogram
+            Depth: 1
+            Reliability Policy: Reliable
+            Durability Policy: Transient Local
+          Style: Boxes
+          Size (Pixels): 3
+          Size (m): 0.08
+          Alpha: 0.65
+          Color Transformer: AxisColor
+          Axis: Z
+          Autocompute Value Bounds: {Value: true}
+          Use Fixed Frame: true
+          Decay Time: 0
+          Selectable: false
+        - Class: rviz_default_plugins/Path
+          Name: 全局路径
+          Enabled: true
+          Topic:
+            Value: /d1max/pct_preview/path
+            Depth: 1
+            Reliability Policy: Reliable
+            Durability Policy: Transient Local
+          Color: 255; 60; 40
+          Line Style: Billboards
+          Line Width: 0.12
+          Buffer Length: 1
+          Pose Style: None
+          Alpha: 1.0
+          # Display lift only. The planning path itself is never moved.
+          Offset: {X: 0.0, Y: 0.0, Z: 0.18}
+    - Class: rviz_common/Group
+      Name: 通行代价
+      Enabled: false
+      Displays:
+        - Class: rviz_default_plugins/PointCloud2
+          Name: 可通行 · 绿到黄
+          Enabled: true
+          Topic:
+            Value: /d1max/pct_preview/tomogram
+            Depth: 1
+            Reliability Policy: Reliable
+            Durability Policy: Transient Local
+          Style: Flat Squares
+          Size (m): 0.18
+          Alpha: 0.8
+          Color Transformer: RGB8
+          Decay Time: 0
+          Selectable: false
+        - Class: rviz_default_plugins/PointCloud2
+          Name: 不可通行 · 红
+          Enabled: true
+          Topic:
+            Value: /d1max/pct_preview/blocked_surfaces
+            Depth: 1
+            Reliability Policy: Reliable
+            Durability Policy: Transient Local
+          Style: Flat Squares
+          Size (m): 0.18
+          Alpha: 0.35
+          Color Transformer: RGB8
+          Decay Time: 0
+          Selectable: false
+    - Class: rviz_common/Group
+      Name: 选点
+      Enabled: true
+      Displays:
+        - Class: rviz_default_plugins/InteractiveMarkers
+          Name: XYZ 起终点
+          Enabled: true
+          Interactive Markers Namespace: /pct_preview_points
+          Show Axes: false
+          Show Descriptions: true
+          Show Visual Aids: true
+  Tools:
+    - Class: rviz_default_plugins/Interact
+    - Class: rviz_default_plugins/MoveCamera
+    - Class: rviz_default_plugins/Select
+    - Class: rviz_default_plugins/FocusCamera
+    - Class: rviz_default_plugins/Measure
+    - Class: d1max_pct_rviz_tools/Start3D
+    - Class: d1max_pct_rviz_tools/Goal3D
+  Views:
+    Current:
+      Class: rviz_default_plugins/Orbit
+      Distance: 12.0
+      Pitch: 0.625
+      Yaw: 0.8
+      Focal Point:
+        X: -4.100001525878895
+        Y: 6.9
+        Z: -0.64
+      Target Frame: d1max_loc_map
+    Saved: []
+Window Geometry:
+  Width: 1800
+  Height: 1100
+  X: 80
+  Y: 30

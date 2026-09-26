@@ -1,0 +1,68 @@
+# ISOLATED FRONT-ONLY EXPERIMENT. Do not install as default.
+input_topic: /front_lidar/imu
+output_topic: /d1max/slam/imu
+frame_id: front_imu_raw
+acceleration_scale: 9.80665
+gyro_scale: 1.0
+timestamp_offset_sec: 0.0
+duplicate_policy: preserve_and_count
+lio_extrinsic:
+  rotation:
+  - 1.0
+  - 0.0
+  - 0.0
+  - 0.0
+  - 0.0
+  - 1.0
+  - 0.0
+  - -1.0
+  - 0.0
+  translation:
+  - 0.0
+  - 0.0
+  - 0.0
+lidar_extrinsics:
+  rear_to_front:
+    parent_frame: rslidar_head
+    child_frame: rslidar_tail
+    rotation:
+    - 1.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - -1.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - -1.0
+    translation:
+    - 0.0
+    - 0.0
+    - -0.7323
+trial:
+  name: historical_exact_zero_lever
+  imu_source: front_internal
+  cloud_selection: front
+  recommended_minimal_pair: false
+  description: 'Reference only: equivalent physical historical chain of raw IMU rotated
+    by A, LIO identity and zero lever; not a default extra replay.'
+  raw_vectors_not_rotated: true
+  central_imu_chain_removed: true
+  point_normalization: Keep current R_N_L and zero cloud translation. Do not apply
+    DIFOP again in point adapter.
+  loop_closure: false
+  scene_constraints: false
+  middleware: rmw_zenoh_cpp
+  classification: Offline diagnostic only; not production approved
+provenance:
+  device_sn: 3009bede1530
+  device_record: /home/dndx/d1max_nav_ws/bags/slam_raw_20260917_171716_fe8f38/snapshots/extrinsics_20260917.json
+  rotation_formula: R_F_N=A.T; A=Rx(+90deg) historical front IMU normalization
+  translation_formula: Historical assumed zero LiDAR/internal-IMU lever arm
+  timing_policy: No central-to-front 13ms correction; retain original front IMU header.
+    Same hardware does not itself prove perfect LiDAR/IMU timing.
+  units_policy: Acceleration g-to-m/s² 9.80665 based on recorded magnitude and existing
+    AIRY convention; gyro retained. Original SDK units not used as ROS topic proof.
+  driver_basis_caveat: Exact bag-time driver transformation not fully established;
+    device q interpreted as raw front LiDAR to raw front internal IMU.
+  manifest: ../manifest.json

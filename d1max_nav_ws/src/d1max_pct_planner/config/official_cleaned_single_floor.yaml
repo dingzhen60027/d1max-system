@@ -1,0 +1,43 @@
+# New artifact only: structure-preserving cleaned PCD -> official-equation PCT.
+schema_version: 1
+source_pcd: /home/dndx/智元四足机器人D1 Max二次开发文档资料包v0.1.0/d1max_ros2/map_manager/data/processed/20260922_164231_sc-pgo-0919-structure-v1_572b51/processed_map.pcd
+output_directory: /home/dndx/d1max_nav_ws/maps/processed/sc_pgo_20260919_pct_cleaned_20260922
+vendor_root: /home/dndx/d1max_nav_ws/src/pct_planner_vendor
+frame_id: d1max_loc_map
+preprocessing:
+  roi: null
+  voxel_size_m: 0.0
+  radius_outlier:
+    enabled: false
+    radius_m: 0.15
+    minimum_neighbors: 3
+pct:
+  resolution: 0.20
+  slice_dh: 0.50
+  # Preserve the previous map's absolute slicing heights. This is a slicing
+  # origin, NOT a ground-plane estimate, flattening, or coordinate transform.
+  ground_height: -4.751631736755371
+  simplify_layers: true
+  limits:
+    max_axis_cells: 2000
+    max_layers: 128
+    max_total_cells: 25000000
+    max_working_bytes: 2500000000
+  traversability:
+    kernel_size: 7
+    interval_min: 0.55
+    interval_free: 0.70
+    slope_max_rad: 0.40
+    step_max: 0.17
+    standable_ratio: 0.20
+    cost_barrier: 50.0
+    safe_margin: 0.40
+    inflation: 0.20
+export:
+  traversable_pcd: true
+notes:
+  - Input is the completed structure-preserving preprocessing result, not the original PCD or an extracted ground-only map.
+  - No second outlier filter, no hole filling, and no safety threshold relaxation.
+  - Absolute slice heights match the prior raw build; XY bounds/grid center are rebuilt from the cleaned input.
+  - CPU port of official PCT tomography equations; official native A-star and GPMP are used for planning.
+  - Offline planning test only; no robot control or physical traversability certification.

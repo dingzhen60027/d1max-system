@@ -1,0 +1,192 @@
+#pragma once
+
+#include <Eigen/Core>
+#include <algorithm>
+#include <array>
+#include <cmath>
+#include <cstdint>
+#include <cstring>
+#include <functional>
+#include <limits>
+#include <stdexcept>
+#include <unordered_map>
+#include <vector>
+
+namespace scan_planner {
+
+// Native low occupied probability is not itself free evidence: one hit added to
+// the negative unknown prior can still lie below the occupied threshold. Strict
+// mode admits only saturated free cells; intermediate evidence stays uncertain.
+inline int strictRawVoxelStatus(double odds,double free_log,double occupied_log) {
+  if (!std::isfinite(odds) || odds<free_log-1e-9) return 2;
+  if (odds>occupied_log) return 1;
+  return odds<=free_log+1e-9 ? 0:2;
+}
+
+// Snapshot-scoped: the owner must clear it for every raw-map mutation/integration
+// and ring-buffer slide. The bound limits memory even during a failed search.
+class VoxelStatusCache {
+ public:
+  explicit VoxelStatusCache(std::size_t capacity=32768):capacity_(capacity) {
+    if (!capacity_) throw std::invalid_argument("zero voxel cache capacity");
+  }
+  void clear() { entries_.clear(); }
+  std::size_t size() const { return entries_.size(); }
+  template <class Query> int get(int address, Query query) {
+    return get(address, 0, 0, query);
+  }
+  // The same center voxel can straddle two different actual-height envelopes.
+  // Reusing only its address could hide a newly included low obstacle.
+  template <class Query> int get(int address, int low_z, int high_z, Query query) {
+    return getExact(address,low_z,high_z,0.,0.,query);
+  }
+  template <class Query> int getExact(int address, int low_z, int high_z,
+      double x, double y, Query query) {
+    std::uint64_t x_bits,y_bits;
+    std::memcpy(&x_bits,&x,sizeof(x)); std::memcpy(&y_bits,&y,sizeof(y));
+    const Key key{address,low_z,high_z,x_bits,y_bits};
+    const auto found=entries_.find(key);
+    if (found!=entries_.end()) return found->second;
+    const int result=query();
+    if (entries_.size()>=capacity_) entries_.clear();
+    entries_.emplace(key,result);
+    return result;
+  }
+ private:
+  struct Key {
+    int address,low_z,high_z;
+    std::uint64_t x_bits,y_bits;
+    bool operator==(const Key &other) const {
+      return address==other.address && low_z==other.low_z && high_z==other.high_z
+          && x_bits==other.x_bits && y_bits==other.y_bits;
+    }
+  };
+  struct Hash {
+    std::size_t operator()(const Key &key) const {
+      std::size_t h=std::hash<int>{}(key.address);
+      for (int v:{key.low_z,key.high_z}) h^=std::hash<int>{}(v)+0x9e3779b9+(h<<6)+(h>>2);
+      for (auto v:{key.x_bits,key.y_bits}) h^=std::hash<std::uint64_t>{}(v)+0x9e3779b9+(h<<6)+(h>>2);
+      return h;
+    }
+  };
+  std::size_t capacity_;
+  std::unordered_map<Key,int,Hash> entries_;
+};
+
+struct VerticalVoxelSpan { int low,high; };
+struct CollisionEvidence {
+  // Slots: measured free, occupied, unknown, outside. Cylinder overlap may
+  // count a voxel twice; this does not change the decision or marker identity.
+  std::array<std::size_t,4> counts{{0,0,0,0}};
+  std::array<Eigen::Vector3i,3> first;
+  int state() const {
+    return counts[1] ? 1 : counts[3] ? -1 : counts[2] ? 2 : 0;
+  }
+};
+
+// Retain the obstacle voxel's full AABB and touching contacts. The query
+// centre is known exactly; expanding its whole voxel again is unnecessary.
+inline bool cylinderIntersectsVoxelXY(const Eigen::Vector3d &center,
+    const Eigen::Vector3i &voxel, double resolution, double radius) {
+  if (!center.allFinite() || !std::isfinite(resolution) || resolution<=0. ||
+      !std::isfinite(radius) || radius<0.)
+    throw std::invalid_argument("invalid exact cylinder geometry");
+  double distance_squared=0.;
+  for (int axis=0;axis<2;++axis) {
+    const double lo=voxel[axis]*resolution, hi=(voxel[axis]+1.)*resolution;
+    const double delta=std::max({lo-center[axis],center[axis]-hi,0.});
+    distance_squared+=delta*delta;
+  }
+  return distance_squared<=radius*radius+1e-12;
+}
+
+// Query position is known, not any possible height in its enclosing voxel.
+// Keep the obstacle's full voxel interval (including touching boundaries),
+// but avoid adding an extra query-voxel height that turns the ground into an
+// obstacle after extending the leg envelope downwards.
+inline VerticalVoxelSpan verticalVoxelSpan(double z, double below, double above, double resolution) {
+  if (!std::isfinite(z) || !std::isfinite(below) || !std::isfinite(above) ||
+      !std::isfinite(resolution) || below<0. || above<0. || resolution<=0.)
+    throw std::invalid_argument("invalid actual-height collision envelope");
+  const double lo=std::ceil((z-below)/resolution-1e-10)-1.;
+  const double hi=std::floor((z+above)/resolution+1e-10);
+  if (!std::isfinite(lo) || !std::isfinite(hi) ||
+      lo<std::numeric_limits<int>::min() || hi>std::numeric_limits<int>::max())
+    throw std::invalid_argument("collision height exceeds index range");
+  return {static_cast<int>(lo),static_cast<int>(hi)};
+}
+
+// Both the occupied cell and queried cylinder-center cell have volume. Their
+// closest XY separation is max(|index delta|*resolution-resolution, 0), not
+// their center-to-center separation. This conservative discrete Minkowski sum
+// includes contact and cannot lose a real obstacle at a voxel corner.
+inline std::vector<Eigen::Vector3i> conservativeCylinderInflation(
+    double resolution, double radius, double inflation_up, double inflation_down) {
+  if (!std::isfinite(resolution) || resolution<=0. || !std::isfinite(radius) || radius<0. ||
+      !std::isfinite(inflation_up) || inflation_up<0. ||
+      !std::isfinite(inflation_down) || inflation_down<0.)
+    throw std::invalid_argument("invalid cylinder voxel geometry");
+  const double xy=std::ceil(radius/resolution)+1.;
+  const double z_up=std::ceil(inflation_up/resolution)+1.;
+  const double z_down=std::ceil(inflation_down/resolution)+1.;
+  if ((2.*xy+1.)*(2.*xy+1.)*(z_up+z_down+1.)>200000.)
+    throw std::invalid_argument("cylinder voxel kernel exceeds bounded budget");
+  std::vector<Eigen::Vector3i> result;
+  for (int x=-static_cast<int>(xy);x<=static_cast<int>(xy);++x)
+    for (int y=-static_cast<int>(xy);y<=static_cast<int>(xy);++y) {
+      const double dx=std::max(0.,std::abs(x)*resolution-resolution);
+      const double dy=std::max(0.,std::abs(y)*resolution-resolution);
+      if (std::hypot(dx,dy)>radius+1e-12) continue;
+      for (int z=-static_cast<int>(z_down);z<=static_cast<int>(z_up);++z) {
+        // Exact cell-interval intersection, avoiding ceil-only overgrowth.
+        if (z*resolution>inflation_up+resolution+1e-12 ||
+            z*resolution< -inflation_down-resolution-1e-12) continue;
+        result.emplace_back(x,y,z);
+      }
+    }
+  return result;
+}
+
+// Reverse the obstacle-inflation offsets to visit all raw cells that could
+// intersect a cylinder whose actual center lies anywhere in center_cell.
+// queryRaw: 0 measured free, 1 occupied, 2 unobserved, -1 outside map.
+template <class RawQuery>
+int observedCylinderStatus(const Eigen::Vector3i &center_cell,
+    const std::vector<Eigen::Vector3i> &inflation_offsets, RawQuery queryRaw) {
+  for (const auto &offset:inflation_offsets) {
+    const Eigen::Vector3i body_cell=center_cell-offset;
+    const int state=queryRaw(body_cell);
+    if (state!=0) return state;
+  }
+  return 0;
+}
+
+template <class RawQuery>
+int observedCylinderStatusAtHeight(const Eigen::Vector3i &center_cell,
+    const VerticalVoxelSpan &span, const std::vector<Eigen::Vector3i> &inflation_offsets,
+    RawQuery queryRaw) {
+  for (const auto &offset:inflation_offsets) {
+    const Eigen::Vector3i body_cell=center_cell-offset;
+    if (body_cell.z()<span.low || body_cell.z()>span.high) continue;
+    const int state=queryRaw(body_cell);
+    if (state!=0) return state;
+  }
+  return 0;
+}
+
+template <class RawQuery>
+int observedCylinderStatusAtPosition(const Eigen::Vector3d &center,
+    const Eigen::Vector3i &center_cell, const VerticalVoxelSpan &span,
+    const std::vector<Eigen::Vector3i> &inflation_offsets,
+    double resolution, double radius, RawQuery queryRaw) {
+  for (const auto &offset:inflation_offsets) {
+    const Eigen::Vector3i cell=center_cell-offset;
+    if (cell.z()<span.low || cell.z()>span.high ||
+        !cylinderIntersectsVoxelXY(center,cell,resolution,radius)) continue;
+    const int state=queryRaw(cell);
+    if (state!=0) return state;
+  }
+  return 0;
+}
+
+}  // namespace scan_planner

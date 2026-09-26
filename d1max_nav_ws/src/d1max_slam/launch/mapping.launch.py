@@ -20,6 +20,9 @@ def launch_setup(context):
         raise RuntimeError("lidar_mode must be 'dual', 'front', or 'rear'")
 
     package_share = Path(get_package_share_directory("d1max_slam"))
+    faster_lio_config = LaunchConfiguration("faster_lio_config").perform(context)
+    if not faster_lio_config:
+        faster_lio_config = str(package_share / "config" / "faster_lio_airy96.yaml")
     actions = [
         Node(
             package="tf2_ros",
@@ -104,7 +107,7 @@ def launch_setup(context):
                 output="screen",
                 arguments=[f"--traj_log_file={trajectory_file}"],
                 parameters=[
-                    str(package_share / "config" / "faster_lio_airy96.yaml"),
+                    faster_lio_config,
                     {
                         "common.lid_topic": "/d1max/slam/points",
                         "common.imu_topic": "/d1max/slam/imu",
@@ -187,6 +190,10 @@ def launch_setup(context):
 def generate_launch_description():
     return LaunchDescription(
         [
+            DeclareLaunchArgument(
+                "faster_lio_config", default_value="",
+                description="Explicit Faster-LIO parameter profile; empty uses the mapping default",
+            ),
             DeclareLaunchArgument(
                 "backend",
                 default_value="faster_lio",

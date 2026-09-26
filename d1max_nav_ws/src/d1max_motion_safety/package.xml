@@ -1,0 +1,18 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>d1max_motion_safety</name>
+  <version>0.1.0</version>
+  <description>Input-driven Humble Collision Monitor adapter preserving downstream freshness checks.</description>
+  <maintainer email="dndx@localhost.localdomain">D1 Max workspace</maintainer>
+  <license>Apache-2.0</license>
+  <buildtool_depend>ament_cmake</buildtool_depend>
+  <depend>geometry_msgs</depend>
+  <depend>nav2_collision_monitor</depend>
+  <depend>nav2_util</depend>
+  <depend>rclcpp</depend>
+  <depend>rclcpp_lifecycle</depend>
+  <test_depend>ament_cmake_gtest</test_depend>
+  <test_depend>rmw_zenoh_cpp</test_depend>
+  <test_depend>ament_index_python</test_depend>
+  <export><build_type>ament_cmake</build_type></export>
+</package>

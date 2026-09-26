@@ -24,6 +24,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from .grid_maps import atomic_json
 
 UNIT='d1max-localization-managed.service'
+LIVE_VIEW_UNIT='d1max-live-planning-view.service'
 MARKER='D1MAX_LOCALIZATION_V1:'
 
 class StartRequest(BaseModel):
@@ -65,6 +66,7 @@ class LocalizationRuntime:
     def __init__(self,root,project_root,nav_root,*,system=None):
         self.root=Path(root).resolve();self.root.mkdir(parents=True,exist_ok=True)
         self.project_root=Path(project_root).resolve();self.nav_root=Path(nav_root).resolve();self.system=system or Systemd()
+        self.launch_lease_path=self.nav_root/'log/.localization-start.lock'
         self.config=self.nav_root/'src/d1max_localization/config/localization.yaml'
         self.script=self.project_root/'d1max_ros2/map_manager/scripts/start_localization.sh'
         self.state_path=self.root/'state.json';self.lock=threading.RLock();self.state={'phase':'stopped','id':None,'version_id':None,'error':None}
@@ -83,6 +85,17 @@ class LocalizationRuntime:
     def transaction(self):
         with self.lock, (self.root/'lifecycle.lock').open('a') as stream:
             fcntl.flock(stream,fcntl.LOCK_EX)
+            try:yield
+            finally:fcntl.flock(stream,fcntl.LOCK_UN)
+
+    @contextmanager
+    def startup_lease(self):
+        """Serialize Web and independent live-session start checks/launches."""
+        self.launch_lease_path.parent.mkdir(parents=True,exist_ok=True)
+        with self.launch_lease_path.open('a') as stream:
+            try:fcntl.flock(stream,fcntl.LOCK_EX|fcntl.LOCK_NB)
+            except BlockingIOError:
+                raise HTTPException(409,'另一个实机定位会话正在启动，请稍后重试') from None
             try:yield
             finally:fcntl.flock(stream,fcntl.LOCK_UN)
 
@@ -150,9 +163,16 @@ class LocalizationRuntime:
         self.snapshot(connection=False)
 
     def start(self,version):
-        with self.transaction():
+        with self.transaction(),self.startup_lease():
             current=self.snapshot(connection=False)
             if current['phase'] in {'running','starting','stopping','conflict','detached'}:raise HTTPException(409,'定位已运行、状态转换中或存在进程冲突，请先停止并核对')
+            try:
+                live_view=self.system.show(LIVE_VIEW_UNIT)
+                live_busy=(live_view.get('ActiveState') in {'active','activating','deactivating','reloading'}
+                           or self.system.populated(live_view))
+            except (OSError,RuntimeError,subprocess.SubprocessError):
+                raise HTTPException(409,'无法确认独立实机可视化会话状态，拒绝重复启动定位') from None
+            if live_busy:raise HTTPException(409,'独立实机可视化会话正在运行或切换中，请先停止该会话再启动 Web 定位')
             web=self.system.show('d1max-web-managed.service')
             if int(web.get('MainPID') or 0)!=os.getpid():raise HTTPException(409,'请使用受托管的 Web 启动定位，以保证关闭 Web 时清理全部定位节点')
             connection=self.manager()['monitor']
@@ -186,9 +206,17 @@ class LocalizationRuntime:
             self.state.update(phase='stopped',error=None,stopped_at=time.time());self.persist()
             return self.snapshot(connection=False)
 
-    def initial_pose(self,request):
+    def initial_pose(self,request,*,expected_session_id=None,expected_version_id=None):
         with self.transaction():
             current=self.snapshot(connection=False)
+            # RViz may have checked readiness before a stop/start or map change.
+            # Bind that request to the checked session/map while holding the same
+            # lifecycle lock as the mailbox write. Legacy Web requests omit these
+            # preconditions and retain their existing behavior.
+            if expected_session_id is not None and expected_session_id!=current.get('id'):
+                raise HTTPException(409,'定位会话已变化，请重新核对地图并重新给初始位姿')
+            if expected_version_id is not None and expected_version_id!=current.get('version_id'):
+                raise HTTPException(409,'定位地图版本已变化，请重新加载地图并重新给初始位姿')
             if current['phase']!='running' or not current['health']:raise HTTPException(409,'定位服务尚未就绪')
             mailbox=self.root/self.state['id']/'initial_pose.json'
             if mailbox.exists():
@@ -225,5 +253,8 @@ def create_localization_router(runtime,grid,shared_lock,other_busy):
     @router.post('/stop')
     def stop():return runtime.stop()
     @router.post('/initial-pose',status_code=202)
-    def initial(request:InitialRequest):return runtime.initial_pose(request)
+    def initial(request:InitialRequest,http_request:ApiRequest):
+        return runtime.initial_pose(request,
+            expected_session_id=http_request.headers.get('x-d1max-session-id'),
+            expected_version_id=http_request.headers.get('x-d1max-map-version'))
     return router

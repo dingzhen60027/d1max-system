@@ -2,15 +2,22 @@
 
 #include <Eigen/Dense>
 
+// Accept NumPy C/F/positive-stride matrices as read-only views during import.
+// DenseElevationMap copies each view once into owned storage; no Python buffer
+// is retained after Init returns. Dynamic inner stride avoids an intermediate
+// column-major MatrixXd made by pybind for ordinary C-contiguous arrays.
+using ConstStridedMatrixRef = Eigen::Ref<
+    const Eigen::MatrixXd, 0, Eigen::Stride<Eigen::Dynamic, Eigen::Dynamic>>;
+
 class DenseElevationMap {
  public:
   DenseElevationMap() = default;
   ~DenseElevationMap() = default;
 
   void Init(const double resolution, const int num_layers,
-            const Eigen::MatrixXd& cost_map, const Eigen::MatrixXd& ele_mask,
-            const Eigen::MatrixXd& height, const Eigen::MatrixXd& ceiling,
-            const Eigen::MatrixXd& grad_x, const Eigen::MatrixXd& grad_y);
+            ConstStridedMatrixRef cost_map, ConstStridedMatrixRef ele_mask,
+            ConstStridedMatrixRef height, ConstStridedMatrixRef ceiling,
+            ConstStridedMatrixRef grad_x, ConstStridedMatrixRef grad_y);
 
   double GetValueBilinear(const int layer, const double x, const double y,
                           Eigen::Vector2d* grad = nullptr);
@@ -43,6 +50,9 @@ class DenseElevationMap {
   }
 
   void SetDebug(const bool flag) { debug_ = flag; }
+  const Eigen::MatrixXd& CostMatrix() const { return cost_; }
+  const Eigen::MatrixXd& HeightMatrix() const { return height_; }
+  const Eigen::MatrixXd& GatewayMatrix() const { return ele_mask_; }
 
  private:
   int inline index(double coord) { return static_cast<int>(coord); }

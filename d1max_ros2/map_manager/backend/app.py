@@ -32,9 +32,18 @@ from .pointcloud_pipeline import (
     validate_pipeline,
     write_pipeline,
 )
-from .runtime import RuntimeManager
+from .mapping.registry import MappingRuntime, BUSY as MAPPING_BUSY
+from .mapping.artifacts import completed_artifacts
+from .mapping.lio_sam_artifacts import completed_artifact as lio_sam_artifact
+from .mapping.lio_sam_artifacts import completed_artifacts as lio_sam_artifacts
+from .mapping.configuration import parse_config, config_yaml
 from .grid_maps import GridWorkspace, create_router
 from .localization import LocalizationRuntime, create_localization_router
+from .live_planning import LivePlanningRuntime, create_live_planning_router
+from .navigation import NavigationRuntime, create_navigation_router
+from .bags.runtime import BagRecorder
+from .bags.library import BagLibrary
+from .bags.api import create_bag_router
 
 
 APP_ROOT = Path(__file__).resolve().parents[1]
@@ -58,7 +67,8 @@ PIPELINE_USER_ROOT.mkdir(parents=True, exist_ok=True)
 
 
 class RuntimeRequest(BaseModel):
-    algorithm: Literal["faster_lio", "fastlio2", "faster_lio_pgo"]
+    algorithm: str = Field(pattern=r'^[a-z][a-z0-9_]{1,63}$')
+    options: dict[str, Any] | None = None
 
 
 class ActiveRequest(BaseModel):
@@ -84,7 +94,7 @@ class ArchiveDeleteRequest(BaseModel):
     delete_all: bool = False
 
 
-runtime_manager = RuntimeManager(NAV_ROOT, RUNTIME_PATH)
+runtime_manager = MappingRuntime(NAV_ROOT, RUNTIME_PATH, APP_ROOT)
 preview_lock = threading.Lock()
 archive_delete_lock = threading.Lock()
 processing_lock = threading.Lock()
@@ -92,7 +102,13 @@ processing_cancel_event = threading.Event()
 processing_thread: threading.Thread | None = None
 grid_workspace = GridWorkspace(DATA_ROOT / "navigation2d")
 localization_runtime = LocalizationRuntime(DATA_ROOT / "localization", PROJECT_ROOT, NAV_ROOT)
-grid_workspace.protected_version = lambda: localization_runtime.pinned_id
+live_planning_runtime = LivePlanningRuntime(NAV_ROOT, localization_runtime)
+navigation_runtime = NavigationRuntime(DATA_ROOT / "navigation", NAV_ROOT, localization_runtime)
+BAG_ROOT = Path(os.environ.get('D1MAX_BAG_DIR', NAV_ROOT / 'bags')).resolve()
+bag_recorder = BagRecorder(APP_ROOT, PROJECT_ROOT, NAV_ROOT, DATA_ROOT / 'bags', BAG_ROOT)
+bag_library = BagLibrary([BAG_ROOT, *filter(None, os.environ.get('D1MAX_BAG_LIBRARY_ROOTS',
+    '/home/dndx/d1max_rosbag903:/home/dndx/d1max_rosbags').split(':'))], DATA_ROOT / 'bags', bag_recorder.active_path)
+grid_workspace.protected_version = lambda: localization_runtime.pinned_id or navigation_runtime.pinned_id
 processing_job: dict[str, Any] = {
     "running": False,
     "status": "idle",
@@ -247,6 +263,10 @@ def friendly_name(path: Path, role: str, run_id: str) -> str:
         "fastlio2": "FAST-LIO2 地图",
         "planning": "PCT 规划点云",
         "legacy": "历史点云",
+        "mola_frontend": "MOLA-LIO 前端地图",
+        "mola_optimized": "MOLA 回环处理地图",
+        "lio_sam_front": "LIO-SAM · 单前雷达",
+        "lio_sam_dual": "LIO-SAM · 前后双雷达",
     }
     return f"{labels.get(role, '3D 点云')} · {time_label}"
 
@@ -263,7 +283,12 @@ def classify(path: Path) -> dict[str, Any]:
     loop_counts: dict[str, int] = {}
     pair_key = None
 
-    if first == "runs" and len(parts) >= 3:
+    if first == "lio_sam" and len(parts) == 3 and (artifact := lio_sam_artifact(path.parent)):
+        manifest = artifact[1]
+        run_id = parts[1]
+        family = "LIO-SAM 实验 · 六轴 IMU 适配"
+        role = "lio_sam_" + manifest["sensor_mode"]
+    elif first == "runs" and len(parts) >= 3:
         run_id = parts[1]
         family = "Faster-LIO + SC-PGO"
         pair_key = run_id
@@ -304,9 +329,23 @@ def iter_cloud_files() -> list[Path]:
     result: list[Path] = []
     if not MAPS_ROOT.is_dir():
         return result
+    result.extend(path for path, _ in lio_sam_artifacts(MAPS_ROOT / "lio_sam"))
     for directory, names, files in os.walk(MAPS_ROOT, followlinks=False):
         current = Path(directory)
-        names[:] = [name for name in names if name not in {"workspace", ".cache"}]
+        # SC-PGO retains local keyframes for re-optimization. They are not
+        # independent global maps, even though each is stored as a PCD.
+        is_pgo_directory = current.name.lower() == "sc_pgo" or current.name.lower().startswith("sc_pgo_")
+        is_run_directory = current.parent == MAPS_ROOT / "runs"
+        names[:] = [
+            name for name in names
+            if name not in {"workspace", ".cache"}
+            # This result library is manifest-only; never recursively expose
+            # LIO-SAM trajectory, transformations, feature subsets or scans.
+            and not (current == MAPS_ROOT and name == "lio_sam")
+            and not (is_pgo_directory and name.lower() == "scans")
+            # Frontend diagnostic snapshots are local scans, not saved maps.
+            and not (is_run_directory and name.lower() == "body_samples")
+        ]
         for filename in files:
             path = current / filename
             if path.suffix.lower() in SUPPORTED_SUFFIXES and not path.is_symlink():
@@ -416,6 +455,7 @@ def scan_maps() -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
         stat = path.stat()
         header = pcd_header(path) if path.suffix.lower() == ".pcd" else ply_header(path)
         classification = classify(path)
+        lio_manifest = (lio_sam_artifact(path.parent) or (None, {}))[1] if classification["role"].startswith("lio_sam_") else {}
         item_id = stable_id(relative)
         override = custom.get(item_id, {}) if isinstance(custom.get(item_id), dict) else {}
         points = header.get("points")
@@ -435,7 +475,7 @@ def scan_maps() -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
         items.append({
             "id": item_id,
             "name": override.get("name") or friendly_name(path, classification["role"], classification["run_id"]),
-            "note": override.get("note", ""),
+            "note": override.get("note", lio_manifest.get("note", "")),
             "archived": bool(override.get("archived", False)),
             "relative_path": relative,
             "path": str(path),
@@ -456,6 +496,39 @@ def scan_maps() -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
         })
 
     items.extend(scan_processed_maps(custom))
+    for path, role, manifest in completed_artifacts(DATA_ROOT / 'mola'):
+        identity = f'mola/{path.parent.name}/{path.name}'
+        item_id = stable_id(identity)
+        override = custom.get(item_id, {})
+        stat = path.stat()
+        header = pcd_header(path)
+        counts = manifest.get('loop_counts') or {}
+        issues = []
+        if (manifest.get('quality') or {}).get('status') == 'rejected':
+            issues.append(manifest['quality'].get('reason', '建图质量核验失败，不可选用于导航'))
+        if role == 'mola_optimized':
+            inliers = counts.get('gnc_inliers')
+            issues.append('回环统计未知；地图质量待核对' if inliers is None else
+                          '未接受有效回环约束' if inliers == 0 else f'GNC 保留 {inliers} 条回环约束；地图质量待核对')
+        if manifest.get('status') in {'failed', 'cancelled'}:
+            issues.append('任务未全部完成，此项为已保存的阶段结果')
+        if header.get('error'):
+            issues.append(str(header['error']))
+        items.append({
+            'id': item_id, 'name': override.get('name') or friendly_name(path, role, manifest.get('started_at', path.parent.name)),
+            'note': override.get('note', ''), 'archived': bool(override.get('archived', False)),
+            'relative_path': identity, 'path': str(path), 'extension': 'pcd',
+            'size': stat.st_size, 'size_human': human_size(stat.st_size),
+            'modified_at': datetime.fromtimestamp(stat.st_mtime).astimezone().isoformat(timespec='seconds'),
+            'created_at': manifest.get('started_at'), 'points': header.get('points'),
+            'fields': header.get('fields', []), 'storage': header.get('data'),
+            'complete': not bool(header.get('error')), 'issues': issues,
+            'accepted_loops': counts.get('gnc_inliers'), 'rejected_loops': counts.get('gnc_outliers'),
+            'loop_counts': counts, 'loop_validation': manifest.get('loop_validation', 'unverified'),
+            'cloud_url': f'/api/maps/{item_id}/cloud.ply', 'category': 'maps',
+            'family': 'MOLA-LIO + 离线回环', 'role': role, 'run_id': path.parent.name,
+            'pair_key': 'mola/' + path.parent.name,
+        })
 
     # In a run with multiple front-end saves, the newest capture is the final
     # one; earlier copies remain visible but are marked as snapshots.
@@ -536,7 +609,10 @@ def comparison_for(item: dict[str, Any], items: list[dict[str, Any]]) -> dict[st
     pair_key = item.get("pair_key")
     if not pair_key:
         return None
-    wanted_role = "frontend" if item["role"] == "optimized" else "optimized"
+    if item['role'] in {'mola_frontend', 'mola_optimized'}:
+        wanted_role = 'mola_frontend' if item['role'] == 'mola_optimized' else 'mola_optimized'
+    else:
+        wanted_role = "frontend" if item["role"] == "optimized" else "optimized"
     candidates = [
         value for value in items
         if value.get("pair_key") == pair_key and value["role"] == wanted_role and not value.get("snapshot")
@@ -689,7 +765,7 @@ def prepare_archive_deletion(item: dict[str, Any]) -> dict[str, Any]:
         target = output_dir
         target_kind = "directory"
     elif item["category"] in {"maps", "planning"}:
-        maps_root = MAPS_ROOT.resolve()
+        maps_root = (DATA_ROOT / 'mola').resolve() if item.get('role') in {'mola_frontend', 'mola_optimized'} else MAPS_ROOT.resolve()
         if not path_is_within(source_resolved, maps_root):
             raise HTTPException(status_code=409, detail=f"地图文件不在受管目录中：{item['name']}")
         target = source
@@ -898,6 +974,7 @@ async def lifespan(_: FastAPI):
     runtime_manager.recover_stale_state()
     grid_workspace.recover()
     localization_runtime.recover()
+    bag_recorder.recover()
     # An interrupted worker must never appear to have completed after Web restarts.
     for path in PROCESSED_ROOT.glob("*/manifest.json"):
         if path.is_symlink() or path.parent.is_symlink():
@@ -913,6 +990,9 @@ async def lifespan(_: FastAPI):
     yield
     # Web Stop also cancels in-flight point-cloud work before the owned cgroup exits.
     processing_cancel_event.set()
+    live_planning_runtime.close()
+    bag_recorder.close()
+    navigation_runtime.close()
     localization_runtime.close()
     grid_workspace.close()
     if processing_thread is not None and processing_thread.is_alive():
@@ -978,11 +1058,7 @@ def overview() -> dict[str, Any]:
         "runtime": runtime_manager.snapshot(),
         "processing_job": processing_snapshot(),
         "processing_configs": list_pipeline_configs(PIPELINE_BUILTIN_ROOT, PIPELINE_USER_ROOT),
-        "algorithms": [
-            {"id": "faster_lio", "name": "Faster-LIO", "description": "双 Airy96 实时建图"},
-            {"id": "fastlio2", "name": "FAST-LIO2", "description": "双雷达无回环建图"},
-            {"id": "faster_lio_pgo", "name": "Faster-LIO + SC-PGO", "description": "建图并检测回环"},
-        ],
+        "algorithms": runtime_manager.catalog(),
     }
 
 
@@ -1146,8 +1222,10 @@ def start_processing(request: ProcessingRequest) -> dict[str, Any]:
             raise HTTPException(status_code=409, detail="已有点云处理任务正在运行")
         if grid_workspace.job.get("running"):
             raise HTTPException(status_code=409, detail="2D 生成任务运行中，请完成后再处理点云")
-        if localization_runtime.pinned_id:
-            raise HTTPException(status_code=409, detail="定位运行中，请先停止再处理点云")
+        if localization_runtime.pinned_id or navigation_runtime.snapshot()['busy']:
+            raise HTTPException(status_code=409, detail="定位或导航运行中，请先停止再处理点云")
+        if runtime_manager.snapshot().get('status') in MAPPING_BUSY:
+            raise HTTPException(status_code=409, detail='建图运行中，请先完成建图再处理点云')
         processing_cancel_event.clear()
         processing_job.clear()
         processing_job.update({
@@ -1210,9 +1288,13 @@ def download_processing_config(config_id: str) -> FileResponse:
 def start_runtime(request: RuntimeRequest) -> dict[str, Any]:
     try:
         with processing_lock:
-            if localization_runtime.pinned_id:
-                raise HTTPException(status_code=409, detail="请先停止定位，再启动建图")
-            return runtime_manager.start(request.algorithm)
+            if bag_recorder.snapshot()['busy']:
+                raise HTTPException(status_code=409, detail='请先结束 Bag 录制并等待保存完成')
+            if localization_runtime.pinned_id or navigation_runtime.snapshot()['busy']:
+                raise HTTPException(status_code=409, detail="请先停止定位和导航，再启动建图")
+            if processing_job.get('running') or grid_workspace.overview()['job'].get('running'):
+                raise HTTPException(status_code=409, detail='请先等待地图处理任务结束')
+            return runtime_manager.start(request.algorithm, request.options)
     except (RuntimeError, ValueError) as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except OSError as exc:
@@ -1231,16 +1313,37 @@ def save_runtime_map() -> dict[str, Any]:
 
 @app.post("/api/runtime/stop")
 def stop_runtime() -> dict[str, Any]:
-    return runtime_manager.stop()
+    try:
+        return runtime_manager.stop()
+    except (RuntimeError, OSError) as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@app.get('/api/mapping/profiles/mola_lio_lc')
+def mola_profile() -> dict[str, Any]:
+    return {'yaml': (APP_ROOT / 'config/mapping/mola_lio_lc.yaml').read_text(),
+            'availability': runtime_manager.mola.availability()}
+
+
+@app.post('/api/mapping/profiles/mola_lio_lc/validate')
+def validate_mola_profile(request: dict[str, Any]) -> dict[str, Any]:
+    try:
+        config = parse_config(request.get('yaml', ''), request.get('bag_path'))
+        return {'yaml': config_yaml(config), 'config': config.model_dump()}
+    except (ValueError, TypeError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @app.post("/api/runtime/cleanup")
 def cleanup_runtime() -> dict[str, Any]:
     before = runtime_manager.snapshot()
-    after = runtime_manager.stop(timeout=8.0)
+    try:
+        after = runtime_manager.stop(timeout=8.0)
+    except (RuntimeError, OSError) as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     return {
-        "stopped": before.get("status") in {"running", "stopping"},
-        "scope": "web-managed-process-group",
+        "stopped": before.get("status") in MAPPING_BUSY,
+        "scope": "web-managed-mapping-only",
         "runtime": after,
     }
 
@@ -1250,8 +1353,17 @@ async def unhandled_error(_, exc: Exception) -> JSONResponse:
     return JSONResponse(status_code=500, content={"detail": str(exc)})
 
 
-app.include_router(create_router(grid_workspace, find_item, processing_lock, lambda: processing_job.get("running", False) or bool(localization_runtime.pinned_id)))
-app.include_router(create_localization_router(localization_runtime, grid_workspace, processing_lock, lambda: processing_job.get("running", False) or runtime_manager.snapshot().get("status") in {'running','stopping','detached'}))
+app.include_router(create_router(grid_workspace, find_item, processing_lock, lambda: processing_job.get("running", False) or bool(localization_runtime.pinned_id) or navigation_runtime.snapshot()['busy'] or runtime_manager.snapshot().get('status') in MAPPING_BUSY))
+app.include_router(create_localization_router(localization_runtime, grid_workspace, processing_lock, lambda: processing_job.get("running", False) or runtime_manager.snapshot().get("status") in MAPPING_BUSY or bag_recorder.snapshot()['busy']))
+app.include_router(create_navigation_router(navigation_runtime, grid_workspace, processing_lock,
+    lambda: processing_job.get('running', False) or runtime_manager.snapshot().get('status') in MAPPING_BUSY or bag_recorder.snapshot()['busy']))
+app.include_router(create_bag_router(bag_library, bag_recorder, processing_lock,
+    lambda: bool(localization_runtime.pinned_id) or navigation_runtime.snapshot()['busy'] or runtime_manager.snapshot().get('status') in MAPPING_BUSY))
+app.include_router(create_live_planning_router(live_planning_runtime, processing_lock, grid_workspace.lock,
+    lambda: bool(processing_job.get('running')) or bool(grid_workspace.job.get('running'))
+    or runtime_manager.snapshot().get('status') in MAPPING_BUSY or bag_recorder.snapshot()['busy']
+    or localization_runtime.snapshot(connection=False)['phase'] in {'starting', 'running', 'stopping', 'detached', 'conflict'}
+    or navigation_runtime.snapshot()['busy']))
 
 DIST_ROOT = APP_ROOT / "frontend" / "dist"
 if DIST_ROOT.is_dir():

@@ -1,0 +1,10 @@
+# Optional overlay for dual_lidar_adapter only. Not loaded by any launch file.
+# Copy into an explicitly reviewed offline profile and set enabled true to
+# inspect the metadata branch. Never replace the main calibration config with
+# this file: transforms, range gates and InputClock are inherited from it.
+dual_lidar_adapter:
+  ros__parameters:
+    perception_rays:
+      enabled: false
+      output_topic: /d1max/localization/perception/rays_raw
+      max_input_points: 250000

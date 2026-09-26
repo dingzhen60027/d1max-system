@@ -4,6 +4,7 @@
 #include <chrono>
 #include <iostream>
 #include <queue>
+#include <stdexcept>
 #include <unordered_map>
 #include <unordered_set>
 
@@ -21,33 +22,48 @@ void Astar::Init(const double cost_threshold, const int num_layers,
                  const double resolution,  const double step_cost_weight, const Eigen::MatrixXd& cost_map,
                  const Eigen::MatrixXd& height_map,
                  const Eigen::MatrixXd& ele_map) {
-  auto t0 = std::chrono::high_resolution_clock::now();
-  cost_threshold_ = cost_threshold;
-step_cost_weight_  = step_cost_weight;
+  InitShared(cost_threshold, num_layers, resolution, step_cost_weight,
+             std::make_shared<const Eigen::MatrixXd>(cost_map),
+             std::make_shared<const Eigen::MatrixXd>(height_map),
+             std::make_shared<const Eigen::MatrixXd>(ele_map));
+  shares_grid_storage_ = false;
+}
 
-  max_x_ = cost_map.cols();
-  max_y_ = cost_map.rows() / num_layers;
+void Astar::InitShared(const double cost_threshold, const int num_layers,
+                       const double resolution, const double step_cost_weight,
+                       std::shared_ptr<const Eigen::MatrixXd> cost_map,
+                       std::shared_ptr<const Eigen::MatrixXd> height_map,
+                       std::shared_ptr<const Eigen::MatrixXd> ele_map) {
+  auto t0 = std::chrono::high_resolution_clock::now();
+  if (!cost_map || !height_map || !ele_map ||
+      num_layers <= 0 || cost_map->rows() <= 0 || cost_map->cols() <= 0 ||
+      cost_map->rows() % num_layers != 0 ||
+      height_map->rows() != cost_map->rows() || height_map->cols() != cost_map->cols() ||
+      ele_map->rows() != cost_map->rows() || ele_map->cols() != cost_map->cols() ||
+      !std::isfinite(resolution) || resolution <= 0) {
+    throw std::invalid_argument("Invalid A* map dimensions or resolution");
+  }
+  // Do not retain pointers across map reinitialization/reallocation.
+  ReleaseQueryNodes();
+  touched_count_ = 0;
+  search_result_.clear();
+  visited_set_.resize(0, 3);
+  last_reset_count_ = 0;
+  search_count_ = 0;
+  last_query_nodes_ = peak_query_nodes_ = 0;
+  cost_threshold_ = cost_threshold;
+  step_cost_weight_ = step_cost_weight;
+  resolution_ = resolution;
+
+  max_x_ = cost_map->cols();
+  max_y_ = cost_map->rows() / num_layers;
   max_layers_ = num_layers;
   xy_size_ = max_x_ * max_y_;
 
-  int row_offset = 0;
-  grid_map_.resize(max_layers_);
-  for (size_t i = 0; i < max_layers_; ++i) {
-    row_offset = i * max_y_;
-    grid_map_[i].resize(max_y_);
-    for (size_t j = 0; j < max_y_; ++j) {
-      grid_map_[i][j].resize(max_x_);
-      for (size_t k = 0; k < max_x_; ++k) {
-        double height = height_map(j + row_offset, k);
-        double z = static_cast<int>(height / resolution);
-        grid_map_[i][j][k] = Node(Eigen::Vector3i(z, j, k), nullptr);
-        grid_map_[i][j][k].cost = cost_map(j + row_offset, k);
-        grid_map_[i][j][k].height = height;
-        grid_map_[i][j][k].ele = ele_map(j + row_offset, k);
-        grid_map_[i][j][k].layer = i;
-      }
-    }
-  }
+  cost_map_ = std::move(cost_map);
+  height_map_ = std::move(height_map);
+  ele_map_ = std::move(ele_map);
+  shares_grid_storage_ = true;
   auto duration = std::chrono::duration_cast<std::chrono::microseconds>(
       std::chrono::high_resolution_clock::now() - t0);
 
@@ -65,13 +81,35 @@ step_cost_weight_  = step_cost_weight;
 }
 
 void Astar::Reset() {
-  for (size_t i = 0; i < grid_map_.size(); ++i) {
-    for (size_t j = 0; j < grid_map_[i].size(); ++j) {
-      for (size_t k = 0; k < grid_map_[i][j].size(); ++k) {
-        grid_map_[i][j][k].Reset();
-      }
-    }
-  }
+  last_reset_count_ = touched_count_;
+  touched_count_ = 0;
+  search_result_.clear();
+  visited_set_.resize(0, 3);
+  ReleaseQueryNodes();
+  last_query_nodes_ = 0;
+}
+
+Node* Astar::GetOrCreateNode(int layer, int row, int col) {
+  const size_t index = (static_cast<size_t>(layer) * max_y_ + row) * max_x_ + col;
+  const auto found = query_nodes_.find(index);
+  if (found != query_nodes_.end()) return &found->second;
+  const int matrix_row = layer * max_y_ + row;
+  const double height = (*height_map_)(matrix_row, col);
+  Node node(Eigen::Vector3i(static_cast<int>(height / resolution_), row, col), nullptr);
+  node.cost = (*cost_map_)(matrix_row, col);
+  node.height = height;
+  node.ele = (*ele_map_)(matrix_row, col);
+  node.layer = layer;
+  return &query_nodes_.emplace(index, std::move(node)).first->second;
+}
+
+void Astar::ReleaseQueryNodes() {
+  last_query_nodes_ = query_nodes_.size();
+  peak_query_nodes_ = std::max(peak_query_nodes_, last_query_nodes_);
+  query_nodes_.clear();
+  // A difficult/failed query must not retain a map-sized bucket table. Keep
+  // only a small bucket capacity; no live Node survives a completed query.
+  if (query_nodes_.bucket_count() > 4096) query_nodes_.rehash(1024);
 }
 
 int Astar::GetHash(const Eigen::Vector3i& idx) const {
@@ -81,17 +119,24 @@ int Astar::GetHash(const Eigen::Vector3i& idx) const {
 bool Astar::Search(const Eigen::Vector3i& start, const Eigen::Vector3i& goal) {
   auto t0 = std::chrono::high_resolution_clock::now();
 
-  if (!search_result_.empty()) {
-    Reset();
-    search_result_.clear();
+  Reset();
+  ++search_count_;
+  const auto in_bounds = [this](const Eigen::Vector3i& p) {
+    return p[0] >= 0 && p[0] < max_layers_ && p[1] >= 0 &&
+           p[1] < max_x_ && p[2] >= 0 && p[2] < max_y_;
+  };
+  if (!in_bounds(start) || !in_bounds(goal)) {
+    throw std::out_of_range("A* endpoint is outside the initialized map");
   }
 
-  auto start_node = &grid_map_[start[0]][start[2]][start[1]];
-  auto goal_node = &grid_map_[goal[0]][goal[2]][goal[1]];
+  auto start_node = GetOrCreateNode(start[0], start[2], start[1]);
+  auto goal_node = GetOrCreateNode(goal[0], goal[2], goal[1]);
+  ++touched_count_;
   start_node->g = 0.0;
 
   if (goal_node->cost > cost_threshold_) {
     printf("goal node is not reachable, cost: %f", goal_node->cost);
+    ReleaseQueryNodes();
     return false;
   }
 
@@ -111,11 +156,13 @@ bool Astar::Search(const Eigen::Vector3i& start, const Eigen::Vector3i& goal) {
         // search_result_.emplace_back(Eigen::Vector3i(
         //     current_node->layer, current_node->idx[1],
         //     current_node->idx[2]));
-        search_result_.emplace_back(current_node);
+        search_result_.push_back(*current_node);
+        search_result_.back().parent = nullptr;
         current_node = current_node->parent;
       }
       std::reverse(search_result_.begin(), search_result_.end());
       if (debug_) ConvertClosedSetToMatrix(closed_set);
+      ReleaseQueryNodes();
       auto duration = std::chrono::duration_cast<std::chrono::microseconds>(
           std::chrono::high_resolution_clock::now() - t0);
       printf("path found, time elapsed: %f ms\n",
@@ -143,17 +190,14 @@ bool Astar::Search(const Eigen::Vector3i& start, const Eigen::Vector3i& goal) {
         continue;
       }
 
-      auto neighbor_node = &grid_map_[layer][i][j];
-
-      if (neighbor_node->cost > cost_threshold_) {
-        if (abs(neighbor_node->ele) < 0.5) {
+      const int matrix_row = layer * max_y_ + i;
+      if ((*cost_map_)(matrix_row, j) > cost_threshold_) {
+        if (abs((*ele_map_)(matrix_row, j)) < 0.5 ||
+            std::abs((*height_map_)(matrix_row, j) - current_node->height) > 0.3) {
           continue;
-        } else {
-          if (std::abs(neighbor_node->height - current_node->height) > 0.3) {
-            continue;
-          }
         }
       }
+      auto neighbor_node = GetOrCreateNode(layer, i, j);
 
       // if ((neighbor_node->cost > cost_threshold_) ||
       //     std::abs(neighbor_node->height - current_node->height) > 0.3) {
@@ -176,6 +220,9 @@ bool Astar::Search(const Eigen::Vector3i& start, const Eigen::Vector3i& goal) {
       }
 
       if (tentative_g < neighbor_node->g) {
+        if (neighbor_node->g == 1e9) {
+          ++touched_count_;
+        }
         neighbor_node->g = tentative_g;
         neighbor_node->f = tentative_g + GetHeuristic(neighbor_node, goal_node);
         neighbor_node->parent = current_node;
@@ -191,6 +238,7 @@ bool Astar::Search(const Eigen::Vector3i& start, const Eigen::Vector3i& goal) {
   if (debug_) {
     ConvertClosedSetToMatrix(closed_set);
   }
+  ReleaseQueryNodes();
   return false;
 }
 
@@ -209,16 +257,15 @@ int Astar::DecideLayer(const Node* cur_node) const {
       continue;
     }
 
-    const Node& search_node = grid_map_[cur_layer][i][j];
-
-    if (abs(search_node.height - cur_height) > 0.2) {
+    const int matrix_row = cur_layer * max_y_ + i;
+    if (abs((*height_map_)(matrix_row, j) - cur_height) > 0.2) {
       continue;
     }
 
-    if (search_node.ele > 0.5) {
+    if ((*ele_map_)(matrix_row, j) > 0.5) {
       true_layer = std::min(cur_layer + 1, max_layers_ - 1);
       break;
-    } else if (search_node.ele < -0.5) {
+    } else if ((*ele_map_)(matrix_row, j) < -0.5) {
       true_layer = std::max(cur_layer - 1, 0);
       break;
     }
@@ -275,14 +322,14 @@ std::vector<PathPoint> Astar::GetPathPoints() const {
     //       std::atan2(search_result_[i][1] - search_result_[i - 1][1],
     //                  search_result_[i][2] - search_result_[i - 1][2]);
     // }
-    path_points[i].layer = search_result_[i]->layer;
-    path_points[i].x = search_result_[i]->idx(2);
-    path_points[i].y = search_result_[i]->idx(1);
-    path_points[i].height = search_result_[i]->height;
+    path_points[i].layer = search_result_[i].layer;
+    path_points[i].x = search_result_[i].idx(2);
+    path_points[i].y = search_result_[i].idx(1);
+    path_points[i].height = search_result_[i].height;
     if (i > 0) {
       path_points[i].heading =
-          std::atan2(search_result_[i]->idx(1) - search_result_[i - 1]->idx(1),
-                     search_result_[i]->idx(2) - search_result_[i - 1]->idx(2));
+          std::atan2(search_result_[i].idx(1) - search_result_[i - 1].idx(1),
+                     search_result_[i].idx(2) - search_result_[i - 1].idx(2));
     }
   }
 
@@ -301,9 +348,9 @@ Eigen::MatrixXd Astar::GetResultMatrix() const {
 
   Eigen::MatrixXd path_matrix(search_result_.size(), 3);
   for (size_t i = 0; i < search_result_.size(); ++i) {
-    path_matrix(i, 0) = search_result_[i]->layer;
-    path_matrix(i, 1) = search_result_[i]->idx[1];
-    path_matrix(i, 2) = search_result_[i]->idx[2];
+    path_matrix(i, 0) = search_result_[i].layer;
+    path_matrix(i, 1) = search_result_[i].idx[1];
+    path_matrix(i, 2) = search_result_[i].idx[2];
   }
   return path_matrix;
 }
@@ -323,20 +370,10 @@ void Astar::ConvertClosedSetToMatrix(
 std::vector<Eigen::Vector3i> Astar::GetNeighbors(Node* node) const {}
 
 Eigen::MatrixXd Astar::GetCostLayer(int layer) const {
-  Eigen::MatrixXd cost_layer(max_y_, max_x_);
-  for (int i = 0; i < max_y_; ++i) {
-    for (int j = 0; j < max_x_; ++j) {
-      cost_layer(i, j) = grid_map_[layer][i][j].cost;
-    }
-  }
-  return cost_layer;
+  if (layer < 0 || layer >= max_layers_) throw std::out_of_range("Invalid A* layer");
+  return cost_map_->middleRows(layer * max_y_, max_y_);
 }
 Eigen::MatrixXd Astar::GetEleLayer(int layer) const {
-  Eigen::MatrixXd ele_layer(max_y_, max_x_);
-  for (int i = 0; i < max_y_; ++i) {
-    for (int j = 0; j < max_x_; ++j) {
-      ele_layer(i, j) = grid_map_[layer][i][j].ele;
-    }
-  }
-  return ele_layer;
+  if (layer < 0 || layer >= max_layers_) throw std::out_of_range("Invalid A* layer");
+  return ele_map_->middleRows(layer * max_y_, max_y_);
 }

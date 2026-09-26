@@ -11,6 +11,7 @@ find_package(ament_index_cpp REQUIRED)
 find_package(bspline_opt REQUIRED)
 find_package(Eigen3 REQUIRED)
 find_package(geometry_msgs REQUIRED)
+find_package(d1max_planning_interfaces REQUIRED)
 find_package(nav_msgs REQUIRED)
 find_package(path_searching REQUIRED)
 find_package(plan_env REQUIRED)
@@ -27,7 +28,7 @@ find_package(visualization_msgs REQUIRED)
 set(scan_planner_dependencies
   ament_index_cpp bspline_opt geometry_msgs nav_msgs path_searching plan_env
   rclcpp scan_planner_msgs sensor_msgs std_msgs tf2 tf2_geometry_msgs tf2_ros
-  traj_utils visualization_msgs)
+  traj_utils visualization_msgs d1max_planning_interfaces)
 
 add_executable(scan_planner_node
   src/scan_planner_node.cpp
@@ -57,6 +58,27 @@ install(PROGRAMS scripts/keypoint_recorder.py
   DESTINATION lib/${PROJECT_NAME} OPTIONAL)
 
 if(BUILD_TESTING)
+  find_package(ament_cmake_gtest REQUIRED)
+  ament_add_gtest(test_input_contract test/test_input_contract.cpp)
+  target_include_directories(test_input_contract PRIVATE include)
+  target_link_libraries(test_input_contract Eigen3::Eigen)
+  ament_add_gtest(test_local_plan_debug test/test_local_plan_debug.cpp)
+  target_include_directories(test_local_plan_debug PRIVATE include)
+  ament_target_dependencies(test_local_plan_debug
+    bspline_opt d1max_planning_interfaces geometry_msgs nav_msgs std_msgs)
+  target_link_libraries(test_local_plan_debug Eigen3::Eigen)
+  ament_add_gtest(test_collision_reference test/test_collision_reference.cpp)
+  target_include_directories(test_collision_reference PRIVATE include)
+  ament_target_dependencies(test_collision_reference bspline_opt)
+  target_link_libraries(test_collision_reference Eigen3::Eigen)
+  ament_add_gtest(test_trajectory_collision test/test_trajectory_collision.cpp)
+  target_include_directories(test_trajectory_collision PRIVATE include)
+  ament_target_dependencies(test_trajectory_collision bspline_opt)
+  target_link_libraries(test_trajectory_collision Eigen3::Eigen)
+  ament_add_gtest(test_reference_target test/test_reference_target.cpp)
+  target_include_directories(test_reference_target PRIVATE include)
+  ament_target_dependencies(test_reference_target bspline_opt)
+  target_link_libraries(test_reference_target Eigen3::Eigen)
   find_package(launch_testing_ament_cmake REQUIRED)
   add_launch_test(test/test_planner_startup.py TIMEOUT 30)
   add_launch_test(test/test_waypoint_parameters.py TIMEOUT 30)

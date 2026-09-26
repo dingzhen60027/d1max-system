@@ -2,6 +2,10 @@
 #include <plan_manage/planner_manager.h>
 #include <chrono>
 #include <thread>
+#include <bspline_opt/reference_path.hpp>
+#include <bspline_opt/trajectory_timing.hpp>
+#include <plan_manage/collision_reference.hpp>
+#include <plan_manage/trajectory_collision.hpp>
 
 namespace scan_planner
 {
@@ -61,6 +65,9 @@ namespace scan_planner
     pp_.feasibility_tolerance_ = get_double("manager.feasibility_tolerance", 0.0);
     pp_.ctrl_pt_dist = get_double("manager.control_points_distance", -1.0);
     pp_.planning_horizon_ = get_double("manager.planning_horizon", 5.0);
+    reference_detour_anchor_margin_=get_double("manager.reference_detour_anchor_margin", .5);
+    if (!std::isfinite(reference_detour_anchor_margin_) || reference_detour_anchor_margin_<0. ||
+        reference_detour_anchor_margin_>2.) throw std::invalid_argument("invalid detour anchor margin");
 
     local_data_.traj_id_ = 0;
     grid_map_.reset(new GridMap);
@@ -83,7 +90,9 @@ namespace scan_planner
                                         Eigen::Vector3d start_acc, Eigen::Vector3d local_target_pt,
                                         Eigen::Vector3d local_target_vel, bool flag_polyInit, bool flag_randomPolyTraj)
   {
-
+    last_failure_phase_="failed_optimization";
+    attempt_blocked_points_.clear();
+    attempt_detour_seed_.clear();
     static int count = 0;
     std::cout << endl
               << "[rebo replan]: -------------------------------------" << count++ << std::endl;
@@ -93,6 +102,7 @@ namespace scan_planner
 
     if ((start_pt - local_target_pt).norm() < 0.2)
     {
+      last_failure_phase_="waiting_goal_reached";
       cout << "Close to goal" << endl;
       continuous_failures_count_++;
       return false;
@@ -104,6 +114,75 @@ namespace scan_planner
     /*** STEP 1: INIT ***/
     double ts = (start_pt - local_target_pt).norm() > 0.1 ? pp_.ctrl_pt_dist / pp_.max_vel_ * 1.2 : pp_.ctrl_pt_dist / pp_.max_vel_ * 5; // pp_.ctrl_pt_dist / pp_.max_vel_ is too tense, and will surely exceed the acc/vel limits
     vector<Eigen::Vector3d> point_set, start_end_derivatives;
+    const bool guided = !local_reference_.empty();
+    const CubicMotionBoundary motion_boundary{start_pt,start_vel,start_acc,
+        local_target_pt,local_target_vel,Eigen::Vector3d::Zero()};
+    if (guided && (!start_vel.allFinite() || !start_acc.allFinite() ||
+        start_vel.norm()>pp_.max_vel_+1e-9 || start_acc.norm()>pp_.max_acc_+1e-9)) {
+      last_failure_phase_="failed_dynamics";
+      RCLCPP_WARN(node_->get_logger(),
+          "Initial motion exceeds strict planning limits: speed=%.6f/%.6f acceleration=%.6f/%.6f; braking policy required",
+          start_vel.norm(),pp_.max_vel_,start_acc.norm(),pp_.max_acc_);
+      ++continuous_failures_count_;
+      return false;
+    }
+    bspline_optimizer_rebound_->reference_path_samples_.clear();
+    if (guided)
+    {
+      std::vector<Eigen::Vector3d> collision_aware_reference;
+      std::string seed_reason;
+      const auto occupancy=[this](const Eigen::Vector3d &p, double yaw) {
+        return grid_map_->getInflateOccupancy(p, yaw);
+      };
+      for (std::size_t i=1; i<local_reference_.size(); ++i) {
+        const auto a=local_reference_[i-1], b=local_reference_[i];
+        const double yaw=std::atan2(b.y()-a.y(), b.x()-a.x());
+        const int count=std::min(4096, std::max(1, static_cast<int>(std::ceil(
+            (b-a).norm()/(grid_map_->getResolution()*.5)))));
+        for (int j=0; j<=count && attempt_blocked_points_.size()<4096; ++j) {
+          const Eigen::Vector3d p=a+(b-a)*(static_cast<double>(j)/count);
+          if (occupancy(p, yaw)!=0) attempt_blocked_points_.push_back(p);
+        }
+      }
+      ASTAR_RET search_result=ASTAR_RET::SEARCH_ERR;
+      const auto search=[this, t_start, &search_result](const Eigen::Vector3d &a, const Eigen::Vector3d &b) {
+        if (std::chrono::duration<double>(std::chrono::steady_clock::now()-t_start).count()>.4)
+          return std::vector<Eigen::Vector3d>{};
+        search_result=bspline_optimizer_rebound_->a_star_->AstarSearch(
+            grid_map_->getResolution(), a, b, false);
+        if (search_result!=ASTAR_RET::SUCCESS)
+          return std::vector<Eigen::Vector3d>{};
+        return bspline_optimizer_rebound_->a_star_->getPath();
+      };
+      if (!buildCollisionAwareReference(local_reference_, grid_map_->getResolution(),
+          occupancy, search, collision_aware_reference, seed_reason, reference_detour_anchor_margin_)) {
+        last_failure_phase_=seed_reason;
+        if (seed_reason=="failed_reference_search") {
+          switch(search_result) {
+            case ASTAR_RET::INIT_START_OCCUPIED: last_failure_phase_="failed_reference_start_occupied";break;
+            case ASTAR_RET::INIT_TARGET_OCCUPIED: last_failure_phase_="failed_reference_target_occupied";break;
+            case ASTAR_RET::INIT_LATTICE_OCCUPIED: last_failure_phase_="failed_reference_lattice_occupied";break;
+            case ASTAR_RET::INIT_UNOBSERVED: last_failure_phase_="waiting_observed_space";break;
+            case ASTAR_RET::INIT_OUTSIDE_MAP: last_failure_phase_="failed_reference_outside_map";break;
+            default: break;
+          }
+        }
+        RCLCPP_WARN(node_->get_logger(), "Local reference rejected: %s", last_failure_phase_.c_str());
+        ++continuous_failures_count_;
+        return false;
+      }
+      attempt_detour_seed_=collision_aware_reference;
+      DiscreteReference local_path;
+      local_path.set(collision_aware_reference);
+      const auto seed = sampleReferenceSeed(local_path, pp_.max_vel_, pp_.max_acc_,
+                                            start_vel.norm(), local_target_vel.norm(), pp_.ctrl_pt_dist);
+      point_set = seed.samples;
+      ts = seed.dt;
+      start_end_derivatives = {start_vel, local_target_vel, start_acc, Eigen::Vector3d::Zero()};
+      bspline_optimizer_rebound_->reference_path_samples_ = point_set;
+    }
+    else
+    {
     static bool flag_first_call = true, flag_force_polynomial = false;
     bool flag_regenerate = false;
     do
@@ -247,14 +326,22 @@ namespace scan_planner
         }
       }
     } while (flag_regenerate);
-
     applyLinearZReference(point_set, start_pt(2), local_target_pt(2));
+    }
 
     Eigen::MatrixXd ctrl_pts;
-    UniformBspline::parameterizeToBspline(ts, point_set, start_end_derivatives, ctrl_pts);
+    if (guided)
+      ctrl_pts=fitCubicWithFixedBoundary(point_set,ts,motion_boundary);
+    else
+      UniformBspline::parameterizeToBspline(ts, point_set, start_end_derivatives, ctrl_pts);
 
     vector<vector<Eigen::Vector3d>> a_star_paths;
     a_star_paths = bspline_optimizer_rebound_->initControlPoints(ctrl_pts, true);
+    if (!bspline_optimizer_rebound_->controlPointsInitialized()) {
+      last_failure_phase_="failed_rebound_search";
+      ++continuous_failures_count_;
+      return false;
+    }
 
     t_init = std::chrono::duration<double>(std::chrono::steady_clock::now() - t_start).count();
 
@@ -269,6 +356,7 @@ namespace scan_planner
     cout << "first_optimize_step_success=" << flag_step_1_success << endl;
     if (!flag_step_1_success)
     {
+      if (!bspline_optimizer_rebound_->controlPointsInitialized()) last_failure_phase_="failed_rebound_search";
       // visualization_->displayOptimalList( ctrl_pts, vis_id );
       continuous_failures_count_++;
       return false;
@@ -284,7 +372,39 @@ namespace scan_planner
 
     double ratio;
     bool flag_step_2_success = true;
-    if (!pos.checkFeasibility(ratio, false))
+    // For a genuinely stationary start, preserve successful rebound geometry:
+    // the legacy time-refinement solver also moves XYZ and can cut a detour back
+    // into obstacles. A moving start still needs its original boundary solve.
+    const bool stationary_guided=guided && stationaryBoundary(start_vel,start_acc);
+    if (guided && !stationary_guided)
+    {
+      try {
+        const auto refine_interior=[this](Eigen::MatrixXd &controls,double dt) {
+          UniformBspline reference(controls,3,dt);
+          bspline_optimizer_rebound_->ref_pts_.clear();
+          const int spans=controls.cols()-3;
+          for (int i=0;i<=spans;++i)
+            bspline_optimizer_rebound_->ref_pts_.push_back(reference.evaluateDeBoorT(i*dt));
+          Eigen::MatrixXd optimized;
+          const bool success=bspline_optimizer_rebound_->BsplineOptimizeTrajRefine(
+              controls,dt,optimized);
+          if (success) controls=optimized;
+          return success;
+        };
+        const auto timing=refineTimingWithFixedBoundary(pos,motion_boundary,
+            pp_.max_vel_,pp_.max_acc_,refine_interior);
+        flag_step_2_success=timing.success;
+        if (!timing.success)
+          RCLCPP_WARN(node_->get_logger(),
+              "Constrained moving timing rejected: %s refinements=%d v_bound=%.6f/%.6f a_bound=%.6f/%.6f",
+              timing.reason.c_str(),timing.refinements,timing.speed_bound,pp_.max_vel_,
+              timing.acceleration_bound,pp_.max_acc_);
+      } catch (const std::exception &error) {
+        RCLCPP_ERROR(node_->get_logger(),"Invalid moving boundary timing: %s",error.what());
+        flag_step_2_success=false;
+      }
+    }
+    else if (!stationary_guided && !pos.checkFeasibility(ratio, false))
     {
       cout << "Need to reallocate time." << endl;
 
@@ -294,10 +414,39 @@ namespace scan_planner
         pos = UniformBspline(optimal_control_points, 3, ts);
     }
 
+    if (stationary_guided && flag_step_2_success)
+    {
+      // Only a stationary start permits geometry-preserving uniform retiming.
+      // Moving starts were refitted above with exact measured derivatives.
+      try
+      {
+        const double time_scale = enforceDerivativeBoundsAtStart(
+            pos, pp_.max_vel_, pp_.max_acc_, start_vel,start_acc);
+        if (time_scale > 1.001)
+          RCLCPP_DEBUG(node_->get_logger(), "Reference B-spline time scaled by %.3f", time_scale);
+      }
+      catch (const std::exception &error)
+      {
+        last_failure_phase_="failed_dynamics";
+        RCLCPP_ERROR(node_->get_logger(), "Reject invalid native spline timing: %s", error.what());
+        return false;
+      }
+    }
+
     if (!flag_step_2_success || !checkDynamicFeasibility(pos))
     {
+      last_failure_phase_="failed_dynamics";
       printf("\033[34mThis refined trajectory is unsafe or dynamically infeasible. Skip publishing it.\n\033[0m");
       continuous_failures_count_++;
+      return false;
+    }
+    // Only queries on this actual final curve may classify its rejection.
+    // Unknown cells explored by an earlier A* are not its terminal failure.
+    grid_map_->resetCollisionDiagnostics();
+    if (!checkWholeTrajectoryCollision(pos)) {
+      last_failure_phase_=grid_map_->unknownCollisionQueries()>0 ?
+          "waiting_observed_space":"failed_final_collision";
+      ++continuous_failures_count_;
       return false;
     }
 
@@ -311,6 +460,7 @@ namespace scan_planner
 
     // success. YoY
     continuous_failures_count_ = 0;
+    last_failure_phase_.clear();
     return true;
   }
 
@@ -503,6 +653,22 @@ namespace scan_planner
     local_data_.start_pos_ = local_data_.position_traj_.evaluateDeBoorT(0.0);
     local_data_.duration_ = local_data_.position_traj_.getTimeSum();
     local_data_.traj_id_ += 1;
+  }
+
+  bool SCANPlannerManager::checkWholeTrajectoryCollision(UniformBspline &position_traj,
+      std::size_t query_budget, double wall_budget_seconds, bool diagnostic)
+  {
+    const double body_extent=node_->get_parameter("grid_map.double_cylinder_radius").as_double()+
+        node_->get_parameter("grid_map.double_cylinder_offset").as_double();
+    return wholeCurveCollisionFree(position_traj, grid_map_->getResolution(), body_extent,
+      [&](const Eigen::Vector3d &p,double yaw) {
+      const int collision=grid_map_->getInflateOccupancy(p,yaw);
+      if (collision!=0 && diagnostic)
+        RCLCPP_WARN(node_->get_logger(),
+          "Final curve rejected: state=%d xyz=(%.6f,%.6f,%.6f) yaw=%.6f",
+          collision,p.x(),p.y(),p.z(),yaw);
+      return collision;
+    }, query_budget, wall_budget_seconds);
   }
 
   bool SCANPlannerManager::checkDynamicFeasibility(UniformBspline position_traj)

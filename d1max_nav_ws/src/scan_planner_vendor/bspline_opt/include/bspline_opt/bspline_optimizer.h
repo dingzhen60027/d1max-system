@@ -76,8 +76,12 @@ namespace scan_planner
 
     AStar::Ptr a_star_;
     std::vector<Eigen::Vector3d> ref_pts_;
+    // Optional collision-checked local guidance samples (including A* detours),
+    // independent of refine ref_pts_. The selected global PCT route stays in FSM.
+    std::vector<Eigen::Vector3d> reference_path_samples_;
 
     std::vector<std::vector<Eigen::Vector3d>> initControlPoints(Eigen::MatrixXd &init_points, bool flag_first_init = true);
+    bool controlPointsInitialized() const { return control_points_initialized_; }
     bool BsplineOptimizeTrajRebound(Eigen::MatrixXd &optimal_points, double ts); // must be called after initControlPoints()
     bool BsplineOptimizeTrajRefine(const Eigen::MatrixXd &init_points, const double ts, Eigen::MatrixXd &optimal_points);
 
@@ -85,6 +89,7 @@ namespace scan_planner
 
   private:
     GridMap::Ptr grid_map_;
+    bool control_points_initialized_{false};
 
     enum FORCE_STOP_OPTIMIZE_TYPE
     {
@@ -113,6 +118,7 @@ namespace scan_planner
     double lambda2_, new_lambda2_; // distance weight
     double lambda3_;               // feasibility weight
     double lambda4_;               // curve fitting
+    double lambda_reference_{0.0};
     int a;
     //
     double dist0_;             // safe distance

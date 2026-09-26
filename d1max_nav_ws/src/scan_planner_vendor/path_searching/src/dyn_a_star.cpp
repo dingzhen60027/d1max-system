@@ -143,9 +143,13 @@ bool AStar::ConvertToIndexAndAdjustStartEndPoints(Vector3d start_pt, Vector3d en
     return true;
 }
 
-ASTAR_RET AStar::AstarSearch(const double step_size, Vector3d start_pt, Vector3d end_pt)
+ASTAR_RET AStar::AstarSearch(const double step_size, Vector3d start_pt, Vector3d end_pt,
+                           bool adjust_endpoints)
 {
     const auto time_1 = std::chrono::steady_clock::now();
+    gridPath_.clear();
+    if (!std::isfinite(step_size) || step_size <= 0. ||
+        !start_pt.allFinite() || !end_pt.allFinite()) return ASTAR_RET::INIT_ERR;
     ++rounds_;
 
     step_size_ = step_size;
@@ -153,10 +157,53 @@ ASTAR_RET AStar::AstarSearch(const double step_size, Vector3d start_pt, Vector3d
     center_ = (start_pt + end_pt) / 2;
 
     Vector3i start_idx, end_idx;
-    if (!ConvertToIndexAndAdjustStartEndPoints(start_pt, end_pt, start_idx, end_idx))
+    const double endpoint_yaw=std::atan2(end_pt.y()-start_pt.y(), end_pt.x()-start_pt.x());
+    bool endpoints_valid=false;
+    int exact_start=3,exact_end=3,grid_start=3,grid_end=3;
+    if (adjust_endpoints) {
+        endpoints_valid=ConvertToIndexAndAdjustStartEndPoints(start_pt, end_pt, start_idx, end_idx);
+    } else if (Coord2Index(start_pt, start_idx) && Coord2Index(end_pt, end_idx)) {
+        // Do not short-circuit these four bounded queries: distinguish an
+        // actual blocked endpoint from a lattice or missing-observation issue.
+        exact_start=checkOccupancy(start_pt,endpoint_yaw);
+        exact_end=checkOccupancy(end_pt,endpoint_yaw);
+        grid_start=checkOccupancy(Index2Coord(start_idx),endpoint_yaw);
+        grid_end=checkOccupancy(Index2Coord(end_idx),endpoint_yaw);
+        endpoints_valid=exact_start==0 && exact_end==0 && grid_start==0 && grid_end==0;
+    }
+    if (!endpoints_valid)
     {
-        RCLCPP_ERROR(rclcpp::get_logger("path_searching"),
-                     "Unable to handle the initial or end point, force return!");
+        if (!adjust_endpoints && exact_start!=3) {
+            // Failure semantics must not mistake the first unknown cell for
+            // an entirely empty envelope. Inspect all endpoint cells only on
+            // this bounded failure path; occupied takes precedence.
+            exact_start=grid_map_->inspectInflateOccupancy(start_pt,endpoint_yaw).state();
+            exact_end=grid_map_->inspectInflateOccupancy(end_pt,endpoint_yaw).state();
+            grid_start=grid_map_->inspectInflateOccupancy(Index2Coord(start_idx),endpoint_yaw).state();
+            grid_end=grid_map_->inspectInflateOccupancy(Index2Coord(end_idx),endpoint_yaw).state();
+        }
+        const auto now=std::chrono::steady_clock::now();
+        static thread_local std::chrono::steady_clock::time_point last_endpoint_warning{};
+        if (now-last_endpoint_warning>=std::chrono::seconds(2)) {
+            last_endpoint_warning=now;
+            RCLCPP_WARN(rclcpp::get_logger("path_searching"),
+                "A* endpoint rejected: start=(%.4f %.4f %.4f) exact=%s lattice=%s; "
+                "end=(%.4f %.4f %.4f) exact=%s lattice=%s; yaw=%.4f resolution=%.3f",
+                start_pt.x(),start_pt.y(),start_pt.z(),scan_planner::occupancyStateName(exact_start),
+                scan_planner::occupancyStateName(grid_start),end_pt.x(),end_pt.y(),end_pt.z(),
+                scan_planner::occupancyStateName(exact_end),scan_planner::occupancyStateName(grid_end),
+                endpoint_yaw,step_size_);
+            RCLCPP_WARN(rclcpp::get_logger("path_searching"),"A* start evidence: %s; end evidence: %s",
+                grid_map_->describeInflateOccupancy(start_pt,endpoint_yaw).c_str(),
+                grid_map_->describeInflateOccupancy(end_pt,endpoint_yaw).c_str());
+        }
+        if (exact_start==1) return ASTAR_RET::INIT_START_OCCUPIED;
+        if (exact_end==1) return ASTAR_RET::INIT_TARGET_OCCUPIED;
+        if (grid_start==1 || grid_end==1) return ASTAR_RET::INIT_LATTICE_OCCUPIED;
+        if (exact_start==-1 || exact_end==-1 || grid_start==-1 || grid_end==-1)
+            return ASTAR_RET::INIT_OUTSIDE_MAP;
+        if (exact_start==2 || exact_end==2 || grid_start==2 || grid_end==2)
+            return ASTAR_RET::INIT_UNOBSERVED;
         return ASTAR_RET::INIT_ERR;
     }
 
@@ -176,7 +223,7 @@ ASTAR_RET AStar::AstarSearch(const double step_size, Vector3d start_pt, Vector3d
         ratio = std::max(0.0, std::min(1.0, ratio));
 
         const double z = search_start(2) + ratio * (search_end(2) - search_start(2));
-        return static_cast<int>((z - center_(2)) * inv_step_size_ + 0.5) + CENTER_IDX_(2);
+        return static_cast<int>(std::round((z - center_(2)) * inv_step_size_)) + CENTER_IDX_(2);
     };
 
     // if ( start_pt(0) > -1 && start_pt(0) < 0 )
@@ -185,7 +232,7 @@ ASTAR_RET AStar::AstarSearch(const double step_size, Vector3d start_pt, Vector3d
     GridNodePtr startPtr = GridNodeMap_[start_idx(0)][start_idx(1)][start_idx(2)];
     GridNodePtr endPtr = GridNodeMap_[end_idx(0)][end_idx(1)][end_idx(2)];
 
-    std::priority_queue<GridNodePtr, std::vector<GridNodePtr>, NodeComparator> empty;
+    std::priority_queue<OpenNodeEntry, std::vector<OpenNodeEntry>, NodeComparator> empty;
     openSet_.swap(empty);
 
     GridNodePtr neighborPtr = NULL;
@@ -199,7 +246,7 @@ ASTAR_RET AStar::AstarSearch(const double step_size, Vector3d start_pt, Vector3d
     startPtr->fScore = getHeu(startPtr, endPtr);
     startPtr->state = GridNode::OPENSET; //put start node in open set
     startPtr->cameFrom = NULL;
-    openSet_.push(startPtr); //put start in open set
+    openSet_.push({startPtr, startPtr->fScore, startPtr->gScore});
 
     double tentative_gScore;
 
@@ -207,8 +254,10 @@ ASTAR_RET AStar::AstarSearch(const double step_size, Vector3d start_pt, Vector3d
     while (!openSet_.empty())
     {
         num_iter++;
-        current = openSet_.top();
+        const auto entry=openSet_.top();
+        current = entry.node;
         openSet_.pop();
+        if (current->state==GridNode::CLOSEDSET || entry.g_score!=current->gScore) continue;
 
         // if ( num_iter < 10000 )
         //     cout << "current=" << current->index.transpose() << endl;
@@ -250,13 +299,24 @@ ASTAR_RET AStar::AstarSearch(const double step_size, Vector3d start_pt, Vector3d
                     continue; //in closed set.
                 }
 
-                neighborPtr->rounds = rounds_;
-
                 const double neighbor_yaw = std::atan2(static_cast<double>(dy), static_cast<double>(dx));
                 if (checkOccupancy(Index2Coord(neighborPtr->index), neighbor_yaw))
                 {
                     continue;
                 }
+                // Do not cut a diagonal corner between two free cells.
+                const auto edge_start=Index2Coord(current->index);
+                const auto edge_end=Index2Coord(neighborIdx);
+                const int edge_steps=std::max(1, static_cast<int>(std::ceil(
+                    (edge_end-edge_start).norm()/(step_size_*.5))));
+                bool edge_blocked=false;
+                for (int sample=0; sample<=edge_steps; ++sample)
+                    if (checkOccupancy(edge_start+(edge_end-edge_start)*
+                        (static_cast<double>(sample)/edge_steps), neighbor_yaw)!=0) {
+                        edge_blocked=true; break;
+                    }
+                if (edge_blocked) continue;
+                neighborPtr->rounds = rounds_;
 
                 const int dz = neighborIdx(2) - current->index(2);
                 double static_cost = sqrt(dx * dx + dy * dy + dz * dz);
@@ -269,13 +329,16 @@ ASTAR_RET AStar::AstarSearch(const double step_size, Vector3d start_pt, Vector3d
                     neighborPtr->cameFrom = current;
                     neighborPtr->gScore = tentative_gScore;
                     neighborPtr->fScore = tentative_gScore + getHeu(neighborPtr, endPtr);
-                    openSet_.push(neighborPtr); //put neighbor in open set and record it.
+                    openSet_.push({neighborPtr, neighborPtr->fScore, neighborPtr->gScore});
                 }
                 else if (tentative_gScore < neighborPtr->gScore)
                 { //in open set and need update
                     neighborPtr->cameFrom = current;
                     neighborPtr->gScore = tentative_gScore;
                     neighborPtr->fScore = tentative_gScore + getHeu(neighborPtr, endPtr);
+                    // Immutable queue entries implement decrease-key by
+                    // reinsertion; mutating a node does not restore heap order.
+                    openSet_.push({neighborPtr, neighborPtr->fScore, neighborPtr->gScore});
                 }
             }
         const auto time_2 = std::chrono::steady_clock::now();

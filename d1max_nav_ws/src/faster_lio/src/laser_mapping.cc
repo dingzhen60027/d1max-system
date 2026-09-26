@@ -13,6 +13,7 @@
 #include <iomanip>
 #include <pcl/common/transforms.h>
 #include <sstream>
+#include <nlohmann/json.hpp>
 
 #include "laser_mapping.h"
 #include "utils.h"
@@ -103,7 +104,34 @@ bool LaserMapping::InitWithoutROS(const std::string &config_yaml) {
 
 // bool LaserMapping::LoadParams(ros::NodeHandle &nh) {
 void LaserMapping::LoadParams() {
+    const auto state_log_path = declare_parameter<std::string>("diagnostics.state_log_path", "");
+    if (!state_log_path.empty()) {
+        if (std::filesystem::exists(state_log_path))
+            throw std::runtime_error("Refusing to overwrite frontend state log: " + state_log_path);
+        frontend_state_log_.open(state_log_path);
+        if (!frontend_state_log_) throw std::runtime_error("Cannot create frontend state log");
+        frontend_state_log_ << "t,x,y,z,qx,qy,qz,qw,vx,vy,vz,bgx,bgy,bgz,bax,bay,baz,gx,gy,gz,features,horizontal_features,residual_rmse,roll_variance,pitch_variance,z_variance\n";
+    }
     robust_mode_=declare_parameter("localization.enabled",false);
+    InitMappingInputGuard();
+    p_imu_->stationary_initialization_enabled = declare_parameter("mapping.stationary_initialization", false);
+    p_imu_->gravity_aligned_world = declare_parameter("mapping.gravity_aligned_world", false);
+    if (p_imu_->stationary_initialization_enabled && !robust_mode_) {
+        p_imu_->initialization_samples = declare_parameter("mapping.initialization_samples", 300);
+        p_imu_->initialization_gate.duration = declare_parameter("mapping.initialization_duration", 2.0);
+        p_imu_->initialization_gate.max_acc_std = declare_parameter("mapping.initialization_max_acc_std", 0.20);
+        p_imu_->initialization_gate.max_gyro_std = declare_parameter("mapping.initialization_max_gyro_std", 0.015);
+        p_imu_->initialization_gate.max_gyro_mean = declare_parameter("mapping.initialization_max_gyro_mean", 0.05);
+        if (p_imu_->initialization_samples < 100 || p_imu_->initialization_samples > 4000 ||
+            !std::isfinite(p_imu_->initialization_gate.duration) ||
+            !std::isfinite(p_imu_->initialization_gate.max_acc_std) ||
+            !std::isfinite(p_imu_->initialization_gate.max_gyro_std) ||
+            !std::isfinite(p_imu_->initialization_gate.max_gyro_mean) ||
+            p_imu_->initialization_gate.duration < 0.5 ||
+            p_imu_->initialization_gate.duration > 10.0 || p_imu_->initialization_gate.max_acc_std <= 0 ||
+            p_imu_->initialization_gate.max_gyro_std <= 0 || p_imu_->initialization_gate.max_gyro_mean <= 0)
+            throw std::runtime_error("Invalid stationary mapping initialization settings");
+    }
     publish_tf_=declare_parameter("publish.tf_enabled",true);
     tf_world_frame_=declare_parameter<std::string>("publish.world_frame","camera_init");
     tf_imu_frame_=declare_parameter<std::string>("publish.body_frame","body");
@@ -522,13 +550,21 @@ LaserMapping::LaserMapping(const std::string &name) : Node(name) {
 
 void LaserMapping::Run() {
     if(robust_mode_){RobustRecovery();RobustStatus();}
+    if(mapping_imu_guard_)MappingInputStatus();
+    if(mapping_input_fault_)return;
     if (!SyncPackages()) {
         return;
     }
 
     /// IMU process, kf prediction, undistortion
     scan_undistort_->clear();
+    const bool mapping_will_propagate = mapping_imu_guard_ && p_imu_->Initialized() && !measures_.imu_.empty();
+    p_imu_->integration_noise_scale = robust_mode_ ? robust_scan_noise_scale_ : 1.0;
     p_imu_->Process(measures_, kf_, scan_undistort_);
+    if(mapping_will_propagate){
+        mapping_last_propagated_end_=measures_.lidar_end_time_;
+        mapping_has_propagated_=true;
+    }
     if (!scan_undistort_ || scan_undistort_->empty()) {
         LOG(WARNING) << "No point, skip this scan!";
         return;
@@ -536,7 +572,11 @@ void LaserMapping::Run() {
 
     /// the first scan
     if (flg_first_scan_) {
-        ivox_->AddPoints(scan_undistort_->points);
+        state_point_ = kf_.get_x();
+        PointVector initial_world(scan_undistort_->size());
+        for (size_t i = 0; i < scan_undistort_->size(); ++i)
+            PointBodyToWorld(&scan_undistort_->points[i], &initial_world[i]);
+        ivox_->AddPoints(initial_world);
         first_lidar_time_ = measures_.lidar_bag_time_;
         flg_first_scan_ = false;
         return;
@@ -583,6 +623,7 @@ void LaserMapping::Run() {
         return;
     }
     if(robust_mode_){robust_last_good_=lidar_end_time_;robust_reason_="tracking";robust_recovering_=false;}
+    LogFrontendState();
     // update local map
     Timer::Evaluate([&, this]() { MapIncremental(); }, "    Incremental Mapping");
 
@@ -621,6 +662,7 @@ void LaserMapping::Run() {
 
 // void LaserMapping::StandardPCLCallBack(const sensor_msgs::PointCloud2::ConstPtr &msg) {
 void LaserMapping::StandardPCLCallBack(const sensor_msgs::msg::PointCloud2::SharedPtr msg) {
+    if(mapping_input_fault_)return;
     mtx_buffer_.lock();
     Timer::Evaluate(
         [&, this]() {
@@ -631,6 +673,11 @@ void LaserMapping::StandardPCLCallBack(const sensor_msgs::msg::PointCloud2::Shar
             // }
             //ROS2
             if ((double)msg->header.stamp.sec + (double)1e-9* msg->header.stamp.nanosec < last_timestamp_lidar_) {
+                if(mapping_imu_guard_){
+                    MappingClockFault("lidar_clock_reset",last_timestamp_lidar_,
+                        (double)msg->header.stamp.sec + (double)1e-9*msg->header.stamp.nanosec);
+                    if(mapping_input_fault_)return;
+                }
                 LOG(ERROR) << "lidar loop back, clear buffer";
                 lidar_buffer_.clear();
             }
@@ -651,6 +698,7 @@ void LaserMapping::StandardPCLCallBack(const sensor_msgs::msg::PointCloud2::Shar
 
 // void LaserMapping::LivoxPCLCallBack(const livox_ros_driver::CustomMsg::ConstPtr &msg) {
 void LaserMapping::LivoxPCLCallBack(const livox_ros_driver2::msg::CustomMsg::SharedPtr msg) {
+    if(mapping_input_fault_)return;
     mtx_buffer_.lock();
     Timer::Evaluate(
         [&, this]() {
@@ -660,6 +708,11 @@ void LaserMapping::LivoxPCLCallBack(const livox_ros_driver2::msg::CustomMsg::Sha
             //     lidar_buffer_.clear();
             // }
             if ((double)msg->header.stamp.sec + (double)1e-9* msg->header.stamp.nanosec < last_timestamp_lidar_) {
+                if(mapping_imu_guard_){
+                    MappingClockFault("lidar_clock_reset",last_timestamp_lidar_,
+                        (double)msg->header.stamp.sec + (double)1e-9*msg->header.stamp.nanosec);
+                    if(mapping_input_fault_)return;
+                }
                 LOG(ERROR) << "lidar loop back, clear buffer";
                 lidar_buffer_.clear();
             }
@@ -692,6 +745,7 @@ void LaserMapping::LivoxPCLCallBack(const livox_ros_driver2::msg::CustomMsg::Sha
 
 // void LaserMapping::IMUCallBack(const sensor_msgs::Imu::ConstPtr &msg_in) {
 void LaserMapping::IMUCallBack(const sensor_msgs::msg::Imu::SharedPtr msg_in) {
+    if(mapping_input_fault_)return;
     publish_count_++;
     // sensor_msgs::Imu::Ptr msg(new sensor_msgs::Imu(*msg_in));
     //ROS2
@@ -711,6 +765,10 @@ void LaserMapping::IMUCallBack(const sensor_msgs::msg::Imu::SharedPtr msg_in) {
     double timestamp =  (double)msg->header.stamp.sec + (double)1e-9* msg->header.stamp.nanosec;
 
     mtx_buffer_.lock();
+    if(mapping_imu_guard_ && timestamp<=last_timestamp_imu_ && last_timestamp_imu_>0){
+        MappingClockFault("imu_clock_reset",last_timestamp_imu_,timestamp);
+        if(mapping_input_fault_){mtx_buffer_.unlock();return;}
+    }
     if (timestamp < last_timestamp_imu_) {
         LOG(WARNING) << "imu loop back, clear buffer";
         imu_buffer_.clear();
@@ -723,6 +781,7 @@ void LaserMapping::IMUCallBack(const sensor_msgs::msg::Imu::SharedPtr msg_in) {
 
 bool LaserMapping::SyncPackages() {
     if(robust_mode_)return RobustSync();
+    if(mapping_input_fault_)return false;
     if (lidar_buffer_.empty() || imu_buffer_.empty()) {
         return false;
     }
@@ -752,6 +811,8 @@ bool LaserMapping::SyncPackages() {
         return false;
     }
 
+    if(mapping_imu_guard_ && !CheckMappingInput())return false;
+
     /*** push imu_ data, and pop from imu_ buffer ***/
     // double imu_time = imu_buffer_.front()->header.stamp.toSec();
     //ROS2
@@ -764,11 +825,128 @@ bool LaserMapping::SyncPackages() {
         measures_.imu_.push_back(imu_buffer_.front());
         imu_buffer_.pop_front();
     }
+    if(mapping_imu_guard_ && !measures_.imu_.empty())mapping_imu_tail_=measures_.imu_.back();
 
     lidar_buffer_.pop_front();
     time_buffer_.pop_front();
     lidar_pushed_ = false;
     return true;
+}
+
+void LaserMapping::InitMappingInputGuard(){
+    mapping_guard_mode_=declare_parameter<std::string>("mapping.imu_continuity.mode","disabled");
+    ImuContinuityConfig config;
+    config.mode=ParseImuContinuityMode(mapping_guard_mode_);
+    config.warning_gap_sec=declare_parameter("mapping.imu_continuity.warning_gap_sec",.015);
+    config.maximum_gap_sec=declare_parameter("mapping.imu_continuity.maximum_gap_sec",.030);
+    const auto log_path=declare_parameter<std::string>("diagnostics.input_log_path","");
+    if(config.mode==ImuContinuityMode::Disabled){
+        if(!log_path.empty())throw std::runtime_error("Input audit log requires an explicit IMU continuity mode");
+        return;
+    }
+    if(robust_mode_)throw std::runtime_error("Mapping IMU continuity guard and localization runtime are separate modes");
+    mapping_imu_guard_=std::make_unique<ImuContinuityGuard>(config);
+    if(!log_path.empty()){
+        if(std::filesystem::exists(log_path))throw std::runtime_error("Refusing to overwrite input audit: "+log_path);
+        mapping_input_log_.open(log_path);
+        if(!mapping_input_log_)throw std::runtime_error("Cannot create mapping input audit log");
+        mapping_input_log_<<"begin,end,mode,checked,input_healthy,admitted,latched,reason,samples,max_gap_sec,warning_intervals,offending_begin,offending_end\n";
+    }
+    mapping_input_status_pub_=create_publisher<std_msgs::msg::String>(
+        "mapping_input_status",rclcpp::QoS(1).reliable().transient_local());
+    // A wall timer still reports waiting/fault while executor.spin_once() has
+    // no sensor callbacks. It never restarts the filter or advances a pose.
+    mapping_input_status_timer_=create_wall_timer(std::chrono::seconds(1),[this]{MappingInputStatus(true);});
+    mapping_guard_result_.healthy=false;
+    mapping_guard_result_.reason="waiting_for_input";
+    RCLCPP_WARN(get_logger(),"Mapping IMU continuity mode=%s; maximum gap=%.6f s. Observe is diagnostic only; fail_closed requires a new run after a fault.",
+        mapping_guard_mode_.c_str(),config.maximum_gap_sec);
+    MappingInputStatus(true);
+}
+
+bool LaserMapping::CheckMappingInput(){
+    const auto timestamp=[](const auto& imu){return imu->header.stamp.sec+imu->header.stamp.nanosec*1e-9;};
+    // Before any state exists, a lidar scan can legitimately precede the first
+    // available IMU. Drop ONLY these uninitializable startup scans, not a gap in
+    // an existing trajectory. No filter/map/odometry is advanced here.
+    if(!p_imu_->Initialized() && !mapping_imu_tail_ && timestamp(imu_buffer_.front())>=lidar_end_time_){
+        mapping_guard_result_.healthy=false;
+        mapping_guard_result_.reason="waiting_initial_imu";
+        lidar_buffer_.pop_front();time_buffer_.pop_front();lidar_pushed_=false;
+        MappingInputStatus(true);
+        return false;
+    }
+    std::vector<ImuContinuitySample> samples;
+    const auto append=[&](const auto& imu){
+        const auto& a=imu->linear_acceleration;const auto& w=imu->angular_velocity;
+        samples.push_back({timestamp(imu),{a.x,a.y,a.z},{w.x,w.y,w.z}});
+    };
+    if(mapping_imu_tail_)append(mapping_imu_tail_);
+    for(const auto& imu:imu_buffer_){
+        append(imu);
+        if(timestamp(imu)>=lidar_end_time_)break;
+    }
+    // Initialization consumes no trajectory propagation. The first propagated
+    // scan starts at ImuProcess's last initialization sample; subsequent scans
+    // start at last_lidar_end_time_, even after missing lidar frames.
+    const double begin=MappingImuContinuityBegin(mapping_has_propagated_,mapping_last_propagated_end_,
+        samples.empty()?measures_.lidar_bag_time_:samples.front().stamp);
+    const auto result=mapping_imu_guard_->Check(begin,lidar_end_time_,samples);
+    RecordMappingInput(result);
+    return result.accepted;
+}
+
+void LaserMapping::MappingClockFault(const char* reason,double previous,double current){
+    RecordMappingInput(mapping_imu_guard_->ExternalFault(reason,previous,current));
+}
+
+void LaserMapping::RecordMappingInput(const ImuContinuityResult& result){
+    mapping_guard_result_=result;
+    mapping_last_input_check_=std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count();
+    ++mapping_input_windows_;
+    if(!result.healthy)++mapping_unhealthy_windows_;
+    const bool new_fault=result.latched && !mapping_input_fault_.exchange(result.latched);
+    if(mapping_input_log_){
+        mapping_input_log_<<std::setprecision(17)<<result.begin<<','<<result.end<<','<<mapping_guard_mode_<<','
+            <<result.checked<<','<<result.healthy<<','<<result.accepted<<','<<result.latched<<','<<result.reason<<','
+            <<result.sample_count<<','<<result.maximum_gap_sec<<','<<result.warning_intervals<<','
+            <<result.offending_begin<<','<<result.offending_end<<'\n';
+        if(!result.healthy || mapping_input_windows_%100==0)mapping_input_log_.flush();
+    }
+    if(new_fault){
+        RCLCPP_ERROR(get_logger(),"MAPPING HALTED: %s, IMU gap %.6f s over [%.9f, %.9f]. No new odometry, TF or map updates. Restart in a NEW run after fixing input; no automatic resume.",
+            result.reason.c_str(),result.maximum_gap_sec,result.offending_begin,result.offending_end);
+        MappingInputStatus(true);
+    }else if(!result.healthy){
+        RCLCPP_WARN_THROTTLE(get_logger(),*get_clock(),2000,
+            "UNPROTECTED mapping input in observe mode: %s, maximum gap %.6f s. Output is diagnostic, not continuity-certified.",
+            result.reason.c_str(),result.maximum_gap_sec);
+        MappingInputStatus(true);
+    }
+}
+
+void LaserMapping::MappingInputStatus(bool force){
+    if(!mapping_input_status_pub_)return;
+    const double steady=std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count();
+    if(!force && steady-mapping_last_input_status_<1.0)return;
+    mapping_last_input_status_=steady;
+    const auto& result=mapping_guard_result_;
+    // Freshness is display/status only, not another sample-rate threshold.
+    // A paused bag is waiting, not a new latched continuity fault.
+    const bool fresh=mapping_last_input_check_>0 && steady-mapping_last_input_check_<2.0;
+    const std::string reason=(!mapping_input_fault_ && !fresh && result.checked)?
+        "waiting_for_fresh_input":result.reason;
+    nlohmann::json status={{"schema",1},{"scope","mapping_input_continuity"},
+        {"mode",mapping_guard_mode_},{"guard_enforced",mapping_guard_mode_=="fail_closed"},
+        {"checked",result.checked},{"input_healthy",result.healthy && fresh},
+        {"last_observation_healthy",result.healthy},{"input_fresh",fresh},
+        {"mapping_halted",mapping_input_fault_.load()},{"requires_new_run",mapping_input_fault_.load()},
+        {"reason",reason},{"initializing",!p_imu_->Initialized()},
+        {"window_begin",result.begin},{"window_end",result.end},
+        {"maximum_gap_sec",result.maximum_gap_sec},
+        {"offending_begin",result.offending_begin},{"offending_end",result.offending_end},
+        {"checked_windows",mapping_input_windows_},{"unhealthy_windows",mapping_unhealthy_windows_}};
+    std_msgs::msg::String message;message.data=status.dump();mapping_input_status_pub_->publish(message);
 }
 
 void LaserMapping::PrintState(const state_ikfom &s) {
@@ -869,8 +1047,8 @@ void LaserMapping::ObsModel(state_ikfom &s, esekfom::dyn_share_datastruct<double
                 auto &points_near = nearest_points_[i];
                 if (ekfom_data.converge) {
                     /** Find the closest surfaces in the map **/
-                    ivox_->GetClosestPoint(point_world, points_near, options::NUM_MATCH_POINTS);
-                    point_selected_surf_[i] = points_near.size() >= options::MIN_NUM_MATCH_POINTS;
+                    const bool found = ivox_->GetClosestPoint(point_world, points_near, options::NUM_MATCH_POINTS);
+                    point_selected_surf_[i] = found && points_near.size() >= options::MIN_NUM_MATCH_POINTS;
                     if (point_selected_surf_[i]) {
                         point_selected_surf_[i] =
                             common::esti_plane(plane_coef_[i], points_near, options::ESTI_PLANE_THRESHOLD);
@@ -882,11 +1060,7 @@ void LaserMapping::ObsModel(state_ikfom &s, esekfom::dyn_share_datastruct<double
                     temp[3] = 1.0;
                     float pd2 = plane_coef_[i].dot(temp);
 
-                    bool valid_corr = p_body.norm() > 81 * pd2 * pd2;
-                    if (valid_corr) {
-                        point_selected_surf_[i] = true;
-                        residuals_[i] = pd2;
-                    }
+                    point_selected_surf_[i] = SelectSurfaceResidual(p_body.norm(), pd2, residuals_[i]);
                 }
             });
         },
@@ -952,6 +1126,28 @@ void LaserMapping::ObsModel(state_ikfom &s, esekfom::dyn_share_datastruct<double
             });
         },
         "    ObsModel (IEKF Build Jacobian)");
+}
+
+void LaserMapping::LogFrontendState() {
+    if (!frontend_state_log_.is_open()) return;
+    const auto& s = state_point_;
+    frontend_state_log_ << std::setprecision(15) << lidar_end_time_;
+    const auto vector = [this](const auto& v, int n) {
+        for (int i = 0; i < n; ++i) frontend_state_log_ << ',' << v[i];
+    };
+    vector(s.pos, 3); vector(s.rot.coeffs(), 4); vector(s.vel, 3);
+    vector(s.bg, 3); vector(s.ba, 3); vector(s.grav, 3);
+    double squared = 0.;
+    int horizontal = 0;
+    for (int i = 0; i < effect_feat_num_; ++i) {
+        squared += corr_pts_[i][3] * corr_pts_[i][3];
+        horizontal += std::abs(corr_norm_[i][2]) > .85F;
+    }
+    const auto covariance = kf_.get_P();
+    frontend_state_log_ << ',' << effect_feat_num_ << ',' << horizontal << ','
+        << std::sqrt(squared / std::max(1, effect_feat_num_)) << ','
+        << covariance(3, 3) << ',' << covariance(4, 4) << ',' << covariance(2, 2) << '\n';
+    if (frame_num_ % 100 == 0) frontend_state_log_.flush();
 }
 
 /////////////////////////////////////  debug save / show /////////////////////////////////////////////////////

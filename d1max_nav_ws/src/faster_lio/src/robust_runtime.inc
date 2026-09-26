@@ -4,6 +4,7 @@
 #include <sstream>
 #include <cmath>
 #include <nlohmann/json.hpp>
+#include "localization_imu_gap.hpp"
 namespace faster_lio {
 static double stamp(const sensor_msgs::msg::Imu& m){return rclcpp::Time(m.header.stamp).seconds();}
 void LaserMapping::InitRobustRuntime(){
@@ -24,13 +25,14 @@ void LaserMapping::InitRobustRuntime(){
       declare_parameter("localization.reinitialize_on_imu_gap",false),
       declare_parameter("localization.max_imu_reinitializations",3),
       declare_parameter("localization.imu_recovery_window_sec",60.));
-    if(!std::isfinite(robust_max_gap_)||robust_max_gap_<=0||robust_max_gap_>.05 ||
+    if(!std::isfinite(robust_max_gap_)||robust_max_gap_<=0||robust_max_gap_>.1 ||
        !std::isfinite(robust_max_age_)||robust_max_age_<=0||robust_max_age_>1. ||robust_min_features_<10)
         throw std::runtime_error("Invalid bounded LIO admission parameters");
     p_imu_->initialization_samples=declare_parameter("localization.initialization_samples",200);
     if(p_imu_->initialization_samples<100||p_imu_->initialization_samples>2000)
         throw std::runtime_error("Invalid stationary initialization sample count");
     p_imu_->debug_file_enabled=false;
+    p_imu_->bounded_scan_endpoints=true;
     const int capacity=declare_parameter("localization.map_capacity",100000);
     if(capacity<10000||capacity>500000)throw std::runtime_error("Invalid bounded local map capacity");
     ivox_options_.capacity_=static_cast<size_t>(capacity);
@@ -86,6 +88,7 @@ void LaserMapping::RobustRecovery(){
     residuals_.clear();point_selected_surf_.clear();plane_coef_.clear();
     flg_first_scan_=true;flg_EKF_inited_=false;localmap_initialized_=false;effect_feat_num_=0;
     first_lidar_time_=0;lidar_end_time_=0;robust_last_end_=0;robust_last_good_=0;
+    robust_scan_degraded_=false;robust_scan_gap_=0;robust_scan_noise_scale_=1;
     ++robust_epoch_;++robust_resets_;robust_epoch_start_=now().seconds();
     robust_recovering_=true;robust_reason_="imu_reinitializing";
     // Never clear an independently observed sensor clock fault.
@@ -99,6 +102,10 @@ void LaserMapping::PublishRobustSample(bool valid){
     json value={{"schema",1},{"epoch",robust_epoch_},{"valid",valid},
       {"fault",robust_fault_.load()},{"reason",robust_reason_},
       {"received_at_unix",now().seconds()}};
+    value["degraded"]=robust_scan_degraded_;
+    value["scan_imu_gap_sec"]=robust_scan_gap_;
+    value["imu_quality_scope"]="last_admitted_scan";
+    value["imu_quality_scan_end_sec"]=robust_last_end_;
     if(valid){
       const auto& m=odom_aft_mapped_;const auto& p=m.pose.pose;const auto& v=m.twist.twist;
       value["stamp_ns"]=std::to_string(static_cast<int64_t>(m.header.stamp.sec)*1000000000LL+m.header.stamp.nanosec);
@@ -152,19 +159,25 @@ bool LaserMapping::RobustSync(){
     if(left!=imu_buffer_.begin())--left;
     auto right=std::lower_bound(left,imu_buffer_.end(),end,[](const auto&m,double t){return stamp(*m)<t;});
     if(right==imu_buffer_.end())return false;
+    double scan_gap=0,noise_scale=1;
+    uint64_t scan_gap_intervals=0;
+    bool degraded=false;
     for(auto it=left;it!=right;++it){
         const double gap=stamp(**std::next(it))-stamp(**it);
         const auto& ga=(*it)->angular_velocity;const auto& gb=(*std::next(it))->angular_velocity;
         const double rotation=gap*std::max(std::sqrt(ga.x*ga.x+ga.y*ga.y+ga.z*ga.z),std::sqrt(gb.x*gb.x+gb.y*gb.y+gb.z*gb.z));
         robust_observed_gap_=std::max(robust_observed_gap_,gap);
-        if(gap>robust_max_gap_ || (gap>robust_soft_gap_ && rotation>robust_gap_rotation_)){
+        const auto quality=AssessLocalizationImuGap(gap,rotation,robust_soft_gap_,robust_max_gap_,robust_gap_rotation_);
+        if(!quality.accepted){
             ++robust_gap_rejections_;robust_last_gap_=gap;
             RequestImuRecovery("imu_gap");
             lidar_buffer_.pop_front();time_buffer_.pop_front();return false;
         }
+        scan_gap=std::max(scan_gap,gap);noise_scale=std::max(noise_scale,quality.noise_scale);
+        degraded=degraded||quality.degraded;
         // Integrate the measured endpoints over their REAL dt with process noise;
         // do not invent samples, repeat zero gyro, or claim a higher sensor rate.
-        if(gap>robust_soft_gap_ && stamp(**std::next(it))>robust_last_end_)++robust_short_gaps_;
+        if(quality.degraded)++scan_gap_intervals;
         if(!p_imu_->Initialized()){
             const auto& a=(*it)->linear_acceleration;const auto& g=(*it)->angular_velocity;
             const double an=std::sqrt(a.x*a.x+a.y*a.y+a.z*a.z),gn=std::sqrt(g.x*g.x+g.y*g.y+g.z*g.z);
@@ -173,8 +186,15 @@ bool LaserMapping::RobustSync(){
     }
     measures_.lidar_=lidar_buffer_.front();measures_.lidar_bag_time_=start;measures_.lidar_end_time_=end;
     measures_.imu_.clear();
-    for(auto it=left;it!=imu_buffer_.end() && stamp(**it)<=end;++it)measures_.imu_.push_back(*it);
+    for(auto it=left;it!=std::next(right);++it){
+        // Initialization estimates a stationary posterior at scan end and must
+        // not consume a future measurement. Propagation retains both real ends.
+        if(!p_imu_->Initialized() && stamp(**it)>end)break;
+        measures_.imu_.push_back(*it);
+    }
     if(measures_.imu_.size()<2)return discard("insufficient_imu");
+    robust_scan_gap_=scan_gap;robust_scan_noise_scale_=noise_scale;robust_scan_degraded_=degraded;
+    robust_short_gaps_+=scan_gap_intervals;
     // Preserve the tail sample for next frame integration; no unbounded queue.
     while(imu_buffer_.size()>2 && stamp(*imu_buffer_[1])<=end)imu_buffer_.pop_front();
     lidar_end_time_=end;robust_last_end_=end;
@@ -189,6 +209,11 @@ void LaserMapping::RobustStatus(){
       <<"\",\"imu_received\":"<<robust_imu_received_<<",\"imu_gap_rejections\":"<<robust_gap_rejections_
       <<",\"scans_replaced\":"<<robust_scans_replaced_<<",\"features\":"<<effect_feat_num_
       <<",\"short_imu_gaps\":"<<robust_short_gaps_<<",\"max_observed_imu_gap_sec\":"<<robust_observed_gap_
+      <<",\"imu_gap_count_scope\":\"accepted_scan_gap_intervals_not_unique_packets\""
+      <<",\"imu_quality_scope\":\"last_admitted_scan\",\"imu_quality_scan_end_sec\":"<<std::to_string(robust_last_end_)
+      <<",\"degraded\":"<<(robust_scan_degraded_?"true":"false")
+      <<",\"scan_imu_gap_sec\":"<<robust_scan_gap_<<",\"imu_gap_warning_sec\":"<<robust_soft_gap_
+      <<",\"imu_gap_noise_scale\":"<<robust_scan_noise_scale_
       <<",\"epoch\":"<<robust_epoch_<<",\"reset_count\":"<<robust_resets_
       <<",\"recovering\":"<<(robust_recovering_?"true":"false")
       <<",\"last_imu_gap_sec\":"<<robust_last_gap_<<",\"imu_gap_limit_sec\":"<<robust_max_gap_

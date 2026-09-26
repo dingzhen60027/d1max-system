@@ -295,6 +295,7 @@ timeout 10 ros2 topic hz /rear_lidar
 | 后Airy96点云 | `/rear_lidar` | 9.8 Hz | `rslidar_tail` |
 | 前IMU | `/front_lidar/imu` | 200 Hz | 以实际消息为准 |
 | 后IMU | `/rear_lidar/imu` | 200 Hz | 以实际消息为准 |
+| 机身独立IMU | `/imu_driver/imu_central` | 约200 Hz（2026-09-17实机短时核验） | `imu_link` |
 
 点云字段应包含：
 
@@ -453,9 +454,12 @@ cd /home/dndx/d1max_nav_ws
 /rear_lidar
 /front_lidar/imu
 /rear_lidar/imu
+/imu_driver/imu_central
 /tf
 /tf_static
 ```
+
+录包脚本要求两路点云和三路 IMU 都有实际消息；机身独立 IMU 缺失时会报错退出，不静默漏录。独立 IMU 按驱动原始数值、时间戳和坐标系保存，加入录包不代表替换 Faster-LIO 当前使用的前雷达 IMU。SDK 文档 4.6 提示独立 IMU 的可用性可能涉及硬件改动；无数据时先检查驱动/硬件，不能用雷达 IMU 冒充。
 
 推荐把新bag继续录到项目外：
 
@@ -788,4 +792,3 @@ ros2 topic echo /d1max_sdk_bridge/robot_state
 | PCT构建 | `d1max_nav_ws/build_pct_planner.sh` |
 | SCAN-Planner | `d1max_nav_ws/start_scan_planner.sh` |
 | 当前算法汇总 | `d1max_nav_ws/CURRENT_ALGORITHM_CONFIGURATION.md` |
-

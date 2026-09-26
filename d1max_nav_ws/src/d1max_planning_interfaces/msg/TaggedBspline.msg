@@ -1,0 +1,4 @@
+string session_id
+uint64 generation
+string frame_id
+scan_planner_msgs/Bspline trajectory

@@ -38,6 +38,7 @@ include_directories(
 
 add_executable(alaserPGO
   src/laserPosegraphOptimization.cpp
+  src/loop_registration.cpp
   include/scancontext/Scancontext.cpp
 )
 
@@ -85,6 +86,14 @@ install(
 )
 
 if(BUILD_TESTING)
+  enable_testing()
+  add_executable(test_loop_registration test/test_loop_registration.cpp src/loop_registration.cpp
+    include/scancontext/Scancontext.cpp)
+  ament_target_dependencies(test_loop_registration cv_bridge pcl_conversions)
+  target_link_libraries(test_loop_registration ${PCL_LIBRARIES})
+  add_test(NAME loop_registration COMMAND test_loop_registration)
+  add_executable(test_vertical_excursion_gate test/test_vertical_excursion_gate.cpp)
+  add_test(NAME vertical_excursion_gate COMMAND test_vertical_excursion_gate)
   find_package(ament_lint_auto REQUIRED)
   # List of linters to skip (copyright and cpplint have too many false positives on third-party code)
   list(APPEND AMENT_LINT_AUTO_EXCLUDE

@@ -4,6 +4,7 @@ from dataclasses import fields
 import json
 import signal
 import rclpy
+from rclpy._rclpy_pybind11 import RCLError
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, ReliabilityPolicy
 from sensor_msgs.msg import Imu
@@ -81,6 +82,11 @@ class LioPredictor(Node):
             "sequence": self.sequence,
             "imu_received": self.core.imu_received,
             "imu_rejected": self.core.rejected,
+            "degraded": self.core.degraded,
+            "prediction_mode": self.core.prediction_mode,
+            "coast": dict(self.core.coast_stats),
+            "imu_gap": dict(self.core.gap_stats),
+            "timing": self.core.timing(now),
             "last_error": self.last_error,
         }
         if state:
@@ -116,4 +122,10 @@ def main(args=None):
     finally:
         signal.signal(signal.SIGINT, signal.SIG_IGN)
         node.destroy_node()
-        rclpy.try_shutdown()
+        try:
+            rclpy.try_shutdown()
+        except RCLError as error:
+            # Humble's SIGINT shutdown can win the race after try_shutdown's
+            # context check. Suppress only this verified already-closed case.
+            if rclpy.ok() or "rcl_shutdown already called" not in str(error):
+                raise

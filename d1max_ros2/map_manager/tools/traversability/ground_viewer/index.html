@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <link rel="icon" href="data:,">
+  <title>D1 Max · 双层地面</title>
+  <style>
+    *{box-sizing:border-box}body{margin:0;background:#0b1019;color:#e6edf7;font:14px Inter,"Noto Sans CJK SC",system-ui,sans-serif}
+    header{min-height:84px;padding:18px 24px;display:flex;align-items:center;justify-content:space-between;gap:16px;border-bottom:1px solid #293346;background:#111824}
+    h1{font-size:20px;margin:0;font-weight:650}.subtitle{margin-top:5px;font-size:12px;color:#94a3b8}
+    button,a{font:inherit;color:#cbd6e8;border:1px solid #354155;border-radius:8px;background:#182131;padding:10px 14px;text-decoration:none;white-space:nowrap;cursor:pointer}
+    button:hover,a:hover{background:#24334b}button.active{background:#254573;border-color:#6598de;color:#fff}
+    button:focus-visible,a:focus-visible,input:focus-visible{outline:2px solid #8db9fc;outline-offset:3px}
+    .actions,.segmented,.toggles{display:flex;align-items:center;gap:8px}.toolbar{padding:14px 20px;display:flex;justify-content:space-between;gap:14px;flex-wrap:wrap}
+    .toggles{gap:16px;color:#a9b9cd;font-size:13px}.toggles label{display:flex;gap:5px;align-items:center;white-space:nowrap}input{accent-color:#77aaff}input[type=range]{width:76px}
+    main{padding:0 20px;display:grid;grid-template-columns:1fr 1fr;gap:16px;height:calc(100vh - 220px);min-height:470px}
+    .view{position:relative;overflow:hidden;background:#101722;border:1px solid #2c384d;border-radius:12px;min-width:0}.view.single{grid-column:1/-1}
+    .view-label{position:absolute;top:18px;left:20px;z-index:1;pointer-events:none}.view-label strong{font-size:17px}.view-label p{color:#91a4be;font-size:12px;margin:6px 0}
+    .host{width:100%;height:100%;touch-action:none}.host canvas{display:block;width:100%;height:100%}.view-foot{position:absolute;bottom:16px;left:20px;color:#8499b3;font-size:11px;pointer-events:none}
+    footer{display:flex;align-items:center;justify-content:center;gap:24px;padding:15px 20px;color:#93a6bf;font-size:12px;flex-wrap:wrap}.legend{display:flex;gap:20px;color:#c4d1e3}.legend i{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px}
+    dialog{color:#e6edf7;background:#141f30;border:1px solid #425471;border-radius:12px;padding:24px;width:min(540px,calc(100vw - 28px));max-height:85vh;overflow:auto;box-shadow:0 20px 80px #0008}dialog::backdrop{background:#0008}
+    dialog h2{font-size:18px;margin:0 0 16px}dialog p{line-height:1.9;color:#aabbd1;font-size:13px}.downloads{display:flex;gap:8px;flex-wrap:wrap;margin:18px 0}.downloads a{font-size:13px}.error{padding:30px;color:#ff9da8}
+    @media(max-width:900px){header{padding:15px}.actions a{display:none}.toolbar{padding:12px}.toggles{gap:10px}main{height:calc(100vh - 260px);padding:0 12px;gap:12px}footer{gap:10px}}
+    @media(max-width:600px){h1{font-size:17px}.actions button{padding:9px}.segmented{gap:4px;flex-wrap:wrap}.segmented button{font-size:12px;padding:9px 11px}main{height:auto;grid-template-columns:1fr}.view{height:65vh;min-height:360px}.subtitle{font-size:11px}footer{font-size:11px}.toggles{flex-wrap:wrap}}
+  </style>
+  <script type="importmap">{"imports":{"three":"./vendor/three.module.js"}}</script>
+</head>
+<body>
+  <header><div><h1>D1 Max · 双层地面</h1><div class="subtitle">SC-PGO · 09-04 14:34</div></div><div class="actions"><a href="../..">地图工作台</a><button id="detail-toggle">配置与结果 ↗</button></div></header>
+  <div class="toolbar">
+    <div class="segmented"><button data-mode="compare" class="active">双层对照</button><button data-mode="all">3D 总览</button><button data-mode="stairs">楼梯特写</button><button id="reset">复位视角</button></div>
+    <div class="toggles"><label><input id="raw" type="checkbox">原始结构</label><label><input id="trajectory" type="checkbox">采集轨迹</label><label>点大小<input id="point-size" type="range" min="1" max="5" step="0.5" value="3"><output id="point-size-value">3 px</output></label></div>
+  </div>
+  <main id="views"><div class="error">正在加载地面点云…</div></main>
+  <footer><div class="legend"><span><i style="background:#539ef6"></i>下层地面</span><span><i style="background:#2ecea2"></i>上层地面</span><span><i style="background:#f9bd4f"></i>楼梯踏面</span></div><span id="footer">原始坐标 · 未补洞</span></footer>
+  <dialog id="details"><h2>地面提取结果</h2><div id="detail-body"></div><button id="detail-close">关闭</button></dialog>
+  <script type="module" src="viewer.js"></script>
+</body>
+</html>

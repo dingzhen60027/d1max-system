@@ -1,7 +1,7 @@
 # 仅用于可视化。不会修改 PCD，也不会发布 map -> odom 或机器人定位 TF。
 # 可以添加多个已分层 PCD；不同地图只有经测量配准后才可以共用 frame_id。
 # 修改文件后重启 start_live_monitor.sh；也可单独重启地图发布器。
-enabled: true  # 只显示已核对的单楼层候选，不加载历史多层地图。
+enabled: false  # 实机定位由 localization/map_cloud 提供当前地图；不加载已删除的历史候选。
 node_name: d1max_floor1_map_view
 status_topic: /d1max/maps/floor1/status
 publish_period_seconds: 10

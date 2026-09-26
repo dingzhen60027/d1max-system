@@ -4,6 +4,11 @@
 #include <Eigen/Eigen>
 #include <Eigen/StdVector>
 #include <algorithm>
+#include <chrono>
+#include <cstdint>
+#include <map>
+#include <array>
+#include <limits>
 #include <cv_bridge/cv_bridge.h>
 #include <cmath>
 #include <geometry_msgs/msg/pose_stamped.hpp>
@@ -17,6 +22,9 @@
 #include <sensor_msgs/msg/image.hpp>
 #include <sensor_msgs/image_encodings.hpp>
 #include <sensor_msgs/msg/point_cloud2.hpp>
+#include <std_msgs/msg/string.hpp>
+#include <d1max_planning_interfaces/msg/projected_rays.hpp>
+#include <plan_env/projected_rays.hpp>
 #include <tf2_ros/transform_broadcaster.h>
 #include <visualization_msgs/msg/marker.hpp>
 
@@ -30,6 +38,7 @@
 #include <message_filters/time_synchronizer.h>
 
 #include <plan_env/raycast.h>
+#include <plan_env/voxel_collision.hpp>
 
 #define logit(x) (log((x) / (1 - (x))))
 
@@ -84,11 +93,21 @@ struct MappingParameters {
   /* visualization and computation time display */
   double vis_height_, ground_height_;
   bool show_occ_time_;
+  double visualization_rate_hz_{3.0};
 
   /* mapping sensor input */
   string sensor_type_;
   bool cloud_is_world_;
   bool need_extrinsic_;
+  bool strict_input_frames_{false};
+  double maximum_cloud_pose_dt_{0.25};
+  bool exact_cloud_pose_sync_{false};
+  bool require_observed_free_{false};
+  bool use_projected_rays_{false};
+  double cloud_pose_pair_wait_{0.25};
+  double cloud_pose_max_age_{0.5};
+  bool require_localization_context_{false};
+  std::string localization_session_id_;
   Eigen::Matrix4d lidar_extrinsic_;
   Eigen::Matrix4d depth_extrinsic_;
 
@@ -122,10 +141,12 @@ struct MappingData {
   bool use_cloud_update_;
   bool has_first_depth_;
   bool has_ray_pose_, has_cloud_;
+  rclcpp::Time ray_pose_stamp_;
 
   // depth image projected point cloud
 
   vector<Eigen::Vector3d> proj_points_;
+  vector<Eigen::Vector3d> proj_origins_;  // Only the opt-in context-tagged ray input.
   int proj_points_cnt;
 
   // flag buffers for speeding up raycasting
@@ -170,6 +191,8 @@ public:
   inline int getOccupancy(Eigen::Vector3d pos);
   inline int getOccupancy(Eigen::Vector3i id);
   inline int getInflateOccupancy(Eigen::Vector3d pos, double yaw);
+  std::string describeInflateOccupancy(const Eigen::Vector3d &position,double yaw);
+  scan_planner::CollisionEvidence inspectInflateOccupancy(const Eigen::Vector3d &position,double yaw);
 
   inline void boundIndex(Eigen::Vector3i& id);
   inline bool isUnknown(const Eigen::Vector3i& id);
@@ -194,12 +217,23 @@ public:
   inline double getResolution();
   Eigen::Vector3d getOrigin();
   int getVoxelNum();
+  // Source time of the cloud actually integrated into occupancy, not merely
+  // the latest message arrival. Zero means explicitly invalidated/no cloud.
+  double latestCloudStamp() const { return integrated_cloud_stamp_ns_ * 1e-9; }
+  std::uint64_t occupancyRevision() const { return occupancy_revision_; }
+  bool requiresObservedFree() const { return mp_.require_observed_free_; }
+  void resetCollisionDiagnostics() { unknown_collision_queries_=0; }
+  std::uint64_t unknownCollisionQueries() const { return unknown_collision_queries_; }
+  // Separate from goal/reference generations: only a localization coordinate
+  // identity change may invalidate all accumulated world-frame evidence.
+  bool applyLocalizationContext(const std::string &payload);
 
   typedef std::shared_ptr<GridMap> Ptr;
 
   EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
 private:
+  friend struct GridMapTestAccess;
   MappingParameters mp_;
   MappingData md_;
 
@@ -209,6 +243,51 @@ private:
   void sensorPoseCallback(const nav_msgs::msg::Odometry::ConstSharedPtr& pose);
   void slidingMapFrameCallback(const nav_msgs::msg::Odometry::ConstSharedPtr& pose);
   void cloudCallback(const sensor_msgs::msg::PointCloud2::ConstSharedPtr& img);
+  bool applyLidarPose(const nav_msgs::msg::Odometry::ConstSharedPtr& pose);
+  void processCloud(const sensor_msgs::msg::PointCloud2::ConstSharedPtr& cloud);
+  void processExactCloudPosePairs();
+  bool acceptProjectedRays(const d1max_planning_interfaces::msg::ProjectedRays &message,
+                           std::int64_t now_ns, std::chrono::steady_clock::time_point received);
+  void processProjectedRays(std::int64_t now_ns, std::chrono::steady_clock::time_point now);
+  void publishProjectedRaysStatus(std::int64_t now_ns, std::chrono::steady_clock::time_point now);
+  bool cloudPoseStampFresh(std::int64_t stamp) const;
+  void invalidateCloudPosePairs(std::int64_t barrier);
+  using PairReceipt = std::chrono::steady_clock::time_point;
+  struct PendingCloud {
+    sensor_msgs::msg::PointCloud2::ConstSharedPtr message;
+    PairReceipt received;
+  };
+  struct PendingPose {
+    nav_msgs::msg::Odometry::ConstSharedPtr message;
+    PairReceipt received;
+  };
+  std::map<std::int64_t, PendingCloud> pending_clouds_;
+  std::map<std::int64_t, PendingPose> pending_poses_;
+  struct PendingRays {
+    scan_planner::ProjectedRayBatch batch;
+    PairReceipt received;
+  };
+  std::array<std::optional<PendingRays>, 2> pending_rays_;
+  std::array<std::int64_t, 2> ray_received_stamps_{{0,0}}, ray_integrated_stamps_{{0,0}};
+  std::array<std::uint64_t, 2> ray_projection_sequences_{{0,0}}, ray_integrations_{{0,0}}, ray_drops_{{0,0}};
+  std::array<PairReceipt, 2> ray_integrated_receipts_;
+  scan_planner::ProjectedRayStatusSchedule ray_status_schedule_;
+  std::uint64_t ray_unattributed_drops_{0}, localization_context_barrier_ns_{0};
+  std::int64_t pair_barrier_ns_{0}, last_paired_stamp_ns_{0};
+  std::int64_t projected_cloud_stamp_ns_{0}, integrated_cloud_stamp_ns_{0};
+  std::uint64_t occupancy_revision_{0};
+  std::uint64_t cloud_pose_pairs_{0}, cloud_pose_pair_drops_{0};
+  scan_planner::VoxelStatusCache observed_cylinder_cache_;
+  std::uint64_t unknown_collision_queries_{0};
+  int observedCylinderStatus(const Eigen::Vector3d &center);
+  std::string localization_context_payload_, localization_seed_;
+  std::uint64_t localization_context_sequence_{0}, localization_epoch_{0};
+  std::array<sensor_msgs::msg::PointCloud2, 2> visualization_cache_;
+  std::array<std::uint64_t, 2> visualization_revision_{{
+      std::numeric_limits<std::uint64_t>::max(), std::numeric_limits<std::uint64_t>::max()}};
+  std::array<int, 2> visualization_clip_{{0, 0}};
+  std::array<std::uint64_t, 2> visualization_builds_{{0, 0}};
+  sensor_msgs::msg::PointCloud2 &cachedVisualization(bool inflated);
 
   // update occupancy by raycasting
   void updateOccupancyCallback();
@@ -216,7 +295,7 @@ private:
 
   // main update process
   void projectDepthImage();
-  void raycastProcess();
+  bool raycastProcess();
 
   inline void inflatePoint(const Eigen::Vector3i& pt, int inf_step_xy, int inf_step_z_up, int inf_step_z_down, vector<Eigen::Vector3i>& pts);
   inline int getInflateOccupancyFromBuffer(Eigen::Vector3d pos, const std::vector<char>& buffer);
@@ -257,6 +336,10 @@ private:
   rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr lidar_pose_sub_;
   rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr sliding_map_frame_sub_;
   rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr cloud_sub_;
+  rclcpp::Subscription<d1max_planning_interfaces::msg::ProjectedRays>::SharedPtr projected_rays_sub_;
+  rclcpp::Publisher<std_msgs::msg::String>::SharedPtr projected_rays_status_pub_;
+  rclcpp::Subscription<std_msgs::msg::String>::SharedPtr localization_context_sub_;
+  rclcpp::Publisher<std_msgs::msg::String>::SharedPtr localization_context_ack_pub_;
   rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr map_pub_;
   rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr map_inf_pub_;
   rclcpp::Publisher<visualization_msgs::msg::Marker>::SharedPtr sliding_map_bbox_pub_;
@@ -369,14 +452,16 @@ inline int GridMap::getOccupancy(Eigen::Vector3d pos) {
 }
 
 inline int GridMap::getInflateOccupancy(Eigen::Vector3d pos, double yaw) {
+  if (!pos.allFinite() || !std::isfinite(yaw)) return -1;
   Eigen::Vector3d heading(std::cos(yaw), std::sin(yaw), 0.0);
   Eigen::Vector3d front = pos + mp_.double_cylinder_offset_ * heading;
   Eigen::Vector3d rear = pos - mp_.double_cylinder_offset_ * heading;
 
-  int front_occ = getInflateOccupancyFromBuffer(front, md_.occupancy_buffer_inflate_);
-  if (front_occ != 0) return front_occ;
-
-  return getInflateOccupancyFromBuffer(rear, md_.occupancy_buffer_inflate_);
+  // The geometry is shared by strict and legacy preview policies. The display
+  // inflation covers ANY query Z in a voxel and cannot preempt actual-height
+  // collision tests. Unknown-space policy is applied inside the raw query.
+  const int front_state=observedCylinderStatus(front);
+  return front_state!=0 ? front_state:observedCylinderStatus(rear);
 }
 
 inline int GridMap::getInflateOccupancyFromBuffer(Eigen::Vector3d pos, const std::vector<char>& buffer) {
@@ -396,6 +481,7 @@ inline int GridMap::getOccupancy(Eigen::Vector3i id) {
 }
 
 inline bool GridMap::isInMap(const Eigen::Vector3d& pos) {
+  if (!pos.allFinite()) return false;
   if (pos(0) < mp_.map_min_boundary_(0) + 1e-4 || pos(1) < mp_.map_min_boundary_(1) + 1e-4 ||
       pos(2) < mp_.map_min_boundary_(2) + 1e-4) {
     // cout << "less than min range!" << endl;

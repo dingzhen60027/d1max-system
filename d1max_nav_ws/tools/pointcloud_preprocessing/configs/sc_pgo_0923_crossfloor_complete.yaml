@@ -1,0 +1,79 @@
+schema: d1max.crossfloor_planning/v1
+planning_only: true
+source:
+  path: /home/dndx/智元四足机器人D1 Max二次开发文档资料包v0.1.0/d1max_ros2/map_manager/data/processed/20260923_141005_sc-pgo-0923-crossfloor-structure-v1_2c7218/processed_map.pcd
+  sha256: 138e329bc1733ed1ea4d7dbe04b8dd545e3831a974a0d27464dbe3eff06f6da5
+floor_conditioning_config:
+  path: /home/dndx/d1max_nav_ws/tools/pointcloud_preprocessing/configs/sc_pgo_0923_multifloor.yaml
+  sha256: 652dc89fb4143b6c577273f9620a73e0ad82fb558416ca3a4e74fc55f471066c
+floor_evidence_sha256: 9e5042ad916314d0d13c8ef5eb34f96428aaf975496faa4ad6b4c732fca8bf09
+output_directory: /home/dndx/d1max_nav_ws/maps/processed/sc_pgo_20260923_crossfloor_complete
+visibility:
+  evidence:
+    path: /home/dndx/d1max_nav_ws/experiments/crossfloor_pct_20260923/visibility_votes.npz
+    sha256: 4b0808fb32de36fe8778c30a7266542a2fe73787de2ed040121b2c41d160d01b
+  free_hit_ratio: 10
+  minimum_free_frames: 20
+  structure_protection_regions:
+    - id: west_wall
+      min: [-34.5, 47.5, -1.4]
+      max: [-32.5, 50.0, 4.9]
+    - id: upper_slab_edge
+      min: [-34.5, 44.0, 3.02]
+      max: [-25.5, 45.5, 3.3]
+measured_restore:
+  keyframe_directory: /home/dndx/d1max_nav_ws/maps/runs/20260923_132601_150357_central_imu_faster_lio_sc_pgo_zenoh/sc_pgo
+  evidence:
+    path: /home/dndx/d1max_nav_ws/experiments/crossfloor_pct_20260923/upper_floor_measured_restore.json
+    sha256: 379f2c765e929485c8c88204070fd451e4916ce3136909f211cbdf75112753bc
+  sources:
+    path: /home/dndx/d1max_nav_ws/experiments/crossfloor_pct_20260923/upper_floor_measured_restore_sources.json
+    sha256: 635b742d92b9030af78f6daa168064e88db0777c6e4790e3e1adb93a785ec516
+  minimum_independent_frames: 5
+  maximum_height_spread_m: 0.08
+conditioned_measured_restore:
+  evidence:
+    path: /home/dndx/d1max_nav_ws/experiments/crossfloor_pct_20260923/lower_floor_measured_restore.json
+    sha256: 16e35f2a65d1ffe291c0e78ba9570fd2ef8131a0f40d98daf453038e400f496c
+  sources:
+    path: /home/dndx/d1max_nav_ws/experiments/crossfloor_pct_20260923/lower_floor_measured_restore.sources.json
+    sha256: 624907b139f0a667892092139933bb8a68fe2ed3d24c0ad475c8718c9369678c
+route_template:
+  path: /home/dndx/d1max_nav_ws/src/d1max_pct_planner/config/crossfloor_route_20260923.yaml
+  sha256: 32c658e6c477226ecf1646a27a124ba0062fe9b83726ee33426483ea76536d12
+anchor_overrides:
+  start: [4.899, 22.246, -0.65]
+portal_search_radius_m: 0.30
+portal_height_tolerance_m: 0.15
+planning_overrides:
+  optimizer_sample_interval: 10
+pct_pipeline:
+  vendor_root: /home/dndx/d1max_nav_ws/src/pct_planner_vendor
+  preprocessing:
+    roi:
+      min: [-40.0, -4.0, -3.0]
+      max: [26.0, 60.0, 9.0]
+    voxel_size_m: 0.0
+    radius_outlier: {enabled: false}
+  pct:
+    resolution: 0.10
+    slice_dh: 0.50
+    ground_height: -3.0
+    simplify_layers: false
+    traversability:
+      kernel_size: 7
+      interval_min: 0.55
+      interval_free: 0.70
+      slope_max_rad: 0.60
+      step_max: 0.17
+      standable_ratio: 0.20
+      cost_barrier: 50.0
+      safe_margin: 0.10
+      inflation: 0.10
+  export: {traversable_pcd: true}
+  notes:
+    - Two floor elevations stay separate; staircase coordinates are not flattened.
+    - The robot trajectory selects measured floor support; it never directly marks a free tube.
+    - Sampling holes are repaired with actual optimized-keyframe returns with at least five independent frames.
+    - Reviewed wall and slab-edge regions are protected from approximate visibility filtering.
+    - No per-return lidar identity or dynamic execution envelope is available; this is offline global planning only.

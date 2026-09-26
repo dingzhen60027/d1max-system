@@ -22,6 +22,7 @@
 #include "std_srvs/srv/trigger.hpp"
 
 #include "robot_sdk/sdk_client.hpp"
+#include "sdk_session_core.hpp"
 
 namespace d1max_sdk_bridge {
 
@@ -1120,6 +1121,7 @@ void BridgeControlCallback::OnReleaseControlAck(
 int main(int argc, char** argv) {
   rclcpp::init(argc, argv);
   try {
+    d1monitor::SessionLease lease;
     auto node = std::make_shared<d1max_sdk_bridge::SdkBridge>();
     rclcpp::executors::MultiThreadedExecutor executor;
     executor.add_node(node);

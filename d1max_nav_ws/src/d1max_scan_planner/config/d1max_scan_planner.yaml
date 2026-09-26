@@ -1,4 +1,4 @@
-/d1max/scan/scan_planner_node:
+/**/scan_planner_node:
   ros__parameters:
     use_sim_time: false
 
@@ -10,6 +10,14 @@
     fsm.emergency_time: 1.2
     fsm.fail_safe: true
     fsm.max_replan_fail_count: 1000
+    # Guided mode waits for actual occupancy/body changes after a failed solve.
+    fsm.failed_replan_cooldown: 0.5
+    fsm.failed_replan_body_distance: 0.15
+    # Search only the existing route and stop at the rolling-map boundary.
+    fsm.reference_target_forward_margin: 1.0
+    fsm.reference_target_backward_margin: 2.0
+    fsm.reference_target_min_advance: 0.30
+    fsm.reference_target_exit_margin: 0.20
 
     # Rolling 3D map for the two Airy96 lidars. The LIO cloud is already in map.
     grid_map.resolution: 0.08
@@ -22,12 +30,16 @@
     grid_map.map_sliding_en: true
     grid_map.map_sliding_thresh: 0.32
 
-    # Conservative D1 Max envelope from the supplied URDF.
-    # Two radius-0.29 m cylinders at x=+/-0.20 m: 0.98 x 0.58 m footprint.
+    # Unvalidated engineering proxy, not an official calibrated safety footprint.
+    # Its 0.98 x 0.58 m bounding box does not prove rectangular-corner coverage.
     grid_map.double_cylinder_radius: 0.29
     grid_map.double_cylinder_offset: 0.20
     grid_map.body_height: 0.55
-    grid_map.obstacles_inflation_z_up: 0.15
+    # Match d1max_robot.yaml: the assumed 0.55 m body reference minus the
+    # provisional 0.10 m ground exclusion gives 0.45 m BELOW the body. This is
+    # obstacle-UP dilation, not upper-body clearance. Neither value is calibrated.
+    # This legacy entry retains its own unknown-space policy; no motion approval.
+    grid_map.obstacles_inflation_z_up: 0.45
     grid_map.obstacles_inflation_z_down: 0.45
 
     grid_map.frame_id: map
@@ -65,11 +77,15 @@
     manager.control_points_distance: 0.20
     manager.feasibility_tolerance: 0.35
     manager.planning_horizon: 6.0
+    manager.reference_detour_anchor_margin: 0.5
 
     optimization.lambda_smooth: 1.0
     optimization.lambda_collision: 1.5
     optimization.lambda_feasibility: 0.2
     optimization.lambda_fitness: 1.0
+    # D1 extension, NOT an upstream SCAN-recommended weight. Set 0 for the native
+    # rebound objective. Positive values attract the verified detour seed only.
+    optimization.lambda_reference: 20.0
     optimization.dist0: 0.28
     optimization.max_vel: 0.45
     optimization.max_acc: 0.35

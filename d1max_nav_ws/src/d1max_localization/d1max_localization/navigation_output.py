@@ -14,6 +14,7 @@ import math
 import signal
 import time
 import rclpy
+from rclpy._rclpy_pybind11 import RCLError
 from rclpy.node import Node
 from nav_msgs.msg import Odometry, Path
 from std_msgs.msg import String
@@ -93,6 +94,9 @@ class NavigationOutput(Node):
         self.pose_pub = self.create_publisher(PoseStamped, PREFIX + "pose", 20)
         self.path_pub = self.create_publisher(Path, PREFIX + "trajectory", 2)
         self.status_pub = self.create_publisher(String, PREFIX + "navigation/status", 10)
+        # A 5 Hz diagnostic snapshot cannot lease an 80 ms pose. Keep this
+        # compact, source-stamped contract on the actual 50 Hz output cadence.
+        self.pose_status_pub = self.create_publisher(String, PREFIX + "navigation/pose_status", 5)
         self.motion_pub = self.create_publisher(
             TwistWithCovarianceStamped, PREFIX + "estimator/motion", 20
         )
@@ -118,6 +122,8 @@ class NavigationOutput(Node):
         self.last_error = ""
         self.local_times = deque(maxlen=256)
         self.global_times = deque(maxlen=256)
+        self.local_arrivals = deque(maxlen=256)
+        self.global_arrivals = deque(maxlen=256)
         self.path = deque(maxlen=int(self.p["trajectory_max_points"]))
         self.predictor_status = {}
         self.timer = self.create_timer(1.0 / self.rate, self.tick)
@@ -137,6 +143,7 @@ class NavigationOutput(Node):
         try:
             value = json.loads(message.data)
             old_epoch = self.core.epoch
+            old_sequence = self.core.local_sequence
             if not self.core.push_local(value, self.now_s()):
                 return
             self.predictor_status = {
@@ -147,28 +154,46 @@ class NavigationOutput(Node):
                     "extrapolation_sec",
                     "imu_received",
                     "imu_rejected",
+                    "degraded",
+                    "prediction_mode",
+                    "coast",
+                    "imu_gap",
+                    "timing",
                 )
             }
             if old_epoch != self.core.epoch:
                 self.clear_path()
                 self.local_times.clear()
                 self.global_times.clear()
+                self.local_arrivals.clear()
+                self.global_arrivals.clear()
                 self.last_local_sent = 0.0
                 self.last_map_sent = 0.0
+            if self.core.local_sequence == old_sequence:
+                # A pending status may retain the last actual sample only until
+                # its original TTL. It is not a new motion observation for EKF.
+                self.publish_aligned(self.now_s())
+                return
             if not self.core.local_ready(self.now_s()):
                 return
             state = self.core.local[-1]
+            raw_motion = self.core.raw_local
             # Only twist from the LIO/IMU predictor enters the global EKF. Do not
             # also fuse LIO pose, raw IMU or MC as independent copies of motion.
             m = TwistWithCovarianceStamped()
             m.header.frame_id = self.p["tracking_frame"]
             m.header.stamp = stamp_time(state.stamp)
-            m.twist.twist.linear.x, m.twist.twist.linear.y, m.twist.twist.linear.z = state.linear
+            m.twist.twist.linear.x, m.twist.twist.linear.y, m.twist.twist.linear.z = raw_motion.linear
             m.twist.twist.angular.x, m.twist.twist.angular.y, m.twist.twist.angular.z = (
-                state.angular
+                raw_motion.angular
             )
-            m.twist.covariance = state.twist_covariance
+            m.twist.covariance = raw_motion.twist_covariance
             self.motion_pub.publish(m)
+            # The predictor already owns the requested cadence. Polling its
+            # latest value with a second equal-rate timer drops real samples
+            # whenever callback arrival crosses that timer's phase.
+            self.publish_local(state)
+            self.publish_aligned(self.now_s())
         except (ValueError, KeyError, TypeError, OverflowError) as error:
             self.last_error = str(error)
 
@@ -192,7 +217,7 @@ class NavigationOutput(Node):
         try:
             v = message.twist.twist.linear
             w = message.twist.twist.angular
-            self.core.push_filtered(
+            accepted = self.core.push_filtered(
                 seconds(message),
                 read_pose(message.pose.pose),
                 [float(x) for x in message.pose.covariance],
@@ -200,6 +225,8 @@ class NavigationOutput(Node):
                 (w.x, w.y, w.z),
                 self.now_s(),
             )
+            if accepted:
+                self.publish_aligned(self.now_s())
         except (ValueError, TypeError, OverflowError) as error:
             self.last_error = str(error)
 
@@ -240,6 +267,7 @@ class NavigationOutput(Node):
             self.core.reset_ack_at
             and self.core.filter_key == self.core.key()
             and self.core.map_ready(now)
+            and not self.core.map_soft_unavailable
         ):
             c = self.core.map_contract
             if c["stamp"] > self.last_map_sent:
@@ -252,6 +280,9 @@ class NavigationOutput(Node):
         if state.stamp <= self.last_local_sent:
             return False
         pose, linear, angular, pc, tc = body_state(state, self.extrinsic)
+        # Pose correction is not physical body motion. Keep twist sourced from
+        # the original posterior/IMU estimate, not from its smoothed attitude.
+        _, linear, angular, _, tc = body_state(self.core.raw_local, self.extrinsic)
         self.local_pub.publish(
             odometry(
                 self.p["odom_frame"],
@@ -269,16 +300,17 @@ class NavigationOutput(Node):
         )
         self.last_local_sent = state.stamp
         self.local_times.append(state.stamp)
+        self.local_arrivals.append(self.now_s())
         return True
 
     def publish_global(self, local, pose, pc):
         state = MotionState(
             local.stamp,
             pose,
-            rotate_vector(pose.orientation, local.linear),
-            local.angular,
+            rotate_vector(pose.orientation, self.core.raw_local.linear),
+            self.core.raw_local.angular,
             pc,
-            local.twist_covariance,
+            self.core.raw_local.twist_covariance,
             local.source_stamp,
             local.imu_stamp,
             local.extrapolation,
@@ -307,6 +339,7 @@ class NavigationOutput(Node):
         m = pose_message(self.p["map_frame"], pose, local.stamp)
         self.pose_pub.publish(m)
         self.global_times.append(local.stamp)
+        self.global_arrivals.append(self.now_s())
         if local.stamp - self.last_path >= 1.0 / self.p["trajectory_rate_hz"]:
             self.path.append(m)
             path = Path()
@@ -324,57 +357,122 @@ class NavigationOutput(Node):
         span = values[-1] - values[0]
         return (len(values) - 1) / span if span >= 0.5 else 0.0
 
+    def publish_aligned(self, now):
+        output = self.core.output(now)
+        if output:
+            # The correction is derived in aligned history; the output itself
+            # is a new local-time composition. The core owns deduplication.
+            local, pose, pc = output
+            self.publish_global(local, pose, pc)
+
+    def pose_status(self, now):
+        stamp = self.global_times[-1] if self.global_times else None
+        timeout = min(self.core.limits.local_timeout, self.core.limits.filter_timeout)
+        fault = self.core.fault or self.core.filter_fault
+        valid = bool(stamp is not None and fresh(stamp, now, timeout)
+                     and self.core.output_ready(now) and not fault and self.future is None)
+        # A later pending predictor notice must not relabel the provenance of
+        # the last actual output. It can neither advance nor refresh that pose.
+        output_ns = round(stamp * 1e9) if stamp is not None else None
+        output_source = next((state for state in reversed(self.core.local)
+                              if round(state.stamp * 1e9) == output_ns), None)
+        coasting = bool(output_source and output_source.extrapolation > .025 + 1e-6)
+        return {
+            'schema': 1, 'epoch': self.core.epoch,
+            'seed_id': self.core.key()[1] if self.core.key() else None,
+            'frame_id': self.p['map_frame'], 'body_frame': self.p['body_frame'],
+            'received_at_unix': now, 'output_stamp_sec': stamp,
+            'pose_timeout_sec': timeout, 'valid': valid, 'pose_valid': valid,
+            'fault': fault, 'reset_pending': self.future is not None,
+            'motion_control_enabled': False, 'output_clock': 'local_motion_samples',
+            'quality': ('fault' if fault else 'coasting' if valid and coasting else
+                        'tracking' if valid else 'paused'),
+            'reason': self.core.output_attempt_reason,
+        }
+
     def tick(self):
         now = self.now_s()
         self.filter_lifecycle(now)
-        output = self.core.output(now)
-        if output:
-            local, pose, pc = output
-            if self.publish_local(local):
-                self.publish_global(local, pose, pc)
-        elif self.core.local_ready(now) and self.core.reason != "tracking":
-            self.publish_local(self.core.local[-1])
+        # Watchdog/reset/status only; input callbacks own actual sample delivery.
+        # A reset acknowledgement can make an already received pair admissible.
+        self.publish_aligned(now)
+        pose_status = self.pose_status(now)
+        pose_message = String()
+        pose_message.data = json.dumps(pose_status, allow_nan=False)
+        self.pose_status_pub.publish(pose_message)
         if now - self.last_status < 0.2:
             return
         self.last_status = now
-        local_hz = self.rate_of(self.local_times, now)
-        global_hz = self.rate_of(self.global_times, now)
+        local_hz = self.rate_of(self.local_arrivals, now)
+        global_hz = self.rate_of(self.global_arrivals, now)
         output_fresh = bool(
             self.global_times and fresh(self.global_times[-1], now, self.core.limits.local_timeout)
         )
-        valid = (
-            output_fresh
-            and self.core.reason == "tracking"
-            and self.core.local_ready(now)
-            and self.core.map_ready(now)
-            and not self.core.fault
-            and not self.core.filter_fault
-            and self.core.filter_key == self.core.key()
-        )
+        valid = output_fresh and pose_status['pose_valid']
         ready = (
             valid
+            and not self.core.map_soft_unavailable
             and self.p["extrinsics_verified"]
             and self.p["time_alignment_verified"]
             and 0.8 * self.rate <= global_hz <= 1.2 * self.rate
         )
+        fault = self.core.fault or self.core.filter_fault
+        alignment_age = (
+            now - self.core.alignment_target[0]
+            if self.core.alignment_target else None
+        )
+        alignment_held = bool(
+            valid and alignment_age is not None
+            and alignment_age > self.core.limits.filter_timeout
+        )
+        quality = ("fault" if fault else pose_status['quality'] if valid else
+                   "initializing" if not self.core.reset_ack_at else "paused")
         value = {
             "schema": 1,
             "epoch": self.core.epoch,
             "seed_id": self.core.key()[1] if self.core.key() else None,
             "received_at_unix": now,
             "valid": valid,
+            "pose_valid": pose_status['pose_valid'],
+            "output_stamp_sec": pose_status['output_stamp_sec'],
+            "pose_timeout_sec": pose_status['pose_timeout_sec'],
+            "frame_id": self.p['map_frame'],
             "navigation_ready": bool(ready),
             "motion_control_enabled": False,
             "state": self.core.reason,
-            "fault": self.core.fault or self.core.filter_fault,
+            "quality": quality,
+            "output_attempt_reason": self.core.output_attempt_reason,
+            "fault": fault,
             "last_error": self.last_error,
             "backend": "faster_lio_imu_prediction_robot_localization",
             "target_hz": self.rate,
             "local_observed_hz": local_hz,
             "global_observed_hz": global_hz,
+            "local_timestamp_hz": self.rate_of(self.local_times, now),
+            "global_timestamp_hz": self.rate_of(self.global_times, now),
+            "global_max_publish_gap_sec": max(
+                (b-a for a,b in zip(self.global_arrivals, list(self.global_arrivals)[1:])),
+                default=None),
             "local_fresh": self.core.local_ready(now),
             "output_age_sec": now - self.global_times[-1] if self.global_times else None,
+            "alignment_age_sec": alignment_age,
+            "alignment_stamp_sec": self.core.alignment_target[0] if self.core.alignment_target else None,
+            "alignment_held": alignment_held,
+            "alignment_mode": "held_correction" if alignment_held else (
+                "fresh_correction" if valid else "unavailable"
+            ),
+            "map_alignment_soft_unavailable": self.core.map_soft_unavailable,
+            "output_clock": "local_motion_samples",
+            "output_resume_count": self.core.output_resume_count,
             "prediction": self.predictor_status,
+            "local_source_timing": self.core.local_timing(now),
+            "correction_smoothing": {
+                "local_translation_residual_m": self.core.local_residual[0],
+                "local_rotation_residual_rad": self.core.local_residual[1],
+                "translation_residual_m": self.core.map_residual[0],
+                "rotation_residual_rad": self.core.map_residual[1],
+                "active": max(*self.core.local_residual, *self.core.map_residual) > 0.001,
+            },
             "reset_pending": self.future is not None,
             "body_frame": self.p["body_frame"],
             "display_pose_reference": self.p["tracking_frame"],
@@ -398,4 +496,10 @@ def main(args=None):
     finally:
         signal.signal(signal.SIGINT, signal.SIG_IGN)
         node.destroy_node()
-        rclpy.try_shutdown()
+        try:
+            rclpy.try_shutdown()
+        except RCLError as error:
+            # Humble's SIGINT shutdown can win the race after try_shutdown's
+            # context check. Suppress only this verified already-closed case.
+            if rclpy.ok() or "rcl_shutdown already called" not in str(error):
+                raise

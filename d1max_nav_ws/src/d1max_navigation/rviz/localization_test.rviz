@@ -1,0 +1,175 @@
+Panels:
+  - Class: rviz_common/Displays
+    Name: Displays
+  - Class: rviz_common/Views
+    Name: Views
+Visualization Manager:
+  Class: ""
+  Displays:
+    - Class: rviz_default_plugins/Map
+      Name: 2D 地图
+      Enabled: true
+      Value: true
+      Alpha: 1
+      Color Scheme: map
+      Draw Behind: true
+      Use Timestamp: false
+      Topic:
+        Value: /d1max/navigation/map
+        Depth: 1
+        Reliability Policy: Reliable
+        Durability Policy: Transient Local
+        History Policy: Keep Last
+    - Class: rviz_default_plugins/PointCloud2
+      Name: 实时点云
+      Enabled: true
+      Value: true
+      Topic:
+        Value: /d1max/localization/lio/deskewed
+        Depth: 1
+        Reliability Policy: Best Effort
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Filter size: 5
+      Position Transformer: XYZ
+      Color Transformer: FlatColor
+      Color: 0; 165; 210
+      Alpha: 0.8
+      Style: Points
+      Size (Pixels): 2
+      Size (m): 0.025
+      Decay Time: 0
+      Use Fixed Frame: true
+    - Class: rviz_default_plugins/PointCloud2
+      Name: 初值预览（未确认）
+      Enabled: true
+      Value: true
+      Topic:
+        Value: /d1max/localization/scan_initial_preview
+        Depth: 1
+        Reliability Policy: Best Effort
+        Durability Policy: Volatile
+        History Policy: Keep Last
+      Position Transformer: XYZ
+      Color Transformer: FlatColor
+      Color: 235; 145; 35
+      Alpha: 0.7
+      Style: Points
+      Size (Pixels): 2
+      Decay Time: 0.5
+      Use Fixed Frame: true
+    - Class: rviz_default_plugins/Odometry
+      Name: 机身方向
+      Enabled: true
+      Value: true
+      Topic:
+        Value: /d1max/localization/odometry/global
+        Depth: 1
+        Reliability Policy: Best Effort
+        Durability Policy: Volatile
+        History Policy: Keep Last
+      Keep: 1
+      Position Tolerance: 0
+      Angle Tolerance: 0
+      Shape:
+        Value: Arrow
+        Color: 220; 40; 55
+        Alpha: 1
+        Shaft Length: 0.65
+        Shaft Radius: 0.035
+        Head Length: 0.25
+        Head Radius: 0.12
+      Covariance:
+        Value: false
+    - Class: rviz_default_plugins/Path
+      Name: 雷达参考点轨迹
+      Enabled: true
+      Value: true
+      Topic:
+        Value: /d1max/localization/trajectory
+        Depth: 1
+        Reliability Policy: Reliable
+        Durability Policy: Volatile
+        History Policy: Keep Last
+      Buffer Length: 1
+      Color: 160; 70; 200
+      Alpha: 1
+      Line Style: Billboards
+      Line Width: 0.02
+      Pose Style: None
+      Offset:
+        X: 0
+        Y: 0
+        Z: 0.03
+    - Class: rviz_default_plugins/PointCloud2
+      Name: 参考 PCD（可选）
+      Enabled: false
+      Value: false
+      Topic:
+        Value: /d1max/localization/map_cloud
+        Depth: 1
+        Reliability Policy: Reliable
+        Durability Policy: Transient Local
+        History Policy: Keep Last
+      Position Transformer: XYZ
+      Color Transformer: AxisColor
+      Axis: Z
+      Alpha: 0.3
+      Style: Points
+      Size (Pixels): 1
+      Decay Time: 0
+      Use Fixed Frame: true
+    - Class: rviz_default_plugins/Marker
+      Name: 定位状态
+      Enabled: true
+      Value: true
+      Topic:
+        Value: /d1max/navigation/test_status
+        Depth: 1
+        Reliability Policy: Reliable
+        Durability Policy: Transient Local
+        History Policy: Keep Last
+  Global Options:
+    Background Color: 35; 39; 46
+    Fixed Frame: d1max_loc_map
+    Frame Rate: 20
+  Name: root
+  Enabled: true
+  Tools:
+    - Class: rviz_default_plugins/Interact
+    - Class: rviz_default_plugins/MoveCamera
+    - Class: rviz_default_plugins/Select
+    - Class: rviz_default_plugins/FocusCamera
+    - Class: rviz_default_plugins/Measure
+    - Class: rviz_default_plugins/SetInitialPose
+      Covariance x: 0.25
+      Covariance y: 0.25
+      Covariance yaw: 0.068538919
+      Topic:
+        Value: /d1max/navigation/initialpose
+        Depth: 1
+        Reliability Policy: Reliable
+        Durability Policy: Volatile
+        History Policy: Keep Last
+  Transformation:
+    Current:
+      Class: rviz_default_plugins/TF
+  Views:
+    Current:
+      Class: rviz_default_plugins/TopDownOrtho
+      Name: Floor plan
+      Angle: 0
+      Scale: 9.4
+      Target Frame: <Fixed Frame>
+      X: -32.7
+      Y: 17.15
+      Near Clip Distance: 0.01
+      Invert Z Axis: false
+    Saved: ~
+Window Geometry:
+  Width: 2400
+  Height: 1500
+  X: 10
+  Y: 40
+  Hide Left Dock: false
+  Hide Right Dock: true

@@ -100,6 +100,32 @@ class LifecycleTests(unittest.TestCase):
         self.assertEqual([x[1] for x in self.system.calls], ["start", "stop"])
         self.assertFalse(self.manager.component("web")["owned"])
         self.assertEqual(self.manager.component("web")["phase"], "failed")
+        self.assertIsNone(self.manager.component("web")["last_start"])
+        self.assertIsNone(self.manager.last_start["web"])
+    def test_completed_job_retains_request_invocation_but_noop_start_cannot_rebind(self):
+        self.request()
+        self.finish()
+        status = self.manager.snapshot()
+        self.assertEqual(status["motion_start_binding"], 1)
+        self.assertIsNone(status["web"]["operation"])
+        original = {"request_id": "request_0123456789", "invocation": "session"}
+        self.assertEqual(status["web"]["last_start"], original)
+        self.request(rid="motion_01234567890")
+        self.assertEqual(self.manager.component("web")["last_start"], original)
+        self.assertEqual(len(self.system.calls), 1)
+        self.request(desired="stop", rid="stop_request_01234")
+        self.finish()
+        self.assertIsNone(self.manager.last_start["web"])
+        self.assertIsNone(self.manager.component("web")["last_start"])
+    def test_new_invocation_or_manager_restart_never_adopts_old_binding(self):
+        self.request()
+        self.finish()
+        self.system.states[self.config["web_unit"]]["InvocationID"] = "new-invocation"
+        self.assertIsNone(self.manager.component("web")["last_start"])
+        replacement = Manager(self.config, self.tmp.name, system=self.system,
+            probe=lambda _host, port, *_: port in self.system.ports)
+        self.assertNotEqual(replacement.instance, self.manager.instance)
+        self.assertIsNone(replacement.component("web")["last_start"])
     def test_double_click_during_start_is_serialized(self):
         self.system.start_ready = False
         self.request()

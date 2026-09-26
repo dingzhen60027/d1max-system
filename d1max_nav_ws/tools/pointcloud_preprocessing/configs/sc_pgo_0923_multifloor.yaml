@@ -1,0 +1,48 @@
+schema: d1max.multifloor_planning/v1
+planning_only: true
+source_pcd: /home/dndx/智元四足机器人D1 Max二次开发文档资料包v0.1.0/d1max_ros2/map_manager/data/processed/20260923_141005_sc-pgo-0923-crossfloor-structure-v1_2c7218/processed_map.pcd
+trajectory_path: /home/dndx/d1max_nav_ws/maps/runs/20260923_132601_150357_central_imu_faster_lio_sc_pgo_zenoh/sc_pgo/optimized_poses.txt
+floor_stage_defaults: /home/dndx/d1max_nav_ws/tools/pointcloud_preprocessing/configs/sc_pgo_0919_flat_floor.yaml
+output_directory: /home/dndx/d1max_nav_ws/maps/processed/sc_pgo_20260923_multifloor_conditioned_v1
+maximum_z_shift_m: 0.50
+maximum_removed_fraction: 0.08
+floors:
+  - id: floor1
+    reference_z_m: -0.65
+    input_z_band: [-2.0, 2.3]
+    trajectory_range_inclusive: [0, 755]
+  - id: floor2
+    reference_z_m: 3.15
+    input_z_band: [2.7, 7.0]
+    trajectory_range_inclusive: [954, 985]
+protected_regions:
+  - min: [-34.0, 49.3, -2.0]
+    max: [-26.5, 57.0, 7.0]
+pct_pipeline:
+  output_directory: /home/dndx/d1max_nav_ws/maps/processed/sc_pgo_20260923_pct_multifloor_conditioned_v1
+  preprocessing:
+    roi:
+      min: [-48.0, -12.0, -3.0]
+      max: [35.0, 62.0, 15.5]
+    voxel_size_m: 0.0
+    radius_outlier: {enabled: false, radius_m: 0.15, minimum_neighbors: 3}
+  pct:
+    resolution: 0.20
+    slice_dh: 0.50
+    ground_height: -1.0
+    simplify_layers: false
+    limits: {max_axis_cells: 2000, max_layers: 128, max_total_cells: 25000000, max_working_bytes: 2500000000}
+    traversability:
+      kernel_size: 7
+      interval_min: 0.55
+      interval_free: 0.70
+      slope_max_rad: 0.40
+      step_max: 0.17
+      standable_ratio: 0.20
+      cost_barrier: 50.0
+      safe_margin: 0.20
+      inflation: 0.20
+  notes:
+    - Independent floor-conditioned planning derivative using the previous validated corridor cleanup stages.
+    - Floor elevations remain -0.65 and 3.15 m; staircase volume retains its original point coordinates.
+    - Original localization PCD is retained. No trajectory tube is automatically cleared.

@@ -1,5 +1,6 @@
 """Unit-only lifecycle tests; no systemd writes and no SDK/robot access."""
 import json
+import fcntl
 import os
 from pathlib import Path
 import tempfile
@@ -9,13 +10,14 @@ import unittest
 from unittest.mock import Mock
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
-from backend.localization import LocalizationRuntime, InitialRequest, UNIT, MARKER, create_localization_router
+from backend.localization import LocalizationRuntime, InitialRequest, UNIT, LIVE_VIEW_UNIT, MARKER, create_localization_router
 
 class FakeSystem:
-    def __init__(self):self.unit={'ActiveState':'inactive','MainPID':'0'};self.starts=0;self.stops=0;self.fail=False;self.leak=False
+    def __init__(self):self.unit={'ActiveState':'inactive','MainPID':'0'};self.live_unit={'ActiveState':'inactive','MainPID':'0'};self.starts=0;self.stops=0;self.fail=False;self.leak=False
     def show(self,unit):
         if self.fail:raise RuntimeError('unavailable')
-        return {'MainPID':str(os.getpid())} if unit=='d1max-web-managed.service' else self.unit
+        if unit=='d1max-web-managed.service':return {'MainPID':str(os.getpid())}
+        return self.live_unit if unit==LIVE_VIEW_UNIT else self.unit
     def populated(self,unit):return unit.get('ActiveState')=='active' or self.leak
     def start(self,session,*args):self.starts+=1;self.unit={'ActiveState':'active','Description':MARKER+session.name,'MainPID':'123'}
     def stop(self):self.stops+=1;self.unit['ActiveState']='inactive'
@@ -54,6 +56,30 @@ class LocalizationTests(unittest.TestCase):
         self.runtime.config.write_text('localization_pipeline:\n  ros__parameters:\n    backend: unknown\n')
         with self.assertRaises(HTTPException):self.runtime.start(self.version)
         self.assertEqual(self.system.starts,0)
+    def test_live_visualization_unit_blocks_web_localization_start(self):
+        for state in ('active','activating','deactivating','reloading'):
+            self.system.live_unit={'ActiveState':state,'MainPID':'777'}
+            before=self.runtime.state.copy()
+            with self.assertRaises(HTTPException) as caught:self.runtime.start(self.version)
+            self.assertEqual(caught.exception.status_code,409)
+            self.assertEqual(self.system.starts,0)
+            self.assertEqual(self.runtime.state,before)
+            self.assertFalse(any(path.is_dir() and len(path.name)==32 for path in self.runtime.root.iterdir()))
+        self.system.live_unit={'ActiveState':'inactive','MainPID':'0'}
+        self.runtime.start(self.version)
+        self.assertEqual(self.system.starts,1)
+    def test_shared_startup_lease_blocks_concurrent_launch_before_any_side_effect(self):
+        lock=self.runtime.launch_lease_path
+        lock.parent.mkdir(parents=True,exist_ok=True)
+        with lock.open('a') as stream:
+            fcntl.flock(stream,fcntl.LOCK_EX|fcntl.LOCK_NB)
+            with self.assertRaises(HTTPException) as caught:self.runtime.start(self.version)
+            self.assertEqual(caught.exception.status_code,409)
+            self.assertEqual(self.system.starts,0)
+            self.assertEqual(self.runtime.state['phase'],'stopped')
+            fcntl.flock(stream,fcntl.LOCK_UN)
+        self.runtime.start(self.version)
+        self.assertEqual(self.system.starts,1)
     def test_unknown_unit_is_not_stopped_or_adopted(self):
         self.system.unit={'ActiveState':'active','Description':'someone else'}
         self.assertEqual(self.runtime.snapshot(False)['phase'],'conflict')
@@ -87,6 +113,39 @@ class LocalizationTests(unittest.TestCase):
             self.runtime.manager.return_value={'monitor':{'active':True,'health':health}}
             with self.assertRaises(HTTPException):self.runtime.start(self.version)
         self.assertEqual(self.system.starts,0)
+    def test_initial_pose_context_headers_accept_matching_session_and_map(self):
+        self.runtime.start(self.version);self.health()
+        grid=Mock();grid.lock=threading.RLock();grid.job={'running':False}
+        app=FastAPI();app.include_router(create_localization_router(self.runtime,grid,threading.RLock(),lambda:False))
+        with TestClient(app) as client:
+            response=client.post('/api/localization/initial-pose',json={'x':1,'y':2,'z':0,'yaw':0},headers={
+                'X-D1max-Session-Id':self.runtime.state['id'],
+                'X-D1max-Map-Version':self.version['id']})
+            self.assertEqual(response.status_code,202)
+            command=json.loads((self.runtime.root/self.runtime.state['id']/'initial_pose.json').read_text())
+            self.assertEqual(command['session_id'],self.runtime.state['id'])
+            self.assertEqual(command['reference'],'body')
+            self.assertEqual(response.json()['request_id'],command['id'])
+    def test_initial_pose_rejects_stale_context_without_mailbox_write(self):
+        self.runtime.start(self.version);self.health()
+        grid=Mock();grid.lock=threading.RLock();grid.job={'running':False}
+        app=FastAPI();app.include_router(create_localization_router(self.runtime,grid,threading.RLock(),lambda:False))
+        pose={'x':1,'y':2,'z':0,'yaw':0}
+        with TestClient(app) as client:
+            checked=client.get('/api/localization/overview').json()
+            self.runtime.stop();self.runtime.start(self.version);self.health()
+            mailbox=self.runtime.root/self.runtime.state['id']/'initial_pose.json'
+            stale_headers={'X-D1max-Session-Id':checked['id'],'X-D1max-Map-Version':checked['version_id']}
+            self.assertEqual(client.post('/api/localization/initial-pose',json=pose,headers=stale_headers).status_code,409)
+            self.assertFalse(mailbox.exists())
+            for headers in ({'X-D1max-Map-Version':'grid-'+'b'*24},{'X-D1max-Session-Id':''}):
+                self.assertEqual(client.post('/api/localization/initial-pose',json=pose,headers=headers).status_code,409)
+                self.assertFalse(mailbox.exists())
+            # Old browser clients without the optional context headers remain valid.
+            self.assertEqual(client.post('/api/localization/initial-pose',json=pose).status_code,202)
+            before=mailbox.read_bytes()
+            self.assertEqual(client.post('/api/localization/initial-pose',json=pose,headers=stale_headers).status_code,409)
+            self.assertEqual(mailbox.read_bytes(),before)
     def test_api_csrf_guards_busy_guard_and_bad_pose(self):
         grid=Mock();grid.lock=threading.RLock();grid.job={'running':False};grid.item.return_value=self.version
         busy=[False];app=FastAPI();app.include_router(create_localization_router(self.runtime,grid,threading.RLock(),lambda:busy[0]))

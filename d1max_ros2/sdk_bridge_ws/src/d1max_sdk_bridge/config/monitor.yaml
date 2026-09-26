@@ -1,5 +1,12 @@
 d1max_sdk_monitor:
   ros__parameters:
+    # SI limits; no movement is authorized by starting the monitor. A separate
+    # explicit navigation arm is mandatory. Preserve the vendor low-speed mode.
+    navigation_control_enabled: false
+    navigation_max_forward_mps: 0.30
+    navigation_max_lateral_mps: 0.0
+    navigation_max_yaw_radps: 0.50
+    navigation_command_timeout_sec: 0.25
     # Operator authorized APP -> SDK handoff. Only OnControlAvailable may arm
     # TakeControl; never infer availability from MC absence or control_source.
     # No motion/posture/mode/e-stop-release commands are enabled by this option.

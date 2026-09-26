@@ -1,0 +1,28 @@
+# Offline only. Keep the existing RViz 3D pose controls, use the cross-floor coordinator.
+map_pcd: /home/dndx/d1max_nav_ws/maps/processed/sc_pgo_20260923_crossfloor_complete_001/processed_map.pcd
+map_backend: official_tomogram
+tomogram_path: /home/dndx/d1max_nav_ws/maps/processed/sc_pgo_20260923_crossfloor_complete_001/pct/tomogram.npz
+crossfloor_route_config: /home/dndx/d1max_nav_ws/maps/processed/sc_pgo_20260923_crossfloor_complete_001/route.yaml
+restore_route_file: /home/dndx/d1max_nav_ws/maps/processed/sc_pgo_20260923_crossfloor_complete_001/route_001/audit.json
+restore_tomogram_path: /home/dndx/d1max_nav_ws/maps/processed/sc_pgo_20260923_crossfloor_complete_001/pct/tomogram.npz
+selection_mode: free
+minimum_headroom_m: 0.55
+unknown_ceiling_policy: allow_unobserved
+vendor_root: /home/dndx/d1max_nav_ws/src/pct_planner_vendor
+planning_frame: d1max_multifloor_planning
+initial_start_xyz: []
+place_endpoints_on_start: false
+placement_anchor_xy: [-30.6, 47.95]
+placement_anchor_z: -0.65
+max_follow_height_change_m: 0.3
+max_selection_height_error_m: 0.08
+selection_max_age_s: 5.0
+planning_timeout_s: 45.0
+map_display_max_points: 600000
+handle_scale_m: 1.2
+max_heading_rate: 1.0
+astar_cost_weight: 1.0
+optimizer_cost_margin: 8.0
+path_refinement: visibility_c2
+refinement_corner_cut_m: 1.5
+max_ground_step_m: 0.17

@@ -2,6 +2,7 @@
 #define FASTER_LIO_IMU_PROCESSING_H
 
 #include <glog/logging.h>
+#include <rclcpp/time.hpp>
 #include "nav_msgs/msg/odometry.hpp"
 #include "sensor_msgs/msg/imu.hpp"
 #include "sensor_msgs/msg/point_cloud2.hpp"
@@ -13,6 +14,7 @@
 #include "so3_math.h"
 #include "use-ikfom.hpp"
 #include "utils.h"
+#include "stationary_initialization.hpp"
 
 namespace faster_lio {
 
@@ -40,6 +42,15 @@ class ImuProcess {
     common::M3D gravity_rotation_;    // rotation to align IMU up → world +z
     int initialization_samples{MAX_INI_COUNT};
     bool debug_file_enabled{true};
+    bool stationary_initialization_enabled{false};
+    bool gravity_aligned_world{false};
+    // Localization-only conservative uncertainty for an admitted short gap.
+    // Default 1.0 preserves all existing mapping algorithms/configurations.
+    double integration_noise_scale{1.0};
+    // Only robust localization supplies a real bracketing right endpoint.
+    // Legacy mapping keeps its original integration path unchanged.
+    bool bounded_scan_endpoints{false};
+    StationaryInitialization initialization_gate;
     bool Initialized() const { return !imu_need_init_; }
     int InitializationSamples() const { return std::max(0, init_iter_num_ - 1); }
     double AccelerationScale() const { return common::G_m_s2 / mean_acc_.norm(); }
@@ -73,6 +84,7 @@ class ImuProcess {
     int init_iter_num_ = 1;
     bool b_first_frame_ = true;
     bool imu_need_init_ = true;
+    std::deque<sensor_msgs::msg::Imu::ConstSharedPtr> initialization_window_;
 };
 
 ImuProcess::ImuProcess() : b_first_frame_(true), imu_need_init_(true) {
@@ -104,6 +116,8 @@ void ImuProcess::Reset() {
     imu_need_init_ = true;
     init_iter_num_ = 1;
     v_imu_.clear();
+    initialization_gate.clear();
+    initialization_window_.clear();
     IMUpose_.clear();
     last_imu_.reset(new sensor_msgs::msg::Imu());
     cur_pcl_un_.reset(new PointCloudType());
@@ -161,6 +175,13 @@ void ImuProcess::IMUInit(const common::MeasureGroup &meas, esekfom::esekf<state_
     // Store rotation to level PCD (align IMU up → world +z)
     common::V3D up_dir = mean_acc_.normalized();
     gravity_rotation_ = Eigen::Quaterniond::FromTwoVectors(up_dir, Eigen::Vector3d::UnitZ()).toRotationMatrix();
+    if (gravity_aligned_world) {
+        init_state.rot = SO3(gravity_rotation_);
+        init_state.grav = S2(common::V3D(0, 0, -common::G_m_s2));
+        // Clouds, odometry and TF all share this frame from the first scan.
+        // Do not rotate only the saved PCD a second time.
+        gravity_rotation_.setIdentity();
+    }
 
     init_state.bg = mean_gyr_;
     init_state.offset_T_L_I = Lidar_T_wrt_IMU_;
@@ -182,11 +203,30 @@ void ImuProcess::UndistortPcl(const common::MeasureGroup &meas, esekfom::esekf<s
                               PointCloudType &pcl_out) {
     /*** add the imu_ of the last frame-tail to the of current frame-head ***/
     auto v_imu = meas.imu_;
-    v_imu.push_front(last_imu_);
-    const double &imu_beg_time = v_imu.front()->header.stamp.sec + v_imu.front()->header.stamp.nanosec * 1e-9;
-    const double &imu_end_time = v_imu.back()->header.stamp.sec + v_imu.back()->header.stamp.nanosec * 1e-9;
+    const auto sample_time=[this](const auto& imu) {
+        if (bounded_scan_endpoints) return rclcpp::Time(imu->header.stamp).seconds();
+        return imu->header.stamp.sec + imu->header.stamp.nanosec * 1e-9;
+    };
+    if (!bounded_scan_endpoints || sample_time(last_imu_) < sample_time(v_imu.front()))
+        v_imu.push_front(last_imu_);
+    const double imu_beg_time = sample_time(v_imu.front());
+    const double imu_end_time = sample_time(v_imu.back());
     const double &pcl_beg_time = meas.lidar_bag_time_;
     const double &pcl_end_time = meas.lidar_end_time_;
+
+    if (bounded_scan_endpoints) {
+        // Validate before mutating filter state. There is no extrapolation in
+        // this branch: every integrated interval has two received endpoints.
+        if (v_imu.size()<2 || imu_beg_time>last_lidar_end_time_ ||
+            imu_end_time<pcl_end_time || pcl_end_time<=last_lidar_end_time_) {
+            pcl_out.clear(); return;
+        }
+        for (size_t i=1; i<v_imu.size(); ++i) {
+            if (sample_time(v_imu[i])<=sample_time(v_imu[i-1])) {
+                pcl_out.clear(); return;
+            }
+        }
+    }
 
     /*** sort point clouds by offset time ***/
     pcl_out = *(meas.lidar_);
@@ -195,7 +235,8 @@ void ImuProcess::UndistortPcl(const common::MeasureGroup &meas, esekfom::esekf<s
     /*** Initialize IMU pose ***/
     state_ikfom imu_state = kf_state.get_x();
     IMUpose_.clear();
-    IMUpose_.push_back(common::set_pose6d(0.0, acc_s_last_, angvel_last_, imu_state.vel, imu_state.pos,
+    IMUpose_.push_back(common::set_pose6d(bounded_scan_endpoints ? last_lidar_end_time_-pcl_beg_time : 0.0,
+                                          acc_s_last_, angvel_last_, imu_state.vel, imu_state.pos,
                                           imu_state.rot.toRotationMatrix()));
 
     /*** forward propagation at each imu_ point ***/
@@ -212,7 +253,7 @@ void ImuProcess::UndistortPcl(const common::MeasureGroup &meas, esekfom::esekf<s
         // if (tail->header.stamp.toSec() < last_lidar_end_time_) {
         //     continue;
         // }
-        if (tail->header.stamp.sec +tail->header.stamp.nanosec * 1e-9 < last_lidar_end_time_) {
+        if (sample_time(tail) < last_lidar_end_time_) {
             continue;
         }
 
@@ -239,10 +280,28 @@ void ImuProcess::UndistortPcl(const common::MeasureGroup &meas, esekfom::esekf<s
         } else {
             dt = (tail->header.stamp.sec + tail->header.stamp.nanosec * 1e-9) - (head->header.stamp.sec + head->header.stamp.nanosec * 1e-9);
         }
+        double integrated_end=sample_time(tail);
+        if (bounded_scan_endpoints) {
+            const double ta=sample_time(head),tb=sample_time(tail);
+            const double begin=std::max(ta,last_lidar_end_time_);
+            integrated_end=std::min(tb,pcl_end_time);
+            if (integrated_end<=begin) continue;
+            dt=integrated_end-begin;
+            // Midpoint of the clipped interval, not the midpoint of the whole
+            // IMU gap. These are integration inputs, not fabricated messages.
+            const double alpha=((begin-ta)+(integrated_end-ta))*.5/(tb-ta);
+            angvel_avr << head->angular_velocity.x+alpha*(tail->angular_velocity.x-head->angular_velocity.x),
+                head->angular_velocity.y+alpha*(tail->angular_velocity.y-head->angular_velocity.y),
+                head->angular_velocity.z+alpha*(tail->angular_velocity.z-head->angular_velocity.z);
+            acc_avr << head->linear_acceleration.x+alpha*(tail->linear_acceleration.x-head->linear_acceleration.x),
+                head->linear_acceleration.y+alpha*(tail->linear_acceleration.y-head->linear_acceleration.y),
+                head->linear_acceleration.z+alpha*(tail->linear_acceleration.z-head->linear_acceleration.z);
+            acc_avr *= common::G_m_s2 / mean_acc_.norm();
+        }
         in.acc = acc_avr;
         in.gyro = angvel_avr;
-        Q_.block<3, 3>(0, 0).diagonal() = cov_gyr_;
-        Q_.block<3, 3>(3, 3).diagonal() = cov_acc_;
+        Q_.block<3, 3>(0, 0).diagonal() = cov_gyr_ * integration_noise_scale;
+        Q_.block<3, 3>(3, 3).diagonal() = cov_acc_ * integration_noise_scale;
         Q_.block<3, 3>(6, 6).diagonal() = cov_bias_gyr_;
         Q_.block<3, 3>(9, 9).diagonal() = cov_bias_acc_;
         kf_state.predict(dt, Q_, in);
@@ -255,18 +314,26 @@ void ImuProcess::UndistortPcl(const common::MeasureGroup &meas, esekfom::esekf<s
             acc_s_last_[i] += imu_state.grav[i];
         }
 
-        double &&offs_t = tail->header.stamp.sec + tail->header.stamp.nanosec * 1e-9 - pcl_beg_time;
+        const double offs_t = integrated_end - pcl_beg_time;
         IMUpose_.emplace_back(common::set_pose6d(offs_t, acc_s_last_, angvel_last_, imu_state.vel, imu_state.pos,
                                                  imu_state.rot.toRotationMatrix()));
     }
 
     /*** calculated the pos and attitude prediction at the frame-end ***/
-    double note = pcl_end_time > imu_end_time ? 1.0 : -1.0;
-    dt = note * (pcl_end_time - imu_end_time);
-    kf_state.predict(dt, Q_, in);
+    if (!bounded_scan_endpoints) {
+        double note = pcl_end_time > imu_end_time ? 1.0 : -1.0;
+        dt = note * (pcl_end_time - imu_end_time);
+        kf_state.predict(dt, Q_, in);
+    }
 
     imu_state = kf_state.get_x();
-    last_imu_ = meas.imu_.back();
+    if (bounded_scan_endpoints) {
+        // Keep the real left tail. The future right endpoint remains in the
+        // upstream queue and is not prepended ahead of older next-frame data.
+        for (auto it=meas.imu_.rbegin();it!=meas.imu_.rend();++it) {
+            if (sample_time(*it)<=pcl_end_time) { last_imu_=*it; break; }
+        }
+    } else last_imu_ = meas.imu_.back();
     last_lidar_end_time_ = pcl_end_time;
 
     /*** undistort each lidar point (backward propagation) ***/
@@ -322,11 +389,39 @@ void ImuProcess::Process(const common::MeasureGroup &meas, esekfom::esekf<state_
 
     if (imu_need_init_) {
         /// The very first lidar frame
-        IMUInit(meas, kf_state, init_iter_num_);
+        if (stationary_initialization_enabled) {
+            for (const auto& imu : meas.imu_) {
+                const auto& a = imu->linear_acceleration;
+                const auto& w = imu->angular_velocity;
+                const double t = imu->header.stamp.sec + imu->header.stamp.nanosec * 1e-9;
+                if (initialization_gate.add(t, {a.x,a.y,a.z}, {w.x,w.y,w.z}))
+                    initialization_window_.push_back(imu);
+            }
+            if (initialization_gate.samples.empty()) { initialization_window_.clear(); return; }
+            while (!initialization_window_.empty()) {
+                const auto& first = initialization_window_.front()->header.stamp;
+                if (first.sec + first.nanosec * 1e-9 >= initialization_gate.samples.front().t) break;
+                initialization_window_.pop_front();
+            }
+            if (!initialization_gate.ready(initialization_samples)) return;
+            auto stable_meas = meas;
+            stable_meas.imu_.clear();
+            for (const auto& imu : initialization_window_)
+                stable_meas.imu_.push_back(std::make_shared<sensor_msgs::msg::Imu>(*imu));
+            IMUInit(stable_meas, kf_state, init_iter_num_);
+            LOG(INFO) << "Stationary initialization: " << stable_meas.imu_.size()
+                      << " samples, gravity-aligned world=" << gravity_aligned_world
+                      << ", mean acc=" << mean_acc_.transpose()
+                      << ", gyro bias=" << mean_gyr_.transpose();
+            initialization_window_.clear(); initialization_gate.clear();
+        } else {
+            IMUInit(meas, kf_state, init_iter_num_);
+        }
 
         imu_need_init_ = true;
 
         last_imu_ = meas.imu_.back();
+        if (bounded_scan_endpoints) last_lidar_end_time_=meas.lidar_end_time_;
 
         state_ikfom imu_state = kf_state.get_x();
         if (init_iter_num_ > initialization_samples) {

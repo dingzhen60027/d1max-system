@@ -26,10 +26,12 @@
 #include <atomic>
 #include "std_msgs/msg/string.hpp"
 #include "imu_recovery.hpp"
+#include "imu_continuity.hpp"
 #include "imu_processing.hpp"
 #include "ivox3d/ivox3d.h"
 #include "options.h"
 #include "pointcloud_preprocess.h"
+#include "registration_quality.hpp"
 
 //ROS2
 #include <tf2_ros/transform_broadcaster.h>
@@ -107,6 +109,26 @@ class LaserMapping : public rclcpp::Node {
     void Finish();
 
    private:
+    std::ofstream frontend_state_log_;
+    void LogFrontendState();
+    void InitMappingInputGuard();
+    bool CheckMappingInput();
+    void RecordMappingInput(const ImuContinuityResult& result);
+    void MappingInputStatus(bool force = false);
+    void MappingClockFault(const char* reason, double previous, double current);
+    std::unique_ptr<ImuContinuityGuard> mapping_imu_guard_;
+    std::string mapping_guard_mode_{"disabled"};
+    ImuContinuityResult mapping_guard_result_;
+    std::atomic<bool> mapping_input_fault_{false};
+    sensor_msgs::msg::Imu::SharedPtr mapping_imu_tail_;
+    double mapping_last_propagated_end_{0.0};
+    bool mapping_has_propagated_{false};
+    double mapping_last_input_status_{0.0};
+    double mapping_last_input_check_{0.0};
+    uint64_t mapping_input_windows_{0}, mapping_unhealthy_windows_{0};
+    std::ofstream mapping_input_log_;
+    rclcpp::Publisher<std_msgs::msg::String>::SharedPtr mapping_input_status_pub_;
+    rclcpp::TimerBase::SharedPtr mapping_input_status_timer_;
     void InitRobustRuntime();
     bool RobustSync();
     void RobustStatus();
@@ -119,6 +141,8 @@ class LaserMapping : public rclcpp::Node {
     std::atomic<uint64_t> robust_imu_received_{0},robust_scans_replaced_{0};
     uint64_t robust_short_gaps_{0};
     double robust_soft_gap_{.015},robust_gap_rotation_{.08},robust_observed_gap_{0};
+    double robust_scan_gap_{0},robust_scan_noise_scale_{1};
+    bool robust_scan_degraded_{false};
     double robust_max_gap_{.03},robust_max_age_{.3},robust_last_end_{0},robust_last_good_{0},robust_last_status_{0};
     uint64_t robust_gap_rejections_{0};
     ImuRecoveryBudget robust_recovery_budget_;

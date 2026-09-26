@@ -1,0 +1,25 @@
+# Planning only. No odometry, simulated body, controller or SDK is started.
+map_pcd: /home/dndx/d1max_nav_ws/maps/runs/20260919_125722_855277_central_imu_faster_lio_sc_pgo_zenoh/sc_pgo/optimized_map.pcd
+map_backend: official_tomogram
+tomogram_path: /home/dndx/d1max_nav_ws/maps/processed/sc_pgo_20260919_pct_official_20260922/tomogram.npz
+# Build the artifact using config/official_single_floor.yaml. No legacy grid fallback.
+selection_mode: ground
+minimum_headroom_m: 0.55
+unknown_ceiling_policy: allow_unobserved
+vendor_root: /home/dndx/d1max_nav_ws/src/pct_planner_vendor
+planning_frame: d1max_loc_map
+initial_start_xyz: []
+# Place both editable handles immediately. This never starts planning or motion.
+place_endpoints_on_start: true
+placement_anchor_xy: [-4.100001525878895, 6.9]
+placement_anchor_z: -0.6375
+max_follow_height_change_m: 0.3
+max_selection_height_error_m: 0.08
+selection_max_age_s: 5.0
+planning_timeout_s: 20.0
+map_display_max_points: 600000
+handle_scale_m: 1.2
+# The PCT artifact already contains official slope/step/clearance inflation.
+# No additional measured-grid inflation/erosion is applied at runtime.
+max_heading_rate: 10.0
+max_ground_step_m: 0.17

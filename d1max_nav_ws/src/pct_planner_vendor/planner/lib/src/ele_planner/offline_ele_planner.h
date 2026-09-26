@@ -16,10 +16,10 @@ class OfflineElePlanner {
 
   void InitMap(const double a_start_cost_threshold,
                const double safe_cost_margin, const double resolution,
-               const int num_layers, const double step_cost_weight, const Eigen::MatrixXd& cost_map,
-               const Eigen::MatrixXd& height_map,
-               const Eigen::MatrixXd& ceiling, const Eigen::MatrixXd& ele_map,
-               const Eigen::MatrixXd& grad_x, const Eigen::MatrixXd& grad_y);
+               const int num_layers, const double step_cost_weight, ConstStridedMatrixRef cost_map,
+               ConstStridedMatrixRef height_map,
+               ConstStridedMatrixRef ceiling, ConstStridedMatrixRef ele_map,
+               ConstStridedMatrixRef grad_x, ConstStridedMatrixRef grad_y);
 
   bool Plan(const Eigen::Vector3i& start, const Eigen::Vector3i& goal,
             const bool optimize = true);
@@ -37,13 +37,21 @@ class OfflineElePlanner {
   Eigen::MatrixXd GetDebugPath() const {
     return path_finder_.GetResultMatrix();
   }
+  size_t GetSearchResultSize() const { return path_finder_.GetResultSize(); }
 
   void set_max_iterations(int max_iterations) {
     trajectory_optimizer_.set_max_iterations(max_iterations);
   }
 
   const Astar& get_path_finder() const { return path_finder_; }
-  const DenseElevationMap& get_map() const { return *map_; }
+  // A returned Python map handle must keep this exact map alive across a
+  // subsequent InitMap; pinning only the planner does not protect old maps.
+  std::shared_ptr<DenseElevationMap> get_map() const { return map_; }
+  void set_optimizer_sample_interval(int interval) {
+    trajectory_optimizer_.set_sample_interval(interval);
+    trajectory_optimizer_wnoj_.set_sample_interval(interval);
+  }
+
   const GPMPOptimizerWnoa& get_trajectory_optimizer() const {
     return trajectory_optimizer_;
   }

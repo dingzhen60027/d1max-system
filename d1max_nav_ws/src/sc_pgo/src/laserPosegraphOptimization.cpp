@@ -18,6 +18,7 @@
 #include <queue>
 #include <rclcpp/rclcpp.hpp>
 #include <sstream>
+#include <stdexcept>
 #include <string>
 #include <thread>
 #include <vector>
@@ -72,6 +73,8 @@
 #include "aloam_velodyne/common.h"
 #include "aloam_velodyne/tic_toc.h"
 #include "scancontext/Scancontext.h"
+#include "loop_registration.hpp"
+#include "vertical_excursion_gate.hpp"
 
 using namespace gtsam;
 
@@ -91,7 +94,8 @@ Pose6D odom_pose_curr{0.0, 0.0, 0.0, 0.0, 0.0, 0.0};  // init pose is zero
 std::queue<std::shared_ptr<nav_msgs::msg::Odometry>> odometryBuf;
 std::queue<std::shared_ptr<sensor_msgs::msg::PointCloud2>> fullResBuf;
 std::queue<std::shared_ptr<sensor_msgs::msg::NavSatFix>> gpsBuf;
-std::queue<std::pair<int, int>> scLoopICPBuf;
+struct LoopCandidate { int history, current; float yaw; };
+std::queue<LoopCandidate> scLoopICPBuf;
 
 std::mutex mBuf;
 std::mutex mKF;
@@ -108,7 +112,7 @@ std::vector<pcl::PointCloud<PointType>::Ptr> keyframeLaserClouds;
 std::vector<Pose6D> keyframePoses;
 std::vector<Pose6D> keyframePosesUpdated;
 std::vector<double> keyframeTimes;
-int recentIdxUpdated = 0;
+std::atomic<int> recentIdxUpdated{0};
 
 gtsam::NonlinearFactorGraph gtSAMgraph;
 std::atomic<bool> gtSAMgraphMade{false};
@@ -139,6 +143,9 @@ std::string body_frame = "body";
 
 double scancontext_filter_size = 0.2;
 double icp_filter_size = 0.2;
+double icp_coarse_filter_size = 0.4;
+double icp_coarse_max_correspondence_distance = 2.0;
+double icp_min_reverse_overlap_ratio = 0.35;
 double icp_max_correspondence_distance = 4.0;
 double icp_fitness_threshold = 0.15;
 double icp_max_correction_translation = 6.0;
@@ -148,6 +155,14 @@ double icp_max_tilt_correction = 0.12;
 double icp_overlap_max_distance = 0.35;
 double icp_min_overlap_ratio = 0.6;
 double loop_max_relative_translation = 2.0;
+double loop_proximity_radius = 6.0;
+double loop_min_time_separation = 60.0;
+double loop_geometry_consistency_translation = 0.60;
+double loop_geometry_consistency_rotation = 0.06;
+bool loop_vertical_transition_guard_enabled = false;
+double loop_vertical_transition_window_m = 20.0;
+double loop_vertical_transition_min_m = 1.5;
+double loop_vertical_transition_residual_m = 1.0;
 double max_sync_offset_sec = 0.02;
 double loop_closure_frequency = 2.0;
 double map_publish_frequency = 0.2;
@@ -170,6 +185,8 @@ int last_loop_candidate_current_idx = -1;
 int last_loop_candidate_history_idx = -1;
 int loop_candidate_streak = 0;
 std::atomic<uint32_t> accepted_loop_count{0};
+std::atomic<int> last_loop_accepted_idx{-1};
+std::atomic<bool> loop_graph_dirty{false};
 std::atomic<int64_t> latest_odom_stamp_ns{0};
 
 pcl::PointCloud<PointType>::Ptr laserCloudMapPGO(
@@ -519,6 +536,8 @@ void updatePoses(void)
     p.pitch = isamCurrentEstimate.at<gtsam::Pose3>(node_idx).rotation().pitch();
     p.yaw = isamCurrentEstimate.at<gtsam::Pose3>(node_idx).rotation().yaw();
   }
+  // A newly queued keyframe is not necessarily part of this estimate yet.
+  recentIdxUpdated.store(static_cast<int>(isamCurrentEstimate.size()));
   mKF.unlock();
 
   mtxRecentPose.lock();
@@ -526,9 +545,6 @@ void updatePoses(void)
     isamCurrentEstimate.at<gtsam::Pose3>(int(isamCurrentEstimate.size()) - 1);
   recentOptimizedX = lastOptimizedPose.translation().x();
   recentOptimizedY = lastOptimizedPose.translation().y();
-
-  // Fix: Set to size() instead of size()-1 so loops with < recentIdxUpdated include all keyframes
-  recentIdxUpdated = int(keyframePosesUpdated.size());
 
   mtxRecentPose.unlock();
 }  // updatePoses
@@ -538,6 +554,9 @@ void runISAM2opt(void)
   // called when a variable added
   isam->update(gtSAMgraph, initialEstimate);
   isam->update();
+  if (loop_graph_dirty.exchange(false)) {
+    for (int i=0; i<8; ++i) isam->update();
+  }
 
   gtSAMgraph.resize(0);
   initialEstimate.clear();
@@ -579,184 +598,143 @@ pcl::PointCloud<PointType>::Ptr transformPointCloud(
   return cloudOut;
 }  // transformPointCloud
 
-void loopFindNearKeyframesCloud(
-  pcl::PointCloud<PointType>::Ptr & nearKeyframes,
-  const int & key, const int & submap_size,
-  const int & root_idx)
+std::optional<gtsam::Pose3> doICPVirtualRelative(int history, int current, float sc_yaw)
 {
-  // extract and stacking near keyframes (in global coord)
-  nearKeyframes->clear();
-  for (int i = -submap_size; i <= submap_size; ++i) {
-    int keyNear = key + i;
-    if (keyNear < 0 || keyNear >= int(keyframeLaserClouds.size())) {continue;}
-
-    mKF.lock();
-    // Fix: Use pose corresponding to each keyNear, not root_idx
-    *nearKeyframes += *local2global(
-      keyframeLaserClouds[keyNear],
-      keyframePosesUpdated[keyNear]);
-    mKF.unlock();
-  }
-
-  if (nearKeyframes->empty()) {return;}
-
-  // downsample near keyframes
-  pcl::PointCloud<PointType>::Ptr cloud_temp(new pcl::PointCloud<PointType>());
-  downSizeFilterICP.setInputCloud(nearKeyframes);
-  downSizeFilterICP.filter(*cloud_temp);
-  *nearKeyframes = *cloud_temp;
-}  // loopFindNearKeyframesCloud
-
-std::optional<gtsam::Pose3> doICPVirtualRelative(
-  int _loop_kf_idx,
-  int _curr_kf_idx)
-{
-  // parse pointclouds
-  pcl::PointCloud<PointType>::Ptr cureKeyframeCloud(
-    new pcl::PointCloud<PointType>());
-  pcl::PointCloud<PointType>::Ptr targetKeyframeCloud(
-    new pcl::PointCloud<PointType>());
-  loopFindNearKeyframesCloud(
-    cureKeyframeCloud, _curr_kf_idx, 0,
-    _loop_kf_idx);                           // use same root of loop kf idx
-  loopFindNearKeyframesCloud(
-    targetKeyframeCloud, _loop_kf_idx,
-    history_keyframe_search_num, _loop_kf_idx);
-
-  if (cureKeyframeCloud->size() < static_cast<size_t>(minimum_keyframe_points) ||
-    targetKeyframeCloud->size() < static_cast<size_t>(minimum_keyframe_points))
-  {
-    logLoopEvent(
-      "reject_sparse", _loop_kf_idx, _curr_kf_idx,
-      cureKeyframeCloud->size(), targetKeyframeCloud->size());
-    RCLCPP_WARN(nh->get_logger(), "Reject loop: insufficient ICP points");
-    return std::nullopt;
-  }
-
-  // loop verification
-  sensor_msgs::msg::PointCloud2 cureKeyframeCloudMsg;
-  pcl::toROSMsg(*cureKeyframeCloud, cureKeyframeCloudMsg);
-  cureKeyframeCloudMsg.header.frame_id = map_frame;
-  cureKeyframeCloudMsg.header.stamp = nh->get_clock()->now();
-  pubLoopScanLocal->publish(cureKeyframeCloudMsg);
-
-  sensor_msgs::msg::PointCloud2 targetKeyframeCloudMsg;
-  pcl::toROSMsg(*targetKeyframeCloud, targetKeyframeCloudMsg);
-  targetKeyframeCloudMsg.header.frame_id = map_frame;
-  targetKeyframeCloudMsg.header.stamp = nh->get_clock()->now();
-  pubLoopSubmapLocal->publish(targetKeyframeCloudMsg);
-
-  // ICP Settings
-  pcl::IterativeClosestPoint<PointType, PointType> icp;
-  icp.setMaxCorrespondenceDistance(icp_max_correspondence_distance);
-  icp.setMaximumIterations(100);
-  icp.setTransformationEpsilon(1e-6);
-  icp.setEuclideanFitnessEpsilon(1e-6);
-  icp.setRANSACIterations(0);
-
-  // Align pointclouds
-  icp.setInputSource(cureKeyframeCloud);
-  icp.setInputTarget(targetKeyframeCloud);
-  pcl::PointCloud<PointType>::Ptr unused_result(
-    new pcl::PointCloud<PointType>());
-  icp.align(*unused_result);
-
-  if (icp.hasConverged() == false ||
-    icp.getFitnessScore() > icp_fitness_threshold)
-  {
-    logLoopEvent(
-      "reject_fitness", _loop_kf_idx, _curr_kf_idx,
-      icp.getFitnessScore(), icp_fitness_threshold);
-    std::cout << "[SC loop] ICP fitness test failed (" << icp.getFitnessScore()
-              << " > " << icp_fitness_threshold << "). Reject this SC loop."
-              << std::endl;
-    return std::nullopt;
-  } else {
-    std::cout << "[SC loop] ICP fitness test passed (" << icp.getFitnessScore()
-              << " < " << icp_fitness_threshold << "). Add this SC loop."
-              << std::endl;
-  }
-
-  pcl::KdTreeFLANN<PointType> target_tree;
-  target_tree.setInputCloud(targetKeyframeCloud);
-  std::vector<int> nearest_index(1);
-  std::vector<float> nearest_squared_distance(1);
-  size_t overlap_points = 0;
-  const double overlap_distance_sq =
-    icp_overlap_max_distance * icp_overlap_max_distance;
-  for (const auto & point : unused_result->points) {
-    if (target_tree.nearestKSearch(
-        point, 1, nearest_index, nearest_squared_distance) > 0 &&
-      nearest_squared_distance.front() <= overlap_distance_sq)
-    {
-      ++overlap_points;
-    }
-  }
-  const double overlap_ratio = unused_result->empty() ? 0.0 :
-    static_cast<double>(overlap_points) / static_cast<double>(unused_result->size());
-  if (overlap_ratio < icp_min_overlap_ratio) {
-    logLoopEvent(
-      "reject_overlap", _loop_kf_idx, _curr_kf_idx,
-      overlap_ratio, icp_min_overlap_ratio);
-    RCLCPP_WARN(
-      nh->get_logger(), "Reject loop: ICP overlap %.3f < %.3f",
-      overlap_ratio, icp_min_overlap_ratio);
-    return std::nullopt;
-  }
-
-  // Get pose transformation
-  float x, y, z, roll, pitch, yaw;
-  Eigen::Affine3f correctionLidarFrame;
-  correctionLidarFrame = icp.getFinalTransformation();
-  pcl::getTranslationAndEulerAngles(
-    correctionLidarFrame, x, y, z, roll, pitch,
-    yaw);
-  const gtsam::Pose3 correction =
-    Pose3(Rot3::RzRyRx(roll, pitch, yaw), Point3(x, y, z));
-  const double correction_translation = correction.translation().norm();
-  const double correction_rotation = correction.rotation().rpy().norm();
-  if (correction_translation > icp_max_correction_translation ||
-    correction_rotation > icp_max_correction_rotation ||
-    std::abs(z) > icp_max_vertical_correction ||
-    std::hypot(roll, pitch) > icp_max_tilt_correction)
-  {
-    logLoopEvent(
-      "reject_correction", _loop_kf_idx, _curr_kf_idx,
-      correction_translation, correction_rotation);
-    RCLCPP_WARN(
-      nh->get_logger(),
-      "Reject loop: correction %.3f m / %.3f rad, z %.3f m, tilt %.3f rad exceeds gate",
-      correction_translation, correction_rotation, std::abs(z), std::hypot(roll, pitch));
-    return std::nullopt;
-  }
-
-  gtsam::Pose3 loop_pose;
-  gtsam::Pose3 current_pose;
+  gtsam::Pose3 hist_pose, cur_pose;
+  sc_pgo::LoopCloud::Ptr source(new sc_pgo::LoopCloud), target(new sc_pgo::LoopCloud);
+  std::vector<sc_pgo::VerticalPoseSample> raw_trajectory;
+  gtsam::Rot3 raw_history_rotation;
   {
     std::lock_guard<std::mutex> lock(mKF);
-    loop_pose = Pose6DtoGTSAMPose3(keyframePosesUpdated.at(_loop_kf_idx));
-    current_pose = Pose6DtoGTSAMPose3(keyframePosesUpdated.at(_curr_kf_idx));
+    if (history < 0 || current <= history ||
+        current >= static_cast<int>(keyframePoses.size())) return std::nullopt;
+    hist_pose = Pose6DtoGTSAMPose3(keyframePosesUpdated[history]);
+    cur_pose = Pose6DtoGTSAMPose3(keyframePosesUpdated[current]);
+    if (loop_vertical_transition_guard_enabled) {
+      raw_history_rotation = Pose6DtoGTSAMPose3(keyframePoses[history]).rotation();
+      raw_trajectory.reserve(current - history + 1);
+      for (int i = history; i <= current; ++i) {
+        const auto& pose = keyframePoses[i];
+        raw_trajectory.push_back({pose.x, pose.y, pose.z});
+      }
+    }
+    *source = *keyframeLaserClouds[current];
+    for (int i = std::max(0, history-history_keyframe_search_num);
+         i <= std::min(current-1, history+history_keyframe_search_num); ++i) {
+      sc_pgo::LoopCloud transformed;
+      const Eigen::Matrix4f relative = hist_pose.between(
+        Pose6DtoGTSAMPose3(keyframePosesUpdated[i])).matrix().cast<float>();
+      pcl::transformPointCloud(*keyframeLaserClouds[i], transformed, relative);
+      *target += transformed;
+    }
   }
-
-  // ICP maps the current cloud (already expressed in the global frame) onto the
-  // historical submap. Compose that global correction with the current pose,
-  // then express the corrected pose relative to the historical keyframe.
-  const gtsam::Pose3 corrected_current_pose = correction.compose(current_pose);
-  const gtsam::Pose3 loop_relative_pose = loop_pose.between(corrected_current_pose);
-  if (loop_relative_pose.translation().norm() > loop_max_relative_translation) {
-    logLoopEvent(
-      "reject_relative_pose", _loop_kf_idx, _curr_kf_idx,
-      loop_relative_pose.translation().norm(), loop_max_relative_translation);
-    RCLCPP_WARN(
-      nh->get_logger(), "Reject loop: matched poses remain %.3f m apart",
-      loop_relative_pose.translation().norm());
+  if (source->size() < static_cast<size_t>(minimum_keyframe_points) ||
+      target->size() < static_cast<size_t>(minimum_keyframe_points)) {
+    logLoopEvent("reject_sparse", history, current, source->size(), target->size());
     return std::nullopt;
   }
-  RCLCPP_INFO(
-    nh->get_logger(), "Verified loop geometry: fitness %.5f, overlap %.3f",
-    icp.getFitnessScore(), overlap_ratio);
-  return loop_relative_pose;
-}  // doICPVirtualRelative
+
+  std::vector<Eigen::Matrix4f> seeds;
+  const Eigen::Matrix4f predicted = hist_pose.between(cur_pose).matrix().cast<float>();
+  seeds.push_back(predicted);
+  // ScanContext reports the shift of HISTORY toward CURRENT. Invert its yaw
+  // for the current -> history point transform. Descriptors are tilt-leveled.
+  const auto level_h = gtsam::Rot3::Rz(-hist_pose.rotation().yaw())*hist_pose.rotation();
+  const auto level_c = gtsam::Rot3::Rz(-cur_pose.rotation().yaw())*cur_pose.rotation();
+  Eigen::Matrix4f descriptor_seed = Eigen::Matrix4f::Identity();
+  descriptor_seed.block<3,3>(0,0) =
+    (level_h.inverse()*gtsam::Rot3::Rz(-sc_yaw)*level_c).matrix().cast<float>();
+  seeds.push_back(descriptor_seed);
+  // Preserve the odometric heading when SC chooses a repeated corridor sector.
+  Eigen::Matrix4f recentered = predicted;
+  recentered.block<3,1>(0,3).setZero();
+  seeds.push_back(recentered);
+  // Nearby keyframes need not be at the exact same spot. Retain horizontal
+  // displacement while testing a recovered altitude, not forcing output z=0.
+  Eigen::Vector3d d_world = cur_pose.translation()-hist_pose.translation();
+  d_world.z()=0;
+  descriptor_seed.block<3,1>(0,3) = (hist_pose.rotation().inverse()*d_world).cast<float>();
+  seeds.push_back(descriptor_seed);
+
+  sc_pgo::RegistrationOptions options;
+  options.coarse_leaf=icp_coarse_filter_size;
+  options.coarse_distance=icp_coarse_max_correspondence_distance;
+  options.min_reverse_overlap=icp_min_reverse_overlap_ratio;
+  options.fine_leaf=icp_filter_size;
+  options.fine_distance=icp_max_correspondence_distance;
+  options.overlap_distance=icp_overlap_max_distance;
+  options.min_overlap=icp_min_overlap_ratio;
+  options.max_inlier_mse=icp_fitness_threshold;
+  options.radius=scMaximumRadius;
+  const auto result = sc_pgo::registerLoop(source, target, seeds, options);
+  if (!result.accepted) {
+    logLoopEvent("reject_geometry", history, current, result.inlier_mse, result.overlap);
+    RCLCPP_INFO(nh->get_logger(), "Reject loop %d <-> %d: %s, mse %.5f overlap %.3f reverse %.3f",
+      history, current, result.reason.c_str(), result.inlier_mse, result.overlap, result.reverse_overlap);
+    return std::nullopt;
+  }
+  const gtsam::Pose3 relative(result.transform.cast<double>());
+  if (loop_vertical_transition_guard_enabled) {
+    // The ICP translation is expressed in the historical BODY frame. Compare
+    // it with the uninterrupted LIO trajectory in that trajectory's world
+    // frame, not in the graph frame that earlier loops may already have bent.
+    const double icp_relative_world_z =
+      raw_history_rotation.rotate(relative.translation()).z();
+    const sc_pgo::VerticalExcursionGateOptions gate_options{
+      loop_vertical_transition_window_m,
+      loop_vertical_transition_min_m,
+      loop_vertical_transition_residual_m};
+    const auto gate = sc_pgo::evaluateVerticalExcursionGate(
+      raw_trajectory, icp_relative_world_z, gate_options);
+    if (!gate.accepted) {
+      const char* event = gate.reason == sc_pgo::VerticalExcursionGateReason::invalid_input ?
+        "reject_vertical_input" : "reject_vertical_transition";
+      logLoopEvent(event, history, current,
+        gate.excursion_evidence_m, gate.vertical_disagreement_m);
+      RCLCPP_WARN(nh->get_logger(),
+        "Reject loop %d <-> %d: %s; local ascent %.3f m, descent %.3f m, "
+        "excursion evidence %.3f m, raw delta z %.3f m, ICP delta z %.3f m",
+        history, current, event, gate.max_ascent_m, gate.max_descent_m,
+        gate.excursion_evidence_m, gate.raw_relative_z_m, icp_relative_world_z);
+      return std::nullopt;
+    }
+  }
+  const auto corrected = hist_pose.compose(relative);
+  const auto correction = corrected.compose(cur_pose.inverse());
+  const Eigen::Vector3d delta = corrected.translation()-cur_pose.translation();
+  const auto angles = correction.rotation().rpy();
+  if (delta.norm()>icp_max_correction_translation ||
+      std::abs(delta.z())>icp_max_vertical_correction ||
+      angles.norm()>icp_max_correction_rotation ||
+      std::hypot(angles.x(),angles.y())>icp_max_tilt_correction ||
+      relative.translation().norm()>loop_max_relative_translation) {
+    logLoopEvent("reject_correction", history, current, delta.norm(), angles.norm());
+    return std::nullopt;
+  }
+  // Require consistent independently registered neighboring scans, not merely
+  // two similar descriptors. Helps reject repeated rooms/corridors/floors.
+  static int pending_current=-1, pending_history=-1;
+  static gtsam::Pose3 pending_correction;
+  bool consistent=false;
+  if (pending_current>=0 && current>pending_current && current-pending_current<=40 &&
+      std::abs(history-pending_history)<=60) {
+    const auto a=pending_correction.compose(cur_pose);
+    const auto b=correction.compose(cur_pose);
+    consistent=(a.translation()-b.translation()).norm()<loop_geometry_consistency_translation &&
+      gtsam::Rot3::Logmap(a.rotation().between(b.rotation())).norm()<loop_geometry_consistency_rotation;
+  }
+  pending_current=current; pending_history=history; pending_correction=correction;
+  if (!consistent) {
+    logLoopEvent("geometry_hold", history, current, result.inlier_mse, result.overlap);
+    return std::nullopt;
+  }
+  pending_current=-1;
+  logLoopEvent("geometry_verified", history, current, result.inlier_mse, result.overlap);
+  RCLCPP_INFO(nh->get_logger(),
+    "Verified loop %d <-> %d: mse %.5f overlap %.3f reverse %.3f, correction z %.3f m",
+    history,current,result.inlier_mse,result.overlap,result.reverse_overlap,delta.z());
+  return relative;
+}
 
 template<typename PointT>
 void removeNaNAndInfiniteInPlace(typename pcl::PointCloud<PointT>::Ptr & cloud)
@@ -889,13 +867,28 @@ void process_pg()
         continue;
       }
 
+      gtsam::Pose3 mapped_current = Pose6DtoGTSAMPose3(pose_curr);
       mKF.lock();
+      if (!keyframePoses.empty()) {
+        const auto map_from_odom = Pose6DtoGTSAMPose3(keyframePosesUpdated.back()).compose(
+          Pose6DtoGTSAMPose3(keyframePoses.back()).inverse());
+        mapped_current = map_from_odom.compose(mapped_current);
+      }
       keyframeLaserClouds.push_back(thisKeyFrameDS);
       keyframePoses.push_back(pose_curr);
-      keyframePosesUpdated.push_back(pose_curr);  // init
+      const auto mrpy = mapped_current.rotation().rpy();
+      const auto mt = mapped_current.translation();
+      keyframePosesUpdated.push_back({mt.x(),mt.y(),mt.z(),mrpy.x(),mrpy.y(),mrpy.z()});
       keyframeTimes.push_back(timeLaserOdometry);
 
-      scManager.makeAndSaveScancontextAndKeys(*thisKeyFrameDS);
+      // Remove roll/pitch for the descriptor ONLY. The stored 3-D scan is not
+      // flattened; ICP still estimates a full six-DoF relative pose.
+      pcl::PointCloud<PointType> descriptor_cloud;
+      Eigen::Matrix4f level = Eigen::Matrix4f::Identity();
+      level.block<3,3>(0,0) = (gtsam::Rot3::Rz(-pose_curr.yaw) *
+        Pose6DtoGTSAMPose3(pose_curr).rotation()).matrix().cast<float>();
+      pcl::transformPointCloud(*thisKeyFrameDS, descriptor_cloud, level);
+      scManager.makeAndSaveScancontextAndKeys(descriptor_cloud);
 
       laserCloudMapPGORedraw = true;
       mKF.unlock();
@@ -957,7 +950,7 @@ void process_pg()
               gtsam::GPSFactor(curr_node_idx, gpsConstraint, robustGPSNoise));
             cout << "GPS factor added at node " << curr_node_idx << endl;
           }
-          initialEstimate.insert(curr_node_idx, poseTo);
+          initialEstimate.insert(curr_node_idx, mapped_current);
           // runISAM2opt();
         }
         mtxPosegraph.unlock();
@@ -1003,6 +996,38 @@ void performSCLoopClosure(void)
     }
     last_loop_checked_current_idx = curr_node_idx;
     detectResult = scManager.detectLoopClosureID();
+    // Descriptor retrieval can miss the start of a long loop after tilt drift.
+    // XY proximity is a proposal only, NEVER sufficient to accept a loop.
+    // Full 3-D geometry and temporal geometric confirmation remain mandatory.
+    int nearest_spatial = -1;
+    double nearest_xy = loop_proximity_radius;
+    const auto& cur = keyframePosesUpdated.back();
+    auto descriptor = scManager.polarcontexts_.back();
+    for (int i = 0; i + loop_min_keyframe_separation <= curr_node_idx; ++i) {
+      const auto& old = keyframePosesUpdated[i];
+      if (keyframeTimes.back()-keyframeTimes[i] < loop_min_time_separation ||
+          std::hypot(cur.x-old.x, cur.y-old.y) > loop_proximity_radius ||
+          std::abs(cur.z-old.z) > icp_max_vertical_correction) continue;
+      const double xy=std::hypot(cur.x-old.x,cur.y-old.y);
+      if (xy<nearest_xy) {nearest_xy=xy;nearest_spatial=i;}
+    }
+    // A descriptor is not invariant to severe roll/pitch drift, occlusion or
+    // translation. If it misses a nearby old place, still PROPOSE the nearest
+    // spatial frame. Strict independent 3-D + temporal verification below is
+    // mandatory; no descriptor/spatial result is itself a loop constraint.
+    // Never replace a valid descriptor match with a drift-biased nearest XY
+    // neighbor. In particular, the exact starting scan should remain the
+    // anchor when ScanContext recognizes it on the final approach.
+    const bool descriptor_eligible = detectResult.first >= 0 &&
+      curr_node_idx-detectResult.first >= loop_min_keyframe_separation &&
+      keyframeTimes.back()-keyframeTimes[detectResult.first] >= loop_min_time_separation;
+    if (!descriptor_eligible && nearest_spatial >= 0) {
+      auto historical_descriptor = scManager.polarcontexts_[nearest_spatial];
+      auto score=scManager.distanceBtnScanContext(descriptor,historical_descriptor);
+      detectResult={nearest_spatial,static_cast<float>(deg2rad(score.second*scManager.PC_UNIT_SECTORANGLE))};
+    } else if (!descriptor_eligible) {
+      detectResult.first=-1;
+    }
   }
 
   int SCclosestHistoryFrameID = detectResult.first;
@@ -1038,8 +1063,8 @@ void performSCLoopClosure(void)
         prev_node_idx, curr_node_idx, loop_candidate_streak, loop_confirmation_count);
       return;
     }
-    if (last_loop_queued_current_idx >= 0 &&
-      curr_node_idx - last_loop_queued_current_idx < loop_accept_cooldown_keyframes)
+    if (last_loop_accepted_idx.load() >= 0 &&
+      curr_node_idx - last_loop_accepted_idx.load() < loop_accept_cooldown_keyframes)
     {
       return;
     }
@@ -1054,7 +1079,14 @@ void performSCLoopClosure(void)
          << curr_node_idx << "" << endl;
 
     mBuf.lock();
-    scLoopICPBuf.push(std::pair<int, int>(prev_node_idx, curr_node_idx));
+    // Keep recent hypotheses under load. Dropping the NEWEST candidate can
+    // permanently lose the actual end-of-bag closure after older failures.
+    if (scLoopICPBuf.size() >= 4) {
+      const auto stale=scLoopICPBuf.front();
+      scLoopICPBuf.pop();
+      logLoopEvent("candidate_superseded",stale.history,stale.current,0,0);
+    }
+    scLoopICPBuf.push({prev_node_idx, curr_node_idx, detectResult.second});
     // addding actual 6D constraints in the other thread, icp_calculation.
     mBuf.unlock();
   } else if (
@@ -1082,23 +1114,19 @@ void process_lcd()
 void process_icp(void)
 {
   while (!shutdown_requested && rclcpp::ok()) {  // Fix: Check shutdown flag
-    while (!scLoopICPBuf.empty()) {
-      if (scLoopICPBuf.size() > 30) {
-        RCLCPP_WARN(
-          nh->get_logger(),
-          "Too many loop closure candidates to be ICPed is waiting ... "
-          "Do process_lcd less frequently (adjust loopClosureFrequency)");
+    while (!shutdown_requested) {
+      LoopCandidate loop_idx_pair;
+      {
+        std::lock_guard<std::mutex> lock(mBuf);
+        if (scLoopICPBuf.empty()) break;
+        loop_idx_pair = scLoopICPBuf.front();
+        scLoopICPBuf.pop();
       }
 
-      mBuf.lock();
-      std::pair<int, int> loop_idx_pair = scLoopICPBuf.front();
-      scLoopICPBuf.pop();
-      mBuf.unlock();
-
-      const int prev_node_idx = loop_idx_pair.first;
-      const int curr_node_idx = loop_idx_pair.second;
+      const int prev_node_idx = loop_idx_pair.history;
+      const int curr_node_idx = loop_idx_pair.current;
       auto relative_pose_optional =
-        doICPVirtualRelative(prev_node_idx, curr_node_idx);
+        doICPVirtualRelative(prev_node_idx, curr_node_idx, loop_idx_pair.yaw);
 
       if (relative_pose_optional) {
         gtsam::Pose3 relative_pose = relative_pose_optional.value();
@@ -1106,10 +1134,12 @@ void process_icp(void)
         gtSAMgraph.add(
           gtsam::BetweenFactor<gtsam::Pose3>(
             prev_node_idx, curr_node_idx, relative_pose, robustLoopNoise));
+        loop_graph_dirty.store(true);
         mtxPosegraph.unlock();
 
         std_msgs::msg::UInt32 loop_count_msg;
         loop_count_msg.data = ++accepted_loop_count;
+        last_loop_accepted_idx.store(curr_node_idx);
         pubLoopCount->publish(loop_count_msg);
         logLoopEvent(
           "accepted", prev_node_idx, curr_node_idx,
@@ -1253,6 +1283,12 @@ int main(int argc, char ** argv)
 
   odomKITTIformat = save_directory + "odom_poses.txt";
   pgKITTIformat = save_directory + "optimized_poses.txt";
+  // Refuse historical artifacts before opening any stream with truncation.
+  for (const auto* name : {"times.txt", "loop_events.csv", "optimized_map.pcd",
+                           "optimized_poses.txt", "odom_poses.txt"}) {
+    if (std::filesystem::exists(save_directory + name))
+      throw std::runtime_error("Use a new SC-PGO output directory; refusing to overwrite history");
+  }
   pgTimeSaveStream =
     std::fstream(save_directory + "times.txt", std::fstream::out);
   if (!pgTimeSaveStream.is_open()) {
@@ -1277,7 +1313,8 @@ int main(int argc, char ** argv)
   // Fix: Replace system() calls with std::filesystem (prevents shell injection)
   try {
     if (std::filesystem::exists(pgScansDirectory)) {
-      std::filesystem::remove_all(pgScansDirectory);
+      if (!std::filesystem::is_empty(pgScansDirectory))
+        throw std::runtime_error("Refusing to remove existing keyframe scans");
     }
     std::filesystem::create_directories(pgScansDirectory);
   } catch (const std::filesystem::filesystem_error & e) {
@@ -1300,6 +1337,9 @@ int main(int argc, char ** argv)
 
   nh->declare_parameter<double>("scancontext_filter_size", 0.2);
   nh->declare_parameter<double>("icp_filter_size", 0.2);
+  icp_coarse_filter_size=nh->declare_parameter("icp_coarse_filter_size", 0.4);
+  icp_coarse_max_correspondence_distance=nh->declare_parameter("icp_coarse_max_correspondence_distance", 2.0);
+  icp_min_reverse_overlap_ratio=nh->declare_parameter("icp_min_reverse_overlap_ratio", 0.35);
   nh->declare_parameter<double>("icp_max_correspondence_distance", 4.0);
   nh->declare_parameter<double>("icp_fitness_threshold", 0.15);
   nh->declare_parameter<double>("icp_max_correction_translation", 6.0);
@@ -1309,6 +1349,27 @@ int main(int argc, char ** argv)
   nh->declare_parameter<double>("icp_overlap_max_distance", 0.35);
   nh->declare_parameter<double>("icp_min_overlap_ratio", 0.6);
   nh->declare_parameter<double>("loop_max_relative_translation", 2.0);
+  loop_proximity_radius = nh->declare_parameter("loop_proximity_radius", 6.0);
+  loop_min_time_separation = nh->declare_parameter("loop_min_time_separation", 60.0);
+  loop_geometry_consistency_translation = nh->declare_parameter("loop_geometry_consistency_translation", 0.60);
+  loop_geometry_consistency_rotation = nh->declare_parameter("loop_geometry_consistency_rotation", 0.06);
+  loop_vertical_transition_guard_enabled =
+    nh->declare_parameter("loop_vertical_transition_guard_enabled", false);
+  loop_vertical_transition_window_m =
+    nh->declare_parameter("loop_vertical_transition_window_m", 20.0);
+  loop_vertical_transition_min_m =
+    nh->declare_parameter("loop_vertical_transition_min_m", 1.5);
+  loop_vertical_transition_residual_m =
+    nh->declare_parameter("loop_vertical_transition_residual_m", 1.0);
+  if (loop_vertical_transition_guard_enabled &&
+      (!std::isfinite(loop_vertical_transition_window_m) ||
+       !std::isfinite(loop_vertical_transition_min_m) ||
+       !std::isfinite(loop_vertical_transition_residual_m) ||
+       loop_vertical_transition_window_m <= 0.0 ||
+       loop_vertical_transition_min_m <= 0.0 ||
+       loop_vertical_transition_residual_m <= 0.0)) {
+    throw std::invalid_argument("Invalid vertical-transition loop guard parameters");
+  }
   nh->declare_parameter<double>("max_sync_offset_sec", 0.02);
   nh->declare_parameter<double>("loop_closure_frequency", 2.0);
   nh->declare_parameter<double>("map_publish_frequency", 0.2);

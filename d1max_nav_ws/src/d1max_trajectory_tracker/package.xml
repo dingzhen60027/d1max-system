@@ -1,0 +1,20 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>d1max_trajectory_tracker</name>
+  <version>0.1.0</version>
+  <description>Fail-closed body velocity tracking of session-tagged SCAN B-splines.</description>
+  <maintainer email="dndx@localhost.localdomain">D1 Max workspace</maintainer>
+  <license>Apache-2.0</license>
+  <buildtool_depend>ament_cmake</buildtool_depend>
+  <depend>bspline_opt</depend>
+  <depend>d1max_planning_interfaces</depend>
+  <depend>eigen</depend>
+  <depend>geometry_msgs</depend>
+  <depend>nav_msgs</depend>
+  <depend>nlohmann_json</depend>
+  <depend>rclcpp</depend>
+  <depend>std_msgs</depend>
+  <depend>std_srvs</depend>
+  <test_depend>ament_cmake_gtest</test_depend>
+  <export><build_type>ament_cmake</build_type></export>
+</package>

@@ -9,8 +9,11 @@
     "test:localization": "node --test scripts/test-pose-estimate.mjs",
     "test:mc": "node --test scripts/test-mc-status.mjs",
     "test:localization-status": "node --test scripts/test-localization-status.mjs",
+    "test:live-planning": "node --test scripts/test-live-planning-status.mjs",
+    "test:live-planning:browser": "node scripts/verify-live-planning.mjs",
     "test:ui-copy": "node scripts/verify-copy.mjs",
     "test:localization:browser": "node scripts/verify-localization.mjs",
+    "test:bags:browser": "node scripts/verify-bags.mjs",
     "preview": "vite preview --host 127.0.0.1"
   },
   "dependencies": {

@@ -15,6 +15,7 @@ try{
  const version=grid.versions.find(v=>v.selected);assert(version);
  await page.route('**/api/**',async route=>{
   const req=route.request(),url=new URL(req.url()),path=url.pathname.split('/').at(-1);
+  if(url.pathname==='/api/navigation/overview'&&req.method()==='GET')return route.fulfill({json:{phase:'stopped',busy:false,installed:true,health:{}}});
   if(!url.pathname.startsWith('/api/localization/')){
    if(req.method()!=='GET')throw Error('Non-fixture write prohibited: '+url.pathname);
    return route.continue();
@@ -36,7 +37,8 @@ try{
   await route.fulfill({json:state});
  });
  await page.goto('http://127.0.0.1:8766/#/2d/navigation');
- await page.getByRole('heading',{name:'单楼层定位调试'}).waitFor();
+ await page.getByRole('heading',{name:'单楼层导航'}).waitFor();
+ await page.getByRole('button',{name:'定位 / 初始位姿',exact:true}).click();
  const submit=page.getByRole('button',{name:'提交定位初值',exact:true});
  assert(await page.getByRole('button',{name:'启动定位',exact:true}).isDisabled());assert(await submit.isDisabled());
  const img=page.getByAltText('初始定位地图'),arrow=page.getByTestId('initial-pose-arrow');

@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <bspline_opt/reference_path.hpp>
 // using namespace std;
 
 namespace scan_planner
@@ -18,6 +19,9 @@ namespace scan_planner
     lambda2_ = get_double("optimization.lambda_collision", -1.0);
     lambda3_ = get_double("optimization.lambda_feasibility", -1.0);
     lambda4_ = get_double("optimization.lambda_fitness", -1.0);
+    lambda_reference_ = get_double("optimization.lambda_reference", 0.0);
+    if (!std::isfinite(lambda_reference_) || lambda_reference_ < 0.0)
+      throw std::invalid_argument("lambda_reference must be finite and nonnegative");
     dist0_ = get_double("optimization.dist0", -1.0);
     max_vel_ = get_double("optimization.max_vel", -1.0);
     max_acc_ = get_double("optimization.max_acc", -1.0);
@@ -60,7 +64,8 @@ namespace scan_planner
    * But I will merge then someday.*/
   std::vector<std::vector<Eigen::Vector3d>> BsplineOptimizer::initControlPoints(Eigen::MatrixXd &init_points, bool flag_first_init /*= true*/)
   {
-
+    control_points_initialized_=false;
+    if (init_points.rows()!=3 || init_points.cols()<=2*order_ || !init_points.allFinite()) return {};
     if (flag_first_init)
     {
       cps_.clearance = dist0_;
@@ -70,13 +75,16 @@ namespace scan_planner
 
     /*** Segment the initial trajectory according to obstacles ***/
     constexpr int ENOUGH_INTERVAL = 2;
-    double step_size = grid_map_->getResolution() / ((init_points.col(0) - init_points.rightCols(1)).norm() / (init_points.cols() - 1)) / 2;
+    double maximum_segment=0.;
+    for (int i=1; i<init_points.cols(); ++i)
+      maximum_segment=std::max(maximum_segment, (init_points.col(i)-init_points.col(i-1)).norm());
+    const double step_size=std::min(1., grid_map_->getResolution()*.5/std::max(maximum_segment, 1e-6));
     int in_id = -1, out_id = -1;
     vector<std::pair<int, int>> segment_ids;
     int same_occ_state_times = ENOUGH_INTERVAL + 1;
     bool occ, last_occ = false;
     bool flag_got_start = false, flag_got_end = false, flag_got_end_maybe = false;
-    int i_end = (int)init_points.cols() - order_ - ((int)init_points.cols() - 2 * order_) / 3; // only check closed 2/3 points.
+    int i_end = (int)init_points.cols() - order_; // Include the terminal third.
     for (int i = order_; i <= i_end; ++i)
     {
       for (double a = 1.0; a >= 0.0; a -= step_size)
@@ -128,6 +136,9 @@ namespace scan_planner
         }
       }
     }
+
+    // A collision that reaches the fixed terminal controls has no free exit.
+    if (flag_got_start && !flag_got_end) return {};
 
     /*** a star search ***/
     vector<vector<Eigen::Vector3d>> a_star_paths;
@@ -366,6 +377,7 @@ namespace scan_planner
       }
     }
 
+    control_points_initialized_=true;
     return a_star_paths;
   }
 
@@ -724,7 +736,7 @@ namespace scan_planner
     int in_id, out_id;
     vector<std::pair<int, int>> segment_ids;
     bool flag_new_obs_valid = false;
-    int i_end = end_idx - (end_idx - order_) / 3;
+    int i_end = end_idx;
     for (int i = order_ - 1; i <= i_end; ++i)
     {
 
@@ -761,7 +773,9 @@ namespace scan_planner
         if (j < 0) // fail to get the obs free point
         {
           RCLCPP_ERROR(rclcpp::get_logger("bspline_opt"), "The robot is inside an obstacle");
-          in_id = 0;
+          control_points_initialized_=false;
+          force_stop_type_=STOP_FOR_ERROR;
+          return false;
         }
 
         for (j = i + 1; j < cps_.size; ++j)
@@ -780,6 +794,7 @@ namespace scan_planner
                       "Trajectory terminal point is in an obstacle; skip this plan");
 
           force_stop_type_ = STOP_FOR_ERROR;
+          control_points_initialized_=false;
           return false;
         }
 
@@ -804,9 +819,9 @@ namespace scan_planner
           {
             RCLCPP_WARN(rclcpp::get_logger("bspline_opt"),
                         "A-star path has fewer than 2 points; drop collision segment");
-            segment_ids.erase(segment_ids.begin() + i);
-            i--;
-            continue;
+            control_points_initialized_=false;
+            force_stop_type_=STOP_FOR_ERROR;
+            return false;
           }
           a_star_paths.push_back(path);
         }
@@ -821,8 +836,9 @@ namespace scan_planner
         else
         {
           RCLCPP_ERROR(rclcpp::get_logger("bspline_opt"), "A-star error");
-          segment_ids.erase(segment_ids.begin() + i);
-          i--;
+          control_points_initialized_=false;
+          force_stop_type_=STOP_FOR_ERROR;
+          return false;
         }
       }
 
@@ -939,6 +955,7 @@ namespace scan_planner
 
   bool BsplineOptimizer::BsplineOptimizeTrajRebound(Eigen::MatrixXd &optimal_points, double ts)
   {
+    if (!control_points_initialized_) return false;
     setBsplineInterval(ts);
 
     bool flag_success = rebound_optimize();
@@ -1048,6 +1065,7 @@ namespace scan_planner
         {
           restart_nums++;
           initControlPoints(cps_.points, false);
+          if (!control_points_initialized_) return false;
           new_lambda2_ *= 2;
 
           printf("\033[32miter(+1)=%d,time(ms)=%5.3f,keep optimizing\n\033[0m", iter_num_, time_ms);
@@ -1166,6 +1184,14 @@ namespace scan_planner
 
     Eigen::MatrixXd grad_3D = lambda1_ * g_smoothness + new_lambda2_ * g_distance +
                               lambda3_ * g_feasibility;
+    if (!reference_path_samples_.empty() && lambda_reference_ > 0.0)
+    {
+      Eigen::MatrixXd reference_gradient;
+      f_combine += lambda_reference_ * referenceSampleCost(cps_.points, reference_path_samples_, reference_gradient);
+      grad_3D += lambda_reference_ * reference_gradient;
+    }
+    // Ground robot: rebound changes XY only. Keep the supplied reference's
+    // height profile; an obstacle is never avoided by lifting the body over it.
     grad_3D.row(2).setZero();
     memcpy(grad, grad_3D.data() + 3 * order_, n * sizeof(grad[0]));
   }
@@ -1194,7 +1220,13 @@ namespace scan_planner
 
     Eigen::MatrixXd grad_3D = lambda1_ * g_smoothness + lambda4_ * g_fitness +
                               lambda3_ * g_feasibility;
-    grad_3D.row(2).setZero();
+    if (!reference_path_samples_.empty() && lambda_reference_ > 0.0)
+    {
+      Eigen::MatrixXd reference_gradient;
+      f_combine += lambda_reference_ * referenceSampleCost(cps_.points, reference_path_samples_, reference_gradient);
+      grad_3D += lambda_reference_ * reference_gradient;
+    }
+    grad_3D.row(2).setZero(); // Preserve the ground reference during refinement too.
     memcpy(grad, grad_3D.data() + 3 * order_, n * sizeof(grad[0]));
   }
 

@@ -22,6 +22,7 @@ from tf2_ros import TransformBroadcaster, StaticTransformBroadcaster
 from .lio_fusion import LioLimits, LioMapState, rotate_pose_covariance
 from .math_utils import Pose3, normalize_quaternion, compose
 from .initial_pose import initial_tracking_pose
+from .estimation.pose_status import continuous_pose_status
 
 PREFIX='/d1max/localization/'
 def seconds(message):
@@ -34,11 +35,22 @@ def fill(p,value):
     p.position.x,p.position.y,p.position.z=value.position
     p.orientation.x,p.orientation.y,p.orientation.z,p.orientation.w=value.orientation
 
+def navigation_tracking_state(navigation, seed):
+    """Map registration and a fresh fused output are separate facts."""
+    if navigation.get('valid') is True and navigation.get('seed_id') == seed:
+        return True, 'tracking'
+    if navigation.get('fault'):
+        return False, 'navigation_fault'
+    if not navigation or navigation.get('reset_pending') or navigation.get('state') == 'initializing_filter':
+        return False, 'filter_initializing'
+    return False, 'output_waiting'
+
 class LioLocalizer(Node):
     def __init__(self):
         super().__init__('lio_localizer')
         defaults={'session_dir':'','map_frame':'d1max_loc_map','odom_frame':'d1max_loc_odom',
           'tracking_frame':'d1max_loc_tracking','lidar_frame':'d1max_loc_lidar',
+          'body_frame':'d1max_loc_base_link',
           'sdk_to_tracking_yaw':1.56646,'tracking_offset_body':[.4043,0.,-.0377],
           'extrinsics_verified':False,'time_alignment_verified':False,
           'trajectory_rate_hz':5.,'trajectory_max_points':1800,'navigation_output_enabled':False}
@@ -50,6 +62,7 @@ class LioLocalizer(Node):
         self.directory=Path(self.p['session_dir']).resolve()
         self.session=json.loads((self.directory/'session.json').read_text())
         self.navigation={};self.navigation_at=0.;self.last_verified=None
+        self.navigation_pose={};self.navigation_pose_at=0.;self.navigation_pose_received=-math.inf
         self.alignment_pub=self.create_publisher(String,PREFIX+'map_alignment',10)
         self.local_pub=self.global_pub=self.pose_pub=self.path_pub=None
         if not self.p['navigation_output_enabled']:
@@ -78,6 +91,7 @@ class LioLocalizer(Node):
           self.create_subscription(String,PREFIX+'lio/status',self.on_frontend,10),
           self.create_subscription(String,PREFIX+'fused_icp/pose_raw/verified',self.on_verified,20),
           self.create_subscription(String,PREFIX+'navigation/status',self.on_navigation,10),
+          self.create_subscription(String,PREFIX+'navigation/pose_status',self.on_navigation_pose,5),
           self.create_subscription(Imu,PREFIX+'imu',lambda m:setattr(self,'imu_at',seconds(m)),qos_profile_sensor_data),
           self.create_subscription(PointCloud2,PREFIX+'points',lambda m:setattr(self,'cloud_at',seconds(m)),qos_profile_sensor_data),
           self.create_subscription(String,'/d1max_sdk_bridge/velocity',self.on_mc,10),
@@ -103,6 +117,26 @@ class LioLocalizer(Node):
             if (value.get('schema')==1 and self.fresh(stamp,.6) and stamp>self.navigation_at
                 and value.get('epoch',0)>=self.core.local_epoch):self.navigation=value;self.navigation_at=stamp
         except (ValueError,KeyError,TypeError):pass
+
+    def on_navigation_pose(self,message):
+        try:
+            value=json.loads(message.data);stamp=value['received_at_unix']
+            if (value.get('schema')==1 and type(stamp) in (int,float)
+                    and math.isfinite(stamp) and -.01 <= self.now_s()-stamp <= .10
+                    and stamp>self.navigation_pose_at
+                    and type(value.get('epoch')) is int and value['epoch']>=self.core.local_epoch):
+                self.navigation_pose=value;self.navigation_pose_at=stamp
+                self.navigation_pose_received=time.monotonic()
+        except (ValueError,KeyError,TypeError):pass
+
+    def continuous_pose(self,now):
+        if not self.p.get('navigation_output_enabled'):
+            return False,'unavailable','continuous_navigation_disabled'
+        return continuous_pose_status(self.navigation_pose, now=now, mono=time.monotonic(),
+            received_mono=self.navigation_pose_received, epoch=self.core.local_epoch,
+            seed=self.active_seed, confirmed_seed=self.confirmed_seed,
+            confirmations=self.verified_confirmations, local_fault=self.core.fault,
+            map_frame=self.p['map_frame'], body_frame=self.p['body_frame'])
 
     def publish_alignment(self):
         if not self.p.get('navigation_output_enabled'):return
@@ -281,6 +315,7 @@ class LioLocalizer(Node):
                 self.publish_seed(recovery,now)
                 self.last_error='地图匹配失锁，正在限制范围内重新确认'
         tracking=front and self.core.tracking(now)
+        map_localized=tracking
         if self.core.fault:state='fault'
         elif not self.fresh(self.imu_at) or not self.fresh(self.cloud_at,.6):state='waiting_sensors'
         elif self.frontend.get('recovering'):state='recovering_local'
@@ -290,13 +325,18 @@ class LioLocalizer(Node):
         elif self.core.last_correction is None:state='acquiring'
         elif self.core.recovery:state='relocalizing'
         else:state='lost'
+        matching_state=state
         self.publish_alignment()
         navigation_current=(self.p.get('navigation_output_enabled') and self.fresh(self.navigation_at,.6)
                             and self.navigation.get('epoch')==self.core.local_epoch)
         navigation=self.navigation if navigation_current else {}
         if self.p.get('navigation_output_enabled') and tracking:
-            tracking=navigation.get('valid') is True and navigation.get('seed_id')==self.active_seed
-            if not tracking:state='navigation_fault' if navigation.get('fault') else 'filter_initializing'
+            tracking,state=navigation_tracking_state(navigation,self.active_seed)
+        continuous_valid,continuous_state,continuous_reason=self.continuous_pose(now)
+        # Matching quality is not the output clock. The old localized field
+        # remains a matching fact; consumers use the high-rate pose contract.
+        if continuous_valid:
+            state='tracking' if map_localized else 'tracking_degraded'
         age=now-self.core.last_correction if self.core.last_correction is not None else None
         hz=0.
         if len(self.pose_times)>1 and self.fresh(self.pose_times[-1],.3):
@@ -311,7 +351,11 @@ class LioLocalizer(Node):
         if self.head_direction!=1:warnings.append('初值提交要求机头前向；当前头尾切换状态不符合，程序不会自动切换')
         if navigation.get('fault'):warnings.append('导航输出已暂停：'+navigation['fault'])
         status={'session_id':self.session['id'],'map_version_id':self.session['version_id'],'wall_time':time.time(),
-          'state':state,'localized':tracking,'navigation_ready':bool(tracking and navigation.get('navigation_ready')),
+          'state':state,'localized':tracking,'map_localized':map_localized,
+          'matching_state':matching_state,
+          'continuous_pose_valid':continuous_valid,'continuous_pose_state':continuous_state,
+          'continuous_pose_reason':continuous_reason,
+          'navigation_ready':bool(tracking and navigation.get('navigation_ready')),
           'local_backend':'faster_lio','fusion_backend':'robot_localization_ekf' if self.p.get('navigation_output_enabled') else 'se3_map_alignment',
           'navigation':navigation,
           'initial_pose_ready':self.seed_ready(),'frontend':self.frontend,'frontend_ready':front,
@@ -323,7 +367,7 @@ class LioLocalizer(Node):
           'gyro_bias_samples':self.frontend.get('initialization_samples',0),
           'gyro_bias_required':self.frontend.get('initialization_required',200),'gyro_bias':self.frontend.get('gyro_bias'),
           'local_ekf_fresh':(navigation.get('local_fresh',False) if self.p.get('navigation_output_enabled') else front and self.core.local_fresh(now)),
-          'global_ekf_fresh':tracking,
+          'global_ekf_fresh':continuous_valid if self.p.get('navigation_output_enabled') else tracking,
           'correction_age':age,'head_direction':self.head_direction,
           'fusion':{'accepted':str(self.core.accepted),'rejected':str(self.core.rejected),
                     'alignment_locked':str(tracking).lower(),'message':state},

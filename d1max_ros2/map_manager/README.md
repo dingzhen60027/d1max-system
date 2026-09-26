@@ -8,6 +8,7 @@ D1 Max 当前建图链路做了适配。首页提供独立的 **2D 导航** 与 
 - 首页 `/#/`：仅加载地图索引，不加载 Three.js、PCD 或 ROS。
 - 3D `/#/3d/maps`：全局侧栏切换原始点云、处理结果、规划产物、归档、异常；中间始终是当前类别的列表、预览和详情。建图启停/保存收进“建图管理”对话框。
 - 2D `/#/2d/versions`：地图版本、生成 2D 地图、导航准备、独立归档。可从 3D 详情直接携带源 PCD 进入生成表单。
+- 数据采集 `/#/bags/recordings`：原始 rosbag 录制、文件详情、下载、名称备注；`/#/bags/archived`：恢复、选择删除或列表全部删除。
 - 使用真实 shadcn/ui Base 组件：Sidebar、Breadcrumb、Card、Select、Dialog、AlertDialog、DropdownMenu、ScrollArea 等，保留现有 3D 数据和点云处理功能。参考 [Sidebar](https://ui.shadcn.com/docs/components/base/sidebar) 与 [Breadcrumb](https://ui.shadcn.com/docs/components/base/breadcrumb)。
 - 首屏按需加载；只有进入 3D 才下载点云渲染模块，只有点击修整才加载 2D 编辑器。
 
@@ -24,12 +25,83 @@ D1 Max 当前建图链路做了适配。首页提供独立的 **2D 导航** 与 
 - Web 启动/保存/停止 D1 Max 建图，固定使用 `rmw_zenoh_cpp` 和 ROS Domain 24；
 - “当前地图”、名称、备注和归档是无损元数据，不改写原始地图目录。
 
+## Rosbag 录制与管理
+
+独立模块 `backend/bags/`，唯一内置录制配置为 `config/recording.yaml`。
+不启动 SDK、不抢占控制、不切换 SLAM、不修改机器人时间或传感器值。
+直接使用 Zenoh 客户端连接配置中的机器人路由，默认 Domain 24，**不使用 Fast DDS**。
+只打开 Web 不会创建 ROS 节点；点击“开始录制”才启动短时检查和录制进程。
+
+- 固定选择：`/front_lidar`、`/rear_lidar`、`/front_lidar/imu`、`/rear_lidar/imu`、`/imu_driver/imu_central`；这五路必须有真实消息。TF 与 TF static 同时录制，但不阻止无 TF 的原始数据采集。
+- 默认开启 MC：`/odom/mc_odom`。可关闭；勾选后同样要求有真实消息。
+- 图像可选：前后 `/front_camera/image_compressed`、`/rear_camera/image_compressed`。
+- 原厂 `/odom/localization_odom` 默认关闭，仅用于结果对照，不是真值，也不会被自动接入我们的定位。
+- 保持原始消息值、时间戳、frame 与逐点字段；不执行 IMU 单位转换或外参变换。
+- SQLite3、不压缩、默认 16 GiB 分片 / 512 MiB 缓存；开始至少保留 5 GiB，剩余不足 1 GiB 自动停止。
+- 20 秒内未收到所有必选数据则失败，不创建假成功的空包；录制中必选数据断流 10 秒自动停录，并标注不完整。
+- 停止优先 SIGINT，等待缓存及 `metadata.yaml` 落盘。强制退出或任何必录话题最终消息数为零，均不能标为成功。监测 Hz 是接收统计，保存后的消息数才是实际入包统计；“已保存”不等于传感器质量或零丢包已经验收。
+- 关闭浏览器标签页不会停止录制；使用“停止并保存”。关闭 Web 服务会请求保存并清理所属进程。进程身份使用 PID + Linux 启动标识 + job 路径校验，互斥文件锁阻止并发录制；遇到外部 CLI 录制只报冲突、不强杀。
+- Web 建图/定位与此原始录制入口互斥，防止录进回放数据或启动脚本干扰录制。现有 CLI `record_slam_bag.sh` 保留不变。
+
+新文件默认保存到 `/home/dndx/d1max_nav_ws/bags/`。自动索引该目录以及
+`/home/dndx/d1max_rosbag903/`、`/home/dndx/d1max_rosbags/` 中的旧包（最多三层，不跟随符号链接）。
+`D1MAX_BAG_DIR` 可设置新录制目录；`D1MAX_BAG_LIBRARY_ROOTS` 以冒号分隔额外管理目录，设为空可禁用额外目录。
+不移动、不重命名原始 bag；显示名、备注、归档写入 `data/bags/catalog.json`。
+只能删除已归档、非录制中、未被进程占用的目录；批量删除先核对全部目标，再永久删除。
+不会删除管理根目录或其他 bag，包含符号链接的目录拒绝删除。
+
+每个新包附带 `recording.yaml`、`d1max_recording.json`、录制日志和 `snapshots/`。
+快照保存的是 PC 本地配置和最新本地审计文件，带来源及 SHA256；**不是本次机器人 OTA 自动实读或标定正确性的保证**。
+跨文件分片的 bag 下载时保留 `metadata.yaml` 与全部 `.db3`。
+浏览旧包仅读取索引和文件大小，不加载点云或扫描整份数据库。
+
+离线验收（全部使用临时目录，不需要机器狗）：
+
+```bash
+cd d1max_ros2/map_manager
+python -m unittest discover -s tests -v
+source ../d1max_ros2_env.sh
+/usr/bin/python3 scripts/verify_bag_recording.py
+# 实际 Zenoh / ROS / rosbag，只连接 loopback，隔离 Domain 184。
+
+# 浏览器测试另开临时 QA 后端（使用带 FastAPI 的 Python）
+python scripts/serve_bag_qa.py
+# 另一个终端
+cd frontend
+npm run test:bags:browser
+```
+
 处理结果默认保存到 `d1max_ros2/map_manager/data/processed/<时间_任务ID>/`。其中
 `processed_map.pcd` 是新的二进制 PCD，`manifest.json` 记录来源、参数和各处理阶段
 点数。源 PCD 始终只读；D1 Max 原图存在 `intensity` 时，处理结果也会保留该字段，
 体素降采样时对体素内的强度取均值。
 
 ## 模块化点云流水线
+
+MOLA 离线建图已作为独立可选方案接入“3D → 建图管理”；默认 Faster-LIO + SC-PGO 不变。
+完整配置、模块边界、输出和隔离说明见 [MOLA 模块文档](backend/mapping/README.md)。
+它直接处理 rosbag 文件，不替换当前实机定位或 Foxglove 链路。
+
+### LIO-SAM 离线实验结果
+
+LIO-SAM 目前只纳管完成后的结果，不加入正式建图启动后端。3D 原始点云中分别标注
+“LIO-SAM · 单前雷达”和“LIO-SAM · 前后双雷达”，均为六轴中心 IMU 适配实验，
+原生地图是角点/平面特征集合，不是全部原始雷达回波。不会自动选用或推荐实验地图。
+
+完成的独立实验可用下列命令登记（`--sensor-mode front` 或 `dual`，须与运行 manifest 的
+`input` 中前后雷达声明一致；`completion.map` 必须指向该次 `map/GlobalMap.pcd`）：
+
+```bash
+cd d1max_ros2/map_manager
+python3 -m backend.mapping.lio_sam_artifacts \
+  --run /absolute/path/to/completed-lio-sam-run \
+  --maps-root /home/dndx/d1max_nav_ws/maps --sensor-mode dual
+```
+
+只复制最终 `GlobalMap.pcd` 到全新的 `maps/lio_sam/<run>/`，最后写完成清单；源实验文件不动，
+同名目标拒绝覆盖。Web 仅依据完成清单读取这一份图，不递归把 `trajectory.pcd`、
+`transformations.pcd`、`CornerMap.pcd`、`SurfMap.pcd` 或关键帧放入地图列表。
+清单记录来源、bag、传感器、版本与 SHA256。登记后刷新页面即可，无需重启建图/通信。
 
 每条处理流程都是一个完整 YAML，而不是散落在程序中的参数。内置配置位于
 `config/pipelines/`，Web 另存的配置位于 `data/processing_configs/`。YAML 中
@@ -97,7 +169,11 @@ cd d1max_ros2/map_manager
 
 原始 PCD 必须仍存在。输出不自动注册或选用，不发送机器人指令。2D 生成与 3D 点云处理共用单任务锁，重复请求返回 409；取消/关闭会请求停止，重启后未完成任务标记中断，不自动重跑。
 
-**定位已集成，导航执行仍未接入：** `/#/2d/navigation` 现在为“定位调试”。Web 可连接只读数据后台、启动 D1 双 EKF + GICP，并像 RViz2 一样按下选位置、拖动指向机头、松开提交初值（Esc 取消）。离线仅记录箭头；精确 XYZ / 角度在高级设置。Foxglove 原左侧 PCD 窗口看结果。不启动 Nav2、不发送速度 / 姿态目标，`navigation_ready` 始终为 false。
+**单楼层 Nav2：** `/#/2d/navigation` 包含“定位 / 初始位姿”和“Nav2 启动”两个页签。定位页保留现有 LIO + PCD 链路与 RViz 风格的初值箭头；Nav2 页仅负责启动 / 停止、运行状态、限速，以及 SDK 显式解锁 / 锁定。默认勾选“同时打开 RViz2”。**导航目标通过 RViz2「Nav2 Goal」发布，任务取消通过 RViz2「Navigation 2」面板操作**，路径和全局 / 局部代价地图也在 RViz2 查看。Web 不提供导航目标表单或任务取消入口。无桌面环境时可取消勾选，以无窗口方式启动。
+
+默认 **离线仿真** 使用独立的回环 Zenoh 路由，不连接 SDK。**实机** 要求先启动同一选用地图的真实定位，SDK / 雷达数据新鲜且不是回放。勾选“启用本次 SDK 运动能力”只创建能力，不会自动解锁；仍需显式确认“解锁 SDK 运动”，然后在 RViz2 中发布目标。只读 SDK 后台不能解锁，Web 不会替你改后台配置、自动起立、切换姿态或解除急停。定位、标定、运动状态、控制权及数据龄不满足门限时保持锁定，不自动重试。速度硬上限为 **1.5 m/s**，实际速度也受 Nav2 与 SDK 配置中的更低门限约束。
+
+模块边界：`backend/navigation.py` 仅调用固定的 `start_navigation.sh`；`d1max_navigation/navigation_commands.py` 执行带导航会话 ID / 地图 ID 核验的 ROS 命令；控制门与 SDK 适配器各自独立核验。API 为 `/api/navigation/{overview,start,stop,command}`，其中 `command` 仅允许 `arm` / `disarm`；`goal` / `cancel` 及任何坐标字段均返回 422。请求不接受任意 ROS 名称、文件路径、Shell 命令或速度参数。停止只清理所属 Nav2 进程组，不断开共享 SDK / 定位。Web 启动的 Nav2 带 `--web-owned` 并绑定 Web 服务生命周期；Web 正常 / 异常退出均不遗留它的节点，外部 CLI 启动的会话不被 Web 退出误停。运行期间锁住地图版本；重复启动、过期会话、地图不匹配、回放充当实机均拒绝。
 
 定位读取当前版本的 `localization.pcd`，源点云不覆盖；运行期间锁住选用版本，禁止切图、取消选用、归档 / 删除该版本。初值仅进入匹配种子，连续确认后才发布全局 TF / 可信位姿。断流不冒充成功，失败不自动重试。机身到前雷达外参仍为 CAD 近似，实机精度尚未验证。
 

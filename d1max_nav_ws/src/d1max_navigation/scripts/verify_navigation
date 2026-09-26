@@ -1,0 +1,5 @@
+#!/usr/bin/env python3
+import sys
+from d1max_navigation.verify_navigation import main
+if __name__ == '__main__':
+    sys.exit(main())

@@ -1,0 +1,97 @@
+# OFFLINE DIAGNOSTIC ONLY. Do not install as default calibration.
+input_topic: /imu_driver/imu_central
+output_topic: /d1max/slam/imu
+frame_id: central_imu
+acceleration_scale: 9.80665
+gyro_scale: 1.0
+timestamp_offset_sec: -0.013
+duplicate_policy: preserve_and_count
+lio_extrinsic:
+  rotation:
+  - 0.9995781904097998
+  - 0.028760803316091613
+  - 0.004032052788303489
+  - 0.028779138252968794
+  - -0.9995753685203944
+  - -0.00456550640514466
+  - 0.0038990330200053673
+  - 0.004679619635397226
+  - -0.9999814491787226
+  translation:
+  - 0.010936960637023726
+  - -0.36597692096910184
+  - 0.0026318472047164305
+provenance:
+  classification: experimental_rotation_time_estimate_and_nominal_lever_arm
+  bag: /home/dndx/d1max_nav_ws/bags/slam_raw_20260917_171716_fe8f38
+  gyro_rotation_fit: calibration/gyro_rotation_candidate.json
+  conventions_and_sources: calibration/calibration_notes.md
+  rotation_method: Robust SO3 gyro fit using alternating 60-second train/heldout blocks,
+    then expressed from existing normalized front IMU axes to raw central axes.
+  time_method: central(t+13ms) best matches front(t); subtract 13ms from central header.
+    May include filter phase, not a proven pure clock correction.
+  acceleration_units: Inferred g from initial low-motion magnitude near 1; SDK units
+    are not used as proof of this ROS topic's units.
+  lever_arm_method: R_C_B = R_C_front_raw_IMU * R_B_front_raw_IMU_nominal.T; t_C_N
+    = R_C_B * [0.366149765, 0.000000325, 0.000000219].
+  manufacturer_nominal_base_from_front_raw_imu:
+  - 0
+  - 0
+  - -1
+  - -1
+  - 0
+  - 0
+  - 0
+  - 1
+  - 0
+  nominal_central_position_in_manufacturer_base_m:
+  - 0.0
+  - 0.0
+  - 0.0
+  limitations:
+  - Central IMU physical origin is assumed at manufacturer base, not measured. CAD
+    alternative IMU origins differ by centimeters; this is not an error bound.
+  - No hardware model identity asserted for imu_link.
+  - Existing dual LiDAR geometry and normalized point transform are deliberately retained;
+    their separate calibration uncertainty remains.
+  - No position-height lock, ground flattening or loop closure used.
+  - Relative gyro-fit intercept is NOT subtracted as absolute central IMU bias; normal
+    LIO initialization estimates bias.
+  - Repeated six-axis messages are preserved and counted; this run is not a driver
+    repair.
+  trial_rotation_method: R_C_N = R_C_F_gyrofit * R_F_L_device_SN3009bede1530 * R_N_L_existing.T
+  trial_manifest: ../manifest.json
+lidar_extrinsics:
+  rear_to_front:
+    parent_frame: rslidar_head
+    child_frame: rslidar_tail
+    rotation:
+    - 0.9995633636020775
+    - -0.028621624229228825
+    - 0.007340624699827561
+    - -0.02793727489977117
+    - -0.9963501911842991
+    - -0.08065857175888391
+    - 0.00962241215483473
+    - 0.08041827624047476
+    - -0.9967147586099201
+    translation:
+    - 0.02589784336230605
+    - -0.17756544086149745
+    - -0.770950885186998
+trial:
+  name: device_front_plus_runtime_rear
+  classification: isolated offline diagnostic, not approved production calibration
+  changed_variable: Compared with device_front_rotation, only rear-to-front R/t changes
+    to the robot startup-log-confirmed loaded OTA transform.
+  rotation_convention: column vectors; p_target=R_target_source*p_source+t_target_source;
+    flat rotations row-major
+  point_normalization: Retain the existing R_N_L and zero translation; do not apply
+    DIFOP twice.
+  central_translation_policy: Keep baseline nominal t_C_N exactly; not claiming a
+    complete central-IMU calibration.
+  driver_basis_status: Unverified for the exact recorded robot driver build; candidate
+    test only.
+  loop_closure: false
+  scene_constraints: false
+  middleware: rmw_zenoh_cpp

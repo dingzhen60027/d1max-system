@@ -15,6 +15,15 @@ laserMapping:
         time_scale: 1e-3             # 兼容不同数据集的时间单位，仅对Velodyne LiDAR(lidar_type=2)生效
 
       mapping:
+        # Admit a stable SI-IMU window, then use the SAME gravity-aligned frame
+        # for live clouds, TF, odometry and saved maps. No height/planar lock.
+        stationary_initialization: true
+        initialization_samples: 300
+        initialization_duration: 2.0
+        initialization_max_acc_std: 0.20
+        initialization_max_gyro_std: 0.015
+        initialization_max_gyro_mean: 0.05
+        gravity_aligned_world: true
         acc_cov: 0.1
         gyr_cov: 0.1
         b_acc_cov: 0.0001

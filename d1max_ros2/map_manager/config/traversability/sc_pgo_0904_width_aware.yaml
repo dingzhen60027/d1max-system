@@ -1,0 +1,59 @@
+schema_version: 1
+name: SC-PGO 09-04 14:34 · 双层通行 · 朝向包络
+source:
+  pcd: /home/dndx/d1max_nav_ws/maps/runs/20260904_143406_bag_faster_lio_pgo_first_config/sc_pgo/optimized_map.pcd
+  poses: /home/dndx/d1max_nav_ws/maps/runs/20260904_143406_bag_faster_lio_pgo_first_config/sc_pgo/optimized_poses.txt
+  frame: map
+  expected_points: 1300464
+  accepted_loops: 0
+preprocess:
+  bounds: [[-14.0, -9.0, -6.7], [25.0, 55.0, 4.0]]
+  voxel_m: 0.06
+  support_normal_radius_m: 0.25
+  # Horizontal treads and slopes near 45 degrees remain support candidates.
+  support_normal_min_abs_z: 0.70
+tomography:
+  resolution_m: 0.10
+  slice_spacing_m: 0.20
+  z_min_m: -6.5
+  z_max_m: 0.8
+  surface_merge_m: 0.04
+  ambiguous_floor_surface_spread_m: 0.12
+  floors:
+    - id: lower
+      label: 下层
+      plane: [0.0065138764, 0.0212876383, 0.9997521722, 4.6971922059]
+      tolerance_m: 0.25
+    - id: upper
+      label: 上层
+      plane: [-0.0199392146, 0.0250299441, 0.9994878337, 0.5045334392]
+      tolerance_m: 0.28
+  connector_roi:
+    xy_min: [9.5, 10.0]
+    xy_max: [20.5, 16.3]
+robot:
+  dimensions_source: 产品说明书/D1 Max产品规格书_v2.0_20260224.pdf
+  length_m: 0.930
+  width_m: 0.480
+  standing_height_m: 0.585
+  footprint_mode: oriented_rectangle
+  heading_bins_half_turn: 24
+  horizontal_margin_m: 0.05
+  vertical_margin_m: 0.08
+  flat_slope_deg: 15.0
+  # Manufacturer capability envelope, for CANDIDATE geometry, not a gait certificate.
+  candidate_slope_max_deg: 45.0
+  step_candidate_max_m: 0.25
+  ground_noise_tolerance_m: 0.04
+  minimum_observed_support_ratio: 0.85
+  minimum_center_support_neighbours: 5
+  seed_sensor_height_m: 0.50
+  seed_distance_m: 0.40
+validation:
+  minimum_seeded_component_area_m2: 0.15
+  mark_all_stairs_conditional: true
+  allow_unknown_as_free: false
+  allow_hole_filling: false
+output:
+  directory: ../../data/traversability/sc_pgo_20260904_143406_width_aware
+  source_preview_voxel_m: 0.18

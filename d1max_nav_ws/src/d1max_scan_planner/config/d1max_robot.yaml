@@ -1,0 +1,64 @@
+# Physical facts and engineering assumptions must not share the same provenance.
+schema: 1
+model: D1 Max
+sources:
+  specification:
+    path: /home/dndx/智元四足机器人D1 Max二次开发文档资料包v0.1.0/产品说明书/D1 Max产品规格书_v2.0_20260224.pdf
+    page: 1
+  sdk_move:
+    path: /home/dndx/智元四足机器人D1 Max二次开发文档资料包v0.1.0/sdk/中狗highlevel-sdk-v0.1.0-Chargingv2/ubuntu22.04/RobotSDK-0.1.0-charging_v2-x86_64/docs/zh/sdk_client_api_cn.md
+    sections: [SetSpeed, Move]
+  urdf:
+    path: /home/dndx/智元四足机器人D1 Max二次开发文档资料包v0.1.0/d1max_ros2/urdf_ws/src/max_description/urdf/max.urdf
+official:
+  standing_size_m: {length: 0.930, width: 0.480, height: 0.585}
+  prone_size_m: {length: 0.930, width: 0.630, height: 0.200}
+  mass_with_batteries_kg: 41.0
+  product_max_speed_mps: 8.0
+  continuous_stair_height_m: 0.25
+  max_slope_deg: 45.0
+  laboratory_min_passage_width_m: 0.50
+  # Capability ratings, not automatic permission to traverse any such terrain.
+  sdk_slow_mode_from_client_api:
+    forward_back_mps: 1.0
+    left_right_mps: 0.5
+    yaw_radps: 1.5
+  sdk_speed_document_conflict: true
+  sdk_speed_document_note: sdk_type_cn.md 的 SpeedLevel 表与 sdk_client_api_cn.md 的 SetSpeed 在轴向和低速角速度上不一致；未以此启用控制。
+urdf_reference_only:
+  # BASE_LINK -> sensor; do not reapply these to already world-frame clouds.
+  front_lidar_xyz_m: [0.4043, 0.0, -0.0377]
+  rear_lidar_xyz_m: [-0.4043, 0.0, -0.0377]
+  lua300c_imu_xyz_m: [0.0, 0.0, 0.00569]
+engineering:
+  mode: standing_preview_only
+  motion_authorized: false
+  # User's project limit, not the product's maximum and not SDK normalization.
+  project_speed_limit_mps: 1.5
+  preview_speed_mps: 0.30
+  preview_acceleration_mps2: 0.35
+  # Source documents do not establish the actual base_link height in this gait.
+  # Retained planning assumption; 0.585 m total height is NOT base_link height.
+  body_reference_height_m: 0.55
+  body_height_calibrated: false
+  # Native SCAN two-circle approximation. Extents 0.98 x 0.58 m exceed the
+  # standing dimensions, but do NOT prove coverage of rectangle corners,
+  # moving legs, payload, prone posture or the real swept volume.
+  collision_model: native_double_cylinder_approximation
+  # Derive native approximation from official standing width/length:
+  # radius=width/2+lateral_margin=0.29;
+  # center_offset=length/2+longitudinal_margin-radius=0.20.
+  footprint_lateral_margin_m: 0.05
+  footprint_longitudinal_margin_m: 0.025
+  collision_envelope_validated: false
+  # Engineering assumption, NOT a statement that obstacles below this are safe.
+  # Must exceed the 0.08 m voxel height to separate sampled ground from legs.
+  # Validate body height, terrain and this exclusion together before motion.
+  ground_exclusion_height_m: 0.10
+  safety_scan_above_base_m: 0.80
+  # Obstacle UP dilation covers the body BELOW its reference, not above it.
+  # body_reference_height_m - ground_exclusion_height_m = 0.45 m.
+  obstacle_dilation_up_m: 0.45
+  obstacle_dilation_down_m: 0.45
+  vertical_envelope_validated: false
+  sdk_speed_mapping_validated: false

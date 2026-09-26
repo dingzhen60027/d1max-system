@@ -221,7 +221,8 @@ class GridWorkspace:
             items.sort(key=lambda v:v.get("created_at",""), reverse=True)
             return {"versions":items, "invalid":invalid, "selected_id":state.get("selected_id"),
                     "previous_id":state.get("previous_id"), "job":json.loads(json.dumps(self.job)),
-                    "navigation":{"available":False, "localization_available":True, "reason":"已集成双 EKF 点云定位；Nav2 导航与底盘执行尚未接入，不发送导航目标"},
+                    "navigation":{"available":True, "localization_available":True, "max_speed_mps":1.5,
+                                  "status_url":"/api/navigation/overview", "reason":"Nav2 单层导航；实机运动须单独解锁，离线仿真不连接 SDK"},
                     "profiles":self.list_profiles()}
 
     def list_profiles(self):

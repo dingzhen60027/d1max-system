@@ -1,0 +1,91 @@
+Panels:
+- Class: rviz_common/Displays
+  Name: Displays
+- Class: rviz_common/Views
+  Name: Views
+Visualization Manager:
+  Class: ''
+  Displays:
+  - Alpha: 0.35
+    Cell Size: 1
+    Class: rviz_default_plugins/Grid
+    Color: 90; 95; 100
+    Name: Grid
+    Plane: XY
+    Value: true
+  - Class: rviz_default_plugins/PointCloud2
+    Name: LIO-SAM Global Map
+    Color Transformer: AxisColor
+    Position Transformer: XYZ
+    Style: Points
+    Size (Pixels): 2
+    Decay Time: 0
+    Topic:
+      Depth: 1
+      Reliability Policy: Reliable
+      Durability Policy: Volatile
+      Value: /lio_sam/mapping/map_global
+    Use Fixed Frame: true
+    Value: true
+  - Class: rviz_default_plugins/PointCloud2
+    Name: Current scan
+    Color Transformer: FlatColor
+    Color: 255; 190; 30
+    Position Transformer: XYZ
+    Style: Points
+    Size (Pixels): 2
+    Decay Time: 0
+    Topic:
+      Depth: 1
+      Reliability Policy: Reliable
+      Value: /lio_sam/mapping/cloud_registered_raw
+    Value: true
+  - Class: rviz_default_plugins/Path
+    Name: LIO-SAM Path
+    Color: 0; 210; 240
+    Line Style: Lines
+    Line Width: 0.025
+    Topic:
+      Depth: 1
+      Reliability Policy: Reliable
+      Value: /lio_sam/mapping/path
+    Value: true
+  - Class: rviz_default_plugins/MarkerArray
+    Name: Accepted loop constraints
+    Topic:
+      Depth: 1
+      Value: /lio_sam/mapping/loop_closure_constraints
+    Value: true
+  - Class: rviz_default_plugins/PointCloud2
+    Name: Saved result
+    Color Transformer: AxisColor
+    Position Transformer: XYZ
+    Style: Points
+    Size (Pixels): 2
+    Decay Time: 0
+    Topic:
+      Depth: 1
+      Reliability Policy: Reliable
+      Durability Policy: Transient Local
+      Value: /lio_sam/saved_map
+    Value: true
+  Global Options:
+    Background Color: 18; 22; 25
+    Fixed Frame: odom
+    Frame Rate: 30
+  Name: root
+  Tools:
+  - Class: rviz_default_plugins/Interact
+  - Class: rviz_default_plugins/MoveCamera
+  - Class: rviz_default_plugins/Select
+  Views:
+    Current:
+      Class: rviz_default_plugins/Orbit
+      Distance: 24
+      Focal Point: {X: 0, Y: 0, Z: 0}
+      Name: Current View
+      Pitch: 0.65
+      Yaw: 0.8
+Window Geometry:
+  Width: 1500
+  Height: 950

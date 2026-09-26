@@ -1,0 +1,139 @@
+{
+  "bag": "/home/dndx/d1max_nav_ws/bags/slam_raw_20260917_171716_fe8f38",
+  "init_cutoff_ns": 1772316443262103536,
+  "max_header_delta_ns": 5000000,
+  "queue_capacity": 8,
+  "read_only": true,
+  "ros_initialized": false,
+  "point_payloads_deserialized": 0,
+  "sql_payload_selection": "substr(data,1,12)",
+  "prefix_bytes_returned": 224268,
+  "record_order": "bag record_ns, file_index, SQLite message id",
+  "source_files": [
+    {
+      "path": "/home/dndx/d1max_nav_ws/bags/slam_raw_20260917_171716_fe8f38/slam_raw_20260917_171716_fe8f38_0.db3",
+      "counts": {
+        "front": 3823,
+        "rear": 3808
+      }
+    },
+    {
+      "path": "/home/dndx/d1max_nav_ws/bags/slam_raw_20260917_171716_fe8f38/slam_raw_20260917_171716_fe8f38_1.db3",
+      "counts": {
+        "rear": 3799,
+        "front": 3831
+      }
+    },
+    {
+      "path": "/home/dndx/d1max_nav_ws/bags/slam_raw_20260917_171716_fe8f38/slam_raw_20260917_171716_fe8f38_2.db3",
+      "counts": {
+        "front": 1710,
+        "rear": 1718
+      }
+    }
+  ],
+  "metadata_sha256": "a961da8fcfc05ddf55e0c53057ec10eea9b074cfce14de7a3fca17d85a8b5c8b",
+  "adapter_sha256": "4481703931be77f41b67339870b8c5b50c123cf2fc5de715959926772585b4a7",
+  "full_bag": {
+    "counts": {
+      "front_received": 9364,
+      "front_skipped_startup": 20,
+      "rear_received": 9325,
+      "rear_skipped_startup": 19,
+      "rear_unpaired": 255,
+      "front_unpaired": 293
+    },
+    "paired_scans": 9051,
+    "pending_unpaired": {
+      "front": 0,
+      "rear": 0
+    },
+    "unpaired_reasons": {
+      "stale_header": {
+        "rear": 255,
+        "front": 293
+      },
+      "queue_capacity": {}
+    },
+    "max_queue_after_pairing": {
+      "front": 3,
+      "rear": 3
+    },
+    "first_pair_header_ns": [
+      1772316443299981117,
+      1772316443299991846
+    ],
+    "last_pair_header_ns": [
+      1772317426099988937,
+      1772317426099994898
+    ],
+    "last_pending_header_ns": {
+      "front": [],
+      "rear": []
+    },
+    "abs_pair_skew_ns": {
+      "min": 0.0,
+      "median": 9298.0,
+      "p95": 25272.5,
+      "max": 104904.0
+    },
+    "count_conservation": true,
+    "independent_pairer_crosscheck": true
+  },
+  "prefix_at_585_front_583_rear": {
+    "counts": {
+      "front_received": 585,
+      "front_skipped_startup": 20,
+      "rear_received": 583,
+      "rear_skipped_startup": 19,
+      "rear_unpaired": 19,
+      "front_unpaired": 21
+    },
+    "paired_scans": 544,
+    "pending_unpaired": {
+      "front": 0,
+      "rear": 1
+    },
+    "unpaired_reasons": {
+      "stale_header": {
+        "rear": 19,
+        "front": 21
+      },
+      "queue_capacity": {}
+    },
+    "max_queue_after_pairing": {
+      "front": 2,
+      "rear": 3
+    },
+    "first_pair_header_ns": [
+      1772316443299981117,
+      1772316443299991846
+    ],
+    "last_pair_header_ns": [
+      1772316503599992037,
+      1772316503599987268
+    ],
+    "last_pending_header_ns": {
+      "front": [],
+      "rear": [
+        1772316503699987173
+      ]
+    },
+    "abs_pair_skew_ns": {
+      "min": 0.0,
+      "median": 6199.0,
+      "p95": 17571.45000000001,
+      "max": 54359.0
+    },
+    "count_conservation": true,
+    "independent_pairer_crosscheck": true,
+    "last_record_ns": 1789636701198813419
+  },
+  "limitations": [
+    "Exact source expectation assumes all recorded clouds are delivered, same per-topic order, and initialization cutoff as supplied.",
+    "ROS callback cross-topic scheduling can differ from bag arrival order; capacity-drop counts may then differ. Inspect queue_capacity count.",
+    "Only pairing and startup header gate are audited; cloud validity, point counts, IMU coverage, end-of-run pending output and algorithm admission are separate.",
+    "Clouds arriving before runtime initialization completes may be skipped even with stamp >= cutoff; compare actual runtime startup counts.",
+    "Bag original missing scans are not runtime message loss; compare counts to this source baseline, not an arbitrary percentage."
+  ]
+}

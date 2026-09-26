@@ -4,6 +4,8 @@ set -eo pipefail
 # Record the raw D1 Max sensor data required to rerun the complete SLAM input
 # pipeline. Processed LIO topics are intentionally not required: the raw bag can
 # be replayed through dual_lidar_adapter and either LIO backend.
+# Keep all three IMUs: front/rear Airy IMUs and the independent body IMU.
+# Recording the body IMU does not change the IMU selected by the SLAM backend.
 
 WS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROBOT_ENV="/home/dndx/智元四足机器人D1 Max二次开发文档资料包v0.1.0/d1max_ros2/d1max_ros2_env.sh"
@@ -23,6 +25,7 @@ REQUIRED_TOPICS=(
   /rear_lidar
   /front_lidar/imu
   /rear_lidar/imu
+  /imu_driver/imu_central
 )
 
 OPTIONAL_TOPICS=(
@@ -130,6 +133,11 @@ cat > "$QOS_FILE" <<'QOS'
   depth: 1000
   reliability: reliable
   durability: volatile
+/imu_driver/imu_central:
+  history: keep_last
+  depth: 1000
+  reliability: reliable
+  durability: volatile
 /tf:
   history: keep_last
   depth: 100
@@ -154,13 +162,15 @@ QOS
   echo "free_disk_gib=$AVAILABLE_GIB"
   echo "required_topics=${REQUIRED_TOPICS[*]}"
   echo "optional_topics=${OPTIONAL_TOPICS[*]}"
+  echo "independent_imu_topic=/imu_driver/imu_central"
+  echo "sensor_data_policy=preserve original values, timestamps and frames; no IMU replacement or conversion"
   echo "RMW_IMPLEMENTATION=${RMW_IMPLEMENTATION:-unset}"
   echo "ROS_DOMAIN_ID=${ROS_DOMAIN_ID:-unset}"
   echo "warning=robot sensor time and PC wall time must be reconciled before mixing PC-stamped TF"
 } > "$INFO_PATH"
 
 echo
-echo "All four raw SLAM streams are live. Recording now."
+echo "All ${#REQUIRED_TOPICS[@]} raw sensor streams are live (2 LiDARs + 3 IMUs). Recording now."
 echo "Press Ctrl+C once to stop cleanly. Do not power off during bag finalization."
 echo
 
@@ -190,4 +200,3 @@ if (( STATUS != 0 && STATUS != 130 )); then
   echo "ERROR: rosbag recorder exited with status $STATUS. Inspect the info file." >&2
   exit "$STATUS"
 fi
-

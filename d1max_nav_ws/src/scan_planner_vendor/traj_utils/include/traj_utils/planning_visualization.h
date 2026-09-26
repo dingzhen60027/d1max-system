@@ -22,6 +22,7 @@ namespace scan_planner
     using MarkerPublisher = rclcpp::Publisher<visualization_msgs::msg::Marker>;
     using MarkerArrayPublisher = rclcpp::Publisher<visualization_msgs::msg::MarkerArray>;
     rclcpp::Node *node_{nullptr};
+    std::string frame_id_{"world"};
 
     MarkerPublisher::SharedPtr goal_point_pub;
     MarkerPublisher::SharedPtr global_list_pub;

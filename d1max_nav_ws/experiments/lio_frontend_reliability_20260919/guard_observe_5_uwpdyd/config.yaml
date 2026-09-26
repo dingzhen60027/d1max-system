@@ -1,0 +1,66 @@
+laserMapping:
+  ros__parameters:
+    common:
+      dataset: nclt
+      imu_topic: /lio_guard_test/imu
+      lid_topic: /lio_guard_test/points
+      time_sync_en: false
+    cube_side_length: 1000.0
+    diagnostics:
+      input_log_path: /home/dndx/d1max_nav_ws/experiments/lio_frontend_reliability_20260919/guard_observe_5_uwpdyd/input.csv
+    esti_plane_threshold: 0.1
+    feature_extract_enable: false
+    filter_size_map: 0.2
+    filter_size_surf: 0.1
+    ivox_grid_resolution: 0.2
+    ivox_nearby_type: 18
+    mapping:
+      acc_cov: 0.1
+      b_acc_cov: 0.0001
+      b_gyr_cov: 0.0001
+      det_range: 100.0
+      extrinsic_R:
+      - 1.0
+      - 0.0
+      - 0.0
+      - 0.0
+      - 1.0
+      - 0.0
+      - 0.0
+      - 0.0
+      - 1.0
+      extrinsic_T:
+      - 0.0
+      - 0.0
+      - 0.0
+      extrinsic_est_en: false
+      fov_degree: 180
+      gravity_aligned_world: true
+      gyr_cov: 0.1
+      imu_continuity:
+        maximum_gap_sec: 0.03
+        mode: observe
+        warning_gap_sec: 0.015
+      initialization_duration: 2.0
+      initialization_max_acc_std: 0.2
+      initialization_max_gyro_mean: 0.05
+      initialization_max_gyro_std: 0.015
+      initialization_samples: 300
+      stationary_initialization: true
+    max_iteration: 3
+    path_save_en: false
+    pcd_save:
+      interval: -1
+      pcd_save_en: false
+    point_filter_num: 1
+    preprocess:
+      blind: 0.5
+      lidar_type: 2
+      scan_line: 192
+      time_scale: 1.0
+    publish:
+      dense_publish_en: true
+      path_publish_en: false
+      scan_bodyframe_pub_en: true
+      scan_effect_pub_en: true
+      scan_publish_en: true

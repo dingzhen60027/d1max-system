@@ -1,0 +1,20 @@
+<library path="d1max_pct_rviz_tools">
+  <class name="d1max_pct_rviz_tools/Start3D" type="d1max_pct_rviz_tools::Start3D" base_class_type="rviz_common::Tool">
+    <description>3D Start: directly place/focus a 3D space marker without clicking the point cloud (B).</description>
+  </class>
+  <class name="d1max_pct_rviz_tools/Goal3D" type="d1max_pct_rviz_tools::Goal3D" base_class_type="rviz_common::Tool">
+    <description>3D Goal: directly place/focus a 3D space marker without clicking the point cloud (N).</description>
+  </class>
+  <class name="d1max_pct_rviz_tools/PlanningPanel" type="d1max_pct_rviz_tools::PlanningPanel" base_class_type="rviz_common::Panel">
+    <description>Exact XYZ editing, explicit grounding and global path preview. No robot control.</description>
+  </class>
+  <class name="d1max_pct_rviz_tools/LiveGoal3D" type="d1max_pct_rviz_tools::LiveGoal3D" base_class_type="rviz_common::Tool">
+    <description>Create and focus a MoveIt-style XYZ goal in the owned live preview; never a robot command.</description>
+  </class>
+  <class name="d1max_pct_rviz_tools/NavigationDiagnosticsPanel" type="d1max_pct_rviz_tools::NavigationDiagnosticsPanel" base_class_type="rviz_common::Panel">
+    <description>Read-only localization and planning status, color legend and saved views. No robot control.</description>
+  </class>
+  <class name="d1max_pct_rviz_tools/MotionControlPanel" type="d1max_pct_rviz_tools::MotionControlPanel" base_class_type="rviz_common::Panel">
+    <description>Explicit session-bound low-speed execution and stop requests; never connects to the robot SDK.</description>
+  </class>
+</library>

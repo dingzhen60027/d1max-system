@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useState } from 'react'
-import { ArrowRight, Archive, Box, ChevronRight, Database, FileWarning, Grid2X2, Home, Layers3, Map, Route, ScanLine, WandSparkles } from 'lucide-react'
+import { ArrowRight, Archive, Box, ChevronRight, Database, FileWarning, Grid2X2, Home, Layers3, Map, Radio, Route, ScanLine, WandSparkles } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardHeader, CardTitle, CardContent, CardFooter } from '@/components/ui/card'
@@ -7,11 +7,17 @@ import { Breadcrumb, BreadcrumbList, BreadcrumbItem, BreadcrumbLink, BreadcrumbS
 import { SidebarProvider, Sidebar, SidebarHeader, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupLabel, SidebarMenu, SidebarMenuItem, SidebarMenuButton, SidebarInset, SidebarTrigger, useSidebar } from '@/components/ui/sidebar'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert'
+import './bags.css'
+import './live-planning.css'
 const Workspace3D = lazy(()=>import('./Workspace3D.jsx'))
 const Workspace2D = lazy(()=>import('./Workspace2D.jsx'))
+const WorkspaceBags = lazy(()=>import('./WorkspaceBags.jsx'))
+const LivePlanningPanel = lazy(()=>import('./LivePlanningPanel.jsx'))
 export const GROUPS = {
+ 'planning':[{id:'live',name:'运行面板',icon:Route}],
  '3d':[{id:'maps',name:'原始点云',icon:Database},{id:'processed',name:'处理结果',icon:WandSparkles},{id:'planning',name:'规划产物',icon:Route},{id:'archived',name:'归档管理',icon:Archive},{id:'failures',name:'异常记录',icon:FileWarning}],
- '2d':[{id:'versions',name:'地图版本',icon:Map},{id:'build',name:'生成 2D 地图',icon:Grid2X2},{id:'navigation',name:'定位调试',icon:Route},{id:'archived',name:'归档管理',icon:Archive}],
+ '2d':[{id:'versions',name:'地图版本',icon:Map},{id:'build',name:'生成 2D 地图',icon:Grid2X2},{id:'nav2',name:'Nav2（独立）',icon:Route},{id:'archived',name:'归档管理',icon:Archive}],
+ 'bags':[{id:'recordings',name:'录制与文件',icon:Radio},{id:'archived',name:'Bag 归档',icon:Archive}],
 }
 export function navigate(path){window.location.hash=path}
 function WorkspaceLink(props){
@@ -20,7 +26,9 @@ function WorkspaceLink(props){
 }
 function readRoute(){
  const [path,query='']=(location.hash.slice(1)||'/').split('?')
- const [,mode,section]=path.split('/')
+ const [,mode,originalSection]=path.split('/')
+ const section=mode==='2d'&&originalSection==='navigation'?'nav2':originalSection
+ if(mode==='2d'&&section==='localization')return {mode:'planning',section:'live',query:new URLSearchParams(query)}
  if(!GROUPS[mode])return {mode:'home',section:'',query:new URLSearchParams()}
  return {mode,section:GROUPS[mode].some(v=>v.id===section)?section:GROUPS[mode][0].id,query:new URLSearchParams(query)}
 }
@@ -47,16 +55,18 @@ function HomePage(){
   <header className="portal-home-top"><a href="#/" className="portal-brand"><span><Layers3/></span><strong>D1 Max<span>MAP WORKSPACE</span></strong></a><Badge variant="outline"><span className="status-dot"/>本地工作台</Badge></header>
   <main className="home-content">
    <div className="home-intro"><h1>地图工作台</h1></div>
-   {error&&<Alert variant="destructive"><FileWarning/><AlertTitle>后端连接异常</AlertTitle><AlertDescription>{error}，请在 Foxglove 检查 Web 状态后刷新。</AlertDescription></Alert>}
+   {error&&<Alert variant="destructive"><FileWarning/><AlertTitle>连接异常</AlertTitle><AlertDescription>{error}</AlertDescription></Alert>}
+   <Card className="home-planning-entry"><CardContent><CardTitle><Route/>定位与规划</CardTitle><Button nativeButton={false} render={<a href="#/planning"/>}>打开<ArrowRight/></Button></CardContent></Card>
    <div className="workspace-choices">
-    {[{mode:'2d',to:'/2d/versions',title:'2D 导航',icon:Map,steps:['生成栅格','地图修整','版本选用'],count:grid?.versions.filter(v=>!v.archived).length,unit:'个地图版本'},
+    {[{mode:'2d',to:'/2d/versions',title:'2D 地图',icon:Map,steps:['生成栅格','地图修整','版本选用'],count:grid?.versions.filter(v=>!v.archived).length,unit:'个地图版本'},
       {mode:'3d',to:'/3d/maps',title:'3D 地图',icon:Box,steps:['原始建图','点云处理','结果对比'],count:data?.summary?.map_count,unit:'份原始点云'}].map(v=>
      <Card className={'workspace-choice '+v.mode} key={v.mode}><a className="choice-cover-link" href={'#'+v.to} aria-label={'进入 '+v.title}><PreviewArtwork mode={v.mode}/></a>
       <CardHeader><CardTitle><v.icon/>{v.title}</CardTitle></CardHeader>
       <CardContent><div className="choice-steps">{v.steps.map((step,index)=><span key={step}>{index>0&&<ChevronRight/>}{step}</span>)}</div></CardContent>
-      <CardFooter><span className="choice-count">{v.count??'—'} {v.unit}</span><Button nativeButton={false} render={<a href={'#'+v.to}/>}>进入工作空间<ArrowRight/></Button></CardFooter>
+      <CardFooter><span className="choice-count">{v.count??'—'} {v.unit}</span><Button nativeButton={false} render={<a href={'#'+v.to}/>}>打开<ArrowRight/></Button></CardFooter>
      </Card>)}
    </div>
+   <div className="home-recording"><div><Radio/><span><strong>数据采集</strong><small>Rosbag 录制与文件管理</small></span></div><Button variant="outline" nativeButton={false} render={<a href="#/bags/recordings"/>}>录制与管理<ArrowRight/></Button></div>
   </main>
   <footer className="home-footer"><span>D1 MAX</span></footer>
  </div>
@@ -65,21 +75,23 @@ export default function App(){
  const [route,setRoute]=useState(readRoute)
  useEffect(()=>{const change=()=>setRoute(readRoute());window.addEventListener('hashchange',change);return()=>window.removeEventListener('hashchange',change)},[])
  if(route.mode==='home')return <HomePage/>
- const modeName=route.mode==='2d'?'2D 导航':'3D 地图',sectionName=GROUPS[route.mode].find(v=>v.id===route.section)?.name
+ const modeName=route.mode==='planning'?'定位与规划':route.mode==='bags'?'数据采集':route.mode==='2d'?'2D 地图':'3D 地图',sectionName=GROUPS[route.mode].find(v=>v.id===route.section)?.name
  return <SidebarProvider className="portal-shell" style={{'--sidebar-width':'204px'}}>
   <Sidebar className="portal-sidebar" collapsible="offcanvas">
    <SidebarHeader><a href="#/" className="portal-brand"><span><Layers3/></span><strong>D1 Max<small>地图工作台</small></strong></a></SidebarHeader>
    <SidebarContent><SidebarGroup><SidebarGroupLabel>工作空间</SidebarGroupLabel><SidebarMenu>
     <SidebarMenuItem><WorkspaceLink render={<a href="#/"/>}><Home/><span>工作台首页</span></WorkspaceLink></SidebarMenuItem>
-    <SidebarMenuItem><WorkspaceLink isActive={route.mode==='2d'} render={<a href="#/2d/versions"/>}><Map/><span>2D 导航</span></WorkspaceLink></SidebarMenuItem>
+    <SidebarMenuItem><WorkspaceLink isActive={route.mode==='planning'} render={<a href="#/planning"/>}><Route/><span>定位与规划</span></WorkspaceLink></SidebarMenuItem>
+    <SidebarMenuItem><WorkspaceLink isActive={route.mode==='2d'} render={<a href="#/2d/versions"/>}><Map/><span>2D 地图</span></WorkspaceLink></SidebarMenuItem>
     <SidebarMenuItem><WorkspaceLink isActive={route.mode==='3d'} render={<a href="#/3d/maps"/>}><Box/><span>3D 地图</span></WorkspaceLink></SidebarMenuItem>
+    <SidebarMenuItem><WorkspaceLink isActive={route.mode==='bags'} render={<a href="#/bags/recordings"/>}><Radio/><span>数据采集</span></WorkspaceLink></SidebarMenuItem>
    </SidebarMenu></SidebarGroup>
-   <SidebarGroup><SidebarGroupLabel>{modeName} / 功能</SidebarGroupLabel><SidebarMenu>{GROUPS[route.mode].map(v=><SidebarMenuItem key={v.id}><WorkspaceLink isActive={route.section===v.id} render={<a href={'#/'+route.mode+'/'+v.id}/> }><v.icon/><span>{v.name}</span></WorkspaceLink></SidebarMenuItem>)}</SidebarMenu></SidebarGroup></SidebarContent>
+   {GROUPS[route.mode].length>1&&<SidebarGroup><SidebarGroupLabel>{modeName}</SidebarGroupLabel><SidebarMenu>{GROUPS[route.mode].map(v=><SidebarMenuItem key={v.id}><WorkspaceLink isActive={route.section===v.id} render={<a href={'#/'+route.mode+'/'+v.id}/> }><v.icon/><span>{v.name}</span></WorkspaceLink></SidebarMenuItem>)}</SidebarMenu></SidebarGroup>}</SidebarContent>
    <SidebarFooter><div className="portal-local" title="ROS 2 · Zenoh · Domain 24"><ScanLine/><span>本地工作区</span></div></SidebarFooter>
   </Sidebar>
-  <SidebarInset className="portal-inset"><header className="portal-breadcrumb"><SidebarTrigger/><Breadcrumb><BreadcrumbList><BreadcrumbItem><BreadcrumbLink href="#/">工作台</BreadcrumbLink></BreadcrumbItem><BreadcrumbSeparator/><BreadcrumbItem><BreadcrumbLink href={'#/'+route.mode+'/'+GROUPS[route.mode][0].id}>{modeName}</BreadcrumbLink></BreadcrumbItem><BreadcrumbSeparator/><BreadcrumbItem><BreadcrumbPage>{sectionName}</BreadcrumbPage></BreadcrumbItem></BreadcrumbList></Breadcrumb>{route.mode==='2d'&&<Badge variant="outline">未开放导航行走</Badge>}</header>
-   <div className="portal-page"><Suspense fallback={<div className="page-loading"><Skeleton/><Skeleton/><span>正在打开工作空间…</span></div>}>
-    {route.mode==='3d'?<Workspace3D section={route.section} setSection={section=>navigate('/3d/'+section)} navigate={navigate}/>:<Workspace2D section={route.section} query={route.query} navigate={navigate}/>}
+  <SidebarInset className="portal-inset"><header className="portal-breadcrumb"><SidebarTrigger/><Breadcrumb><BreadcrumbList><BreadcrumbItem><BreadcrumbLink href="#/">工作台</BreadcrumbLink></BreadcrumbItem><BreadcrumbSeparator/>{GROUPS[route.mode].length>1?<><BreadcrumbItem><BreadcrumbLink href={'#/'+route.mode+'/'+GROUPS[route.mode][0].id}>{modeName}</BreadcrumbLink></BreadcrumbItem><BreadcrumbSeparator/><BreadcrumbItem><BreadcrumbPage>{sectionName}</BreadcrumbPage></BreadcrumbItem></>:<BreadcrumbItem><BreadcrumbPage>{modeName}</BreadcrumbPage></BreadcrumbItem>}</BreadcrumbList></Breadcrumb></header>
+   <div className="portal-page"><Suspense fallback={<div className="page-loading"><Skeleton/><Skeleton/><span>加载中…</span></div>}>
+    {route.mode==='planning'?<LivePlanningPanel/>:route.mode==='bags'?<WorkspaceBags section={route.section}/>:route.mode==='3d'?<Workspace3D section={route.section} setSection={section=>navigate('/3d/'+section)} navigate={navigate}/>:<Workspace2D section={route.section} query={route.query} navigate={navigate}/>}
    </Suspense></div>
   </SidebarInset>
  </SidebarProvider>

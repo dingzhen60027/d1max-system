@@ -72,6 +72,13 @@
 .mapping-dialog .runtime-state{width:100%;min-height:62px;padding:12px;box-shadow:none}
 .mapping-dialog .mapping-pipeline{display:flex;flex-direction:column;gap:10px;width:100%}.mapping-dialog .pipeline-stage{min-height:80px;width:100%;padding:14px;display:flex;align-items:center;justify-content:space-between}
 .mapping-dialog .pipeline-arrow{display:none}.mapping-dialog .algorithm-select{min-width:260px}.mapping-dialog .pipeline-stage.readonly{display:none}
+.mapping-dialog[data-slot="dialog-content"]{max-height:calc(100dvh - 40px);overflow-y:auto}
+.mola-options{display:grid;gap:14px;padding:16px;border:1px solid var(--border);border-radius:12px;min-width:0}
+.mola-options label{display:grid;gap:8px;font-size:14px}.mola-module-tags,.mola-config-actions{display:flex;gap:8px;flex-wrap:wrap}
+.mola-options summary,.mola-task-status summary{cursor:pointer;padding:8px 0;font-size:14px}
+.mola-config-editor{font-family:monospace;font-size:13px;line-height:1.5;field-sizing:fixed;height:320px;max-height:45dvh;min-height:180px;resize:vertical}
+.mola-config-actions{margin-top:10px}.mola-options [role="alert"]{color:var(--destructive);overflow-wrap:anywhere}
+.mola-task-status{display:grid;gap:10px;min-width:0}.mola-task-status code,.mola-task-status pre{font-size:12px;overflow-wrap:anywhere;white-space:pre-wrap;max-height:220px;overflow:auto}
 .page-loading{display:flex;gap:16px;padding:32px;align-items:center;flex-wrap:wrap;color:#71717a;font-size:14px}.page-loading [data-slot="skeleton"]{height:150px;width:240px}
 .workspace-notice{margin:0 24px 14px;width:auto;flex-shrink:0;font-size:12px}.workspace-notice>[data-slot="button"]{position:absolute;right:10px;top:8px}
 .success-notice{display:flex;position:relative;gap:8px;align-items:center;padding:12px 42px 12px 14px;border:1px solid #c7dfd0;border-radius:9px;color:#28734c;background:#f2f8f4}.success-notice>svg{width:16px}

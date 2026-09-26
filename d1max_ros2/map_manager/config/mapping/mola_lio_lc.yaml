@@ -1,0 +1,39 @@
+# MOLA offline mapping profile v1. Browser edits are schema-validated; no shell expressions.
+# Select a COMPLETE rosbag directory with metadata.yaml. Original data is read-only.
+schema_version: 1
+profile: mola_lio_lc
+input:
+  bag_path: ''
+  lidar_topic: /front_lidar
+  imu_topic: /front_lidar/imu
+  base_frame: d1max_mola_body
+  imu_acceleration_scale: 9.80665
+sensors:
+  # D1 Airy points/IMU use different physical axes despite identical frame IDs.
+  # Same calibration as the existing d1max_slam input adapter; not for other sensors.
+  source: fixed
+  lidar_pose: [0, 0, 0, -110.67283082570724, 89.62532789947299, 159.57603050669604]
+  imu_pose: [0, 0, 0, 0, 0, 90]
+frontend:
+  pipeline: gicp_imu
+  keyframe_distance_m: 0.3
+  keyframe_rotation_deg: 10
+  local_map_radius_m: 30
+loop_closure:
+  algorithm: frame_to_frame_gicp
+  enabled: true
+  assume_planar_world: false
+  min_icp_quality: 0.75
+  max_candidate_distance_m: 2.5
+  min_frame_separation: 30
+  max_optimization_rounds: 10
+export:
+  voxel_size_m: 0.1
+execution:
+  threads: 4
+  stage_timeout_sec: 7200
+visualization:
+  enabled: true
+  voxel_size_m: 0.15
+  update_period_sec: 1.0
+  max_points: 1000000

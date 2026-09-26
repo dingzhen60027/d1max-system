@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <chrono>
 #include <cmath>
 #include <cstdint>
@@ -11,10 +12,12 @@
 #include <optional>
 #include <stdexcept>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include "livox_ros_driver2/msg/custom_msg.hpp"
 #include "d1max_localization/input_clock.hpp"
+#include "d1max_localization/perception_ray_queue.hpp"
 #include "diagnostic_msgs/msg/diagnostic_array.hpp"
 #include "rosgraph_msgs/msg/clock.hpp"
 #include "rclcpp/rclcpp.hpp"
@@ -149,6 +152,28 @@ public:
     imu_acceleration_scale_ =
       declare_parameter<double>("imu_acceleration_scale", 9.80665);
 
+    // Metadata-only opt-in branch. Existing LIO inputs, pairing, filtering,
+    // clocks and publishers are unchanged when this is disabled (the default).
+    perception_rays_enabled_ = declare_parameter("perception_rays.enabled", false);
+    perception_rays_topic_ = declare_parameter<std::string>(
+      "perception_rays.output_topic", "/d1max/localization/perception/rays_raw");
+    const auto ray_max_points = declare_parameter<int>("perception_rays.max_input_points", 250000);
+    perception_ray_options_.min_range = min_range_;
+    perception_ray_options_.max_range = max_range_;
+    perception_ray_options_.scan_period = scan_period_sec_;
+    perception_ray_options_.relative_timestamp_scale = relative_timestamp_scale_;
+    if (perception_rays_enabled_) {
+      if (ray_max_points < 1 || ray_max_points > 1000000 || perception_rays_topic_.empty()) {
+        throw std::invalid_argument("invalid perception_rays configuration");
+      }
+      perception_ray_options_.max_input_points = static_cast<uint32_t>(ray_max_points);
+      if (!d1max_localization::perception_rays::validOptions(perception_ray_options_)) {
+        throw std::invalid_argument("invalid perception_rays range/time bounds");
+      }
+      perception_rays_pub_ = create_publisher<sensor_msgs::msg::PointCloud2>(
+        perception_rays_topic_, rclcpp::SensorDataQoS().keep_last(1));
+    }
+
     auto input_qos = rclcpp::SensorDataQoS().keep_last(1);
     auto output_qos = rclcpp::QoS(rclcpp::KeepLast(5)).reliable().durability_volatile();
 
@@ -162,6 +187,7 @@ public:
       front_sub_ = create_subscription<sensor_msgs::msg::PointCloud2>(
         front_topic_, input_qos,
         [this](sensor_msgs::msg::PointCloud2::ConstSharedPtr msg) {
+          queuePerceptionRays(d1max_localization::perception_rays::Sensor::Front, msg);
           if (lidar_mode_ == "front") {
             publishSingle(*msg);
           } else {
@@ -175,6 +201,7 @@ public:
       rear_sub_ = create_subscription<sensor_msgs::msg::PointCloud2>(
         rear_topic_, input_qos,
         [this](sensor_msgs::msg::PointCloud2::ConstSharedPtr msg) {
+          queuePerceptionRays(d1max_localization::perception_rays::Sensor::Rear, msg);
           if (lidar_mode_ == "rear") {
             publishSingle(*msg);
           } else {
@@ -202,9 +229,83 @@ public:
         lidar_mode_.c_str(), topic.c_str(), target_frame_.c_str(),
         input_imu_topic_.c_str(), output_cloud_topic_.c_str());
     }
+    // Start last, after every potentially throwing constructor operation.
+    if (perception_rays_enabled_) {
+      RCLCPP_INFO(get_logger(),
+        "Raw per-sensor ray metadata enabled: %s (NOT deskewed; no planner consumer)",
+        perception_rays_topic_.c_str());
+      perception_ray_worker_ = std::thread([this] {perceptionRayLoop();});
+    }
+  }
+
+  ~DualLidarAdapter() override
+  {
+    perception_ray_queue_.stop();
+    if (perception_ray_worker_.joinable()) {perception_ray_worker_.join();}
   }
 
 private:
+  void queuePerceptionRays(
+    d1max_localization::perception_rays::Sensor sensor,
+    const sensor_msgs::msg::PointCloud2::ConstSharedPtr & cloud)
+  {
+    if (!perception_rays_enabled_) {return;}
+    if (static_cast<uint64_t>(cloud->width) * cloud->height >
+      perception_ray_options_.max_input_points || cloud->data.size() > 64U * 1024U * 1024U)
+    {
+      ++perception_rays_rejected_;
+      return;
+    }
+    if (perception_ray_queue_.submit(sensor, cloud) ==
+      d1max_localization::perception_rays::LatestQueue::Submit::Replaced)
+    {
+      ++perception_rays_overwritten_;
+    }
+  }
+
+  void perceptionRayLoop()
+  {
+    namespace rays = d1max_localization::perception_rays;
+    while (const auto item = perception_ray_queue_.wait()) {
+      std::optional<double> offset;
+      {
+        std::lock_guard<std::mutex> lock(clock_mutex_);
+        offset = input_clock_->offset(steadySeconds());
+      }
+      if (!offset) {++perception_rays_no_clock_; continue;}
+      try {
+        const bool front = item->sensor == rays::Sensor::Front;
+        auto result = rays::convert(*item->cloud, item->sensor,
+          front ? front_frame_ : rear_frame_, target_frame_,
+          front ? front_transform_ : rear_transform_, *offset, now().seconds(),
+          perception_ray_options_);
+        if (!result) {
+          ++perception_rays_rejected_;
+          RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 5000,
+            "Reject raw per-sensor ray metadata: %s", result.error.c_str());
+          continue;
+        }
+        // Clock loss while converting must not publish a new usable sample.
+        {
+          std::lock_guard<std::mutex> lock(clock_mutex_);
+          const auto latest = input_clock_->offset(steadySeconds());
+          if (!latest || *latest != *offset) {++perception_rays_no_clock_; continue;}
+        }
+        const double publication_age = now().seconds() - result.latest_timestamp;
+        if (publication_age > 0.5 || publication_age < -0.10) {
+          ++perception_rays_rejected_;
+          continue;
+        }
+        perception_rays_pub_->publish(result.cloud);
+        ++perception_rays_published_;
+      } catch (const std::exception & error) {
+        ++perception_rays_rejected_;
+        RCLCPP_ERROR_THROTTLE(get_logger(), *get_clock(), 5000,
+          "Raw per-sensor ray metadata conversion failed: %s", error.what());
+      }
+    }
+  }
+
   static double steadySeconds(){return std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count();}
   void publishClockStatus(){
     diagnostic_msgs::msg::DiagnosticArray report;report.header.stamp=now();
@@ -220,6 +321,11 @@ private:
     add("imu_max_source_gap_sec",std::to_string(imu_max_source_gap_));
     add("front_fallback_enabled",front_fallback_?"true":"false");
     add("front_only_attempts",std::to_string(front_only_attempts_));
+    add("perception_rays_enabled",perception_rays_enabled_?"true":"false");
+    add("perception_rays_published",std::to_string(perception_rays_published_.load()));
+    add("perception_rays_rejected",std::to_string(perception_rays_rejected_.load()));
+    add("perception_rays_overwritten",std::to_string(perception_rays_overwritten_.load()));
+    add("perception_rays_no_clock",std::to_string(perception_rays_no_clock_.load()));
     report.status.push_back(s);
     }
     clock_diagnostics_->publish(report);
@@ -258,33 +364,9 @@ private:
   double decodePointTime(
     double raw, double header_seconds, size_t index, size_t point_count) const
   {
-    if (std::isfinite(raw)) {
-      constexpr std::array<double, 4> scales{{1.0, 1e-3, 1e-6, 1e-9}};
-      double best = header_seconds;
-      double best_error = std::numeric_limits<double>::max();
-      for (const double scale : scales) {
-        const double candidate = raw * scale;
-        if (candidate > 1e8) {
-          const double error = std::abs(candidate - header_seconds);
-          if (error < best_error) {
-            best = candidate;
-            best_error = error;
-          }
-        }
-      }
-      if (best_error < 86400.0) {
-        return best;
-      }
-
-      const double relative = raw * relative_timestamp_scale_;
-      if (relative >= 0.0 && relative <= scan_period_sec_ * 2.0) {
-        return header_seconds + relative;
-      }
-    }
-
-    // Never invent per-point acquisition times for localization deskew.
     (void)index; (void)point_count;
-    return std::numeric_limits<double>::quiet_NaN();
+    return d1max_localization::perception_rays::decodePointTime(
+      raw, header_seconds, relative_timestamp_scale_, scan_period_sec_);
   }
 
   bool appendCloud(
@@ -568,6 +650,15 @@ private:
   double max_range_{};
   int rear_ring_offset_{};
   double imu_acceleration_scale_{};
+
+  bool perception_rays_enabled_{false};
+  std::string perception_rays_topic_;
+  d1max_localization::perception_rays::Options perception_ray_options_;
+  d1max_localization::perception_rays::LatestQueue perception_ray_queue_;
+  std::thread perception_ray_worker_;
+  std::atomic<uint64_t> perception_rays_published_{0}, perception_rays_rejected_{0};
+  std::atomic<uint64_t> perception_rays_overwritten_{0}, perception_rays_no_clock_{0};
+  rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr perception_rays_pub_;
 
   std::string front_frame_, rear_frame_;
   tf2::Transform front_transform_, rear_transform_;

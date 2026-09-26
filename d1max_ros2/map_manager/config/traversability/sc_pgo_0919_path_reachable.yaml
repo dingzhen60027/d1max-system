@@ -1,0 +1,13 @@
+ground: /home/dndx/d1max_nav_ws/maps/processed/sc_pgo_20260919_ground_20260921/ground.pcd
+source: /home/dndx/d1max_nav_ws/maps/runs/20260919_125722_855277_central_imu_faster_lio_sc_pgo_zenoh/sc_pgo/optimized_map.pcd
+output: /home/dndx/d1max_nav_ws/maps/processed/sc_pgo_20260919_ground_20260921/global_path_reachable
+resolution_m: 0.20
+minimum_points_per_cell: 2
+obstacle_association_m: 0.35
+obstacle_min_height_m: 0.18
+obstacle_max_height_m: 1.50
+clearance_m: 0.20
+max_adjacent_height_m: 0.15
+start_xy: [0.0, 0.0]
+goal_xy: [-18.5, 33.3]
+max_endpoint_snap_m: 3.0

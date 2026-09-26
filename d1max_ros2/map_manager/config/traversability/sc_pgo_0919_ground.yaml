@@ -1,0 +1,24 @@
+schema_version: 1
+name: SC-PGO 09-19 · 轨迹辅助地面提取
+source:
+  pcd: /home/dndx/d1max_nav_ws/maps/runs/20260919_125722_855277_central_imu_faster_lio_sc_pgo_zenoh/sc_pgo/optimized_map.pcd
+  poses: /home/dndx/d1max_nav_ws/maps/runs/20260919_125722_855277_central_imu_faster_lio_sc_pgo_zenoh/sc_pgo/optimized_poses.txt
+  expected_points: 1127596
+normals:
+  radius_m: 0.35
+  max_neighbors: 40
+  minimum_abs_z: 0.90
+trajectory:
+  # Estimate the sensor-to-floor separation from horizontal measured surfaces.
+  seed_radius_m: 1.2
+  offset_range_m: [0.15, 1.6]
+  histogram_bin_m: 0.03
+  max_lateral_distance_m: 6.0
+  ground_band_m: 0.22
+cleanup:
+  radius_m: 0.22
+  minimum_neighbors: 4
+  component_grid_m: 0.20
+  minimum_component_cells: 20
+output:
+  directory: /home/dndx/d1max_nav_ws/maps/processed/sc_pgo_20260919_ground_20260921

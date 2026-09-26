@@ -1,0 +1,8 @@
+// Local map preview only: no robot uplink, no multicast or gossip discovery.
+{
+  mode: "router",
+  listen: { endpoints: ["tcp/127.0.0.1:7460"], exit_on_failure: true },
+  connect: { endpoints: [] },
+  scouting: { multicast: { enabled: false }, gossip: { enabled: false } },
+  timestamping: { enabled: true, drop_future_timestamp: false },
+}

@@ -1,0 +1,52 @@
+diff --git a/mola_metric_maps/CMakeLists.txt b/mola_metric_maps/CMakeLists.txt
+index e4c3f3e..c787bf4 100644
+--- a/mola_metric_maps/CMakeLists.txt
++++ b/mola_metric_maps/CMakeLists.txt
+@@ -82,12 +82,17 @@ endif()
+ 
+ # -----------------------
+ # define apps:
+-add_subdirectory(apps)
++option(MOLA_METRIC_MAPS_BUILD_APPS "Build standalone applications" ON)
++if(MOLA_METRIC_MAPS_BUILD_APPS)
++  add_subdirectory(apps)
++endif()
+ 
+ # -----------------------
+ # define tests:
+-enable_testing()
+-add_subdirectory(tests)
++if(BUILD_TESTING)
++  enable_testing()
++  add_subdirectory(tests)
++endif()
+ 
+ # -----------------------------------------------------------------------------
+ #  ROS2
+@@ -98,4 +103,3 @@ if(DETECTED_ROS2)
+ 
+   ament_package()
+ endif()
+-
+diff --git a/mola_metric_maps/src/KeyframePointCloudMap.cpp b/mola_metric_maps/src/KeyframePointCloudMap.cpp
+index 6612a9e..40a471d 100644
+--- a/mola_metric_maps/src/KeyframePointCloudMap.cpp
++++ b/mola_metric_maps/src/KeyframePointCloudMap.cpp
+@@ -2831,9 +2831,15 @@ void KeyframePointCloudMap::KeyFrame::computeCovariancesAndDensity() const
+         std::vector<size_t> k_indices;
+         std::vector<float>  k_sq_distances;
+ 
++        // Humble/nanoflann 1.4: KNN followed by the same radius bound is
++        // equivalent to RKNN, without the unsupported MRPT overload.
+         pointcloud_->kdTreeNClosestPoint3DIdx(
+-            xs[i], ys[i], zs[i], K_CORRESPONDENCES, k_indices, k_sq_distances,
+-            MAX_DIST_SQR_FOR_COV);
++            xs[i], ys[i], zs[i], K_CORRESPONDENCES, k_indices, k_sq_distances);
++        while (!k_sq_distances.empty() && k_sq_distances.back() >= MAX_DIST_SQR_FOR_COV)
++        {
++          k_sq_distances.pop_back();
++          k_indices.pop_back();
++        }
+ 
+         // Too few neighbors actually found: a plane/line fit from this few
+         // samples is unreliable, so fall back to an isotropic covariance

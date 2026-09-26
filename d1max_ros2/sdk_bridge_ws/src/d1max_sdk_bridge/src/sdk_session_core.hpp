@@ -11,10 +11,16 @@ namespace d1monitor {
 // has a check/start race). Never unlink the live lock inode.
 class SessionLease {
  public:
+  static std::string default_path() {
+    // Retain the monitor's established inode so upgraded legacy entry points
+    // also exclude an already-running monitor from the previous build.
+    return "/run/user/"+std::to_string(getuid())+"/d1max-sdk-monitor.lock";
+  }
+  SessionLease():SessionLease(default_path()){}
   explicit SessionLease(const std::string& path) {
     fd_=open(path.c_str(),O_CREAT|O_RDWR|O_CLOEXEC|O_NOFOLLOW,0600);
     if(fd_<0)throw std::runtime_error("Cannot open SDK session lock: "+path);
-    if(flock(fd_,LOCK_EX|LOCK_NB)!=0){close(fd_);fd_=-1;throw std::runtime_error("SDK monitor already running; refusing duplicate connection");}
+    if(flock(fd_,LOCK_EX|LOCK_NB)!=0){close(fd_);fd_=-1;throw std::runtime_error("SDK bridge already running; refusing duplicate connection");}
   }
   ~SessionLease(){if(fd_>=0)close(fd_);}
   SessionLease(const SessionLease&)=delete;

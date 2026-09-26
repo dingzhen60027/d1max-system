@@ -17,6 +17,8 @@
 - install/
 - log/
 - local/
+- .local/
+- .cache/
 - node_modules/
 - dist/
 - .venv/
@@ -34,6 +36,30 @@
 - /map_manager/data/
 - /sdk_bridge_ws/src/d1max_sdk_bridge/vendor/
 - /urdf_ws/
+- /symlink_install_manifest.txt
+- /diagnostics/*runtime*.json
+# Keep reproducible experiment source/notes, not recordings, temporary runs,
+# duplicated upstream checkouts, generated reports or installed workspaces.
+- /experiments/legbot_source_audit_20260924/
+- /experiments/**/ws/
+- /experiments/**/runs/
+- /experiments/**/tf_header_tests/
+- /experiments/**/interrupted_runs/
+- /experiments/**/loop_analysis_test.*/
+- /experiments/**/guard_fail_closed_*/
++ /experiments/**/
++ /experiments/**.py
++ /experiments/**.sh
++ /experiments/**.cpp
++ /experiments/**.hpp
++ /experiments/**.h
++ /experiments/**.md
++ /experiments/**.yaml
++ /experiments/**.yml
++ /experiments/**.rviz
++ /experiments/**.json5
++ /experiments/lio_sam_20260920/bag_pair_audit.json
+- /experiments/**
 - rsc/pcd/
 - *.pcd
 - *.ply

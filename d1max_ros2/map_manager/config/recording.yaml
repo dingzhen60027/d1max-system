@@ -1,0 +1,34 @@
+schema_version: 1
+transport:
+  rmw: rmw_zenoh_cpp
+  domain_id: 24
+  endpoint: tcp/192.168.168.100:7447
+storage:
+  identifier: sqlite3
+  split_size_mib: 16384
+  cache_size_mib: 512
+  min_start_free_gib: 5
+  stop_free_gib: 1
+timing:
+  prepare_timeout_sec: 20
+  sensor_timeout_sec: 10
+  finalize_timeout_sec: 20
+# Required streams must deliver real messages before rosbag starts.
+# Values, timestamps, frames and per-point fields are recorded unchanged.
+topics:
+  - {name: /front_lidar, type: sensor_msgs/msg/PointCloud2, group: core, required: true, depth: 10}
+  - {name: /rear_lidar, type: sensor_msgs/msg/PointCloud2, group: core, required: true, depth: 10}
+  - {name: /front_lidar/imu, type: sensor_msgs/msg/Imu, group: core, required: true, depth: 1000}
+  - {name: /rear_lidar/imu, type: sensor_msgs/msg/Imu, group: core, required: true, depth: 1000}
+  - {name: /imu_driver/imu_central, type: sensor_msgs/msg/Imu, group: core, required: true, depth: 1000}
+  - {name: /tf, type: tf2_msgs/msg/TFMessage, group: core, required: false, depth: 100}
+  - {name: /tf_static, type: tf2_msgs/msg/TFMessage, group: core, required: false, depth: 100, durability: transient_local}
+  - {name: /odom/mc_odom, type: nav_msgs/msg/Odometry, group: motion, required: true, depth: 500}
+  - {name: /front_camera/image_compressed, type: sensor_msgs/msg/CompressedImage, group: cameras, required: true, depth: 10, reliability: best_effort}
+  - {name: /rear_camera/image_compressed, type: sensor_msgs/msg/CompressedImage, group: cameras, required: true, depth: 10, reliability: best_effort}
+  - {name: /odom/localization_odom, type: nav_msgs/msg/Odometry, group: reference, required: true, depth: 100}
+groups:
+  - {id: core, name: 双雷达 · 三路 IMU · TF, locked: true, default: true}
+  - {id: motion, name: MC 里程计, default: true}
+  - {id: cameras, name: 前后压缩图像, default: false}
+  - {id: reference, name: 原厂定位参考, default: false}

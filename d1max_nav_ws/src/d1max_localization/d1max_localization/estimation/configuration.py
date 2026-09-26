@@ -53,7 +53,8 @@ def navigation_parameters(config):
     nl = NavigationLimits(**{k[7:]: v for k, v in pipeline.items() if k.startswith("limits.")})
     InertialPredictor(pl)
     NavigationState(nl)
-    if nl.max_prediction_horizon < pl.max_horizon or nl.max_imu_age < pl.max_extrapolation:
+    if (nl.max_prediction_horizon < pl.max_horizon
+            or nl.max_coast < pl.max_coast or nl.max_imu_age < pl.max_coast):
         raise ValueError("navigation admission must cover the configured prediction bounds")
     rl = config["ekf_navigation"]["ros__parameters"]
     required = {

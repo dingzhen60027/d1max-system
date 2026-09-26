@@ -29,11 +29,14 @@ class WebLifecycleTests(unittest.TestCase):
                     self.assertFalse(cancel.is_set())
                     value=json.loads((root / "unfinished/manifest.json").read_text())
                     self.assertEqual(value["status"],"interrupted")
-            with patch.object(app,"PROCESSED_ROOT",root), patch.object(app,"runtime_manager",runtime), patch.object(app,"grid_workspace",Mock()), patch.object(app,"localization_runtime",Mock()), patch.object(app,"processing_cancel_event",cancel), patch.object(app,"processing_thread",worker):
+            bag_recorder = Mock()
+            with patch.object(app,"PROCESSED_ROOT",root), patch.object(app,"runtime_manager",runtime), patch.object(app,"grid_workspace",Mock()), patch.object(app,"localization_runtime",Mock()), patch.object(app,"navigation_runtime",Mock()), patch.object(app,"bag_recorder",bag_recorder), patch.object(app,"processing_cancel_event",cancel), patch.object(app,"processing_thread",worker):
                 asyncio.run(lifecycle())
             self.assertTrue(cancel.is_set())
             self.assertFalse(worker.is_alive())
             runtime.close.assert_called_once()
             runtime.recover_stale_state.assert_called_once()
+            bag_recorder.recover.assert_called_once()
+            bag_recorder.close.assert_called_once()
             self.assertEqual((root / "good/manifest.json").read_bytes(),original_good)
             self.assertEqual(json.loads(outside.read_text())["status"],"running")

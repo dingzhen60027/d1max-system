@@ -1,0 +1,44 @@
+schema_version: 1
+kind: ground_only
+name: SC-PGO 09-04 14:34 · 双层地面提取
+source:
+  pcd: /home/dndx/d1max_nav_ws/maps/runs/20260904_143406_bag_faster_lio_pgo_first_config/sc_pgo/optimized_map.pcd
+  poses: /home/dndx/d1max_nav_ws/maps/runs/20260904_143406_bag_faster_lio_pgo_first_config/sc_pgo/optimized_poses.txt
+  expected_points: 1300464
+  frame: map
+preprocess:
+  bounds: [[-14.0, -9.0, -6.7], [25.0, 55.0, 4.0]]
+  normal_radius_m: 0.25
+  normal_max_neighbours: 32
+floors:
+  - id: lower
+    label: 下层地面
+    plane: [0.0065138764, 0.0212876383, 0.9997521722, 4.6971922059]
+    plane_band_m: 0.16
+    minimum_normal_alignment: 0.90
+    color: [83, 158, 246]
+  - id: upper
+    label: 上层地面
+    plane: [-0.0199392146, 0.0250299441, 0.9994878337, 0.5045334392]
+    plane_band_m: 0.22
+    minimum_normal_alignment: 0.90
+    color: [46, 206, 162]
+stairs:
+  xy_min: [9.5, 10.0]
+  xy_max: [20.5, 16.3]
+  minimum_abs_normal_z: 0.80
+  # Geometry association with the recorded scan trajectory, not robot dimensions.
+  trajectory_vertical_tolerance_m: 0.23
+  trajectory_lateral_tolerance_m: 1.25
+  color: [249, 189, 79]
+cleanup:
+  radius_m: 0.22
+  minimum_neighbours: 4
+  component_grid_m: 0.18
+  minimum_floor_component_cells: 8
+  minimum_stair_component_cells: 3
+  hole_filling: false
+output:
+  directory: ../../data/traversability/sc_pgo_20260904_143406_ground_only
+  source_preview_voxel_m: 0.18
+  display_point_size_px: 3.0

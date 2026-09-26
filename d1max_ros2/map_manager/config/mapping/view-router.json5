@@ -1,0 +1,2 @@
+// Dedicated offline display router; no robot or discovery endpoints.
+{mode:"router",connect:{endpoints:[]},listen:{endpoints:["tcp/127.0.0.1:17749"],exit_on_failure:true},scouting:{multicast:{enabled:false},gossip:{enabled:false}},timestamping:{enabled:true,drop_future_timestamp:false}}

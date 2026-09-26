@@ -1,0 +1,36 @@
+# D1 Max 2026-09-03 bag: raw accelerometer units are g; raw source stays read-only.
+schema_version: 1
+profile: mola_lio_lc
+input:
+  bag_path: /home/dndx/d1max_rosbag903/slam_raw_20260903_232807
+  lidar_topic: /front_lidar
+  imu_topic: /front_lidar/imu
+  base_frame: d1max_mola_body
+  imu_acceleration_scale: 9.80665
+sensors:
+  # Airy point coordinates and IMU vectors share a misleading frame_id in this bag.
+  # Reuse d1max_slam/launch/mapping.launch.py point -> ROS/IMU calibration.
+  # Quaternion XYZW: [-0.499867275, 0.503186620, 0.497953310, 0.498977388].
+  # These are equivalent ZYX Euler angles, NOT independent tuning offsets.
+  source: fixed
+  lidar_pose: [0, 0, 0, -110.67283082570724, 89.62532789947299, 159.57603050669604]
+  # Same IMU Rx(+90 degrees) as the existing D1 input adapter: (x,-z,y).
+  imu_pose: [0, 0, 0, 0, 0, 90]
+frontend:
+  pipeline: gicp_imu
+  keyframe_distance_m: 0.3
+  keyframe_rotation_deg: 10
+  local_map_radius_m: 30
+loop_closure:
+  enabled: true
+  algorithm: frame_to_frame_gicp
+  assume_planar_world: false
+  min_icp_quality: 0.75
+  max_candidate_distance_m: 2.5
+  min_frame_separation: 30
+  max_optimization_rounds: 10
+export:
+  voxel_size_m: 0.1
+execution:
+  threads: 4
+  stage_timeout_sec: 7200

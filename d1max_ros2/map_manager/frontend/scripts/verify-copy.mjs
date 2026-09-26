@@ -16,6 +16,8 @@ const config={id:'fixture',name:'建筑结构保留',description:'流水线说�
 const raw={items:[source,{...source,id:'fixture-archive',name:'测试归档点云',archived:true}],summary:{map_count:1,failure_count:0},comparisons:{},failures:[],processing_configs:[config],processing_job:{running:false,status:'idle',logs:[]},runtime:{status:'idle',logs:[]},algorithms:[{id:'faster_lio_pgo',name:'Faster-LIO + SC-PGO'}]}
 const grid={versions:[version,{...version,id:'grid-'+'2'.repeat(24),selected:false,archived:true}],profiles:[{id:'conservative',name:'保守方案',parameters:params}],job:{running:false,status:'idle'},invalid:[]}
 const localization={phase:'stopped',backend:'lio_pcd',installed:true,connection:{active:false,health:{}},health:{},logs:[]}
+const livePlanning={phase:'stopped',busy:false,installed:true,mode:'LIVE_VISUALIZATION_NO_MOTION',motion_enabled:false,map_name:'09-23 跨楼层 SC-PGO',current_floor:'floor1',connection:{active:false,health:{}},health:{},global_status:{},scan_status:{},stages:{},components:{localization:{name:'测试定位器'},global_planner:{name:'测试全局规划器'},local_planner:{name:'测试局部规划器'}}}
+const liveSnapshot=()=>({...structuredClone(livePlanning),snapshot_at_unix:Date.now()/1000})
 const unsafe=[],errors=[],checks=[]
 const types={'.html':'text/html','.js':'text/javascript','.css':'text/css','.woff2':'font/woff2'}
 const server=createServer(async(req,res)=>{
@@ -42,6 +44,8 @@ try{
   if(path==='/api/overview')return route.fulfill({json:raw})
   if(path==='/api/2d/overview')return route.fulfill({json:grid})
   if(path==='/api/localization/overview')return route.fulfill({json:localization})
+  if(path==='/api/live-planning/overview')return route.fulfill({json:liveSnapshot()})
+  if(path==='/api/navigation/overview')return route.fulfill({json:{phase:'stopped',busy:false,installed:true,health:{}}})
   if(path.startsWith('/api/')){unsafe.push('Unmocked '+path);return route.abort()}
   return route.continue()
  })
@@ -49,7 +53,7 @@ try{
  const shot=async name=>{await page.waitForTimeout(200);return page.screenshot({path:output+'/'+name+'.png',fullPage:true,animations:'disabled'})}
  await go('/','地图工作台');assert.equal(await page.locator('.workspace-choice').count(),2);await shot('home')
  assert(!(await page.locator('body').innerText()).includes('选择你的工作空间'))
- for(const [path,title] of [['/2d/versions','2D 地图版本'],['/2d/archived','2D 归档'],['/3d/maps','原始建图点云'],['/3d/processed','点云处理结果'],['/3d/planning','规划派生数据'],['/3d/archived','3D 归档'],['/3d/failures','运行异常记录']]){
+ for(const [path,title] of [['/2d/versions','2D 地图版本'],['/2d/archived','2D 归档'],['/3d/maps','原始点云'],['/3d/processed','点云处理结果'],['/3d/planning','规划数据'],['/3d/archived','3D 归档'],['/3d/failures','异常记录']]){
   await go(path,title);assert.equal(await page.locator('.workspace-heading p,.workspace-heading .eyebrow').count(),0)
  }
  checks.push('2D/3D headings have no explanatory subtitles')
@@ -60,7 +64,7 @@ try{
  assert.equal(await files.getByText('localization.pcd · 定位点云',{exact:true}).isVisible(),false)
  await files.locator('summary').click();assert(await files.getByText('localization.pcd · 定位点云',{exact:true}).isVisible());await files.locator('summary').click()
  assert(await page.getByText('Z 使用 PCD 坐标，非离地高度。',{exact:true}).isVisible())
- assert(await page.getByRole('button',{name:'生成并保存候选版',exact:true}).isEnabled());await shot('build')
+ assert(await page.getByRole('button',{name:'生成地图',exact:true}).isEnabled());await shot('build')
  checks.push('Build controls and coordinate units retained; output files expand on demand')
  await go('/2d/versions','2D 地图版本');await page.getByRole('button',{name:'修整 2D 地图',exact:true}).waitFor();await shot('versions')
  await page.getByText('通行性待核对',{exact:true}).click();assert(await page.getByText(version.warning,{exact:true}).isVisible())
@@ -73,36 +77,40 @@ try{
  await go('/3d/archived','3D 归档');await page.getByRole('button',{name:'全部删除',exact:true}).click()
  assert(await page.getByText(/无法恢复；处理结果的/).isVisible());await page.getByRole('button',{name:'取消',exact:true}).click()
  checks.push('2D/3D irreversible deletion confirmations retained; no deletion submitted')
- await go('/3d/maps','原始建图点云');await page.getByRole('button',{name:'配置参数并处理 PCD',exact:true}).click()
- await page.getByRole('heading',{name:'生成点云处理结果',exact:true}).waitFor()
+ await go('/3d/maps','原始点云');await page.getByRole('button',{name:'处理 PCD',exact:true}).click()
+ await page.getByRole('heading',{name:'处理点云',exact:true}).waitFor()
  assert.equal(await page.locator('.processing-note').count(),0);assert.equal(await page.locator('.parameter-switch small').count(),0)
  assert(await page.getByRole('button',{name:'开始处理',exact:true}).isEnabled());await shot('processing');await page.getByRole('button',{name:'取消',exact:true}).click()
  checks.push('Processing parameters and actions retained; module IDs and implementation prose removed')
- await go('/2d/navigation','单楼层定位调试');await page.getByRole('button',{name:'启动定位',exact:true}).waitFor()
- assert.equal(await page.locator('.localization-top [data-slot=card-description]').count(),0)
- assert(await page.getByRole('button',{name:'启动定位',exact:true}).isDisabled());assert(await page.getByRole('button',{name:'提交定位初值',exact:true}).isDisabled())
- assert(await page.getByText('ws://127.0.0.1:8769',{exact:true}).isVisible());await shot('localization')
- localization.connection.error='测试：机器人链路断开'
- localization.health={state:'waiting_sensors',last_error:'测试：速度流未到达',warnings:['测试：机身外参未标定'],input_clock:{ready:'false',message:'测试：时间戳异常'}}
+ await go('/planning','定位与规划');await page.getByRole('button',{name:'启动',exact:true}).waitFor()
+ assert(await page.getByRole('button',{name:'启动',exact:true}).isDisabled())
+ assert.equal(await page.locator('.live-planning-page input,.live-planning-page form,.live-planning-page canvas').count(),0)
+ const configuration=page.locator('.live-configuration')
+ assert.equal(await configuration.getAttribute('open'),null)
+ assert(await configuration.locator('summary').getByText('运行配置',{exact:true}).isVisible())
+ assert.equal(await configuration.getByText('RViz',{exact:true}).isVisible(),false)
+ await configuration.locator('summary').click()
+ for(const component of Object.values(livePlanning.components))assert(await configuration.getByText(component.name,{exact:true}).isVisible())
+ assert(await configuration.getByText('RViz',{exact:true}).isVisible())
+ assert.doesNotMatch(await page.locator('.live-planning-page').innerText(),/Faster-LIO|PCT|SCAN/)
+ await configuration.locator('summary').click();await shot('localization')
+ livePlanning.connection.error='测试：机器人链路断开'
  await page.getByText('测试：机器人链路断开',{exact:true}).waitFor()
- assert(await page.getByText('测试：速度流未到达',{exact:true}).isVisible());assert(await page.getByText('测试：时间戳异常',{exact:true}).isVisible())
- const limits=page.getByText('定位限制 · 1',{exact:true});await limits.click();assert(await page.getByText('测试：机身外参未标定',{exact:true}).isVisible());await limits.click()
- checks.push('Connection, initial-pose gating, failure reasons and expandable limitations retained')
+ checks.push('Web owns lifecycle only; initial pose and goal belong to RViz; connection failure remains visible')
  for(const width of [1920,1440,1100,800,390]){
   await page.setViewportSize({width,height:1000});await page.waitForTimeout(100)
-  assert.deepEqual(await page.locator('.localization-page,.localization-top [data-slot=card],.localization-seed').evaluateAll(nodes=>nodes.filter(n=>n.scrollWidth>n.clientWidth+3).map(n=>n.className)),[],String(width))
+  assert.deepEqual(await page.locator('.live-planning-page,.live-planning-launch,.live-stage').evaluateAll(nodes=>nodes.filter(n=>n.scrollWidth>n.clientWidth+3).map(n=>n.className)),[],String(width))
  }
- checks.push('Localization layout has no horizontal overflow at five viewport widths')
- assert(await page.getByText('启动 LIO + PCD 定位',{exact:false}).isVisible())
- localization.phase='running';localization.health={state:'relocalizing',local_backend:'faster_lio',initial_pose_ready:false,sensors:{imu:true,cloud:true,sdk:false},local_ekf_fresh:true,global_ekf_fresh:false}
- await page.getByText('受限重定位中',{exact:true}).waitFor()
- assert(await page.getByText('局部 LIO',{exact:false}).isVisible())
- assert(await page.getByRole('button',{name:'提交定位初值',exact:true}).isDisabled())
- localization.health={...localization.health,state:'fault',local_fault:'local_pose_jump',local_ekf_fresh:false}
- await page.getByRole('status').getByText('局部里程计已停止',{exact:true}).waitFor()
- assert(await page.getByRole('status').getByText('原因：local_pose_jump。请核对定位日志；未自动绕过检查。',{exact:true}).isVisible())
- assert(await page.getByRole('button',{name:'提交定位初值',exact:true}).isDisabled())
- checks.push('LIO backend, relocalizing and fault states render without false ready controls')
+ checks.push('Live workflow layout has no horizontal overflow at five viewport widths')
+ livePlanning.phase='running';livePlanning.busy=true;livePlanning.session_id='test';livePlanning.health={state:'relocalizing',localized:false}
+ livePlanning.stages={localization:{label:'重定位中',tone:'waiting'},global_planner:{label:'待定位',tone:'waiting'},local_planner:{label:'待全局路径',tone:'waiting'}}
+ await page.getByText('重定位中',{exact:true}).waitFor()
+ livePlanning.health={state:'fault',localized:false}
+ livePlanning.stages.localization={label:'已暂停',tone:'warning'}
+ await page.getByText('已暂停',{exact:true}).waitFor()
+ assert(await page.getByRole('button',{name:'启动',exact:true}).isDisabled())
+ assert.equal(await page.locator('.live-stage.ready').count(),0)
+ checks.push('Backend relocalizing and fault labels do not imply a valid global or local path')
  assert.deepEqual(errors,[]);assert.deepEqual(unsafe,[])
  console.log(JSON.stringify({checks,errors,unsafe,screenshots:output},null,2))
 }finally{

@@ -1,0 +1,8 @@
+# Stage 1: load a saved map and verify localization. No planner/controller/AMCL.
+map_frame: d1max_loc_map
+map_topic: /d1max/navigation/map
+initial_pose_topic: /d1max/navigation/initialpose
+web_url: http://127.0.0.1:8766
+# RViz's arrow supplies XY + body heading; Z is an explicit seed, not a ground fix.
+# Current map uses its original 3D datum. Other floors require a measured body Z.
+initial_pose_z: 0.0

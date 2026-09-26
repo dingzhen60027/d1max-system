@@ -248,14 +248,111 @@ def test_no_map_no_global_and_bounded_filter_output():
     assert core.output(10.3) is None and core.reason == "waiting_local"
 
 
-def test_delayed_filter_output_aligned_to_common_time_without_restamping():
+def test_delayed_filter_correction_aligned_then_applied_to_new_local_motion():
     core = locked()
     core.filtered.clear()
     assert push_filter(core, 10.19)
     assert push_filter(core, 10.21)
     result = core.output(10.21)
-    assert result is not None and result[0].stamp == pytest.approx(10.2, abs=1e-9)
-    assert core.last_output == pytest.approx(10.2, abs=1e-9)
+    assert result is not None and result[0].stamp == pytest.approx(10.20, abs=1e-9)
+    assert core.last_output == pytest.approx(10.20, abs=1e-9)
+    assert core.alignment_target[0] == pytest.approx(10.19)
+    # The newer real EKF frame waits for the predictor to bracket its timestamp.
+    assert core.output(10.21) is None
+    assert core.push_local(local(10.22), 10.22)
+    result = core.output(10.22)
+    assert result is not None and result[0].stamp == pytest.approx(10.22, abs=1e-9)
+    assert core.alignment_target[0] == pytest.approx(10.21)
+
+
+def test_local_motion_is_the_only_output_clock_despite_async_ekf():
+    core = locked()
+    emitted, filter_stamps = [], []
+    for i in range(101):
+        t = 10.22 + i * .02
+        assert core.push_local(local(t), t)
+        core.accept_map(alignment(t), t)
+        output = core.output(t)
+        if output:
+            emitted.append(output[0].stamp)
+        # EKF runs 5ms out of phase, at the SAME 50Hz; a second call must
+        # not publish another timestamp selected from the predictor clock.
+        filtered_t = t + .005
+        assert push_filter(core, filtered_t)
+        filter_stamps.append(filtered_t)
+        output = core.output(filtered_t)
+        if output:
+            emitted.append(output[0].stamp)
+    emitted = [t for t in emitted if t > 10.2]
+    assert len(emitted) == 101
+    assert emitted == pytest.approx([10.22+i*.02 for i in range(101)])
+    assert np.diff(emitted) == pytest.approx(np.full(100, .02), abs=1e-9)
+
+
+def test_bounded_alignment_hold_uses_new_motion_without_fabricating_filter_samples():
+    core = locked()
+    first = core.output(10.2)
+    assert first
+    for t in (10.22, 10.24, 10.26, 10.28):
+        assert core.push_local(local(t), t)
+        assert core.output(t)[0].stamp == pytest.approx(t)
+        assert core.alignment_target[0] == pytest.approx(10.2)
+    # EKF output need not arrive on every 50 Hz local tick. Only real local
+    # samples advance the public output timestamp; the correction is held with
+    # its original stamp, not republished as a fresh EKF measurement.
+    assert core.push_local(local(10.30), 10.30)
+    held = core.output(10.30)
+    assert held[0].stamp == pytest.approx(10.30)
+    assert held[2][0] > first[2][0]  # original correction ages with uncertainty
+    assert core.alignment_target[0] == pytest.approx(10.2)
+    assert len(core.filtered) == 2 and core.filtered[-1][0] == pytest.approx(10.2)
+
+
+def test_alignment_hold_expires_even_when_map_and_future_filter_are_fresh():
+    core = locked()
+    assert core.output(10.2)
+    # A newer verified map correction keeps the map contract current, but
+    # cannot extend the original EKF alignment target's own age.
+    assert core.accept_map(alignment(10.5), 10.5)
+    assert core.push_local(local(10.81), 10.81)
+    assert push_filter(core, 10.815)  # ahead of the newest real local sample
+    assert core.output(10.81) is None
+    assert core.alignment_target[0] == pytest.approx(10.2)
+    assert not core.output_ready(10.81)
+    assert core.last_output == pytest.approx(10.2)
+
+
+def test_delayed_ekf_is_admitted_only_against_real_aligned_history():
+    core = locked()
+    assert core.output(10.2)
+    for t in np.arange(10.22, 10.421, .02):
+        t = round(float(t), 3)
+        assert core.push_local(local(t), t)
+        assert core.output(t) is not None
+    assert core.accept_map(alignment(10.42), 10.42)
+    # The EKF's historical source stamp is 120 ms old at receipt. This is
+    # acceptable only because real local samples bracket that source time.
+    assert core.push_filtered(10.30, Pose3((0., 0., 0.), (0., 0., 0., 1.)),
+                              diagonal(), (0., 0., 0.), (0., 0., 0.), 10.42)
+    assert core.update_alignment(10.42) == ""
+    assert core.alignment_target[0] == pytest.approx(10.30)
+    assert not core.push_filtered(10.31, Pose3((0., 0., 0.), (0., 0., 0., 1.)),
+                                  diagonal(), (0., 0., 0.), (0., 0., 0.), 10.62)
+
+
+def test_same_epoch_local_gap_resumes_from_measured_endpoint_without_reseed():
+    core = locked()
+    assert core.output(10.2)
+    old_stamp, old_key = core.alignment_target[0], core.key()
+    assert core.push_local(pending_local(10.22, "lio_stale"), 10.22)
+    assert core.output(10.22) is None
+    assert core.last_output == pytest.approx(10.2)
+    assert core.push_local(local(10.5), 10.5)  # >0.25s: measured resume path
+    resumed = core.output(10.5)
+    assert resumed is not None and resumed[0].stamp == pytest.approx(10.5)
+    assert core.output_resume_count == 1
+    assert core.key() == old_key and core.alignment_target[0] == old_stamp
+    assert core.last_output == pytest.approx(10.5)  # never restamp the old pose
 
 
 def test_reseed_and_epoch_require_new_ack_and_never_reuse_unguarded_filter():
@@ -302,12 +399,204 @@ def test_map_expiry_not_hidden_by_fresh_filter_predictions():
     assert core.output(10.8) is None and core.reason == "waiting_map"
 
 
+def pending_local(stamp, reason="imu_stale", *, epoch=1, fault=False):
+    return dict(schema=1, epoch=epoch, valid=False, fault=fault,
+                received_at_unix=stamp, reason=reason)
+
+
+def test_aligned_history_uses_selected_time_but_live_sources_remain_fresh():
+    core = locked()
+    core.local.clear()
+    historical = local(10.2)
+    historical.update(imu_stamp_ns="10175000000", source_stamp_ns="9975000000")
+    assert core.push_local(historical, 10.2)
+    assert core.push_local(local(10.24), 10.24)
+    core.filtered.clear()
+    assert push_filter(core, 10.21) and push_filter(core, 10.25)
+    result = core.output(10.25)
+    # Historical support ages are 35/235ms at selected time; charging the
+    # additional 40ms alignment delay again incorrectly rejects both sources.
+    assert result is not None and result[0].stamp == pytest.approx(10.24)
+    assert core.alignment_target[0] == pytest.approx(10.21)
+    assert core.local_at(10.21).imu_stamp == pytest.approx(10.175)
+    assert core.local_at(10.21).source_stamp == pytest.approx(9.975)
+    assert core.output_ready(10.25)
+    assert not core.output_ready(10.291)  # newest REAL IMU has now expired
+
+
+@pytest.mark.parametrize("field,value", [
+    ("imu_stamp_ns", "10160000000"),
+    ("source_stamp_ns", "9960000000"),
+])
+def test_historical_support_limits_still_apply_at_selected_time(field, value):
+    core = locked()
+    core.local.clear()
+    historical = local(10.2)
+    historical[field] = value  # fresh when admitted, too old for interpolation
+    assert core.push_local(historical, 10.2)
+    assert core.push_local(local(10.24), 10.24)
+    core.filtered.clear()
+    assert push_filter(core, 10.22) and push_filter(core, 10.25)
+    assert core.output(10.25) is None
+    assert core.reason == "aligned_history_stale"
+    assert not core.output_ready(10.25)
+
+
+def test_fresh_latest_ekf_cannot_hide_expired_selected_output():
+    core = locked()
+    core.limits = replace(core.limits, filter_timeout=.02, filter_input_timeout=.02)
+    assert push_filter(core, 10.24)  # ahead of the latest local sample
+    assert core.local_ready(10.235)
+    assert core.output(10.235) is None
+    assert core.reason == "aligned_output_stale"
+    assert not core.output_ready(10.235)
+
+
+def test_pending_imu_preserves_actual_sample_only_until_original_source_ttl():
+    core = locked()
+    assert core.output(10.2)
+    original = core.local[-1]
+    sequence, stamp = core.local_sequence, core.last_output
+    assert core.push_local(pending_local(10.23), 10.23)
+    assert core.local[-1] is original and core.local_sequence == sequence
+    assert core.local_ready(10.23) and core.output_ready(10.23)
+    assert core.output(10.23) is None  # no repeated output, not even old stamp
+    assert core.reason == "tracking"
+    assert core.output_attempt_reason == "waiting_local_sample"
+    assert core.last_output == stamp
+    # More fresh pending envelopes never extend source time or any deadline.
+    assert core.push_local(pending_local(10.251), 10.251)
+    assert not core.local_ready(10.251) and not core.output_ready(10.251)
+    assert core.output(10.251) is None and core.reason == "waiting_local"
+    assert core.local[-1] is original and core.last_output == stamp
+    # Recovery requires actual new motion and actual aligned filter data.
+    assert core.push_local(local(10.26), 10.26)
+    assert push_filter(core, 10.26)
+    assert core.output(10.26)[0].stamp == pytest.approx(10.26)
+
+
+@pytest.mark.parametrize("limit", ["local_timeout", "max_prediction_horizon", "max_imu_age"])
+def test_pending_imu_preserves_each_configured_source_timeout(limit):
+    core = locked()
+    assert core.output(10.2)
+    # Tighten the selected existing limit only; do not change the samples.
+    core.limits = replace(core.limits, **{limit: .039 if limit == "max_prediction_horizon" else .01})
+    assert core.push_local(pending_local(10.22), 10.22)
+    assert not core.local_ready(10.22)
+    assert not core.output_ready(10.22)
+
+
+@pytest.mark.parametrize("reason,fault", [
+    ("lio_stale", True), ("waiting_lio", False), ("imu_gap", False),
+    ("imu_gap_rotation", False), ("host_clock_reset", True), ("imu_stale", True),
+])
+def test_invalid_local_status_stops_output_without_refreshing_old_alignment(reason, fault):
+    core = locked()
+    assert core.output(10.2) and core.output_ready(10.2)
+    original_alignment_stamp = core.alignment_target[0]
+    assert core.push_local(pending_local(10.21, reason, fault=fault), 10.21)
+    assert not core.local_ready(10.21) and not core.output_ready(10.21)
+    assert core.last_output_key is None
+    if fault:
+        assert core.alignment_target is None
+    else:
+        assert core.alignment_target[0] == original_alignment_stamp
+    assert core.push_local(pending_local(10.22), 10.22)
+    assert not core.local_ready(10.22)  # pending is never permission to revive
+    if not fault:
+        assert core.push_local(local(10.23), 10.23)
+        assert not core.output_ready(10.23)  # no resurrection of pre-invalid output
+        resumed = core.output(10.23)
+        assert resumed is not None and resumed[0].stamp == pytest.approx(10.23)
+        assert core.alignment_target[0] == original_alignment_stamp
+        assert core.output_ready(10.23)
+    else:
+        assert not core.push_local(local(10.23), 10.23)
+        assert core.output(10.23) is None
+
+
+def test_new_epoch_map_fault_and_reseed_revoke_cached_output():
+    for change in ("epoch", "map_fault", "seed"):
+        core = locked()
+        assert core.output(10.2)
+        if change == "epoch":
+            assert core.push_local(pending_local(10.21, epoch=2), 10.21)
+            assert not core.local_valid and not core.local
+        elif change == "map_fault":
+            value = alignment(10.21)
+            value["valid"] = False
+            value["fault"] = True
+            assert core.accept_map(value, 10.21)
+        else:
+            assert core.accept_map(alignment(10.21, seed="seed-b"), 10.21)
+        assert core.last_output_key is None and not core.output_ready(10.21)
+        assert core.output(10.21) is None
+
+
+def test_same_seed_soft_map_unavailable_neither_revokes_nor_extends_old_contract():
+    core = locked()
+    assert core.output(10.2)
+    old_key, old_alignment_stamp, old_contract_at = (
+        core.key(), core.alignment_target[0], core.contract_at)
+    unavailable = alignment(10.21)
+    unavailable["valid"] = False
+    assert core.accept_map(unavailable, 10.21)
+    assert core.key() == old_key and core.output_ready(10.21)
+    assert core.map_soft_unavailable is True
+    assert core.contract_at == old_contract_at
+    assert core.alignment_target[0] == old_alignment_stamp
+    assert core.push_local(local(10.22), 10.22)
+    assert core.output(10.22)[0].stamp == pytest.approx(10.22)
+    unavailable["received_at_unix"] = 10.59
+    assert core.accept_map(unavailable, 10.59)
+    assert core.contract_at == old_contract_at
+    assert not core.map_ready(10.61)  # repeated unavailable is not a heartbeat
+    assert core.accept_map(alignment(10.62), 10.62)
+    assert core.map_soft_unavailable is False
+
+
+def test_soft_map_notice_cannot_admit_out_of_order_older_valid_contract():
+    core = locked()
+    notice = alignment(10.3)
+    notice["valid"] = False
+    assert core.accept_map(notice, 10.3)
+    older = alignment(10.25)
+    assert not core.accept_map(older, 10.3)
+    assert core.map_contract["stamp"] == pytest.approx(10.0)
+
+
+def test_duplicate_candidate_does_not_leave_old_attempt_failure_sticky():
+    core = locked()
+    assert core.output(10.2)
+    core.reason = "aligned_history_stale"  # previous attempt, not source validity
+    assert core.output_ready(10.21)
+    assert core.output(10.21) is None
+    assert core.reason == "tracking" and core.output_attempt_reason == "waiting_local_sample"
+    # A fresh EKF sample ahead of local history cannot keep a much older
+    # selected alignment alive. Nor may duplicate callbacks restamp output.
+    assert core.accept_map(alignment(10.5), 10.5)
+    assert core.push_local(local(10.81), 10.81)
+    assert push_filter(core, 10.815)
+    assert not core.output_ready(10.81)
+    assert core.output(10.81) is None and core.reason == "aligned_output_stale"
+
+
 @pytest.mark.parametrize(
     "limits", [PredictionLimits(max_horizon=2.0), PredictionLimits(max_extrapolation=0.1)]
 )
 def test_unbounded_prediction_configuration_refused(limits):
     with pytest.raises(ValueError):
         InertialPredictor(limits)
+
+
+@pytest.mark.parametrize("limits", [
+    NavigationLimits(filter_input_timeout=.07),
+    NavigationLimits(filter_input_timeout=.61),
+    NavigationLimits(alignment_hold_timeout=.61),
+])
+def test_async_alignment_cannot_outlive_configured_map_contract(limits):
+    with pytest.raises(ValueError):
+        NavigationState(limits)
 
 
 def test_single_yaml_generates_rate_and_extrinsics_without_planar_duplicate_inputs():

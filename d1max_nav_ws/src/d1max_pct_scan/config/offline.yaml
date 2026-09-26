@@ -1,0 +1,15 @@
+# Real recorded map, synthetic local sensing and body dynamics. No robot uplink.
+map_pcd: /home/dndx/d1max_nav_ws/maps/runs/20260919_125722_855277_central_imu_faster_lio_sc_pgo_zenoh/sc_pgo/optimized_map.pcd
+ground_pcd: /home/dndx/d1max_nav_ws/maps/processed/sc_pgo_20260919_ground_20260921/ground.pcd
+planning_grid: /home/dndx/d1max_nav_ws/maps/processed/sc_pgo_20260919_ground_20260921/global_path_reachable/planning_grid.npz
+map_frame: d1max_loc_map
+odom_frame: d1max_loc_odom
+base_frame: d1max_loc_base_link
+body_height: 0.55
+initial_xy: [-4.100001525878895, 6.9]
+initial_yaw: 1.942
+test_goal_xy: [-5.500001525878901, 10.5]
+max_speed: 0.30
+max_yaw_rate: 0.50
+sensor_range: 6.0
+sensor_voxel: 0.12

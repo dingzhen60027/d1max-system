@@ -7,8 +7,8 @@ localization_pipeline:
 /d1max/localization/lio/laserMapping:
   ros__parameters:
     localization.enabled: true
-    localization.max_imu_gap_sec: 0.05  # raw bag contains a measured 40 ms source gap
-    localization.reinitialize_on_imu_gap: true  # new local epoch, NOT propagation across missing IMU
+    localization.max_imu_gap_sec: 0.10  # bounded short-gap propagation; real dt, increased uncertainty
+    localization.reinitialize_on_imu_gap: true  # only hard gap/dynamic bound failures start a new epoch
     localization.max_imu_reinitializations: 3  # at most three resets per rolling minute
     localization.imu_recovery_window_sec: 60.0
     localization.imu_gap_warning_sec: 0.015
@@ -120,7 +120,12 @@ navigation_estimation:
     body_frame: d1max_loc_base_link
     prediction.max_horizon: 0.25
     prediction.max_extrapolation: 0.025
-    prediction.max_imu_gap: 0.05
+    # Total time without a new REAL IMU sample. Beyond the 25ms hold use
+    # explicit uncertain constant-velocity/rate prediction; never fake IMU.
+    prediction.max_coast: 0.10
+    prediction.coast_accel_sigma: 2.0
+    prediction.coast_angular_accel_sigma: 1.0
+    prediction.max_imu_gap: 0.10  # same short-gap policy as the frontend; not unlimited extrapolation
     prediction.soft_imu_gap: 0.015
     prediction.max_gap_rotation: 0.08
     prediction.history_sec: 2.0
@@ -128,13 +133,24 @@ navigation_estimation:
     limits.correction_timeout: 0.75
     limits.contract_timeout: 0.6
     limits.filter_timeout: 0.08
+    limits.filter_input_timeout: 0.30
+    limits.alignment_hold_timeout: 0.60
     limits.max_prediction_horizon: 0.25
-    limits.max_imu_age: 0.05
+    limits.max_imu_age: 0.10
+    limits.max_coast: 0.10
     limits.max_history_gap: 0.08
     limits.max_map_error: 0.5
     limits.max_map_angle: 0.3
     limits.max_correction_step: 0.10
     limits.max_correction_angle: 0.08
+    # Correction-only rates: actual motion is propagated at its measured speed.
+    limits.correction_speed: 0.15
+    limits.correction_angular_speed: 0.10
+    limits.correction_time_constant: 0.30
+    limits.local_correction_speed: 0.15
+    limits.local_correction_angular_speed: 0.10
+    limits.max_local_residual: 0.25
+    limits.max_local_angle: 0.15
     limits.max_speed: 4.0
     limits.max_angular_rate: 5.0
     limits.reset_timeout: 2.0

@@ -1,0 +1,8 @@
+# Applies only to the isolated global-planning worker, not LIO/SCAN/ROS/RViz.
+# cpu_ids: [] selects up to max_cpu_cores from the inherited Linux cpuset.
+# Set explicit logical CPU IDs here after checking the target NUC's topology.
+max_cpu_cores: 2
+cpu_ids: []
+omp_threads: 2
+blas_threads: 1
+nice: 5

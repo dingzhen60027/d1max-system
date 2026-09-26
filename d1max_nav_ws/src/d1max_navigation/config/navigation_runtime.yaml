@@ -1,0 +1,29 @@
+# Full Nav2 bringup runtime; no automatic robot connection or motion enable.
+web_url: http://127.0.0.1:8766
+map_frame: d1max_loc_map
+odom_frame: d1max_loc_odom
+base_frame: d1max_loc_base_link
+initial_pose_z: 0.0
+# The 1.5 m/s user ceiling is NOT a cruise-speed request. Commission slowly.
+# The SDK bridge presently supports the documented low-speed profile only;
+# max_forward above 1.0 m/s is refused, even though the user ceiling is higher.
+motion_limits:
+  max_planar: 1.5
+  max_forward: 0.30
+  max_lateral: 0.0
+  max_yaw: 0.50
+  accel_forward: 0.40
+  accel_yaw: 0.80
+simulation:
+  initial_x: 0.0
+  initial_y: 0.0
+  initial_yaw: 1.5707963267948966
+  scan_bins: 720
+cloud_projection:
+  # Matches the standing D1 profile: base at assumed .55 m, exclude first .10 m.
+  # This assumption still requires body-height/terrain acceptance before motion.
+  min_height: -0.45
+  max_height: 0.8
+  range_min: 0.15
+  range_max: 12.0
+  bins: 720

@@ -33,21 +33,10 @@ import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import MolaMappingOptions from './MolaMappingOptions.jsx'
+import { MODULE_LABELS, moduleParameterText } from './processing-display.js'
 
 const PointCloudView = lazy(() => import('./PointCloudView.jsx'))
-
-const ALGORITHM_LABELS = {
-  faster_lio: 'Faster-LIO',
-  fastlio2: 'FAST-LIO2',
-  faster_lio_pgo: 'Faster-LIO + SC-PGO',
-}
-
-const MODULE_LABELS = {
-  crop_z: 'Z 高度裁剪',
-  voxel_downsample: '体素降采样',
-  statistical_outlier: '统计离群点滤波',
-  radius_outlier: '半径离群点滤波',
-}
 
 const clone = (value) => JSON.parse(JSON.stringify(value))
 
@@ -89,17 +78,9 @@ function roleLabel(item) {
   return {
     optimized: 'SC-PGO 优化', frontend: 'Faster-LIO 原图', fastlio2: 'FAST-LIO2',
     planning: '规划派生', processed: '点云处理结果', legacy: '历史点云',
+    mola_frontend: 'MOLA-LIO 原图', mola_optimized: 'MOLA 回环处理',
+    lio_sam_front: 'LIO-SAM · 单前雷达', lio_sam_dual: 'LIO-SAM · 前后双雷达',
   }[item?.role] || '点云'
-}
-
-function moduleParameterText(module) {
-  if (!module.enabled) return '关闭'
-  const value = module.parameters || {}
-  if (module.type === 'crop_z') return `${value.min_z}～${value.max_z} m`
-  if (module.type === 'voxel_downsample') return `${value.voxel_size} m`
-  if (module.type === 'statistical_outlier') return `neighbors=${value.neighbors}, σ=${value.std_ratio}`
-  if (module.type === 'radius_outlier') return `${value.radius} m / ${value.min_points} 点`
-  return JSON.stringify(value)
 }
 
 function Modal({ title, subtitle, onClose, children, wide = false }) {
@@ -137,7 +118,7 @@ function MetadataModal({ item, onClose, onDone, notify }) {
     <Modal title="编辑地图资料" subtitle={item.relative_path} onClose={onClose}>
       <form className="modal-form" onSubmit={submit}>
         <label><span>显示名称</span><Input autoFocus value={name} onChange={(event) => setName(event.target.value)} /></label>
-        <label><span>备注</span><Textarea rows="4" value={note} onChange={(event) => setNote(event.target.value)} placeholder="记录场地、采集方式或质量判断" /></label>
+        <label><span>备注</span><Textarea rows="4" value={note} onChange={(event) => setNote(event.target.value)} placeholder="场地、采集方式或质量备注" /></label>
         <div className="modal-actions"><Button type="button" variant="outline" className="button secondary" onClick={onClose}>取消</Button><Button type="submit" className="button primary" disabled={busy}>{busy && <Spinner />}保存</Button></div>
       </form>
     </Modal>
@@ -193,7 +174,7 @@ function ProcessingModal({ item, configs, onClose, onStarted, onRefresh, notify 
     return { ...current, modules }
   })
   const saveConfig = async () => {
-    if (!saveName.trim()) return notify('先填写流水线配置名称', 'error')
+    if (!saveName.trim()) return notify('请填写配置名称', 'error')
     setBusy(true)
     try {
       const saved = await api('/api/processing/configs', {
@@ -230,7 +211,7 @@ function ProcessingModal({ item, configs, onClose, onStarted, onRefresh, notify 
   }
 
   return (
-    <Modal title="生成点云处理结果" subtitle={`输入：${item.name}`} onClose={onClose} wide>
+    <Modal title="处理点云" subtitle={`输入：${item.name}`} onClose={onClose} wide>
       <form className="modal-form processing-form" onSubmit={submit}>
         <Alert className="source-lock"><Database size={17} /><div><AlertTitle>源 PCD</AlertTitle><AlertDescription>{item.relative_path}</AlertDescription></div><Badge tone="active">只读</Badge></Alert>
         <div className="profile-row">
@@ -242,13 +223,13 @@ function ProcessingModal({ item, configs, onClose, onStarted, onRefresh, notify 
           {pipeline.modules.map((module, index) => <ParameterSwitch key={module.id} checked={module.enabled} onChange={(enabled) => updateModule(index, { enabled })} title={`${index + 1}. ${MODULE_LABELS[module.type] || module.type}`} actions={<span className="module-order"><Tooltip><TooltipTrigger render={<Button type="button" variant="outline" size="icon-xs" onClick={() => moveModule(index, -1)} disabled={index === 0} />}><ArrowUp size={13} /><span className="sr-only">上移模块</span></TooltipTrigger><TooltipContent>上移模块</TooltipContent></Tooltip><Tooltip><TooltipTrigger render={<Button type="button" variant="outline" size="icon-xs" onClick={() => moveModule(index, 1)} disabled={index === pipeline.modules.length - 1} />}><ArrowDown size={13} /><span className="sr-only">下移模块</span></TooltipTrigger><TooltipContent>下移模块</TooltipContent></Tooltip></span>}>
             {module.type === 'crop_z' && <><NumberField label="Z 最小值" value={module.parameters.min_z} onChange={(value) => setModuleParameter(index, 'min_z', value)} min="-100" max="100" step="0.1" unit="m" disabled={!module.enabled} /><NumberField label="Z 最大值" value={module.parameters.max_z} onChange={(value) => setModuleParameter(index, 'max_z', value)} min="-100" max="100" step="0.1" unit="m" disabled={!module.enabled} /></>}
             {module.type === 'voxel_downsample' && <NumberField label="体素边长" value={module.parameters.voxel_size} onChange={(value) => setModuleParameter(index, 'voxel_size', value)} min="0.02" max="1" step="0.01" unit="m" disabled={!module.enabled} />}
-            {module.type === 'statistical_outlier' && <><NumberField label="邻域点 neighbors" value={module.parameters.neighbors} onChange={(value) => setModuleParameter(index, 'neighbors', value)} min="2" max="500" step="1" disabled={!module.enabled} /><NumberField label="标准差倍数" value={module.parameters.std_ratio} onChange={(value) => setModuleParameter(index, 'std_ratio', value)} min="0.05" max="10" step="0.05" disabled={!module.enabled} /></>}
+            {module.type === 'statistical_outlier' && <><NumberField label="邻域点数" value={module.parameters.neighbors} onChange={(value) => setModuleParameter(index, 'neighbors', value)} min="2" max="500" step="1" disabled={!module.enabled} /><NumberField label="标准差倍数" value={module.parameters.std_ratio} onChange={(value) => setModuleParameter(index, 'std_ratio', value)} min="0.05" max="10" step="0.05" disabled={!module.enabled} /></>}
             {module.type === 'radius_outlier' && <><NumberField label="搜索半径" value={module.parameters.radius} onChange={(value) => setModuleParameter(index, 'radius', value)} min="0.01" max="5" step="0.01" unit="m" disabled={!module.enabled} /><NumberField label="最少邻点" value={module.parameters.min_points} onChange={(value) => setModuleParameter(index, 'min_points', value)} min="1" max="500" step="1" disabled={!module.enabled} /></>}
           </ParameterSwitch>)}
         </div>
-        <div className="output-fields"><label><span>结果名称</span><Input value={name} onChange={(event) => setName(event.target.value)} required /></label><label><span>备注</span><Input value={note} onChange={(event) => setNote(event.target.value)} placeholder="可记录场地和使用目的" /></label></div>
-        {submitError && <Alert variant="destructive" className="processing-error"><FileWarning /><div><AlertTitle>处理任务未能启动</AlertTitle><AlertDescription>{submitError}</AlertDescription></div></Alert>}
-        <div className="modal-actions"><Button type="button" variant="outline" className="button secondary" onClick={onClose}>取消</Button><Button type="submit" className="button primary" disabled={busy || !name.trim()}>{busy ? <><Spinner />正在创建任务…</> : '开始处理'}</Button></div>
+        <div className="output-fields"><label><span>结果名称</span><Input value={name} onChange={(event) => setName(event.target.value)} required /></label><label><span>备注</span><Input value={note} onChange={(event) => setNote(event.target.value)} placeholder="场地或用途" /></label></div>
+        {submitError && <Alert variant="destructive" className="processing-error"><FileWarning /><div><AlertTitle>处理启动失败</AlertTitle><AlertDescription>{submitError}</AlertDescription></div></Alert>}
+        <div className="modal-actions"><Button type="button" variant="outline" className="button secondary" onClick={onClose}>取消</Button><Button type="submit" className="button primary" disabled={busy || !name.trim()}>{busy ? <><Spinner />启动中…</> : '开始处理'}</Button></div>
       </form>
     </Modal>
   )
@@ -301,6 +282,7 @@ export default function Workspace3D({ section = "maps", setSection, navigate }) 
   const [selectedId, setSelectedId] = useState('')
   const [search, setSearch] = useState('')
   const [algorithm, setAlgorithm] = useState('faster_lio_pgo')
+  const [molaOptions, setMolaOptions] = useState({ bag_path: '', config_yaml: '' })
   const [actionBusy, setActionBusy] = useState(false)
   const [compare, setCompare] = useState(false)
   const [modal, setModal] = useState(null)
@@ -360,7 +342,7 @@ export default function Workspace3D({ section = "maps", setSection, navigate }) 
     if (job.status === 'complete' && job.result_id && ['running', 'cancelling'].includes(previous)) {
       setSection('processed')
       setSelectedId(job.result_id)
-      notify('点云处理完成，新 PCD 已保存')
+      notify('处理完成，PCD 已保存')
     } else if (job.status === 'failed' && ['running', 'cancelling'].includes(previous)) {
       notify(`点云处理失败：${job.error || '请查看任务日志'}`, 'error')
     }
@@ -397,7 +379,10 @@ export default function Workspace3D({ section = "maps", setSection, navigate }) 
   }, [archiveItems])
 
   const runtime = data?.runtime || { status: 'idle', logs: [] }
-  const runtimeBusy = ['running', 'stopping'].includes(runtime.status)
+  const runtimeBusy = ['running', 'starting', 'stopping', 'conflict', 'detached'].includes(runtime.status)
+  const selectedAlgorithm = data?.algorithms?.find(item => item.id === algorithm)
+  const algorithmName = id => data?.algorithms?.find(item => item.id === id)?.name || id
+  const offlineMapping = selectedAlgorithm?.input_mode === 'rosbag'
 
   const switchSection = (nextSection) => {
     sectionRef.current = nextSection
@@ -460,7 +445,7 @@ export default function Workspace3D({ section = "maps", setSection, navigate }) 
   const openArchiveDeletion = (items, deleteAll = false) => {
     const targets = deleteAll ? archiveItems : items
     if (!targets.length) {
-      notify(deleteAll ? '归档区已经是空的' : '请先勾选要永久删除的归档地图', 'error')
+      notify(deleteAll ? '归档区为空' : '请选择要删除的归档地图', 'error')
       return
     }
     setArchiveDelete({
@@ -503,7 +488,7 @@ export default function Workspace3D({ section = "maps", setSection, navigate }) 
   return (
     <div className="app-shell workspace3d">
       <header className="workspace-heading">
-        <div><h1>{{maps:'原始建图点云',processed:'点云处理结果',planning:'规划派生数据',archived:'3D 归档',failures:'运行异常记录'}[section]}</h1></div>
+        <div><h1>{{maps:'原始点云',processed:'点云处理结果',planning:'规划数据',archived:'3D 归档',failures:'异常记录'}[section]}</h1></div>
         <div className="heading-actions">
           {runtimeBusy && <Badge tone="active">建图运行中</Badge>}
           <Button variant="outline" onClick={() => refresh()} disabled={actionBusy}><RefreshCw size={16}/>重新扫描</Button>
@@ -512,16 +497,18 @@ export default function Workspace3D({ section = "maps", setSection, navigate }) 
         </div>
       </header>
       <Dialog open={mappingOpen} onOpenChange={setMappingOpen}><DialogContent className="mapping-dialog"><DialogHeader><DialogTitle>建图管理</DialogTitle><DialogDescription className="sr-only">建图启停与保存</DialogDescription></DialogHeader><section className="runtime-bar">
-        <Card size="sm" className={`runtime-state ${runtime.status}`}><span className="runtime-pulse" /><div><strong>{runtime.status === 'running' ? `${ALGORITHM_LABELS[runtime.algorithm]} 运行中` : runtime.status === 'failed' ? '建图流程异常' : runtime.status === 'detached' ? '检测到旧建图流程' : '建图流程未运行'}</strong><span>{runtime.error || (runtime.started_at ? `最近启动 ${formatTime(runtime.started_at)}` : 'ROS Domain 24 · rmw_zenoh_cpp')}</span></div></Card>
+        <Card size="sm" className={`runtime-state ${runtime.status}`}><span className="runtime-pulse" /><div><strong>{runtime.status === 'running' ? `${algorithmName(runtime.algorithm)} 运行中` : runtime.status === 'complete' ? '建图完成 · 已保存' : runtime.status === 'cancelled' ? '离线任务已取消' : runtime.status === 'stopping' ? '停止并清理中' : runtime.status === 'failed' ? '建图异常' : ['detached','conflict'].includes(runtime.status) ? '任务占用待核对' : '未建图'}</strong><span>{runtime.error || (runtime.started_at ? `最近启动 ${formatTime(runtime.started_at)}` : 'ROS Domain 24 · rmw_zenoh_cpp')}</span></div></Card>
         <div className="mapping-pipeline">
           <Card size="sm" className={`pipeline-stage ${runtimeBusy ? 'running' : ''}`}>
-            <div className="pipeline-title"><span>1</span><div><strong>选择建图后端</strong><Select value={algorithm} onValueChange={setAlgorithm} disabled={runtimeBusy}><SelectTrigger className="algorithm-select"><SelectValue>{data?.algorithms?.find((item) => item.id === algorithm)?.name || ALGORITHM_LABELS[algorithm]}</SelectValue></SelectTrigger><SelectContent>{data?.algorithms?.map((item) => <SelectItem value={item.id} key={item.id}>{item.name}</SelectItem>)}</SelectContent></Select></div></div>
-            {!runtimeBusy ? <Button onClick={() => runAction('/api/runtime/start', { algorithm }, `${ALGORITHM_LABELS[algorithm]} 已启动`)} disabled={actionBusy}><Play data-icon="inline-start" size={15} />开始建图</Button> : <Button variant="destructive" className="stop" onClick={() => runAction('/api/runtime/stop', null, '建图已停止并触发落盘')} disabled={actionBusy || runtime.status === 'stopping'}><CircleStop data-icon="inline-start" size={15} />结束建图</Button>}
+            <div className="pipeline-title"><span>1</span><div><strong>选择建图方案</strong><Select value={algorithm} onValueChange={setAlgorithm} disabled={runtimeBusy || actionBusy}><SelectTrigger className="algorithm-select"><SelectValue>{algorithmName(algorithm)}</SelectValue></SelectTrigger><SelectContent>{data?.algorithms?.map((item) => <SelectItem value={item.id} key={item.id}>{item.name}{item.available === false ? ' · 不可用' : ''}</SelectItem>)}</SelectContent></Select></div></div>
+            {!runtimeBusy ? <Button onClick={() => runAction('/api/runtime/start', { algorithm, ...(offlineMapping ? { options: { config_yaml: molaOptions.config_yaml, ...(molaOptions.bag_path ? { bag_path: molaOptions.bag_path } : {}) } } : {}) }, `${algorithmName(algorithm)} 任务已提交`)} disabled={actionBusy || selectedAlgorithm?.available === false || (offlineMapping && !molaOptions.config_yaml)}><Play data-icon="inline-start" size={15} />{offlineMapping ? '开始离线建图' : '开始建图'}</Button> : <Button variant="destructive" className="stop" onClick={() => runAction('/api/runtime/stop', null, '建图任务已停止；请核对已保存结果')} disabled={actionBusy || runtime.status === 'stopping'}><CircleStop data-icon="inline-start" size={15} />{runtime.algorithm === 'mola_lio_lc' ? '取消任务' : '结束建图'}</Button>}
           </Card>
+          {offlineMapping && <MolaMappingOptions value={molaOptions} onChange={setMolaOptions} disabled={runtimeBusy || actionBusy}/>}
+          {selectedAlgorithm?.available === false && <Alert variant="destructive"><AlertDescription>{selectedAlgorithm.unavailable_reason}</AlertDescription></Alert>}
           <ChevronRight className="pipeline-arrow" />
           <Card size="sm" className="pipeline-stage">
             <div className="pipeline-title" title="/d1max/slam/save"><span>2</span><div><strong>保存当前地图</strong></div></div>
-            <Button onClick={() => runAction('/api/runtime/save', null, '地图保存服务调用成功')} disabled={actionBusy || runtime.status !== 'running'}><Save data-icon="inline-start" size={15} />立即保存</Button>
+            <Button onClick={() => runAction('/api/runtime/save', null, '保存请求已发送')} disabled={actionBusy || runtime.status !== 'running' || runtime.algorithm === 'mola_lio_lc'}><Save data-icon="inline-start" size={15} />{offlineMapping || runtime.algorithm === 'mola_lio_lc' ? '阶段结束自动保存' : '立即保存'}</Button>
           </Card>
           <ChevronRight className="pipeline-arrow" />
           <Card size="sm" className="pipeline-stage readonly">
@@ -529,6 +516,7 @@ export default function Workspace3D({ section = "maps", setSection, navigate }) 
             <Check size={19} />
           </Card>
         </div>
+        {runtime.algorithm === 'mola_lio_lc' && runtime.id && <div className="mola-task-status"><strong>{{queued:'排队',preflight:'准备',input_check:'输入检查',lio:'LIO 建图',raw_metric_map:'前端地图生成',raw_ply:'前端点云导出',loop_closure:'离线回环',optimized_metric_map:'优化地图生成',optimized_ply:'优化点云导出',complete:'完成',cancelled:'已取消'}[runtime.stage] || runtime.stage}</strong><Progress value={runtime.progress || 0}/><code>{runtime.run_directory}</code><details><summary>任务日志</summary><pre>{runtime.logs?.join('\n')}</pre></details></div>}
       </section></DialogContent></Dialog>
       <AlertDialog open={cleanupOpen} onOpenChange={setCleanupOpen}><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>清理 Web 建图进程？</AlertDialogTitle><AlertDialogDescription>只停止本 Web 启动的建图，不删除地图或点云。</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>取消</AlertDialogCancel><AlertDialogAction variant="destructive" onClick={()=>{setCleanupOpen(false);runAction('/api/runtime/cleanup',null,'Web 建图进程已清理')}}>确认清理</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
 
@@ -556,10 +544,10 @@ export default function Workspace3D({ section = "maps", setSection, navigate }) 
             <div className="preview-toolbar">
               <div><strong>{selected.name}</strong><span>{selected.relative_path}</span></div>
               <div className="toolbar-badges"><Badge tone={selected.issues.length ? 'warning' : 'active'}>{selected.issues.length ? `${selected.issues.length} 项提示` : '文件完整'}</Badge>{selected.recommended && <Badge tone="blue"><Sparkles size={12} />回环验证</Badge>}</div>
-              <div className="preview-actions">{peer && <Button variant="outline" size="sm" className={`view-button ${compare ? 'active' : ''}`} onClick={() => setCompare((value) => !value)}><GitCompareArrows data-icon="inline-start" size={16} />{compare ? '单图查看' : selected.category === 'processed' ? '原图 / 处理后对比' : '前端 / PGO 对比'}</Button>}</div>
+              <div className="preview-actions">{peer && <Button variant="outline" size="sm" className={`view-button ${compare ? 'active' : ''}`} onClick={() => setCompare((value) => !value)}><GitCompareArrows data-icon="inline-start" size={16} />{compare ? '单图' : selected.category === 'processed' ? '处理前后对比' : '前端 / PGO 对比'}</Button>}</div>
             </div>
             <div className={`map-stage ${compare && peer ? 'compare' : ''}`}>
-              <Suspense fallback={<div className="canvas-overlay"><Spinner />正在载入 3D 模块</div>}>
+              <Suspense fallback={<div className="canvas-overlay"><Spinner />加载点云视图…</div>}>
                 <div className="cloud-panel"><PointCloudView url={selected.cloud_url} compact={compare} />{compare && <span className="cloud-label">A · {roleLabel(selected)}</span>}</div>
                 {compare && peer && <div className="cloud-panel"><PointCloudView url={peer.cloud_url} compact /><span className="cloud-label">B · {roleLabel(peer)}</span></div>}
               </Suspense>
@@ -571,7 +559,7 @@ export default function Workspace3D({ section = "maps", setSection, navigate }) 
         <Card className="inspector">
           <ScrollArea className="inspector-scroll">
           {selected ? <>
-            <div className="inspector-head"><div className={`large-map-icon ${selected.role}`}><Box size={26} /></div><div><span>{selected.family}</span><h2>{selected.name}</h2><div>{selected.active && <Badge tone="active">当前</Badge>}{selected.recommended && <Badge tone="blue">推荐</Badge>}{selected.latest && <Badge tone="latest">最新落盘</Badge>}</div></div></div>
+            <div className="inspector-head"><div className={`large-map-icon ${selected.role}`}><Box size={26} /></div><div><span>{selected.family}</span><h2>{selected.name}</h2><div>{selected.active && <Badge tone="active">当前</Badge>}{selected.recommended && <Badge tone="blue">推荐</Badge>}{selected.latest && <Badge tone="latest">最新</Badge>}</div></div></div>
             {!!selected.issues.length && <Alert className="issue-panel"><FileWarning size={18} /><div><AlertTitle>质量提示</AlertTitle>{selected.issues.map((issue) => <AlertDescription key={issue}>{issue}</AlertDescription>)}</div></Alert>}
             <section className="detail-section"><h3>点云信息</h3><dl><div><dt>角色</dt><dd>{roleLabel(selected)}</dd></div><div><dt>点数</dt><dd>{selected.points?.toLocaleString() || '未记录'}</dd></div><div><dt>文件大小</dt><dd>{selected.size_human}</dd></div><div><dt>格式</dt><dd>{selected.extension.toUpperCase()} · {selected.storage || '未知编码'}</dd></div><div><dt>修改时间</dt><dd>{formatTime(selected.modified_at)}</dd></div></dl></section>
             {selected.category === 'processed' && <section className="detail-section processing-details"><h3>处理记录</h3><dl><div><dt>源地图</dt><dd title={selected.source_path}>{selected.source_name || '源文件已移动'}</dd></div><div><dt>原始点数</dt><dd>{selected.input_points?.toLocaleString() || '未记录'}</dd></div><div><dt>减少比例</dt><dd>{selected.removed_percent == null ? '未计算' : `${selected.removed_percent}%`}</dd></div><div><dt>流水线配置</dt><dd>{selected.config_name || selected.profile_name || '旧版参数'}</dd></div></dl><div className="stage-counts">{selected.stage_counts?.map((stage) => <div key={stage.stage}><span>{stage.label}</span><strong>{stage.points?.toLocaleString()}</strong></div>)}</div>{selected.pipeline?.modules ? <div className="parameter-summary">{selected.pipeline.modules.map((module, index) => <Fragment key={module.id}><span>{index + 1}. {MODULE_LABELS[module.type] || module.type}</span><code>{moduleParameterText(module)}</code></Fragment>)}</div> : <div className="parameter-summary"><span>统计</span><code>{selected.parameters?.statistical_enabled ? `k=${selected.parameters.statistical_mean_k}, σ=${selected.parameters.statistical_std_dev_mul}` : '关闭'}</code><span>半径</span><code>{selected.parameters?.radius_enabled ? `${selected.parameters.radius}m / ${selected.parameters.radius_min_points}点` : '关闭'}</code><span>体素</span><code>{selected.parameters?.voxel_enabled ? `${selected.parameters.voxel_leaf}m` : '关闭'}</code><span>Z 裁剪</span><code>{selected.parameters?.crop_enabled ? `${selected.parameters.z_min}～${selected.parameters.z_max}m` : '关闭'}</code></div>}</section>}
@@ -579,12 +567,12 @@ export default function Workspace3D({ section = "maps", setSection, navigate }) 
             <section className="detail-section"><h3>文件路径</h3><div className="path-row"><code title={selected.path}>{selected.path}</code><TooltipButton label="复制点云路径" className="icon-button" onClick={() => copyPath(selected.path)}><Copy size={15} /></TooltipButton></div>{selected.pipeline_path && <div className="path-row pipeline-path"><code title={selected.pipeline_path}>{selected.pipeline_path}</code><TooltipButton label="复制流水线路径" className="icon-button" onClick={() => copyPath(selected.pipeline_path)}><Copy size={15} /></TooltipButton></div>}</section>
             {selected.note && <section className="detail-section"><h3>备注</h3><p>{selected.note}</p></section>}
             <div className="inspector-actions">
-              {['maps','processed'].includes(selected.category) && !selected.archived && <Button variant="outline" className="button wide" onClick={()=>navigate('/2d/build?source='+selected.id)}><Map size={16}/>用此 PCD 生成 2D 地图</Button>}
-              {selected.category === 'maps' && <Button variant="secondary" className="button process wide" onClick={() => setModal({ type: 'processing', item: selected })} disabled={processingJob.running}><SlidersHorizontal data-icon="inline-start" size={16} />{processingJob.running ? '已有点云处理任务运行中' : '配置参数并处理 PCD'}</Button>}
-              <Button variant="outline" className="button secondary wide" onClick={() => setModal({ type: 'metadata', item: selected })}><Pencil data-icon="inline-start" size={16} />编辑名称与备注</Button>
-              {['maps', 'processed'].includes(selected.category) && !selected.active && <Button className="button primary wide" onClick={() => runAction('/api/active', { map_id: selected.id }, '已标为当前 3D 地图')} disabled={actionBusy}><MapPin data-icon="inline-start" size={16} />标为当前 3D 地图</Button>}
-              {selected.archived && <Button variant="destructive" className="button danger-soft wide" onClick={() => openArchiveDeletion([selected])} disabled={actionBusy}><Trash2 data-icon="inline-start" size={16} />永久删除此项</Button>}
-              <Button variant="ghost" className="button ghost wide" onClick={() => updateMetadata(selected, { archived: !selected.archived }, selected.archived ? '已恢复到地图列表' : '已无损归档')} disabled={actionBusy}>{selected.archived ? <RotateCcw data-icon="inline-start" size={16} /> : <Archive data-icon="inline-start" size={16} />}{selected.archived ? '恢复显示' : '无损归档'}</Button>
+              {['maps','processed'].includes(selected.category) && !selected.archived && <Button variant="outline" className="button wide" onClick={()=>navigate('/2d/build?source='+selected.id)}><Map size={16}/>生成 2D 地图</Button>}
+              {selected.category === 'maps' && <Button variant="secondary" className="button process wide" onClick={() => setModal({ type: 'processing', item: selected })} disabled={processingJob.running}><SlidersHorizontal data-icon="inline-start" size={16} />{processingJob.running ? '点云处理中' : '处理 PCD'}</Button>}
+              <Button variant="outline" className="button secondary wide" onClick={() => setModal({ type: 'metadata', item: selected })}><Pencil data-icon="inline-start" size={16} />名称与备注</Button>
+              {['maps', 'processed'].includes(selected.category) && !selected.active && <Button className="button primary wide" onClick={() => runAction('/api/active', { map_id: selected.id }, '当前地图已更新')} disabled={actionBusy}><MapPin data-icon="inline-start" size={16} />设为当前地图</Button>}
+              {selected.archived && <Button variant="destructive" className="button danger-soft wide" onClick={() => openArchiveDeletion([selected])} disabled={actionBusy}><Trash2 data-icon="inline-start" size={16} />永久删除</Button>}
+              <Button variant="ghost" className="button ghost wide" onClick={() => updateMetadata(selected, { archived: !selected.archived }, selected.archived ? '已恢复' : '已归档')} disabled={actionBusy}>{selected.archived ? <RotateCcw data-icon="inline-start" size={16} /> : <Archive data-icon="inline-start" size={16} />}{selected.archived ? '恢复显示' : '归档'}</Button>
             </div>
           </> : <Empty className="inspector-empty"><EmptyHeader><EmptyMedia variant="icon"><ServerCog size={25} /></EmptyMedia><EmptyDescription>未选择点云</EmptyDescription></EmptyHeader></Empty>}
           </ScrollArea>
@@ -604,8 +592,8 @@ export default function Workspace3D({ section = "maps", setSection, navigate }) 
             <AlertDialogTitle>永久删除 {archiveDelete?.count || 0} 个归档点云？</AlertDialogTitle>
             <AlertDialogDescription>预计清理 {formatBytes(archiveDelete?.bytes)}。此操作会直接删除磁盘文件及 Web 预览缓存，无法恢复；处理结果的 pipeline.yaml 和 manifest.json 也会一并删除。未归档地图不会受影响。</AlertDialogDescription>
           </AlertDialogHeader>
-          <Alert className="permanent-delete-warning" variant="destructive"><FileWarning /><div><AlertTitle>这不是无损归档</AlertTitle><AlertDescription>{archiveDelete?.deleteAll ? '将清空整个归档区，包括当前搜索结果之外的条目。' : '只会删除这次勾选或指定的归档条目。'}</AlertDescription></div></Alert>
-          <AlertDialogFooter><AlertDialogCancel disabled={actionBusy}>取消</AlertDialogCancel><AlertDialogAction variant="destructive" onClick={confirmArchiveDeletion} disabled={actionBusy}>{actionBusy ? <><Spinner />正在清理磁盘…</> : '确认永久删除'}</AlertDialogAction></AlertDialogFooter>
+          <Alert className="permanent-delete-warning" variant="destructive"><FileWarning /><div><AlertTitle>永久删除</AlertTitle><AlertDescription>{archiveDelete?.deleteAll ? '将清空整个归档区，包括当前搜索结果之外的条目。' : '只会删除这次勾选或指定的归档条目。'}</AlertDescription></div></Alert>
+          <AlertDialogFooter><AlertDialogCancel disabled={actionBusy}>取消</AlertDialogCancel><AlertDialogAction variant="destructive" onClick={confirmArchiveDeletion} disabled={actionBusy}>{actionBusy ? <><Spinner />删除中…</> : '确认永久删除'}</AlertDialogAction></AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
     </div>

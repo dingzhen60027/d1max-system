@@ -1,0 +1,8 @@
+// Offline MOLA CLI may initialize rclcpp internally. No live-router or LAN discovery.
+{
+  mode: "peer",
+  connect: { endpoints: [] },
+  listen: { endpoints: ["tcp/127.0.0.1:0"] },
+  scouting: { multicast: { enabled: false }, gossip: { enabled: false } },
+  timestamping: { enabled: true },
+}

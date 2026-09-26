@@ -1,0 +1,31 @@
+pct_route_server:
+  ros__parameters:
+    use_sim_time: false
+    planning_grid: /home/dndx/d1max_nav_ws/maps/processed/sc_pgo_20260919_ground_20260921/global_path_reachable/planning_grid.npz
+    vendor_root: /home/dndx/d1max_nav_ws/src/pct_planner_vendor
+    planning_frame: d1max_loc_map
+    body_frame: d1max_loc_base_link
+    odometry_topic: /d1max/localization/odometry/global
+    goal_topic: /d1max/pct_scan/goal
+    cancel_topic: /d1max/pct_scan/cancel
+    path_topic: /d1max/pct_scan/global_path
+    reference_topic: /d1max/pct_scan/reference_path
+    status_topic: /d1max/pct_scan/global_status
+    task_topic: /d1max/pct_scan/task
+    session_id: ""
+    body_height_m: 0.55
+    odometry_timeout_s: 0.5
+    goal_max_age_s: 5.0
+    planning_timeout_s: 20.0
+    # Steady-time watchdog; only actual XY translation counts, not yaw/commands.
+    # Twenty seconds allows initial turn-in-place without indefinite active state.
+    progress_timeout_s: 20.0
+    progress_distance_m: 0.10
+    max_start_motion_m: 0.4
+    goal_tolerance_m: 0.25
+    cost_margin_m: 0.6
+    minimum_clearance_m: 0.2
+    # Extra PCT optimization corridor only; measured free mask is not expanded.
+    optimization_guard_cells: 1
+    max_heading_rate: 10.0
+    max_ground_step_m: 0.15

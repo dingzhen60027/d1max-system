@@ -11,6 +11,7 @@
 #include "rosgraph_msgs/msg/clock.hpp"
 #include "robot_sdk/sdk_client.hpp"
 #include "console_control_core.hpp"
+#include "sdk_session_core.hpp"
 
 using Json=nlohmann::json;
 using String=std_msgs::msg::String;
@@ -154,4 +155,9 @@ void Acks::OnSpeed(int s){if(s==b_->core.config.speed_level)b_->ack("set_speed")
 void Acks::OnSoftEmergencyStop(bool on){b_->ack(on?"soft_estop":"recover_estop");}
 void Acks::OnTakeControlAck(const robot_sdk::TakeControlAck& a){b_->ack("take_control",a.error_code==0);}
 void Acks::OnReleaseControlAck(const robot_sdk::ReleaseControlAck& a){b_->ack("release_control",a.error_code==0);}
-int main(int argc,char** argv){rclcpp::init(argc,argv);auto node=std::make_shared<Bridge>();rclcpp::spin(node);node.reset();if(rclcpp::ok())rclcpp::shutdown();}
+int main(int argc,char** argv){
+  try {
+    d1monitor::SessionLease lease;
+    rclcpp::init(argc,argv);auto node=std::make_shared<Bridge>();rclcpp::spin(node);node.reset();if(rclcpp::ok())rclcpp::shutdown();
+  }catch(const std::exception& error){fprintf(stderr,"SDK console: %s\n",error.what());return 1;}
+}

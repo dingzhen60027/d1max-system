@@ -35,6 +35,15 @@ namespace scan_planner
                                  const std::vector<Eigen::Vector3d> &waypoints, const Eigen::Vector3d &end_vel, const Eigen::Vector3d &end_acc);
 
     void initPlanModules(rclcpp::Node *node, PlanningVisualization::Ptr vis = nullptr);
+    void setLocalReference(const std::vector<Eigen::Vector3d> &points) { local_reference_ = points; }
+    const std::string &lastFailurePhase() const { return last_failure_phase_; }
+    const std::vector<Eigen::Vector3d> &attemptBlockedPoints() const { return attempt_blocked_points_; }
+    const std::vector<Eigen::Vector3d> &attemptDetourSeed() const { return attempt_detour_seed_; }
+    // Optional continuity proof has its own small budget. Failure never relaxes
+    // collision checks or rejects an otherwise valid replacement trajectory.
+    bool recheckPredecessor(UniformBspline &trajectory) {
+      return checkWholeTrajectoryCollision(trajectory, 5000, .008, false);
+    }
 
     PlanParameters pp_;
     LocalTrajData local_data_;
@@ -43,6 +52,10 @@ namespace scan_planner
 
   private:
     rclcpp::Node *node_{nullptr};
+    std::vector<Eigen::Vector3d> local_reference_;
+    std::string last_failure_phase_{"failed_optimization"};
+    std::vector<Eigen::Vector3d> attempt_blocked_points_, attempt_detour_seed_;
+    double reference_detour_anchor_margin_{.5};
     /* main planning algorithms & modules */
     PlanningVisualization::Ptr visualization_;
 
@@ -52,6 +65,8 @@ namespace scan_planner
 
     void updateTrajInfo(const UniformBspline &position_traj, const rclcpp::Time time_now);
     bool checkDynamicFeasibility(UniformBspline position_traj);
+    bool checkWholeTrajectoryCollision(UniformBspline &position_traj,
+        std::size_t query_budget=200000, double wall_budget_seconds=0., bool diagnostic=true);
 
     void reparamBspline(UniformBspline &bspline, vector<Eigen::Vector3d> &start_end_derivative, double ratio, Eigen::MatrixXd &ctrl_pts, double &dt,
                         double &time_inc);

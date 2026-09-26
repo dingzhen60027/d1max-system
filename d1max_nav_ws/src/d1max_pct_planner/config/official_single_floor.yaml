@@ -1,0 +1,43 @@
+# One YAML reproduces the complete map build, not the old extracted-ground adapter.
+# PYTHONPATH=/home/dndx/d1max_nav_ws/src/d1max_pct_planner python3 -m d1max_pct_planner.official_pipeline --config /home/dndx/d1max_nav_ws/src/d1max_pct_planner/config/official_single_floor.yaml
+schema_version: 1
+source_pcd: /home/dndx/d1max_nav_ws/maps/runs/20260919_125722_855277_central_imu_faster_lio_sc_pgo_zenoh/sc_pgo/optimized_map.pcd
+output_directory: /home/dndx/d1max_nav_ws/maps/processed/sc_pgo_20260919_pct_official_20260922
+vendor_root: /home/dndx/d1max_nav_ws/src/pct_planner_vendor
+frame_id: d1max_loc_map
+preprocessing:
+  # Full finite source retained initially; optional ROI is {min: [x,y,z], max: [x,y,z]}.
+  roi: null
+  voxel_size_m: 0.0
+  radius_outlier:
+    enabled: false
+    radius_m: 0.15
+    minimum_neighbors: 3
+pct:
+  resolution: 0.20
+  slice_dh: 0.50
+  ground_height: auto
+  simplify_layers: true
+  limits:
+    max_axis_cells: 2000
+    max_layers: 128
+    max_total_cells: 25000000
+    max_working_bytes: 2500000000
+  traversability:
+    kernel_size: 7
+    interval_min: 0.55
+    interval_free: 0.70
+    slope_max_rad: 0.40
+    step_max: 0.17
+    standable_ratio: 0.20
+    cost_barrier: 50.0
+    safe_margin: 0.40
+    inflation: 0.20
+export:
+  traversable_pcd: true
+notes:
+  - CPU port of official PCT equations, not CUDA execution; the official native global planner consumes the result.
+  - Resolution follows the official 0.2 m option; other traversal parameters follow Building with 0.55 m minimum headroom.
+  - Single-floor is a task scope, not a forced single slice. Real higher surfaces remain distinguishable.
+  - Static offline geometry only. Body width, gait and stopping clearance still need physical validation.
+  - No ground filling, flattening or invented ceiling. Unobserved above is not a certified open sky.
