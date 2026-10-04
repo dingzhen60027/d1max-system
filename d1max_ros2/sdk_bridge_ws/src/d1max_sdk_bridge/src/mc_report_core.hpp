@@ -3,9 +3,9 @@
 #include <array>
 #include <cmath>
 #include <cstdint>
-#include <deque>
 #include <stdexcept>
 #include <string>
+#include <utility>
 
 namespace d1monitor {
 // Fixed storage, O(1) callback copy, discard oldest on overflow. Externally locked.
@@ -18,10 +18,30 @@ template<class T, size_t Capacity> struct Inbox {
     if(size==Capacity){head=(head+1)%Capacity;--size;++dropped;}
     data[(head+size)%Capacity]=value;++size;
   }
+  void push(T&& value) {
+    if(size==Capacity){head=(head+1)%Capacity;--size;++dropped;}
+    data[(head+size)%Capacity]=std::move(value);++size;
+  }
   bool pop(T& value) {
     if(!size)return false;
-    value=data[head];head=(head+1)%Capacity;--size;return true;
+    value=std::move(data[head]);head=(head+1)%Capacity;--size;return true;
   }
+};
+
+// Same two-second timing window and 512-sample flood bound as before, with
+// storage allocated once rather than deque blocks in the MC state lock.
+template<class T, size_t Capacity> class FixedWindow {
+ public:
+  static_assert(Capacity > 0);
+  bool empty() const{return size_==0;}
+  size_t size() const{return size_;}
+  const T& front() const{return data_[head_];}
+  const T& back() const{return data_[(head_+size_-1)%Capacity];}
+  void clear(){head_=size_=0;}
+  void pop_front(){head_=(head_+1)%Capacity;--size_;}
+  void push_back(T value){if(size_==Capacity)pop_front();data_[(head_+size_)%Capacity]=std::move(value);++size_;}
+ private:
+  std::array<T,Capacity> data_{};size_t head_=0,size_=0;
 };
 
 // SetMcConfig only switches reporting on/off. expected_hz is a diagnostic
@@ -54,7 +74,24 @@ struct McReport {
   double anchor_wall=0.,stamp_unix=0.;
   std::string write_error;
   struct Timing {double arrival;uint64_t source;};
-  std::deque<Timing> timings;
+  FixedWindow<Timing,512> timings;
+  // Diagnostics copy scalar results only. They never own/copy the timing
+  // history and are evaluated at one snapshot time, outside JSON/publish.
+  struct Snapshot {
+    double expected_hz,minimum_hz,maximum_hz;
+    bool acknowledged,ack_on,write_complete;
+    uint64_t samples,invalid_samples,timestamp_rejections,stale_samples,total_attempts;
+    unsigned attempts,max_attempts,retry_cycles;
+    bool fresh,rate_ok;
+    double observed_hz,source_hz,next_retry_in;
+    std::string state,write_error;
+  };
+  Snapshot snapshot(double now) const {
+    return {expected_hz,minimum_hz,maximum_hz,acknowledged,ack_on,write_complete,
+      samples,invalid_samples,timestamp_rejections,stale_samples,total_attempts,
+      attempts,max_attempts,retry_cycles,fresh(now),rate_ok(now),observed_hz(now),
+      source_hz(now),next_retry_in(now),state(now),write_error};
+  }
   void validate() const {
     if(max_attempts<1||max_attempts>5||!std::isfinite(ready_delay)||ready_delay<0||
        !std::isfinite(retry_sec)||retry_sec<2.5||retry_sec>30||
@@ -111,8 +148,6 @@ struct McReport {
     if(last_arrival<0||arrival-last_arrival>=stale_sec){stable_since=arrival;timings.clear();}
     last_source=source;last_arrival=arrival;stamp_unix=candidate;++samples;
     timings.push_back({arrival,source});prune(now);
-    // Bound memory even under a faulty callback flood.
-    while(timings.size()>512)timings.pop_front();
     return true;
   }
   bool request_due(bool is_connected,bool is_replay,double now,bool allow_request=true) {

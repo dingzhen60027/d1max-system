@@ -63,5 +63,7 @@ if(BUILD_TESTING)
   # Explicit offline CLI only; not a CTest or ROS executable/node.
   add_executable(offline_projected_rays_probe test/offline_projected_rays_probe.cpp)
   target_link_libraries(offline_projected_rays_probe plan_env)
+  add_executable(offline_collision_performance_probe test/offline_collision_performance_probe.cpp)
+  target_link_libraries(offline_collision_performance_probe plan_env)
 endif()
 ament_package()

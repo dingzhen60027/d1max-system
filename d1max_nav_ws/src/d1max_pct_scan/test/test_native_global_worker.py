@@ -144,6 +144,39 @@ def test_warmup_timeout_latches_without_tick_respawn_or_goal_changes(monkeypatch
     assert events.count('spawn')==1 and obj.generation==91
 
 
+def test_exited_worker_final_decode_remains_bounded_by_original_warmup_deadline(monkeypatch):
+    obj,now,events=warmup_owner(monkeypatch)
+    LiveGlobalPlanner._start_warmup(obj)
+    obj.child.is_alive=lambda:False
+    obj.pipe.receive_finished=False
+    LiveGlobalPlanner._poll_warmup(obj)
+    assert obj.warmup['phase']=='running'
+    now[0]=13.
+    LiveGlobalPlanner._poll_warmup(obj)
+    assert obj.warmup['phase']=='failed' and events.count('stop')==1
+
+
+def test_owner_tick_does_not_retire_warmup_mid_decode_and_retires_failed_idle_channel(monkeypatch):
+    obj,now,events=warmup_owner(monkeypatch)
+    LiveGlobalPlanner._start_warmup(obj)
+    obj.retired_children.reap=lambda:None
+    obj._revoke_if_context_lost=lambda:None
+    obj.pending_goal=None
+    obj.static_validator=SimpleNamespace(poll=lambda:None)
+    obj.last_status_at=now[0]
+    obj.child.is_alive=lambda:False
+    obj.pipe.receive_finished=False
+    LiveGlobalPlanner.tick(obj)
+    assert obj.child is not None and obj.warmup['phase']=='running'
+    obj.warmup['phase']='ready'
+    obj.child.is_alive=lambda:True
+    obj.pipe.failed=True
+    obj.worker_generation=None
+    assert not LiveGlobalPlanner.idle_worker_available(obj)
+    LiveGlobalPlanner.tick(obj)
+    assert obj.child is None and events.count('stop')==1
+
+
 @pytest.mark.parametrize('token,kind',[(2,'warmed'),(1,'planned'),(1,'warmup_failed')])
 def test_warmup_wrong_token_route_packet_or_failure_cannot_be_ready(monkeypatch,token,kind):
     obj,_,events=warmup_owner(monkeypatch);LiveGlobalPlanner._start_warmup(obj)

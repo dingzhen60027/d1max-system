@@ -327,7 +327,11 @@ void GridMap::copyCollisionSnapshotTo(GridMap &out,std::int64_t source_now_ns,
   out.mp_=mp_;
   out.md_.occupancy_buffer_=md_.occupancy_buffer_;
   out.md_.occupancy_buffer_inflate_=md_.occupancy_buffer_inflate_;
-  out.md_.occupancy_buffer_inflate_cnt_=md_.occupancy_buffer_inflate_cnt_;
+  // Incremental inflation counters belong to fusion only. Collision readers
+  // use the committed flags/raw evidence and never update the map. Do not
+  // allocate/copy four bytes per voxel into each of the three read slots.
+  if(!out.md_.occupancy_buffer_inflate_cnt_.empty())
+    std::vector<int>().swap(out.md_.occupancy_buffer_inflate_cnt_);
   out.md_.inflate_offsets_=md_.inflate_offsets_;
   out.free_observation_stamps_=free_observation_stamps_;
   out.integrated_cloud_stamp_ns_=integrated_cloud_stamp_ns_;

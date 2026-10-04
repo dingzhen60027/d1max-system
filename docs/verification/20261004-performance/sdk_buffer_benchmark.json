@@ -1,0 +1,1494 @@
+{
+  "status": "source_and_isolated_pure_logic_only",
+  "physical_acceptance_verified": false,
+  "deployed": false,
+  "sdk_connected": false,
+  "robot_motion_performed": false,
+  "measured_at": "2026-10-04",
+  "cpu": "Intel Core i9-14900HX",
+  "compiler": "GNU C++ 11.4.0",
+  "flags": "-std=c++17 -O3 -DNDEBUG",
+  "cpu_affinity": 2,
+  "baseline_commit": "b344f52501851a109c5b55220e7f7b75fd638962",
+  "baseline_source": "/home/dndx/d1max-system/d1max_ros2/sdk_bridge_ws/src/d1max_sdk_bridge",
+  "optimized_source": "/home/dndx/智元四足机器人D1 Max二次开发文档资料包v0.1.0/d1max_ros2/sdk_bridge_ws/src/d1max_sdk_bridge",
+  "build_dir": "/tmp/d1max-sdk-architecture-gtUR7F",
+  "methodology": "Same benchmark source compiled against baseline/current production headers; no SDK/ROS executor. Final measurements after root granted an exclusive team benchmark window. 7 alternating baseline/current runs per mode. Heap counting and system-allocator timing are separate executable variants. MC entry uses noinline,noclone; checksum observed. std::malloc-requested C++ heap bytes exclude allocator metadata, stack, ROS/SDK/Zenoh memory. RSS is process peak from /usr/bin/time.",
+  "summary": [
+    {
+      "name": "mc_accepted_sample_50hz",
+      "baseline": {
+        "ns_median": 13.1182,
+        "ns_min": 7.83073,
+        "ns_max": 14.4526,
+        "allocations": 31251,
+        "requested_bytes": 16000144,
+        "peak_heap_bytes": 2704,
+        "entry_heap_bytes": 576,
+        "exit_heap_bytes": 2704
+      },
+      "optimized": {
+        "ns_median": 6.79501,
+        "ns_min": 3.93446,
+        "ns_max": 8.92187,
+        "allocations": 0,
+        "requested_bytes": 0,
+        "peak_heap_bytes": 0,
+        "entry_heap_bytes": 0,
+        "exit_heap_bytes": 0
+      },
+      "speedup": 1.9305637519297247
+    },
+    {
+      "name": "mc_diagnostic_snapshot_50hz",
+      "baseline": {
+        "ns_median": 79.2116,
+        "ns_min": 77.8132,
+        "ns_max": 79.7541,
+        "allocations": 3000000,
+        "requested_bytes": 1066000000,
+        "peak_heap_bytes": 4244,
+        "entry_heap_bytes": 2112,
+        "exit_heap_bytes": 2112
+      },
+      "optimized": {
+        "ns_median": 19.4225,
+        "ns_min": 14.4915,
+        "ns_max": 20.4513,
+        "allocations": 500000,
+        "requested_bytes": 10000000,
+        "peak_heap_bytes": 20,
+        "entry_heap_bytes": 0,
+        "exit_heap_bytes": 0
+      },
+      "speedup": 4.078342128974128
+    },
+    {
+      "name": "commit_enqueue_drain_distinct",
+      "baseline": {
+        "ns_median": 470.084,
+        "ns_min": 462.243,
+        "ns_max": 474.355,
+        "allocations": 3075056,
+        "requested_bytes": 382602472,
+        "peak_heap_bytes": 15549,
+        "entry_heap_bytes": 309,
+        "exit_heap_bytes": 2781
+      },
+      "optimized": {
+        "ns_median": 331.411,
+        "ns_min": 329.112,
+        "ns_max": 333.874,
+        "allocations": 1400000,
+        "requested_bytes": 61800000,
+        "peak_heap_bytes": 2781,
+        "entry_heap_bytes": 309,
+        "exit_heap_bytes": 309
+      },
+      "speedup": 1.4184320979086391
+    }
+  ],
+  "runs": [
+    {
+      "iteration": 1,
+      "variant": "baseline",
+      "mode": "counted",
+      "records": [
+        {
+          "implementation": "baseline_b344f52",
+          "mc_object_bytes": 336
+        },
+        {
+          "allocation_instrumentation": true
+        },
+        {
+          "name": "mc_accepted_sample_50hz",
+          "operations": 1000000,
+          "ns_per_op": 11.2106,
+          "allocations": 31251,
+          "requested_bytes": 16000144,
+          "entry_heap_bytes": 576,
+          "peak_heap_bytes": 2704,
+          "exit_heap_bytes": 2704
+        },
+        {
+          "name": "mc_diagnostic_snapshot_50hz",
+          "operations": 500000,
+          "ns_per_op": 70.4279,
+          "allocations": 3000000,
+          "requested_bytes": 1066000000,
+          "entry_heap_bytes": 2112,
+          "peak_heap_bytes": 4244,
+          "exit_heap_bytes": 2112
+        },
+        {
+          "name": "commit_enqueue_drain_distinct",
+          "operations": 200000,
+          "ns_per_op": 444.47,
+          "allocations": 3075056,
+          "requested_bytes": 382602472,
+          "entry_heap_bytes": 309,
+          "peak_heap_bytes": 15549,
+          "exit_heap_bytes": 2781
+        },
+        {
+          "checksum": 20111600000
+        }
+      ],
+      "max_rss_kb": 3584,
+      "wall_s": 0.13
+    },
+    {
+      "iteration": 1,
+      "variant": "optimized",
+      "mode": "counted",
+      "records": [
+        {
+          "implementation": "optimized_source",
+          "mc_object_bytes": 8464,
+          "mc_snapshot_bytes": 176
+        },
+        {
+          "allocation_instrumentation": true
+        },
+        {
+          "name": "mc_accepted_sample_50hz",
+          "operations": 1000000,
+          "ns_per_op": 7.88039,
+          "allocations": 0,
+          "requested_bytes": 0,
+          "entry_heap_bytes": 0,
+          "peak_heap_bytes": 0,
+          "exit_heap_bytes": 0
+        },
+        {
+          "name": "mc_diagnostic_snapshot_50hz",
+          "operations": 500000,
+          "ns_per_op": 17.6093,
+          "allocations": 500000,
+          "requested_bytes": 10000000,
+          "entry_heap_bytes": 0,
+          "peak_heap_bytes": 20,
+          "exit_heap_bytes": 0
+        },
+        {
+          "name": "commit_enqueue_drain_distinct",
+          "operations": 200000,
+          "ns_per_op": 320.516,
+          "allocations": 1400000,
+          "requested_bytes": 61800000,
+          "entry_heap_bytes": 309,
+          "peak_heap_bytes": 2781,
+          "exit_heap_bytes": 309
+        },
+        {
+          "checksum": 20111600000
+        }
+      ],
+      "max_rss_kb": 3584,
+      "wall_s": 0.08
+    },
+    {
+      "iteration": 2,
+      "variant": "optimized",
+      "mode": "counted",
+      "records": [
+        {
+          "implementation": "optimized_source",
+          "mc_object_bytes": 8464,
+          "mc_snapshot_bytes": 176
+        },
+        {
+          "allocation_instrumentation": true
+        },
+        {
+          "name": "mc_accepted_sample_50hz",
+          "operations": 1000000,
+          "ns_per_op": 5.88593,
+          "allocations": 0,
+          "requested_bytes": 0,
+          "entry_heap_bytes": 0,
+          "peak_heap_bytes": 0,
+          "exit_heap_bytes": 0
+        },
+        {
+          "name": "mc_diagnostic_snapshot_50hz",
+          "operations": 500000,
+          "ns_per_op": 19.195,
+          "allocations": 500000,
+          "requested_bytes": 10000000,
+          "entry_heap_bytes": 0,
+          "peak_heap_bytes": 20,
+          "exit_heap_bytes": 0
+        },
+        {
+          "name": "commit_enqueue_drain_distinct",
+          "operations": 200000,
+          "ns_per_op": 324.847,
+          "allocations": 1400000,
+          "requested_bytes": 61800000,
+          "entry_heap_bytes": 309,
+          "peak_heap_bytes": 2781,
+          "exit_heap_bytes": 309
+        },
+        {
+          "checksum": 20111600000
+        }
+      ],
+      "max_rss_kb": 3584,
+      "wall_s": 0.08
+    },
+    {
+      "iteration": 2,
+      "variant": "baseline",
+      "mode": "counted",
+      "records": [
+        {
+          "implementation": "baseline_b344f52",
+          "mc_object_bytes": 336
+        },
+        {
+          "allocation_instrumentation": true
+        },
+        {
+          "name": "mc_accepted_sample_50hz",
+          "operations": 1000000,
+          "ns_per_op": 15.0919,
+          "allocations": 31251,
+          "requested_bytes": 16000144,
+          "entry_heap_bytes": 576,
+          "peak_heap_bytes": 2704,
+          "exit_heap_bytes": 2704
+        },
+        {
+          "name": "mc_diagnostic_snapshot_50hz",
+          "operations": 500000,
+          "ns_per_op": 72.0185,
+          "allocations": 3000000,
+          "requested_bytes": 1066000000,
+          "entry_heap_bytes": 2112,
+          "peak_heap_bytes": 4244,
+          "exit_heap_bytes": 2112
+        },
+        {
+          "name": "commit_enqueue_drain_distinct",
+          "operations": 200000,
+          "ns_per_op": 457.819,
+          "allocations": 3075056,
+          "requested_bytes": 382602472,
+          "entry_heap_bytes": 309,
+          "peak_heap_bytes": 15549,
+          "exit_heap_bytes": 2781
+        },
+        {
+          "checksum": 20111600000
+        }
+      ],
+      "max_rss_kb": 3584,
+      "wall_s": 0.14
+    },
+    {
+      "iteration": 3,
+      "variant": "baseline",
+      "mode": "counted",
+      "records": [
+        {
+          "implementation": "baseline_b344f52",
+          "mc_object_bytes": 336
+        },
+        {
+          "allocation_instrumentation": true
+        },
+        {
+          "name": "mc_accepted_sample_50hz",
+          "operations": 1000000,
+          "ns_per_op": 7.17657,
+          "allocations": 31251,
+          "requested_bytes": 16000144,
+          "entry_heap_bytes": 576,
+          "peak_heap_bytes": 2704,
+          "exit_heap_bytes": 2704
+        },
+        {
+          "name": "mc_diagnostic_snapshot_50hz",
+          "operations": 500000,
+          "ns_per_op": 70.3847,
+          "allocations": 3000000,
+          "requested_bytes": 1066000000,
+          "entry_heap_bytes": 2112,
+          "peak_heap_bytes": 4244,
+          "exit_heap_bytes": 2112
+        },
+        {
+          "name": "commit_enqueue_drain_distinct",
+          "operations": 200000,
+          "ns_per_op": 448.421,
+          "allocations": 3075056,
+          "requested_bytes": 382602472,
+          "entry_heap_bytes": 309,
+          "peak_heap_bytes": 15549,
+          "exit_heap_bytes": 2781
+        },
+        {
+          "checksum": 20111600000
+        }
+      ],
+      "max_rss_kb": 3584,
+      "wall_s": 0.13
+    },
+    {
+      "iteration": 3,
+      "variant": "optimized",
+      "mode": "counted",
+      "records": [
+        {
+          "implementation": "optimized_source",
+          "mc_object_bytes": 8464,
+          "mc_snapshot_bytes": 176
+        },
+        {
+          "allocation_instrumentation": true
+        },
+        {
+          "name": "mc_accepted_sample_50hz",
+          "operations": 1000000,
+          "ns_per_op": 9.34174,
+          "allocations": 0,
+          "requested_bytes": 0,
+          "entry_heap_bytes": 0,
+          "peak_heap_bytes": 0,
+          "exit_heap_bytes": 0
+        },
+        {
+          "name": "mc_diagnostic_snapshot_50hz",
+          "operations": 500000,
+          "ns_per_op": 17.5222,
+          "allocations": 500000,
+          "requested_bytes": 10000000,
+          "entry_heap_bytes": 0,
+          "peak_heap_bytes": 20,
+          "exit_heap_bytes": 0
+        },
+        {
+          "name": "commit_enqueue_drain_distinct",
+          "operations": 200000,
+          "ns_per_op": 318.03,
+          "allocations": 1400000,
+          "requested_bytes": 61800000,
+          "entry_heap_bytes": 309,
+          "peak_heap_bytes": 2781,
+          "exit_heap_bytes": 309
+        },
+        {
+          "checksum": 20111600000
+        }
+      ],
+      "max_rss_kb": 3584,
+      "wall_s": 0.08
+    },
+    {
+      "iteration": 4,
+      "variant": "optimized",
+      "mode": "counted",
+      "records": [
+        {
+          "implementation": "optimized_source",
+          "mc_object_bytes": 8464,
+          "mc_snapshot_bytes": 176
+        },
+        {
+          "allocation_instrumentation": true
+        },
+        {
+          "name": "mc_accepted_sample_50hz",
+          "operations": 1000000,
+          "ns_per_op": 8.27554,
+          "allocations": 0,
+          "requested_bytes": 0,
+          "entry_heap_bytes": 0,
+          "peak_heap_bytes": 0,
+          "exit_heap_bytes": 0
+        },
+        {
+          "name": "mc_diagnostic_snapshot_50hz",
+          "operations": 500000,
+          "ns_per_op": 17.9782,
+          "allocations": 500000,
+          "requested_bytes": 10000000,
+          "entry_heap_bytes": 0,
+          "peak_heap_bytes": 20,
+          "exit_heap_bytes": 0
+        },
+        {
+          "name": "commit_enqueue_drain_distinct",
+          "operations": 200000,
+          "ns_per_op": 324.549,
+          "allocations": 1400000,
+          "requested_bytes": 61800000,
+          "entry_heap_bytes": 309,
+          "peak_heap_bytes": 2781,
+          "exit_heap_bytes": 309
+        },
+        {
+          "checksum": 20111600000
+        }
+      ],
+      "max_rss_kb": 3584,
+      "wall_s": 0.08
+    },
+    {
+      "iteration": 4,
+      "variant": "baseline",
+      "mode": "counted",
+      "records": [
+        {
+          "implementation": "baseline_b344f52",
+          "mc_object_bytes": 336
+        },
+        {
+          "allocation_instrumentation": true
+        },
+        {
+          "name": "mc_accepted_sample_50hz",
+          "operations": 1000000,
+          "ns_per_op": 12.8661,
+          "allocations": 31251,
+          "requested_bytes": 16000144,
+          "entry_heap_bytes": 576,
+          "peak_heap_bytes": 2704,
+          "exit_heap_bytes": 2704
+        },
+        {
+          "name": "mc_diagnostic_snapshot_50hz",
+          "operations": 500000,
+          "ns_per_op": 75.4307,
+          "allocations": 3000000,
+          "requested_bytes": 1066000000,
+          "entry_heap_bytes": 2112,
+          "peak_heap_bytes": 4244,
+          "exit_heap_bytes": 2112
+        },
+        {
+          "name": "commit_enqueue_drain_distinct",
+          "operations": 200000,
+          "ns_per_op": 446.998,
+          "allocations": 3075056,
+          "requested_bytes": 382602472,
+          "entry_heap_bytes": 309,
+          "peak_heap_bytes": 15549,
+          "exit_heap_bytes": 2781
+        },
+        {
+          "checksum": 20111600000
+        }
+      ],
+      "max_rss_kb": 3584,
+      "wall_s": 0.14
+    },
+    {
+      "iteration": 5,
+      "variant": "baseline",
+      "mode": "counted",
+      "records": [
+        {
+          "implementation": "baseline_b344f52",
+          "mc_object_bytes": 336
+        },
+        {
+          "allocation_instrumentation": true
+        },
+        {
+          "name": "mc_accepted_sample_50hz",
+          "operations": 1000000,
+          "ns_per_op": 7.24841,
+          "allocations": 31251,
+          "requested_bytes": 16000144,
+          "entry_heap_bytes": 576,
+          "peak_heap_bytes": 2704,
+          "exit_heap_bytes": 2704
+        },
+        {
+          "name": "mc_diagnostic_snapshot_50hz",
+          "operations": 500000,
+          "ns_per_op": 69.718,
+          "allocations": 3000000,
+          "requested_bytes": 1066000000,
+          "entry_heap_bytes": 2112,
+          "peak_heap_bytes": 4244,
+          "exit_heap_bytes": 2112
+        },
+        {
+          "name": "commit_enqueue_drain_distinct",
+          "operations": 200000,
+          "ns_per_op": 446.436,
+          "allocations": 3075056,
+          "requested_bytes": 382602472,
+          "entry_heap_bytes": 309,
+          "peak_heap_bytes": 15549,
+          "exit_heap_bytes": 2781
+        },
+        {
+          "checksum": 20111600000
+        }
+      ],
+      "max_rss_kb": 3584,
+      "wall_s": 0.13
+    },
+    {
+      "iteration": 5,
+      "variant": "optimized",
+      "mode": "counted",
+      "records": [
+        {
+          "implementation": "optimized_source",
+          "mc_object_bytes": 8464,
+          "mc_snapshot_bytes": 176
+        },
+        {
+          "allocation_instrumentation": true
+        },
+        {
+          "name": "mc_accepted_sample_50hz",
+          "operations": 1000000,
+          "ns_per_op": 9.78545,
+          "allocations": 0,
+          "requested_bytes": 0,
+          "entry_heap_bytes": 0,
+          "peak_heap_bytes": 0,
+          "exit_heap_bytes": 0
+        },
+        {
+          "name": "mc_diagnostic_snapshot_50hz",
+          "operations": 500000,
+          "ns_per_op": 17.3153,
+          "allocations": 500000,
+          "requested_bytes": 10000000,
+          "entry_heap_bytes": 0,
+          "peak_heap_bytes": 20,
+          "exit_heap_bytes": 0
+        },
+        {
+          "name": "commit_enqueue_drain_distinct",
+          "operations": 200000,
+          "ns_per_op": 325.255,
+          "allocations": 1400000,
+          "requested_bytes": 61800000,
+          "entry_heap_bytes": 309,
+          "peak_heap_bytes": 2781,
+          "exit_heap_bytes": 309
+        },
+        {
+          "checksum": 20111600000
+        }
+      ],
+      "max_rss_kb": 3584,
+      "wall_s": 0.08
+    },
+    {
+      "iteration": 6,
+      "variant": "optimized",
+      "mode": "counted",
+      "records": [
+        {
+          "implementation": "optimized_source",
+          "mc_object_bytes": 8464,
+          "mc_snapshot_bytes": 176
+        },
+        {
+          "allocation_instrumentation": true
+        },
+        {
+          "name": "mc_accepted_sample_50hz",
+          "operations": 1000000,
+          "ns_per_op": 5.87905,
+          "allocations": 0,
+          "requested_bytes": 0,
+          "entry_heap_bytes": 0,
+          "peak_heap_bytes": 0,
+          "exit_heap_bytes": 0
+        },
+        {
+          "name": "mc_diagnostic_snapshot_50hz",
+          "operations": 500000,
+          "ns_per_op": 19.444,
+          "allocations": 500000,
+          "requested_bytes": 10000000,
+          "entry_heap_bytes": 0,
+          "peak_heap_bytes": 20,
+          "exit_heap_bytes": 0
+        },
+        {
+          "name": "commit_enqueue_drain_distinct",
+          "operations": 200000,
+          "ns_per_op": 321.474,
+          "allocations": 1400000,
+          "requested_bytes": 61800000,
+          "entry_heap_bytes": 309,
+          "peak_heap_bytes": 2781,
+          "exit_heap_bytes": 309
+        },
+        {
+          "checksum": 20111600000
+        }
+      ],
+      "max_rss_kb": 3584,
+      "wall_s": 0.08
+    },
+    {
+      "iteration": 6,
+      "variant": "baseline",
+      "mode": "counted",
+      "records": [
+        {
+          "implementation": "baseline_b344f52",
+          "mc_object_bytes": 336
+        },
+        {
+          "allocation_instrumentation": true
+        },
+        {
+          "name": "mc_accepted_sample_50hz",
+          "operations": 1000000,
+          "ns_per_op": 13.2597,
+          "allocations": 31251,
+          "requested_bytes": 16000144,
+          "entry_heap_bytes": 576,
+          "peak_heap_bytes": 2704,
+          "exit_heap_bytes": 2704
+        },
+        {
+          "name": "mc_diagnostic_snapshot_50hz",
+          "operations": 500000,
+          "ns_per_op": 71.859,
+          "allocations": 3000000,
+          "requested_bytes": 1066000000,
+          "entry_heap_bytes": 2112,
+          "peak_heap_bytes": 4244,
+          "exit_heap_bytes": 2112
+        },
+        {
+          "name": "commit_enqueue_drain_distinct",
+          "operations": 200000,
+          "ns_per_op": 450.802,
+          "allocations": 3075056,
+          "requested_bytes": 382602472,
+          "entry_heap_bytes": 309,
+          "peak_heap_bytes": 15549,
+          "exit_heap_bytes": 2781
+        },
+        {
+          "checksum": 20111600000
+        }
+      ],
+      "max_rss_kb": 3584,
+      "wall_s": 0.14
+    },
+    {
+      "iteration": 7,
+      "variant": "baseline",
+      "mode": "counted",
+      "records": [
+        {
+          "implementation": "baseline_b344f52",
+          "mc_object_bytes": 336
+        },
+        {
+          "allocation_instrumentation": true
+        },
+        {
+          "name": "mc_accepted_sample_50hz",
+          "operations": 1000000,
+          "ns_per_op": 15.9767,
+          "allocations": 31251,
+          "requested_bytes": 16000144,
+          "entry_heap_bytes": 576,
+          "peak_heap_bytes": 2704,
+          "exit_heap_bytes": 2704
+        },
+        {
+          "name": "mc_diagnostic_snapshot_50hz",
+          "operations": 500000,
+          "ns_per_op": 69.5921,
+          "allocations": 3000000,
+          "requested_bytes": 1066000000,
+          "entry_heap_bytes": 2112,
+          "peak_heap_bytes": 4244,
+          "exit_heap_bytes": 2112
+        },
+        {
+          "name": "commit_enqueue_drain_distinct",
+          "operations": 200000,
+          "ns_per_op": 446.825,
+          "allocations": 3075056,
+          "requested_bytes": 382602472,
+          "entry_heap_bytes": 309,
+          "peak_heap_bytes": 15549,
+          "exit_heap_bytes": 2781
+        },
+        {
+          "checksum": 20111600000
+        }
+      ],
+      "max_rss_kb": 3584,
+      "wall_s": 0.14
+    },
+    {
+      "iteration": 7,
+      "variant": "optimized",
+      "mode": "counted",
+      "records": [
+        {
+          "implementation": "optimized_source",
+          "mc_object_bytes": 8464,
+          "mc_snapshot_bytes": 176
+        },
+        {
+          "allocation_instrumentation": true
+        },
+        {
+          "name": "mc_accepted_sample_50hz",
+          "operations": 1000000,
+          "ns_per_op": 5.43573,
+          "allocations": 0,
+          "requested_bytes": 0,
+          "entry_heap_bytes": 0,
+          "peak_heap_bytes": 0,
+          "exit_heap_bytes": 0
+        },
+        {
+          "name": "mc_diagnostic_snapshot_50hz",
+          "operations": 500000,
+          "ns_per_op": 19.6598,
+          "allocations": 500000,
+          "requested_bytes": 10000000,
+          "entry_heap_bytes": 0,
+          "peak_heap_bytes": 20,
+          "exit_heap_bytes": 0
+        },
+        {
+          "name": "commit_enqueue_drain_distinct",
+          "operations": 200000,
+          "ns_per_op": 326.045,
+          "allocations": 1400000,
+          "requested_bytes": 61800000,
+          "entry_heap_bytes": 309,
+          "peak_heap_bytes": 2781,
+          "exit_heap_bytes": 309
+        },
+        {
+          "checksum": 20111600000
+        }
+      ],
+      "max_rss_kb": 3584,
+      "wall_s": 0.08
+    },
+    {
+      "iteration": 1,
+      "variant": "baseline",
+      "mode": "timing",
+      "records": [
+        {
+          "implementation": "baseline_b344f52",
+          "mc_object_bytes": 336
+        },
+        {
+          "allocation_instrumentation": false
+        },
+        {
+          "name": "mc_accepted_sample_50hz",
+          "operations": 1000000,
+          "ns_per_op": 14.026,
+          "allocations": 0,
+          "requested_bytes": 0,
+          "entry_heap_bytes": 0,
+          "peak_heap_bytes": 0,
+          "exit_heap_bytes": 0
+        },
+        {
+          "name": "mc_diagnostic_snapshot_50hz",
+          "operations": 500000,
+          "ns_per_op": 78.8586,
+          "allocations": 0,
+          "requested_bytes": 0,
+          "entry_heap_bytes": 0,
+          "peak_heap_bytes": 0,
+          "exit_heap_bytes": 0
+        },
+        {
+          "name": "commit_enqueue_drain_distinct",
+          "operations": 200000,
+          "ns_per_op": 474.355,
+          "allocations": 0,
+          "requested_bytes": 0,
+          "entry_heap_bytes": 0,
+          "peak_heap_bytes": 0,
+          "exit_heap_bytes": 0
+        },
+        {
+          "checksum": 20111600000
+        }
+      ],
+      "max_rss_kb": 3584,
+      "wall_s": 0.14
+    },
+    {
+      "iteration": 1,
+      "variant": "optimized",
+      "mode": "timing",
+      "records": [
+        {
+          "implementation": "optimized_source",
+          "mc_object_bytes": 8464,
+          "mc_snapshot_bytes": 176
+        },
+        {
+          "allocation_instrumentation": false
+        },
+        {
+          "name": "mc_accepted_sample_50hz",
+          "operations": 1000000,
+          "ns_per_op": 3.93446,
+          "allocations": 0,
+          "requested_bytes": 0,
+          "entry_heap_bytes": 0,
+          "peak_heap_bytes": 0,
+          "exit_heap_bytes": 0
+        },
+        {
+          "name": "mc_diagnostic_snapshot_50hz",
+          "operations": 500000,
+          "ns_per_op": 14.4915,
+          "allocations": 0,
+          "requested_bytes": 0,
+          "entry_heap_bytes": 0,
+          "peak_heap_bytes": 0,
+          "exit_heap_bytes": 0
+        },
+        {
+          "name": "commit_enqueue_drain_distinct",
+          "operations": 200000,
+          "ns_per_op": 333.874,
+          "allocations": 0,
+          "requested_bytes": 0,
+          "entry_heap_bytes": 0,
+          "peak_heap_bytes": 0,
+          "exit_heap_bytes": 0
+        },
+        {
+          "checksum": 20111600000
+        }
+      ],
+      "max_rss_kb": 3584,
+      "wall_s": 0.07
+    },
+    {
+      "iteration": 2,
+      "variant": "optimized",
+      "mode": "timing",
+      "records": [
+        {
+          "implementation": "optimized_source",
+          "mc_object_bytes": 8464,
+          "mc_snapshot_bytes": 176
+        },
+        {
+          "allocation_instrumentation": false
+        },
+        {
+          "name": "mc_accepted_sample_50hz",
+          "operations": 1000000,
+          "ns_per_op": 6.79501,
+          "allocations": 0,
+          "requested_bytes": 0,
+          "entry_heap_bytes": 0,
+          "peak_heap_bytes": 0,
+          "exit_heap_bytes": 0
+        },
+        {
+          "name": "mc_diagnostic_snapshot_50hz",
+          "operations": 500000,
+          "ns_per_op": 19.7118,
+          "allocations": 0,
+          "requested_bytes": 0,
+          "entry_heap_bytes": 0,
+          "peak_heap_bytes": 0,
+          "exit_heap_bytes": 0
+        },
+        {
+          "name": "commit_enqueue_drain_distinct",
+          "operations": 200000,
+          "ns_per_op": 331.049,
+          "allocations": 0,
+          "requested_bytes": 0,
+          "entry_heap_bytes": 0,
+          "peak_heap_bytes": 0,
+          "exit_heap_bytes": 0
+        },
+        {
+          "checksum": 20111600000
+        }
+      ],
+      "max_rss_kb": 3584,
+      "wall_s": 0.08
+    },
+    {
+      "iteration": 2,
+      "variant": "baseline",
+      "mode": "timing",
+      "records": [
+        {
+          "implementation": "baseline_b344f52",
+          "mc_object_bytes": 336
+        },
+        {
+          "allocation_instrumentation": false
+        },
+        {
+          "name": "mc_accepted_sample_50hz",
+          "operations": 1000000,
+          "ns_per_op": 14.4526,
+          "allocations": 0,
+          "requested_bytes": 0,
+          "entry_heap_bytes": 0,
+          "peak_heap_bytes": 0,
+          "exit_heap_bytes": 0
+        },
+        {
+          "name": "mc_diagnostic_snapshot_50hz",
+          "operations": 500000,
+          "ns_per_op": 79.7541,
+          "allocations": 0,
+          "requested_bytes": 0,
+          "entry_heap_bytes": 0,
+          "peak_heap_bytes": 0,
+          "exit_heap_bytes": 0
+        },
+        {
+          "name": "commit_enqueue_drain_distinct",
+          "operations": 200000,
+          "ns_per_op": 469.692,
+          "allocations": 0,
+          "requested_bytes": 0,
+          "entry_heap_bytes": 0,
+          "peak_heap_bytes": 0,
+          "exit_heap_bytes": 0
+        },
+        {
+          "checksum": 20111600000
+        }
+      ],
+      "max_rss_kb": 3584,
+      "wall_s": 0.14
+    },
+    {
+      "iteration": 3,
+      "variant": "baseline",
+      "mode": "timing",
+      "records": [
+        {
+          "implementation": "baseline_b344f52",
+          "mc_object_bytes": 336
+        },
+        {
+          "allocation_instrumentation": false
+        },
+        {
+          "name": "mc_accepted_sample_50hz",
+          "operations": 1000000,
+          "ns_per_op": 8.10453,
+          "allocations": 0,
+          "requested_bytes": 0,
+          "entry_heap_bytes": 0,
+          "peak_heap_bytes": 0,
+          "exit_heap_bytes": 0
+        },
+        {
+          "name": "mc_diagnostic_snapshot_50hz",
+          "operations": 500000,
+          "ns_per_op": 77.8132,
+          "allocations": 0,
+          "requested_bytes": 0,
+          "entry_heap_bytes": 0,
+          "peak_heap_bytes": 0,
+          "exit_heap_bytes": 0
+        },
+        {
+          "name": "commit_enqueue_drain_distinct",
+          "operations": 200000,
+          "ns_per_op": 469.527,
+          "allocations": 0,
+          "requested_bytes": 0,
+          "entry_heap_bytes": 0,
+          "peak_heap_bytes": 0,
+          "exit_heap_bytes": 0
+        },
+        {
+          "checksum": 20111600000
+        }
+      ],
+      "max_rss_kb": 3584,
+      "wall_s": 0.14
+    },
+    {
+      "iteration": 3,
+      "variant": "optimized",
+      "mode": "timing",
+      "records": [
+        {
+          "implementation": "optimized_source",
+          "mc_object_bytes": 8464,
+          "mc_snapshot_bytes": 176
+        },
+        {
+          "allocation_instrumentation": false
+        },
+        {
+          "name": "mc_accepted_sample_50hz",
+          "operations": 1000000,
+          "ns_per_op": 8.92187,
+          "allocations": 0,
+          "requested_bytes": 0,
+          "entry_heap_bytes": 0,
+          "peak_heap_bytes": 0,
+          "exit_heap_bytes": 0
+        },
+        {
+          "name": "mc_diagnostic_snapshot_50hz",
+          "operations": 500000,
+          "ns_per_op": 19.4225,
+          "allocations": 0,
+          "requested_bytes": 0,
+          "entry_heap_bytes": 0,
+          "peak_heap_bytes": 0,
+          "exit_heap_bytes": 0
+        },
+        {
+          "name": "commit_enqueue_drain_distinct",
+          "operations": 200000,
+          "ns_per_op": 329.112,
+          "allocations": 0,
+          "requested_bytes": 0,
+          "entry_heap_bytes": 0,
+          "peak_heap_bytes": 0,
+          "exit_heap_bytes": 0
+        },
+        {
+          "checksum": 20111600000
+        }
+      ],
+      "max_rss_kb": 3584,
+      "wall_s": 0.08
+    },
+    {
+      "iteration": 4,
+      "variant": "optimized",
+      "mode": "timing",
+      "records": [
+        {
+          "implementation": "optimized_source",
+          "mc_object_bytes": 8464,
+          "mc_snapshot_bytes": 176
+        },
+        {
+          "allocation_instrumentation": false
+        },
+        {
+          "name": "mc_accepted_sample_50hz",
+          "operations": 1000000,
+          "ns_per_op": 6.7302,
+          "allocations": 0,
+          "requested_bytes": 0,
+          "entry_heap_bytes": 0,
+          "peak_heap_bytes": 0,
+          "exit_heap_bytes": 0
+        },
+        {
+          "name": "mc_diagnostic_snapshot_50hz",
+          "operations": 500000,
+          "ns_per_op": 20.4187,
+          "allocations": 0,
+          "requested_bytes": 0,
+          "entry_heap_bytes": 0,
+          "peak_heap_bytes": 0,
+          "exit_heap_bytes": 0
+        },
+        {
+          "name": "commit_enqueue_drain_distinct",
+          "operations": 200000,
+          "ns_per_op": 333.313,
+          "allocations": 0,
+          "requested_bytes": 0,
+          "entry_heap_bytes": 0,
+          "peak_heap_bytes": 0,
+          "exit_heap_bytes": 0
+        },
+        {
+          "checksum": 20111600000
+        }
+      ],
+      "max_rss_kb": 3584,
+      "wall_s": 0.08
+    },
+    {
+      "iteration": 4,
+      "variant": "baseline",
+      "mode": "timing",
+      "records": [
+        {
+          "implementation": "baseline_b344f52",
+          "mc_object_bytes": 336
+        },
+        {
+          "allocation_instrumentation": false
+        },
+        {
+          "name": "mc_accepted_sample_50hz",
+          "operations": 1000000,
+          "ns_per_op": 13.1182,
+          "allocations": 0,
+          "requested_bytes": 0,
+          "entry_heap_bytes": 0,
+          "peak_heap_bytes": 0,
+          "exit_heap_bytes": 0
+        },
+        {
+          "name": "mc_diagnostic_snapshot_50hz",
+          "operations": 500000,
+          "ns_per_op": 79.2116,
+          "allocations": 0,
+          "requested_bytes": 0,
+          "entry_heap_bytes": 0,
+          "peak_heap_bytes": 0,
+          "exit_heap_bytes": 0
+        },
+        {
+          "name": "commit_enqueue_drain_distinct",
+          "operations": 200000,
+          "ns_per_op": 470.802,
+          "allocations": 0,
+          "requested_bytes": 0,
+          "entry_heap_bytes": 0,
+          "peak_heap_bytes": 0,
+          "exit_heap_bytes": 0
+        },
+        {
+          "checksum": 20111600000
+        }
+      ],
+      "max_rss_kb": 3584,
+      "wall_s": 0.14
+    },
+    {
+      "iteration": 5,
+      "variant": "baseline",
+      "mode": "timing",
+      "records": [
+        {
+          "implementation": "baseline_b344f52",
+          "mc_object_bytes": 336
+        },
+        {
+          "allocation_instrumentation": false
+        },
+        {
+          "name": "mc_accepted_sample_50hz",
+          "operations": 1000000,
+          "ns_per_op": 7.98608,
+          "allocations": 0,
+          "requested_bytes": 0,
+          "entry_heap_bytes": 0,
+          "peak_heap_bytes": 0,
+          "exit_heap_bytes": 0
+        },
+        {
+          "name": "mc_diagnostic_snapshot_50hz",
+          "operations": 500000,
+          "ns_per_op": 79.612,
+          "allocations": 0,
+          "requested_bytes": 0,
+          "entry_heap_bytes": 0,
+          "peak_heap_bytes": 0,
+          "exit_heap_bytes": 0
+        },
+        {
+          "name": "commit_enqueue_drain_distinct",
+          "operations": 200000,
+          "ns_per_op": 471.98,
+          "allocations": 0,
+          "requested_bytes": 0,
+          "entry_heap_bytes": 0,
+          "peak_heap_bytes": 0,
+          "exit_heap_bytes": 0
+        },
+        {
+          "checksum": 20111600000
+        }
+      ],
+      "max_rss_kb": 3584,
+      "wall_s": 0.14
+    },
+    {
+      "iteration": 5,
+      "variant": "optimized",
+      "mode": "timing",
+      "records": [
+        {
+          "implementation": "optimized_source",
+          "mc_object_bytes": 8464,
+          "mc_snapshot_bytes": 176
+        },
+        {
+          "allocation_instrumentation": false
+        },
+        {
+          "name": "mc_accepted_sample_50hz",
+          "operations": 1000000,
+          "ns_per_op": 5.42274,
+          "allocations": 0,
+          "requested_bytes": 0,
+          "entry_heap_bytes": 0,
+          "peak_heap_bytes": 0,
+          "exit_heap_bytes": 0
+        },
+        {
+          "name": "mc_diagnostic_snapshot_50hz",
+          "operations": 500000,
+          "ns_per_op": 20.4513,
+          "allocations": 0,
+          "requested_bytes": 0,
+          "entry_heap_bytes": 0,
+          "peak_heap_bytes": 0,
+          "exit_heap_bytes": 0
+        },
+        {
+          "name": "commit_enqueue_drain_distinct",
+          "operations": 200000,
+          "ns_per_op": 333.166,
+          "allocations": 0,
+          "requested_bytes": 0,
+          "entry_heap_bytes": 0,
+          "peak_heap_bytes": 0,
+          "exit_heap_bytes": 0
+        },
+        {
+          "checksum": 20111600000
+        }
+      ],
+      "max_rss_kb": 3584,
+      "wall_s": 0.08
+    },
+    {
+      "iteration": 6,
+      "variant": "optimized",
+      "mode": "timing",
+      "records": [
+        {
+          "implementation": "optimized_source",
+          "mc_object_bytes": 8464,
+          "mc_snapshot_bytes": 176
+        },
+        {
+          "allocation_instrumentation": false
+        },
+        {
+          "name": "mc_accepted_sample_50hz",
+          "operations": 1000000,
+          "ns_per_op": 7.66484,
+          "allocations": 0,
+          "requested_bytes": 0,
+          "entry_heap_bytes": 0,
+          "peak_heap_bytes": 0,
+          "exit_heap_bytes": 0
+        },
+        {
+          "name": "mc_diagnostic_snapshot_50hz",
+          "operations": 500000,
+          "ns_per_op": 16.3504,
+          "allocations": 0,
+          "requested_bytes": 0,
+          "entry_heap_bytes": 0,
+          "peak_heap_bytes": 0,
+          "exit_heap_bytes": 0
+        },
+        {
+          "name": "commit_enqueue_drain_distinct",
+          "operations": 200000,
+          "ns_per_op": 329.946,
+          "allocations": 0,
+          "requested_bytes": 0,
+          "entry_heap_bytes": 0,
+          "peak_heap_bytes": 0,
+          "exit_heap_bytes": 0
+        },
+        {
+          "checksum": 20111600000
+        }
+      ],
+      "max_rss_kb": 3584,
+      "wall_s": 0.08
+    },
+    {
+      "iteration": 6,
+      "variant": "baseline",
+      "mode": "timing",
+      "records": [
+        {
+          "implementation": "baseline_b344f52",
+          "mc_object_bytes": 336
+        },
+        {
+          "allocation_instrumentation": false
+        },
+        {
+          "name": "mc_accepted_sample_50hz",
+          "operations": 1000000,
+          "ns_per_op": 13.7379,
+          "allocations": 0,
+          "requested_bytes": 0,
+          "entry_heap_bytes": 0,
+          "peak_heap_bytes": 0,
+          "exit_heap_bytes": 0
+        },
+        {
+          "name": "mc_diagnostic_snapshot_50hz",
+          "operations": 500000,
+          "ns_per_op": 78.7492,
+          "allocations": 0,
+          "requested_bytes": 0,
+          "entry_heap_bytes": 0,
+          "peak_heap_bytes": 0,
+          "exit_heap_bytes": 0
+        },
+        {
+          "name": "commit_enqueue_drain_distinct",
+          "operations": 200000,
+          "ns_per_op": 462.243,
+          "allocations": 0,
+          "requested_bytes": 0,
+          "entry_heap_bytes": 0,
+          "peak_heap_bytes": 0,
+          "exit_heap_bytes": 0
+        },
+        {
+          "checksum": 20111600000
+        }
+      ],
+      "max_rss_kb": 3584,
+      "wall_s": 0.14
+    },
+    {
+      "iteration": 7,
+      "variant": "baseline",
+      "mode": "timing",
+      "records": [
+        {
+          "implementation": "baseline_b344f52",
+          "mc_object_bytes": 336
+        },
+        {
+          "allocation_instrumentation": false
+        },
+        {
+          "name": "mc_accepted_sample_50hz",
+          "operations": 1000000,
+          "ns_per_op": 7.83073,
+          "allocations": 0,
+          "requested_bytes": 0,
+          "entry_heap_bytes": 0,
+          "peak_heap_bytes": 0,
+          "exit_heap_bytes": 0
+        },
+        {
+          "name": "mc_diagnostic_snapshot_50hz",
+          "operations": 500000,
+          "ns_per_op": 79.6695,
+          "allocations": 0,
+          "requested_bytes": 0,
+          "entry_heap_bytes": 0,
+          "peak_heap_bytes": 0,
+          "exit_heap_bytes": 0
+        },
+        {
+          "name": "commit_enqueue_drain_distinct",
+          "operations": 200000,
+          "ns_per_op": 470.084,
+          "allocations": 0,
+          "requested_bytes": 0,
+          "entry_heap_bytes": 0,
+          "peak_heap_bytes": 0,
+          "exit_heap_bytes": 0
+        },
+        {
+          "checksum": 20111600000
+        }
+      ],
+      "max_rss_kb": 3584,
+      "wall_s": 0.14
+    },
+    {
+      "iteration": 7,
+      "variant": "optimized",
+      "mode": "timing",
+      "records": [
+        {
+          "implementation": "optimized_source",
+          "mc_object_bytes": 8464,
+          "mc_snapshot_bytes": 176
+        },
+        {
+          "allocation_instrumentation": false
+        },
+        {
+          "name": "mc_accepted_sample_50hz",
+          "operations": 1000000,
+          "ns_per_op": 8.68909,
+          "allocations": 0,
+          "requested_bytes": 0,
+          "entry_heap_bytes": 0,
+          "peak_heap_bytes": 0,
+          "exit_heap_bytes": 0
+        },
+        {
+          "name": "mc_diagnostic_snapshot_50hz",
+          "operations": 500000,
+          "ns_per_op": 18.4235,
+          "allocations": 0,
+          "requested_bytes": 0,
+          "entry_heap_bytes": 0,
+          "peak_heap_bytes": 0,
+          "exit_heap_bytes": 0
+        },
+        {
+          "name": "commit_enqueue_drain_distinct",
+          "operations": 200000,
+          "ns_per_op": 331.411,
+          "allocations": 0,
+          "requested_bytes": 0,
+          "entry_heap_bytes": 0,
+          "peak_heap_bytes": 0,
+          "exit_heap_bytes": 0
+        },
+        {
+          "checksum": 20111600000
+        }
+      ],
+      "max_rss_kb": 3584,
+      "wall_s": 0.08
+    }
+  ],
+  "mc_object_bytes": {
+    "baseline": 336,
+    "optimized": 8464,
+    "optimized_snapshot": 176
+  },
+  "memory_tradeoff": "Optimized MC object reserves 512 timings inline (+8128 bytes), removing deque churn. MC diagnostic and commit-drain transient heap fall, but both benchmark processes have 3584 KiB peak RSS; this does not establish full-service resident memory reduction.",
+  "source_sha256": "5df5b8cac849cbeb01ca6458ecffbc7abd54d3066ed40f7fb328c41adbcff806  /home/dndx/智元四足机器人D1 Max二次开发文档资料包v0.1.0/d1max_ros2/sdk_bridge_ws/src/d1max_sdk_bridge/CMakeLists.txt\n0985eed6b1e4b42296f943ef835dabc8834bc47b7ada475f6af2e348ff621e7c  /home/dndx/智元四足机器人D1 Max二次开发文档资料包v0.1.0/d1max_ros2/sdk_bridge_ws/src/d1max_sdk_bridge/src/mc_report_core.hpp\n65d629d625f165a71c8062584d2d129ffe29ffb7e89b6463a2b1ce19eb17235d  /home/dndx/智元四足机器人D1 Max二次开发文档资料包v0.1.0/d1max_ros2/sdk_bridge_ws/src/d1max_sdk_bridge/src/execution_publication_core.hpp\nb975bdfe845d974e2483f0fb21eab61806eab8c539d22f89f200544b45871723  /home/dndx/智元四足机器人D1 Max二次开发文档资料包v0.1.0/d1max_ros2/sdk_bridge_ws/src/d1max_sdk_bridge/src/sdk_monitor_bridge.cpp\n81d813d814eb3ff385b238b4b97a57a189fae33f3c6d626a96a98c379a454efe  /home/dndx/智元四足机器人D1 Max二次开发文档资料包v0.1.0/d1max_ros2/sdk_bridge_ws/src/d1max_sdk_bridge/src/test_mc_report.cpp\n40fd36b99b27b48406945edbe9312b729613b8c7b2d8fa791a30ebfbfbfbcd60  /home/dndx/智元四足机器人D1 Max二次开发文档资料包v0.1.0/d1max_ros2/sdk_bridge_ws/src/d1max_sdk_bridge/src/test_execution_handoff.cpp\ne63ef7680d88be0211ad2f109e2a42c8b158a4f7ab32e556130f2c14b7e1e067  /home/dndx/智元四足机器人D1 Max二次开发文档资料包v0.1.0/d1max_ros2/sdk_bridge_ws/src/d1max_sdk_bridge/src/test_execution_publication.cpp\n166ce79e03a2fedd7af4459f82776b8e4e61a2336f07ec83ff1764a38573bc77  /home/dndx/智元四足机器人D1 Max二次开发文档资料包v0.1.0/d1max_ros2/sdk_bridge_ws/src/d1max_sdk_bridge/src/benchmark_execution_buffers.cpp",
+  "test_result": {
+    "chunk_id": "d76384",
+    "wall_time_seconds": 0.000007469,
+    "exit_code": 0,
+    "original_token_count": 439,
+    "output": "Internal ctest changing into directory: /tmp/d1max-sdk-architecture-gtUR7F\nTest project /tmp/d1max-sdk-architecture-gtUR7F\n      Start  1: test_mc_report\n 1/14 Test  #1: test_mc_report ...................   Passed    0.00 sec\n      Start  2: test_joint_report\n 2/14 Test  #2: test_joint_report ................   Passed    0.00 sec\n      Start  3: test_monitor_estop\n 3/14 Test  #3: test_monitor_estop ...............   Passed    0.00 sec\n      Start  4: test_sdk_session\n 4/14 Test  #4: test_sdk_session .................   Passed    0.00 sec\n      Start  5: test_sdk_ownership\n 5/14 Test  #5: test_sdk_ownership ...............   Passed    0.00 sec\n      Start  6: test_navigation_motion\n 6/14 Test  #6: test_navigation_motion ...........   Passed    0.00 sec\n      Start  7: test_navigation_dispatch\n 7/14 Test  #7: test_navigation_dispatch .........   Passed    0.00 sec\n      Start  8: test_execution_shutdown\n 8/14 Test  #8: test_execution_shutdown ..........   Passed    0.00 sec\n      Start  9: test_execution_scheduler\n 9/14 Test  #9: test_execution_scheduler .........   Passed    0.00 sec\n      Start 10: test_execution_transport\n10/14 Test #10: test_execution_transport .........   Passed    0.00 sec\n      Start 11: test_execution_handoff\n11/14 Test #11: test_execution_handoff ...........   Passed    0.00 sec\n      Start 12: test_execution_publication\n12/14 Test #12: test_execution_publication .......   Passed    0.01 sec\n      Start 13: test_execution_mock_telemetry\n13/14 Test #13: test_execution_mock_telemetry ....   Passed    0.00 sec\n      Start 14: test_execution_acceptance\n14/14 Test #14: test_execution_acceptance ........   Passed    0.01 sec\n\n100% tests passed, 0 tests failed out of 14\n\nTotal Test time (real) =   0.04 sec\n"
+  },
+  "build_result": "sdk_monitor_bridge and changed/new pure tests successfully compiled in the existing isolated Release build; no install target run."
+}

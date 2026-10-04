@@ -4,6 +4,7 @@
 #include <set>
 #include <tuple>
 #include <random>
+#include <map>
 
 using scan_planner::conservativeCylinderInflation;
 using scan_planner::observedCylinderStatus;
@@ -143,6 +144,37 @@ TEST(VoxelCollision, SameCellCacheReusesOnlyCurrentSnapshotAndCannotGrowUnbounde
   for (int i=0;i<100;++i) {
     EXPECT_EQ(cache.get(i,query),2);
     EXPECT_LE(cache.size(),4U);
+  }
+}
+
+TEST(VoxelCollision, DenseCacheMatchesExactLegacyKeysAcrossGrowthClearAndCapacityFlush) {
+  for(const std::size_t capacity:{1U,7U,64U,1024U}) {
+    scan_planner::VoxelStatusCache cache(capacity);
+    std::map<std::array<std::uint64_t,5>,int> oracle;
+    std::uint64_t random=0x13ac4028U;unsigned calls=0,expected_calls=0;
+    for(unsigned i=0;i<20000;++i) {
+      if(i%131==0){cache.clear();oracle.clear();}
+      random=random*6364136223846793005ULL+1442695040888963407ULL;
+      const int address=static_cast<int>((random>>32)%211)-100;
+      const int low=static_cast<int>((random>>16)%11)-5,high=low+4;
+      const double x=(random&1)?0.:-0.;
+      const double y=static_cast<double>((random>>8)%17)*.001;
+      std::uint64_t xb,yb;std::memcpy(&xb,&x,sizeof(x));std::memcpy(&yb,&y,sizeof(y));
+      const std::array<std::uint64_t,5> key{{static_cast<std::uint64_t>(address),
+        static_cast<std::uint64_t>(low),static_cast<std::uint64_t>(high),xb,yb}};
+      const auto found=oracle.find(key);
+      int expected;
+      if(found!=oracle.end())expected=found->second;
+      else {
+        expected=static_cast<int>(i%4)-1;++expected_calls;
+        if(oracle.size()>=capacity)oracle.clear();
+        oracle.emplace(key,expected);
+      }
+      EXPECT_EQ(cache.getExact(address,low,high,x,y,[&](){++calls;return static_cast<int>(i%4)-1;}),expected);
+      EXPECT_EQ(cache.getExact(address,low,high,x,y,[&](){++calls;return 99;}),expected);
+      ASSERT_EQ(cache.size(),oracle.size());
+      ASSERT_EQ(calls,expected_calls);
+    }
   }
 }
 

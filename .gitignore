@@ -1,5 +1,8 @@
 # Build products and local dependencies
 **/build/
+!d1max_nav_ws/scripts/build/
+!d1max_nav_ws/scripts/build/*.sh
+**/obj/
 **/install/
 **/log/
 **/local/

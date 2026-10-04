@@ -261,24 +261,20 @@ class ReferenceCallbacks:
         set_stamp(proposal.valid_until,nanoseconds(proposal.source_stamp)+400_000_000)
         proposal.transport_mode=self.p['transport_mode']
         core=self.transport.pending_core or self.transport.core
-        endpoint=core.snapshot.payload()['xyz'][-1]
+        endpoint=core.goal_ground_xyz
         xyz=core.anchor.map_from_odom.inverse().point((endpoint[0],endpoint[1],endpoint[2]+core.body_height))
         proposal.goal_position=Point(x=float(xyz[0]),y=float(xyz[1]),z=float(xyz[2]))
-        frozen=core.snapshot.payload()
-        proposal.has_goal_yaw=frozen['has_goal_yaw']
-        proposal.goal_yaw_tolerance_rad=frozen['goal_yaw_tolerance_rad']
+        proposal.has_goal_yaw,yaw,proposal.goal_yaw_tolerance_rad=core.goal_heading
         if proposal.has_goal_yaw:
-            yaw=frozen['goal_yaw']
             heading=core.anchor.map_from_odom.inverse().rotate((math.cos(yaw),math.sin(yaw),0.))
             if math.hypot(heading[0],heading[1])<.1:
                 raise ValueError('goal_heading_projection_degenerate')
             proposal.goal_yaw=math.atan2(heading[1],heading[0])
         self.proposal,self.receipt=proposal,None
         self.last_proposal_monotonic=self.mono()
-        value=core.snapshot.payload(); evidence=value['geometry_evidence']
         # Freeze the candidate's exact anchor, original source time and support
         # identity. The worker reads immutable map data, never transport/core.
-        request=(deepcopy(proposal),deepcopy(value),core.anchor.map_from_odom.inverse(),
+        request=(deepcopy(proposal),core.support_evidence,core.anchor.map_from_odom.inverse(),
                  tuple(core._progress.body_source_xyz[:2]),core.body_height)
         if self.preparation is not None:
             self.preparation.submit(proposal.proposal_id,request)
@@ -288,17 +284,17 @@ class ReferenceCallbacks:
     def build_support(self,request):
         from d1max_planning_interfaces.msg import SupportReference
         from geometry_msgs.msg import Point
-        proposal,value,inverse,center,body_height=request
-        evidence=value['geometry_evidence']
+        proposal,evidence,inverse,center,body_height=request
         support=SupportReference(version=deepcopy(proposal.version),
-            support_reference_id=proposal.proposal_id, support_map_sha256=value['source_map_sha256'],
+            support_reference_id=proposal.proposal_id, support_map_sha256=evidence.source_map_sha256,
             floor_id=self.p['floor_id'],segment_kind='floor',required_mode='general',frame_id='d1max_loc_map',
             source_stamp=deepcopy(proposal.source_stamp),support_xy_radius_m=.2,
             body_reference_height_m=body_height,max_support_slope_rad=.15,max_support_step_m=.05,
-            verified=bool(value['execution_eligible']),reason=value['eligibility_reason'])
+            verified=bool(evidence.execution_eligible),reason=evidence.eligibility_reason)
         # Literal original-map returns are preserved in the snapshot evidence.
         # Reference interpolation is never relabelled as a measured return.
-        points=evidence.get('observed_source_support_xyz',[])
+        source=evidence.observed_source_support_xyz
+        encoded_points=evidence.canonical_observed_support
         if self.support_map is not None:
             ids=self.support_map.tree.query_ball_point(center,6.)
             source=self.support_map.support[ids]
@@ -308,17 +304,21 @@ class ReferenceCallbacks:
                 source=source[np.sort(unique)]
             if len(source)>20000:
                 source=source[np.linspace(0,len(source)-1,20000,dtype=int)]
-            points=source.tolist()
+            encoded_points=canonical(source.tolist())
         from .ray_projection import rotate_many
         transformed=rotate_many(np.asarray(inverse.xyzw),
-            np.asarray(points,dtype=float).reshape((-1,3)))+np.asarray(inverse.xyz)
+            source)+np.asarray(inverse.xyz)
         for odom in transformed:
             # Tracker operates in odom; preserve the bound anchor explicitly.
             support.support_ground_xyz.append(Point(x=float(odom[0]),y=float(odom[1]),z=float(odom[2])))
         support.frame_id='d1max_loc_odom'
-        if not points: support.verified=False; support.reason='original_support_returns_missing'
-        support.support_hash=hashlib.sha256(canonical(dict(map=value['source_map_sha256'],
-            anchor=proposal.version.anchor_id,points=points)).encode()).hexdigest()
+        if len(source)==0: support.verified=False; support.reason='original_support_returns_missing'
+        # Same canonical {anchor,map,points} bytes as before. Cache the literal
+        # evidence encoding, preserving int/float and signed-zero identity;
+        # numeric conversion for geometry must not silently change its hash.
+        encoded='{"anchor":'+canonical(proposal.version.anchor_id)+',"map":'+canonical(
+            evidence.source_map_sha256)+',"points":'+encoded_points+'}'
+        support.support_hash=hashlib.sha256(encoded.encode()).hexdigest()
         return proposal,support
 
     def deliver_support(self,proposal,support):

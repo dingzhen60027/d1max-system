@@ -73,6 +73,22 @@ def test_async_support_uses_same_geometry_and_source_as_synchronous_owner():
     finally:assert c.close()
 
 
+def test_cached_support_preserves_literal_hash_and_never_reparses_full_route(monkeypatch):
+    import hashlib
+    from d1max_pct_scan.continuous_reference import SupportEvidence, _immutable_array
+    from d1max_pct_scan.source_route import RouteSnapshot, canonical
+    c,_,out=harness();c.on_route(envelope())
+    core=c.transport.pending_core or c.transport.core
+    points=[[0,0,-0.0],[1.0,0,0]]
+    core.support_evidence=SupportEvidence('a'*64,False,'fixture',_immutable_array(points),canonical(points))
+    monkeypatch.setattr(RouteSnapshot,'payload',lambda _:pytest.fail('full route reparsed in window owner'))
+    c.prepare(c.transport.pending)
+    support=[value for kind,value in out if kind=='support'][-1]
+    expected=canonical(dict(map='a'*64,anchor=c.proposal.version.anchor_id,points=points))
+    assert support.support_hash==hashlib.sha256(expected.encode()).hexdigest()
+    assert len(support.support_ground_xyz)==2
+
+
 def test_cancel_during_async_support_retirement_cannot_publish_old_proposal():
     from threading import Event
     from d1max_pct_scan.bounded_preparation import LatestPreparation

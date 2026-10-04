@@ -1,0 +1,740 @@
+{
+  "scope": "Normal production new/delete, no heap hook; no ROS node/executor/SDK; -O3 -DNDEBUG; 5 alternating processes per variant.",
+  "same_input_counters_and_checksums_match": true,
+  "runs": [
+    {
+      "variant": "release_b344f52",
+      "repetition": 0,
+      "command": [
+        "/home/dndx/d1max_nav_ws/experiments/navigation_performance_20261004/native_timing_release_b344f52",
+        "all"
+      ],
+      "probe": "exact_cache",
+      "heap_instrumented": false,
+      "capacity": 64,
+      "rounds": 500,
+      "misses": 32064,
+      "checksum": 96000,
+      "round_p50_us": 1.51,
+      "round_p95_us": 1.634
+    },
+    {
+      "variant": "release_b344f52",
+      "repetition": 0,
+      "command": [
+        "/home/dndx/d1max_nav_ws/experiments/navigation_performance_20261004/native_timing_release_b344f52",
+        "all"
+      ],
+      "probe": "exact_cache",
+      "heap_instrumented": false,
+      "capacity": 1024,
+      "rounds": 200,
+      "misses": 205824,
+      "checksum": 614400,
+      "round_p50_us": 26.268,
+      "round_p95_us": 29.054
+    },
+    {
+      "variant": "release_b344f52",
+      "repetition": 0,
+      "command": [
+        "/home/dndx/d1max_nav_ws/experiments/navigation_performance_20261004/native_timing_release_b344f52",
+        "all"
+      ],
+      "probe": "exact_cache",
+      "heap_instrumented": false,
+      "capacity": 32768,
+      "rounds": 40,
+      "misses": 1343488,
+      "checksum": 3932160,
+      "round_p50_us": 1101.925,
+      "round_p95_us": 1161.557
+    },
+    {
+      "variant": "release_b344f52",
+      "repetition": 0,
+      "command": [
+        "/home/dndx/d1max_nav_ws/experiments/navigation_performance_20261004/native_timing_release_b344f52",
+        "all"
+      ],
+      "probe": "three_snapshot_slots",
+      "heap_instrumented": false,
+      "voxels": 921600,
+      "rounds": 120,
+      "checksum": 276480000284834640,
+      "three_slot_buffer_bytes": 58141260,
+      "rss_high_water_kib": 125948,
+      "copy_p50_us": 508.825,
+      "copy_p95_us": 601.155
+    },
+    {
+      "variant": "current_after",
+      "repetition": 0,
+      "command": [
+        "/home/dndx/d1max_nav_ws/experiments/navigation_performance_20261004/native_timing_current_after",
+        "all"
+      ],
+      "probe": "exact_cache",
+      "heap_instrumented": false,
+      "capacity": 64,
+      "rounds": 500,
+      "misses": 32064,
+      "checksum": 96000,
+      "round_p50_us": 0.976,
+      "round_p95_us": 1.212
+    },
+    {
+      "variant": "current_after",
+      "repetition": 0,
+      "command": [
+        "/home/dndx/d1max_nav_ws/experiments/navigation_performance_20261004/native_timing_current_after",
+        "all"
+      ],
+      "probe": "exact_cache",
+      "heap_instrumented": false,
+      "capacity": 1024,
+      "rounds": 200,
+      "misses": 205824,
+      "checksum": 614400,
+      "round_p50_us": 15.518,
+      "round_p95_us": 16.672
+    },
+    {
+      "variant": "current_after",
+      "repetition": 0,
+      "command": [
+        "/home/dndx/d1max_nav_ws/experiments/navigation_performance_20261004/native_timing_current_after",
+        "all"
+      ],
+      "probe": "exact_cache",
+      "heap_instrumented": false,
+      "capacity": 32768,
+      "rounds": 40,
+      "misses": 1343488,
+      "checksum": 3932160,
+      "round_p50_us": 515.681,
+      "round_p95_us": 527.791
+    },
+    {
+      "variant": "current_after",
+      "repetition": 0,
+      "command": [
+        "/home/dndx/d1max_nav_ws/experiments/navigation_performance_20261004/native_timing_current_after",
+        "all"
+      ],
+      "probe": "three_snapshot_slots",
+      "heap_instrumented": false,
+      "voxels": 921600,
+      "rounds": 120,
+      "checksum": 276480000284834640,
+      "three_slot_buffer_bytes": 47082060,
+      "rss_high_water_kib": 113444,
+      "copy_p50_us": 341.953,
+      "copy_p95_us": 384.777
+    },
+    {
+      "variant": "current_after",
+      "repetition": 1,
+      "command": [
+        "/home/dndx/d1max_nav_ws/experiments/navigation_performance_20261004/native_timing_current_after",
+        "all"
+      ],
+      "probe": "exact_cache",
+      "heap_instrumented": false,
+      "capacity": 64,
+      "rounds": 500,
+      "misses": 32064,
+      "checksum": 96000,
+      "round_p50_us": 0.966,
+      "round_p95_us": 1.205
+    },
+    {
+      "variant": "current_after",
+      "repetition": 1,
+      "command": [
+        "/home/dndx/d1max_nav_ws/experiments/navigation_performance_20261004/native_timing_current_after",
+        "all"
+      ],
+      "probe": "exact_cache",
+      "heap_instrumented": false,
+      "capacity": 1024,
+      "rounds": 200,
+      "misses": 205824,
+      "checksum": 614400,
+      "round_p50_us": 16.004,
+      "round_p95_us": 17.942
+    },
+    {
+      "variant": "current_after",
+      "repetition": 1,
+      "command": [
+        "/home/dndx/d1max_nav_ws/experiments/navigation_performance_20261004/native_timing_current_after",
+        "all"
+      ],
+      "probe": "exact_cache",
+      "heap_instrumented": false,
+      "capacity": 32768,
+      "rounds": 40,
+      "misses": 1343488,
+      "checksum": 3932160,
+      "round_p50_us": 522.913,
+      "round_p95_us": 551.85
+    },
+    {
+      "variant": "current_after",
+      "repetition": 1,
+      "command": [
+        "/home/dndx/d1max_nav_ws/experiments/navigation_performance_20261004/native_timing_current_after",
+        "all"
+      ],
+      "probe": "three_snapshot_slots",
+      "heap_instrumented": false,
+      "voxels": 921600,
+      "rounds": 120,
+      "checksum": 276480000284834640,
+      "three_slot_buffer_bytes": 47082060,
+      "rss_high_water_kib": 113548,
+      "copy_p50_us": 369.024,
+      "copy_p95_us": 415.221
+    },
+    {
+      "variant": "release_b344f52",
+      "repetition": 1,
+      "command": [
+        "/home/dndx/d1max_nav_ws/experiments/navigation_performance_20261004/native_timing_release_b344f52",
+        "all"
+      ],
+      "probe": "exact_cache",
+      "heap_instrumented": false,
+      "capacity": 64,
+      "rounds": 500,
+      "misses": 32064,
+      "checksum": 96000,
+      "round_p50_us": 1.621,
+      "round_p95_us": 1.763
+    },
+    {
+      "variant": "release_b344f52",
+      "repetition": 1,
+      "command": [
+        "/home/dndx/d1max_nav_ws/experiments/navigation_performance_20261004/native_timing_release_b344f52",
+        "all"
+      ],
+      "probe": "exact_cache",
+      "heap_instrumented": false,
+      "capacity": 1024,
+      "rounds": 200,
+      "misses": 205824,
+      "checksum": 614400,
+      "round_p50_us": 28.026,
+      "round_p95_us": 29.603
+    },
+    {
+      "variant": "release_b344f52",
+      "repetition": 1,
+      "command": [
+        "/home/dndx/d1max_nav_ws/experiments/navigation_performance_20261004/native_timing_release_b344f52",
+        "all"
+      ],
+      "probe": "exact_cache",
+      "heap_instrumented": false,
+      "capacity": 32768,
+      "rounds": 40,
+      "misses": 1343488,
+      "checksum": 3932160,
+      "round_p50_us": 1143.181,
+      "round_p95_us": 1180.11
+    },
+    {
+      "variant": "release_b344f52",
+      "repetition": 1,
+      "command": [
+        "/home/dndx/d1max_nav_ws/experiments/navigation_performance_20261004/native_timing_release_b344f52",
+        "all"
+      ],
+      "probe": "three_snapshot_slots",
+      "heap_instrumented": false,
+      "voxels": 921600,
+      "rounds": 120,
+      "checksum": 276480000284834640,
+      "three_slot_buffer_bytes": 58141260,
+      "rss_high_water_kib": 125876,
+      "copy_p50_us": 546.174,
+      "copy_p95_us": 763.336
+    },
+    {
+      "variant": "release_b344f52",
+      "repetition": 2,
+      "command": [
+        "/home/dndx/d1max_nav_ws/experiments/navigation_performance_20261004/native_timing_release_b344f52",
+        "all"
+      ],
+      "probe": "exact_cache",
+      "heap_instrumented": false,
+      "capacity": 64,
+      "rounds": 500,
+      "misses": 32064,
+      "checksum": 96000,
+      "round_p50_us": 1.529,
+      "round_p95_us": 1.735
+    },
+    {
+      "variant": "release_b344f52",
+      "repetition": 2,
+      "command": [
+        "/home/dndx/d1max_nav_ws/experiments/navigation_performance_20261004/native_timing_release_b344f52",
+        "all"
+      ],
+      "probe": "exact_cache",
+      "heap_instrumented": false,
+      "capacity": 1024,
+      "rounds": 200,
+      "misses": 205824,
+      "checksum": 614400,
+      "round_p50_us": 27.74,
+      "round_p95_us": 29.819
+    },
+    {
+      "variant": "release_b344f52",
+      "repetition": 2,
+      "command": [
+        "/home/dndx/d1max_nav_ws/experiments/navigation_performance_20261004/native_timing_release_b344f52",
+        "all"
+      ],
+      "probe": "exact_cache",
+      "heap_instrumented": false,
+      "capacity": 32768,
+      "rounds": 40,
+      "misses": 1343488,
+      "checksum": 3932160,
+      "round_p50_us": 1146.706,
+      "round_p95_us": 1215.086
+    },
+    {
+      "variant": "release_b344f52",
+      "repetition": 2,
+      "command": [
+        "/home/dndx/d1max_nav_ws/experiments/navigation_performance_20261004/native_timing_release_b344f52",
+        "all"
+      ],
+      "probe": "three_snapshot_slots",
+      "heap_instrumented": false,
+      "voxels": 921600,
+      "rounds": 120,
+      "checksum": 276480000284834640,
+      "three_slot_buffer_bytes": 58141260,
+      "rss_high_water_kib": 126404,
+      "copy_p50_us": 560.617,
+      "copy_p95_us": 627.231
+    },
+    {
+      "variant": "current_after",
+      "repetition": 2,
+      "command": [
+        "/home/dndx/d1max_nav_ws/experiments/navigation_performance_20261004/native_timing_current_after",
+        "all"
+      ],
+      "probe": "exact_cache",
+      "heap_instrumented": false,
+      "capacity": 64,
+      "rounds": 500,
+      "misses": 32064,
+      "checksum": 96000,
+      "round_p50_us": 0.995,
+      "round_p95_us": 1.241
+    },
+    {
+      "variant": "current_after",
+      "repetition": 2,
+      "command": [
+        "/home/dndx/d1max_nav_ws/experiments/navigation_performance_20261004/native_timing_current_after",
+        "all"
+      ],
+      "probe": "exact_cache",
+      "heap_instrumented": false,
+      "capacity": 1024,
+      "rounds": 200,
+      "misses": 205824,
+      "checksum": 614400,
+      "round_p50_us": 16.708,
+      "round_p95_us": 18.188
+    },
+    {
+      "variant": "current_after",
+      "repetition": 2,
+      "command": [
+        "/home/dndx/d1max_nav_ws/experiments/navigation_performance_20261004/native_timing_current_after",
+        "all"
+      ],
+      "probe": "exact_cache",
+      "heap_instrumented": false,
+      "capacity": 32768,
+      "rounds": 40,
+      "misses": 1343488,
+      "checksum": 3932160,
+      "round_p50_us": 532.626,
+      "round_p95_us": 563.129
+    },
+    {
+      "variant": "current_after",
+      "repetition": 2,
+      "command": [
+        "/home/dndx/d1max_nav_ws/experiments/navigation_performance_20261004/native_timing_current_after",
+        "all"
+      ],
+      "probe": "three_snapshot_slots",
+      "heap_instrumented": false,
+      "voxels": 921600,
+      "rounds": 120,
+      "checksum": 276480000284834640,
+      "three_slot_buffer_bytes": 47082060,
+      "rss_high_water_kib": 113584,
+      "copy_p50_us": 367.234,
+      "copy_p95_us": 407.389
+    },
+    {
+      "variant": "current_after",
+      "repetition": 3,
+      "command": [
+        "/home/dndx/d1max_nav_ws/experiments/navigation_performance_20261004/native_timing_current_after",
+        "all"
+      ],
+      "probe": "exact_cache",
+      "heap_instrumented": false,
+      "capacity": 64,
+      "rounds": 500,
+      "misses": 32064,
+      "checksum": 96000,
+      "round_p50_us": 0.973,
+      "round_p95_us": 1.264
+    },
+    {
+      "variant": "current_after",
+      "repetition": 3,
+      "command": [
+        "/home/dndx/d1max_nav_ws/experiments/navigation_performance_20261004/native_timing_current_after",
+        "all"
+      ],
+      "probe": "exact_cache",
+      "heap_instrumented": false,
+      "capacity": 1024,
+      "rounds": 200,
+      "misses": 205824,
+      "checksum": 614400,
+      "round_p50_us": 15.951,
+      "round_p95_us": 18.094
+    },
+    {
+      "variant": "current_after",
+      "repetition": 3,
+      "command": [
+        "/home/dndx/d1max_nav_ws/experiments/navigation_performance_20261004/native_timing_current_after",
+        "all"
+      ],
+      "probe": "exact_cache",
+      "heap_instrumented": false,
+      "capacity": 32768,
+      "rounds": 40,
+      "misses": 1343488,
+      "checksum": 3932160,
+      "round_p50_us": 528.119,
+      "round_p95_us": 547.365
+    },
+    {
+      "variant": "current_after",
+      "repetition": 3,
+      "command": [
+        "/home/dndx/d1max_nav_ws/experiments/navigation_performance_20261004/native_timing_current_after",
+        "all"
+      ],
+      "probe": "three_snapshot_slots",
+      "heap_instrumented": false,
+      "voxels": 921600,
+      "rounds": 120,
+      "checksum": 276480000284834640,
+      "three_slot_buffer_bytes": 47082060,
+      "rss_high_water_kib": 113684,
+      "copy_p50_us": 356.199,
+      "copy_p95_us": 376.485
+    },
+    {
+      "variant": "release_b344f52",
+      "repetition": 3,
+      "command": [
+        "/home/dndx/d1max_nav_ws/experiments/navigation_performance_20261004/native_timing_release_b344f52",
+        "all"
+      ],
+      "probe": "exact_cache",
+      "heap_instrumented": false,
+      "capacity": 64,
+      "rounds": 500,
+      "misses": 32064,
+      "checksum": 96000,
+      "round_p50_us": 1.671,
+      "round_p95_us": 1.777
+    },
+    {
+      "variant": "release_b344f52",
+      "repetition": 3,
+      "command": [
+        "/home/dndx/d1max_nav_ws/experiments/navigation_performance_20261004/native_timing_release_b344f52",
+        "all"
+      ],
+      "probe": "exact_cache",
+      "heap_instrumented": false,
+      "capacity": 1024,
+      "rounds": 200,
+      "misses": 205824,
+      "checksum": 614400,
+      "round_p50_us": 26.778,
+      "round_p95_us": 29.573
+    },
+    {
+      "variant": "release_b344f52",
+      "repetition": 3,
+      "command": [
+        "/home/dndx/d1max_nav_ws/experiments/navigation_performance_20261004/native_timing_release_b344f52",
+        "all"
+      ],
+      "probe": "exact_cache",
+      "heap_instrumented": false,
+      "capacity": 32768,
+      "rounds": 40,
+      "misses": 1343488,
+      "checksum": 3932160,
+      "round_p50_us": 1136.85,
+      "round_p95_us": 1170.268
+    },
+    {
+      "variant": "release_b344f52",
+      "repetition": 3,
+      "command": [
+        "/home/dndx/d1max_nav_ws/experiments/navigation_performance_20261004/native_timing_release_b344f52",
+        "all"
+      ],
+      "probe": "three_snapshot_slots",
+      "heap_instrumented": false,
+      "voxels": 921600,
+      "rounds": 120,
+      "checksum": 276480000284834640,
+      "three_slot_buffer_bytes": 58141260,
+      "rss_high_water_kib": 126208,
+      "copy_p50_us": 549.423,
+      "copy_p95_us": 664.621
+    },
+    {
+      "variant": "release_b344f52",
+      "repetition": 4,
+      "command": [
+        "/home/dndx/d1max_nav_ws/experiments/navigation_performance_20261004/native_timing_release_b344f52",
+        "all"
+      ],
+      "probe": "exact_cache",
+      "heap_instrumented": false,
+      "capacity": 64,
+      "rounds": 500,
+      "misses": 32064,
+      "checksum": 96000,
+      "round_p50_us": 1.615,
+      "round_p95_us": 1.754
+    },
+    {
+      "variant": "release_b344f52",
+      "repetition": 4,
+      "command": [
+        "/home/dndx/d1max_nav_ws/experiments/navigation_performance_20261004/native_timing_release_b344f52",
+        "all"
+      ],
+      "probe": "exact_cache",
+      "heap_instrumented": false,
+      "capacity": 1024,
+      "rounds": 200,
+      "misses": 205824,
+      "checksum": 614400,
+      "round_p50_us": 27.389,
+      "round_p95_us": 29.704
+    },
+    {
+      "variant": "release_b344f52",
+      "repetition": 4,
+      "command": [
+        "/home/dndx/d1max_nav_ws/experiments/navigation_performance_20261004/native_timing_release_b344f52",
+        "all"
+      ],
+      "probe": "exact_cache",
+      "heap_instrumented": false,
+      "capacity": 32768,
+      "rounds": 40,
+      "misses": 1343488,
+      "checksum": 3932160,
+      "round_p50_us": 1167.061,
+      "round_p95_us": 1256.676
+    },
+    {
+      "variant": "release_b344f52",
+      "repetition": 4,
+      "command": [
+        "/home/dndx/d1max_nav_ws/experiments/navigation_performance_20261004/native_timing_release_b344f52",
+        "all"
+      ],
+      "probe": "three_snapshot_slots",
+      "heap_instrumented": false,
+      "voxels": 921600,
+      "rounds": 120,
+      "checksum": 276480000284834640,
+      "three_slot_buffer_bytes": 58141260,
+      "rss_high_water_kib": 126416,
+      "copy_p50_us": 545.508,
+      "copy_p95_us": 605.862
+    },
+    {
+      "variant": "current_after",
+      "repetition": 4,
+      "command": [
+        "/home/dndx/d1max_nav_ws/experiments/navigation_performance_20261004/native_timing_current_after",
+        "all"
+      ],
+      "probe": "exact_cache",
+      "heap_instrumented": false,
+      "capacity": 64,
+      "rounds": 500,
+      "misses": 32064,
+      "checksum": 96000,
+      "round_p50_us": 1.002,
+      "round_p95_us": 1.262
+    },
+    {
+      "variant": "current_after",
+      "repetition": 4,
+      "command": [
+        "/home/dndx/d1max_nav_ws/experiments/navigation_performance_20261004/native_timing_current_after",
+        "all"
+      ],
+      "probe": "exact_cache",
+      "heap_instrumented": false,
+      "capacity": 1024,
+      "rounds": 200,
+      "misses": 205824,
+      "checksum": 614400,
+      "round_p50_us": 16.044,
+      "round_p95_us": 18.114
+    },
+    {
+      "variant": "current_after",
+      "repetition": 4,
+      "command": [
+        "/home/dndx/d1max_nav_ws/experiments/navigation_performance_20261004/native_timing_current_after",
+        "all"
+      ],
+      "probe": "exact_cache",
+      "heap_instrumented": false,
+      "capacity": 32768,
+      "rounds": 40,
+      "misses": 1343488,
+      "checksum": 3932160,
+      "round_p50_us": 543.967,
+      "round_p95_us": 568.367
+    },
+    {
+      "variant": "current_after",
+      "repetition": 4,
+      "command": [
+        "/home/dndx/d1max_nav_ws/experiments/navigation_performance_20261004/native_timing_current_after",
+        "all"
+      ],
+      "probe": "three_snapshot_slots",
+      "heap_instrumented": false,
+      "voxels": 921600,
+      "rounds": 120,
+      "checksum": 276480000284834640,
+      "three_slot_buffer_bytes": 47082060,
+      "rss_high_water_kib": 113096,
+      "copy_p50_us": 361.176,
+      "copy_p95_us": 400.733
+    }
+  ],
+  "median_of_five_runs": [
+    {
+      "variant": "release_b344f52",
+      "probe": "exact_cache",
+      "capacity": 64,
+      "rounds": 500,
+      "misses": 32064,
+      "checksum": 96000,
+      "round_p50_us": 1.615,
+      "round_p95_us": 1.754
+    },
+    {
+      "variant": "current_after",
+      "probe": "exact_cache",
+      "capacity": 64,
+      "rounds": 500,
+      "misses": 32064,
+      "checksum": 96000,
+      "round_p50_us": 0.976,
+      "round_p95_us": 1.241
+    },
+    {
+      "variant": "release_b344f52",
+      "probe": "exact_cache",
+      "capacity": 1024,
+      "rounds": 200,
+      "misses": 205824,
+      "checksum": 614400,
+      "round_p50_us": 27.389,
+      "round_p95_us": 29.603
+    },
+    {
+      "variant": "current_after",
+      "probe": "exact_cache",
+      "capacity": 1024,
+      "rounds": 200,
+      "misses": 205824,
+      "checksum": 614400,
+      "round_p50_us": 16.004,
+      "round_p95_us": 18.094
+    },
+    {
+      "variant": "release_b344f52",
+      "probe": "exact_cache",
+      "capacity": 32768,
+      "rounds": 40,
+      "misses": 1343488,
+      "checksum": 3932160,
+      "round_p50_us": 1143.181,
+      "round_p95_us": 1180.11
+    },
+    {
+      "variant": "current_after",
+      "probe": "exact_cache",
+      "capacity": 32768,
+      "rounds": 40,
+      "misses": 1343488,
+      "checksum": 3932160,
+      "round_p50_us": 528.119,
+      "round_p95_us": 551.85
+    },
+    {
+      "variant": "release_b344f52",
+      "probe": "three_snapshot_slots",
+      "voxels": 921600,
+      "rounds": 120,
+      "checksum": 276480000284834640,
+      "three_slot_buffer_bytes": 58141260,
+      "rss_high_water_kib": 126208,
+      "copy_p50_us": 546.174,
+      "copy_p95_us": 627.231
+    },
+    {
+      "variant": "current_after",
+      "probe": "three_snapshot_slots",
+      "voxels": 921600,
+      "rounds": 120,
+      "checksum": 276480000284834640,
+      "three_slot_buffer_bytes": 47082060,
+      "rss_high_water_kib": 113548,
+      "copy_p50_us": 361.176,
+      "copy_p95_us": 400.733
+    }
+  ]
+}

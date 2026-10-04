@@ -3,6 +3,7 @@ from types import SimpleNamespace
 
 import numpy as np
 import pytest
+from copy import deepcopy
 
 from d1max_pct_scan.control_frame_contract import BodySample, Context, Rigid, create_anchor
 from d1max_pct_scan.continuous_reference import ContinuousReference, ModeObservation, Observation
@@ -69,6 +70,25 @@ def test_reference_adds_height_once_then_fixed_rigid_transform_and_keeps_source_
     assert result.source_ns == BASE_NS and result.received_monotonic == 100.
     assert result.frame_id == 'd1max_loc_odom' and not result.execution_eligible
     assert result.route_hash == ref.snapshot.route_hash
+
+
+def test_candidate_shares_only_immutable_geometry_and_keeps_dynamic_state_separate():
+    ref = reference()
+    project(ref, observation())
+    staged = deepcopy(ref)
+    for name in ('snapshot', '_points', '_arc', '_segments', 'support_evidence'):
+        assert getattr(staged, name) is getattr(ref, name)
+    for array in (staged._points, staged._arc, staged.support_evidence.observed_source_support_xyz):
+        with pytest.raises(ValueError):
+            array.flags.writeable = True
+    with pytest.raises(TypeError):
+        staged._segments[0]['kind'] = 'stair'
+    assert staged._history is not ref._history
+    staged._history.clear()
+    assert len(ref._history) == 1
+    project(staged, observation(x=.1, t=.1))
+    assert ref._progress.source_ns == BASE_NS
+    assert staged._progress.source_ns == BASE_NS + 100_000_000
 
 
 def test_small_reverse_is_measured_but_confirmed_progress_never_goes_backward():

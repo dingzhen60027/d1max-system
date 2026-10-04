@@ -13,7 +13,11 @@
 - .config/
 - .git
 - .gitmodules
+# scripts/build is authored source, not a generated CMake/colcon build tree.
++ /scripts/build/
++ /scripts/build/*.sh
 - build/
+- obj/
 - install/
 - log/
 - local/

@@ -1,0 +1,64 @@
+{
+  "date": "2026-10-04",
+  "release_baseline": {"repository": "/home/dndx/d1max-system", "commit": "b344f52", "plan_env_source_clean": true},
+  "changes_this_turn": [
+    "GridMap collision snapshots do not allocate or copy fusion-only inflation counters; raw odds, flags, free source stamps, map/context revisions and clocks are still copied.",
+    "VoxelStatusCache retains exact address, vertical span and XY bit keys in lazy bounded dense storage; generation invalidation reuses allocated storage across clears; original capacity-flush/emplace behavior is preserved.",
+    "Two additional native tests cover dense-cache parity across growth, signed zero, negative indices, clears and flushes, and snapshot counter omission with writer/query independence."
+  ],
+  "behavior": {
+    "heap_probe_all_15_process_checksum_and_counter_comparisons_equal": true,
+    "normal_allocator_timing_all_10_process_checksum_and_counter_comparisons_equal": true,
+    "legacy_cache_oracle_iterations": 80000,
+    "new_safety_or_collision_policy_changes": false
+  },
+  "memory_measured_in_heap_probe": {
+    "fixture_voxels": 921600,
+    "fixture_dimensions_m": [6.0, 6.0, 3.2],
+    "resolution_m": 0.05,
+    "three_snapshot_buffer_bytes_before": 58141260,
+    "three_snapshot_buffer_bytes_after": 47082060,
+    "three_snapshot_buffer_bytes_saved": 11059200,
+    "full_32768_entry_cache_retained_cpp_heap_bytes_before": 2171352,
+    "full_32768_entry_cache_retained_cpp_heap_bytes_after": 1835008,
+    "32768_entry_cache_40_hot_round_allocation_calls_before": 1310720,
+    "32768_entry_cache_40_hot_round_allocation_calls_after": 0,
+    "32768_entry_cache_40_hot_round_requested_allocation_bytes_before": 73400320,
+    "32768_entry_cache_40_hot_round_requested_allocation_bytes_after": 0,
+    "cache_retention_tradeoff": "clear retains dense storage at the observed peak, so empty-cache logical heap can exceed the old bucket-only map. Full-cache retained heap is lower. Cold cumulative allocation bytes increase from 2496192 to 3669120 while calls fall from 32780 to 24."
+  },
+  "normal_allocator_wall_time_median_of_5_alternating_process_runs_us": {
+    "snapshot_copy_p50_before": 546.174,
+    "snapshot_copy_p50_after": 361.176,
+    "snapshot_copy_p95_before": 627.231,
+    "snapshot_copy_p95_after": 400.733,
+    "32768_cache_round_p50_before": 1143.181,
+    "32768_cache_round_p50_after": 528.119,
+    "32768_cache_round_p95_before": 1180.110,
+    "32768_cache_round_p95_after": 551.850
+  },
+  "verification": {
+    "plan_env_only": {"ctest_suites": 6, "native_cases": 126, "failures": 0},
+    "fresh_four_package_superbuild": {"ctest_entries": 29, "gtest_suites": 24, "native_cases": 325, "no_ros_callback_check_entries": 5, "failures": 0, "ctest_wall_seconds": 3.16},
+    "freshly_recompiled_packages": ["plan_env", "path_searching", "bspline_opt", "scan_planner"],
+    "source_header_and_new_static_library_links_checked": true,
+    "old_plan_env_path_searching_bspline_opt_include_or_lib_paths_in_new_compile_or_link_commands": false,
+    "node_static_libraries": ["../bspline_opt/libbspline_opt.a", "../path_searching/libpath_searching.a", "../plan_env/libplan_env.a"],
+    "node_sha256": "c93a8d480da901b36fc90865eaed03d307c9e95da3c9cfb9f78527cde3f34f83",
+    "plan_env_library_sha256": "00571d2661b2406fb6e987f8ea8a52065c90ae1a094e946117964f393d6135de",
+    "path_searching_library_sha256": "dacafc92048b0554e0fa5f8103d0fc2b5abcf976720e2a0fcda60ad06e973520",
+    "bspline_opt_library_sha256": "0fd60d7248023b23db8968e2fd3a53f0a33525e3dd2c15b8adc3c401129d67c5",
+    "default_rmw": "rmw_zenoh_cpp",
+    "excluded_ros_launch_tests": ["test_test_planner_startup.py", "test_test_waypoint_parameters.py"],
+    "diff_check_passed": true
+  },
+  "reproduce": [
+    "bash experiments/navigation_performance_20261004/run_native_consistent_build.sh",
+    "python3 experiments/navigation_performance_20261004/build_native_release_probe.py",
+    "python3 experiments/navigation_performance_20261004/run_native_probes.py",
+    "python3 experiments/navigation_performance_20261004/build_native_timing_probes.py",
+    "python3 experiments/navigation_performance_20261004/run_native_timing_probes.py"
+  ],
+  "evidence_files": ["native_results.json", "native_timing_results.json", "native_consistent/build/compile_commands.json", "native_consistent/build/scan_planner/CMakeFiles/scan_planner_node.dir/link.txt", "native_consistent/build/test_results", "native_consistent/build/Testing/Temporary/LastTest.log"],
+  "limitations": "Bounded offline microbenchmarks and contract/native geometry tests do not prove 20ms end-to-end deadline, NUC pressure behavior, Zenoh ingress latency, full-map execution, real SDK stopping or physical acceptance. RSS is only a per-process high-water measurement. No install/deploy/production/SDK/motion/bag replay/commit/push was performed."
+}

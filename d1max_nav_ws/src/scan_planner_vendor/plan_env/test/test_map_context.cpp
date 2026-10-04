@@ -62,6 +62,9 @@ struct GridMapTestAccess {
     EXPECT_EQ(map.observedCylinderStatus({-.15,-.15,-.15}),2);
   }
   static auto raw(const GridMap &map) {return map.md_.occupancy_buffer_;}
+  static std::size_t inflationCounterBytes(const GridMap& map) {
+    return map.md_.occupancy_buffer_inflate_cnt_.capacity()*sizeof(int);
+  }
   static void freeAges(GridMap &map,std::int64_t source,std::int64_t now) {
     map.mp_.use_projected_rays_=true;
     map.free_observation_stamps_.assign(map.md_.occupancy_buffer_.size(),source);
@@ -159,6 +162,26 @@ TEST(CollisionSnapshotPool, CopyDoesNotRenewExpiredFreeEvidence) {
   writer.copyCollisionSnapshotTo(snapshot,101000000000,std::chrono::steady_clock::now());
   EXPECT_EQ(snapshot.getInflateOccupancy({-.15,-.15,-.15},0.),2);
   EXPECT_EQ(snapshot.latestCloudStampNs(),writer.latestCloudStampNs());
+}
+
+TEST(CollisionSnapshotPool, ReaderDoesNotRetainWriterOnlyInflationCounters) {
+  GridMap writer;GridMapTestAccess::configure(writer);GridMapTestAccess::seedEvidence(writer);
+  GridMap snapshot;GridMapTestAccess::configure(snapshot); // Reuse a memory-only destination.
+  ASSERT_GT(GridMapTestAccess::inflationCounterBytes(writer),0U);
+  ASSERT_GT(GridMapTestAccess::inflationCounterBytes(snapshot),0U);
+  writer.copyCollisionSnapshotTo(snapshot,101000000000,std::chrono::steady_clock::now());
+  EXPECT_EQ(GridMapTestAccess::inflationCounterBytes(snapshot),0U);
+  EXPECT_GT(GridMapTestAccess::inflationCounterBytes(writer),0U);
+  EXPECT_EQ(snapshot.collisionSnapshotBytes()+512*sizeof(int),writer.collisionSnapshotBytes());
+  for(double x:{-.25,-.15,.05,.25})for(double y:{-.25,-.05,.25})for(double yaw:{0.,.7,1.57}) {
+    const Eigen::Vector3d point(x,y,.05);
+    EXPECT_EQ(snapshot.getInflateOccupancy(point,yaw),writer.getInflateOccupancy(point,yaw));
+    EXPECT_EQ(snapshot.inspectInflateOccupancy(point,yaw,true).counts,writer.inspectInflateOccupancy(point,yaw,true).counts);
+  }
+  writer.resetBuffer();
+  writer.copyCollisionSnapshotTo(snapshot,101000000000,std::chrono::steady_clock::now());
+  EXPECT_EQ(GridMapTestAccess::inflationCounterBytes(snapshot),0U);
+  EXPECT_EQ(snapshot.getInflateOccupancy({-.15,-.15,-.15},0.),2);
 }
 
 TEST(CollisionSnapshotPool, SolverReservationCannotStarveTwoValidatorSlots) {

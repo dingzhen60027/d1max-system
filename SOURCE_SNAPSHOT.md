@@ -1,5 +1,15 @@
 # 源码快照记录
 
+## 最新整理与迁移准备
+
+2026-10-04，在发布基线 `b344f52501851a109c5b55220e7f7b75fd638962` 上同步当日性能整改：原生 GridMap 快照及精确缓存、跟踪热循环、不可变参考、完整帧 worker IPC 和 SDK 有界遥测。仍由两处实际开发目录提供源码，发布位置为本仓库 `main`；没有移动工作区、重编生产 install、切换 release、连接 SDK 或修改物理验收。
+
+新增新电脑路径模板、只读依赖清单、新目录显式构建工具及 [部署说明](docs/DEPLOYMENT.md)。修复源码同步规则误把 `scripts/build/` 当缓存排除的问题，补齐三个源码构建脚本；从发布树移除两份上游 GeographicLib `obj` 构建缓存，Git 历史可恢复，原运行目录不变。SDK vendor、地图/bag、封存运行包及本机凭据继续排除。
+
+性能验证摘要、原始 JSON、JUnit 和 owner 同输入基线纳入 [性能证据](docs/verification/20261004-performance/)。它们来自先前隔离验证环境；报告中的绝对路径/ELF 是原验证身份，不是新机已经拥有的文件。仅这些审阅后的记录被复制，不上传全部 experiments、构建树、库或录包。发布副本覆盖前备份在 `/tmp/d1max-source-backup-yFe7mInF`，补齐构建脚本的备份位置 `/tmp/d1max-source-backup-PKDrn9kz`；临时备份不是长期运行包。
+
+下文保留之前的同步记录，各版本范围以对应日期为准。
+
 ## 当前同步：2026-10-04
 
 以发布仓库 `832a5209d962cf1194fdbfaf5d5ba72c0d15c711` 为起点，同步现有导航主线、Web 启停、SDK bridge、测试与模块说明。开发导航目录基线为 `76e1ccb5a081af13be22eac6c1d7deb31ba5ae61`，分支 `chore/project-layout-20260928`；包含在该目录后续完成的未提交修改，不能把开发 HEAD 当作这批源码的完整身份。

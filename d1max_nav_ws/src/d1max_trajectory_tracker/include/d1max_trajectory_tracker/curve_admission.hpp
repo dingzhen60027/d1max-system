@@ -16,8 +16,9 @@ struct CurveProjection {
 
 // Bounded same-curve XYZ projection. Source time only limits how far the
 // measured body could have moved; elapsed time never chooses the curve time.
+template<class CurveEvaluator>
 inline std::optional<CurveProjection> projectCurveAdmission(
-    const scan_planner::UniformBspline& curve,
+    const CurveEvaluator& curve,
     const std::vector<double>& times, const std::vector<double>& arcs,
     const std::vector<Eigen::Vector3d>& points, const Eigen::Vector3d& body,
     double seed_time, double seed_arc, double backward, double forward, double join_limit=.0125) {

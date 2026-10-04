@@ -1,4 +1,13 @@
-# 同步与发布
+# 项目工具
+
+新电脑迁移见 [部署说明](../docs/DEPLOYMENT.md)：
+
+- `source tools/deployment-env.sh`：只设置 checkout 路径，保留显式覆盖，不加载网络或 ROS。
+- `python3 tools/deployment_preflight.py --scope source`：只读源码检查；nav/sdk/web 等 scope 检查对应依赖，不视作封存/物理验收。
+- `bash tools/build-source.sh --scope nav --output NEW_PATH`：默认只打印计划；加 `--apply` 在新隔离目录构建，保持当前主线，不启动服务、SDK 或导航。
+- `python3 -m unittest discover -s tools -p 'test_*.py' -v`：工具的无实机测试；需要 rsync/colcon 的部分用临时目录和 fake 编译器，不执行真实 ROS 构建。
+
+## 同步与发布
 
 在统一发布仓库运行；源目录不会被写入。默认只比较校验和：
 

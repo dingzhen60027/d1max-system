@@ -1,0 +1,59 @@
+{
+  "scope": "pure production reference core + controlled partial IPC; no ROS/SDK/replay",
+  "route": {
+    "route_hash": "4c43d3fd6389427c41c9b6f62d7741304d7daa5148fbbe30d2009c13529ed764",
+    "point_count": 20000,
+    "encoded_bytes": 1142193,
+    "baseline_source_sha256": "475c3114c8ec68881f1ca4737a2b0c0be9801c274874664340e8aa3e9be295d0",
+    "current_source_sha256": "3640cbe13f42046395c027958d70a4b759eb4ab5284d3f1dfe6464741afe3119",
+    "before_b344f52": {
+      "construct": {
+        "repeats": 9,
+        "p50_us": 52250.001,
+        "p95_us": 57501.8964,
+        "max_us": 58308.458,
+        "python_peak_bytes": 13824693
+      },
+      "reanchor": {
+        "repeats": 31,
+        "p50_us": 645.704,
+        "p95_us": 674.4175,
+        "max_us": 748.841,
+        "python_peak_bytes": 650970
+      }
+    },
+    "after": {
+      "construct": {
+        "repeats": 9,
+        "p50_us": 32915.325,
+        "p95_us": 36191.165799999995,
+        "max_us": 36328.441,
+        "python_peak_bytes": 13824885
+      },
+      "reanchor": {
+        "repeats": 31,
+        "p50_us": 623.195,
+        "p95_us": 662.4995,
+        "max_us": 696.592,
+        "python_peak_bytes": 8236
+      }
+    },
+    "same_output": true
+  },
+  "ipc": {
+    "payload_delay_ms": 50.0,
+    "request_capacity": 1,
+    "reply_capacity": 4,
+    "max_request_bytes": 4096,
+    "max_reply_bytes": 16777216,
+    "before_raw_pipe": {
+      "owner_p50_us": 50361.861,
+      "owner_max_us": 50631.316
+    },
+    "after": {
+      "owner_p50_us": 8.422,
+      "owner_max_us": 9.842
+    },
+    "same_complete_packet": true
+  }
+}

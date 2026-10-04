@@ -1,4 +1,5 @@
 #include "execution_transport_core.hpp"
+#include "execution_publication_core.hpp"
 #include "mc_report_core.hpp"
 #include "test_execution_fixture.hpp"
 #include <cassert>
@@ -39,7 +40,10 @@ static Transport active(){auto t=armed();assert(t.localState(body(10.005),10.005
  t.writeCalled(10.005,true);const auto a=t.takeCommitAck();assert(a&&a->applied&&a->commit_sequence==1&&a->previous_commit_sequence==0);
  assert(a->body_source_stamp==stamp(10.005)&&a->measured_pose.header.stamp==a->body_source_stamp);
  assert(a->demand_body_source_stamp==stamp(10.)&&a->demand_source_stamp==stamp(10.)&&!a->write_acknowledged);
- t.writeAcknowledged(1,10.01);const auto ack=t.takeCommitAck();assert(ack&&ack->write_acknowledged&&ack->applied_at==stamp(10.005));return t;}
+ CommitOutbox outbox;assert(outbox.put(*a)==CommitOutbox::Result::Queued);
+ t.writeAcknowledged(1,10.01);const auto ack=t.takeCommitAck();assert(ack&&ack->write_acknowledged&&ack->applied_at==stamp(10.005));
+ assert(outbox.put(*ack)==CommitOutbox::Result::Coalesced&&outbox.size()==1);
+ CommitAck emitted;assert(outbox.pop(emitted)&&emitted==*ack);return t;}
 static Handoff grant(){Handoff g;g.schema_version=2;g.transition_mode=Handoff::CONTINUOUS_REPLACE;g.handoff_id="handoff-1";g.sequence=g.expected_commit_sequence=1;
  g.incumbent=permit1();g.candidate=permit1();g.candidate.version.reference_generation=2;g.candidate.version.anchor_revision=2;
  g.candidate.trajectory_id=2;g.candidate.sequence=g.candidate.validation_sequence=2;g.candidate.geometry_committed=false;

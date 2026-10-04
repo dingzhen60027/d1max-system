@@ -10,11 +10,12 @@ from collections import deque
 from copy import deepcopy
 from dataclasses import dataclass
 import math
+from types import MappingProxyType
 
 import numpy as np
 
 from .control_frame_contract import BodySample, Context, ControlAnchor, create_anchor
-from .source_route import RouteSnapshot
+from .source_route import RouteSnapshot, canonical
 
 
 @dataclass(frozen=True)
@@ -73,15 +74,38 @@ class ReferenceWindow:
     end_arc_m: float = 0.
 
 
+def _immutable_array(values):
+    """Bytes-owned storage cannot be made writable by a candidate reader."""
+    array = np.asarray(values, dtype=float)
+    return np.frombuffer(array.tobytes(), dtype=float).reshape(array.shape)
+
+
+def _immutable_metadata(value):
+    if isinstance(value, dict):
+        return MappingProxyType({key: _immutable_metadata(item) for key, item in value.items()})
+    if isinstance(value, list):
+        return tuple(_immutable_metadata(item) for item in value)
+    return value
+
+
+@dataclass(frozen=True)
+class SupportEvidence:
+    source_map_sha256: str
+    execution_eligible: bool
+    eligibility_reason: str
+    observed_source_support_xyz: np.ndarray
+    canonical_observed_support: str
+
+
 class ContinuousReference:
     def __init__(self, snapshot, *, context, task_id, anchor, body_height_m,
                  body_height_calibration_id, freshness_s=.5, maximum_speed_mps=1.5,
                  projection_radius_m=.3, backward_window_m=.35, forward_window_m=1.,
                  portal_radius_m=.12, stationary_span_s=.2, lateral_radius_m=1.4):
-        if (not isinstance(snapshot, RouteSnapshot)
-                or RouteSnapshot.create(snapshot.payload()) != snapshot
+        value = snapshot.payload() if isinstance(snapshot, RouteSnapshot) else None
+        if (value is None or RouteSnapshot.create(value) != snapshot
                 or not isinstance(context, Context) or not isinstance(anchor, ControlAnchor)
-                or anchor.context != context or snapshot.payload()['map_version_id'] != context.map_version
+                or anchor.context != context or value['map_version_id'] != context.map_version
                 or not isinstance(task_id, str) or not 0 < len(task_id) <= 160
                 or not isinstance(body_height_calibration_id, str) or not body_height_calibration_id):
             raise ValueError('complete_immutable_route_and_anchor_identity_required')
@@ -104,16 +128,32 @@ class ContinuousReference:
         if lateral_radius_m < projection_radius_m:
             raise ValueError('bounded_reference_parameters_required')
         self.lateral = float(lateral_radius_m)
-        value = snapshot.payload()
-        self._points = np.asarray(value['xyz'], dtype=float)
-        self._arc = np.r_[0., np.cumsum(np.linalg.norm(np.diff(self._points, axis=0), axis=1))]
-        self._segments = tuple(value['segments'])
+        self._points = _immutable_array(value['xyz'])
+        self._arc = _immutable_array(np.r_[0., np.cumsum(np.linalg.norm(np.diff(self._points, axis=0), axis=1))])
+        self._segments = tuple(_immutable_metadata(segment) for segment in value['segments'])
+        self.goal_ground_xyz = tuple(value['xyz'][-1])
+        self.goal_heading = (value['has_goal_yaw'], value['goal_yaw'], value['goal_yaw_tolerance_rad'])
+        self.support_evidence = SupportEvidence(value['source_map_sha256'], value['execution_eligible'],
+            value['eligibility_reason'], _immutable_array(
+                value['geometry_evidence'].get('observed_source_support_xyz', [])).reshape((-1, 3)),
+            canonical(value['geometry_evidence'].get('observed_source_support_xyz', [])))
         self._segment = 0
         self._measured = self._confirmed = 0.
         self._progress = None
         self._last_sample = None
         self._history = deque(maxlen=128)
         self.candidate_anchor = None
+
+    def __deepcopy__(self, memo):
+        # Reanchor only stages dynamic progress. Geometry and literal source
+        # evidence belong to the immutable route, not to an anchor version.
+        staged = object.__new__(type(self))
+        memo[id(self)] = staged
+        shared = {'snapshot', '_points', '_arc', '_segments', 'goal_ground_xyz',
+                  'goal_heading', 'support_evidence'}
+        for name, value in self.__dict__.items():
+            setattr(staged, name, value if name in shared else deepcopy(value, memo))
+        return staged
 
     def _fresh(self, source_ns, received, *, current_source_ns, now_monotonic):
         if (type(source_ns) is not int or type(current_source_ns) is not int

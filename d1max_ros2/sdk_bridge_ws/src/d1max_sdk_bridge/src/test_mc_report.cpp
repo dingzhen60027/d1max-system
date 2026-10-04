@@ -12,12 +12,25 @@ static McReport ready() {
 int main() {
   {d1monitor::Inbox<int,2> q;q.push(1);q.push(2);q.push(3);int out=0;
    assert(q.dropped==1&&q.pop(out)&&out==2);assert(q.pop(out)&&out==3);assert(!q.pop(out));}
+  {auto r=ready(); // Fixed storage wraps under a flood without changing the old 512 bound.
+   for(uint64_t i=0;i<10000;++i){const double t=1.+i*.0001;
+     assert(r.sample(t,100.+i*.0001,1000000000ULL+i*100000ULL,zero,zero,t));}
+   assert(r.timings.size()==512&&r.timings.front().source==1000000000ULL+9488*100000ULL);
+   assert(r.timings.back().source==1000000000ULL+9999*100000ULL);
+   assert(r.observed_hz(1.9999)==0.); // <1s window still cannot invent a valid rate
+   const auto snap=r.snapshot(1.9999);
+   assert(snap.samples==r.samples&&snap.fresh==r.fresh(1.9999)&&snap.state==r.state(1.9999));
+   assert(snap.observed_hz==r.observed_hz(1.9999)&&snap.source_hz==r.source_hz(1.9999));
+   r.prune(5.);assert(r.timings.empty());r.disconnect();assert(r.timings.empty()&&r.samples==0);
+   assert(!r.snapshot(5.).fresh&&r.snapshot(5.).state=="disconnected");}
   {auto r=ready();r.ack(true);assert(!r.fresh(1.)&&r.state(1.)=="waiting_stream");
    for(int i=0;i<101;++i){const auto now=1.+i*.02;
      assert(r.sample(now,100.+i*.02,1000000000ULL+i*20000000ULL,zero,zero,now));}
    r.robot(3.);assert(r.rate_ok(3.));assert(std::abs(r.observed_hz(3.)-50.)<.001);
    assert(std::abs(r.source_hz(3.)-50.)<.001);assert(std::abs(r.stamp_unix-102.)<1e-8);
    assert(r.state(3.)=="streaming");assert(!r.request_due(true,false,3.));
+   const auto snap=r.snapshot(3.);assert(snap.fresh&&snap.rate_ok&&snap.observed_hz==r.observed_hz(3.));
+   assert(snap.source_hz==r.source_hz(3.)&&snap.state==r.state(3.)&&snap.next_retry_in==r.next_retry_in(3.));
    assert(!r.fresh(3.4));assert(r.observed_hz(3.4)==0.);}
   {auto r=ready();assert(r.sample(1.,100.,1000000000,zero,zero,1.));
    assert(r.state(1.)=="streaming_unconfirmed");  // data does not invent a configuration ACK

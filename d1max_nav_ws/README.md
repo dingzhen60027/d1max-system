@@ -31,6 +31,18 @@ Choosing the development mainline does not switch the production release or
 grant SDK motion authority. The default release selector remains unchanged;
 deployment and physical acceptance are separate steps.
 
+The 2026-10-04 performance round reduces native snapshot buffers, removes hot-loop
+heap allocation and isolates complete-frame worker IPC and periodic SDK publishing.
+Same-input measurements and the bounded-memory tradeoffs are recorded in the
+[navigation module performance section](src/d1max_pct_scan/README.md#性能整改2026-10-04未部署)
+and `experiments/navigation_performance_20261004/`. Sources and consistent isolated
+builds are verified; no production install, release pointer or physical acceptance
+flag has been changed. Core microbenchmarks are not an end-to-end 20 ms guarantee.
+This publication includes reviewed records in
+[`docs/verification/20261004-performance`](../docs/verification/20261004-performance/),
+not the developer's generated experiment/build trees. For another computer, use
+the [deployment guide](../docs/DEPLOYMENT.md) and root source-build planner.
+
 ## Layout
 
 ```

@@ -67,6 +67,57 @@ PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 /usr/bin/python3 -m pytest -q -p no:cacheprovid
 跨层执行模式事务、整图集成、20 ms 输出及压力测试、厂商调用阻塞/断网停车、
 MC 源时延迟、轮腿/载荷几何和实测制动仍需分别验收；源码通过不宣称物理能力已具备。
 
+### 性能整改（2026-10-04，未部署）
+
+同输入基线为发布仓库 `b344f525`。本轮只改现有主线热路径，保留原生
+GridMap/SCAN/PCT、源时间、碰撞语义、执行授权和唯一 SDK writer。
+参考窗口共享只读路线及支撑证据；坐标锚候选只复制动态进度，窗口 owner
+不再反复 JSON 解码/深拷贝完整路线。全局 worker 使用有界、完整帧 IPC：
+独立 I/O 线程收发，owner 不执行可能等待剩余帧的 `recv()`；4 槽回复、1 槽待发，
+溢出失效关闭，旧 child 和 I/O 线程退役完成后才允许替换。
+Linux duplex socket 先 shutdown 中断 I/O，原 FD 在两线程退出后才关闭，避免句柄复用。
+
+| 同输入局部指标 | 修改前 → 修改后 |
+| --- | --- |
+| 6×6×3.2 m / 5 cm 三槽原生碰撞缓冲 | 58,141,260 → 47,082,060 B（省 10.55 MiB） |
+| 快照复制 P50 | 546.174 → 361.176 µs |
+| 32768 项精确查询缓存热轮 P50 | 1143.181 → 528.119 µs；40 轮堆分配 1,310,720 → 0 |
+| 跟踪 core 每 tick 动态分配 | 31 次 / 904 B → 0；普通 23 控制点 P95 中位数 0.840 → 0.489 µs |
+| 20000 点路线 reanchor 的 Python 峰值分配 | 651,153 → 8,236 B；几何/进度/源时间输出相同 |
+| 受控 50 ms IPC 剩余帧延迟 | owner 不再等待剩余帧；完整结果、取消与代际拒绝分别测试 |
+
+SDK MC 改成固定 512 条 timing ring，锁内诊断取轻量快照；ACK 使用固定容量并
+合并完全相同重发，周期诊断发布交给既有 telemetry worker 的 latest 槽。
+关键 ACK 不按最新状态覆盖，过载仍 veto；供应商调用、critical transition event
+和 shutdown 发布/线程 join 的实际最长阻塞时间仍未实测。
+
+这是有界预分配的取舍，不是所有对象都变小：满缓存保留内存下降 15.49%，
+但 clear 保留峰值容量，冷启动分配字节有所增加。跟踪准备几何在 23 点时增加
+1672 B、10000 点时增加 640200 B；SDK MC 对象增加 8128 B，换取热路径无分配。
+跟踪基准 RSS 有增加，SDK 基准 RSS 不变，不能把缓冲区节省当作整服务 RSS 结论。
+
+开发目录的 `experiments/navigation_performance_20261004/` 保存 native、tracker、SDK 与 owner 的
+原始 JSON、冻结基线、源码/ELF 哈希和复现脚本。native 新缓冲布局的四包依赖已
+在全新隔离构建中成套重编，325 项原生用例、160 项 tracker 用例、14 组 SDK
+测试通过；两个需运行 ROS 节点的 native launch 测试未执行。
+Python 全量回归 2033 项通过、1 项大型地图缺项跳过；最终通信/参考边界再复跑
+128 项通过，包含 100 次不完整帧取消后的 FD/线程无累积检查。
+
+发布仓库仅保留审阅后的 [性能证据](../../../docs/verification/20261004-performance/)，
+不复制全部隔离构建树。新电脑完整 native 重建见 [部署说明](../../../docs/DEPLOYMENT.md)。
+在已提供 NumPy 的系统 Python 环境，从仓库的 `d1max_nav_ws` 可重现 owner 基准：
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src/d1max_pct_scan /usr/bin/python3 \
+  tools/validation/benchmark_navigation_owner.py \
+  --baseline ../docs/verification/20261004-performance/baseline_reference.py \
+  --output /tmp/d1max-owner-results.json
+```
+
+构建、计数和纯计时分开，正式计时使用串行静默窗口。以上是具体核心/缓冲区
+测量，不是 20 ms 整链、生产 Zenoh 延迟、NUC 压力或实机制动验收。没有更改
+默认 release 指针、现有 install、生产服务或物理验收标志；部署必须整套生成新版本。
+
 以下保留旧预览入口的历史实现、用法和验收记录。旧 `start-motion`、
 `start_live_planning_view.sh` 和离线模拟脚本不得替代正式 BT 任务/运动入口；
 下文“当前”等表述仅对应各节原记录版本，不代表 2026-10-03 主线已经物理验收。

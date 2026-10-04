@@ -28,6 +28,7 @@
 #include "execution_acceptance.hpp"
 #include "execution_shutdown_core.hpp"
 #include "execution_scheduler.hpp"
+#include "execution_publication_core.hpp"
 using Json=nlohmann::json;
 using String=std_msgs::msg::String;
 static double mono(){return std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count();}
@@ -359,8 +360,15 @@ class Monitor final:public rclcpp::Node {
     const auto h=navigation_health(mono());
     return {h.connected&&!h.replay,h.owned,
       navigation_.robot_fresh(h,mono())&&h.mode==1&&h.motion==5&&h.speed==1&&h.head==1,
-      h.mc_fresh&&execution3_&&execution3_->mcSourceFresh(wall(),session_+":"+std::to_string(mc_.generation)),
+      h.mc_fresh&&execution3_&&execution3_->mcSourceFresh(wall(),mc_clock_epoch()),
       h.software!=1||h.hardware!=1};
+  }
+  // Access only with the state mutex held. Preserve the exact epoch label,
+  // rebuilding its string only when MC disconnect/reconfiguration advances it.
+  const std::string& mc_clock_epoch(){
+    if(mc_clock_epoch_.empty()||mc_clock_generation_!=mc_.generation){
+      mc_clock_epoch_=session_+":"+std::to_string(mc_.generation);mc_clock_generation_=mc_.generation;}
+    return mc_clock_epoch_;
   }
   void execution_tick(){
     if(shutting_down_.load())return;
@@ -420,9 +428,9 @@ class Monitor final:public rclcpp::Node {
     // status is lossy; commit results use a separate fixed queue. An overflow
     // is a safety veto, never silent authorization loss/revival.
     {std::lock_guard<std::mutex>lock(telemetry_mutex_);
-      execution_telemetry_.put(ExecutionTelemetry{state,stop,stationary});
-      if(ack){if(execution_ack_out_.size==8)navigation_events_.raise(d1monitor::NavigationEvents::WorkerStopped);
-        else execution_ack_out_.push(*ack);}}
+      execution_telemetry_.put(ExecutionTelemetry{std::move(state),std::move(stop),std::move(stationary)});
+      if(ack&&execution_ack_out_.put(std::move(*ack))==d1monitor::execution3::CommitOutbox::Result::Overflow)
+        navigation_events_.raise(d1monitor::NavigationEvents::WorkerStopped);}
     telemetry_wake_.notify_one();
   }
   void shutdown_execution(){
@@ -507,19 +515,25 @@ class Monitor final:public rclcpp::Node {
   struct RobotPacket {robot_sdk::RobotState data;double arrival,received;};
   struct McTelemetry {McPacket packet;uint64_t sequence=0,generation=0;double stamp=0;};
   struct ExecutionTelemetry {d1monitor::execution3::State state;d1monitor::execution3::Stop stop;d1monitor::execution3::Stationary stationary;};
+  struct DiagnosticTelemetry {String connected,behavior,speed,status;};
   void work_telemetry(){
     try{for(;;){
       std::optional<RobotPacket> robot;std::optional<McTelemetry> mc;robot_sdk::FaultDatas faults;
-      std::optional<ExecutionTelemetry>execution;std::deque<d1monitor::execution3::CommitAck>commits;
+      std::optional<ExecutionTelemetry>execution;std::array<d1monitor::execution3::CommitAck,8>commits;size_t commit_count=0;
+      std::optional<DiagnosticTelemetry>diagnostic;std::optional<String>joint_diagnostic;
       {std::unique_lock<std::mutex>lock(telemetry_mutex_);
         telemetry_wake_.wait(lock,[this]{return telemetry_stopping_||robot_telemetry_.pending||mc_telemetry_.pending||
-          execution_telemetry_.pending||execution_ack_out_.size||!fault_telemetry_.empty();});
+          execution_telemetry_.pending||execution_ack_out_.size()||diagnostic_telemetry_.pending||
+          joint_diagnostic_telemetry_.pending||!fault_telemetry_.empty();});
         if(telemetry_stopping_)return;
         robot=robot_telemetry_.take();mc=mc_telemetry_.take();faults.swap(fault_telemetry_);execution=execution_telemetry_.take();
-        d1monitor::execution3::CommitAck ack;while(execution_ack_out_.pop(ack))commits.push_back(std::move(ack));}
+        diagnostic=diagnostic_telemetry_.take();joint_diagnostic=joint_diagnostic_telemetry_.take();
+        while(commit_count<commits.size()&&execution_ack_out_.pop(commits[commit_count]))++commit_count;}
+      // Send transaction results before lossy status/JSON on this consumer.
+      // A blocked middleware call still has no software deadline guarantee.
+      for(size_t i=0;i<commit_count;++i)execution_commit_->publish(commits[i]);
       if(execution){execution_state_->publish(execution->state);execution_stop_->publish(execution->stop);
         execution_stationary_->publish(execution->stationary);}
-      for(const auto&ack:commits)execution_commit_->publish(ack);
       if(robot){const auto&d=robot->data;
         publish("robot_state",{{"source",execution3_?"sdk_monitor_execution_v3":navigation_.enabled?"sdk_monitor_navigation":"sdk_monitor_estop"},
           {"read_only",!navigation_.enabled&&!execution3_},{"motion_control_enabled",navigation_.enabled||static_cast<bool>(execution3_)},
@@ -540,6 +554,12 @@ class Monitor final:public rclcpp::Node {
           {"clock_mode","source_delta_host_anchor"},{"clock_approximate",true},{"session",session_},{"generation",mc->generation},
           {"v_body",d.v_body},{"omega_body",d.omega_body},
           {"forward_speed",d.v_body[0]},{"lateral_speed",d.v_body[1]},{"yaw_speed",d.omega_body[2]},{"sequence",mc->sequence}});}
+      // Periodic status belongs to this lossy consumer too. Middleware
+      // backpressure cannot block the main executor's ownership/event drain.
+      if(diagnostic){pubs_.at("connection_state_text")->publish(diagnostic->connected);
+        pubs_.at("behavior_state")->publish(diagnostic->behavior);
+        pubs_.at("speed_report_status")->publish(diagnostic->speed);status_->publish(diagnostic->status);}
+      if(joint_diagnostic)pubs_.at("joint_state_status")->publish(*joint_diagnostic);
     }}catch(const std::exception&error){
       navigation_events_.raise(d1monitor::NavigationEvents::WorkerStopped);
       RCLCPP_ERROR(get_logger(),"Telemetry publication worker stopped, motion veto latched: %s",error.what());
@@ -622,13 +642,13 @@ class Monitor final:public rclcpp::Node {
        // swallow a backward-source event before the unique writer sees it.
        // An equal duplicate only remains a diagnostic rejection, not a gap.
        if(execution3_&&mc_.sourceOrder(d.time_stamp)==d1monitor::McReport::SourceOrder::Backward)
-         execution3_->mcSourceRegressed(wall(),session_+":"+std::to_string(mc_.generation));
+         execution3_->mcSourceRegressed(wall(),mc_clock_epoch());
        if(safety.replay||!mc_.sample(packet.arrival,packet.received,d.time_stamp,d.v_body,d.omega_body,mono()))continue;
        navigation_.measurement(d.v_body[0],d.v_body[1],packet.arrival);
        sequence=mc_.samples;generation=mc_.generation;stamp=mc_.stamp_unix;
        if(execution3_) {
          double v2=0,w2=0;for(int i=0;i<3;++i){v2+=d.v_body[i]*d.v_body[i];w2+=d.omega_body[i]*d.omega_body[i];}
-         execution3_->mc(d.time_stamp,stamp,packet.received,std::sqrt(v2),std::sqrt(w2),wall(),session_+":"+std::to_string(generation));
+         execution3_->mc(d.time_stamp,stamp,packet.received,std::sqrt(v2),std::sqrt(w2),wall(),mc_clock_epoch());
        }}
       {std::lock_guard<std::mutex>lock(telemetry_mutex_);mc_telemetry_.put(McTelemetry{packet,sequence,generation,stamp});}
       telemetry_wake_.notify_one();
@@ -716,15 +736,15 @@ class Monitor final:public rclcpp::Node {
       if(error){std::lock_guard<std::mutex> lock(mutex);mc_.written(request_generation,request_id,error.message());}
     }
     if(joints_.enabled)tick_joint(connected_now,replay);
-    d1monitor::Safety safe;d1monitor::McReport report;d1monitor::Ownership owner_report;
-    {std::lock_guard<std::mutex> lock(mutex);safety.connected=connected_now;safety.tick(mono());safe=safety;report=mc_;owner_report=ownership_;}
-    String connected;connected.data=safe.connected?"connected":"disconnected";pubs_.at("connection_state_text")->publish(connected);
+    d1monitor::Safety safe;d1monitor::McReport::Snapshot report{};d1monitor::Ownership owner_report;
+    {std::lock_guard<std::mutex> lock(mutex);safety.connected=connected_now;safety.tick(mono());safe=safety;report=mc_.snapshot(mono());owner_report=ownership_;}
+    String connected;connected.data=safe.connected?"connected":"disconnected";
     d1monitor::NavigationMotion nav;std::string nav_reason,sdk_version;d1monitor::execution3::State execution_state;uint64_t v3_moves=0;
     double mc_capture_lower=0,mc_capture_upper=0,mc_capture_bound=0;bool mc_source_fresh=false;
     {std::lock_guard<std::mutex> lock(mutex);nav=navigation_;nav_reason=navigation_.reason(navigation_health(mono()),mono());
       if(execution3_){execution_state=execution3_->state(wall());mc_capture_lower=execution3_->mcCaptureLowerBound();
         mc_capture_upper=execution3_->mcCaptureUpperBound();mc_capture_bound=execution3_->mcCaptureDelayBound();
-        mc_source_fresh=execution3_->mcSourceFresh(wall(),session_+":"+std::to_string(mc_.generation));}
+        mc_source_fresh=execution3_->mcSourceFresh(wall(),mc_clock_epoch());}
       v3_moves=execution_submitted_moves_;sdk_version=sdk_version_;}
     const bool v3=static_cast<bool>(execution3_);
     const Json execution_diag={{"enabled",v3},{"execution_policy_schema",1},{"phase",execution_state.phase},{"reason",execution_state.reason},
@@ -735,20 +755,20 @@ class Monitor final:public rclcpp::Node {
       {"mc_clock_basis","source_delta_host_anchor_approximate"},{"mc_clock_approximate",true},
       {"mc_capture_lower_bound_unix",mc_capture_lower},{"mc_capture_upper_bound_unix",mc_capture_upper},
       {"mc_capture_delay_bound_s",mc_capture_bound},
-      {"mc_accepted_source_fresh",mc_source_fresh},{"mc_arrival_fresh",report.fresh(mono())},
+      {"mc_accepted_source_fresh",mc_source_fresh},{"mc_arrival_fresh",report.fresh},
       {"writer_period_s",.05},{"writer_last_duration_s",execution_last_duration_s_.load()},
       {"writer_deadlines_skipped",execution_writer_skipped_.load()},{"writer_overruns",execution_writer_overruns_.load()},
       {"scheduling_isolation","dedicated_input_executor_steady_writer_latest_telemetry"},
       {"independent_physical_stop_verified",false},
       {"fault_latched",execution_state.fault_latched}};
-    publish("behavior_state",{{"fsm_state",v3?execution_state.phase:nav.enabled?(nav.armed?"NAVIGATION_ARMED":"NAVIGATION_LOCKED"):"MONITOR_ONLY"},{"telemetry_only",!nav.enabled&&!v3},{"motion_control_enabled",nav.enabled||v3},{"control_adapter",v3?"monitor_execution_v3":nav.enabled?"monitor_navigation_v1":"monitor_estop_v1"},
+    String behavior;behavior.data=Json{{"fsm_state",v3?execution_state.phase:nav.enabled?(nav.armed?"NAVIGATION_ARMED":"NAVIGATION_LOCKED"):"MONITOR_ONLY"},{"telemetry_only",!nav.enabled&&!v3},{"motion_control_enabled",nav.enabled||v3},{"control_adapter",v3?"monitor_execution_v3":nav.enabled?"monitor_navigation_v1":"monitor_estop_v1"},
       {"execution_v3",execution_diag},{"sdk_version",sdk_version},
       {"ready_for_navigation",v3?Json(execution_state.grant_ready):nav.enabled?Json(nav_reason.empty()):Json(nullptr)},{"sdk_has_control",owner_report.owns(mono())},{"ownership_state",owner_report.state(mono())},{"replay_latched",safe.replay},{"sdk_commands_sent",safe.sent+nav.sent+v3_moves},
       {"navigation_armed",nav.armed},{"navigation_arm_generation",nav.generation},{"navigation_block_reason",nav_reason},{"navigation_error",nav.error},{"fault_latched",nav.fault},{"requires_review",nav.fault},
       {"navigation_measured_planar_mps",nav.measured_planar_mps},{"navigation_overspeed_latched",nav.overspeed_latched},
-      {"estop_result",safe.result},{"estop_ack",safe.ack},{"estop_error",safe.error},{"estop_pending",safe.pending}});
+      {"estop_result",safe.result},{"estop_ack",safe.ack},{"estop_error",safe.error},{"estop_pending",safe.pending}}.dump();
     const auto now=mono();const auto owner_state=owner_report.state(now);
-    const auto mc_state=!report.fresh(now)&&connected_now&&!replay&&!owner_report.allow_mc_config()?owner_state:report.state(now);
+    const auto mc_state=!report.fresh&&connected_now&&!replay&&!owner_report.allow_mc_config()?owner_state:report.state;
     const Json owner={{"enabled",owner_report.enabled},{"state",owner_state},{"confirmed",owner_report.owns(now)},
       {"acknowledged",owner_report.acknowledged},{"state_confirmations",owner_report.confirmations},{"control_source",owner_report.control_source},
       {"requests",owner_report.total_requests},{"error",owner_report.error},{"automatic_retry",false}};
@@ -756,23 +776,23 @@ class Monitor final:public rclcpp::Node {
       RCLCPP_INFO(get_logger(),"SDK ownership: %s",owner_state.c_str());last_owner_state_=owner_state;
     }
     if(mc_state!=last_mc_state_){
-      RCLCPP_INFO(get_logger(),"MC stream: %s, received %.1f Hz, samples %lu",mc_state.c_str(),report.observed_hz(now),report.samples);
+      RCLCPP_INFO(get_logger(),"MC stream: %s, received %.1f Hz, samples %lu",mc_state.c_str(),report.observed_hz,report.samples);
       last_mc_state_=mc_state;
     }
     // Stable ROS topic name for existing Web/Foxglove subscriptions; source is explicit.
-    publish("speed_report_status",{{"source","sdk_mc"},{"callback","OnMcData"},{"requested",report.total_attempts>0},
+    String speed;speed.data=Json{{"source","sdk_mc"},{"callback","OnMcData"},{"requested",report.total_attempts>0},
       {"expected_hz",report.expected_hz},{"minimum_hz",report.minimum_hz},{"maximum_hz",report.maximum_hz},
       {"acknowledged",report.acknowledged},{"ack_on",report.ack_on},
       {"samples",report.samples},{"invalid_samples",report.invalid_samples},{"timestamp_rejections",report.timestamp_rejections},
       {"stale_samples",report.stale_samples},{"queue_dropped",dropped},
-      {"stream_fresh",report.fresh(now)},{"observed_hz",report.observed_hz(now)},{"source_hz",report.source_hz(now)},{"rate_ok",report.rate_ok(now)},
+      {"stream_fresh",report.fresh},{"observed_hz",report.observed_hz},{"source_hz",report.source_hz},{"rate_ok",report.rate_ok},
       {"clock_mode","source_delta_host_anchor"},{"clock_approximate",true},
       {"state",mc_state},{"attempts",report.attempts},{"max_attempts",report.max_attempts},
-      {"total_attempts",report.total_attempts},{"retry_cycles",report.retry_cycles},{"next_retry_sec",owner_report.allow_mc_config()?report.next_retry_in(now):-1.},
+      {"total_attempts",report.total_attempts},{"retry_cycles",report.retry_cycles},{"next_retry_sec",owner_report.allow_mc_config()?report.next_retry_in:-1.},
       {"ownership",owner},
       {"connection_state",static_cast<int>(connection_state)},{"connect_attempts",connect_retry_.attempts},
       {"last_sdk_error",last_sdk_error_},{"last_sdk_error_code",last_sdk_error_code_},{"last_sdk_error_at",last_sdk_error_at_},
-      {"write_complete",report.write_complete},{"write_error",report.write_error},{"received_at_unix",wall()}});
+      {"write_complete",report.write_complete},{"write_error",report.write_error},{"received_at_unix",wall()}}.dump();
     String status;status.data=Json{{"session",session_},{"service_prefix","/d1max/monitor/s_"+session_},{"mode",safe.replay?"replay":"monitor"},
       {"motion_control_enabled",nav.enabled||v3},{"navigation_armed",v3?execution_state.grant_ready:nav.armed},{"navigation_arm_generation",v3?execution_state.sdk_arm_generation:nav.generation},
       {"execution_v3",execution_diag},{"sdk_version",sdk_version},
@@ -780,7 +800,10 @@ class Monitor final:public rclcpp::Node {
       {"navigation_measured_planar_mps",nav.measured_planar_mps},{"navigation_overspeed_latched",nav.overspeed_latched},
       {"navigation_limits",{{"hard_planar_mps",d1monitor::NavigationMotion::hard_planar_mps},{"forward_mps",nav.max_x},{"lateral_mps",nav.max_y},{"yaw_radps",nav.max_yaw},{"required_speed_level",1}}},
       {"joint_state_enabled",joints_.enabled},
-      {"ownership",owner},{"safety_available",safe.available()},{"wall_time",wall()}}.dump();status_->publish(status);
+      {"ownership",owner},{"safety_available",safe.available()},{"wall_time",wall()}}.dump();
+    {std::lock_guard<std::mutex>lock(telemetry_mutex_);diagnostic_telemetry_.put(
+      DiagnosticTelemetry{std::move(connected),std::move(behavior),std::move(speed),std::move(status)});}
+    telemetry_wake_.notify_one();
   }
   void tick_joint(bool connected,bool replay){
     std::optional<JointAck> ack;std::optional<McWrite> written;uint64_t invalid,dropped;bool failed;
@@ -801,7 +824,7 @@ class Monitor final:public rclcpp::Node {
     }
     d1monitor::JointReport report;{std::lock_guard<std::mutex> lock(joint_mutex_);report=joints_;}
     const auto now=mono();
-    publish("joint_state_status",{{"source","sdk_joint_state"},{"callback","OnJointStateData"},{"read_only",true},
+    String status;status.data=Json{{"source","sdk_joint_state"},{"callback","OnJointStateData"},{"read_only",true},
       {"enabled",true},{"state",failed?"worker_failed":report.state(now)},{"stream_fresh",report.fresh(now)},{"worker_failed",failed},
       {"clock_mode","receipt_only"},{"source_timestamp_available",false},{"units_verified",false},{"urdf_mapping_verified",false},
       {"session",session_},{"generation",report.generation},{"samples",report.samples},
@@ -809,7 +832,9 @@ class Monitor final:public rclcpp::Node {
       {"receipt_ttl_sec",d1monitor::JointReport::receipt_ttl},{"invalid_samples",invalid},{"stale_samples",report.stale_samples},{"queue_dropped",dropped},
       {"attempts",report.attempts},{"max_attempts",d1monitor::JointReport::max_attempts},{"total_attempts",report.total_attempts},
       {"acknowledged",report.acknowledged},{"ack_on",report.ack_on},{"write_complete",report.write_complete},{"write_error",report.write_error},
-      {"received_at_unix",wall()}});
+      {"received_at_unix",wall()}}.dump();
+    {std::lock_guard<std::mutex>lock(telemetry_mutex_);joint_diagnostic_telemetry_.put(std::move(status));}
+    telemetry_wake_.notify_one();
   }
   std::string session_,last_mc_state_,ip_,port_,last_sdk_error_,sdk_version_;d1monitor::McReport mc_;
   d1monitor::ConnectRetry connect_retry_;int last_connection_state_=-1,last_sdk_error_code_=0;double last_sdk_error_at_=0.;
@@ -829,7 +854,10 @@ class Monitor final:public rclcpp::Node {
   std::mutex telemetry_mutex_;std::condition_variable telemetry_wake_;std::thread telemetry_worker_;bool telemetry_stopping_=false;
   d1monitor::LatestMailbox<RobotPacket>robot_telemetry_;d1monitor::LatestMailbox<McTelemetry>mc_telemetry_;
   d1monitor::LatestMailbox<ExecutionTelemetry>execution_telemetry_;
-  d1monitor::Inbox<d1monitor::execution3::CommitAck,8>execution_ack_out_;
+  d1monitor::LatestMailbox<DiagnosticTelemetry>diagnostic_telemetry_;
+  d1monitor::LatestMailbox<String>joint_diagnostic_telemetry_;
+  d1monitor::execution3::CommitOutbox execution_ack_out_;
+  std::string mc_clock_epoch_;uint64_t mc_clock_generation_=0;
   robot_sdk::FaultDatas fault_telemetry_;
   d1monitor::Inbox<McPacket,128> mc_in_;std::optional<RobotPacket> robot_in_;
   robot_sdk::FaultDatas faults_in_;std::optional<bool> mc_ack_;std::error_code sdk_error_;

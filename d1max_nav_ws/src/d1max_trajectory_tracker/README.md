@@ -15,6 +15,16 @@ and derivative therefore have exactly SCAN's semantics. Like the reference
 lookahead, not elapsed execution time. No Go2 motor controller is launched.
 Reference reviewed: [a1_cmd_adapter.cpp at f60606a](https://github.com/Robot-Nav/legbot_3D_Nav/blob/f60606a4903bad58fca813f76072f9940a284d1d/src/SCAN-Planner/src/planner/plan_manage/src/a1_cmd_adapter.cpp).
 
+Runtime evaluation uses an immutable `FixedBsplineSampler` prepared from the
+vendor's read-out control points, knots and degree, including native derivative
+curves. Its fixed 3D De Boor recurrence is bitwise-tested against the vendor at
+nonuniform knots, both neighbours, endpoints and every admitted degree. It does
+not interpolate the sample table, change join/speed bounds, accept repeated
+knots, or bypass the full geometry equality check. Stack storage removes the
+per-tick dynamic vectors, and left-span binary lookup replaces the native linear
+knot scan. This adds bounded immutable preparation memory; isolated core timing
+does **not** establish the ROS/transport/SDK end-to-end 20 ms deadline.
+
 The controller caches actual vendor-spline XYZ arc length (bounded to 6000
 intervals) at admission and searches only a bounded local arc window on each
 new source-stamped body sample. It permits 0.15 m physical backtracking and a

@@ -71,8 +71,18 @@ class VoxelStatusCache {
  public:
   explicit VoxelStatusCache(std::size_t capacity=32768):capacity_(capacity) {
     if (!capacity_) throw std::invalid_argument("zero voxel cache capacity");
+    if (capacity_>std::numeric_limits<std::uint32_t>::max())
+      throw std::length_error("voxel cache capacity exceeds index range");
   }
-  void clear() { entries_.clear(); }
+  void clear() {
+    entries_.clear();
+    // Retain bounded storage across cloud/proof changes. A new generation
+    // invalidates the index without freeing/reallocating one node per query.
+    if (++generation_==0) {
+      for(auto& slot:slots_)slot.generation=0;
+      generation_=1;
+    }
+  }
   std::size_t size() const { return entries_.size(); }
   template <class Query> int get(int address, Query query) {
     return get(address, 0, 0, query);
@@ -87,11 +97,19 @@ class VoxelStatusCache {
     std::uint64_t x_bits,y_bits;
     std::memcpy(&x_bits,&x,sizeof(x)); std::memcpy(&y_bits,&y,sizeof(y));
     const Key key{address,low_z,high_z,x_bits,y_bits};
-    const auto found=entries_.find(key);
-    if (found!=entries_.end()) return found->second;
+    if(!slots_.empty()) {
+      const auto slot=findSlot(key);
+      if(slots_[slot].generation==generation_)return entries_[slots_[slot].index].state;
+    }
     const int result=query();
-    if (entries_.size()>=capacity_) entries_.clear();
-    entries_.emplace(key,result);
+    if (entries_.size()>=capacity_) clear();
+    ensureStorage();
+    const auto slot=findSlot(key);
+    // Preserve emplace semantics even if a query itself populated the key.
+    if(slots_[slot].generation!=generation_) {
+      slots_[slot]={static_cast<std::uint32_t>(entries_.size()),generation_};
+      entries_.push_back({key,result});
+    }
     return result;
   }
  private:
@@ -111,8 +129,32 @@ class VoxelStatusCache {
       return h;
     }
   };
+  struct Entry {Key key;int state;};
+  struct Slot {std::uint32_t index{0},generation{0};};
+  std::size_t findSlot(const Key& key) const {
+    auto slot=Hash{}(key)&(slots_.size()-1);
+    while(slots_[slot].generation==generation_ &&
+        !(entries_[slots_[slot].index].key==key))slot=(slot+1)&(slots_.size()-1);
+    return slot;
+  }
+  void ensureStorage() {
+    if(!slots_.empty() && entries_.size()<slots_.size()/2 &&
+        entries_.size()<entries_.capacity())return;
+    const auto target=std::min(capacity_,std::max(std::size_t(16),entries_.size()*2));
+    std::size_t slot_count=1;
+    while(slot_count<target*2)slot_count*=2;
+    entries_.reserve(target);
+    std::vector<Slot> slots(slot_count);
+    slots_.swap(slots);
+    for(std::size_t i=0;i<entries_.size();++i) {
+      const auto slot=findSlot(entries_[i].key);
+      slots_[slot]={static_cast<std::uint32_t>(i),generation_};
+    }
+  }
   std::size_t capacity_;
-  std::unordered_map<Key,int,Hash> entries_;
+  std::uint32_t generation_{1};
+  std::vector<Entry> entries_;
+  std::vector<Slot> slots_;
 };
 
 struct VerticalVoxelSpan { int low,high; };

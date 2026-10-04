@@ -249,6 +249,7 @@ class LiveGlobalPlanner(Node):
     def idle_worker_available(self):
         return (self.child is not None and self.pipe is not None
                 and self.worker_generation is None and self.child.is_alive()
+                and not getattr(self.pipe, 'failed', False)
                 and getattr(self,'warmup',{}).get('phase') != 'running')
 
     def _spawn_native_worker(self):
@@ -262,6 +263,11 @@ class LiveGlobalPlanner(Node):
             spawn_with_environment(self.child,self.native_environment)
         finally:
             child.close()
+        from .bounded_worker_channel import BoundedWorkerChannel
+        # Register ownership before either thread starts: partial thread-start
+        # failure must retire the same channel, not leave an orphan reader.
+        self.pipe = BoundedWorkerChannel(parent, autostart=False)
+        self.pipe.start()
 
     def _start_warmup(self):
         """One attempt per explicit startup/replacement, never a tick retry."""
@@ -305,7 +311,8 @@ class LiveGlobalPlanner(Node):
                 if self.current is None:
                     self.state='waiting_for_fresh_localization';self.reason='native_maps_ready_no_goal'
                 return
-            if self.child is None or not self.child.is_alive():
+            if self.child is None or (not self.child.is_alive()
+                    and getattr(self.pipe, 'receive_finished', True)):
                 raise GlobalPlanError('native_warmup_process_exited')
         except (EOFError,OSError,GlobalPlanError) as exc:
             self.stop_child()
@@ -1107,10 +1114,12 @@ class LiveGlobalPlanner(Node):
                         packet = {'kind': 'failed', 'generation': self.current.generation,
                                   'error': str(exc)}
                     self._finish(packet)
-            elif self.child is not None and not self.child.is_alive():
+            elif (self.child is not None and not self.child.is_alive()
+                    and getattr(self.pipe, 'receive_finished', True)):
                 self.revoke('native_worker_exited_without_result')
                 self.state = 'planning_failed'
-        elif self.child is not None and not self.child.is_alive():
+        elif (self.child is not None and getattr(self, 'warmup', {}).get('phase') != 'running'
+                and (not self.child.is_alive() or getattr(self.pipe, 'failed', False))):
             # Idle exit does not erase a separately validated visible route.
             self.stop_child()
         validation = self.static_validator.poll()

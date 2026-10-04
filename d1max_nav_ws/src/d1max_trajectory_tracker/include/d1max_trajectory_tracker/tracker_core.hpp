@@ -1,7 +1,7 @@
 #pragma once
 
-// ROS-independent admission/control core. Trajectory evaluation is SCAN's own
-// implementation, not a second interpretation of its knot/time conventions.
+// ROS-independent admission/control core. Curves and derivatives are built and
+// admitted by SCAN; the immutable fixed-3D evaluator preserves its exact math.
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
@@ -16,6 +16,7 @@
 #include <Eigen/Geometry>
 #include <bspline_opt/uniform_bspline.h>
 #include "d1max_trajectory_tracker/curve_admission.hpp"
+#include "d1max_trajectory_tracker/fixed_bspline_sampler.hpp"
 
 namespace d1max_trajectory_tracker
 {
@@ -305,6 +306,7 @@ struct JoinDiagnostic {
 
 struct EntryCurveCache {
   std::shared_ptr<const scan_planner::UniformBspline> curve,velocity;
+  std::shared_ptr<const FixedBsplineSampler> curve_sampler,velocity_sampler;
   std::vector<double> times,arcs;
   std::vector<Eigen::Vector3d> points;
   double duration{0.};
@@ -322,7 +324,11 @@ struct EntryCurveCache {
     for(std::size_t i=0;i<t.points.size();++i)p.col(i)=t.points[i];
     for(std::size_t i=0;i<t.knots.size();++i)k(i)=t.knots[i];
     auto curve=std::make_shared<scan_planner::UniformBspline>(p,t.order,.1);curve->setKnot(k);
-    c.velocity=std::make_shared<const scan_planner::UniformBspline>(curve->getDerivative());
+    auto velocity=std::make_shared<scan_planner::UniformBspline>(curve->getDerivative());
+    c.curve_sampler=FixedBsplineSampler::fromVendor(*curve);
+    c.velocity_sampler=FixedBsplineSampler::fromVendor(*velocity);
+    if(!c.curve_sampler||!c.velocity_sampler)return {};
+    c.velocity=std::move(velocity);
     c.curve=std::move(curve);
     const unsigned n=std::clamp(static_cast<unsigned>(std::ceil(c.duration/.02)),40u,6000u);
     c.times.resize(n+1);c.arcs.resize(n+1);c.points.reserve(n+1);
@@ -355,10 +361,10 @@ struct EntryCurveCache {
        std::abs(curveArcAt(times,arcs,seed_time)-seed_arc)>.01)return reject("entry_proof_curve_domain_invalid");
     const double travel=std::min(config.projection_max_forward_m,
       config.max_speed*std::max(0.,body.stamp-proof_body_stamp)+config.join_limit);
-    const auto p=projectCurveAdmission(*curve,times,arcs,points,body.position,seed_time,seed_arc,
+    const auto p=projectCurveAdmission(*curve_sampler,times,arcs,points,body.position,seed_time,seed_arc,
       std::min(config.projection_backtrack_m,travel),travel,config.join_limit);
     if(!p)return reject("entry_measured_body_not_on_candidate");
-    if((velocity->evaluateDeBoorT(p->time)-body.velocity_in_frame).norm()>.05)
+    if((velocity_sampler->evaluateDeBoorT(p->time)-body.velocity_in_frame).norm()>.05)
       return reject("entry_measured_velocity_off_candidate");
     auto t=original;t.valid_start_time=p->time;t.valid_start_arc_length=p->arc;
     t.entry_reobserved=true;t.original_join_source_stamp_ns=original.join_source_stamp_ns;
@@ -894,15 +900,15 @@ public:
       }
       last_projected_stamp_ = odom_.stamp;
     }
-    const auto pos = trajectory_->evaluateDeBoorT(execution_time_);
+    const auto pos = positionAt(execution_time_);
     const Eigen::Vector2d pos_error = pos.head<2>() - odom_.position.head<2>();
     if (pos_error.norm() > 2.0 || std::abs(pos.z() - odom_.position.z()) > 0.5) {
       invalidateTrajectory("tracking_error_outside_single_floor_envelope");
       return stop();
     }
     const double look_time = std::min(duration_, execution_time_ + config_.lookahead);
-    const Eigen::Vector3d desired = trajectory_->evaluateDeBoorT(look_time);
-    const Eigen::Vector3d velocity = velocity_->evaluateDeBoorT(look_time);
+    const Eigen::Vector3d desired = positionAt(look_time);
+    const Eigen::Vector3d velocity = velocityAt(look_time);
     const Eigen::Vector2d look_error = desired.head<2>() - odom_.position.head<2>();
     // The upstream adapter can translate sideways. Ours cannot: the complete
     // positional feedback must steer yaw, not be thrown away after projecting
@@ -1093,10 +1099,10 @@ public:
        !fresh(now,current.odom_.stamp,.1,.02)||!sourceEvidenceFresh(current.odom_,now))return {};
     const double dt=std::max(0.,current.odom_.stamp-last_projected_stamp_);
     const double travel=std::min(config_.projection_max_forward_m,config_.max_speed*dt+config_.join_limit);
-    const auto p=projectCurveAdmission(*trajectory_,timeTable(),arcTable(),pointTable(),current.odom_.position,
+    const auto p=projectCurveAdmission(*prepared_geometry_->entry.curve_sampler,timeTable(),arcTable(),pointTable(),current.odom_.position,
       execution_time_,measured_arc_,std::min(config_.projection_backtrack_m,travel),travel,config_.join_limit);
     if(!p)return {};
-    const auto position=trajectory_->evaluateDeBoorT(p->time),velocity=velocity_->evaluateDeBoorT(p->time);
+    const auto position=positionAt(p->time),velocity=velocityAt(p->time);
     const double pe=(position-current.odom_.position).norm(),ve=(velocity-current.odom_.velocity_in_frame).norm();
     if(pe>config_.join_limit||ve>.05)return {};
     odom_=current.odom_;have_odom_=current.have_odom_;odom_received_=current.odom_received_;
@@ -1164,6 +1170,12 @@ public:
   }
 
 private:
+  Eigen::Vector3d positionAt(double time)const {
+    return prepared_geometry_->entry.curve_sampler->evaluateDeBoorT(time);
+  }
+  Eigen::Vector3d velocityAt(double time)const {
+    return prepared_geometry_->entry.velocity_sampler->evaluateDeBoorT(time);
+  }
   bool candidateReject(const char* reason) { candidate_reason_=reason;join_diagnostic_.reason=reason;return false; }
   bool supportValid(const ControlIdentity& identity,std::uint64_t generation) const {
     return support_&&support_index_&&supportEvidenceValid(*support_,*support_index_,identity,generation,config_);
@@ -1179,7 +1191,7 @@ private:
     const double to=std::min(arcTable().back(), measured_arc_+forward_window);
     double best_arc=measured_arc_, best_time=execution_time_;
     bool outside_window=false;
-    double best_dist=(trajectory_->evaluateDeBoorT(execution_time_)-odom_.position).squaredNorm();
+    double best_dist=(positionAt(execution_time_)-odom_.position).squaredNorm();
     auto lower=std::lower_bound(arcTable().begin(),arcTable().end(),from);
     std::size_t begin=lower==arcTable().begin()?0:static_cast<std::size_t>(lower-arcTable().begin()-1);
     for (std::size_t i=begin; i+1<arcTable().size() && arcTable()[i]<=to; ++i) {

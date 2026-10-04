@@ -15,6 +15,7 @@ class RetiredChildren:
         self.terminate_grace_s = terminate_grace_s
         self.clock = clock
         self.pending = []
+        self._channels = {}
 
     def retire(self, child, pipe):
         """Close the reply channel and signal an owned child without waiting."""
@@ -23,15 +24,17 @@ class RetiredChildren:
         if child is None or child.pid is None:
             return
         child.join(timeout=0)
-        if not child.is_alive():
+        if not child.is_alive() and getattr(pipe, 'retirement_ready', True):
             return
-        try:
-            child.terminate()
-        except ProcessLookupError:
-            pass
-        child.join(timeout=0)
         if child.is_alive():
+            try:
+                child.terminate()
+            except ProcessLookupError:
+                pass
+        child.join(timeout=0)
+        if child.is_alive() or not getattr(pipe, 'retirement_ready', True):
             self.pending.append((child, self.clock()))
+            self._channels[id(child)] = pipe
 
     def reap(self):
         """Single timer tick: join exited workers; SIGKILL tardy workers."""
@@ -45,8 +48,11 @@ class RetiredChildren:
                 except ProcessLookupError:
                     pass
                 child.join(timeout=0)
-            if child.is_alive():
+            channel = self._channels.get(id(child))
+            if child.is_alive() or not getattr(channel, 'retirement_ready', True):
                 remaining.append((child, terminated_at))
+            else:
+                self._channels.pop(id(child), None)
         self.pending = remaining
         return len(remaining)
 

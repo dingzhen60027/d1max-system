@@ -121,7 +121,8 @@ class ContinuousReferenceTransport:
             raise ValueError('staging_context_quarantined')
         # Verify configured artifacts BEFORE RouteIngress mutates ownership.
         checked = from_message(message.snapshot)
-        if any(checked.payload()[k] != value for k, value in self.expected_hashes.items()):
+        value = checked.payload()
+        if any(value[k] != expected for k, expected in self.expected_hashes.items()):
             raise ValueError('staging_route_artifact_identity_mismatch')
         context = ((self.latest_pair[0].body.context.session, self.latest_pair[0].body.context.epoch,
                     self.latest_pair[0].body.context.seed) if self.latest_pair else

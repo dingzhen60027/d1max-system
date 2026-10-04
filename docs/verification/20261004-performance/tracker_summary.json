@@ -1,0 +1,309 @@
+{
+  "scope": "TrackerCore::step, not ROS callback scheduling/serialization/SDK or navigation completion",
+  "reference": "b344f52501851a109c5b55220e7f7b75fd638962 tracker headers; same isolated vendor archive",
+  "measurement": "CPU 2 affinity; five alternating rounds; 10000 timing ticks/fixture/run; allocation pass separate",
+  "timing": {
+    "b344": {
+      "core_tick_23_controls": {
+        "samples_total": 50000,
+        "median_run_p50_us": 0.768,
+        "median_run_p95_us": 0.84,
+        "median_run_p99_us": 0.868,
+        "worst_observed_tick_us": 17.907,
+        "p95_all_runs_us": [
+          0.807,
+          0.806,
+          0.842,
+          0.84,
+          0.846
+        ],
+        "digest": "18b6a16f6371a83"
+      },
+      "core_tick_23_controls_with_support": {
+        "samples_total": 50000,
+        "median_run_p50_us": 1.41,
+        "median_run_p95_us": 1.52,
+        "median_run_p99_us": 1.898,
+        "worst_observed_tick_us": 24.097,
+        "p95_all_runs_us": [
+          1.512,
+          1.52,
+          1.568,
+          1.515,
+          1.568
+        ],
+        "digest": "bfeafb9455674883"
+      },
+      "core_tick_10000_controls_mid_curve": {
+        "samples_total": 50000,
+        "median_run_p50_us": 5.469,
+        "median_run_p95_us": 5.831,
+        "median_run_p99_us": 6.756,
+        "worst_observed_tick_us": 25.107,
+        "p95_all_runs_us": [
+          5.593,
+          5.716,
+          5.831,
+          5.848,
+          5.849
+        ],
+        "digest": "10b1c20e3c1fcbb"
+      }
+    },
+    "before": {
+      "core_tick_23_controls": {
+        "samples_total": 50000,
+        "median_run_p50_us": 0.751,
+        "median_run_p95_us": 0.816,
+        "median_run_p99_us": 0.851,
+        "worst_observed_tick_us": 5.839,
+        "p95_all_runs_us": [
+          0.792,
+          0.816,
+          0.816,
+          0.819,
+          0.836
+        ],
+        "digest": "18b6a16f6371a83"
+      },
+      "core_tick_23_controls_with_support": {
+        "samples_total": 50000,
+        "median_run_p50_us": 1.414,
+        "median_run_p95_us": 1.528,
+        "median_run_p99_us": 1.589,
+        "worst_observed_tick_us": 14.65,
+        "p95_all_runs_us": [
+          1.486,
+          1.528,
+          1.509,
+          1.542,
+          1.569
+        ],
+        "digest": "bfeafb9455674883"
+      },
+      "core_tick_10000_controls_mid_curve": {
+        "samples_total": 50000,
+        "median_run_p50_us": 5.401,
+        "median_run_p95_us": 5.757,
+        "median_run_p99_us": 6.736,
+        "worst_observed_tick_us": 22.288,
+        "p95_all_runs_us": [
+          5.739,
+          5.757,
+          5.701,
+          5.849,
+          5.837
+        ],
+        "digest": "10b1c20e3c1fcbb"
+      }
+    },
+    "after": {
+      "core_tick_23_controls": {
+        "samples_total": 50000,
+        "median_run_p50_us": 0.438,
+        "median_run_p95_us": 0.489,
+        "median_run_p99_us": 0.521,
+        "worst_observed_tick_us": 24.699,
+        "p95_all_runs_us": [
+          0.474,
+          0.473,
+          0.49,
+          0.489,
+          0.494
+        ],
+        "digest": "18b6a16f6371a83"
+      },
+      "core_tick_23_controls_with_support": {
+        "samples_total": 50000,
+        "median_run_p50_us": 1.092,
+        "median_run_p95_us": 1.167,
+        "median_run_p99_us": 1.213,
+        "worst_observed_tick_us": 21.032,
+        "p95_all_runs_us": [
+          1.136,
+          1.146,
+          1.167,
+          1.201,
+          1.222
+        ],
+        "digest": "bfeafb9455674883"
+      },
+      "core_tick_10000_controls_mid_curve": {
+        "samples_total": 50000,
+        "median_run_p50_us": 0.472,
+        "median_run_p95_us": 0.543,
+        "median_run_p99_us": 0.587,
+        "worst_observed_tick_us": 5.491,
+        "p95_all_runs_us": [
+          0.543,
+          0.527,
+          0.53,
+          0.55,
+          0.564
+        ],
+        "digest": "10b1c20e3c1fcbb"
+      }
+    }
+  },
+  "allocation": {
+    "b344": {
+      "core_tick_23_controls": {
+        "allocations": 31000,
+        "requested_bytes": 904000,
+        "peak_live_requested_bytes": 208,
+        "preparation_allocations": 4057,
+        "preparation_requested_bytes": 133844,
+        "preparation_peak_live_requested_bytes": 16652,
+        "preparation_retained_requested_bytes": 13689,
+        "allocation_ticks": 1000,
+        "allocations_per_tick": 31.0,
+        "requested_bytes_per_tick": 904.0
+      },
+      "core_tick_23_controls_with_support": {
+        "allocations": 31000,
+        "requested_bytes": 904000,
+        "peak_live_requested_bytes": 208,
+        "preparation_allocations": 4095,
+        "preparation_requested_bytes": 135964,
+        "preparation_peak_live_requested_bytes": 18620,
+        "preparation_retained_requested_bytes": 16284,
+        "allocation_ticks": 1000,
+        "allocations_per_tick": 31.0,
+        "requested_bytes_per_tick": 904.0
+      },
+      "core_tick_10000_controls_mid_curve": {
+        "allocations": 31000,
+        "requested_bytes": 904000,
+        "peak_live_requested_bytes": 208,
+        "preparation_allocations": 119957,
+        "preparation_requested_bytes": 7382060,
+        "preparation_peak_live_requested_bytes": 2168468,
+        "preparation_retained_requested_bytes": 1568905,
+        "allocation_ticks": 1000,
+        "allocations_per_tick": 31.0,
+        "requested_bytes_per_tick": 904.0
+      }
+    },
+    "before": {
+      "core_tick_23_controls": {
+        "allocations": 31000,
+        "requested_bytes": 904000,
+        "peak_live_requested_bytes": 208,
+        "preparation_allocations": 4057,
+        "preparation_requested_bytes": 133844,
+        "preparation_peak_live_requested_bytes": 16652,
+        "preparation_retained_requested_bytes": 13689,
+        "allocation_ticks": 1000,
+        "allocations_per_tick": 31.0,
+        "requested_bytes_per_tick": 904.0
+      },
+      "core_tick_23_controls_with_support": {
+        "allocations": 31000,
+        "requested_bytes": 904000,
+        "peak_live_requested_bytes": 208,
+        "preparation_allocations": 4095,
+        "preparation_requested_bytes": 135964,
+        "preparation_peak_live_requested_bytes": 18620,
+        "preparation_retained_requested_bytes": 16284,
+        "allocation_ticks": 1000,
+        "allocations_per_tick": 31.0,
+        "requested_bytes_per_tick": 904.0
+      },
+      "core_tick_10000_controls_mid_curve": {
+        "allocations": 31000,
+        "requested_bytes": 904000,
+        "peak_live_requested_bytes": 208,
+        "preparation_allocations": 119957,
+        "preparation_requested_bytes": 7382060,
+        "preparation_peak_live_requested_bytes": 2168468,
+        "preparation_retained_requested_bytes": 1568905,
+        "allocation_ticks": 1000,
+        "allocations_per_tick": 31.0,
+        "requested_bytes_per_tick": 904.0
+      }
+    },
+    "after": {
+      "core_tick_23_controls": {
+        "allocations": 0,
+        "requested_bytes": 0,
+        "peak_live_requested_bytes": 0,
+        "preparation_allocations": 4065,
+        "preparation_requested_bytes": 135516,
+        "preparation_peak_live_requested_bytes": 18324,
+        "preparation_retained_requested_bytes": 15361,
+        "allocation_ticks": 1000,
+        "allocations_per_tick": 0.0,
+        "requested_bytes_per_tick": 0.0
+      },
+      "core_tick_23_controls_with_support": {
+        "allocations": 0,
+        "requested_bytes": 0,
+        "peak_live_requested_bytes": 0,
+        "preparation_allocations": 4103,
+        "preparation_requested_bytes": 137636,
+        "preparation_peak_live_requested_bytes": 20292,
+        "preparation_retained_requested_bytes": 17956,
+        "allocation_ticks": 1000,
+        "allocations_per_tick": 0.0,
+        "requested_bytes_per_tick": 0.0
+      },
+      "core_tick_10000_controls_mid_curve": {
+        "allocations": 0,
+        "requested_bytes": 0,
+        "peak_live_requested_bytes": 0,
+        "preparation_allocations": 119965,
+        "preparation_requested_bytes": 8022260,
+        "preparation_peak_live_requested_bytes": 2808668,
+        "preparation_retained_requested_bytes": 2209105,
+        "allocation_ticks": 1000,
+        "allocations_per_tick": 0.0,
+        "requested_bytes_per_tick": 0.0
+      }
+    }
+  },
+  "memory": {
+    "b344": {
+      "process_peak_rss_kib_all_runs": [
+        6708,
+        6728,
+        6720,
+        6716,
+        6732
+      ],
+      "process_peak_rss_kib_median": 6720,
+      "process_peak_rss_kib_max": 6732
+    },
+    "before": {
+      "process_peak_rss_kib_all_runs": [
+        6728,
+        6724,
+        6732,
+        6668,
+        6680
+      ],
+      "process_peak_rss_kib_median": 6724,
+      "process_peak_rss_kib_max": 6732
+    },
+    "after": {
+      "process_peak_rss_kib_all_runs": [
+        7308,
+        7324,
+        7336,
+        7256,
+        7324
+      ],
+      "process_peak_rss_kib_median": 7324,
+      "process_peak_rss_kib_max": 7336
+    }
+  },
+  "all_output_digests_bitwise_identical": true,
+  "limitations": [
+    "No ROS/SDK/production services started; no deployment or physical acceptance.",
+    "Fixed sampler adds bounded immutable memory: +1672 bytes/23-point preparation; +640200 bytes/10000 points.",
+    "Geometry equality remains full-content validation at admission, never an ID-based shortcut.",
+    "Preparation/table generation still uses native vendor evaluation; this round optimizes actual runtime evaluation.",
+    "Core zero allocation does not imply Node progress/JSON/message publication has zero allocation.",
+    "Microseconds here do not prove a 20 ms end-to-end deadline, sensor freshness, CPU stress or NUC acceptance.",
+    "rusage maximum RSS may include inherited pre-exec peak; use /proc/self/status VmHWM, reported separately."
+  ]
+}
