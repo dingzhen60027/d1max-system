@@ -1,0 +1,5 @@
+#!/usr/bin/env python3
+from d1max_localization.realtime_navigation_output import main
+
+if __name__ == '__main__':
+    main()

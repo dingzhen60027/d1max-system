@@ -11,6 +11,7 @@ from pathlib import Path
 import numpy as np
 import yaml
 
+from . import load_config
 from .flat_floor import condition_flat_floor
 from .flat_floor_runner import structural_cleanup
 from .pcd_io import read_pcd, write_derived_z, write_subset
@@ -80,13 +81,13 @@ def condition_levels(xyz, poses, config, defaults):
 
 def run(config_path):
     config_path = Path(config_path).resolve(strict=True)
-    cfg = yaml.safe_load(config_path.read_text())
+    cfg = load_config(config_path)
     if cfg.get('schema') != SCHEMA or cfg.get('planning_only') is not True:
         raise ValueError('Explicit multi-floor planning derivative required')
     source = Path(cfg['source_pcd']).resolve(strict=True)
     trajectory = Path(cfg['trajectory_path']).resolve(strict=True)
     defaults_path = Path(cfg['floor_stage_defaults']).resolve(strict=True)
-    defaults = yaml.safe_load(defaults_path.read_text())
+    defaults = load_config(defaults_path)
     hashes = {str(p): sha256(p) for p in (source, trajectory, config_path, defaults_path)}
     cloud = read_pcd(source)
     if not cloud.finite_xyz_mask.all():

@@ -104,7 +104,10 @@ class TomogramRoute:
     def __init__(self, tomogram, vendor_root, max_heading_rate=10.0, height_tolerance_m=0.08,
                  astar_cost_weight=.2, optimizer_cost_margin=15.0,
                  path_refinement='none', refinement_corner_cut_m=1.5,
-                 optimizer_sample_interval=10, defer_map=False):
+                 optimizer_sample_interval=10, defer_map=False, planning_strategy='native_gpmp'):
+        if planning_strategy not in ('native_gpmp','native_astar_checked_smooth'):
+            raise ValueError('Unsupported explicit native planning strategy')
+        self.planning_strategy = planning_strategy
         if path_refinement not in ('none', 'visibility_c2'):
             raise ValueError('path_refinement must be none or visibility_c2')
         if (isinstance(refinement_corner_cut_m, (bool, np.bool_))
@@ -114,6 +117,23 @@ class TomogramRoute:
         self.path_refinement = path_refinement
         self.refinement_corner_cut_m = float(refinement_corner_cut_m)
         self.tomogram = tomogram if isinstance(tomogram, TomogramMap) else TomogramMap(tomogram)
+        self.source_ground = None
+        if planning_strategy == 'native_astar_checked_smooth':
+            import hashlib
+            import json
+            from pathlib import Path
+            from .source_identity_refinement import ObservedGround
+            manifest_path = Path(self.tomogram.provenance['source_processing_manifest'])
+            if hashlib.sha256(manifest_path.read_bytes()).hexdigest() != self.tomogram.provenance['source_processing_manifest_sha256']:
+                raise TomogramError('source_ground_manifest_changed','Source identity manifest changed')
+            manifest = json.loads(manifest_path.read_text())
+            archive_path = manifest_path.parent/manifest['source_indices_file']
+            if (manifest.get('geometry_operation') != 'source_identity'
+                    or not isinstance(manifest.get('floor_id'), str) or not manifest['floor_id'].isidentifier()
+                    or hashlib.sha256(archive_path.read_bytes()).hexdigest() != manifest['source_indices_sha256']):
+                raise TomogramError('source_ground_evidence_changed','Source floor return evidence changed')
+            with np.load(archive_path,allow_pickle=False) as archive:
+                self.source_ground = ObservedGround(archive[manifest['floor_id']+'_support_xyz'])
         self.height_tolerance_m = float(height_tolerance_m)
         from .native_runtime import probe_native_libraries
         probe_native_libraries(vendor_root)
@@ -142,6 +162,8 @@ class TomogramRoute:
             raise TomogramError('endpoints_too_close', 'Select distinct cells for native PCT planning')
         if getattr(self, '_map_loaded', True) is False:
             self._load_native_map()
+        if getattr(self, 'planning_strategy', 'native_gpmp') == 'native_astar_checked_smooth':
+            return self._plan_checked_astar(start,goal,started)
         native = self.planner.plan(start['xyz'][:2], goal['xyz'][:2],
                                    start['layer_id'], goal['layer_id'], return_details=True)
         if native is None:
@@ -210,6 +232,40 @@ class TomogramRoute:
                 # Geometry diagnostics are not a replacement for collision checks.
                 'path_quality': path_quality(path),
                 **curve_checks, **checks}
+
+    def _plan_checked_astar(self,start,goal,started):
+        from .source_identity_refinement import refine_source_identity
+        if self.tomogram.provenance.get('geometry_operation') != 'source_identity':
+            raise TomogramError('source_identity_required','Checked single-floor strategy requires original geometry')
+        native = self.planner.plan_astar(start['xyz'][:2],goal['xyz'][:2],start['layer_id'],goal['layer_id'])
+        if native is None:
+            raise TomogramError('native_planning_failed','Native layered A-star did not find a route')
+        path = np.vstack([start['xyz'],native['path'],goal['xyz']])
+        layers = np.r_[start['layer_id'],native['layer_ids'],goal['layer_id']]
+        keep = np.r_[True,(np.linalg.norm(np.diff(path,axis=0),axis=1)>1e-9)|(np.diff(layers)!=0)]
+        # Native lattice arithmetic can differ from the exact requested XY by
+        # one ULP. Deduplicate intermediate samples, never the frozen goal we
+        # explicitly appended. All connectors and the final exact endpoints
+        # remain subject to the unchanged production validators below.
+        keep[-1] = True
+        path,layers=path[keep],layers[keep]
+        checks = self.tomogram.validate_path(path,layers)
+        refinement = refine_source_identity(self.tomogram,path,layers,self.refinement_corner_cut_m,self.source_ground)
+        path,layers=np.asarray(refinement['path']),np.asarray(refinement['layer_ids'],dtype=int)
+        if not np.array_equal(path[0],start['xyz']) or not np.array_equal(path[-1],goal['xyz']):
+            raise TomogramError('refinement_endpoint_mismatch','Refinement changed frozen endpoints')
+        final_checks = self.tomogram.validate_path(path,layers)
+        return dict(path=path.tolist(),layer_ids=layers.tolist(),
+            source_layer_ids=self.tomogram.source_layers[layers].tolist(),
+            start_layer=start['layer_id'],goal_layer=goal['layer_id'],start_xyz=start['xyz'],goal_xyz=goal['xyz'],
+            length_m=float(np.linalg.norm(np.diff(path,axis=0),axis=1).sum()),elapsed_s=time.monotonic()-started,
+            algorithm=refinement['algorithm'],planning_strategy=self.planning_strategy,
+            map_backend='official_pct_cpu_layered_tomogram',source_tomogram_sha256=self.tomogram.sha256,
+            native_runtime=self.native_runtime,native_parameters=dict(self.native_parameters,optimizer_invoked=False),
+            native_geometry={'collision_checks':checks,'kind':'native_astar_polyline'},
+            path_refinement={k:v for k,v in refinement.items() if k not in ('path','layer_ids')},
+            height_semantics='original_floor_returns_with_exact_selected_endpoints',path_quality=path_quality(path),
+            curve_validation=refinement['curve_validation'],**final_checks)
 
 
 def worker_main(settings, requests, results):

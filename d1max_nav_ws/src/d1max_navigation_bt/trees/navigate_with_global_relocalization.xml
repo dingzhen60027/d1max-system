@@ -1,0 +1,20 @@
+<?xml version="1.0"?>
+<root main_tree_to_execute="NavigateCommittedRoute">
+  <BehaviorTree ID="NavigateCommittedRoute">
+    <ReactiveSequence name="NavigateTask">
+      <TaskContextValid name="CheckTaskIdentity"/>
+      <!-- Remember startup success; ordinary corrections cannot re-enter it. -->
+      <SequenceStar name="InitializedNavigationLifecycle">
+        <WaitForInitialLocalization name="InitialLocalization" timeout_s="60" warmup_timeout_s="120"/>
+        <!-- Input gaps retain the same actions, task, route and identity. -->
+        <PauseOnUnavailable name="WaitForNavigationInputs" timeout_s="30">
+          <SequenceStar name="CommittedRouteLifecycle">
+            <ComputeGlobalRoute name="ComputeRouteOnce" timeout_s="60"/>
+            <FollowCommittedRoute name="FollowRoute"/>
+            <VerifyMeasuredArrival name="VerifyArrival" timeout_s="3"/>
+          </SequenceStar>
+        </PauseOnUnavailable>
+      </SequenceStar>
+    </ReactiveSequence>
+  </BehaviorTree>
+</root>

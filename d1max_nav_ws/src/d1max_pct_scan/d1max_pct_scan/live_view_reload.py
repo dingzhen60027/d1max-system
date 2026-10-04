@@ -15,6 +15,21 @@ REQUEST_FILE = 'ui_reload_request.json'
 RESULT_FILE = 'ui_reload_result.json'
 
 
+def presentation_exit_is_nonfatal(name, session):
+    """Presentation loss is not mission cancellation.
+
+    Only newly sealed sessions explicitly selecting this contract may detach.
+    Preview freeze must already be owned outside the view process. No command
+    or robot-health failure can be classified as a display failure here.
+    """
+    if name not in UI_NAMES or session.get('ui_lifetime_policy') != 'independent':
+        return False
+    return ((session.get('motion_control_enabled') is False
+             and session.get('preview_freeze_owner') == 'supervisor_child')
+            or (session.get('motion_control_enabled') is True
+                and session.get('preview_freeze_owner') == 'motion_coordinator'))
+
+
 def token(value):
     return isinstance(value, str) and re.fullmatch(r'[0-9a-f]{32}', value) is not None
 

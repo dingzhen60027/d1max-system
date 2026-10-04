@@ -40,6 +40,8 @@ from .mapping.configuration import parse_config, config_yaml
 from .grid_maps import GridWorkspace, create_router
 from .localization import LocalizationRuntime, create_localization_router
 from .live_planning import LivePlanningRuntime, create_live_planning_router
+from .navigation_session import NavigationSessionRuntime, create_navigation_session_router
+from .single_floor import create_single_floor_router
 from .navigation import NavigationRuntime, create_navigation_router
 from .bags.runtime import BagRecorder
 from .bags.library import BagLibrary
@@ -103,6 +105,8 @@ processing_thread: threading.Thread | None = None
 grid_workspace = GridWorkspace(DATA_ROOT / "navigation2d")
 localization_runtime = LocalizationRuntime(DATA_ROOT / "localization", PROJECT_ROOT, NAV_ROOT)
 live_planning_runtime = LivePlanningRuntime(NAV_ROOT, localization_runtime)
+navigation_session_runtime = NavigationSessionRuntime(DATA_ROOT / "single_floor", NAV_ROOT, localization_runtime)
+single_floor_runtime = navigation_session_runtime  # Existing state and unit ownership remain shared.
 navigation_runtime = NavigationRuntime(DATA_ROOT / "navigation", NAV_ROOT, localization_runtime)
 BAG_ROOT = Path(os.environ.get('D1MAX_BAG_DIR', NAV_ROOT / 'bags')).resolve()
 bag_recorder = BagRecorder(APP_ROOT, PROJECT_ROOT, NAV_ROOT, DATA_ROOT / 'bags', BAG_ROOT)
@@ -991,6 +995,7 @@ async def lifespan(_: FastAPI):
     # Web Stop also cancels in-flight point-cloud work before the owned cgroup exits.
     processing_cancel_event.set()
     live_planning_runtime.close()
+    navigation_session_runtime.close()
     bag_recorder.close()
     navigation_runtime.close()
     localization_runtime.close()
@@ -1354,16 +1359,28 @@ async def unhandled_error(_, exc: Exception) -> JSONResponse:
 
 
 app.include_router(create_router(grid_workspace, find_item, processing_lock, lambda: processing_job.get("running", False) or bool(localization_runtime.pinned_id) or navigation_runtime.snapshot()['busy'] or runtime_manager.snapshot().get('status') in MAPPING_BUSY))
-app.include_router(create_localization_router(localization_runtime, grid_workspace, processing_lock, lambda: processing_job.get("running", False) or runtime_manager.snapshot().get("status") in MAPPING_BUSY or bag_recorder.snapshot()['busy']))
+app.include_router(create_localization_router(localization_runtime, grid_workspace, processing_lock, lambda: processing_job.get("running", False) or runtime_manager.snapshot().get("status") in MAPPING_BUSY or bag_recorder.snapshot()['busy'] or navigation_session_runtime.snapshot()['busy']))
 app.include_router(create_navigation_router(navigation_runtime, grid_workspace, processing_lock,
-    lambda: processing_job.get('running', False) or runtime_manager.snapshot().get('status') in MAPPING_BUSY or bag_recorder.snapshot()['busy']))
+    lambda: processing_job.get('running', False) or runtime_manager.snapshot().get('status') in MAPPING_BUSY or bag_recorder.snapshot()['busy'] or navigation_session_runtime.snapshot()['busy']))
 app.include_router(create_bag_router(bag_library, bag_recorder, processing_lock,
     lambda: bool(localization_runtime.pinned_id) or navigation_runtime.snapshot()['busy'] or runtime_manager.snapshot().get('status') in MAPPING_BUSY))
 app.include_router(create_live_planning_router(live_planning_runtime, processing_lock, grid_workspace.lock,
     lambda: bool(processing_job.get('running')) or bool(grid_workspace.job.get('running'))
     or runtime_manager.snapshot().get('status') in MAPPING_BUSY or bag_recorder.snapshot()['busy']
     or localization_runtime.snapshot(connection=False)['phase'] in {'starting', 'running', 'stopping', 'detached', 'conflict'}
-    or navigation_runtime.snapshot()['busy']))
+    or navigation_runtime.snapshot()['busy'] or navigation_session_runtime.snapshot()['busy'], retired=True))
+
+
+def navigation_session_other_busy():
+    return (bool(processing_job.get('running')) or bool(grid_workspace.job.get('running'))
+    or runtime_manager.snapshot().get('status') in MAPPING_BUSY or bag_recorder.snapshot()['busy']
+    or live_planning_runtime.snapshot(connection=False)['busy']
+    or localization_runtime.snapshot(connection=False)['phase'] in {'starting','running','stopping','detached','conflict'}
+    or navigation_runtime.snapshot()['busy'])
+
+
+app.include_router(create_navigation_session_router(navigation_session_runtime, processing_lock, navigation_session_other_busy))
+app.include_router(create_single_floor_router(navigation_session_runtime, processing_lock, navigation_session_other_busy))
 
 DIST_ROOT = APP_ROOT / "frontend" / "dist"
 if DIST_ROOT.is_dir():

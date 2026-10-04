@@ -1,10 +1,12 @@
 #pragma once
 
 #include <Eigen/Geometry>
+#include <algorithm>
 #include <cmath>
 #include <stdexcept>
 #include <string>
 #include <cstdint>
+#include <chrono>
 #include <vector>
 
 namespace scan_planner {
@@ -22,6 +24,34 @@ inline bool periodicReplanDue(double now, double last_attempt, double interval)
 {
   return std::isfinite(now) && std::isfinite(last_attempt) &&
          std::isfinite(interval) && interval > 0.0 && now - last_attempt >= interval;
+}
+
+// Event requests share the actual solver submission clock, not the periodic
+// preview clock (which can advance without a solve). There is still only one
+// worker and every admitted solve retains its original 400 ms SolveBudget.
+inline bool formalReseedSubmissionDue(std::chrono::steady_clock::time_point now,
+    std::chrono::steady_clock::time_point last_submission,bool worker_running)
+{
+  return !worker_running && (last_submission==std::chrono::steady_clock::time_point{} ||
+    now-last_submission>=std::chrono::milliseconds(500));
+}
+
+// Snapshot contention is a scheduler precondition, not evidence that geometry
+// is blocked. Retrying it never changes collision/unknown semantics and never
+// renews a previously submitted SolveBudget.
+inline bool nativeResourceWait(const std::string &phase)
+{
+  return phase == "waiting_snapshot_slot";
+}
+
+// These are selector envelope QUERY counts, never unique physical voxels.
+// Diagnostic-only classification; occupied/unknown policy is unchanged.
+inline const char* referenceTargetEvidenceClass(std::size_t occupied,std::size_t unknown,
+    std::size_t outside) {
+  if(occupied&&unknown)return "target_mixed_occupied_unknown";
+  if(occupied)return "target_occupied";
+  if(unknown)return "target_unknown";
+  return outside?"target_outside":"target_no_blocking_query";
 }
 
 inline bool measuredReferenceGoalReached(const Eigen::Vector3d &body,
@@ -44,6 +74,18 @@ inline bool failedDynamicsBoundaryChanged(const Eigen::Vector3d &failed_velocity
     return false;
   return failed_velocity.norm() > speed_limit + 1e-9 ||
       (velocity - failed_velocity).norm() >= .02;
+}
+
+// Rotation changes the measured initial heading and the two-cylinder envelope
+// even when translation and voxel occupancy are unchanged. Ignore attitude
+// noise and quaternion sign flips; this is a retry trigger, never free space.
+inline bool failedOrientationBoundaryChanged(const Eigen::Quaterniond &failed,
+    const Eigen::Quaterniond &current, double angle_threshold = .10)
+{
+  if (!failed.coeffs().allFinite() || !current.coeffs().allFinite() ||
+      failed.norm() < 1e-6 || current.norm() < 1e-6 ||
+      !std::isfinite(angle_threshold) || angle_threshold <= 0.) return false;
+  return failed.normalized().angularDistance(current.normalized()) >= angle_threshold;
 }
 
 inline bool acceptsReferenceGeneration(const std::string &configured_session,

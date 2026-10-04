@@ -91,11 +91,14 @@ class Acceptance(Node):
 
 
 def main():
-    ap=argparse.ArgumentParser();ap.add_argument('--session',type=Path,default=Path('/home/dndx/d1max_nav_ws/log/pct_scan/last_session.json'))
+    ap=argparse.ArgumentParser();ap.add_argument('--session',type=Path,default=None)
     ap.add_argument('--case',choices=['smoke','full','observe'],default='full')
     ap.add_argument('--goal',type=float,nargs=2,help='Offline goal override, X Y in the configured map frame')
     ap.add_argument('--arrival-timeout',type=float,default=100.)
     args=ap.parse_args()
+    if args.session is None:
+        from d1max_pct_planner import paths
+        args.session=paths.nav_root()/'log/pct_scan/last_session.json'
     session=json.loads(args.session.read_text());cfg=yaml.safe_load(Path(session['config']).read_text())
     if args.goal:cfg['test_goal_xy']=args.goal
     if session.get('mode')!='sim' or session.get('real_motion_enabled'):raise RuntimeError('Offline session required')

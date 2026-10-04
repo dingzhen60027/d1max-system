@@ -4,6 +4,7 @@
 #include <chrono>
 #include <cmath>
 #include <bspline_opt/reference_path.hpp>
+#include <bspline_opt/whole_spline_collision.hpp>
 // using namespace std;
 
 namespace scan_planner
@@ -65,6 +66,7 @@ namespace scan_planner
   std::vector<std::vector<Eigen::Vector3d>> BsplineOptimizer::initControlPoints(Eigen::MatrixXd &init_points, bool flag_first_init /*= true*/)
   {
     control_points_initialized_=false;
+    if (!solveAllowed(solve_budget_)) return {};
     if (init_points.rows()!=3 || init_points.cols()<=2*order_ || !init_points.allFinite()) return {};
     if (flag_first_init)
     {
@@ -89,9 +91,10 @@ namespace scan_planner
     {
       for (double a = 1.0; a >= 0.0; a -= step_size)
       {
+        if (!solveAllowed(solve_budget_)) return {};
         Eigen::Vector3d sample_pt = a * init_points.col(i - 1) + (1 - a) * init_points.col(i);
         double sample_yaw = estimateSegmentYaw(init_points.col(i - 1), init_points.col(i));
-        occ = grid_map_->getInflateOccupancy(sample_pt, sample_yaw);
+        occ = queryOccupancy(sample_pt, sample_yaw);
         // cout << setprecision(5);
         // cout << (a * init_points.col(i-1) + (1-a) * init_points.col(i)).transpose() << " occ1=" << occ << endl;
 
@@ -159,7 +162,13 @@ namespace scan_planner
       }
       else
       {
-        RCLCPP_ERROR(rclcpp::get_logger("bspline_opt"), "A-star failed; aborting optimization");
+        const double yaw=estimateSegmentYaw(in,out);
+        RCLCPP_ERROR(rclcpp::get_logger("bspline_opt"),
+            "A-star failed; aborting optimization: ret=%d segment=%zu controls=%d..%d "
+            "in=(%.6f %.6f %.6f) out=(%.6f %.6f %.6f) yaw=%.6f query=(%d,%d) adjust_endpoints=true",
+            static_cast<int>(ret),i,segment_ids[i].first,segment_ids[i].second,
+            in.x(),in.y(),in.z(),out.x(),out.y(),out.z(),yaw,
+            queryOccupancy(in,yaw),queryOccupancy(out,yaw));
         return a_star_paths;
       }
     }
@@ -292,7 +301,7 @@ namespace scan_planner
             {
               Eigen::Vector3d sample_pt = (a / length) * intersection_point + (1 - a / length) * cps_.points.col(j);
               double sample_yaw = estimateControlPointYaw(cps_.points, j);
-              occ = grid_map_->getInflateOccupancy(sample_pt, sample_yaw);
+              occ = queryOccupancy(sample_pt, sample_yaw);
 
               if (occ || a < grid_map_->getResolution())
               {
@@ -386,7 +395,7 @@ namespace scan_planner
     BsplineOptimizer *opt = reinterpret_cast<BsplineOptimizer *>(func_data);
     // cout << "k=" << k << endl;
     // cout << "opt->flag_continue_to_optimize_=" << opt->flag_continue_to_optimize_ << endl;
-    return (opt->force_stop_type_ == STOP_FOR_ERROR || opt->force_stop_type_ == STOP_FOR_REBOUND);
+    return (!solveAllowed(opt->solve_budget_) || opt->force_stop_type_ == STOP_FOR_ERROR || opt->force_stop_type_ == STOP_FOR_REBOUND);
   }
 
   double BsplineOptimizer::costFunctionRebound(void *func_data, const double *x, double *grad, const int n)
@@ -740,7 +749,7 @@ namespace scan_planner
     for (int i = order_ - 1; i <= i_end; ++i)
     {
 
-      bool occ = grid_map_->getInflateOccupancy(cps_.points.col(i), estimateControlPointYaw(cps_.points, i));
+      bool occ = queryOccupancy(cps_.points.col(i), estimateControlPointYaw(cps_.points, i));
 
       /*** check if the new collision will be valid ***/
       if (occ)
@@ -763,7 +772,7 @@ namespace scan_planner
         int j;
         for (j = i - 1; j >= 0; --j)
         {
-          occ = grid_map_->getInflateOccupancy(cps_.points.col(j), estimateControlPointYaw(cps_.points, j));
+          occ = queryOccupancy(cps_.points.col(j), estimateControlPointYaw(cps_.points, j));
           if (!occ)
           {
             in_id = j;
@@ -780,7 +789,7 @@ namespace scan_planner
 
         for (j = i + 1; j < cps_.size; ++j)
         {
-          occ = grid_map_->getInflateOccupancy(cps_.points.col(j), estimateControlPointYaw(cps_.points, j));
+          occ = queryOccupancy(cps_.points.col(j), estimateControlPointYaw(cps_.points, j));
 
           if (!occ)
           {
@@ -835,7 +844,13 @@ namespace scan_planner
         }
         else
         {
-          RCLCPP_ERROR(rclcpp::get_logger("bspline_opt"), "A-star error");
+          const double yaw=estimateSegmentYaw(in,out);
+          RCLCPP_ERROR(rclcpp::get_logger("bspline_opt"),
+              "A-star error in rebound: ret=%d segment=%zu controls=%d..%d "
+              "in=(%.6f %.6f %.6f) out=(%.6f %.6f %.6f) yaw=%.6f query=(%d,%d) adjust_endpoints=true",
+              static_cast<int>(ret),i,segment_ids[i].first,segment_ids[i].second,
+              in.x(),in.y(),in.z(),out.x(),out.y(),out.z(),yaw,
+              queryOccupancy(in,yaw),queryOccupancy(out,yaw));
           control_points_initialized_=false;
           force_stop_type_=STOP_FOR_ERROR;
           return false;
@@ -906,7 +921,7 @@ namespace scan_planner
               {
                 Eigen::Vector3d sample_pt = (a / length) * intersection_point + (1 - a / length) * cps_.points.col(j);
                 double sample_yaw = estimateControlPointYaw(cps_.points, j);
-                bool occ = grid_map_->getInflateOccupancy(sample_pt, sample_yaw);
+                bool occ = queryOccupancy(sample_pt, sample_yaw);
 
                 if (occ || a < grid_map_->getResolution())
                 {
@@ -980,6 +995,7 @@ namespace scan_planner
 
   bool BsplineOptimizer::rebound_optimize()
   {
+    if (!solveAllowed(solve_budget_)) return false;
     iter_num_ = 0;
     int start_id = order_;
     int end_id = this->cps_.size - order_;
@@ -997,6 +1013,7 @@ namespace scan_planner
     do
     {
       /* ---------- prepare ---------- */
+      if (!solveAllowed(solve_budget_)) return false;
       min_cost_ = std::numeric_limits<double>::max();
       iter_num_ = 0;
       flag_force_return = false;
@@ -1015,6 +1032,7 @@ namespace scan_planner
       /* ---------- optimize ---------- */
       t1 = std::chrono::steady_clock::now();
       int result = lbfgs::lbfgs_optimize(variable_num_, q, &final_cost, BsplineOptimizer::costFunctionRebound, NULL, BsplineOptimizer::earlyExit, this, &lbfgs_params);
+      if (!solveAllowed(solve_budget_)) return false;
       t2 = std::chrono::steady_clock::now();
       double time_ms = std::chrono::duration<double, std::milli>(t2 - t1).count();
       double total_time_ms = std::chrono::duration<double, std::milli>(t2 - t0).count();
@@ -1029,30 +1047,30 @@ namespace scan_planner
         flag_force_return = false;
 
         UniformBspline traj = UniformBspline(cps_.points, 3, bspline_interval_);
-        double tm, tmp;
-        traj.getTimeSpan(tm, tmp);
-        double t_step = (tmp - tm) / ((traj.evaluateDeBoorT(tmp) - traj.evaluateDeBoorT(tm)).norm() / grid_map_->getResolution());
-        for (double t = tm; t < tmp * 2 / 3; t += t_step) // Only check the closest 2/3 partition of the whole trajectory.
-        {
-          Eigen::Vector3d pos = traj.evaluateDeBoorT(t);
-          Eigen::Vector3d pos_next = traj.evaluateDeBoorT(std::min(t + t_step, tmp));
-          flag_occ = grid_map_->getInflateOccupancy(pos, estimateSegmentYaw(pos, pos_next));
-          if (flag_occ)
-          {
-            //cout << "hit_obs, t=" << t << " P=" << traj.evaluateDeBoorT(t).transpose() << endl;
-
-            if (t <= bspline_interval_) // First 3 control points in obstacles!
-            {
-              cout << cps_.points.col(1).transpose() << "\n"
-                   << cps_.points.col(2).transpose() << "\n"
-                   << cps_.points.col(3).transpose() << "\n"
-                   << cps_.points.col(4).transpose() << endl;
-              RCLCPP_WARN(rclcpp::get_logger("bspline_opt"),
-                          "First three control points are in obstacles; t=%f", t);
-              return false;
-            }
-
-            break;
+        const auto collision=checkWholeSplineCollision(traj,grid_map_->getResolution(),
+            [this](const Eigen::Vector3d &position,double yaw) {
+              return queryOccupancy(position,yaw);
+            },50000,heading_contract_);
+        if (collision.state==SplineCollisionState::InvalidInput ||
+            collision.state==SplineCollisionState::SampleBudgetExceeded) {
+          RCLCPP_WARN(rclcpp::get_logger("bspline_opt"),
+              "Full spline collision check rejected: state=%d queries=%zu",
+              static_cast<int>(collision.state),collision.queries);
+          return false;
+        }
+        flag_occ=collision.state==SplineCollisionState::Collision;
+        if (flag_occ) {
+          RCLCPP_WARN(rclcpp::get_logger("bspline_opt"),
+              "Full spline collision: t=%.6f/%.6f state=%d queries=%zu restart=%d "
+              "xyz=(%.6f %.6f %.6f) yaw=%.6f v=(%.6f %.6f %.6f) preview_body_heading=%d measured_yaw=%.6f",
+              collision.time,traj.getTimeSum(),collision.occupancy,collision.queries,restart_nums,
+              collision.position.x(),collision.position.y(),collision.position.z(),collision.yaw,
+              collision.velocity.x(),collision.velocity.y(),collision.velocity.z(),
+              heading_contract_.preview_only_enabled?1:0,heading_contract_.measured_yaw);
+          if (collision.time<=bspline_interval_) {
+            RCLCPP_WARN(rclcpp::get_logger("bspline_opt"),
+                "First three control points are in obstacles; t=%f",collision.time);
+            return false;
           }
         }
 
@@ -1092,6 +1110,7 @@ namespace scan_planner
 
   bool BsplineOptimizer::refine_optimize()
   {
+    if (!solveAllowed(solve_budget_)) return false;
     iter_num_ = 0;
     int start_id = order_;
     int end_id = this->cps_.points.cols() - order_;
@@ -1113,7 +1132,10 @@ namespace scan_planner
       lbfgs_params.max_iterations = 200;
       lbfgs_params.g_epsilon = 0.001;
 
-      int result = lbfgs::lbfgs_optimize(variable_num_, q, &final_cost, BsplineOptimizer::costFunctionRefine, NULL, NULL, this, &lbfgs_params);
+      if (!solveAllowed(solve_budget_)) return false;
+      force_stop_type_=DONT_STOP;
+      int result = lbfgs::lbfgs_optimize(variable_num_, q, &final_cost, BsplineOptimizer::costFunctionRefine, NULL, BsplineOptimizer::earlyExit, this, &lbfgs_params);
+      if (!solveAllowed(solve_budget_)) return false;
       if (result == lbfgs::LBFGS_CONVERGENCE ||
           result == lbfgs::LBFGSERR_MAXIMUMITERATION ||
           result == lbfgs::LBFGS_ALREADY_MINIMIZED ||
@@ -1135,7 +1157,7 @@ namespace scan_planner
       {
         Eigen::Vector3d pos = traj.evaluateDeBoorT(t);
         Eigen::Vector3d pos_next = traj.evaluateDeBoorT(std::min(t + t_step, tmp));
-        if (grid_map_->getInflateOccupancy(pos, estimateSegmentYaw(pos, pos_next)))
+        if (queryOccupancy(pos, estimateSegmentYaw(pos, pos_next)))
         {
           // cout << "Refined traj hit_obs, t=" << t << " P=" << traj.evaluateDeBoorT(t).transpose() << endl;
 

@@ -5,17 +5,17 @@ prior:
   single_level_flat_floor_confirmed: true
   source: 用户确认本楼层地面水平；只用于离线规划地图，不修复SLAM
 input:
-  path: /home/dndx/智元四足机器人D1 Max二次开发文档资料包v0.1.0/d1max_ros2/map_manager/data/processed/20260922_164231_sc-pgo-0919-structure-v1_572b51/processed_map.pcd
+  path: ${D1MAX_APP_ROOT}/map_manager/data/processed/20260922_164231_sc-pgo-0919-structure-v1_572b51/processed_map.pcd
   sha256: 9acb981006da500e927be60763656c3fe29bfcef8081f7bdcacce70846694b9c
   source_id: 0f5ac7f8988dc383
   source_name: SC-PGO 0919 · 建筑主体保留清理
   frame_id: d1max_loc_map
 trajectory:
-  path: /home/dndx/d1max_nav_ws/maps/runs/20260919_125722_855277_central_imu_faster_lio_sc_pgo_zenoh/sc_pgo/optimized_poses.txt
+  path: ${D1MAX_NAV_ROOT}/maps/runs/20260919_125722_855277_central_imu_faster_lio_sc_pgo_zenoh/sc_pgo/optimized_poses.txt
   sha256: 95d490af3ca8eee59ffd23ef8edd5bfad349b63cb2e9060f95f58ef86c453da5
   format: kitti_3x4
 output:
-  directory: /home/dndx/智元四足机器人D1 Max二次开发文档资料包v0.1.0/d1max_ros2/map_manager/data/processed/20260923_flat_floor_sc_pgo_0919_v6
+  directory: ${D1MAX_APP_ROOT}/map_manager/data/processed/20260923_flat_floor_sc_pgo_0919_v6
   frame_id: d1max_flat_floor_planning
   planning_only: true
   maximum_removed_fraction: 0.05
@@ -104,8 +104,8 @@ obstacle_cleanup:
   normal_batch_points: 40000
   maximum_grid_cells: 4000000
 pct_pipeline:
-  output_directory: /home/dndx/d1max_nav_ws/maps/processed/sc_pgo_20260919_pct_flat_floor_v6_20260923
-  vendor_root: /home/dndx/d1max_nav_ws/src/pct_planner_vendor
+  output_directory: ${D1MAX_NAV_ROOT}/maps/processed/sc_pgo_20260919_pct_flat_floor_v6_20260923
+  vendor_root: ${D1MAX_NAV_ROOT}/src/pct_planner_vendor
   preprocessing:
     roi: null
     voxel_size_m: 0.0

@@ -3,13 +3,13 @@ id: sc-pgo-0919-structure-v1
 name: SC-PGO 建筑结构保留 · 离群清理
 description: 独立预处理；保留实测局部面/线，仅移除缺少邻域支持的离群点。不是语义人物删除。
 input:
-  path: /home/dndx/d1max_nav_ws/maps/runs/20260919_125722_855277_central_imu_faster_lio_sc_pgo_zenoh/sc_pgo/optimized_map.pcd
+  path: ${D1MAX_NAV_ROOT}/maps/runs/20260919_125722_855277_central_imu_faster_lio_sc_pgo_zenoh/sc_pgo/optimized_map.pcd
   sha256: 67475e7325b2b0b0686a08e7eacd0e56c3eed42b107d178018f37af514bfd0c2
   source_id: 147a9766376e422f
   source_name: SC-PGO 优化地图 · 09-19 12:57
   frame_id: d1max_loc_map
 output:
-  root: /home/dndx/智元四足机器人D1 Max二次开发文档资料包v0.1.0/d1max_ros2/map_manager/data/processed
+  root: ${D1MAX_APP_ROOT}/map_manager/data/processed
   basename: processed_map.pcd
   preserve_all_fields: true
   save_removed: true

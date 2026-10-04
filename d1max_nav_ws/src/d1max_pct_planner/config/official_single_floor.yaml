@@ -1,9 +1,9 @@
 # One YAML reproduces the complete map build, not the old extracted-ground adapter.
-# PYTHONPATH=/home/dndx/d1max_nav_ws/src/d1max_pct_planner python3 -m d1max_pct_planner.official_pipeline --config /home/dndx/d1max_nav_ws/src/d1max_pct_planner/config/official_single_floor.yaml
+# PYTHONPATH=${D1MAX_NAV_ROOT}/src/d1max_pct_planner python3 -m d1max_pct_planner.official_pipeline --config ${D1MAX_NAV_ROOT}/src/d1max_pct_planner/config/official_single_floor.yaml
 schema_version: 1
-source_pcd: /home/dndx/d1max_nav_ws/maps/runs/20260919_125722_855277_central_imu_faster_lio_sc_pgo_zenoh/sc_pgo/optimized_map.pcd
-output_directory: /home/dndx/d1max_nav_ws/maps/processed/sc_pgo_20260919_pct_official_20260922
-vendor_root: /home/dndx/d1max_nav_ws/src/pct_planner_vendor
+source_pcd: ${D1MAX_NAV_ROOT}/maps/runs/20260919_125722_855277_central_imu_faster_lio_sc_pgo_zenoh/sc_pgo/optimized_map.pcd
+output_directory: ${D1MAX_NAV_ROOT}/maps/processed/sc_pgo_20260919_pct_official_20260922
+vendor_root: ${D1MAX_NAV_ROOT}/src/pct_planner_vendor
 frame_id: d1max_loc_map
 preprocessing:
   # Full finite source retained initially; optional ROI is {min: [x,y,z], max: [x,y,z]}.

@@ -12,19 +12,46 @@ import threading
 import time
 import rclpy
 from rclpy.node import Node
-from rclpy.qos import qos_profile_sensor_data
+from rclpy.qos import qos_profile_sensor_data, QoSProfile, DurabilityPolicy, ReliabilityPolicy
 from nav_msgs.msg import Odometry, Path as RosPath
 from sensor_msgs.msg import Imu, PointCloud2
 from std_msgs.msg import String
 from geometry_msgs.msg import PoseWithCovarianceStamped, PoseStamped, TransformStamped
 from diagnostic_msgs.msg import DiagnosticArray
 from tf2_ros import TransformBroadcaster, StaticTransformBroadcaster
+from d1max_navigation_bt_interfaces.msg import InitialPoseOutcome
 from .lio_fusion import LioLimits, LioMapState, rotate_pose_covariance
 from .math_utils import Pose3, normalize_quaternion, compose
 from .initial_pose import initial_tracking_pose
 from .estimation.pose_status import continuous_pose_status
 
 PREFIX='/d1max/localization/'
+INITIAL_POSE_TRANSACTION='bt_initial_pose_transaction_v1'
+
+def transaction_intent_stamp(command, session_id):
+    """Only exact typed mailbox identities can produce a correlated outcome."""
+    if command.get('initial_pose_transaction') != INITIAL_POSE_TRANSACTION:
+        return None
+    identifier=command.get('id');stamp=command.get('intent_source_stamp_ns')
+    if (command.get('session_id') != session_id or not isinstance(identifier,str)
+            or not 1 <= len(identifier) <= 128 or not identifier.isascii()
+            or any(not(c.isalnum() or c in '-_.') for c in identifier)
+            or not isinstance(stamp,str) or not stamp.isascii() or not stamp.isdigit()
+            or str(int(stamp)) != stamp or not 0 < int(stamp) < 2147483648*1000000000):
+        raise ValueError('初值事务身份或原始意图时间无效')
+    return int(stamp)
+
+def initial_pose_outcome(command, *, session_id, map_version_id, source_ns, epoch, seed, accepted, applied, reason):
+    intent=transaction_intent_stamp(command,session_id)
+    if intent is None:return None  # Internal/legacy seeds do not impersonate an RViz transaction.
+    result=InitialPoseOutcome();result.schema_version=1
+    result.session_id=session_id;result.request_id=command['id'];result.map_version_id=map_version_id
+    result.intent_source_stamp.sec,result.intent_source_stamp.nanosec=divmod(intent,1000000000)
+    result.source_stamp.sec,result.source_stamp.nanosec=divmod(source_ns,1000000000)
+    result.localization_epoch=int(epoch);result.localization_seed_id=str(seed or '')
+    result.accepted=bool(accepted);result.applied=bool(applied);result.reason=reason
+    return result
+
 def seconds(message):
     return message.header.stamp.sec+message.header.stamp.nanosec*1e-9
 def pose_from(p):
@@ -74,6 +101,8 @@ class LioLocalizer(Node):
         self.seed_pub=self.create_publisher(PoseWithCovarianceStamped,PREFIX+'fused_icp/initialpose',10)
         self.prediction_pub=self.create_publisher(PoseWithCovarianceStamped,PREFIX+'fused_icp/prediction',20)
         self.status_pub=self.create_publisher(String,PREFIX+'status',10)
+        self.initial_outcome_pub=self.create_publisher(InitialPoseOutcome,PREFIX+'initial_pose/outcome',
+          QoSProfile(depth=1,reliability=ReliabilityPolicy.RELIABLE,durability=DurabilityPolicy.TRANSIENT_LOCAL))
         self.tf=TransformBroadcaster(self) if not self.p['navigation_output_enabled'] else None
         self.static_tf=StaticTransformBroadcaster(self)
         sensor=TransformStamped();sensor.header.stamp=self.get_clock().now().to_msg()
@@ -290,22 +319,35 @@ class LioLocalizer(Node):
     def read_command(self):
         path=self.directory/'initial_pose.json'
         if not path.exists():return
+        command=None;application_started=False
         try:
             command=json.loads(path.read_text());identifier=command['id']
             if identifier==self.last_command:return
             self.last_command=identifier
+            transaction_intent_stamp(command,self.session['id'])
             if command['session_id']!=self.session['id'] or not 0<=time.time()-command['created_at']<=5:raise ValueError('初值已过期或会话不匹配')
             if command['created_at']<self.epoch_changed_at:raise ValueError('局部里程计轮次已变化，请重新提交初值')
             if not self.seed_ready():raise ValueError('等待 LIO 初始化和新鲜机头前向状态')
             pose=initial_tracking_pose(command,self.p['tracking_offset_body'],self.p['sdk_to_tracking_yaw'])
-            stamp=self.now_s();self.core.seed(pose,stamp);self.publish_seed(pose,stamp)
+            stamp=self.now_s();application_started=True
+            self.core.seed(pose,stamp);self.publish_seed(pose,stamp)
             self.path.clear()
             # Explicitly clear old verified trajectory on reseed.
             if not self.p.get('navigation_output_enabled'):
                 empty=RosPath();empty.header.frame_id=self.p['map_frame'];empty.header.stamp=self.get_clock().now().to_msg();self.path_pub.publish(empty)
             self.command_result={'id':identifier,'accepted':True,'message':'初值仅作为地图匹配种子，等待连续确认'}
+            self.publish_initial_outcome(command,True,True,'initial_pose_seed_installed_not_localization_ready')
         except (ValueError,KeyError,TypeError,OSError) as e:
             self.command_result={'id':self.last_command,'accepted':False,'message':str(e)}
+            if command is not None:
+                try:self.publish_initial_outcome(command,False,application_started,str(e))
+                except (ValueError,KeyError,TypeError,OverflowError):pass  # Cannot guess a trustworthy request binding.
+    def publish_initial_outcome(self,command,accepted,applied,reason):
+        if transaction_intent_stamp(command,self.session['id']) is None:return
+        result=initial_pose_outcome(command,session_id=self.session['id'],map_version_id=self.session['version_id'],
+          source_ns=self.get_clock().now().nanoseconds,epoch=self.core.local_epoch,seed=self.active_seed,
+          accepted=accepted,applied=applied,reason=reason)
+        if result is not None:self.initial_outcome_pub.publish(result)
     def tick(self):
         self.read_command()
         now=self.now_s();front=self.front_ready()

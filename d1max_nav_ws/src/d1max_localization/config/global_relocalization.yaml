@@ -1,0 +1,17 @@
+# New-package startup overlay; the pinned baseline localization.yaml is intact.
+# Loaded BEFORE the base/session config so an explicit session setting wins.
+lio_localizer:
+  ros__parameters:
+    global_relocalization.enabled: true
+    global_relocalization.registration.backend: fpfh_ransac
+    global_relocalization.registration.threads: 2
+    global_relocalization.registration.voxel_m: 0.4
+    global_relocalization.registration.fine_voxel_m: 0.2
+    global_relocalization.registration.exhaustive_tiles: true
+    global_relocalization.registration.search_timeout_s: 25.0
+    global_relocalization.registration.index_timeout_s: 120.0
+    global_relocalization.registration.min_inlier_ratio: 0.60
+    global_relocalization.registration.max_rmse_m: 0.20
+    global_relocalization.registration.ambiguity_margin: 0.06
+    global_relocalization.startup.stationary_window_s: 0.6
+    global_relocalization.startup.confirmation_timeout_s: 15.0

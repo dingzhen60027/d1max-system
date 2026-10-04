@@ -1,0 +1,24 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>d1max_navigation_bt</name>
+  <version>0.1.0</version>
+  <description>BehaviorTree.CPP navigation task orchestration with immutable routes.</description>
+  <maintainer email="maintainers@example.invalid">D1 Max maintainers</maintainer>
+  <license>Apache-2.0</license>
+  <buildtool_depend>ament_cmake</buildtool_depend>
+  <depend>behaviortree_cpp_v3</depend>
+  <depend>rclcpp</depend>
+  <depend>rclcpp_action</depend>
+  <depend>nav2_util</depend>
+  <depend>rclcpp_lifecycle</depend>
+  <depend>std_msgs</depend>
+  <depend>geometry_msgs</depend>
+  <depend>nav_msgs</depend>
+  <depend>d1max_navigation_bt_interfaces</depend>
+  <depend>d1max_planning_interfaces</depend>
+  <depend>ament_index_cpp</depend>
+  <depend>nlohmann_json</depend>
+  <depend>openssl</depend>
+  <test_depend>ament_cmake_gtest</test_depend>
+  <export><build_type>ament_cmake</build_type></export>
+</package>

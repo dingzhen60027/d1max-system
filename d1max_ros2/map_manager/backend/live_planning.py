@@ -266,7 +266,7 @@ class LivePlanningRuntime:
     def __init__(self, nav_root, localization_runtime, *, system=None, runner=None):
         self.nav_root = Path(nav_root).resolve()
         self.root = self.nav_root / 'log/live_planning'
-        self.script = self.nav_root / 'start_live_planning_view.sh'
+        self.script = self.nav_root / 'scripts/planning/start_live_planning_view.sh'
         self.config = self.nav_root / 'src/d1max_pct_scan/config/live_visualization.yaml'
         self.localization_runtime = localization_runtime
         self.system = system or Systemd()
@@ -509,7 +509,7 @@ class LivePlanningRuntime:
             pass  # The systemd unit is also BindsTo/PartOf the managed Web unit.
 
 
-def create_live_planning_router(runtime, shared_lock, grid_lock, other_busy):
+def create_live_planning_router(runtime, shared_lock, grid_lock, other_busy, *, retired=False):
     @contextmanager
     def try_lock(lock):
         if not lock.acquire(blocking=False):
@@ -536,6 +536,8 @@ def create_live_planning_router(runtime, shared_lock, grid_lock, other_busy):
 
     @router.post('/start', status_code=202)
     def start(_request: EmptyRequest):
+        if retired:
+            raise HTTPException(410, '旧预览入口已停用，请使用“定位与规划”的主线入口')
         with try_lock(shared_lock), try_lock(grid_lock):
             if other_busy():
                 raise HTTPException(409, '请先结束建图、录包、点云处理、旧导航或旧定位会话')

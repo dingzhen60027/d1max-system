@@ -9,8 +9,9 @@ import subprocess
 import uuid
 from datetime import datetime
 import yaml
+from d1max_pct_planner import paths
 
-WS=Path('/home/dndx/d1max_nav_ws')
+WS=paths.nav_root()
 SOURCE=WS/'src/d1max_pct_scan'
 ROOT=WS/'log/pct_scan'
 UNIT='d1max-pct-scan.service'
@@ -68,12 +69,12 @@ def start(args):
     router={**common,'mode':'router','listen':{'endpoints':['tcp/127.0.0.1:7464'],'exit_on_failure':True},'connect':{'endpoints':[]}}
     for name,data in [('client',client),('router',router)]:
         (directory/(name+'.json5')).write_text(json.dumps(data,indent=2))
-    pct=yaml.safe_load((WS/'src/d1max_pct_planner/config/pct_scan_single_floor.yaml').read_text())['pct_route_server']['ros__parameters']
+    pct=paths.expand_tree(yaml.safe_load((WS/'src/d1max_pct_planner/config/pct_scan_single_floor.yaml').read_text()))['pct_route_server']['ros__parameters']
     pct.update(session_id=sid,planning_grid=cfg['planning_grid'],planning_frame=cfg['map_frame'],body_frame=cfg['base_frame'],body_height_m=cfg['body_height'])
     scan={'use_sim_time':False,'fsm.navi_mode':3,'fsm.require_tagged_reference':True,'fsm.navigation_session_id':sid,
           'fsm.strict_input_frames':True,'fsm.odom_twist_in_body_frame':True,'fsm.odom_timeout':.5,
           'fsm.reference_path_z_offset':cfg['body_height'],'fsm.reference_start_tolerance':1.,'fsm.max_replan_interval':1.,
-          'fsm.reference_path_guidance':True,'optimization.lambda_reference':20.,
+          'fsm.reference_path_guidance':True,
           'optimization.vel_tolerance':.03,'optimization.acc_tolerance':.05,
           'grid_map.frame_id':cfg['map_frame'],'grid_map.body_height':cfg['body_height'],'grid_map.sliding_map_frame_id':'d1max_pct_scan_'+sid+'_local',
           'grid_map.strict_input_frames':True,'grid_map.maximum_cloud_pose_dt':.25,'grid_map.cloud_is_world':True,'grid_map.need_extrinsic':False,

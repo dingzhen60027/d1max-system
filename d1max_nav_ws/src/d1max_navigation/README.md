@@ -21,9 +21,9 @@ MC 测得超速会锁存停止，但软件无法保证网络断开或主机故�
 
 ```bash
 cd /home/dndx/d1max_nav_ws
-./start_navigation.sh start --mode sim
-./start_navigation.sh status
-./start_navigation.sh stop
+scripts/navigation/start_navigation.sh start --mode sim
+scripts/navigation/start_navigation.sh status
+scripts/navigation/start_navigation.sh stop
 ```
 
 如果已启动，切换或重新初始化用 `restart --mode sim`，不要同时运行多个启动命令。
@@ -68,7 +68,7 @@ cd /home/dndx/d1max_nav_ws
 
 ```bash
 # 先在 Web 连接机器人，确认雷达、IMU、MC 数据正常
-./start_navigation.sh restart --mode live
+scripts/navigation/start_navigation.sh restart --mode live
 ```
 
 这会复用现有 SDK 与定位会话，加载相同地图版本，启用真实点云障碍投影和完整 Nav2，

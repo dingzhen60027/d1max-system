@@ -9,6 +9,9 @@ from std_msgs.msg import String
 from d1max_localization.lio_localizer import LioLocalizer, navigation_tracking_state
 from d1max_localization.lio_fusion import LioMapState
 from d1max_localization.math_utils import Pose3
+from d1max_localization.startup_relocalization import StartupRelocalization
+from d1max_localization.global_registration import RegistrationConfig
+from d1max_localization.global_lio_localizer import GlobalLioLocalizer
 
 
 @pytest.fixture
@@ -171,3 +174,72 @@ def test_status_keeps_matching_and_continuous_pose_and_motion_facts_separate(nod
     expired=json.loads(node.status_pub.publish.call_args.args[0].data)
     assert expired['continuous_pose_valid'] is expired['global_ekf_fresh'] is False
     assert expired['continuous_pose_reason']=='pose_output_source_stale'
+
+
+def startup_node(node):
+    node.__class__=GlobalLioLocalizer
+    node.startup=StartupRelocalization('test')
+    node.registration_config=RegistrationConfig()
+    node.relocalization_worker=Mock(state='ready')
+    node.relocalization_scan=None;node.relocalization_index={}
+    node.active_seed=node.confirmed_seed=None;node.verified_confirmations=0
+    node.startup.map_sha256='a'*64
+    for i in range(9):sample(node,t=99.2+i*.1)
+    status(node,1)
+    assert node.startup.capture(99.95,100.)
+    return node
+
+
+def test_global_result_uses_single_seed_owner_not_navigation_output_or_tf(node):
+    n=startup_node(node)
+    transform=[[1,0,0,3],[0,1,0,2],[0,0,1,0],[0,0,0,1]]
+    n.relocalization_worker.poll.return_value=dict(kind='result',accepted=True,
+        request_id=n.startup.request['request_id'],map_sha256='a'*64,candidate=dict(transform=transform))
+    n.poll_relocalization(100.)
+    assert n.core.seed_time==100. and n.startup.state=='confirming'
+    assert n.active_seed=='100000000000' and n.confirmed_seed is None
+    assert n.seed_pub.publish.call_count==1
+    assert n.seed_pub.publish.call_args.args[0].pose.pose.position.x==3.
+    n.global_pub.publish.assert_not_called();n.tf.sendTransform.assert_not_called()
+    assert n.relocalization_worker is None
+
+
+def test_manual_seed_cancels_worker_and_cannot_be_overwritten(node):
+    n=startup_node(node);worker=n.relocalization_worker
+    command=dict(id='manual',session_id='test',created_at=time.time(),reference='tracking',x=5.,y=2.,z=0.,yaw=0.)
+    (n.directory/'initial_pose.json').write_text(json.dumps(command))
+    n.read_command()
+    worker.close.assert_called_once()
+    assert n.command_result['accepted'] and n.startup.state=='confirming'
+    assert n.startup.reason.startswith('manual_seed') and n.startup.request is None
+
+
+def test_global_failure_stays_manual_without_looping_worker(node):
+    n=startup_node(node);worker=n.relocalization_worker
+    worker.poll.return_value=dict(kind='result',accepted=False,reason='ambiguous_place_or_floor',
+        request_id=n.startup.request['request_id'],map_sha256='a'*64)
+    n.poll_relocalization(100.)
+    assert n.startup.state=='failed' and n.relocalization_worker is None
+    worker.close.assert_called_once();n.seed_pub.publish.assert_not_called()
+    n.poll_relocalization(100.)
+    assert n.relocalization_worker is None
+
+
+def test_index_lifecycle_reports_have_original_map_identity_and_fenced_sequence(node, monkeypatch):
+    n=startup_node(node)
+    n.read_command=Mock();n.poll_relocalization=Mock()
+    n.startup.verification=Mock()
+    n.startup_status_sequence=0
+    n.relocalization_map_sha256='b'*64
+    n.relocalization_index={};n.relocalization_scan_status={}
+    n.relocalization_status_pub=Mock()
+    n.core.tracking=Mock(return_value=False)
+    monkeypatch.setattr(LioLocalizer,'tick',lambda self:None)
+    # ROS clock pause cannot prevent real index-progress messages from being
+    # ordered; the sequence is lifecycle evidence, never a pose/source stamp.
+    n.tick();n.tick()
+    packets=[json.loads(call.args[0].data) for call in n.relocalization_status_pub.publish.call_args_list]
+    assert [p['status_sequence'] for p in packets]==[1,2]
+    assert [p['received_at_unix'] for p in packets]==[100.,100.]
+    assert all(p['requested_map_sha256']=='b'*64 for p in packets)
+    assert not any('local_odometry' in p or 'source_stamp' in p for p in packets)

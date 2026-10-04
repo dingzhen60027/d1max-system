@@ -8,8 +8,10 @@ from d1max_pct_planner.planner_core import TomogramPlanner
 from d1max_pct_planner.route_engine import plan_checked
 
 
-VENDOR = Path('/home/dndx/d1max_nav_ws/src/pct_planner_vendor')
-GRID = Path('/home/dndx/d1max_nav_ws/maps/processed/sc_pgo_20260919_ground_20260921/global_path_reachable/planning_grid.npz')
+from d1max_pct_planner.paths import nav_root, vendor_checkout
+
+VENDOR = vendor_checkout()
+GRID = nav_root()/'maps/processed/sc_pgo_20260919_ground_20260921/global_path_reachable/planning_grid.npz'
 pytestmark = pytest.mark.skipif(not (VENDOR / 'planner/lib/ele_planner.cpython-310-x86_64-linux-gnu.so').exists(),
                                 reason='Native PCT extension is not built')
 

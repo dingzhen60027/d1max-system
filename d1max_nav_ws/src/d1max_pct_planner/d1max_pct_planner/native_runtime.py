@@ -56,7 +56,8 @@ def vendorverify(vendor_root):
     Missing build evidence is an error: version-number guesses or system-library
     fallbacks cannot establish ABI compatibility. Returned paths are absolute.
     """
-    root = Path(vendor_root).expanduser().resolve()
+    from .paths import expand, vendor_checkout
+    root = Path(expand(vendor_root) or vendor_checkout()).expanduser().resolve()
     lib_root = root / 'planner/lib'
     headers = sorted((lib_root / '3rdparty').glob('gtsam-*/install/include/gtsam/config.h'))
     if len(headers) != 1:

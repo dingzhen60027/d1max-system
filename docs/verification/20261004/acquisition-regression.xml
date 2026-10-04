@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="(empty)"
+	tests="1"
+	failures="0"
+	disabled="0"
+	skipped="0"
+	hostname="dndx-pc"
+	time="0"
+	timestamp="2026-10-04T14:56:55"
+	>
+	<testcase name="test_perception_rays" classname="test_perception_rays" time="0.04068" status="run">
+		<system-out>-- run_test.py: invoking following command in '/home/dndx/d1max_nav_ws/experiments/single_floor_execution_20261003_system_v2/application/build/d1max_localization':
+ - /home/dndx/d1max_nav_ws/experiments/single_floor_execution_20261003_system_v2/application/build/d1max_localization/test_perception_rays --gtest_output=xml:/home/dndx/d1max_nav_ws/experiments/single_floor_execution_20261003_system_v2/application/build/d1max_localization/test_results/d1max_localization/test_perception_rays.gtest.xml
+Running main() from /opt/ros/humble/src/gtest_vendor/src/gtest_main.cc
+[==========] Running 17 tests from 2 test suites.
+[----------] Global test environment set-up.
+[----------] 15 tests from PerceptionRays
+[ RUN      ] PerceptionRays.VersionOneSchemaAndSourceOrderRoundTrip
+[       OK ] PerceptionRays.VersionOneSchemaAndSourceOrderRoundTrip (0 ms)
+[ RUN      ] PerceptionRays.BothOriginsUseExactlyTheConfiguredExtrinsicComposition
+[       OK ] PerceptionRays.BothOriginsUseExactlyTheConfiguredExtrinsicComposition (0 ms)
+[ RUN      ] PerceptionRays.RearOnlyMessageKeepsRearIdentityWithoutFrontPair
+[       OK ] PerceptionRays.RearOnlyMessageKeepsRearIdentityWithoutFrontPair (0 ms)
+[ RUN      ] PerceptionRays.OrganizedRowsHonorPaddingAndOriginalIndices
+[       OK ] PerceptionRays.OrganizedRowsHonorPaddingAndOriginalIndices (0 ms)
+[ RUN      ] PerceptionRays.NonmonotonicAcquisitionOrderDoesNotSortAwayProvenance
+[       OK ] PerceptionRays.NonmonotonicAcquisitionOrderDoesNotSortAwayProvenance (0 ms)
+[ RUN      ] PerceptionRays.SameInputClockOffsetAppliedToBothSensorTimes
+[       OK ] PerceptionRays.SameInputClockOffsetAppliedToBothSensorTimes (0 ms)
+[ RUN      ] PerceptionRays.AbsoluteTimeUnitsMatchExistingAiryDecoder
+[       OK ] PerceptionRays.AbsoluteTimeUnitsMatchExistingAiryDecoder (0 ms)
+[ RUN      ] PerceptionRays.InvalidPointsAreNotInventedAndSourceIndicesRemainTraceable
+[       OK ] PerceptionRays.InvalidPointsAreNotInventedAndSourceIndicesRemainTraceable (0 ms)
+[ RUN      ] PerceptionRays.RangeGateIsAboutSensorOriginNotTrackingOrigin
+[       OK ] PerceptionRays.RangeGateIsAboutSensorOriginNotTrackingOrigin (0 ms)
+[ RUN      ] PerceptionRays.StaleFutureAndZeroDurationCloudsFailClosed
+[       OK ] PerceptionRays.StaleFutureAndZeroDurationCloudsFailClosed (0 ms)
+[ RUN      ] PerceptionRays.InvalidLayoutSchemaAndOversizeFailClosed
+[       OK ] PerceptionRays.InvalidLayoutSchemaAndOversizeFailClosed (0 ms)
+[ RUN      ] PerceptionRays.SensorFrameTransformAndClockAreValidated
+[       OK ] PerceptionRays.SensorFrameTransformAndClockAreValidated (0 ms)
+[ RUN      ] PerceptionRays.BoundsAreExplicitAndDoNotLowerExistingBlindRange
+[       OK ] PerceptionRays.BoundsAreExplicitAndDoNotLowerExistingBlindRange (0 ms)
+[ RUN      ] PerceptionRays.SafetyRetainsMeasuredNearAndFarHitsWithoutLioRangeGate
+[       OK ] PerceptionRays.SafetyRetainsMeasuredNearAndFarHitsWithoutLioRangeGate (0 ms)
+[ RUN      ] PerceptionRays.SafetyBudgetMatchesProductionBeforeAllocating
+[       OK ] PerceptionRays.SafetyBudgetMatchesProductionBeforeAllocating (2 ms)
+[----------] 15 tests from PerceptionRays (2 ms total)
+
+[----------] 2 tests from PerceptionRayQueue
+[ RUN      ] PerceptionRayQueue.FrontAndRearHaveIndependentBoundedLatestSlots
+[       OK ] PerceptionRayQueue.FrontAndRearHaveIndependentBoundedLatestSlots (0 ms)
+[ RUN      ] PerceptionRayQueue.StopWakesWorkerAndPreventsSubsequentSubmissions
+[       OK ] PerceptionRayQueue.StopWakesWorkerAndPreventsSubsequentSubmissions (0 ms)
+[----------] 2 tests from PerceptionRayQueue (0 ms total)
+
+[----------] Global test environment tear-down
+[==========] 17 tests from 2 test suites ran. (2 ms total)
+[  PASSED  ] 17 tests.
+-- run_test.py: return code 0
+-- run_test.py: inject classname prefix into gtest result file '/home/dndx/d1max_nav_ws/experiments/single_floor_execution_20261003_system_v2/application/build/d1max_localization/test_results/d1max_localization/test_perception_rays.gtest.xml'
+-- run_test.py: verify result file '/home/dndx/d1max_nav_ws/experiments/single_floor_execution_20261003_system_v2/application/build/d1max_localization/test_results/d1max_localization/test_perception_rays.gtest.xml'
+</system-out>
+	</testcase>
+</testsuite>

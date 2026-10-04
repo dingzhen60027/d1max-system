@@ -110,7 +110,8 @@ def _unique_array_bytes(maps):
 
 
 def load_config(path, tomogram):
-    raw = yaml.safe_load(Path(path).read_text())
+    from .paths import expand_tree
+    raw = expand_tree(yaml.safe_load(Path(path).read_text()))
     settings = validate_config(raw)
     if Path(settings['tomogram_path']).resolve() != Path(tomogram.source).resolve():
         raise ValueError('Cross-floor coordinator and editor must use the same tomogram')
@@ -231,6 +232,27 @@ class CrossfloorPreviewRoute:
         if len(matches) != 1:
             raise ValueError('起终点请放在一楼或二楼地面；楼梯由连接通道自动规划')
         return matches[0]
+
+    def warmup_resources(self):
+        """Build three native map resources without computing a user route."""
+        if not self._planning_lock.acquire(blocking=False):
+            raise RuntimeError('Planner snapshot already has an active request')
+        try:
+            if (_signature(self.raw),_signature(self.settings))!=self._config_signature:
+                raise ValueError('Map configuration changed; create a new planner snapshot')
+            for name in ('lower_floor', 'stair_lower', 'upper_floor'):
+                self._resources(name, self.settings)
+            return {'native_map_cache': self._resource_stats(),
+                    'fixed_stair_cache': {**self._fixed_stairs.stats,
+                        'entries': len(self._fixed_stairs._results)},
+                    'scope': 'three_native_maps_not_goal_or_cached_floor_route'}
+        except BaseException:
+            self._native_maps.clear()
+            self._fixed_stairs.clear()
+            self.cache_stats['invalidations'] += 1
+            raise
+        finally:
+            self._planning_lock.release()
 
     def plan(self, start, goal, start_layer, goal_layer):
         # Upstream native objects hold per-query mutable search/optimizer data.

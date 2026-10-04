@@ -27,12 +27,14 @@ def fixture():
     odom.pose.pose.orientation.w = 1.
     published = []
     node = SimpleNamespace(session={'id': 's'}, frame='d1max_loc_map',
+        goal_request_pending=False, execute_pending=False,
         last_state=state, state_at=19.95, body=odom, body_received=19.8,
         body_sample_context=('s', 2, 'seed'), body_context=('s', 2, 'seed', 'seed'),
         body_barrier=99., retired_body_caption=False,
         body_marker=SimpleNamespace(publish=published.append),
         get_clock=lambda: SimpleNamespace(now=lambda: SimpleNamespace(
             to_msg=lambda: Time(sec=100, nanosec=0))))
+    node.expire_requests=lambda now: LiveView.expire_requests(node,now)
     return node, published
 
 
@@ -183,3 +185,45 @@ def test_tick_clears_world_caption_but_keeps_panel_diagnostics():
     assert world[0].ns == 'live_state' and not world[0].text
     assert len(reports) == 1 and json.loads(reports[0].data)['session_id'] == 's'
     assert goals == [True]
+
+
+@pytest.mark.parametrize('source_stamp,source_session,reason,label', [
+    (99.9, 's', 'current_floor_requires_unique_measured_ground_support', '目标保留 · 等待可用起点'),
+    (99.9, 's', 'total_goal_computation_deadline_expired', '规划未完成'),
+    (98., 's', 'current_floor_requires_unique_measured_ground_support', None),
+    (99.9, 'other', 'current_floor_requires_unique_measured_ground_support', None),
+])
+def test_live_view_callback_tick_exposes_current_hold_not_stale_or_other_session(
+        tmp_path, source_stamp, source_session, reason, label):
+    node, _ = fixture()
+    reports = []
+    node.freeze = None
+    node.global_state, node.scan_state = {}, {}
+    node.global_at = node.scan_at = 0.
+    node.last_seed_id = None
+    node.reason, node.reason_scope = '目标已提交，等待规划', 'planning'
+    node.goal_submitted_at = 99.
+    node.motion_capable = False
+    node.marker = SimpleNamespace(publish=lambda _: None)
+    node.diagnostics_pub = SimpleNamespace(publish=reports.append)
+    node.publish_goal_editor = lambda: None
+    node.last_snapshot_at, node.directory = 18., tmp_path
+    node.session['mode'] = 'LIVE_VISUALIZATION_NO_MOTION'
+    hold = dict(session_id=source_session, received_at_unix=source_stamp,
+        state='goal_retained_waiting_recovery', planning_phase='goal_retained_waiting_recovery',
+        goal_retained=True, active_reference=False, recovery_hold=dict(reason=reason, user_stamp=90.),
+        active_goal=dict(session_id=source_session, epoch=2, seed_id='seed', user_stamp=90.))
+    with patch('d1max_pct_scan.live_view.time.time', return_value=100.), \
+         patch('d1max_pct_scan.live_view.time.monotonic', return_value=20.):
+        LiveView.on_global(node, String(data=json.dumps(hold)))
+        LiveView.tick(node)
+    report = json.loads(reports[0].data)
+    snapshot = json.loads((tmp_path/'view_status.json').read_text())
+    if label is not None:
+        assert report['stages']['global']['label'] == snapshot['reason'] == label
+        assert report['stages']['local']['label'] in ('等待可用起点', '等待重新规划')
+    else:
+        assert report['stages']['global']['label'] == '等待目标'
+        assert snapshot['global_status'] == {}
+    assert report['motion_enabled'] is False and report['plan_id'] is None
+    assert report['local_target'] is None

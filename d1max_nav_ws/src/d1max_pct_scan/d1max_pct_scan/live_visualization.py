@@ -1,5 +1,6 @@
 """Algorithm-neutral RViz presentation. No planning or frame conversion here."""
 from copy import deepcopy
+from pathlib import Path
 
 PREFIX = '/d1max/live_planning/'
 # Native occupancy snapshots publish at 3 Hz. A .25 s decay expired before the
@@ -24,7 +25,26 @@ def group(name, children, *, enabled=True):
             'Displays': children}
 
 
-def configure(base, *, session_id='', layout='global'):
+def rolling_occupancy_display(name, suffix, *, size):
+    """SCAN ROS 2 default.rviz height-coloured occupancy presentation.
+
+    Squares (not opaque voxel cubes) let both the hit map and the smaller
+    inflated samples remain legible together, as in upstream. These colours
+    encode Z height only; they are not the global traversability classes.
+    The bounded snapshot TTL is the sole lifetime adaptation for our 3 Hz
+    publisher and never changes the underlying occupancy or collision query.
+    """
+    return display('PointCloud2', name,
+        Topic=topic(PREFIX+'scan/grid_map/'+suffix, sensor=True),
+        **{'Position Transformer': 'XYZ', 'Color Transformer': 'AxisColor',
+           'Axis': 'Z', 'Autocompute Value Bounds': {'Value': True},
+           'Use rainbow': True, 'Invert Rainbow': False,
+           'Style': 'Squares', 'Size (Pixels)': 3, 'Size (m)': size,
+           'Alpha': 1., 'Decay Time': LOCAL_MAP_DISPLAY_TTL,
+           'Use Fixed Frame': True, 'Selectable': True})
+
+
+def configure(base, *, session_id='', layout='global', session_directory=None):
     """Build one presentation profile over the same planning topics.
 
     The local view uses SCAN's published sliding occupancy, not a new map or
@@ -86,14 +106,8 @@ def configure(base, *, session_id='', layout='global'):
                 'Show Descriptions': True, 'Show Visual Aids': False})]),
         group('局部规划', [
             cloud,
-            # Native rolling occupancy includes support ground, not just
-            # classified obstacles. Keep it neutral and translucent so it
-            # cannot be mistaken for a red, impassable surface classification.
-            display('PointCloud2', '滑动占据地图（含地面）',
-                Topic=topic(PREFIX+'scan/grid_map/occupancy', sensor=True),
-                **{'Position Transformer': 'XYZ', 'Color Transformer': 'FlatColor',
-                   'Color': '170; 182; 196', 'Style': 'Boxes', 'Size (m)': .08,
-                   'Alpha': .20, 'Decay Time': LOCAL_MAP_DISPLAY_TTL, 'Use Fixed Frame': True}),
+            rolling_occupancy_display('滑动占据地图（高度）', 'occupancy', size=.05),
+            rolling_occupancy_display('碰撞膨胀地图（高度）', 'occupancy_inflate', size=.04),
             # This is the native rolling buffer's real map-frame boundary,
             # not a view-dependent crop or an assertion that it is all free.
             display('Marker', '滑动窗口边界',
@@ -103,14 +117,11 @@ def configure(base, *, session_id='', layout='global'):
             display('MarkerArray', '搜索尝试与受阻位置',
                     Topic=topic(PREFIX+'local_attempt_debug', transient=True)),
             display('Marker', '局部轨迹',
-                    Topic=topic(PREFIX+'scan_optimal', transient=True))],
+                    # One update contains a line and a sphere list (plus an
+                    # optional DELETEALL); retain the upstream depth of five.
+                    Topic={**topic(PREFIX+'scan_optimal', transient=True), 'Depth': 5})],
             enabled=local_layout),
-        group('调试', [pose,
-            display('PointCloud2', '碰撞膨胀体素', enabled=False,
-                Topic=topic(PREFIX+'scan/grid_map/occupancy_inflate', sensor=True),
-                **{'Position Transformer': 'XYZ', 'Color Transformer': 'FlatColor',
-                   'Color': '255; 150; 50', 'Style': 'Boxes', 'Size (m)': .08,
-                   'Alpha': .18, 'Decay Time': LOCAL_MAP_DISPLAY_TTL})]),
+        group('调试', [pose]),
     ]
     cfg['Panels'] = [
         {'Class': 'd1max_pct_rviz_tools/NavigationDiagnosticsPanel', 'Name': '导航监视',
@@ -121,6 +132,11 @@ def configure(base, *, session_id='', layout='global'):
                                   'Splitter Ratio': .52}},
         {'Class': 'rviz_common/Views', 'Name': '视角'},
     ]
+    if session_directory is not None:
+        directory = Path(session_directory).resolve()
+        cfg['Panels'][0].update({
+            'Layout Request File': str(directory/'navigation-view-layout-request.json'),
+            'Layout State File': str(directory/'navigation-view-layout-state.json')})
     for tool in vm['Tools']:
         if tool['Class'] == 'rviz_default_plugins/SetInitialPose':
             tool['Topic'] = topic(PREFIX+'initialpose')

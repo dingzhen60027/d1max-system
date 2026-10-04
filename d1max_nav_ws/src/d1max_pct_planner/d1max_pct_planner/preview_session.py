@@ -15,7 +15,9 @@ import uuid
 
 import yaml
 
-WS = Path('/home/dndx/d1max_nav_ws')
+from .paths import expand_tree, nav_root
+
+WS = nav_root()
 SOURCE = WS / 'src/d1max_pct_planner'
 ROOT = WS / 'log/pct_preview'
 UNIT = 'd1max-pct-preview.service'
@@ -202,7 +204,7 @@ def rviz_config(cfg):
 def start(args):
     if service().get('ActiveState') in ACTIVE_STATES:
         raise RuntimeError('Preview already exists; stop it explicitly before starting another')
-    cfg = validate_config(yaml.safe_load(args.config.read_text()))
+    cfg = validate_config(expand_tree(yaml.safe_load(args.config.read_text())))
     # Never adopt an unrelated router, including the offline navigation router.
     with socket.socket() as probe:
         probe.bind(('127.0.0.1', PORT))

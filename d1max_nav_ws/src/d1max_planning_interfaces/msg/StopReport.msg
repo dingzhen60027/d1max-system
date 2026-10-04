@@ -1,0 +1,22 @@
+# Writer-owned stop evidence. Submission/retirement are not measured stop.
+ExecutionVersion version
+string execution_id
+uint64 control_epoch
+string sdk_session
+uint64 sdk_arm_generation
+string stop_request_id
+uint64 sequence
+builtin_interfaces/Time source_stamp
+bool nonzero_blocked
+bool stop_submitted
+bool measured_stop_confirmed
+bool physical_acceptance_verified
+string mc_clock_epoch
+uint64 mc_raw_stamp_ns
+uint32 stationary_samples
+float64 stationary_duration_sec
+float64 measured_linear_mps
+float64 measured_angular_radps
+string time_basis
+string transport_mode
+string reason

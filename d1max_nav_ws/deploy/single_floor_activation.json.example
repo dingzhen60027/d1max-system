@@ -1,0 +1,13 @@
+{
+  "schema_version": 3,
+  "profile": "single_floor_live",
+  "purpose": "execution",
+  "release_root": "/home/dndx/d1max_nav_ws/experiments/single_floor_execution_20261002_entry_v1",
+  "entrypoint": "/home/dndx/d1max_nav_ws/tools/single_floor_entry.sh",
+  "entrypoint_sha256": "cb073dc571cd681325d41fd2456862a8c8d2926af15b6de47d691d5c52192953",
+  "release_manifest": "/home/dndx/d1max_nav_ws/experiments/single_floor_execution_20261002_entry_v1/release_manifest_entry_v1.json",
+  "release_manifest_sha256": "f1b92d4581ce18f17a694f7535b154c9a33525f64e8e4de0222d4dfeda2789ab",
+  "physical_acceptance_record": "REPLACE_WITH_ACTUAL_RECORD_ABSOLUTE_PATH",
+  "physical_acceptance_record_sha256": "REPLACE_WITH_ACTUAL_RECORD_SHA256",
+  "expected_sdk_session": "REPLACE_WITH_CURRENT_EXISTING_SDK_SESSION"
+}

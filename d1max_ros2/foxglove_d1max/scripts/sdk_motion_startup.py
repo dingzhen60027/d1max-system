@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 from contextlib import contextmanager
 import fcntl
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -32,6 +33,19 @@ SDK_EXECUTABLES = {"sdk_monitor_bridge", "sdk_state_bridge", "sdk_telemetry_brid
 LIMITS = {"navigation_max_forward_mps": 0.30, "navigation_max_lateral_mps": 0.0,
           "navigation_max_yaw_radps": 0.50}
 STOP_FIRST = "已有 monitor 或启动/停止尚未完成；请通过现有 manager 停止并确认 stopped 后再执行。不会旁起 SDK 或自动重启。"
+# Optional sealed navigation release whose schema-3 monitor replaces the
+# workspace build. Its execution channel only moves after a bound grant.
+RELEASE_ENV = "D1MAX_MONITOR_RELEASE"
+RELEASE_MONITOR = "sdk/install/d1max_sdk_bridge/lib/d1max_sdk_bridge/sdk_monitor_bridge"
+# Physical acceptance binding, validated by the monitor itself. Absent means
+# the v3 channel stays unaccepted and rejects every activation grant.
+EXECUTION_IDENTITY = {
+    "execution_acceptance_record": ("D1MAX_EXECUTION_ACCEPTANCE_RECORD", r"/[^\"\\\x00-\x1f]+"),
+    "execution_robot_id": ("D1MAX_EXECUTION_ROBOT_ID", r"[A-Za-z0-9_.:-]{1,128}"),
+    "execution_sdk_version": ("D1MAX_EXECUTION_SDK_VERSION", r"[A-Za-z0-9_.+-]{1,64}"),
+    "execution_calibration_sha256": ("D1MAX_EXECUTION_CALIBRATION_SHA256", r"[0-9a-f]{64}"),
+    "execution_robot_profile_sha256": ("D1MAX_EXECUTION_ROBOT_PROFILE_SHA256", r"[0-9a-f]{64}"),
+}
 
 
 def private_directory(path):
@@ -284,6 +298,46 @@ def ros_duplicate_preflight():
         rclpy.shutdown()
 
 
+def sealed_release_monitor(value):
+    """Schema-3 monitor of a sealed release; every sealed file must be unchanged."""
+    if not value.startswith("/"):
+        raise RuntimeError(f"{RELEASE_ENV} 必须是绝对路径")
+    release = Path(value).resolve(strict=True)
+    descriptor = json.loads((release / "release.json").read_text(encoding="utf-8"))
+    name = Path(str(descriptor.get("sealed_manifest", "")))
+    if descriptor.get("schema") != 1 or name.is_absolute() or len(name.parts) != 1:
+        raise RuntimeError("release.json 必须指向 release 内的封存清单")
+    files = json.loads((release / name).read_text(encoding="utf-8")).get("files")
+    if not isinstance(files, dict):
+        raise RuntimeError("封存清单缺少文件列表")
+    binary = release / RELEASE_MONITOR
+    for required in (release / "release.json", binary):
+        if str(required) not in files:
+            raise RuntimeError(f"未封存：{required}")
+    for path, expected in files.items():
+        digest = hashlib.sha256()
+        with Path(path).open("rb") as stream:
+            for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+                digest.update(chunk)
+        if digest.hexdigest() != expected:
+            raise RuntimeError(f"release 已变化，拒绝启动：{path}")
+    return binary
+
+
+def execution_identity():
+    """All five acceptance bindings or none; the monitor validates the record."""
+    given = {name: os.environ.get(variable, "") for name, (variable, _) in EXECUTION_IDENTITY.items()}
+    if not any(given.values()):
+        return []
+    args = []
+    for name, (variable, pattern) in EXECUTION_IDENTITY.items():
+        if not re.fullmatch(pattern, given[name]):
+            raise RuntimeError(f"物理验收绑定不完整或格式错误：{variable}")
+        # Quoted so ROS keeps digit-only ids and versions as strings.
+        args.extend(["-p", f"{name}:={json.dumps(given[name], ensure_ascii=False)}"])
+    return args
+
+
 def sdk_arguments(enabled):
     audit = os.environ.get('D1MAX_JOINT_TELEMETRY_AUDIT', 'false')
     if audit not in ('true', 'false'):
@@ -291,11 +345,18 @@ def sdk_arguments(enabled):
     if audit == 'true' and enabled:
         raise RuntimeError('Joint telemetry audit cannot consume a motion startup request')
     workspace = BASE.parent / "sdk_bridge_ws"
-    args = [str(workspace / "install/d1max_sdk_bridge/lib/d1max_sdk_bridge/sdk_monitor_bridge"),
+    release = os.environ.get(RELEASE_ENV, "")
+    if release and enabled:
+        raise RuntimeError("release schema-3 执行通道与旧运动能力互斥；v3 仅接受绑定验收的 grant")
+    binary = (sealed_release_monitor(release) if release else
+              workspace / "install/d1max_sdk_bridge/lib/d1max_sdk_bridge/sdk_monitor_bridge")
+    args = [str(binary),
             "--ros-args", "--params-file", str(workspace / "src/d1max_sdk_bridge/config/monitor.yaml"),
             "-p", "navigation_control_enabled:=" + ("true" if enabled else "false")]
     for name, value in LIMITS.items():
         args.extend(["-p", f"{name}:={value}"])
+    if release:
+        args.extend(["-p", "execution_v3_enabled:=true", *execution_identity()])
     if audit == 'true':
         # A scoped read-only audit overrides, but never rewrites, the operator's
         # normal APP handoff preference. No ownership acquisition is authorized.
@@ -328,7 +389,9 @@ def launch_sdk():
                 with os.fdopen(fd, "w") as stream:
                     json.dump({"nonce": ticket["nonce"], "invocation": ticket["invocation"],
                                "limits": LIMITS, "startup_disarmed": True}, stream)
-            print("SDK monitor: motion-capable, startup DISARMED" if ticket else "SDK monitor: motion DISABLED", flush=True)
+            print("SDK monitor: motion-capable, startup DISARMED" if ticket else
+                  "SDK monitor: schema-3 channel, motion only after a bound grant" if os.environ.get(RELEASE_ENV) else
+                  "SDK monitor: motion DISABLED", flush=True)
             # This is the only process launch: the current existing monitor child is
             # replaced, never a second SDK client beside it. No SDK command is sent here.
             os.execv(args[0], args)

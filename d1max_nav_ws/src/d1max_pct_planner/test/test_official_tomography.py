@@ -192,7 +192,7 @@ def test_one_yaml_build_produces_safe_npz_official_pickle_manifest_and_immutable
     assert o3d.io.write_point_cloud(str(source),cloud)
     original_hash=sha256(source)
     cfg={'schema_version':1,'source_pcd':str(source),'output_directory':str(tmp_path/'result'),
-         'vendor_root':'/home/dndx/d1max_nav_ws/src/pct_planner_vendor',
+         'vendor_root':'${D1MAX_NAV_ROOT}/src/pct_planner_vendor',
          'frame_id':'d1max_loc_map','pct':config(),'export':{'traversable_pcd':True}}
     path=tmp_path/'config.yaml';path.write_text(yaml.safe_dump(cfg))
     output,manifest=build(path)

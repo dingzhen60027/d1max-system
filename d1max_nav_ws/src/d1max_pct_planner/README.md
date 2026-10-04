@@ -151,14 +151,14 @@ python3 src/d1max_pct_planner/tools/benchmark_live_map.py --case crossfloor \
 
 可复现建图配置：[config/official_single_floor.yaml](config/official_single_floor.yaml)。
 运行/选点配置：[config/preview.yaml](config/preview.yaml)。
-完整实现、验收和局限：[官方流程接入说明](/home/dndx/d1max_nav_ws/docs/20260922_pct_official_workflow.md)。
+完整实现、验收和局限：[官方流程接入说明](/home/dndx/d1max_nav_ws/docs/design/20260922_pct_official_workflow.md)。
 
 这个入口只做全局路径，不运行模拟运动、SCAN 跟踪器或机器狗 SDK；不依赖里程计。与下文在线参考路径服务分离，使用独立 `/d1max/pct_preview/*` 话题和 localhost:7465 Zenoh，会话不会发到机器狗或原导航执行器。
 
 ```bash
-/home/dndx/d1max_nav_ws/start_pct_preview.sh start
-/home/dndx/d1max_nav_ws/start_pct_preview.sh status
-/home/dndx/d1max_nav_ws/start_pct_preview.sh stop
+/home/dndx/d1max_nav_ws/scripts/planning/start_pct_preview.sh start
+/home/dndx/d1max_nav_ws/scripts/planning/start_pct_preview.sh status
+/home/dndx/d1max_nav_ws/scripts/planning/start_pct_preview.sh stop
 ```
 
 操作顺序：

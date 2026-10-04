@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="(empty)"
+	tests="11"
+	failures="0"
+	disabled="0"
+	skipped="0"
+	hostname="dndx-pc"
+	time="0"
+	timestamp="2026-10-04T14:54:23"
+	>
+	<testcase name="test_mc_report" classname="test_mc_report" time="0.00173805" status="run">
+		<system-out>MC core: queue, rate, ACK, retry, timestamp, stale, replay and clock checks passed
+</system-out>
+	</testcase>
+	<testcase name="test_joint_report" classname="test_joint_report" time="0.00185557" status="run">
+		<system-out>Joint receipt-only core: bounded copy, names, shapes, finite values, stale/order, default-off, ACK, retry and reconnect checks passed
+</system-out>
+	</testcase>
+	<testcase name="test_monitor_estop" classname="test_monitor_estop" time="0.00165625" status="run">
+		<system-out>PASS monitor-only safety: connection/replay gating, deduplication, telemetry without ACK, timeout, stale state, no retries
+</system-out>
+	</testcase>
+	<testcase name="test_sdk_ownership" classname="test_sdk_ownership" time="0.00162921" status="run">
+		<system-out>SDK handoff: APP priority, repeated cycles, ACK/state/data confirmation, timeout, replay and MC gating passed
+</system-out>
+	</testcase>
+	<testcase name="test_navigation_motion" classname="test_navigation_motion" time="0.00149669" status="run">
+		<system-out>PASS optional SDK navigation: disabled default, explicit arm, SI conversion, generation/context/sequence guards, freshness, bounded stop, no automatic rearm
+</system-out>
+	</testcase>
+	<testcase name="test_navigation_dispatch" classname="test_navigation_dispatch" time="0.00244697" status="run">
+		<system-out>PASS serialized SDK dispatch: callback/worker revocations, MC overspeed, ordered submission, synchronous callback, sticky veto, no auto rearm
+</system-out>
+	</testcase>
+	<testcase name="test_execution_shutdown" classname="test_execution_shutdown" time="0.00181455" status="run">
+		<system-out>finite shutdown zero transaction positive/negative assertions passed
+</system-out>
+	</testcase>
+	<testcase name="test_execution_scheduler" classname="test_execution_scheduler" time="0.00242173" status="run">
+		<system-out>steady writer deadline / bounded latest mailbox / accepted MC rate assertions passed
+</system-out>
+	</testcase>
+	<testcase name="test_execution_transport" classname="test_execution_transport" time="0.00292577" status="run">
+		<system-out>schema3 execution transport positive/negative assertions passed
+</system-out>
+	</testcase>
+	<testcase name="test_execution_handoff" classname="test_execution_handoff" time="0.00269582" status="run">
+		<system-out>bounded writer handoff positive/negative assertions passed
+</system-out>
+	</testcase>
+	<testcase name="test_execution_acceptance" classname="test_execution_acceptance" time="0.00799907" status="run">
+		<system-out>physical evidence, measured stop/rate policy and full reaction budget assertions passed
+</system-out>
+	</testcase>
+</testsuite>

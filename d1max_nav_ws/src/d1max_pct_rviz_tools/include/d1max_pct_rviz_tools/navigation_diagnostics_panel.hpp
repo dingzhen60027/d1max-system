@@ -25,6 +25,7 @@ public:
   void load(const rviz_common::Config & config) override;
   void save(rviz_common::Config config) const override;
   void acceptStatus(const QString & json);
+  bool acceptLayoutRequest(const QString & json);
   void refresh();
   // Presentation only: this never publishes a navigation or motion request.
   static void applyLayoutVisibility(rviz_common::DisplayGroup * root, const QString & layout);
@@ -42,8 +43,13 @@ private:
   bool valid_{false};
   bool motion_capable_{false};
   QString layout_{"global"};
+  QString layout_request_file_;
+  QString layout_state_file_;
+  QString viewer_id_;
+  QString last_layout_request_id_;
   std::array<QPushButton *, 2> layout_buttons_{};
   QLabel * mode_{};
+  QLabel * task_{};
   std::array<QLabel *, 3> stages_{};
   QLabel * admission_{};
   QLabel * ages_{};
@@ -54,6 +60,7 @@ private:
   void chooseView(int index);
   void chooseLayout(const QString & layout, bool notify);
   void updateLayoutWidgets();
+  void pollLayoutRequest();
   rclcpp::Subscription<std_msgs::msg::String>::SharedPtr subscription_;
 };
 }  // namespace d1max_pct_rviz_tools

@@ -203,6 +203,12 @@ def spline(identifier, generation=1):
     message.trajectory.traj_id = identifier
     message.trajectory.start_time.sec = 100
     message.trajectory.start_time.nanosec = 200000000
+    # A real cubic spline, also consumed by the upstream-style derivative
+    # renderer; support-check tests still stub their independent dense sampler.
+    message.trajectory.order = 3
+    message.trajectory.knots = [float(i)*.1 for i in range(-3, 7)]
+    from geometry_msgs.msg import Point
+    message.trajectory.pos_pts = [Point(x=float(i)*.04, y=0., z=.55) for i in range(6)]
     return message
 
 
@@ -225,9 +231,11 @@ def spline_harness(monkeypatch):
     bridge = SimpleNamespace(
         gate=gate, p={'session_id': 'test', 'map_frame': 'd1max_loc_map', 'body_height': .55,
                       'execution_mode': 'preview',
+                      'input_timeout': .5, 'perception_timeout': .5,
                       'ground_support_height_tolerance_m': .2,
                       'ground_support_max_step_m': .17},
         ground_support=support, ground_support_check={}, debug_gate=LocalDebugGate(),
+        map_context_sequence=1, sensor_barrier=99.,
         last_spline_id=-1, last_spline_stamp=0., pending_spline_marker=None,
         pending_spline_message=None, admitted_spline_key=None, admitted_record=None,
         admission_reason='startup', admission_sequence=0,
@@ -247,7 +255,7 @@ def spline_harness(monkeypatch):
         setattr(bridge, method, lambda *args, _method=method, **kwargs:
                 getattr(LiveScanBridge, _method)(bridge, *args, **kwargs))
     bridge.delete_spline_marker = lambda: LiveScanBridge.delete_spline_marker(bridge)
-    bridge.clear_debug = lambda phase='inactive': LiveScanBridge.clear_debug(bridge, phase)
+    bridge.clear_debug = lambda phase='inactive', **kwargs: LiveScanBridge.clear_debug(bridge, phase, **kwargs)
     bridge.clear_marker = lambda **kwargs: LiveScanBridge.clear_marker(bridge, **kwargs)
     bridge.debug_pub = SimpleNamespace(publish=lambda msg: emitted.append(msg))
     return bridge, support, emitted

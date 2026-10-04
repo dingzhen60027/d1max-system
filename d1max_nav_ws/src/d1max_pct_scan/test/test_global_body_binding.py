@@ -72,7 +72,7 @@ def test_old_epoch_pose_lease_cannot_authorize_new_epoch_body(monkeypatch):
 def test_prebuilt_message_headers_share_fresh_commit_stamp(monkeypatch):
     points = np.array([[0.,0.,-.5],[1.,0.,-.5]])
     monkeypatch.setattr('d1max_pct_scan.live_global_planner.validate_static_route',
-        lambda *args:dict(xyz=points,diagnostics={},source_tomogram_sha256='hash'))
+        lambda *args, **kwargs:dict(xyz=points,diagnostics={},source_tomogram_sha256='hash'))
     checked = prepare_validated_path({},None,SimpleNamespace(source_frame='d1max_loc_map'))
     message = checked['path_message']
     assert all(pose.header is message.header for pose in message.poses)

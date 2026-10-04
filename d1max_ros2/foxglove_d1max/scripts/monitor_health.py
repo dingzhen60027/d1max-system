@@ -3,8 +3,23 @@
 import json
 import math
 import os
+import re
 from pathlib import Path
 import time
+
+
+def monitor_identity(report, wall):
+    """Read existing Monitor identity; never infer a session from connection state."""
+    try:
+        if (not isinstance(report, dict) or report.get('mode') != 'monitor'
+                or not 0 <= wall-float(report.get('wall_time', 0)) <= 1.
+                or not re.fullmatch(r'[A-Za-z0-9_.-]{1,128}', report.get('session', ''))):
+            return {}
+        execution=report.get('execution_v3', {})
+        return dict(sdk_session=report['session'],sdk_session_source_stamp=report['wall_time'],
+            execution_v3_enabled=execution.get('enabled') is True,
+            execution_record_valid=execution.get('acceptance_record_valid') is True)
+    except (ValueError,TypeError,AttributeError):return {}
 
 
 def mc_health(report, wall, connected=True, replay=False):
@@ -48,6 +63,7 @@ def main():
     seen = {}
     sdk = {"received_at": 0, "connected": False, "replay": False}
     mc = {}
+    monitor = {}
 
     def receive_robot(message):
         try:
@@ -61,8 +77,10 @@ def main():
         seen["connection"] = time.monotonic()
 
     def receive_monitor(message):
+        nonlocal monitor
         try:
-            sdk["replay"] = json.loads(message.data).get("mode") == "replay"
+            monitor=json.loads(message.data)
+            sdk["replay"] = monitor.get("mode") == "replay"
         except (ValueError, AttributeError):
             sdk["replay"] = True
 
@@ -92,6 +110,7 @@ def main():
                  "images_fresh": all(fresh(side + "_image") for side in ("front", "rear")),
                  "replay": sdk["replay"]}
         value.update(mc_health(mc, wall, value["sdk_fresh"], sdk["replay"]))
+        value.update(monitor_identity(monitor,wall))
         temporary = target.with_suffix(".tmp")
         temporary.write_text(json.dumps(value), encoding="utf-8")
         os.replace(temporary, target)

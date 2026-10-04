@@ -39,7 +39,7 @@ class NavigationRuntime:
     def __init__(self, root, nav_root, localization, *, runner=subprocess.run):
         self.root = Path(root).resolve()
         self.root.mkdir(parents=True, exist_ok=True)
-        self.script = Path(nav_root).resolve() / 'start_navigation.sh'
+        self.script = Path(nav_root).resolve() / 'scripts/navigation/start_navigation.sh'
         self.localization = localization
         self.runner = runner
         self.lock = threading.RLock()

@@ -161,6 +161,37 @@ def test_prediction_reanchors_delayed_posterior_without_double_integration():
     assert p.evaluate(10.2).pose.position[0] == pytest.approx(0.2)
 
 
+def test_prediction_uses_only_causal_imu_and_preserves_future_sample_for_next_tick():
+    from d1max_localization.estimation.causal_prediction import CausalInertialPredictor
+    p = CausalInertialPredictor()
+    p.accept(snapshot(), 10.)
+    for t in (9.995, 10., 10.005, 10.01):
+        assert p.push_imu(t, (0., 0., 9.81), (0., 0., 0.), t)
+    # Same phase difference observed in the real raw-bag ROS replay. A large
+    # acceleration in the later sample must not leak into the earlier state.
+    assert p.push_imu(10.011, (30., 0., 9.81), (0., 0., 0.), 10.0105)
+    result = p.evaluate(10.0105)
+    assert result is not None
+    assert result.imu_stamp == 10.01 and result.imu_stamp <= result.stamp
+    assert result.extrapolation == pytest.approx(.0005)
+    assert result.world_velocity == pytest.approx((0., 0., 0.))
+    assert p.imu[-1][0] == 10.011  # not deleted, relabeled or freshly restamped
+    later = p.evaluate(10.012)
+    assert later.imu_stamp == 10.011
+    assert later.world_velocity[0] > 0.
+
+
+def test_future_imu_cannot_hide_expired_causal_support():
+    from d1max_localization.estimation.causal_prediction import CausalInertialPredictor
+    p = CausalInertialPredictor(PredictionLimits(max_coast=.1))
+    p.accept(snapshot(), 10.)
+    assert p.push_imu(10., (0., 0., 9.81), (0., 0., 0.), 10.)
+    assert p.push_imu(10.11, (0., 0., 9.81), (0., 0., 0.), 10.105)
+    assert p.evaluate(10.105) is None
+    assert p.reason == 'imu_stale'
+    assert p.coast_stats['rejected_reason'] == 'duration'
+
+
 def test_prediction_gap_and_epoch_cannot_reuse_old_posterior():
     p = InertialPredictor()
     p.accept(snapshot(), 10.0)

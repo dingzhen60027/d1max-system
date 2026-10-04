@@ -71,6 +71,7 @@ def run(args):
     counts = {topics[i][0]: count for i, count in connection.execute(
         'SELECT topic_id,count(*) FROM messages GROUP BY topic_id')}
     events, raw_inputs, offsets, contexts, static = [], [], [], [], {}
+    timing_events, projected_events = [], []
     local_frames, global_frames = set(), set()
     report = dict(kind='REAL_BAG_PURE_OFFLINE_PROJECTOR_NATIVE_MAP', no_ros_initialized=True,
                   no_robot_or_motion=True, bag=str(database), session=str(args.session),
@@ -84,6 +85,10 @@ def run(args):
         WS/'src/d1max_localization/include/d1max_localization/perception_rays.hpp',
         args.session/'localization.yaml', args.session/'scan.yaml')}
     args.output.mkdir(parents=True, exist_ok=False)
+    fixture = args.output/'native_fixture' if args.freeze_native_inputs else None
+    if fixture is not None:
+        fixture.mkdir()
+    frozen_requests, frozen_responses, frozen_files = [], [], []
     with tempfile.TemporaryDirectory(prefix='d1max_offline_rays_') as temporary:
         stage = Path(temporary)
         for topic_id, timestamp, data in connection.execute(
@@ -97,8 +102,19 @@ def run(args):
                 filename = stage/f'input_{index}.cdr'
                 filename.write_bytes(data)
                 raw_inputs.append(dict(index=index, sensor=source, received=timestamp, input=filename))
+                original = deserialize_message(data, get_message(type_name))
+                timing_events.append(dict(topic=name, receipt_ns=timestamp,
+                    source_ns=stamp_ns(original.header.stamp), source_clock='robot_original_header'))
                 continue
             message = deserialize_message(data, get_message(type_name))
+            if hasattr(message, 'header'):
+                timing_events.append(dict(topic=name, receipt_ns=timestamp,
+                    source_ns=stamp_ns(message.header.stamp), source_clock='normalized_localization'))
+            elif name in ('/d1max/localization/status', '/d1max/localization/navigation/status',
+                          '/d1max/localization/navigation/pose_status'):
+                # These are reported snapshots, not substitute raw IMU/LIO events.
+                snapshot = json.loads(message.data)
+                timing_events.append(dict(topic=name, receipt_ns=timestamp, status=snapshot))
             if name == '/tf_static':
                 for transform in message.transforms:
                     key = (transform.header.frame_id, transform.child_frame_id)
@@ -183,8 +199,12 @@ def run(args):
                                    stderr=subprocess.PIPE, text=True, bufsize=1)
 
         def rpc(value):
+            if fixture is not None:
+                frozen_requests.append(value)
             process.stdin.write(json.dumps(value)+'\n'); process.stdin.flush()
             result = json.loads(process.stdout.readline())
+            if fixture is not None:
+                frozen_responses.append(result)
             if 'error' in result:
                 raise RuntimeError(result['error'])
             return result
@@ -216,6 +236,7 @@ def run(args):
             payload = array('B'); payload.frombytes(memoryview(projected.points).cast('B')); cloud.data = payload
             output.write_bytes(serialize_message(message))
 
+        latest_body_stamp = None
         try:
             native_parameters['grid_map.localization_session_id'] = context.session_id
             rpc(dict(type='configure', parameters=native_parameters, context=contexts[0]))
@@ -227,6 +248,7 @@ def run(args):
                         key = status_topics[topic]; statuses[key] = json.loads(message.data); receipts[key] = received
                     elif topic.endswith('/odometry/global'):
                         latest_body = pose(message.pose.pose)
+                        latest_body_stamp = stamp_ns(message.header.stamp)
                     elif topic == 'raw':
                         if identity(now) is None:
                             drop['raw_context_unavailable'] += 1; continue
@@ -264,8 +286,20 @@ def run(args):
                         except ProjectionError as error:
                             drop[str(error)] += 1; pending[sensor] = None; continue
                         projector_times.append((time.perf_counter()-started)*1000)
-                        output = stage/'projected.cdr'; make_projected(projected, output)
-                        accepted = rpc(dict(type='rays', file=str(output), now_ns=now)); output.unlink()
+                        output = ((fixture/f'projected_{len(projected_events):04d}.cdr')
+                                  if fixture is not None else stage/'projected.cdr')
+                        make_projected(projected, output)
+                        accepted = rpc(dict(type='rays', file=str(output.resolve()), now_ns=now))
+                        if fixture is None:
+                            output.unlink()
+                        else:
+                            frozen_files.append(dict(file=output.name,
+                                sha256=hashlib.sha256(output.read_bytes()).hexdigest(), size=output.stat().st_size))
+                        projected_events.append(dict(sensor_id=sensor, receipt_ns=received,
+                            start_ns=projected.start_ns, end_ns=projected.end_ns,
+                            alignment_ns=projected.alignment_ns, projection_complete_clock_ns=now,
+                            receipt_wait_ms=(now-received)/1e6,
+                            processing_ms=projector_times[-1], accepted=accepted['accepted']))
                         native_accept_times.append(accepted['processing_ms'])
                         successes[str(sensor)] += bool(accepted['accepted'])
                         if not accepted['accepted']: drop['native_rejected'] += 1
@@ -276,7 +310,9 @@ def run(args):
                         yaw = yaw_from_quaternion(latest_body.orientation)
                         for label, distance in (('body',0.), ('ahead_2m',2.)):
                             p = list(latest_body.position); p[0] += distance*math.cos(yaw); p[1] += distance*math.sin(yaw)
-                            queries.append(dict(label=label, position=p, yaw=yaw))
+                            queries.append(dict(label=label, position=p, yaw=yaw,
+                                orientation_xyzw=list(latest_body.orientation),
+                                source_stamp_ns=latest_body_stamp))
                     tick = rpc(dict(type='tick', now_ns=now, queries=queries)); tick['now_ns'] = now
                     native_times.append(tick['processing_ms']); ticks.append(tick)
             report['native_final'] = rpc(dict(type='summary', queries=queries))
@@ -306,6 +342,16 @@ def run(args):
             report[label] = dict(count=len(entries), blocked=sum(e['collision']!=0 for e in entries),
                 last=entries[-1] if entries else None)
         (args.output/'events.jsonl').write_text(''.join(json.dumps(value)+'\n' for value in ticks))
+        (args.output/'source_time_events.jsonl').write_text(''.join(json.dumps(value)+'\n' for value in timing_events))
+        (args.output/'projection_time_events.jsonl').write_text(''.join(json.dumps(value)+'\n' for value in projected_events))
+        if fixture is not None:
+            (fixture/'requests.jsonl').write_text(''.join(json.dumps(value)+'\n' for value in frozen_requests))
+            (fixture/'baseline_responses.jsonl').write_text(''.join(json.dumps(value)+'\n' for value in frozen_responses))
+            (fixture/'manifest.json').write_text(json.dumps(dict(schema=1,
+                input_sha256=report['input_sha256'], session=str(args.session.resolve()),
+                requests=len(frozen_requests), files=frozen_files,
+                baseline_probe_sha256=hashlib.sha256(args.probe.read_bytes()).hexdigest(),
+                adapter_sha256=hashlib.sha256(args.converter.read_bytes()).hexdigest()), indent=2))
         (args.output/'report.json').write_text(json.dumps(report, indent=2))
         print(json.dumps({key:value for key,value in report.items() if key!='adapter'}, indent=2))
 
@@ -317,4 +363,6 @@ if __name__ == '__main__':
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--converter', type=Path, default=WS/'build/d1max_localization/perception_rays_offline')
     parser.add_argument('--probe', type=Path, default=WS/'build/plan_env/offline_projected_rays_probe')
+    parser.add_argument('--freeze-native-inputs', action='store_true',
+        help='Preserve bounded projected CDRs and exact native requests for same-input comparisons')
     run(parser.parse_args())

@@ -5,7 +5,166 @@
 使用、配置、坐标系、故障恢复与验收边界请看 [当前实现说明](ROBUST_LOCALIZATION.md)。
 下文双 EKF / MC 积分说明仅适用于显式选择 `legacy_ekf` 的历史后端，不代表当前默认链路。
 
+## 2026-10-02：启动全局重定位
+
+新版开发入口在 `lio_pcd` 中加入 **全图搜索 → 初值 → 原生 GICP 连续确认 → 连续融合位姿 → BT 规划**。
+`single_floor_session` 仍是正式会话入口。新开发会话调用 `global_localization.launch.py`，它运行
+`GlobalLioLocalizer` 替代（不同时运行）旧种子节点，复用旧节点的匹配确认和融合合同。
+已封存的发布包没有自动更新；必须整套构建、验收、封装后切换，不能只替换 XML 或 Python。
+Web 启停、RViz 手动初值的职责不变。此功能不连接 SDK、不申请控制权，也不授权运动。
+
+启动时使用同一份**原坐标定位 PCD**和 Faster-LIO 已去畸变的双雷达 `lio/deskewed`（tracking 坐标）。
+与 PCT 的平整规划地图无关，不借用建图轨迹或用户初值进行全局搜索，不压平地图、不增加假 TF。
+原始 XYZ 的三维窗口建立 FPFH 索引，RANSAC 提出候选，ICP 在原图上精配准。
+默认检查全部有几何证据的有界子图；描述子仅排序，不以“前八个最相似”代替全图检查。
+多候选按 XYZ 和姿态去重；不同楼层/远处相似走廊仍单独竞争。
+重叠率、残差、几何可观测性及候选分差不足时不提交种子，保留手动入口。全局唯一性不是数学保证。
+算法方法参考 [Open3D 官方全局配准流程](https://www.open3d.org/docs/release/tutorial/pipelines/global_registration.html)。
+
+唯一参数入口是 `lio_localizer.global_relocalization.*`，见 `config/global_relocalization.yaml`；
+`.enabled: false` 可恢复只用手动初值。`registration.backend: fpfh_ransac` 与纯算法模块分离，
+上层不依赖 FPFH/PCT/SCAN 内部实现。当前仅此全局搜索后端可选，不声称已集成其他算法。
+默认两线程、一个独立进程、一个请求、一个扫描槽；索引以地图内容/配置/库版本哈希缓存，
+首建 120 秒、每次搜索 25 秒上限，超时终止 worker，不阻塞现有高频估计或无界堆积。
+
+- 初始化要求 LIO 就绪、机头状态新鲜且前向、静止至少 0.6 秒。保存扫描时刻的插值 LIO 位姿；返回后按真实 LIO 增量传播一次，不能用最新 TF 配旧点云。
+- 地图/会话/局部 epoch/请求身份必须一致；搜索中明显移动则拒绝结果。tracking 初值不再叠加机身高度或 SDK 朝向。
+- `lio_localizer` 仍是唯一种子接收者；候选经原有 `fused_icp/initialpose` 进入匹配器，至少三次新扫描确认，且融合输出有效后才显示 ready。候选不直接发布机器人 TF。
+- 手动 RViz 初值优先，立即退役 worker 和旧请求。已有种子/任务失锁后不自动进行全图跳转；LIO 重置后需重新给手动初值，不复活原运动授权。
+- BT 的 `InitialLocalization` 节点有 60 秒任务等待期限；失败不计算路线。成功后记忆推进，普通地图校正不会重回此节点。
+- 诊断 `/d1max/localization/global_relocalization/status` 和会话 `status.json.global_relocalization`。初次搜索失败可显式调用 `global_relocalization/retry` (`std_srvs/srv/Trigger`)，最多两次搜索；已有种子后只能手动给初值。
+
+### 离线复现与已验证边界
+
+工具只读 PCD / sqlite rosbag，不初始化 ROS、不发布初值/目标、不连接机器人：
+
+```bash
+source /opt/ros/humble/setup.bash
+OMP_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2 /usr/bin/python3 tools/validation/global_relocalization_probe.py \
+  --map '/home/dndx/智元四足机器人D1 Max二次开发文档资料包v0.1.0/d1max_ros2/map_manager/data/processed/20260923_141005_sc-pgo-0923-crossfloor-structure-v1_2c7218/processed_map.pcd' \
+  --bag experiments/near_field_feasibility/20260927_live_static_W2CBQT/capture01/bag \
+  --topic /d1max/localization/perception/rays_raw --static-raw \
+  --cache experiments/global_relocalization_20261002/cache \
+  --output experiments/global_relocalization_20261002/recorded_static_reproduce.json
+```
+
+该历史包未录 deskewed，以上**仅静止原始扫描**测试先核验录制的 lidar→tracking 恒等变换、
+LIO 速度和实际位移；不能用于运动中的去畸变验收。动态输入应使用 `--bag ...` 的默认 deskewed 话题。
+`--scan query.pcd` / `--scan query.npz` 支持独立查询云；`--crop-center X Y Z` 是地图裁剪夹具，不冒充实机证据。
+
+`experiments/global_relocalization_20261002/recorded_static_04.json`：未使用初值搜索，结果
+tracking XYZ 约 `(0.545, 1.732, -0.022)`，重叠率 1.0、RMSE 0.088 m、候选分差 0.124，热缓存总耗时约 20.9 秒。
+与历史 TF / LIO 记录位置一致，**不是定位精度 GT，也未完成本轮实机或动态自动初始化验收**。
+原生 Open3D 另有未知刚体姿态正例及完全重复上下层拒绝反例；协议测试覆盖手动抢占、epoch/地图错配、迟到结果、运动/断流和确认超时；BT 覆盖等待、取消、超时及不重入。
+稀疏扫描的特征一致率与几何重叠率分别统计；不能拿 Open3D 0.14 RANSAC 的对应点一致率直接筛掉正确的几何候选。
+
+本轮编译输出只在 `experiments/global_relocalization_20261002/{build,install}`，未更新生产 install / 已封存发布包，未启动生产服务。正式自动初始化仍须现场静止/不同楼层/重复走廊验收。
+旧参数 `config/localization.yaml`、旧定位节点/launch 和旧 XML 保持封存内容不变；新开发会话由 `single_floor_session`
+选择 `navigate_with_global_relocalization.xml`，新的 localization launch 先载入重定位参数再载入会话参数。
+会话可显式覆盖 `.enabled: false`。不要把新 XML 配旧 BT ELF，或把旧定位安装配新 launch。
+
+### 使用真实行为树的原始录包回放
+
+```bash
+bash tools/validation/bt_localization_replay_entry.sh \
+  --bag bags/slam_raw_20260923_010248_eb79d8 \
+  --output experiments/global_relocalization_20261002/bt_replay_reproduce \
+  --seconds 45 --rviz
+```
+
+该入口运行真正的 BehaviorTree.CPP `navigate_with_global_relocalization.xml`、Action 适配器、
+Faster-LIO、原生 GICP 和 robot_localization。Python 只负责原始消息回放和进程生命周期，
+不替代 BT、不伪造健康状态。仅回放前后雷达和前雷达 IMU，不使用录包里的旧位姿、TF 或控制。
+使用域 219、独立且仅本机回环的 Zenoh 路由，不访问 SDK。索引预热后，BT 在定位前收到一个
+只预览的地图支持目标；全图搜索时暂停虚拟时间，搜索完成后续播，不能循环旧扫描冒充新输入。
+源消息时间保持原值；固定录包接收时钟到传感器时钟的偏移只用于 `/clock`，不是物理时钟标定。
+`recorded_sim_time` 输入时钟模式必须同时满足隔离标识、指定域、Zenoh 和 `use_sim_time`；
+不能用于实机。录包没有 SDK 机头状态，仅隔离边界允许 tracking 初值，实机前向检查不变。
+
+开发版 `causal_lio_predictor` 复用封存的传播核心，只使用不晚于当前目标时刻的真实 IMU；
+略晚的样本保留到下一拍，不修改时间戳，也不放宽源龄检查。原发布入口和传播核心未替换。
+这解决了回放中“预测状态携带稍晚 IMU、原子 NavigationState 因源时间顺序错误拒收”的问题。
+BT 的跟随准备预算只在路线完成且 FollowRoute 已发出后开始，不占用初始定位等待预算。
+
+`bt_replay_03` 与修复后的 `bt_replay_04` 使用同一录包区间：自动重定位都经实际 GICP/融合确认，
+BT 的 `InitialLocalization` 成功并进入 `ComputeRouteOnce`。修复后无原子对时间顺序拒收，
+45 秒回放收到 1891 个融合位姿及 1891 个类型化导航状态，约 45 Hz。
+**连续性仍未验收**：最长输出间隔约 0.30 秒，仍有源龄相关的可用/等待转换。
+`report.json` 分别记录初始化与连续性结果，`passed` 不再以“有输出”代替连续性通过。
+本入口未启动局部地图、SCAN 或运动链，BT 跟随阶段会等待地图并按预算超时；不代表整链导航成功。
+回放结束后 RViz 保留最后一帧供检查，关闭窗口会清理此入口拥有的全部进程。
+
 Web 启动、设置初始位姿和停止；Foxglove 只看地图、实时扫描、位姿与轨迹。**不启动 Nav2、不申请 SDK 控制权、不发送速度、姿态或急停解除命令。仅 Zenoh，不使用 Fast DDS。**
+
+## 2026-10-03：实时导航状态整改（开发包，未达到连续性验收）
+
+要求分开度量：输出更新间隔、节点计算耗时、源数据龄及下游实际接收/使用时的数据龄。
+50 Hz 定时器不等于 20 ms 最坏延迟，也不代表获得了 50 Hz 的新激光观测。
+不再增加一个把同源 IMU/LIO 当作独立观测的 EKF；Faster-LIO 已进行惯性/激光状态估计，
+robot_localization 保留全局融合职责。参考 [robot_localization 官方状态估计配置](https://github.com/cra-ros-pkg/robot_localization/blob/ros2/doc/state_estimation_nodes.rst)。
+
+开发链路：真实扫描末端后验和 IMU → `RealtimeNavigationOutput` 中的因果预测 →
+连续局部 odom；原生地图匹配 → 私有全局 EKF → 有限速率的 map 校正 →
+同时间 local/global 原子状态 → BT/下游。地图校正不控制高频输出节拍。
+预测与导航输出是分离的纯算法核心，只共用一个串行 ROS 调度所有者，去掉一次进程间
+转发和等频定时器相位差；全局搜索、匹配、EKF 不在这个高频节点求解。
+
+改动及边界：
+
+- 新入口 `realtime_navigation_output` 取代开发 launch 内独立的 predictor/output 两节点；禁止同时运行两套预测器或公共 TF 写者。旧封存节点与传播核心不改。
+- `config/realtime_navigation.yaml` 记录 50 Hz 调度和 350 ms 后验预测上限，复制进入新会话并记录哈希；350 ms 不是延长 IMU 有效期。仍保留 100 ms IMU/coast 上限、真实积分缺口、旋转、不确定度、epoch 和故障限制；现有消费者后验源龄上限仍为 400 ms。
+- 原生 LIO 的非故障 `valid=false/reason=tracking` 扫描过期通知，只在同 epoch、`last_admitted_scan` 且扫描末端身份与保留后验一致时保留原后验。不能更新源时间、接收时间或续期。过期仍停止预测；退化、重置、传感器故障和未知状态立即失效。
+- 仅使用不晚于目标时刻的真实 IMU，稍晚样本留到下一拍。没有填造 IMU、发布零运动观测、重复旧姿态刷新租约或修改未验收标志。
+- 输出目标先选为不晚于 ROS 整数时钟、经浮点核心编解码仍不向前漂移的可表示时刻，再进行积分。当前 epoch 最多相差 1791 ns；不是给旧姿态重新盖接收时间。该措施消除浮点往返造成的几百纳秒“未来样本”误拒收，未放宽任何未来时间判断。
+- `/d1max/localization/navigation/realtime` 提供有限长度统计：计算耗时、调度间隔、超期计数、后验/IMU 原始源龄和 LIO 通知。`posterior_processing_sec` 是历史字段名，实际为后验源时到发布的总龄，包含输入延迟；不能据此声称测得纯 LIO 求解耗时。
+- 隔离回放增加原生 LIO 事件与真实 BT 输入诊断，不改变 BT 的接纳条件。SIGTERM/取消/ROS 关闭异常不再跳过该入口拥有的子进程清理。
+
+同包同 45 秒区间、相同地图的对照（`bt_replay_04` → `bt_replay_09_causal_wire`）：
+
+| 指标 | 分离旧链路 | 合并调度＋有界后验衔接 |
+|---|---:|---:|
+| 类型化状态数量 | 1891 | 2049 |
+| 输出平均频率 | 45.04 Hz | 48.86 Hz |
+| 最长输出间隔 | 299 ms | 199 ms |
+| 5 Hz 诊断采样的不可用转换 | 25 次 | 1 次 |
+
+新链路更新间隔 P50/P95/P99 约 20.0/22.0/38.8 ms，计算耗时 P95/P99 约
+5.7/6.8 ms、最大 9.6 ms，未超过 20 ms 计算预算。真正的下游接收间隔 P95 约 24.5 ms，
+不能拿节点计算耗时代替端到端更新间隔。这是本机短回放测量，不是硬实时或 NUC 验收。
+5 Hz 诊断没有记录每一次短暂停顿，须同时查看状态间隔；本次仍有 16 个状态间隔超过 40 ms。
+**整段连续性仍失败，不能凭接近 50 Hz 宣称满足要求。**
+
+独立只读审计原始包发现：前雷达 IMU 源间隔中位数约 5 ms，但接收间隔 P99 约
+90.3 ms、最大 116.3 ms；前后雷达的源帧间隔最大约 400 ms、记录接收间隔约 401 ms。
+因此“200 Hz 采样”不等于每 5 ms 能交付一次数据。记录缺帧的位置不能靠新的滤波器补回。
+这还不能区分驱动丢包、传输拥塞与录制漏收，须在实机的驱动/传输/接收/记录各边界对照源序号和时间。
+中心 IMU 录制接收间隔最大约 93.5 ms，没有超过 100 ms 的接收空窗；但其共享时钟、
+外参和作为 LIO 输入的动态质量未在本轮验收，不自动替换或混用偏置。
+
+`bt_replay_08_realtime_evidence` 捕获 212 个“未来样本”误拒收，最差只超前 639 ns，
+确认为浮点往返精度问题，不是毫秒级传感器时钟错误。修复后的 `bt_replay_09_causal_wire`
+未来拒收为零，源龄检查保持不变；仍有 223 个 BT 诊断使用时刻超过 IMU 源龄上限，
+以及 9 个抵达时过龄的状态。它们需要同时核对输入成批交付和上一状态的龄。
+最长断档处仍是后验源龄超过 350 ms（原包中前后雷达均存在约 400 ms 帧间隔）。
+真实机器人时钟/网络延迟上界尚未标定，不能放宽所有消费者来掩盖剩余输入问题。
+
+复现（输出目录须不存在或为空；仅本机隔离 Zenoh，无 SDK/运动）：
+
+```bash
+bash tools/validation/bt_localization_replay_entry.sh \
+  --bag bags/slam_raw_20260923_010248_eb79d8 \
+  --output experiments/global_relocalization_20261002/realtime_reproduce \
+  --seconds 45 --timing-backend integrated
+```
+
+`--timing-backend split` 可单独复现 250 ms 分离节点对照。
+新报告保存源/接收更新间隔、IMU/后验源龄、原始输入审计、原生 LIO 通知、BT 使用时龄及清理结果。
+初始化成功与连续性通过分别判定；没有启动局部规划/控制，不能拿本回放冒充导航到达。
+开发 install 在 `experiments/global_relocalization_20261002/install`；正式发布入口仍核验
+原封存 563 文件，未自动替换、部署、连接 SDK 或 push。下一步必须先解决/验收原始采集交付，
+然后在同一 BT 输入上重新测量连续性、最坏间隔和端到端数据龄。
+定位包 19 个 CTest 目标及 BT 4 个 CTest 目标通过，覆盖因果样本、原后验到期、故障/重置不保留、
+IMU/旋转边界、时间戳精度往返和原始包只读审计；组件测试通过不代表实机连续定位通过。
 
 ## 历史后端的数据与算法（仅 legacy_ekf）
 

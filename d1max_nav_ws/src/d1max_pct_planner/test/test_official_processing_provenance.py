@@ -93,7 +93,7 @@ def test_conditioned_build_labels_derived_surfaces_without_object_payload(tmp_pa
     processing_manifest.write_text(json.dumps(record))
     original_hash = pipeline.sha256(record['source_path'])
     config.update(schema_version=1, output_directory=str(tmp_path / 'result'),
-                  vendor_root='/home/dndx/d1max_nav_ws/src/pct_planner_vendor',
+                  vendor_root='${D1MAX_NAV_ROOT}/src/pct_planner_vendor',
                   pct={'resolution': .2, 'slice_dh': .5, 'ground_height': -.5,
                        'traversability': {'kernel_size': 3, 'interval_min': .55, 'interval_free': .7,
                                           'slope_max_rad': .4, 'step_max': .17, 'standable_ratio': .2,

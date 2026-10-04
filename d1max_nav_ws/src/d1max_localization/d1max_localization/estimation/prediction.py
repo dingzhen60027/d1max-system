@@ -46,6 +46,12 @@ class PredictionLimits:
 
 
 class InertialPredictor:
+    # Receipt admission is independent of prediction/IMU validity. The legacy
+    # noncausal consumer retains its original 10 ms allowance; the explicitly
+    # causal consumer can buffer InputClock's 50 ms phase window without using
+    # those samples before their original acquisition time.
+    _receive_future_sec = 0.01
+
     def __init__(
         self, limits=PredictionLimits(), odom="d1max_loc_odom", tracking="d1max_loc_tracking"
     ):
@@ -97,7 +103,7 @@ class InertialPredictor:
         stamp = positive_time(stamp)
         a = vector(acceleration, bound=200.0)
         w = vector(angular, bound=30.0)
-        if not fresh(stamp, now, 0.2):
+        if not fresh(stamp, now, 0.2, future=self._receive_future_sec):
             self.rejected += 1
             return False
         if self.imu and stamp <= self.imu[-1][0]:

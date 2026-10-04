@@ -5,6 +5,7 @@
 #include <cmath>
 #include <cstdint>
 #include <cstring>
+#include <cstdlib>
 #include <functional>
 #include <limits>
 #include <memory>
@@ -90,10 +91,16 @@ public:
   : Node("dual_lidar_adapter")
   {
     const auto clock_mode=declare_parameter<std::string>("input_clock_mode","strict");
-    if(clock_mode!="strict" && clock_mode!="estimate_shared_epoch")throw std::invalid_argument("invalid input_clock_mode");
+    if(clock_mode!="strict" && clock_mode!="estimate_shared_epoch" && clock_mode!="recorded_sim_time")throw std::invalid_argument("invalid input_clock_mode");
+    const bool recorded=clock_mode=="recorded_sim_time";
+    const auto env=[](const char*key){const auto*v=std::getenv(key);return v?std::string(v):std::string();};
+    if(recorded && (!get_parameter("use_sim_time").as_bool() ||
+        env("D1MAX_OFFLINE_ZENOH_TEST")!="1" || env("D1MAX_NAV_ISOLATED")!="1" ||
+        env("ROS_DOMAIN_ID")!="219" || env("RMW_IMPLEMENTATION")!="rmw_zenoh_cpp"))
+      throw std::invalid_argument("recorded clock requires isolated Zenoh and simulated time");
     const auto clock_samples=declare_parameter<int>("input_clock_samples",100);
     if(clock_samples<2 || clock_samples>10000)throw std::invalid_argument("invalid input_clock_samples");
-    input_clock_=std::make_unique<d1max_localization::InputClock>(clock_mode=="estimate_shared_epoch",clock_samples,declare_parameter<double>("input_clock_min_span",1.0));
+    input_clock_=std::make_unique<d1max_localization::InputClock>(clock_mode=="estimate_shared_epoch",clock_samples,declare_parameter<double>("input_clock_min_span",1.0),recorded);
     clock_diagnostics_=create_publisher<diagnostic_msgs::msg::DiagnosticArray>("/diagnostics",10);
     clock_timer_=create_wall_timer(std::chrono::milliseconds(500),[this]{publishClockStatus();});
     replay_sub_=create_subscription<rosgraph_msgs::msg::Clock>("/clock",rclcpp::SensorDataQoS(),[this](rosgraph_msgs::msg::Clock::ConstSharedPtr){
@@ -157,13 +164,17 @@ public:
     perception_rays_enabled_ = declare_parameter("perception_rays.enabled", false);
     perception_rays_topic_ = declare_parameter<std::string>(
       "perception_rays.output_topic", "/d1max/localization/perception/rays_raw");
-    const auto ray_max_points = declare_parameter<int>("perception_rays.max_input_points", 250000);
-    perception_ray_options_.min_range = min_range_;
-    perception_ray_options_.max_range = max_range_;
+    const auto ray_max_points = declare_parameter<int>("perception_rays.max_input_points",
+      d1max_localization::perception_rays::kMaxAcquisitionPoints);
+    // Independent acquisition contract. LIO near/far registration filters
+    // must not remove a real near hit or a useful far crossing ray here.
+    perception_ray_options_.min_range = declare_parameter<double>("perception_rays.min_range", 0.0);
+    perception_ray_options_.max_range = declare_parameter<double>("perception_rays.max_range", 1000.0);
     perception_ray_options_.scan_period = scan_period_sec_;
     perception_ray_options_.relative_timestamp_scale = relative_timestamp_scale_;
     if (perception_rays_enabled_) {
-      if (ray_max_points < 1 || ray_max_points > 1000000 || perception_rays_topic_.empty()) {
+      if (ray_max_points < 1 || ray_max_points >
+        static_cast<int>(d1max_localization::perception_rays::kMaxAcquisitionPoints) || perception_rays_topic_.empty()) {
         throw std::invalid_argument("invalid perception_rays configuration");
       }
       perception_ray_options_.max_input_points = static_cast<uint32_t>(ray_max_points);

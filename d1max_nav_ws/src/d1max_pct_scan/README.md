@@ -1,12 +1,85 @@
-# D1 Max：PCT 全局规划 + SCAN 局部规划
+# D1 Max 导航会话与规划适配
 
-## 当前入口：RViz 定位与规划联调（不控制机器人）
+## 当前主线（2026-10-04）
 
-Web 的 **“定位与规划”** 是当前统一入口：只负责连接和启停，位姿与目标全部在 RViz 操作。它调用受托管的 `start_live_planning_view.sh`，与下文的 `start_pct_scan.sh` 离线模拟入口分开。不启动速度跟踪器、SDK 控制或运动执行，不改原始地图，也不修改通信中间件。
+唯一任务与运动主线是现有 BehaviorTree.CPP 导航图，由
+`d1max_pct_scan.navigation_session` 提供公开会话接口，正式操作统一走
+`tools/navigation_entry.sh` 的封存版本入口。架构面向室内外、多楼层，
+单楼层只是当前测试配置。旧 `single_floor_session` / `single_floor_entry.sh`
+是同一实现与旧封存包的兼容名称，不构成第二个任务管理者。
+当前 floor-segment 执行合同、楼梯限制和物理验收状态保持不变。
+显示只使用一个 RViz：全局/局部在导航面板中切换；局部布局关闭整栋建筑图层，
+跟随机身显示滑动地图。不重复打开第二个窗口、不触发重新定位或重新规划。
+`planning_only` / `execution`
+是同一运行图的两种用途，不是两套上层；PCT/SCAN 是当前可替换的算法后端。
+当前状态与边界以[项目 README](../../README.md)及其状态文档为准。
 
-新增的 **`start-motion` 显式执行入口** 复用同一定位/规划会话，另启动跟踪、碰撞保护与 SDK 门控；启动仍未使能，操作在 RViz「运动控制」面板。普通 `start` 和 Web 默认行为不变。使用前必须阅读 [运动接入与验收边界](MOTION_INTEGRATION.md)：当前仅允许低速平地，未完成的标定/实机验收不会被自动放行。
+### 系统整改：任务事务、调度与证据一致性（2026-10-04）
+
+本轮修改同一主线，不更换 PCT、原生 SCAN/GridMap、Zenoh 或 SDK 写者，
+不以放宽未知空间、扩大近身删点盒或置真验收标志消除故障。
+
+| 边界 | 整改后的合同 |
+| --- | --- |
+| 手动初值 | 原始 RViz 点击先验证；BT 撤许可并等待旧工作退役及必要停稳，才允许 COMMIT。定位 owner 返回实际应用的 epoch/seed；新身份连续稳定后才接纳新目标。 |
+| 消息顺序 | epoch 优先，同 epoch 才比较源时；旧包、重复包、外来包不刷新租约，新 epoch 的源时小幅回退也不能被隐藏或给旧任务续权。 |
+| 几何准备 | 参考支撑和跟踪几何分别使用一个 worker、一个可替换待处理槽和一个结果槽；工作线程只读请求，任务线程核验版本、实际接入及期限后提交。 |
+| 控制与 SDK | 高频控制不再重建完整样条/索引；SDK steady-clock 唯一 writer 与低频 JSON/发布分离。控制权提交、撤销和最终速度提交保持串行顺序，错过周期不追发旧命令。 |
+| 安全采集 | LIO 范围过滤与安全测量回波过滤分开；适配、投影、原生解码及安全入口统一每传感器 100000 点预算。无效回波仍是未知，不生成清空射线。 |
+| 停稳与延迟 | 同一哈希记录的 `execution_timing`、`stationary_evidence` 供 SDK、BT、跟踪及安全门控使用。反应范围包含传感器源龄、命令管线、writer 周期和时钟不确定度；旧缺项记录拒绝执行。 |
+| 组件存活 | 实际回调进展与传感器有效性分开。host heartbeat + steady 超时监督线程停滞；故障交由原 BT owner 撤授权并 drain，不另建任务或自动重启续跑。 |
+
+新的会话要求 `bt_initial_pose_transaction_v1` 和 `functional_liveness_v1`；
+接口预检实际序列化 `PrepareInitialPose` 与 `InitialPoseOutcome`，不能混用旧会话。
+参数生成保持原坐标地图、连续 odom、原生碰撞语义及单个 RViz。
+
+隔离编译已覆盖 Navigator、新接口、跟踪器、双雷达适配器、原生 SCAN 和 SDK bridge/mock/checker。
+Python 回归含真实地图资料的会话生成、准入及退役竞态、同输入同步/异步几何一致性、
+坏候选/迟到结果、双雷达预算与原始源龄、MC 噪声策略的正反例。
+原生回归包含未知/证据不足、低矮障碍、缺失支撑、制动扫掠以及 SDK 失权/指令过期；
+这不是整图或实机导航成功的替代证据。
+
+本轮完整 Python 回归为 2017 项通过、1 项因大型审计地图未安装而跳过；
+最后的启动预算一致性修改另行复跑 129 项相关合同，全部通过。
+隔离原生测试为 BT 233 项、跟踪器 152 项、安全采集 17 项、射线解码 49 项、
+制动扫掠 18 项；SDK 11 组测试全部通过。跟踪准备 worker 的 9 个竞态正反例
+另重复 100 轮通过。组件测试不能代替实时性、整图运行或物理停车验收。
+
+本轮结果和源码/隔离 ELF 的抽查哈希保存在
+`experiments/navigation_architecture_20261004/revision_probe.json`；同目录保存
+各组 `*-regression.xml`，可重现 Python 回归：
+
+```bash
+cd /home/dndx/d1max_nav_ws
+source /opt/ros/humble/setup.bash
+source experiments/single_floor_execution_20261003_system_v2/native/install/local_setup.bash
+source experiments/single_floor_execution_20261003_system_v2/interfaces/install/local_setup.bash
+source experiments/navigation_architecture_20261004/bt_initial_pose/install/local_setup.bash
+export D1MAX_TEST_MAP_DIRECTORY="$PWD/experiments/single_floor_execution_20261003_system_v2/map/source_identity_floor1_res015_candidate"
+PYTHONDONTWRITEBYTECODE=1 \
+PYTHONPATH="$PWD/src/d1max_navigation:$PWD/src/d1max_localization:$PWD/src/d1max_pct_scan:$PWD/src/d1max_pct_planner:$PYTHONPATH" \
+PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 /usr/bin/python3 -m pytest -q -p no:cacheprovider \
+  src/d1max_pct_scan/test src/d1max_localization/test/test_initial_pose_outcome.py
+```
+
+源码与隔离产物尚未自动部署，默认 release 指针未修改，也未启动 SDK、运动或完整 bag 回放。
+普通组件尚未全部转换为 ROS LifecycleNode；功能存活监测不能冒充完整生命周期验收。
+跨层执行模式事务、整图集成、20 ms 输出及压力测试、厂商调用阻塞/断网停车、
+MC 源时延迟、轮腿/载荷几何和实测制动仍需分别验收；源码通过不宣称物理能力已具备。
+
+以下保留旧预览入口的历史实现、用法和验收记录。旧 `start-motion`、
+`start_live_planning_view.sh` 和离线模拟脚本不得替代正式 BT 任务/运动入口；
+下文“当前”等表述仅对应各节原记录版本，不代表 2026-10-03 主线已经物理验收。
+
+## 历史入口：RViz 定位与规划联调（不控制机器人）
+
+Web 的 **“定位与规划”** 是当前统一入口：只负责连接和启停，位姿与目标全部在 RViz 操作。它调用受托管的 `scripts/planning/start_live_planning_view.sh`，与下文的 `scripts/planning/start_pct_scan.sh` 离线模拟入口分开。不启动速度跟踪器、SDK 控制或运动执行，不改原始地图，也不修改通信中间件。
+
+**`start-motion` 显式执行入口** 复用同一定位/规划会话，包含跟踪、碰撞保护与 SDK 门控；这不是当前会话已允许运动。**当前 `per_sensor_rays` 后端仍被执行入口明确禁止，物理验收标志仍为 false。** 普通 `start` 和 Web 默认仅预览。使用前必须阅读 [运动接入与验收边界](MOTION_INTEGRATION.md)，不能跳过保护或把“低速平地”解释成已验收。
 
 工作顺序：**连接传感器 → RViz 初始位姿 → 定位连续确认 → 给目标 → PCT 全局路径 → SCAN 局部样条。** 全局规划从定位得到的当前位置开始，不需要另外设置规划起点。
+
+09-27 按用户要求，默认配置为 `scan_collision_policy: official`：采用官方 SCAN 双圆柱中心查询膨胀障碍；不再要求整个包络有近期饱和自由观测，也不再追加本地 PCT 起点/样条高度否决。未知格仍保留未知数据，不等于实测自由空间；真实膨胀障碍、地图边界和输入断流仍保留。只切换规划判据，不启用 SDK 运动。旧 `observed_free` 模式仅保留供明确选择的离线对照。
 
 ### RViz 双布局
 
@@ -15,9 +88,12 @@ Web 的 **“定位与规划”** 是当前统一入口：只负责连接和启�
 - **全局规划**：跨楼层地图、可通行地面、全局路线、3D 目标手柄、机器狗 XYZ 坐标系。
 - **局部规划**：跟随机器狗，隐藏整栋建筑和全局地面；显示实时点云、原生滑动占据地图及边界、选中参考段、局部目标、搜索尝试和局部轨迹。全局路线以细线保留。
 
-滑动占据图用半透明灰色（包含地面），不把所有雷达回波涂成红色障碍；窗口边界只表示空间范围，不代表观测有效或可通行。
+滑动占据图与膨胀图采用官方 ROS 2 的 Z 高度彩虹色、Squares 显示（含地面），不再统一灰色。
+青色框是原生滑动窗口边界。局部最优样条按真实导数速度黄→红着色，附采样点；
+颜色不是可通行等级，也不是定位状态。轨迹仍须与同次原生接受结果配对后才显示。
+官方发布的这两层是占据与膨胀体素，不是另造的 ESDF 距离场。
 每次启动保存同一会话的 `global_planning.rviz`、`local_planning.rviz`，默认从全局布局进入。
-仅更新最近一次预览的布局文件可执行 `./start_live_planning_view.sh export-views`；该操作不启动后台或连接机器人。
+仅更新最近一次预览的布局文件可执行 `scripts/planning/start_live_planning_view.sh export-views`；该操作不启动后台或连接机器人。
 
 ### PCT / SCAN 接口与验收边界（2026-09-24 官方源码复核）
 
@@ -31,22 +107,26 @@ SCAN 用实时局部占据图对当前参考段搜索绕行并优化机身样条
 | PCT 全局输出 | 经过支撑与层间连接检查的地面参考线 | 不能当作实时无障碍的机身轨迹 |
 | `GroundPathBridge` | 将规划地面估计映射回原定位地图坐标 | 不能用它变形实时点云、机身或发布伪 TF |
 | SCAN 参考 | 原路线弧长、拐角与高度；地面到机身偏移只加一次 | 不能另拟合一条削掉楼梯转角的全局多项式 |
-| SCAN 输出 | 原生搜索/优化/整曲线碰撞校验后的候选样条 | 原生 `accepted` 不能绕过代际、时间和 PCT 支撑检查 |
-| PCT 地面校验 | 样条中心线下方的有效 PCT 单元及局部高度连续性 | 不是足端落点、连续扫掠体积或运动授权 |
+| SCAN 输出 | 原生搜索/优化/官方碰撞判据后的候选样条 | 原生 `accepted` 不能绕过代际、时间或成为运动授权 |
+| PCT 地面校验（旧严格模式） | 样条中心线下方的有效 PCT 单元及局部高度连续性 | 官方规划模式不追加此否决；它也不是足端或扫掠体积证明 |
 
 表中的地面输出是本项目明确约定的适配接口。官方 PCT 优化器原本输出结合
 `reference_height` 与顶空的机器人轨迹高度；本项目从 tomogram 取地面参考后才加
 一次机身高度，不能给未经适配的官方轨迹再次叠加高度。当前固定机身高度和
 `allow_unobserved` 顶空设置也不构成低顶区域或楼梯足端支撑的实机通行证明。
 
-实机射线原点还有一项已确认的边界：`dual_lidar_adapter` 合并前后雷达，
-Faster-LIO 将其统一去畸变至扫描末时刻的 tracking frame，`/lio/deskewed`
-不再携带可靠的逐点雷达来源/采集时刻；SCAN bridge 当前给这份合并点云配一个
-tracking 原点。因此“完整射线遍历”只是对**单一合成原点**的严格计算，不代表
-双雷达真实可见空间已经标定验证。后雷达约 0.7323 m 的外参平移不能靠一个
-tracking pose 消除。后续须贯穿保留 sensor ID 与采样时间，并给去畸变后的点
-匹配同样补偿后的真实射线原点，或提供有明确运动误差界的分雷达 cloud/origin 对。
-隔离测试使用每份首回波点云的真实解析原点，不覆盖这项实机近似；当前仍无运动授权。
+当前实机会话使用 `per_sensor_rays`：保留前后雷达来源、逐点采集时间及分别运动补偿的射线原点，
+以原生地图完成积分的回执确认数据新鲜度；09-27 静止录包已记录到这条支路。
+旧 `deskewed_cloud` 后端仍使用合并去畸变云与单一 tracking 原点，只是保留的兼容实现，
+不能用其旧说明否定当前逐束接口，也不能将接口接通等同于外参、自体及近身覆盖已验收。
+运动安全扫描仍使用 LIO 云、跟踪器仍使用全局里程计，这两项执行前整改未完成，
+因此当前仍无运动授权。
+
+09-27 恢复逻辑修复：同一定位轮次的短时失租约立即撤销旧局部路径，但不重设逐束地图的
+传感器屏障；观测仍按原源时间过期。原生 SCAN 因里程计未到而拒收参考线时明确回报，
+预览桥接请求全局模块重新校验并发布新代次；同一定位 context 在实际轨迹配对成功前，
+共享最多 3 次、固定 10 秒的拒收恢复预算，重新规划改变路径形状不会续期。
+坐标/几何拒收不自动重试，真正重定位仍严格隔离旧数据。源码及隔离回归完成不代表已部署。
 
 局部样条限速处理区分初态：数值静止初态可保留绕障曲线并拉长时间；运动初态
 固定真实起始位置、速度与输入加速度，重新分配时间、拟合并优化内部控制点，
@@ -56,7 +136,8 @@ tracking pose 消除。后续须贯穿保留 sensor ID 与采样时间，并给�
 
 启动时将有效 PCT 地面转换成原定位坐标的稀疏索引，绑定原始定位 PCD、tomogram
 和索引文件的 SHA-256，存入本次会话。局部回调只查索引，不重读 PCD、不临时加载全图。
-曲线跨过空洞、代价阻塞单元、错误高度带或不连续地面时，不显示成通过验证的绿线。
+旧严格模式会对曲线的空洞、代价阻塞、错误高度带或不连续地面追加拒绝。
+当前官方模式保留索引来源绑定，但不执行这项额外否决，不能把预览轨迹当作地面支撑证明。
 `ground_support_height_tolerance_m` 和 `ground_support_max_step_m` 是独立配置，
 不通过改变实时位姿或偷偷抬高路径来消除错误。
 
@@ -153,13 +234,13 @@ Web 按“定位 / 全局规划 / 局部规划”显示，不绑定算法名称�
 下次接好机器狗后，打开 [Web → 定位与规划](http://127.0.0.1:8766/#/planning)：先“连接机器狗”，等待数据就绪，再点 **“启动定位与规划”**。定位、PCT、SCAN 和 RViz 一起启动，不需要在 Web 拖箭头、填写 XYZ 或分别启动规划器。旧 Nav2 保留为明确标注的独立入口，不属于这条 PCT + SCAN 流程。
 
 1. 等待 RViz 状态提示可以给初值。用 **2D Pose Estimate** 在一楼点机身位置，拖向机头方向；这只是初始猜测，必须经过连续点云匹配确认。
-2. 定位有效后，用 **2D Goal Pose** 给一楼目标。蓝线是全局路径，橙线是局部规划器本次选中的机身高度参考段，橙点是局部目标，绿线是实际优化后的机身轨迹。
+2. 定位有效后，用 **2D Goal Pose** 给一楼目标。蓝线是全局路径，橙色细线是本次选中的机身高度参考段，橙点是局部目标，黄红渐变线及采样点是实际优化后的机身轨迹。
 3. 点顶部 **3D 目标**（快捷键 N）直接显示手柄，用 **Interact** 拖动 XYZ，右键选择“规划到此处（只显示）”。跨层可切侧栏 **3D** 视角。选择必须落在有地面支撑的位置，不能将墙面或两层之间的空中点作为目标。手柄旋转不约束终点朝向。
 4. 右键目标手柄可取消规划。重新给初值、新目标或真正的定位故障会撤销旧任务；同一定位身份的短暂数据中断只暂停路径提交与局部参考，不重新启动静态全局计算。恢复时重新核验当前位置与任务身份；超时、取消的任务不能恢复。
 
 ### RViz 怎么看
 
-侧栏 **导航监视** 给出定位、全局、局部三项状态，提供 **总览 / 跟随 / 3D** 视角按钮，以及里程计/点云数据龄、本次局部目标 XYZ 和参考段长度。异常具体原因放在“诊断详情”，不在地图上覆盖大段文字。图层按 **定位 / 全局规划 / 局部规划 / 调试** 分组；红色实时障碍默认显示，原始里程计协方差与膨胀占用默认关闭。跨层默认斜视 3D，避免上下层在俯视下重叠。
+侧栏 **导航监视** 给出定位、全局、局部三项状态，提供 **总览 / 跟随 / 3D** 视角按钮，以及里程计/点云数据龄、本次局部目标 XYZ 和参考段长度。异常具体原因放在“诊断详情”，不在地图上覆盖大段文字。局部布局默认显示按高度着色的原生占据与膨胀图、青色滑动框和优化轨迹，隐藏整栋参考地图；原始里程计协方差默认关闭。跨层全局布局默认斜视 3D，避免上下层在俯视下重叠。
 
 | 颜色 | 含义 |
 |---|---|
@@ -169,10 +250,11 @@ Web 按“定位 / 全局规划 / 局部规划”显示，不绑定算法名称�
 | 蓝色线 | 完整全局路径；仅 RViz 显示上移 0.15 m |
 | 橙色细线、蓝色点 | 实际选中的局部参考段及其锚点/投影点，Z 在机身高度 |
 | 橙色球 | 本次局部规划目标，不是全局最终目标 |
-| 绿色细线 | 同一次原生优化产生的局部轨迹，Z 在机身高度 |
-| 红色体素 / 红色尝试点 | 实时占用 / 原生局部尝试中实际受阻的位置 |
+| 黄→红轨迹与采样点 | 同一次原生优化的机身轨迹；按本条曲线速度范围归一化，黄慢红快 |
+| 高度彩虹方片 / 青色边框 | 原生占据、膨胀体素 / 滑动地图边界，不是通行等级 |
+| 红色或紫色尝试点 | 原生局部尝试中实际受阻的位置，不是已接受轨迹 |
 
-沿橙线看“选中了哪一段”，对照绿线看“实际绕到哪里”；青色点云与参考地图对不上时先查定位。全局路径消息本身仍在地面，局部参考/轨迹为机身高度 `body_height`；蓝线另有仅用于 RViz 的 0.15 m 显示偏移，避免被地面体素遮挡，该偏移不进入任何规划计算。
+沿橙色细线看“选中了哪一段”，对照黄红轨迹看“实际绕到哪里”；青色点云与参考地图对不上时先查定位。全局路径消息本身仍在地面，局部参考/轨迹为机身高度 `body_height`；蓝线另有仅用于 RViz 的 0.15 m 显示偏移，避免被地面体素遮挡，该偏移不进入任何规划计算。
 
 `LocalPlanDebug` 是独立、算法中立的只读接口。当前适配器从原生 `getLocalTarget()` 的同一份 `slice(progress, target_arc, start_pt)` 输出参考段、投影点、局部目标；**不在 Python 中另算目标冒充原生选择**。它与 `TaggedBspline` 按会话、代际、轨迹编号配对。诊断的发布时刻和样条的起始时刻含义不同，不要求二者相等，但都必须新鲜。超大诊断只停用诊断，不删改优化输入。
 
@@ -182,10 +264,10 @@ Web 按“定位 / 全局规划 / 局部规划”显示，不绑定算法名称�
 
 ```bash
 # 下列命令仅供维护；日常使用 Web 的统一启动/停止按钮。
-/home/dndx/d1max_nav_ws/start_live_planning_view.sh status
-/home/dndx/d1max_nav_ws/start_live_planning_view.sh stop
+/home/dndx/d1max_nav_ws/scripts/planning/start_live_planning_view.sh status
+/home/dndx/d1max_nav_ws/scripts/planning/start_live_planning_view.sh stop
 # 不连接、不启动节点，只检查配置并生成参数快照：
-/home/dndx/d1max_nav_ws/start_live_planning_view.sh prepare
+/home/dndx/d1max_nav_ws/scripts/planning/start_live_planning_view.sh prepare
 ```
 
 关闭 RViz、停止 Web 或任一必要节点退出，会结束本次入口拥有的定位/规划进程；传感器通信后台由原有 Connect/Disconnect 管理。Web 与旧定位入口共用启动锁，拒绝重复定位。`stop` 和规划取消都**不是机器人急停**。连接与运行状态以当前会话为准。
@@ -270,8 +352,8 @@ SHA 校验改为分块流式读取，校验值保持一致；上表临时分配�
 
 证据与复现入口：
 
-- [点云前后对照基准](/home/dndx/d1max_nav_ws/log/live_cloud_bridge_benchmark/20260924/before_after_ros.json)：`tools/benchmark_live_cloud_bridge.py`，不创建 ROS 节点。
-- [流式校验基准](/home/dndx/d1max_nav_ws/log/engineering_optimization_20260924/startup_hash.json)：`tools/benchmark_live_startup.py`，只读地图。
+- [点云前后对照基准](/home/dndx/d1max_nav_ws/log/live_cloud_bridge_benchmark/20260924/before_after_ros.json)：`tools/benchmark/benchmark_live_cloud_bridge.py`，不创建 ROS 节点。
+- [流式校验基准](/home/dndx/d1max_nav_ws/log/engineering_optimization_20260924/startup_hash.json)：`tools/benchmark/benchmark_live_startup.py`，只读地图。
 - [最终离线全链路验收](/home/dndx/d1max_nav_ws/log/offline_live_chain_smoke/20260924_150936_bcfa1a9d/report.json)：`test/offline_live_chain_smoke.py`，私有 Domain 224 / Zenoh 17467，无机器人上联。
 - [状态界面 ROS 验收](/home/dndx/d1max_nav_ws/log/offline_live_view_smoke/20260924_150222_792704c5/report.json)：包含迟到状态拒绝与干净退出。
 
@@ -303,7 +385,7 @@ SHA 校验改为分块流式读取，校验值保持一致；上表临时分配�
 
 ## 单楼层离线软件闭环（历史独立入口）
 
-以下 `start_pct_scan.sh` 是**离线软件闭环**，不连接机器人 SDK、不发送实机控制、不替换现有 Nav2/LIO 配置。使用实测 SC-PGO 地图、理想模拟里程计和局部 PCD 观测验证规划/跟踪接口。通信仅使用 `rmw_zenoh_cpp`，独立 localhost:7464、Domain 24，关闭 multicast/gossip 和所有机器人上联。
+以下 `scripts/planning/start_pct_scan.sh` 是**离线软件闭环**，不连接机器人 SDK、不发送实机控制、不替换现有 Nav2/LIO 配置。使用实测 SC-PGO 地图、理想模拟里程计和局部 PCD 观测验证规划/跟踪接口。通信仅使用 `rmw_zenoh_cpp`，独立 localhost:7464、Domain 24，关闭 multicast/gossip 和所有机器人上联。
 
 ## 数据流
 
@@ -323,10 +405,10 @@ RViz 2D Goal Pose + map系机身里程计
 ## 启停和观察
 
 ```bash
-/home/dndx/d1max_nav_ws/start_pct_scan.sh start
-/home/dndx/d1max_nav_ws/start_pct_scan.sh status
-/home/dndx/d1max_nav_ws/start_pct_scan.sh cancel
-/home/dndx/d1max_nav_ws/start_pct_scan.sh stop
+/home/dndx/d1max_nav_ws/scripts/planning/start_pct_scan.sh start
+/home/dndx/d1max_nav_ws/scripts/planning/start_pct_scan.sh status
+/home/dndx/d1max_nav_ws/scripts/planning/start_pct_scan.sh cancel
+/home/dndx/d1max_nav_ws/scripts/planning/start_pct_scan.sh stop
 ```
 
 启动会打开 RViz；`--headless` 不打开窗口。在 RViz 顶部 **2D Goal Pose** 点选目标，话题固定为 `/d1max/pct_scan/goal`。蓝色是 PCT 地面路线，SCAN marker 是局部优化结果，橙色箭头是**模拟机身**，橙色细线是保留的模拟行走轨迹。不要将其理解为真实定位结果。关闭 RViz 会结束本次受管会话；重复启动被拒绝，停止只清理本包拥有的进程。

@@ -1,11 +1,13 @@
 
 #include <plan_manage/scan_replan_fsm.h>
+#include <plan_manage/worker_lifecycle.hpp>
 #include <cmath>
 #include <stdexcept>
 #include <optional>
 #include <plan_manage/input_contract.hpp>
 #include <plan_manage/local_plan_debug.hpp>
 #include <plan_manage/reference_target.hpp>
+#include <plan_manage/visible_reference_target.hpp>
 
 namespace
 {
@@ -106,17 +108,122 @@ namespace scan_planner
     visualization_.reset(new PlanningVisualization(node_));
     planner_manager_.reset(new SCANPlannerManager);
     planner_manager_->initPlanModules(node_, visualization_);
+    solve_worker_enabled_=load_parameter<bool>(node_,"fsm.solve_worker_enabled",true);
+    require_schema_v2_=load_parameter<bool>(node_,"fsm.require_reference_schema_v2",false);
+    if (solve_worker_enabled_ && reference_path_guidance_) {
+      solve_worker_=std::make_unique<SCANPlannerManager>();
+      solve_worker_->initSolveWorker(*planner_manager_);
+      planner_manager_->releaseOwnerSolver();
+    }
+    if(load_parameter<bool>(node_,"fsm.execution_protocol",false)) {
+      const auto mode=load_parameter<std::string>(node_,"fsm.execution_transport_mode","live");
+      if(!require_schema_v2_ || !require_tagged_reference_ || std::abs(reference_path_z_offset_)>1e-9)
+        throw std::runtime_error("execution protocol requires tagged body-center reference and zero z offset");
+      std::optional<BrakingModel> braking;
+      const auto braking_record=load_parameter<std::string>(node_,"fsm.execution_braking_model_record","");
+      const auto braking_sha=load_parameter<std::string>(node_,"fsm.execution_braking_model_sha256","");
+      if(!braking_record.empty()||!braking_sha.empty())braking=BrakingModel::load(braking_record,braking_sha,mode);
+      else RCLCPP_WARN(node_->get_logger(),"No measured braking model: geometry preview only; motion proof unavailable");
+      if(braking&&load_parameter<double>(node_,"grid_map.cloud_pose_max_age",.5)>braking->sensor_source_age)
+        throw std::runtime_error("map sensor source age exceeds bound execution record");
+      execution_validator_=std::make_unique<ExecutionValidator>(node_,snapshot_pool_,self_inflation_frame_id_,mode,
+          self_double_cylinder_radius_+self_double_cylinder_offset_,std::move(braking),
+          load_parameter<bool>(node_,"fsm.writer_handoff_enabled",false));
+      execution_receipt_pub_=node_->create_publisher<ew::ReferenceReceipt>(
+          "/d1max/live_planning/execution/reference_receipt",rclcpp::QoS(2));
+      execution_support_sub_=node_->create_subscription<ew::SupportReference>(
+          "/d1max/live_planning/execution/support",rclcpp::QoS(2),
+          [this](ew::SupportReference::ConstSharedPtr m){execution_validator_->support(*m);});
+      // Control and source-measured progress touch only the locked validator
+      // ledger, never FSM/GridMap buffers. Neither waits behind map fusion.
+      execution_control_group_=node_->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
+      rclcpp::SubscriptionOptions control_options;control_options.callback_group=execution_control_group_;
+      // Latest-body inbox for the independent validator: only copy trusted
+      // source geometry under its mutex. FSM and production GridMap still
+      // consume odometry on their one writer; map integration cannot delay this
+      // safety reader's body stamp behind a 100+ ms ray transaction.
+      execution_body_sub_=node_->create_subscription<nav_msgs::msg::Odometry>(
+        "body_pose",rclcpp::SensorDataQoS().keep_last(1),
+        [this](nav_msgs::msg::Odometry::ConstSharedPtr m) {
+          const auto& p=m->pose.pose.position;const auto& q=m->pose.pose.orientation;
+          MeasuredBodyPose body{{p.x,p.y,p.z},Eigen::Quaterniond(q.w,q.x,q.y,q.z),
+            rclcpp::Time(m->header.stamp).seconds(),m->header.frame_id};
+          double yaw=0.;
+          if(measuredBodyYaw(body,self_inflation_frame_id_,node_->now().seconds(),odom_timeout_,yaw))
+            execution_validator_->body(body);
+        },control_options);
+      execution_permit_sub_=node_->create_subscription<ew::ExecutionPermit>(
+          "/d1max/live_planning/execution/permit",rclcpp::QoS(2),
+          [this](ew::ExecutionPermit::ConstSharedPtr m){execution_validator_->commit(*m);},control_options);
+      execution_handoff_sub_=node_->create_subscription<ew::ExecutionHandoffGrant>(
+          "/d1max/live_planning/execution/handoff_grant",rclcpp::QoS(2),
+          [this](ew::ExecutionHandoffGrant::ConstSharedPtr m){execution_validator_->handoff(*m);},control_options);
+      execution_prepared_sub_=node_->create_subscription<ew::PreparedMotionDemand>(
+          "/d1max/live_planning/execution/prepared_demand",rclcpp::QoS(1),
+          [this](ew::PreparedMotionDemand::ConstSharedPtr m){execution_validator_->preparedDemand(*m);},control_options);
+      execution_commit_ack_sub_=node_->create_subscription<ew::ExecutionCommitAck>(
+          "/d1max/live_planning/execution/commit_ack",rclcpp::QoS(8),
+          [this](ew::ExecutionCommitAck::ConstSharedPtr m){execution_validator_->commitAck(*m);},control_options);
+      execution_progress_sub_=node_->create_subscription<ew::TrackingProgress>(
+          "planning/tracking_progress",rclcpp::QoS(1),
+          [this](ew::TrackingProgress::ConstSharedPtr m){execution_validator_->progress(*m);},control_options);
+      execution_demand_sub_=node_->create_subscription<ew::MotionDemand>(
+          "/d1max/live_planning/execution/demand",rclcpp::QoS(1),
+          [this](ew::MotionDemand::ConstSharedPtr m){execution_validator_->demand(*m);},control_options);
+      execution_blocked_entry_sub_=node_->create_subscription<ew::MotionValidation>(
+          "/d1max/live_planning/execution/blocked_entry",rclcpp::QoS(4),
+          [this](ew::MotionValidation::ConstSharedPtr m){execution_validator_->submitBlockedEntry(*m);},control_options);
+      execution_admission_sub_=node_->create_subscription<ew::TrajectoryAdmission>(
+          "/d1max/live_planning/execution/admission",rclcpp::QoS(1),
+          [this](ew::TrajectoryAdmission::ConstSharedPtr m){execution_validator_->submitCandidateEntryRejection(*m);},control_options);
+      execution_proposal_sub_=node_->create_subscription<ew::ReferenceProposal>(
+          "/d1max/live_planning/execution/reference_proposal",rclcpp::QoS(1),
+          [this,mode](ew::ReferenceProposal::ConstSharedPtr m){
+            ew::ReferenceReceipt ack;ack.version=m->version;ack.proposal_id=m->proposal_id;
+            ack.expected_version=m->expected_version;ack.expected_trajectory_id=m->expected_trajectory_id;
+            ack.source_stamp=node_->now();ack.valid_until=node_->now()+rclcpp::Duration::from_seconds(.5);
+            ack.transport_mode=mode;ack.reason="reference_contract_rejected";
+            const double age=(node_->now()-rclcpp::Time(m->source_stamp)).seconds();
+            const auto current=execution_validator_->committedVersion();
+            const bool expected=current?(*current==m->expected_version && sameExecutionTask(*current,m->version) &&
+              execution_validator_->committedTrajectory()==m->expected_trajectory_id):m->expected_version.task_id.empty();
+            if(m->transport_mode==mode&&!m->proposal_id.empty()&&age>=-.02&&age<=1.&&
+               rclcpp::Time(m->valid_until)>node_->now()&&m->version==executionVersion(m->reference)&&expected&&
+               m->reference.point_reference=="body_center"&&m->reference.path.header.frame_id==self_inflation_frame_id_&&
+               !m->reference.path.poses.empty()) {
+              execution_validator_->cancelPending();
+              execution_proposal_=*m;
+              typedPathCallback(std::make_shared<ew::ReferencePath>(m->reference));
+              ack.accepted=have_target_&&reference_generation_==m->reference.generation;
+              ack.reason=ack.accepted?"pending_reference_received_not_motion_authority":"reference_geometry_rejected";
+            }
+            execution_receipt_pub_->publish(ack);
+          });
+      // Publish immediately after the writer's fusion transaction. A second
+      // independent 200 ms timer can add an entire stale-map cycle by phase.
+      // The 20 Hz validator thread still only reads immutable snapshots.
+      planner_manager_->grid_map_->setCollisionUpdateCallback([this]{
+        if(snapshot_pool_.publishValidation(*planner_manager_->grid_map_,node_->now().nanoseconds(),std::chrono::steady_clock::now()) &&
+           execution_validator_) execution_validator_->snapshotPublished();
+        if(execution_validator_&&execution_validator_->slowSnapshotWanted()&&
+           snapshot_pool_.publishSolver(*planner_manager_->grid_map_,node_->now().nanoseconds(),std::chrono::steady_clock::now()))
+          execution_validator_->admissionSnapshotPublished();
+      });
+    }
     // Zero keeps the upstream smoothness/collision/feasibility objective.
     // Optional reference attraction is a D1 extension, not a mode-3 requirement.
 
     /* callback */
-    exec_timer_ = node_->create_wall_timer(std::chrono::milliseconds(10),
+    exec_timer_ = node_->create_wall_timer(std::chrono::milliseconds(50),
                                            std::bind(&SCANReplanFSM::execFSMCallback, this));
     safety_timer_ = node_->create_wall_timer(std::chrono::milliseconds(50),
                                              std::bind(&SCANReplanFSM::checkCollisionCallback, this));
     odom_sub_ = node_->create_subscription<nav_msgs::msg::Odometry>(
         "body_pose", rclcpp::SensorDataQoS(),
         std::bind(&SCANReplanFSM::odometryCallback, this, std::placeholders::_1));
+    tracking_progress_sub_=node_->create_subscription<d1max_planning_interfaces::msg::TrackingProgress>(
+        "planning/tracking_progress",rclcpp::QoS(1).best_effort(),
+        std::bind(&SCANReplanFSM::trackingProgressCallback,this,std::placeholders::_1));
     if (max_replan_interval_ > 0.0)
       cloud_health_sub_ = node_->create_subscription<sensor_msgs::msg::PointCloud2>(
           "cloud", rclcpp::SensorDataQoS(), [this](sensor_msgs::msg::PointCloud2::ConstSharedPtr msg) {
@@ -274,8 +381,7 @@ namespace scan_planner
     {
       std::vector<Eigen::Vector3d> full_reference{odom_pos_};
       full_reference.insert(full_reference.end(), waypoints.begin(), waypoints.end());
-      discrete_reference_.set(full_reference);
-      discrete_progress_ = 0.0;
+      discrete_progress_ = setReferenceFromBody(discrete_reference_, odom_pos_, waypoints);
       end_vel_.setZero();
       have_target_ = true;
       have_new_target_ = true;
@@ -428,10 +534,23 @@ namespace scan_planner
       RCLCPP_WARN(node_->get_logger(), "Reject reference from wrong session or old/duplicate generation");
       return;
     }
+    if(execution_validator_&&msg->path.poses.empty()) {
+      // A task-scoped higher-generation cancellation retires geometry before
+      // publishing its ACK. It is not an unsuccessful replacement candidate,
+      // and must never be swallowed by the incumbent's visualization path.
+      if(msg->schema_version!=2||!execution_validator_->cancelReference(executionVersion(*msg))) {
+        RCLCPP_WARN(node_->get_logger(),"Reject cancellation without matching native owner");return;
+      }
+      execution_proposal_.reset();
+    }
+    cancelSolveWorker();
+    tracking_progress_.reset();
+    reference_metadata_=*msg;
     // SingleThreadedExecutor: input replacement and trajectory publication are
     // serialized. Revoke the previous route even when the new route is invalid.
     have_reference_generation_ = true;
     reference_generation_ = msg->generation;
+    force_visible_side_target_=blocked_entry_replan_pending_=false;
     accepted_curve_id_ = -1;
     predecessor_id_ = 0;
     predecessor_safe_ = false;
@@ -452,9 +571,21 @@ namespace scan_planner
     changeFSMExecState(WAIT_TARGET, "REFERENCE_REPLACE");
     if (msg->path.poses.empty())
     {
-      if (have_odom_ && (node_->now() - last_odom_time_).seconds() <= odom_timeout_)
+      if (!execution_validator_ && have_odom_ && (node_->now() - last_odom_time_).seconds() <= odom_timeout_)
         callEmergencyStop(odom_pos_);
       RCLCPP_INFO(node_->get_logger(), "Reference generation %lu canceled", reference_generation_);
+      return;
+    }
+    if ((require_schema_v2_ && msg->schema_version!=2) ||
+        (msg->schema_version==2 &&
+         ((msg->point_reference!="ground" && msg->point_reference!="body_center") ||
+          (msg->point_reference=="body_center" && std::abs(reference_path_z_offset_)>1e-9) ||
+          msg->task_id.empty() || msg->route_id.empty() || msg->route_hash.empty() ||
+          msg->map_version_id.empty() || msg->segment_id.empty() ||
+          msg->point_segment_ids.size()!=msg->path.poses.size() ||
+          msg->point_segment_kinds.size()!=msg->path.poses.size() ||
+          msg->point_required_modes.size()!=msg->path.poses.size()))) {
+      publishInvalidLocalPlanDebug("invalid_reference_schema",true);
       return;
     }
     pathCallback(std::make_shared<nav_msgs::msg::Path>(msg->path));
@@ -470,7 +601,45 @@ namespace scan_planner
       tagged.generation = reference_generation_;
       tagged.frame_id = self_inflation_frame_id_;
       tagged.trajectory = trajectory;
+      tagged.schema_version=reference_metadata_.schema_version;
+      tagged.point_reference="body_center";
+      tagged.task_id=reference_metadata_.task_id;
+      tagged.route_id=reference_metadata_.route_id;
+      tagged.route_hash=reference_metadata_.route_hash;
+      tagged.map_version_id=reference_metadata_.map_version_id;
+      tagged.segment_id=reference_metadata_.segment_id;
+      tagged.segment_kind=reference_metadata_.segment_kind;
+      tagged.required_mode=reference_metadata_.required_mode;
+      tagged.anchor_revision=reference_metadata_.anchor_revision;
+      tagged.map_geometry_revision=reference_metadata_.map_geometry_revision;
+      tagged.anchor_id=reference_metadata_.anchor_id;
+      tagged.context_sequence=reference_metadata_.context_sequence;
+      tagged.localization_epoch=reference_metadata_.localization_epoch;
+      tagged.localization_seed_id=reference_metadata_.localization_seed_id;
+      if (const auto &join=planner_manager_->acceptedJoinEvidence()) {
+        tagged.valid_start_time=join->curve_time;
+        tagged.valid_start_arc_length=join->arc_length;
+        tagged.join_source_stamp=rclcpp::Time(
+            static_cast<std::int64_t>(std::llround(join->measured.source_stamp*1e9)),
+            node_->get_clock()->get_clock_type());
+        tagged.join_pose.position.x=join->measured.position.x();
+        tagged.join_pose.position.y=join->measured.position.y();
+        tagged.join_pose.position.z=join->measured.position.z();
+        tagged.join_pose.orientation.x=join->measured.orientation.x();
+        tagged.join_pose.orientation.y=join->measured.orientation.y();
+        tagged.join_pose.orientation.z=join->measured.orientation.z();
+        tagged.join_pose.orientation.w=join->measured.orientation.w();
+        tagged.join_twist.linear.x=join->velocity.x();
+        tagged.join_twist.linear.y=join->velocity.y();
+        tagged.join_twist.linear.z=join->velocity.z();
+        tagged.join_acceleration.linear.x=join->acceleration.x();
+        tagged.join_acceleration.linear.y=join->acceleration.y();
+        tagged.join_acceleration.linear.z=join->acceleration.z();
+        tagged.join_acceleration_valid=join->acceleration_valid;
+      }
       tagged_bspline_pub_->publish(tagged);
+      if(execution_validator_&&execution_proposal_&&execution_proposal_->reference.generation==tagged.generation)
+        execution_validator_->candidate(tagged,*execution_proposal_);
     }
   }
 
@@ -487,6 +656,12 @@ namespace scan_planner
 
   void SCANReplanFSM::publishInvalidLocalPlanDebug(const std::string &phase, bool force)
   {
+    // An unsuccessful candidate is not an invalidation of the BT-committed
+    // trajectory. Only the independent validator's actual proof describes it.
+    if(phase!="cancelled"&&execution_validator_&&publishExecutionLedgerDebug())return;
+    // A source gap suspends proof, not the immutable accepted preview geometry.
+    // Collision, cancellation and every other failure permanently revoke it.
+    if (phase!="waiting_sensor_map" && phase!="waiting_recheck") accepted_preview_debug_.reset();
     if (!local_plan_debug_pub_) return;
     if (!force && have_local_debug_state_ && last_local_debug_phase_ == phase &&
         last_local_debug_generation_ == reference_generation_) return;
@@ -512,7 +687,10 @@ namespace scan_planner
       message->predecessor_id = predecessor_id_;
       message->predecessor_safe = predecessor_safe_;
       message->predecessor_check_stamp = predecessor_check_stamp_;
-      local_plan_debug_pub_->publish(*message);
+      accepted_preview_debug_=*message;
+      accepted_curve_context_sequence_=planner_manager_->grid_map_->localizationContextSequence();
+      if(execution_validator_)execution_validator_->candidateDebug(*message);
+      else local_plan_debug_pub_->publish(*message);
       accepted_curve_generation_ = reference_generation_;
       accepted_curve_id_ = static_cast<std::int64_t>(plan_id);
       have_local_debug_state_ = true;
@@ -521,11 +699,91 @@ namespace scan_planner
       return;
     }
     const auto reason = selected.size() > kMaxLocalDebugReferencePoints ? "debug_overflow" : "debug_invalid";
+    accepted_preview_debug_.reset();
     local_plan_debug_pub_->publish(makeInvalidLocalPlanDebug(
         header, navigation_session_id_, reference_generation_, plan_id, reason));
     have_local_debug_state_ = true;
     last_local_debug_phase_ = reason;
     last_local_debug_generation_ = reference_generation_;
+  }
+
+  bool SCANReplanFSM::publishExecutionLedgerDebug()
+  {
+    if(!execution_validator_||!local_plan_debug_pub_)return false;
+    const auto view=execution_validator_->committedView();if(!view)return false;
+    const auto& spline=view->spline;
+    const auto now=node_->now();
+    const bool fresh=view->proof&&view->proof->valid&&
+      rclcpp::Time(view->proof->valid_until)>now&&
+      (now-rclcpp::Time(view->proof->body_source_stamp)).seconds()<=odom_timeout_;
+    if(fresh&&view->debug) {
+      auto debug=*view->debug;debug.header=localPlanDebugHeader();debug.phase="accepted";debug.valid=true;
+      debug.checked_map_source_stamp_ns=std::min(rclcpp::Time(view->proof->front_ray_source_stamp).nanoseconds(),
+                                                 rclcpp::Time(view->proof->rear_ray_source_stamp).nanoseconds());
+      debug.checked_body_source_stamp_ns=rclcpp::Time(view->proof->body_source_stamp).nanoseconds();
+      debug.checked_map_revision=view->proof->map_snapshot_revision;
+      debug.checked_context_sequence=view->proof->version.context_sequence;
+      local_plan_debug_pub_->publish(debug);
+      Eigen::MatrixXd points(3,spline.trajectory.pos_pts.size());Eigen::VectorXd knots(spline.trajectory.knots.size());
+      for(std::size_t i=0;i<spline.trajectory.pos_pts.size();++i) {
+        const auto& p=spline.trajectory.pos_pts[i];points.col(i)=Eigen::Vector3d(p.x,p.y,p.z);
+      }
+      for(std::size_t i=0;i<spline.trajectory.knots.size();++i)knots[i]=spline.trajectory.knots[i];
+      UniformBspline curve(points,3,.1);curve.setKnot(knots);visualization_->displayOptimalTraj(curve,0);
+    } else {
+      local_plan_debug_pub_->publish(makeInvalidLocalPlanDebug(localPlanDebugHeader(),spline.session_id,
+        spline.generation,static_cast<std::uint64_t>(spline.trajectory.traj_id),
+        view->proof&&!view->proof->valid?view->proof->reason:"waiting_current_validation"));
+    }
+    return true;
+  }
+
+  SCANReplanFSM::PreviewRecheck SCANReplanFSM::revalidatePreviewIncumbent()
+  {
+    // The heading contract can only be enabled in explicit official-policy,
+    // per-sensor-ray, no-motion preview. Default/execution paths never use this.
+    if (!reference_path_guidance_ || !require_tagged_reference_ || !have_target_ ||
+        !planner_manager_->hasPreviewHeadingContract() || !accepted_preview_debug_ ||
+        accepted_curve_generation_!=reference_generation_ || accepted_curve_id_<=0 ||
+        accepted_curve_id_!=planner_manager_->local_data_.traj_id_ ||
+        accepted_preview_debug_->plan_id!=static_cast<std::uint64_t>(accepted_curve_id_))
+      return PreviewRecheck::Unavailable;
+    const auto map=planner_manager_->grid_map_;
+    if (accepted_curve_context_sequence_==0 ||
+        accepted_curve_context_sequence_!=map->localizationContextSequence()) {
+      accepted_preview_debug_.reset();
+      return PreviewRecheck::Unavailable;
+    }
+    const auto sources_fresh=[&]() {
+      const auto now=node_->now();
+      const double age=(now-last_odom_time_).seconds();
+      return have_odom_ && age>=0. && age<=odom_timeout_ &&
+          map->integratedCloudFreshAt(now.nanoseconds());
+    };
+    if (!sources_fresh()) return PreviewRecheck::Stale;
+    const auto source_stamp=map->latestCloudStampNs();
+    const auto body_stamp=last_odom_time_.nanoseconds();
+    const auto context=map->localizationContextSequence();
+    const auto revision=map->occupancyRevision();
+    const auto checked=planner_manager_->recheckPreviewTrajectory();
+    // The bounded whole-curve check can consume time; do not turn aged input
+    // into fresh evidence. These identity checks also protect future executors.
+    if (!sources_fresh() || source_stamp!=map->latestCloudStampNs() ||
+        body_stamp!=last_odom_time_.nanoseconds() ||
+        context!=map->localizationContextSequence() || revision!=map->occupancyRevision())
+      return PreviewRecheck::Stale;
+    if (checked==CurveCheckEvidence::Occupied) return PreviewRecheck::Unsafe;
+    if (checked!=CurveCheckEvidence::Clear) return PreviewRecheck::Uncertified;
+    const auto proof=makeRevalidatedLocalPlanDebug(*accepted_preview_debug_,
+        localPlanDebugHeader(),source_stamp,body_stamp,revision,context);
+    if (!proof || !local_plan_debug_pub_) return PreviewRecheck::Stale;
+    local_plan_debug_pub_->publish(*proof);
+    // Do not save the newly dated proof as the original acceptance, nor modify
+    // local_data_/traj_id/start_time/controls or grant execution admission.
+    have_local_debug_state_=true;
+    last_local_debug_phase_="revalidated";
+    last_local_debug_generation_=reference_generation_;
+    return PreviewRecheck::Safe;
   }
 
   void SCANReplanFSM::publishAttemptDebug(const std_msgs::msg::Header &header, bool clear_only,
@@ -594,11 +852,18 @@ namespace scan_planner
     if (!have_odom_ || (node_->now() - last_odom_time_).seconds() > odom_timeout_)
     {
       RCLCPP_WARN(node_->get_logger(), "Ignore reference path: no fresh body odometry");
+      // Reference and odometry travel on different topics. The bridge may have
+      // fresh odometry while this callback still sees the previous sample.
+      // This generation was already consumed by typedPathCallback: report its
+      // rejection explicitly so the owner can revalidate a NEW generation.
+      // Never queue this geometry for automatic execution after odometry returns.
+      publishInvalidLocalPlanDebug("reference_rejected_odometry", true);
       return;
     }
     if (strict_input_frames_ && msg->header.frame_id != self_inflation_frame_id_)
     {
       RCLCPP_ERROR(node_->get_logger(), "Reference path frame does not match grid_map.frame_id");
+      publishInvalidLocalPlanDebug("reference_rejected_frame", true);
       return;
     }
 
@@ -611,6 +876,7 @@ namespace scan_planner
           pose_stamped.header.frame_id != self_inflation_frame_id_)
       {
         RCLCPP_ERROR(node_->get_logger(), "Reference path contains a mismatched pose frame");
+        publishInvalidLocalPlanDebug("reference_rejected_frame", true);
         return;
       }
       Eigen::Vector3d wp;
@@ -627,6 +893,7 @@ namespace scan_planner
     catch (const std::invalid_argument &error)
     {
       RCLCPP_ERROR(node_->get_logger(), "Reject reference path: %s", error.what());
+      publishInvalidLocalPlanDebug("reference_rejected_geometry", true);
       return;
     }
     trigger_ = true;
@@ -649,17 +916,19 @@ namespace scan_planner
     else
     {
       RCLCPP_ERROR(node_->get_logger(), "Unable to generate global trajectory from reference path");
+      publishInvalidLocalPlanDebug("reference_rejected_geometry", true);
     }
   }
 
   void SCANReplanFSM::odometryCallback(const nav_msgs::msg::Odometry::ConstSharedPtr &msg)
   {
-    const double age = (node_->now() - rclcpp::Time(msg->header.stamp)).seconds();
-    if (strict_input_frames_ && (msg->header.frame_id != self_inflation_frame_id_ ||
-                                age < -0.1 || age > odom_timeout_))
+    const rclcpp::Time source_time(msg->header.stamp);
+    if ((strict_input_frames_ && msg->header.frame_id != self_inflation_frame_id_) ||
+        !measuredPoseSourceAccepted(source_time.nanoseconds(),node_->now().nanoseconds(),
+                                  odom_timeout_,have_odom_ ? last_odom_time_.nanoseconds():0))
     {
       RCLCPP_ERROR_THROTTLE(node_->get_logger(), *node_->get_clock(), 2000,
-                           "Reject body odometry: world-frame mismatch or stale/future timestamp");
+                           "Reject body odometry: world-frame mismatch or missing/stale/future/old timestamp");
       return;
     }
     const Eigen::Vector3d position(msg->pose.pose.position.x, msg->pose.pose.position.y,
@@ -681,7 +950,9 @@ namespace scan_planner
                            "Reject body odometry: %s", error.what());
       return;
     }
-    last_odom_time_ = node_->now();
+    // Keep the acquisition time: a delayed message must not receive a second
+    // freshness lease merely because the callback just ran.
+    last_odom_time_ = source_time;
     odom_pos_(0) = msg->pose.pose.position.x;
     odom_pos_(1) = msg->pose.pose.position.y;
     odom_pos_(2) = msg->pose.pose.position.z;
@@ -698,6 +969,12 @@ namespace scan_planner
     //odom_acc_ = estimateAcc( msg );
 
     odom_orient_ = orientation;
+    planner_manager_->setMeasuredBodyPose(
+        MeasuredBodyPose{position,orientation,source_time.seconds(),msg->header.frame_id},
+        self_inflation_frame_id_,odom_timeout_);
+    planner_manager_->setMeasuredBodyVelocity(velocity);
+    if(execution_validator_) execution_validator_->body(
+      MeasuredBodyPose{position,orientation,source_time.seconds(),msg->header.frame_id});
 
     have_odom_ = true;
     publishSelfInflationMarker();
@@ -715,6 +992,9 @@ namespace scan_planner
 
   void SCANReplanFSM::updateLocalTrajTimeFreeze()
   {
+    // Execution geometry uses measured progress and explicit current proofs;
+    // never rewrite its original publication time while waiting for authority.
+    if(execution_validator_)return;
     const rclcpp::Time now = node_->now();
     double dt = (now - last_freeze_update_time_).seconds();
     last_freeze_update_time_ = now;
@@ -816,6 +1096,24 @@ namespace scan_planner
 
   void SCANReplanFSM::execFSMCallback()
   {
+    if(execution_validator_) {
+      const auto blocked=execution_validator_->consumeBlockedEntry();
+      if(blocked&&have_target_&&blocked->version==executionVersion(reference_metadata_)) {
+        // Strictly matched native command proof, not an arbitrary "blocked"
+        // status. Retire only the pending candidate, never the active curve or
+        // global task. The shared solve budget/rate limit still applies.
+        cancelSolveWorker();execution_validator_->cancelPending();
+        force_visible_side_target_=blocked_entry_replan_pending_=true;
+        blocked_entry_position_=odom_pos_;
+        RCLCPP_WARN(node_->get_logger(),"Confirmed command entry blocked; requesting bounded local side corridor for curve %ld",blocked->trajectory_id);
+      }
+    }
+    if (pollSolveWorker()) return;
+    if(pending_snapshot_request_.pending()&&!snapshotAcquisitionCurrent()) {
+      // Cancellation, original deadline and REAL source validity end this
+      // acquisition. No new deadline is allocated by a timer/slot release.
+      waitForChangedEnvironment();return;
+    }
     updateLocalTrajTimeFreeze();
     // A downstream controller must also timeout its own odometry/trajectory.
     // Do not generate apparently fresh trajectories from a stale robot pose.
@@ -830,18 +1128,41 @@ namespace scan_planner
         measuredReferenceGoalReached(odom_pos_, end_pt_,
             reference_goal_xy_tolerance_, reference_goal_z_tolerance_)) {
       have_target_=false;
+      cancelSolveWorker();
       publishInvalidLocalPlanDebug("completed");
       publishAttemptDebug(localPlanDebugHeader(), true);
       changeFSMExecState(WAIT_TARGET, "MEASURED_GOAL_REACHED");
       return;
     }
     if (max_replan_interval_ > 0.0 || reference_path_guidance_) {
-      const double map_stamp=planner_manager_->grid_map_->latestCloudStamp();
-      const double age=node_->now().seconds()-map_stamp;
-      if (map_stamp<=0. || age<-.1 || age>odom_timeout_) {
+      if (!planner_manager_->grid_map_->integratedCloudFreshAt(node_->now().nanoseconds())) {
         publishInvalidLocalPlanDebug("waiting_sensor_map");
         return;
       }
+    }
+    if(execution_validator_&&reference_path_guidance_&&have_target_&&have_odom_&&
+       (exec_state_==EXEC_TRAJ||exec_state_==WAIT_ENVIRONMENT||exec_state_==REPLAN_TRAJ||exec_state_==GEN_NEW_TRAJ)&&
+       formalReseedSubmissionDue(std::chrono::steady_clock::now(),last_solve_submit_,solve_future_.valid())) {
+      const auto reseed=execution_validator_->consumeFormalReseedAt(node_->now().nanoseconds());
+      if(reseed&&sameExecutionTask(reseed->version,executionVersion(reference_metadata_))&&
+         (reseed->terminal||reseed->version==executionVersion(reference_metadata_))) {
+        // A stale join boundary is not an obstacle and does not justify a side
+        // corridor or changing the task. Keep writer-applied geometry and its
+        // real safety reader alive; only reseed the next bounded local solve.
+        last_attempt_failure_phase_=reseed->reason;
+        changeFSMExecState(GEN_NEW_TRAJ,reseed->terminal?"MEASURED_LOCAL_ENDPOINT":"MEASURED_ENTRY_RESEED");
+        RCLCPP_INFO(node_->get_logger(),"Formal local reseed curve=%ld reason=%s original_body_source_ns=%ld",
+          reseed->trajectory_id,reseed->reason.c_str(),rclcpp::Time(reseed->body_source_stamp).nanoseconds());
+      }
+    }
+    if(force_visible_side_target_&&!blocked_entry_replan_pending_&&
+       (odom_pos_-blocked_entry_position_).norm()>=.3)force_visible_side_target_=false;
+    if(blocked_entry_replan_pending_) {
+      if(!periodicReplanDue(node_->now().seconds(),last_replan_time_.seconds(),
+          std::max(.5,failed_replan_cooldown_)))return;
+      blocked_entry_replan_pending_=false;
+      last_attempt_failure_phase_="blocked_executable_entry";
+      changeFSMExecState(GEN_NEW_TRAJ,"COMMAND_ENTRY_BLOCKED");
     }
 
     static int fsm_num = 0;
@@ -907,6 +1228,7 @@ namespace scan_planner
       }
       else
       {
+        if(pending_snapshot_request_.pending())break;
         replan_fail_count_++;
         if (reference_path_guidance_) waitForChangedEnvironment();
         else {
@@ -927,6 +1249,7 @@ namespace scan_planner
       }
       else
       {
+        if(pending_snapshot_request_.pending())break;
         replan_fail_count_++;
         if (reference_path_guidance_) waitForChangedEnvironment();
         else {
@@ -943,15 +1266,9 @@ namespace scan_planner
       if (!have_target_) { changeFSMExecState(WAIT_TARGET, "NO_TARGET"); break; }
       const double mono=std::chrono::duration<double>(
           std::chrono::steady_clock::now().time_since_epoch()).count();
-      if (mono-failed_replan_monotonic_<failed_replan_cooldown_) return;
-      const bool new_supported_map=last_attempt_failure_phase_=="waiting_sensor_map" &&
-          planner_manager_->grid_map_->latestCloudStamp()>failed_map_stamp_;
-      const bool dynamics_recovered=last_attempt_failure_phase_=="failed_dynamics" &&
-          failedDynamicsBoundaryChanged(failed_body_velocity_, odom_vel_, planner_manager_->pp_.max_vel_);
-      if (!new_supported_map && !dynamics_recovered &&
-          planner_manager_->grid_map_->occupancyRevision()==failed_environment_revision_ &&
-          (odom_pos_-failed_body_position_).norm()<failed_replan_body_distance_) return;
-      changeFSMExecState(GEN_NEW_TRAJ, "ENVIRONMENT_CHANGED");
+      if (!failedAttemptRetryReady(mono)) return;
+      changeFSMExecState(GEN_NEW_TRAJ,
+          nativeResourceWait(last_attempt_failure_phase_) ? "RESOURCE_RETRY" : "ENVIRONMENT_CHANGED");
       break;
     }
 
@@ -961,6 +1278,12 @@ namespace scan_planner
       // produces a new real trajectory rather than refreshing stale messages.
       if (periodicReplanDue(node_->now().seconds(), last_replan_time_.seconds(), max_replan_interval_))
       {
+        if (keepPreviewIncumbentForPeriodicReplan()) {
+          // Only the scheduling clock changes. Curve ID, controls, source
+          // timestamps and physical progress remain unchanged.
+          last_replan_time_=node_->now();
+          break;
+        }
         changeFSMExecState(REPLAN_TRAJ, "PERIODIC");
         return;
       }
@@ -968,6 +1291,17 @@ namespace scan_planner
       LocalTrajData *info = &planner_manager_->local_data_;
       rclcpp::Time time_now = node_->now();
       double t_cur = (time_now - info->start_time_).seconds();
+      if (reference_path_guidance_) {
+        if (go2_execution_frozen_ && planner_manager_->hasPreviewHeadingContract())
+          t_cur=planner_manager_->previewCurveProgressTime();
+        else {
+          if (!tracking_progress_ || !tracking_progress_->valid ||
+              tracking_progress_->trajectory_id!=info->traj_id_ ||
+              (node_->now()-rclcpp::Time(tracking_progress_->header.stamp)).seconds()>odom_timeout_)
+            return;
+          t_cur=tracking_progress_->curve_time;
+        }
+      }
       t_cur = min(info->duration_, t_cur);
 
       Eigen::Vector3d pos = info->position_traj_.evaluateDeBoorT(t_cur);
@@ -1087,44 +1421,137 @@ namespace scan_planner
 
   void SCANReplanFSM::waitForChangedEnvironment()
   {
+    // A submitted request is not an optimizer failure. Its one result is
+    // consumed by pollSolveWorker; callbacks keep validating the incumbent.
+    if (solve_future_.valid() || pending_snapshot_request_.pending() ||
+        last_attempt_failure_phase_=="waiting_solve_budget") return;
     failed_replan_monotonic_=std::chrono::duration<double>(
         std::chrono::steady_clock::now().time_since_epoch()).count();
     failed_environment_revision_=planner_manager_->grid_map_->occupancyRevision();
     failed_map_stamp_=planner_manager_->grid_map_->latestCloudStamp();
+    failed_ray_stamps_={planner_manager_->grid_map_->integratedRaySourceStamp(0),
+                        planner_manager_->grid_map_->integratedRaySourceStamp(1)};
     failed_body_position_=odom_pos_;
     failed_body_velocity_=odom_vel_;
+    failed_body_orientation_=odom_orient_;
+    failed_body_source_ns_=last_odom_time_.nanoseconds();
     const auto &reason=last_attempt_failure_phase_;
-    publishInvalidLocalPlanDebug(reason.empty() ? "failed_optimization" : reason);
-    RCLCPP_WARN(node_->get_logger(), "Local navigation waiting for changed environment: %s",
-                reason.c_str());
+    // A rejected replacement is not proof that the already accepted curve is
+    // unsafe. Keep only an incumbent freshly checked against real body/map.
+    const auto incumbent=revalidatePreviewIncumbent();
+    if (incumbent==PreviewRecheck::Stale)
+      publishInvalidLocalPlanDebug("waiting_sensor_map", true);
+    else if (incumbent==PreviewRecheck::Uncertified)
+      publishInvalidLocalPlanDebug("waiting_recheck", true);
+    else if (incumbent==PreviewRecheck::Unsafe)
+      publishInvalidLocalPlanDebug("failed_current_validation", true);
+    else if (incumbent!=PreviewRecheck::Safe)
+      // Each call follows an actual failed solve. Repeated same-phase failures
+      // must remain diagnosable, not disappear after a diagnostic lease expires.
+      publishInvalidLocalPlanDebug(reason.empty() ? "failed_optimization" : reason, true);
+    RCLCPP_WARN(node_->get_logger(), "Local navigation waiting for %s: %s",
+                nativeResourceWait(reason) ? "bounded snapshot retry" : "changed environment", reason.c_str());
     changeFSMExecState(WAIT_ENVIRONMENT, "BOUNDED_FAILURE");
+  }
+
+  bool SCANReplanFSM::failedAttemptRetryReady(double monotonic_now)
+  {
+    // An exclusive reader releasing the third slot need not change a voxel or
+    // body pose. Re-attempt resources at most 2 Hz, then acquire through the
+    // same arbiter; contention never bypasses ownership. Every new attempt gets
+    // one ORIGINAL 400 ms deadline in callReboundReplan, not a continuation or
+    // extension of the failed request. Existing actual-solve cooldown remains.
+    const bool resource=nativeResourceWait(last_attempt_failure_phase_);
+    const double cooldown=resource ? std::max(.5,failed_replan_cooldown_) : failed_replan_cooldown_;
+    if (!std::isfinite(monotonic_now) || monotonic_now-failed_replan_monotonic_<cooldown) return false;
+    return resource || environmentChangedSinceFailure();
+  }
+
+  bool SCANReplanFSM::environmentChangedSinceFailure()
+  {
+    const auto map=planner_manager_->grid_map_;
+    const auto& reason=last_attempt_failure_phase_;
+    // A geometrically unchanged saturated map can acquire fresh FREE evidence.
+    // Recheck/unknown failures must not wait forever for a changed occupancy
+    // bit. Both real sensor watermarks must advance; receipt/timer/republication
+    // alone cannot recover the attempt, and WAIT_ENVIRONMENT still enforces the
+    // existing 500 ms solve cooldown plus the one 400 ms shared solve budget.
+    const bool evidence_dependent=reason=="waiting_sensor_map"||reason=="waiting_recheck"||
+        reason=="waiting_observed_space"||reason=="failed_final_collision"||
+        reason=="failed_current_validation"||reason=="blocked_executable_entry"||
+        reason=="waiting_observed_side_target"||reason=="visible_side_target_budget_exhausted";
+    const bool new_supported_map=evidence_dependent &&
+        map->latestCloudStamp()>failed_map_stamp_ &&
+        map->integratedRaySourceStamp(0)>failed_ray_stamps_[0] &&
+        map->integratedRaySourceStamp(1)>failed_ray_stamps_[1] &&
+        map->integratedCloudFreshAt(node_->now().nanoseconds());
+    const double body_age=(node_->now()-last_odom_time_).seconds();
+    const bool new_body=have_odom_ && last_odom_time_.nanoseconds()>failed_body_source_ns_ &&
+        body_age>=0. && body_age<=odom_timeout_;
+    // A solve can reject an old body sample without any geometric change.
+    // A genuinely new valid sample resolves that precondition; unchanged or
+    // stale source timestamps do not manufacture a recovery event.
+    const bool body_recovered=new_body && last_attempt_failure_phase_=="waiting_body_pose";
+    const bool dynamics_recovered=new_body && last_attempt_failure_phase_=="failed_dynamics" &&
+        failedDynamicsBoundaryChanged(failed_body_velocity_, odom_vel_, planner_manager_->pp_.max_vel_);
+    const bool attitude_changed=new_body &&
+        failedOrientationBoundaryChanged(failed_body_orientation_, odom_orient_);
+    return new_supported_map || body_recovered || dynamics_recovered || attitude_changed ||
+        map->occupancyRevision()!=failed_environment_revision_ ||
+        (odom_pos_-failed_body_position_).norm()>=failed_replan_body_distance_;
+  }
+
+  bool SCANReplanFSM::keepPreviewIncumbentForPeriodicReplan()
+  {
+    if(execution_validator_&&go2_execution_frozen_) {
+      const auto view=execution_validator_->committedView();
+      return view&&view->spline.generation==reference_generation_&&view->proof&&view->proof->valid&&
+        rclcpp::Time(view->proof->valid_until)>node_->now()&&view->progress&&view->progress->valid&&
+        // Writer-applied geometry may remain safe while the local horizon is
+        // finished, or a newer solver curve cannot meet the actual entry
+        // boundary. That is not an idle preview: freezing its solve clock
+        // would retain the unjoinable candidate forever. Preserve the active
+        // proof/identity, but reseed the next bounded solve from real odometry.
+        !view->progress->holding&&
+        view->spline.trajectory.traj_id==planner_manager_->local_data_.traj_id_&&
+        (node_->now()-rclcpp::Time(view->progress->header.stamp)).seconds()<=odom_timeout_&&
+        view->progress->twist.linear.x*view->progress->twist.linear.x+
+        view->progress->twist.linear.y*view->progress->twist.linear.y+
+        view->progress->twist.linear.z*view->progress->twist.linear.z<.0001;
+    }
+    if (!go2_execution_frozen_ || !reference_path_guidance_ ||
+        !planner_manager_->hasPreviewHeadingContract()) return false;
+    const auto incumbent=revalidatePreviewIncumbent();
+    if (incumbent!=PreviewRecheck::Safe) return false;
+    const auto &curve=planner_manager_->local_data_;
+    const double advance=std::min(1.,planning_horizon_*.25);
+    // Progress is projected from measured XYZ, not wall-clock spline time.
+    // The fraction bound also refreshes a short final leg or a curved segment
+    // which approaches its end while its chord is still close to the start.
+    return std::isfinite(advance) && advance>0. && curve.duration_>0. &&
+        (odom_pos_-curve.start_pos_).norm()<advance &&
+        planner_manager_->previewCurveProgressTime()<curve.duration_*.25;
+  }
+
+  bool SCANReplanFSM::shouldReplanUncertifiedPreview()
+  {
+    if (!go2_execution_frozen_ || !reference_path_guidance_ || !have_target_ ||
+        !planner_manager_->hasPreviewHeadingContract() ||
+        (exec_state_!=EXEC_TRAJ && exec_state_!=WAIT_ENVIRONMENT) ||
+        !periodicReplanDue(node_->now().seconds(),last_replan_time_.seconds(),
+                          std::max(.1,failed_replan_cooldown_))) return false;
+    const auto &previous=exec_state_==WAIT_ENVIRONMENT ? failed_body_position_ :
+        planner_manager_->local_data_.start_pos_;
+    return (odom_pos_-previous).norm()>=planner_manager_->grid_map_->getResolution()*.25;
   }
 
   bool SCANReplanFSM::planFromCurrentTraj()
   {
-    LocalTrajData *info = &planner_manager_->local_data_;
-    rclcpp::Time time_now = node_->now();
-    double t_cur = (time_now - info->start_time_).seconds();
-    t_cur = std::min(std::max(t_cur, 0.0), info->duration_);
-
-    //cout << "info->velocity_traj_=" << info->velocity_traj_.get_control_points() << endl;
-
-    start_pt_ = odom_pos_;
-    start_vel_ = info->velocity_traj_.evaluateDeBoorT(t_cur);
-    start_acc_ = info->acceleration_traj_.evaluateDeBoorT(t_cur);
-    if (go2_execution_frozen_ || reference_path_guidance_)
-    {
-      start_vel_ = odom_vel_;
-      start_acc_.setZero();
-    }
-
-    const Eigen::Vector2d to_goal = end_pt_.head<2>() - odom_pos_.head<2>();
-    if (shouldSuppressOpposedPrediction(
-            go2_execution_frozen_ || reference_path_guidance_, to_goal, start_vel_))
-    {
-      start_vel_.setZero();
-      start_acc_.setZero();
-    }
+    // Reference guidance selects WHERE to go, not WHETHER the body is following
+    // a trajectory. Keep the upstream measured-position + incumbent-derivative
+    // hand-off while executing; an explicitly frozen preview uses measured
+    // motion because its spline clock is not the robot's physical progress.
+    setStartStateFromOdomOrCurrentTraj();
 
     // In reference mode the complete PCT route, including its progress index,
     // must survive every local replan. Replacing it with a direct polynomial
@@ -1162,37 +1589,136 @@ namespace scan_planner
     start_pt_ = odom_pos_;
     start_vel_ = odom_vel_;
     start_acc_.setZero();
-    if (reference_path_guidance_ || go2_execution_frozen_) return;
+    if (go2_execution_frozen_ || have_new_target_) return;
+
+    if(execution_validator_) {
+      if(const auto boundary=execution_validator_->committedBoundary(odom_pos_,node_->now().seconds())) {
+        start_vel_=boundary->velocity;start_acc_=boundary->acceleration;
+      }
+      return;
+    }
 
     LocalTrajData *info = &planner_manager_->local_data_;
+    if (require_tagged_reference_ &&
+        (accepted_curve_id_ <= 0 || accepted_curve_generation_ != reference_generation_ ||
+         info->traj_id_ != accepted_curve_id_))
+      return;
     if (info->start_time_.seconds() < 1e-5 || info->duration_ <= 1e-5)
       return;
 
-    const double raw_t_cur = (node_->now() - info->start_time_).seconds();
-    if (raw_t_cur < -1e-3 || raw_t_cur > info->duration_ + 0.2)
+    // Use a controller's measured curve progress, never time since publication.
+    // Without a matching fresh proof keep measured velocity / zero acceleration;
+    // no virtual prediction is licensed by a running spline clock.
+    if (!tracking_progress_ || !tracking_progress_->valid || tracking_progress_->holding ||
+        tracking_progress_->trajectory_id!=info->traj_id_ ||
+        tracking_progress_->generation!=reference_generation_ ||
+        (node_->now()-rclcpp::Time(tracking_progress_->header.stamp)).seconds()>odom_timeout_)
       return;
-
-    const double t_cur = std::min(std::max(raw_t_cur, 0.0), info->duration_);
-    start_vel_ = info->velocity_traj_.evaluateDeBoorT(t_cur);
-    start_acc_ = info->acceleration_traj_.evaluateDeBoorT(t_cur);
+    const double t_cur=tracking_progress_->curve_time;
+    if (!std::isfinite(t_cur) || t_cur<0. || t_cur>info->duration_ ||
+        (info->position_traj_.evaluateDeBoorT(t_cur)-odom_pos_).norm()>
+            planner_manager_->grid_map_->getResolution()*.25) return;
+    const auto velocity = info->velocity_traj_.evaluateDeBoorT(t_cur);
+    const auto acceleration = info->acceleration_traj_.evaluateDeBoorT(t_cur);
+    if (!velocity.allFinite() || !acceleration.allFinite()) return;
+    start_vel_ = velocity;
+    start_acc_ = acceleration;
 
     const Eigen::Vector2d to_goal = end_pt_.head<2>() - odom_pos_.head<2>();
-    if (shouldSuppressOpposedPrediction(false, to_goal, start_vel_))
+    // A routed corridor may initially lead away from the final goal. Do not
+    // introduce a zero-velocity discontinuity merely because of that geometry.
+    if (!reference_path_guidance_ && shouldSuppressOpposedPrediction(false, to_goal, start_vel_))
     {
       start_vel_.setZero();
       start_acc_.setZero();
     }
   }
 
+  void SCANReplanFSM::trackingProgressCallback(
+      const d1max_planning_interfaces::msg::TrackingProgress::ConstSharedPtr &msg)
+  {
+    if(execution_validator_)execution_validator_->progress(*msg);
+    const auto &identity=reference_metadata_;
+    const double age=(node_->now()-rclcpp::Time(msg->header.stamp)).seconds();
+    if (!msg->valid && msg->session_id==navigation_session_id_ &&
+        msg->generation==reference_generation_ && msg->trajectory_id==accepted_curve_id_) {
+      tracking_progress_.reset();
+      return;
+    }
+    if (!have_odom_ || !msg->valid || msg->session_id!=navigation_session_id_ ||
+        msg->generation!=reference_generation_ || msg->trajectory_id!=accepted_curve_id_ ||
+        msg->header.frame_id!=self_inflation_frame_id_ || age<0. || age>odom_timeout_ ||
+        !std::isfinite(msg->curve_time) || msg->curve_time<0. ||
+        !std::isfinite(msg->arc_length) || msg->arc_length<0. ||
+        !std::isfinite(msg->s_committed) || msg->s_committed<msg->arc_length ||
+        msg->route_id!=identity.route_id || msg->segment_id!=identity.segment_id ||
+        msg->map_version_id!=identity.map_version_id || msg->anchor_id!=identity.anchor_id ||
+        msg->context_sequence!=identity.context_sequence ||
+        msg->localization_epoch!=identity.localization_epoch ||
+        msg->localization_seed_id!=identity.localization_seed_id) return;
+    if (identity.schema_version==2 &&
+        (msg->schema_version!=2 || msg->task_id!=identity.task_id ||
+         msg->route_hash!=identity.route_hash || msg->anchor_revision!=identity.anchor_revision ||
+         msg->anchor_id.empty() || !msg->context_sequence)) return;
+    const Eigen::Vector3d measured(msg->pose.position.x,msg->pose.position.y,msg->pose.position.z);
+    const auto &curve=planner_manager_->local_data_;
+    if (!measured.allFinite() || msg->curve_time>curve.duration_ ||
+        (measured-odom_pos_).norm()>planner_manager_->grid_map_->getResolution()*.25) return;
+    if (tracking_progress_ && tracking_progress_->trajectory_id==msg->trajectory_id) {
+      if (rclcpp::Time(msg->header.stamp)<=rclcpp::Time(tracking_progress_->header.stamp) ||
+          msg->s_committed<tracking_progress_->s_committed ||
+          msg->arc_length<tracking_progress_->s_committed-.15) return;
+      // A new source sample cannot jump to an overlapping floor/branch. The
+      // downstream tracker also bounds its XYZ projection; this is independent.
+      const double dt=(rclcpp::Time(msg->header.stamp)-
+                       rclcpp::Time(tracking_progress_->header.stamp)).seconds();
+      if (msg->arc_length-tracking_progress_->arc_length>
+          planner_manager_->pp_.max_vel_*dt+.10) return;
+    }
+    tracking_progress_=*msg;
+  }
+
   void SCANReplanFSM::checkCollisionCallback()
   {
+    if(execution_validator_) {
+      // The independent validator checks the committed curve on immutable
+      // snapshots. Never compare its progress with the latest solver candidate.
+      publishExecutionLedgerDebug();return;
+    }
     updateLocalTrajTimeFreeze();
+    if (reference_path_guidance_ && planner_manager_->hasPreviewHeadingContract() &&
+        have_target_ && exec_state_!=WAIT_TARGET) {
+      // Continue checking an incumbent even when a candidate solve is waiting
+      // for changed evidence. No optimization is needed to prove it still free.
+      const auto incumbent=revalidatePreviewIncumbent();
+      if (incumbent==PreviewRecheck::Stale) {
+        publishInvalidLocalPlanDebug("waiting_sensor_map");
+        return;
+      }
+      if (incumbent==PreviewRecheck::Uncertified) {
+        publishInvalidLocalPlanDebug("waiting_recheck");
+        if (shouldReplanUncertifiedPreview())
+          changeFSMExecState(REPLAN_TRAJ,"MEASURED_PREVIEW_JOIN_CHANGED");
+        return;
+      }
+      if (incumbent==PreviewRecheck::Safe) return;
+      if (incumbent==PreviewRecheck::Unsafe) {
+        publishInvalidLocalPlanDebug("failed_current_validation");
+        last_attempt_failure_phase_="failed_current_validation";
+        if (exec_state_!=WAIT_ENVIRONMENT) {
+          if (planFromCurrentTraj()) changeFSMExecState(EXEC_TRAJ,"PREVIEW_SAFETY");
+          else waitForChangedEnvironment();
+        }
+        return;
+      }
+      // A revoked or never-accepted preview cannot resurrect from a collision
+      // check; only a genuinely accepted new spline may establish an incumbent.
+      return;
+    }
     if (!have_odom_ || (node_->now() - last_odom_time_).seconds() > odom_timeout_)
       return;
     if (max_replan_interval_ > 0.0 || reference_path_guidance_) {
-      const double stamp=planner_manager_->grid_map_->latestCloudStamp();
-      const double age=node_->now().seconds()-stamp;
-      if (stamp<=0. || age<-.1 || age>odom_timeout_) return;
+      if (!planner_manager_->grid_map_->integratedCloudFreshAt(node_->now().nanoseconds())) return;
     }
 
     LocalTrajData *info = &planner_manager_->local_data_;
@@ -1204,7 +1730,16 @@ namespace scan_planner
     /* ---------- check trajectory ---------- */
     constexpr double time_step = 0.01;
     constexpr int maximum_samples=20000;
-    const double raw_t_cur=(node_->now()-info->start_time_).seconds();
+    double raw_t_cur=(node_->now()-info->start_time_).seconds();
+    if (reference_path_guidance_) {
+      if (!tracking_progress_ || !tracking_progress_->valid ||
+          tracking_progress_->trajectory_id!=info->traj_id_ ||
+          (node_->now()-rclcpp::Time(tracking_progress_->header.stamp)).seconds()>odom_timeout_) {
+        publishInvalidLocalPlanDebug("waiting_measured_progress");
+        return;
+      }
+      raw_t_cur=tracking_progress_->curve_time;
+    }
     if (!std::isfinite(info->duration_) || info->duration_<=0. ||
         !std::isfinite(raw_t_cur) || raw_t_cur<-.1) {
       last_attempt_failure_phase_="failed_final_collision";
@@ -1258,6 +1793,18 @@ namespace scan_planner
 
   bool SCANReplanFSM::callReboundReplan(bool flag_use_poly_init, bool flag_randomPolyTraj)
   {
+    if (solve_future_.valid()) return false;
+    const auto submitted=std::chrono::steady_clock::now();
+    if(pending_snapshot_request_.pending()&&!snapshotAcquisitionCurrent())return false;
+    if ((solve_worker_||execution_validator_)&&
+        !formalReseedSubmissionDue(submitted,last_solve_submit_,false)) {
+      last_attempt_failure_phase_="waiting_solve_budget";
+      return false;
+    }
+    // One absolute budget includes target selection, snapshot, worker solve
+    // and the owner-thread latest-map final check; no stage renews it.
+    const auto request_budget=pending_snapshot_request_.begin(reference_generation_);
+    planner_manager_->discardPreviewCandidate();
     predecessor_id_ = 0;
     predecessor_safe_ = false;
     predecessor_check_stamp_ = builtin_interfaces::msg::Time{};
@@ -1266,20 +1813,45 @@ namespace scan_planner
     planner_manager_->grid_map_->resetCollisionDiagnostics();
     local_target_query_debug_=ReferenceTargetResult{};
 
-    if (!getLocalTarget()) {
-      if (planner_manager_->grid_map_->requiresObservedFree() &&
+    const auto target_started=std::chrono::steady_clock::now();
+    GridMap::Ptr target_snapshot;
+    const bool target_available=getLocalTarget(request_budget,&target_snapshot);
+    const auto target_ms=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-target_started).count();
+    RCLCPP_INFO(node_->get_logger(),"NativeTarget generation=%lu target_selection_ms=%.3f success=%d reason=%s",
+      reference_generation_,target_ms,target_available?1:0,local_target_query_debug_.reason.c_str());
+    if (!target_available) {
+      if (!request_budget->allowed()) last_attempt_failure_phase_=request_budget->reason();
+      else if (nativeResourceWait(local_target_query_debug_.reason))
+        last_attempt_failure_phase_=local_target_query_debug_.reason;
+      if (request_budget->allowed() && !nativeResourceWait(last_attempt_failure_phase_) &&
+          planner_manager_->grid_map_->requiresObservedFree() &&
           planner_manager_->grid_map_->unknownCollisionQueries()>0)
         last_attempt_failure_phase_="waiting_observed_space";
       const auto &query=local_target_query_debug_;
       RCLCPP_WARN_THROTTLE(node_->get_logger(), *node_->get_clock(), 1000,
-          "Reference target unavailable: %s queries=%zu free=%zu unknown=%zu occupied=%zu outside=%zu "
+          "Reference target unavailable: %s target_query_classification=%s queries=%zu free=%zu unknown=%zu occupied=%zu outside=%zu "
           "first_blocked_present=%d first_blocked=[%.3f,%.3f,%.3f] value=%d shown_points=%zu",
-          last_attempt_failure_phase_.c_str(), query.queries, query.free_queries,
+          last_attempt_failure_phase_.c_str(),referenceTargetEvidenceClass(query.occupied_queries,
+            query.unknown_queries,query.outside_queries), query.queries, query.free_queries,
           query.unknown_queries, query.occupied_queries, query.outside_queries,
           query.has_first_blocked ? 1:0, query.first_blocked.x(), query.first_blocked.y(),
           query.first_blocked.z(), query.first_blocked_value, query.blocked_points.size());
+      // Query THIS failed reference pose and its exact tested heading. The
+      // selector's 'unknown queries' count is not a count of physical voxels.
+      // Diagnostic inspection retains the production collision policy and is
+      // bounded/rate-limited independently of selector search work.
+      const auto diagnostic_now=std::chrono::steady_clock::now();
+      if(query.has_first_blocked&&(last_target_evidence_diagnostic_==std::chrono::steady_clock::time_point{}||
+          diagnostic_now-last_target_evidence_diagnostic_>=std::chrono::seconds(1))) {
+        last_target_evidence_diagnostic_=diagnostic_now;
+        const auto detail=planner_manager_->grid_map_->describeInflateOccupancy(query.first_blocked,query.first_blocked_yaw);
+        RCLCPP_WARN(node_->get_logger(),"Reference endpoint evidence generation=%lu endpoint_queries=%zu yaw=%.4f %s",
+          reference_generation_,query.queries,query.first_blocked_yaw,detail.c_str());
+      }
       // No optimizer ran: never re-stamp an earlier attempt's blocked/seed data.
-      have_new_target_=false;
+      if(!nativeResourceWait(last_attempt_failure_phase_)) {
+        cancelSnapshotAcquisition();have_new_target_=false;
+      }
       publishAttemptDebug(attempt_header, false, false);
       return false;
     }
@@ -1289,25 +1861,112 @@ namespace scan_planner
     const auto preceding_generation = reference_generation_;
     const auto preceding_id = accepted_curve_id_;
     std::optional<UniformBspline> predecessor;
+    const double predecessor_measured_time=(tracking_progress_ && tracking_progress_->valid &&
+        tracking_progress_->trajectory_id==preceding_id) ? tracking_progress_->curve_time :
+        planner_manager_->previewCurveProgressTime();
     if (reference_path_guidance_ && require_tagged_reference_ && preceding_id > 0 &&
         accepted_curve_generation_ == preceding_generation &&
         planner_manager_->local_data_.traj_id_ == preceding_id)
       predecessor.emplace(planner_manager_->local_data_.position_traj_);
 
+    if (solve_worker_) {
+      const auto copy_start=std::chrono::steady_clock::now();
+      // A side-target search and the subsequent solve are ONE solver turn.
+      // Transfer its exclusive third-slot lease; do not release/reacquire and
+      // consume a second quota before admission has had its promised turn.
+      auto snapshot=std::move(target_snapshot);
+      if(!snapshot) {
+        snapshot=snapshot_pool_.acquireSolver(*planner_manager_->grid_map_,
+            node_->now().nanoseconds(),request_budget->deadline());
+      }
+      snapshot_copy_ms_=std::chrono::duration<double,std::milli>(
+          std::chrono::steady_clock::now()-copy_start).count();
+      if (!snapshot || !request_budget->allowed()) {
+        last_attempt_failure_phase_=!request_budget->allowed()?request_budget->reason():"waiting_snapshot_slot";
+        if(!request_budget->allowed())cancelSnapshotAcquisition();
+        return false;
+      }
+      // A slot miss did not start a solve. Do not add a 500 ms cooldown to the
+      // pending reader, otherwise a fair admission grant could strand solver
+      // intent until its lease expires. Actual solve starts remain <= 2 Hz.
+      last_solve_submit_=std::chrono::steady_clock::now();
+      // A moving entry may never skip the declared segment boundary. The
+      // odom transport sends one semantic segment at a time; mixed legacy map
+      // previews remain visible but cannot use nonzero v2 entry parameters.
+      const auto &meta=reference_metadata_;
+      const bool single_segment=meta.schema_version!=2 ||
+          (!meta.point_segment_ids.empty() && std::all_of(
+              meta.point_segment_ids.begin(),meta.point_segment_ids.end(),
+              [&](const std::string &id){return id==meta.segment_id;}));
+      planner_manager_->setMeasuredJoinSingleSegment(single_segment);
+      solve_worker_->prepareSolveWorker(*planner_manager_,snapshot);
+      active_solve_budget_=request_budget;
+      pending_snapshot_request_.release();
+      solve_generation_=reference_generation_;
+      solve_attempt_header_=attempt_header;
+      solve_predecessor_=std::move(predecessor);
+      solve_predecessor_id_=preceding_id;
+      solve_predecessor_measured_time_=predecessor_measured_time;
+      const auto start=start_pt_, velocity=start_vel_, acceleration=start_acc_;
+      const auto target=local_target_pt_, target_velocity=local_target_vel_;
+      const bool poly=have_new_target_ || flag_use_poly_init;
+      have_new_target_=false;
+      try {
+        solve_future_=std::async(std::launch::async,
+          [this,request_budget,submitted,start,velocity,acceleration,target,target_velocity,poly,flag_randomPolyTraj]() {
+        SolveScopeExit release_snapshot([this]() noexcept {solve_worker_->releaseSolveSnapshot();});
+        WorkerResult result;
+        const auto begun=std::chrono::steady_clock::now();
+        result.queue_ms=std::chrono::duration<double,std::milli>(begun-submitted).count();
+        try {
+          if (solve_worker_->reboundReplan(start,velocity,acceleration,target,target_velocity,
+                                          poly,flag_randomPolyTraj,request_budget))
+            result.candidate=solve_worker_->takeSolvedCandidate();
+          result.failure=solve_worker_->lastFailurePhase();
+        } catch (const std::bad_alloc &) {
+          throw; // Resource exhaustion is not a recoverable/safe planning result.
+        } catch (...) {
+          result.candidate.reset();
+          result.failure="solve_exception";
+        }
+        result.solve_ms=std::chrono::duration<double,std::milli>(
+            std::chrono::steady_clock::now()-begun).count();
+        return result;
+      });
+      } catch (const std::bad_alloc &) {
+        request_budget->cancel();
+        solve_worker_->releaseSolveSnapshot();
+        active_solve_budget_.reset();solve_predecessor_.reset();
+        throw;
+      } catch (...) {
+        solve_worker_->releaseSolveSnapshot();
+        active_solve_budget_.reset();solve_predecessor_.reset();
+        last_attempt_failure_phase_="solve_launch_failed";
+        return false;
+      }
+      return false; // pending, not failed; incumbent safety checks continue
+    }
+
+    pending_snapshot_request_.release();
+    snapshot_pool_.cancelSolverRequest();
+    if(execution_validator_)last_solve_submit_=submitted;
     bool plan_success =
-        planner_manager_->reboundReplan(start_pt_, start_vel_, start_acc_, local_target_pt_, local_target_vel_, (have_new_target_ || flag_use_poly_init), flag_randomPolyTraj);
+        planner_manager_->reboundReplan(start_pt_, start_vel_, start_acc_, local_target_pt_, local_target_vel_, (have_new_target_ || flag_use_poly_init), flag_randomPolyTraj,request_budget);
     have_new_target_ = false;
     last_attempt_failure_phase_=planner_manager_->lastFailurePhase();
     // A long solve must not turn expired input into a fresh accepted output.
     if (reference_path_guidance_ && plan_success) {
-      const double map_stamp=planner_manager_->grid_map_->latestCloudStamp();
-      const double map_age=node_->now().seconds()-map_stamp;
       if (!have_odom_ || (node_->now()-last_odom_time_).seconds()>odom_timeout_ ||
-          map_stamp<=0. || map_age<-.1 || map_age>odom_timeout_) {
+          !planner_manager_->grid_map_->integratedCloudFreshAt(node_->now().nanoseconds())) {
         plan_success=false;
         last_attempt_failure_phase_="waiting_sensor_map";
       }
     }
+    if (plan_success && !planner_manager_->commitPreviewCandidate()) {
+      plan_success=false;
+      last_attempt_failure_phase_="waiting_sensor_map";
+    }
+    if (!plan_success) planner_manager_->discardPreviewCandidate();
     publishAttemptDebug(attempt_header);
 
     cout << "final_plan_success=" << plan_success << endl;
@@ -1317,43 +1976,119 @@ namespace scan_planner
       if (predecessor && reference_generation_ == preceding_generation &&
           planner_manager_->local_data_.traj_id_ > preceding_id) {
         predecessor_id_ = static_cast<std::uint64_t>(preceding_id);
-        predecessor_safe_ = planner_manager_->recheckPredecessor(*predecessor);
+        predecessor_safe_ = planner_manager_->recheckPredecessor(*predecessor,predecessor_measured_time);
         if (predecessor_safe_) predecessor_check_stamp_ = node_->now();
       }
 
-      auto info = &planner_manager_->local_data_;
-
-      /* publish traj */
-      scan_planner_msgs::msg::Bspline bspline;
-      bspline.order = 3;
-      bspline.start_time = info->start_time_;
-      bspline.traj_id = info->traj_id_;
-
-      Eigen::MatrixXd pos_pts = info->position_traj_.getControlPoint();
-      bspline.pos_pts.reserve(pos_pts.cols());
-      for (int i = 0; i < pos_pts.cols(); ++i)
-      {
-        geometry_msgs::msg::Point pt;
-        pt.x = pos_pts(0, i);
-        pt.y = pos_pts(1, i);
-        pt.z = pos_pts(2, i);
-        bspline.pos_pts.push_back(pt);
-      }
-
-      Eigen::VectorXd knots = info->position_traj_.getKnot();
-      bspline.knots.reserve(knots.rows());
-      for (int i = 0; i < knots.rows(); ++i)
-      {
-        bspline.knots.push_back(knots(i));
-      }
-
-      publishTrajectory(bspline);
-      publishAcceptedLocalPlanDebug(static_cast<std::uint64_t>(std::max(0, info->traj_id_)));
-
-      visualization_->displayOptimalTraj(info->position_traj_, 0);
+      publishCommittedTrajectory();
     }
 
     return plan_success;
+  }
+
+  void SCANReplanFSM::cancelSnapshotAcquisition()
+  {
+    pending_snapshot_request_.cancel();snapshot_pool_.cancelSolverRequest();
+  }
+
+  bool SCANReplanFSM::snapshotAcquisitionCurrent()
+  {
+    if(!pending_snapshot_request_.pending())return false;
+    const auto budget=pending_snapshot_request_.budget();
+    const double body_age=(node_->now()-last_odom_time_).seconds();
+    const bool source_fresh=have_target_&&have_odom_&&body_age>=-.02&&body_age<=odom_timeout_&&
+        planner_manager_->grid_map_->integratedCloudFreshAt(node_->now().nanoseconds());
+    if(pending_snapshot_request_.current(reference_generation_,source_fresh))return true;
+    last_attempt_failure_phase_=!budget->allowed()?budget->reason():
+        (!source_fresh?"waiting_sensor_map":"solve_cancelled");
+    cancelSnapshotAcquisition();return false;
+  }
+
+  void SCANReplanFSM::cancelSolveWorker()
+  {
+    cancelSnapshotAcquisition();
+    if (active_solve_budget_) active_solve_budget_->cancel();
+  }
+
+  bool SCANReplanFSM::pollSolveWorker()
+  {
+    if (!solve_future_.valid()) return false;
+    if (solve_future_.wait_for(std::chrono::seconds(0))!=std::future_status::ready) return true;
+    const auto budget=std::move(active_solve_budget_);
+    // Retire the pending token even when get() rethrows a worker/future error.
+    // This consumes the future once; no retry renews its deadline or identity.
+    WorkerResult result;
+    try {
+      result=solve_future_.get(); // RAII already released the worker snapshot.
+    } catch (const std::bad_alloc &) {
+      if (budget) budget->cancel();
+      solve_predecessor_.reset();
+      throw; // Fail-stop; never continue with a purported safe incumbent after OOM.
+    } catch (...) {
+      result.candidate.reset();
+      result.failure="solve_exception";
+    }
+    RCLCPP_INFO(node_->get_logger(),
+        "NativeSolve generation=%lu queue_ms=%.3f snapshot_ms=%.3f solve_ms=%.3f snapshot_bytes=%zu deadline=%s",
+        solve_generation_,result.queue_ms,snapshot_copy_ms_,result.solve_ms,
+        planner_manager_->grid_map_->collisionSnapshotBytes(),budget ? budget->reason():"missing");
+    // Input replacement already revoked the old generation. No old diagnostics,
+    // candidate or previous result may overwrite the replacement's state.
+    if (solve_generation_!=reference_generation_ || !have_target_ ||
+        !budget || budget->stop()==SolveBudget::Stop::Cancelled) {
+      solve_predecessor_.reset();
+      return false;
+    }
+    planner_manager_->importAttemptDiagnostics(*solve_worker_);
+    last_attempt_failure_phase_=result.failure;
+    predecessor_id_=0;
+    predecessor_safe_=false;
+    predecessor_check_stamp_=builtin_interfaces::msg::Time{};
+    if (result.candidate && solve_predecessor_ && solve_predecessor_id_>0 &&
+        budget->remainingSeconds()>.012) {
+      predecessor_id_=static_cast<std::uint64_t>(solve_predecessor_id_);
+      predecessor_safe_=planner_manager_->recheckPredecessor(*solve_predecessor_,
+                                                             solve_predecessor_measured_time_);
+      if (predecessor_safe_) predecessor_check_stamp_=node_->now();
+    }
+    solve_predecessor_.reset();
+    bool adopted=false;
+    if (result.candidate && have_odom_ &&
+        (node_->now()-last_odom_time_).seconds()<=odom_timeout_)
+      adopted=planner_manager_->adoptSolvedCandidate(std::move(*result.candidate),budget);
+    if (!budget->allowed()) last_attempt_failure_phase_=budget->reason();
+    else if (result.candidate && !adopted) last_attempt_failure_phase_="waiting_recheck";
+    publishAttemptDebug(solve_attempt_header_);
+    if (!adopted) {
+      ++replan_fail_count_;
+      waitForChangedEnvironment();
+      return true;
+    }
+    replan_fail_count_=0;
+    flag_escape_emergency_=true;
+    publishCommittedTrajectory();
+    changeFSMExecState(EXEC_TRAJ,"SOLVE_WORKER_ACCEPTED");
+    return true;
+  }
+
+  void SCANReplanFSM::publishCommittedTrajectory()
+  {
+    auto &info=planner_manager_->local_data_;
+    scan_planner_msgs::msg::Bspline bspline;
+    bspline.order=3;
+    bspline.start_time=info.start_time_;
+    bspline.traj_id=info.traj_id_;
+    const auto points=info.position_traj_.getControlPoint();
+    for (int i=0;i<points.cols();++i) {
+      geometry_msgs::msg::Point point;
+      point.x=points(0,i);point.y=points(1,i);point.z=points(2,i);
+      bspline.pos_pts.push_back(point);
+    }
+    const auto knots=info.position_traj_.getKnot();
+    for (int i=0;i<knots.rows();++i) bspline.knots.push_back(knots(i));
+    publishTrajectory(bspline);
+    publishAcceptedLocalPlanDebug(static_cast<std::uint64_t>(std::max(0,info.traj_id_)));
+    if(!execution_validator_)visualization_->displayOptimalTraj(info.position_traj_,0);
   }
 
   bool SCANReplanFSM::callEmergencyStop(Eigen::Vector3d stop_pos)
@@ -1394,7 +2129,7 @@ namespace scan_planner
     return true;
   }
 
-  bool SCANReplanFSM::getLocalTarget()
+  bool SCANReplanFSM::getLocalTarget(const SolveBudget::Ptr &budget,GridMap::Ptr* reserved_snapshot)
   {
     if (reference_path_guidance_)
     {
@@ -1406,9 +2141,10 @@ namespace scan_planner
       options.min_advance=reference_target_min_advance_;
       options.exit_margin=reference_target_exit_margin_;
       options.sample_step=planner_manager_->grid_map_->getResolution()*.5;
-      const auto selection=selectReferenceTarget(discrete_reference_, start_pt_,
+      auto selection=selectReferenceTarget(discrete_reference_, start_pt_,
           discrete_progress_, planning_horizon_, options,
-          [this](const Eigen::Vector3d &point, double yaw) {
+          [this,&budget](const Eigen::Vector3d &point, double yaw) {
+            if (!solveAllowed(budget)) return -1;
             const auto map=planner_manager_->grid_map_;
             const Eigen::Vector3d offset=self_double_cylinder_offset_*Eigen::Vector3d(std::cos(yaw),std::sin(yaw),0.);
             const Eigen::Vector3d front=point+offset, rear=point-offset;
@@ -1417,19 +2153,55 @@ namespace scan_planner
             if (!map->isInMap(front) || !map->isInMap(rear)) return -1;
             return map->getInflateOccupancy(point,yaw);
           });
+      std::vector<Eigen::Vector3d> visible_side_reference;
+      if(force_visible_side_target_) {
+        selection.valid=false;selection.reason="blocked_executable_entry";
+      }
+      if(!selection.valid&&execution_validator_&&solveAllowed(budget)) {
+        const auto support=execution_validator_->planningSupport(executionVersion(reference_metadata_));
+        const auto braking=execution_validator_->brakingModel();
+        double measured_yaw=0.;
+        const MeasuredBodyPose measured{start_pt_,odom_orient_,last_odom_time_.seconds(),self_inflation_frame_id_};
+        if(support&&braking&&measuredBodyYaw(measured,self_inflation_frame_id_,node_->now().seconds(),odom_timeout_,measured_yaw)) {
+          auto snapshot=snapshot_pool_.acquireSolver(*planner_manager_->grid_map_,
+              node_->now().nanoseconds(),budget->deadline());
+          if(!snapshot){selection.reason="waiting_snapshot_slot";local_target_query_debug_=selection;return false;}
+          // Waiting is part of the parent's ORIGINAL 400 ms, not the 80 ms
+          // side computation quota. Allocate that sub-budget only after the
+          // exclusive fair lease exists; it is capped by original remaining.
+          const auto side_budget=std::make_shared<SolveBudget>(std::chrono::milliseconds(80),
+              []{return SolveBudget::Clock::now();},budget);
+          snapshot->requireObservedSnapshot();
+          auto visible=selectVisibleSideTarget(discrete_reference_,start_pt_,measured_yaw,discrete_progress_,
+              planning_horizon_,*support,*snapshot,self_inflation_frame_id_,side_budget,1024,&*braking);
+          if(visible.target.valid) {
+            if(reserved_snapshot)*reserved_snapshot=std::move(snapshot);
+            visible_side_reference=std::move(visible.support_path);
+            visible.target.queries+=selection.queries;visible.target.free_queries+=selection.free_queries;
+            visible.target.unknown_queries+=selection.unknown_queries;visible.target.occupied_queries+=selection.occupied_queries;
+            visible.target.outside_queries+=selection.outside_queries;
+            selection=std::move(visible.target);
+            RCLCPP_INFO(node_->get_logger(),"Visible side reference selected: candidates=%zu target=[%.3f,%.3f,%.3f] queries=%zu; original global route unchanged",
+              visible.candidates,selection.point.x(),selection.point.y(),selection.point.z(),selection.queries);
+          } else {
+            selection.reason=visible.target.reason;
+          }
+        }
+      }
       const double target_arc=selection.arc;
       local_target_query_debug_=selection;
       local_debug_projection_ = discrete_reference_.sample(discrete_progress_);
       local_debug_target_arc_ = target_arc;
-      local_target_pt_ = discrete_reference_.sample(target_arc);
+      local_target_pt_ = selection.point;
       local_target_vel_.setZero();
-      local_debug_selected_reference_ = discrete_reference_.slice(discrete_progress_, target_arc, start_pt_);
+      local_debug_selected_reference_ = visible_side_reference.empty() ?
+          discrete_reference_.slice(discrete_progress_, target_arc, start_pt_) : std::move(visible_side_reference);
       if (!selection.valid) {
         last_attempt_failure_phase_=selection.reason;
         planner_manager_->setLocalReference({});
         return false;
       }
-      if (target_arc < discrete_reference_.length() - 1e-4)
+      if (selection.reason!="reference_target_visible_side"&&target_arc < discrete_reference_.length() - 1e-4)
       {
         const Eigen::Vector3d tangent = discrete_reference_.sample(std::min(target_arc + .05, discrete_reference_.length())) -
                                         discrete_reference_.sample(std::max(0.0, target_arc - .05));

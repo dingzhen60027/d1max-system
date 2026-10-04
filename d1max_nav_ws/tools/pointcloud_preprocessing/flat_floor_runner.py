@@ -13,6 +13,7 @@ import numpy as np
 import yaml
 
 from .pcd_io import read_pcd, write_subset, write_derived_z
+from . import load_config
 from .runner import sha256
 
 
@@ -63,7 +64,7 @@ def run(config_path, *, pcd_only=False):
     from .flat_floor import condition_flat_floor
     started = time.monotonic()
     config_path = Path(config_path).resolve(strict=True)
-    cfg = validate(yaml.safe_load(config_path.read_text()))
+    cfg = validate(load_config(config_path))
     source = Path(cfg['input']['path']).resolve(strict=True)
     trajectory_path = Path(cfg['trajectory']['path']).resolve(strict=True)
     hashes = {str(p): sha256(p) for p in (source, trajectory_path, config_path)}

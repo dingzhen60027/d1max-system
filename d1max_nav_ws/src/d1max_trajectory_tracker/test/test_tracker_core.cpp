@@ -1,16 +1,23 @@
 #include <gtest/gtest.h>
 #include <limits>
+#include <string>
 #include "d1max_trajectory_tracker/tracker_core.hpp"
+#include "d1max_trajectory_tracker/control_contract.hpp"
 
 using namespace d1max_trajectory_tracker;
 
 namespace {
-Config config() { Config c; c.session_id = "test-session"; return c; }
+// Legacy fixtures exercise historical controller geometry only; production
+// default requires full v2 route/segment/anchor identity and remains blocked.
+Config config() { Config c; c.session_id = "test-session"; c.planning_frame="d1max_loc_map";
+  c.require_versioned_identity=false; return c; }
 Task task(std::uint64_t generation = 1) {
-  return Task{"test-session", "d1max_loc_map", generation, true, 100.0, Eigen::Vector3d(2.0, 0.0, 0.55)};
+  Task t; t.session_id="test-session"; t.frame_id="d1max_loc_map"; t.generation=generation;
+  t.active=true; t.issued_at=100.; t.goal={2.,0.,.55}; return t;
 }
 Odom odom(double stamp = 100.0) {
-  return Odom{"d1max_loc_map", "d1max_loc_base_link", stamp, 0.0, Eigen::Vector3d(0, 0, .55), 0.0};
+  Odom o; o.frame_id="d1max_loc_map"; o.child_frame_id="d1max_loc_base_link";
+  o.stamp=stamp; o.position={0.,0.,.55}; return o;
 }
 Trajectory trajectory(std::uint64_t generation = 1, std::int64_t id = 1) {
   Trajectory t;
@@ -39,12 +46,54 @@ TEST(Tracker, DoesNotStartWithoutExplicitTask) {
   EXPECT_EQ(core.reason(), "idle");
 }
 
+TEST(Tracker, RuntimeRequiresVersionedControlContractEvenIfStandalone) {
+  EXPECT_THROW(requireIntegratedControlContract(), std::invalid_argument);
+}
+
+TEST(Tracker, OutOfOrderAndDuplicateOdomCannotRewindOrRefreshSource) {
+  TrackerCore core(config()); prepare(core);
+  ASSERT_TRUE(core.receiveOdom(odom(100.1), 100.1, 10.1));
+  auto delayed = odom(100.05);
+  delayed.position.x() = 1.5;
+  EXPECT_FALSE(core.receiveOdom(delayed, 100.15, 10.15));
+  EXPECT_FALSE(core.receiveOdom(odom(100.1), 100.2, 10.2));
+  core.step(100.2, 10.2);
+  core.receiveTask(task(), 100.3, 10.3);
+  EXPECT_GT(core.step(100.3, 10.3).forward, 0.);
+  core.receiveTask(task(), 100.51, 10.51);
+  EXPECT_EQ(core.step(100.51, 10.51).reason, "odometry_stale");
+}
+
+TEST(Tracker, LegacyMapCorrectionChangesCommandWithoutPhysicalMotion) {
+  // Evidence for the runtime architecture blocker: both bodies are stationary
+  // in local odom, but applying only a map correction to one state creates a
+  // spurious steering error against its still-old map trajectory.
+  TrackerCore stationary(config()), corrected(config());
+  prepare(stationary); prepare(corrected);
+  stationary.step(100.05, 10.05); corrected.step(100.05, 10.05);
+  auto same = odom(100.1);
+  ASSERT_TRUE(stationary.receiveOdom(same, 100.1, 10.1));
+  same.position.y() = .2;
+  ASSERT_TRUE(corrected.receiveOdom(same, 100.1, 10.1));
+  EXPECT_DOUBLE_EQ(stationary.step(100.1, 10.1).yaw_rate, 0.);
+  EXPECT_LT(corrected.step(100.1, 10.1).yaw_rate, 0.);
+}
+
 TEST(Tracker, UsesVendorCurveAndOutputsBoundedSI) {
   TrackerCore core(config()); prepare(core);
   const auto out = core.step(100.05, 10.05);
-  EXPECT_NEAR(out.forward, .02, 1e-9);  // .4 m/s² × .05s
+  EXPECT_NEAR(out.forward, .0175, 1e-9);  // .35 m/s² × .05s
   EXPECT_NEAR(out.yaw_rate, 0, 1e-9);
   EXPECT_FALSE(out.frozen);
+}
+TEST(Tracker,AcceptedRouteYawToleranceRangeIsNotSilentlyRejectedAtAlignment) {
+  for(double tolerance:{.01,.15,.3,.5}) {
+    TrackerCore core(config());prepare(core);core.step(100.02,10.02);
+    auto measured=odom(100.04);measured.posterior_stamp=measured.imu_stamp=100.04;
+    ASSERT_TRUE(core.receiveOdom(measured,100.04,10.04));
+    const auto out=core.align(1.,tolerance,100.04,10.04,true);
+    EXPECT_EQ(out.reason,"aligning");EXPECT_GT(out.yaw_rate,0.);EXPECT_EQ(out.forward,0.);
+  }
 }
 
 TEST(Tracker, SessionGenerationAndIdAreEnforced) {
@@ -64,7 +113,7 @@ TEST(Tracker, SessionGenerationAndIdAreEnforced) {
   EXPECT_TRUE(core.receiveTrajectory(current, 100.15, 10.15));
 }
 
-TEST(Tracker, EmptyInvalidOrWrongFramePlanStopsExistingMotion) {
+TEST(Tracker, EmptyInvalidOrWrongFrameCandidateDoesNotWithdrawIncumbent) {
   for (int variant = 0; variant < 7; ++variant) {
     TrackerCore core(config()); prepare(core);
     auto bad = trajectory(1, 2);
@@ -76,19 +125,75 @@ TEST(Tracker, EmptyInvalidOrWrongFramePlanStopsExistingMotion) {
     if (variant == 5) bad.start_time = 101;
     if (variant == 6) bad.order = 1;
     EXPECT_FALSE(core.receiveTrajectory(bad, 100.05, 10.05));
-    EXPECT_DOUBLE_EQ(core.step(100.05, 10.05).forward, 0);
+    EXPECT_GT(core.step(100.05, 10.05).forward, 0);
+    EXPECT_EQ(core.trajectoryId(),1);
   }
 }
 
+TEST(Tracker, CandidateDiagnosticsSeparateFormatClockAndGeometryWithoutChangingAdmission) {
+  struct Case {const char* reason;int variant;};
+  const Case cases[]={{"trajectory_clock_nonfinite",0},{"trajectory_clock_nonfinite",1},
+    {"trajectory_clock_nonfinite",2},{"trajectory_frame_mismatch",3},
+    {"trajectory_predates_task",4},{"trajectory_start_in_future",5},
+    {"trajectory_start_expired",6},{"trajectory_order_unsupported",7},
+    {"trajectory_control_point_count",8},{"trajectory_control_point_count",9},
+    {"trajectory_knot_count",10},{"trajectory_control_point_nonfinite",11},
+    {"trajectory_knot_nonfinite",12},{"trajectory_knots_not_increasing",13},
+    {"trajectory_duration_out_of_range",14},{"trajectory_duration_out_of_range",15},
+    {"trajectory_duration_elapsed",16},{"trajectory_arc_degenerate",17}};
+  for(const auto& entry:cases) {
+    auto cfg=config();cfg.trajectory_timeout=entry.variant==6?2.:5.;TrackerCore core(cfg);
+    ASSERT_TRUE(core.receiveTask(task(),100.,10.));
+    ASSERT_TRUE(core.receiveOdom(odom(),100.,10.));
+    auto bad=trajectory();double now=100.,receipt=10.;
+    const double nan=std::numeric_limits<double>::quiet_NaN();
+    switch(entry.variant) {
+      case 0:now=nan;break;
+      case 1:receipt=nan;break;
+      case 2:bad.start_time=nan;break;
+      case 3:bad.frame_id="other";break;
+      case 4:bad.start_time=99.99;break;
+      case 5:bad.start_time=100.201;break;
+      case 6:now=102.001;receipt=12.001;break;
+      case 7:bad.order=1;break;
+      case 8:bad.points.resize(3);break;
+      case 9:bad.points.resize(10001);break;
+      case 10:bad.knots.pop_back();break;
+      case 11:bad.points[1].x()=nan;break;
+      case 12:bad.knots[5]=nan;break;
+      case 13:bad.knots[5]=bad.knots[4];break;
+      case 14:for(auto& knot:bad.knots)knot*=.001;break;
+      case 15:for(auto& knot:bad.knots)knot*=100.;break;
+      case 16:now=104.001;receipt=14.001;break;
+      case 17:for(auto& point:bad.points)point={0.,0.,.55};break;
+    }
+    EXPECT_FALSE(core.receiveTrajectory(bad,now,receipt))<<entry.variant;
+    EXPECT_EQ(core.candidateReason(),entry.reason)<<entry.variant;
+    EXPECT_TRUE(core.active())<<entry.variant; // Invalid candidate is not task cancellation.
+    EXPECT_EQ(core.trajectoryId(),-1)<<entry.variant;
+  }
+}
+
+TEST(Tracker, ExpiredPendingCandidateDoesNotWithdrawOrRestampAcceptedCurve) {
+  auto cfg=config();cfg.trajectory_timeout=2.;TrackerCore core(cfg);prepare(core);
+  const auto accepted_id=core.trajectoryId();
+  auto bad=trajectory(1,2);
+  EXPECT_FALSE(core.receiveTrajectory(bad,102.001,12.001));
+  EXPECT_EQ(core.candidateReason(),"trajectory_start_expired");
+  EXPECT_EQ(core.trajectoryId(),accepted_id);
+  EXPECT_TRUE(core.active());
+  // No replacement was installed and no source was republished to grant it a
+  // fresh lease; independent odometry/proof checks still control actual motion.
+}
+
 TEST(Tracker, OdomFramesQuaternionAndSpeedCannotBypassSafety) {
-  for (int variant = 0; variant < 5; ++variant) {
+  for (int variant = 0; variant < 4; ++variant) {
     TrackerCore core(config()); prepare(core);
-    auto bad = odom();
+    auto bad = odom(100.05); // a distinct fresh fault, not an ignored duplicate
     if (variant == 0) bad.frame_id = "odom";
     if (variant == 1) bad.child_frame_id = "lidar";
     if (variant == 2) bad.yaw = std::numeric_limits<double>::quiet_NaN();
     if (variant == 3) bad.planar_speed = 1.51;
-    if (variant == 4) bad.stamp = 99;
     EXPECT_FALSE(core.receiveOdom(bad, 100.05, 10.05));
     EXPECT_DOUBLE_EQ(core.step(100.05, 10.05).forward, 0);
   }
@@ -137,12 +242,305 @@ TEST(Tracker, InvalidMutableHeartbeatIsNotAccepted) {
 
 TEST(Tracker, RotatesAndFreezesBeforeForwardMotion) {
   TrackerCore core(config()); prepare(core);
-  auto turned = odom(); turned.yaw = 1.5;
-  core.receiveOdom(turned, 100, 10);
+  auto turned = odom(100.01); turned.yaw = 1.5;
+  ASSERT_TRUE(core.receiveOdom(turned, 100.01, 10.01));
   const auto out = core.step(100.05, 10.05);
   EXPECT_DOUBLE_EQ(out.forward, 0);
   EXPECT_LT(out.yaw_rate, 0);
   EXPECT_TRUE(out.frozen);
+}
+
+TEST(Tracker, OccupiedForwardTurnRequestsControlledStopBeforePureMeasuredTurn) {
+  TrackerCore core(config());prepare(core);
+  auto pose=odom(100.05);pose.yaw=.4;
+  ASSERT_TRUE(core.receiveOdom(pose,100.05,10.05));
+  auto previous=core.step(100.05,10.05);ASSERT_GT(previous.forward,0.);
+  ASSERT_TRUE(core.notifyBlockedForwardTurn(1,100.05,100.06,previous.forward,previous.yaw_rate));
+  EXPECT_STREQ(core.maneuverPhase(),"decelerating_for_turn");
+  bool rotated=false;
+  for(int i=2;i<=16;++i) {
+    const double t=i*.05;pose.stamp=100+t;
+    pose.planar_speed=previous.forward;pose.velocity_in_frame={previous.forward,0,0};
+    pose.angular_velocity_in_frame.z()=previous.yaw_rate;
+    ASSERT_TRUE(core.receiveOdom(pose,100+t,10+t));core.refreshTaskLease(10+t);
+    const auto output=core.step(100+t,10+t);
+    EXPECT_LE(std::abs(output.forward-previous.forward),.35*.05+1e-9);
+    EXPECT_LE(std::abs(output.yaw_rate-previous.yaw_rate),.8*.05+1e-9);
+    EXPECT_TRUE(output.frozen);
+    if(output.reason=="turn_first_aligning") {
+      EXPECT_EQ(output.forward,0.);rotated=rotated||output.yaw_rate<0.;
+    }
+    previous=output;
+  }
+  EXPECT_TRUE(rotated);EXPECT_STREQ(core.maneuverPhase(),"aligning_to_curve");
+}
+
+TEST(Tracker, TurnFirstNeedsDistinctMeasuredAlignmentSamplesAndHasHysteresis) {
+  TrackerCore core(config());prepare(core);
+  ASSERT_TRUE(core.notifyBlockedForwardTurn(1,100.,100.,.1,.2));
+  for(int i=1;i<=3;++i) {
+    const double t=i*.02;ASSERT_TRUE(core.receiveOdom(odom(100+t),100+t,10+t));
+    EXPECT_EQ(core.step(100+t,10+t).forward,0.);
+  }
+  ASSERT_STREQ(core.maneuverPhase(),"decelerating_for_turn"); // 60 ms is not rest.
+  // Timer ticks with no new source sample cannot count as observed alignment.
+  for(int i=4;i<=6;++i)EXPECT_EQ(core.step(100+i*.02,10+i*.02).forward,0.);
+  EXPECT_STREQ(core.maneuverPhase(),"decelerating_for_turn");
+  for(int i=7;i<=31;++i) {
+    const double t=i*.02;ASSERT_TRUE(core.receiveOdom(odom(100+t),100+t,10+t));
+    core.refreshTaskLease(10+t);
+    EXPECT_EQ(core.step(100+t,10+t).forward,0.);
+  }
+  ASSERT_STREQ(core.maneuverPhase(),"aligning_to_curve");
+  for(int i=32;i<=34;++i)EXPECT_EQ(core.step(100+i*.02,10+i*.02).forward,0.);
+  EXPECT_STREQ(core.maneuverPhase(),"aligning_to_curve");
+  for(int i=35;i<=65;++i) {
+    const double t=i*.02;ASSERT_TRUE(core.receiveOdom(odom(100+t),100+t,10+t));
+    core.refreshTaskLease(10+t);EXPECT_EQ(core.step(100+t,10+t).forward,0.);
+  }
+  ASSERT_STREQ(core.maneuverPhase(),"following");
+  auto pose=odom(101.32);pose.yaw=.15;ASSERT_TRUE(core.receiveOdom(pose,101.32,11.32));
+  EXPECT_GT(core.step(101.32,11.32).forward,0.);EXPECT_STREQ(core.maneuverPhase(),"following");
+  pose.stamp=101.34;pose.yaw=.21;ASSERT_TRUE(core.receiveOdom(pose,101.34,11.34));
+  const auto output=core.step(101.34,11.34);
+  EXPECT_STREQ(core.maneuverPhase(),"decelerating_for_turn");EXPECT_TRUE(output.frozen);
+}
+
+TEST(Tracker, TurnRestUsesRecordLimitsAndFreshMovingSampleRestartsDuration) {
+  auto c=config();c.stationary_linear_threshold_mps=.01;c.stationary_angular_threshold_radps=.02;
+  c.stationary_reentry_duration_s=1.;c.stationary_minimum_samples=5;
+  TrackerCore core(c);prepare(core);
+  ASSERT_TRUE(core.notifyBlockedForwardTurn(1,100.,100.,.1,.2));
+  for(int i=1;i<=67;++i) {
+    const double t=i*.02;auto state=odom(100+t);
+    if(i==16)state.planar_speed=.011; // Fresh MC/fusion noise above accepted threshold.
+    ASSERT_TRUE(core.receiveOdom(state,100+t,10+t));core.refreshTaskLease(10+t);
+    EXPECT_EQ(core.step(100+t,10+t).forward,0.);
+    if(i<67) {EXPECT_STREQ(core.maneuverPhase(),"decelerating_for_turn")<<i;}
+  }
+  ASSERT_STREQ(core.maneuverPhase(),"aligning_to_curve");
+  for(int i=68;i<=118;++i) {
+    const double t=i*.02;ASSERT_TRUE(core.receiveOdom(odom(100+t),100+t,10+t));
+    core.refreshTaskLease(10+t);EXPECT_EQ(core.step(100+t,10+t).forward,0.);
+    if(i<118) {EXPECT_STREQ(core.maneuverPhase(),"aligning_to_curve")<<i;}
+  }
+  EXPECT_STREQ(core.maneuverPhase(),"following");
+  ASSERT_TRUE(core.receiveOdom(odom(102.38),102.38,12.38));
+  EXPECT_GT(core.step(102.38,12.38).forward,0.);
+}
+
+TEST(Tracker, TurnRestSampleMinimumCannotBeSatisfiedByTimerOrReplayedSource) {
+  auto c=config();c.stationary_minimum_samples=100;TrackerCore core(c);prepare(core);
+  ASSERT_TRUE(core.notifyBlockedForwardTurn(1,100.,100.,.1,.2));
+  for(int i=1;i<=100;++i) {
+    const double t=i*.02;auto state=odom(100+t);
+    ASSERT_TRUE(core.receiveOdom(state,100+t,10+t));core.refreshTaskLease(10+t);
+    EXPECT_FALSE(core.receiveOdom(state,100+t,10+t)); // Same source cannot add an observation.
+    EXPECT_EQ(core.step(100+t,10+t).forward,0.);
+    if(i<100) {EXPECT_STREQ(core.maneuverPhase(),"decelerating_for_turn")<<i;}
+  }
+  EXPECT_STREQ(core.maneuverPhase(),"aligning_to_curve");
+}
+
+TEST(Tracker, WrongOldZeroFeedbackCannotRequestManeuverAndStaleBodyCannotTurn) {
+  TrackerCore core(config());prepare(core);
+  EXPECT_FALSE(core.notifyBlockedForwardTurn(2,100.,100.,.1,.2));
+  EXPECT_FALSE(core.notifyBlockedForwardTurn(1,99.8,100.,.1,.2));
+  EXPECT_FALSE(core.notifyBlockedForwardTurn(1,100.,100.,0.,.2));
+  EXPECT_FALSE(core.notifyBlockedForwardTurn(1,100.,100.,.1,0.));
+  EXPECT_STREQ(core.maneuverPhase(),"following");
+  ASSERT_TRUE(core.notifyBlockedForwardTurn(1,100.,100.,.1,.2));
+  EXPECT_FALSE(core.notifyBlockedForwardTurn(1,100.,100.,.1,.2));
+  core.refreshTaskLease(10.2);core.step(100.2,10.2);
+  core.refreshTaskLease(10.4);core.step(100.4,10.4);
+  core.refreshTaskLease(10.5);const auto output=core.step(100.5,10.5);
+  EXPECT_EQ(output.forward,0.);EXPECT_EQ(output.yaw_rate,0.);
+  EXPECT_TRUE(core.holding());
+}
+
+TEST(Tracker, SameTaskCandidateAndTemporaryProofHoldDoNotResetTurnPhase) {
+  TrackerCore core(config());prepare(core);core.step(100.02,10.02);
+  ASSERT_TRUE(core.notifyBlockedForwardTurn(1,100.02,100.02,.1,.2));
+  ASSERT_TRUE(core.receiveTrajectory(trajectory(1,2),100.03,10.03));
+  EXPECT_STREQ(core.maneuverPhase(),"decelerating_for_turn");
+  EXPECT_FALSE(core.notifyBlockedForwardTurn(1,100.03,100.03,.1,.2));
+  core.suspendOutput(100.04,10.04,"waiting_native_proof",false);
+  EXPECT_STREQ(core.maneuverPhase(),"decelerating_for_turn");
+  EXPECT_EQ(core.step(100.05,10.05).forward,0.);
+  core.cancel("cancelled");EXPECT_STREQ(core.maneuverPhase(),"following");
+}
+
+namespace {
+void alignBlockedEntry(TrackerCore& core) {
+  prepare(core);ASSERT_TRUE(core.notifyBlockedForwardTurn(1,100.,100.,.1,.2));
+  for(int i=1;i<=62;++i) {
+    const double t=i*.02;ASSERT_TRUE(core.receiveOdom(odom(100+t),100+t,10+t));
+    core.refreshTaskLease(10+t);EXPECT_EQ(core.step(100+t,10+t).forward,0.);
+  }
+  ASSERT_STREQ(core.maneuverPhase(),"following");
+}
+}
+
+TEST(Tracker, OccupiedAlignedEntryWaitsWithoutRepeatedForwardAndRetainsTask) {
+  TrackerCore core(config());alignBlockedEntry(core);
+  ASSERT_TRUE(core.receiveOdom(odom(101.26),101.26,11.26));
+  ASSERT_TRUE(core.notifyBlockedForwardTurn(1,101.26,101.26,.01,.016));
+  ASSERT_STREQ(core.maneuverPhase(),"waiting_executable_entry");
+  for(int i=64;i<=106;++i) {
+    const double t=i*.02;ASSERT_TRUE(core.receiveOdom(odom(100+t),100+t,10+t));
+    core.refreshTaskLease(10+t);const auto out=core.step(100+t,10+t);
+    EXPECT_EQ(out.forward,0.);EXPECT_EQ(out.yaw_rate,0.);
+    EXPECT_EQ(out.reason,"waiting_executable_entry");EXPECT_TRUE(core.active());
+    EXPECT_FALSE(core.notifyBlockedForwardTurn(1,100+t,100+t,.01,.016));
+  }
+}
+
+TEST(Tracker, OccupiedInPlaceAlignTurnWaitsForAnotherEntryInsteadOfRepeatingIt) {
+  TrackerCore core(config());prepare(core);
+  auto pose=odom(100.01);pose.yaw=.6;ASSERT_TRUE(core.receiveOdom(pose,100.01,10.01));
+  ASSERT_TRUE(core.notifyBlockedForwardTurn(1,100.01,100.01,.1,.2));
+  double yaw=0.;
+  for(int i=1;i<=31&&std::string(core.maneuverPhase())!="aligning_to_curve";++i) {
+    const double t=i*.02;pose.stamp=100+t;ASSERT_TRUE(core.receiveOdom(pose,100+t,10+t));
+    core.refreshTaskLease(10+t);core.step(100+t,10+t);
+  }
+  ASSERT_STREQ(core.maneuverPhase(),"aligning_to_curve");
+  for(int i=32;i<=37;++i) {
+    const double t=i*.02;pose.stamp=100+t;ASSERT_TRUE(core.receiveOdom(pose,100+t,10+t));
+    core.refreshTaskLease(10+t);const auto out=core.step(100+t,10+t);
+    EXPECT_EQ(out.forward,0.);yaw=out.yaw_rate;
+  }
+  ASSERT_NE(yaw,0.);
+  // Zero-yaw, stale and reverse feedback cannot escalate even while aligning.
+  EXPECT_FALSE(core.notifyBlockedForwardTurn(1,100.74,100.74,0.,0.));
+  EXPECT_FALSE(core.notifyBlockedForwardTurn(1,100.56,100.74,0.,yaw));
+  EXPECT_FALSE(core.notifyBlockedForwardTurn(1,100.74,100.74,-.05,yaw));
+  EXPECT_FALSE(core.notifyBlockedForwardTurn(2,100.74,100.74,0.,yaw));
+  EXPECT_STREQ(core.maneuverPhase(),"aligning_to_curve");
+  ASSERT_TRUE(core.notifyBlockedForwardTurn(1,100.74,100.74,0.,yaw));
+  ASSERT_STREQ(core.maneuverPhase(),"waiting_executable_entry");
+  for(int i=38;i<=63;++i) {
+    const double t=i*.02;pose.stamp=100+t;ASSERT_TRUE(core.receiveOdom(pose,100+t,10+t));
+    core.refreshTaskLease(10+t);const auto out=core.step(100+t,10+t);
+    EXPECT_EQ(out.forward,0.);EXPECT_EQ(out.yaw_rate,0.);
+    EXPECT_EQ(out.reason,"waiting_executable_entry");EXPECT_TRUE(core.active());
+  }
+  // Only an admitted replacement leaves the wait, and it restarts at a stop.
+  auto replacement=trajectory(1,2);replacement.start_time=101.28;
+  ASSERT_TRUE(core.receiveTrajectory(replacement,101.28,11.28));
+  EXPECT_STREQ(core.maneuverPhase(),"decelerating_for_turn");
+}
+
+TEST(Tracker, InPlaceTurnFeedbackOutsideAligningCannotRequestManeuver) {
+  TrackerCore core(config());prepare(core);
+  EXPECT_FALSE(core.notifyBlockedForwardTurn(1,100.,100.,0.,.3));
+  EXPECT_STREQ(core.maneuverPhase(),"following");
+  ASSERT_TRUE(core.notifyBlockedForwardTurn(1,100.,100.,.1,.2));
+  ASSERT_STREQ(core.maneuverPhase(),"decelerating_for_turn");
+  EXPECT_FALSE(core.notifyBlockedForwardTurn(1,100.01,100.01,0.,.3));
+  EXPECT_STREQ(core.maneuverPhase(),"decelerating_for_turn");
+}
+
+TEST(Tracker, OnlyAdmittedReplacementCanRetryBlockedEntryAndStillMustStopAndAlign) {
+  TrackerCore core(config());alignBlockedEntry(core);
+  ASSERT_TRUE(core.receiveOdom(odom(101.26),101.26,11.26));
+  ASSERT_TRUE(core.notifyBlockedForwardTurn(1,101.26,101.26,.01,.016));
+  auto bad=trajectory(1,2);bad.knots.clear();
+  ASSERT_FALSE(core.receiveTrajectory(bad,101.26,11.26));
+  EXPECT_STREQ(core.maneuverPhase(),"waiting_executable_entry");
+  auto valid=trajectory(1,2);valid.start_time=101.26;
+  ASSERT_TRUE(core.receiveTrajectory(valid,101.26,11.26));
+  EXPECT_STREQ(core.maneuverPhase(),"decelerating_for_turn");
+  ASSERT_TRUE(core.receiveOdom(odom(101.28),101.28,11.28));
+  EXPECT_EQ(core.step(101.28,11.28).forward,0.);
+  core.cancel("operator_cancel");EXPECT_FALSE(core.active());
+  EXPECT_STREQ(core.maneuverPhase(),"following");
+}
+
+TEST(Tracker, RealProgressAfterAlignedEntryDistinguishesANewObstacle) {
+  TrackerCore core(config());alignBlockedEntry(core);
+  auto body=odom(101.26);body.position.x()=.06;
+  ASSERT_TRUE(core.receiveOdom(body,101.26,11.26));
+  ASSERT_TRUE(core.notifyBlockedForwardTurn(1,101.26,101.26,.01,.016));
+  EXPECT_STREQ(core.maneuverPhase(),"decelerating_for_turn");
+}
+
+TEST(Tracker, RealSplineCurvatureConstrainsForwardSpeedWithoutGuessingLateralAcceleration) {
+  EXPECT_NEAR(curvatureForwardLimit({.2,0,0},{0,.08,0},.5,.3),.25,1e-12);
+  EXPECT_DOUBLE_EQ(curvatureForwardLimit({.2,0,.01},{0,0,.01},.5,.3),.3);
+  EXPECT_DOUBLE_EQ(curvatureForwardLimit({NAN,0,0},{0,0,0},.5,.3),0.);
+  auto c=config();c.max_yaw_rate=.1;TrackerCore core(c);
+  ASSERT_TRUE(core.receiveTask(task(),100,10));ASSERT_TRUE(core.receiveOdom(odom(),100,10));
+  auto curved=trajectory();for(auto& p:curved.points)p.y()=2*p.x()*p.x();
+  ASSERT_TRUE(core.receiveTrajectory(curved,100,10));
+  double maximum=0.;
+  for(int i=1;i<=10;++i) {
+    const double t=i*.05;auto pose=odom(100+t);pose.yaw=.5;
+    ASSERT_TRUE(core.receiveOdom(pose,100+t,10+t));core.refreshTaskLease(10+t);
+    const auto output=core.step(100+t,10+t);maximum=std::max(maximum,output.forward);
+    EXPECT_LE(output.forward,.026);EXPECT_LE(std::abs(output.yaw_rate),.1);
+  }
+  EXPECT_GT(maximum,0.);
+}
+
+TEST(Tracker, FutureBendIsReachedThroughBrakingEnvelopeNotWholeCurveMinimum) {
+  const std::vector<double> arc{0.,.4,.8,1.2};
+  const std::vector<double> cap{.30,.30,.30,.10};
+  const auto envelope=brakingSpeedEnvelope(arc,cap,.35,1.);
+  ASSERT_EQ(envelope.size(),arc.size());
+  EXPECT_DOUBLE_EQ(brakingEnvelopeAt(arc,envelope,0.,.35,1.),.30);
+  EXPECT_DOUBLE_EQ(brakingEnvelopeAt(arc,envelope,.8,.35,1.),.30);
+  EXPECT_NEAR(brakingEnvelopeAt(arc,envelope,1.19,.35,1.),std::sqrt(.01+.007),1e-12);
+  // The low cap is still mandatory at the bend itself. No instantaneous
+  // limiter reset or unknown/occupied-space exception is involved.
+  EXPECT_DOUBLE_EQ(brakingEnvelopeAt(arc,envelope,1.2,.35,1.),.10);
+  EXPECT_LT(brakingEnvelopeAt(arc,envelope,1.19,.35,1.),.30);
+  for(std::size_t i=1;i<envelope.size();++i)
+    EXPECT_LE(envelope[i-1]*envelope[i-1],envelope[i]*envelope[i]+2.*.35*(arc[i]-arc[i-1])+1e-12);
+}
+TEST(Tracker, BrakingEnvelopeCannotBorrowVerticalDistanceOrIgnoreCloseTurn) {
+  const std::vector<double> arc{0.,.02};const std::vector<double> cap{.30,.05};
+  const auto flat=brakingSpeedEnvelope(arc,cap,.35,1.);
+  const auto inclined=brakingSpeedEnvelope(arc,cap,.35*.7,.7);
+  ASSERT_EQ(flat.size(),2u);ASSERT_EQ(inclined.size(),2u);
+  EXPECT_LT(flat.front(),.30);EXPECT_LT(inclined.front(),flat.front());
+  EXPECT_DOUBLE_EQ(inclined.back(),.05);
+  EXPECT_TRUE(brakingSpeedEnvelope({0.,-.1},cap,.35,1.).empty());
+  EXPECT_TRUE(brakingSpeedEnvelope(arc,{.3,NAN},.35,1.).empty());
+  EXPECT_TRUE(brakingSpeedEnvelope(arc,cap,.35,1.01).empty());
+}
+TEST(Tracker, NormalCurvatureControlNeverHardClipsThroughTheAccelerationLimit) {
+  double previous=.30;
+  for(double cap:{.30,.297,.295,.293,.291}) {
+    const auto next=normalForwardStep(.1,previous,cap,.35,.02);ASSERT_TRUE(next);
+    EXPECT_LE(*next,cap+1e-12);EXPECT_LE(std::abs(*next-previous),.35*.02+1e-12);previous=*next;
+  }
+  EXPECT_FALSE(normalForwardStep(.29,.30,.29,.35,.02));
+  EXPECT_FALSE(normalForwardStep(.1,.30,.10,.35,.02));
+  EXPECT_FALSE(normalForwardStep(.1,.30,.30,.35,.26));
+}
+TEST(Tracker, PoseJumpIntoUnreachableCurveSpeedRequestsExplicitStopAndPreservesAppliedGeometry) {
+  TrackerCore core(config());prepare(core);
+  auto t=trajectory(1,2);
+  for(auto& p:t.points) {const double d=std::max(0.,p.x()-.6);p.y()=d<=.1?2.*d*d:.02+.4*(d-.1);}
+  ASSERT_TRUE(core.receiveTrajectory(t,100.,10.));core.recordAppliedOutput(.296,0.,100.,10.);
+  auto body=odom(100.02);body.position.x()=.3;
+  ASSERT_TRUE(core.receiveOdom(body,100.02,10.02));core.refreshTaskLease(10.02);
+  ASSERT_EQ(core.step(100.02,10.02).reason,"tracking");
+  body=odom(100.04);body.position.x()=.57;
+  ASSERT_TRUE(core.receiveOdom(body,100.04,10.04));core.refreshTaskLease(10.04);
+  const auto stopped=core.step(100.04,10.04);
+  EXPECT_EQ(stopped.reason,"braking_envelope_reentry_required");EXPECT_EQ(stopped.forward,0.);EXPECT_EQ(stopped.yaw_rate,0.);
+  EXPECT_TRUE(core.requiresMeasuredReentry());EXPECT_TRUE(core.active());EXPECT_TRUE(core.hasInstalledGeometry());
+  EXPECT_EQ(core.trajectoryId(),2);const auto arc=core.progressArc();
+  // Fresh samples and permission heartbeats alone cannot reset this fence.
+  for(int i=1;i<=40;++i) {
+    body.stamp=100.04+i*.02;ASSERT_TRUE(core.receiveOdom(body,body.stamp,10.04+i*.02));
+    core.refreshTaskLease(10.04+i*.02);
+    const auto held=core.step(body.stamp,10.04+i*.02,true);
+    EXPECT_EQ(held.reason,"braking_envelope_reentry_required");EXPECT_EQ(held.forward,0.);
+  }
+  EXPECT_TRUE(core.requiresMeasuredReentry());EXPECT_TRUE(core.hasInstalledGeometry());EXPECT_GE(core.progressArc(),arc-1e-9);
 }
 
 TEST(Tracker, DoesNotChaseAPlanInADifferentHeightOrFarAway) {
@@ -155,16 +553,17 @@ TEST(Tracker, DoesNotChaseAPlanInADifferentHeightOrFarAway) {
     }
     EXPECT_EQ(core.receiveTrajectory(plan, 100, 10), variant != 0);
     const auto out = core.step(100.05, 10.05);
-    EXPECT_DOUBLE_EQ(out.forward, 0);
-    EXPECT_EQ(out.reason, variant == 0 ? "trajectory_outside_single_floor_envelope" :
+    if(variant==0) {EXPECT_GT(out.forward,0.);EXPECT_EQ(core.trajectoryId(),1);}
+    else EXPECT_DOUBLE_EQ(out.forward, 0);
+    EXPECT_EQ(out.reason, variant == 0 ? "tracking" :
                                       "tracking_error_outside_single_floor_envelope");
   }
 }
 
 TEST(Tracker, GoalCompletionStopsAndRemainsTerminal) {
   TrackerCore core(config()); prepare(core);
-  auto at_goal = odom(); at_goal.position.x() = 1.9;
-  core.receiveOdom(at_goal, 100, 10);
+  auto at_goal = odom(100.01); at_goal.position.x() = 1.9;
+  ASSERT_TRUE(core.receiveOdom(at_goal, 100.01, 10.01));
   const auto out = core.step(100.05, 10.05);
   EXPECT_DOUBLE_EQ(out.forward, 0);
   EXPECT_TRUE(out.finished);
@@ -220,6 +619,26 @@ TEST(Tracker, ConfigurationCannotRelaxHardCeiling) {
   EXPECT_THROW(TrackerCore core(c), std::invalid_argument);
   c = config(); c.goal_height_tolerance = .21;
   EXPECT_THROW(TrackerCore core(c), std::invalid_argument);
+}
+
+TEST(Tracker, StationaryRecordThresholdsAreBoundedAndStricterValuesRemainValid) {
+  for(int variant=0;variant<10;++variant) {
+    auto c=config();
+    if(variant==0)c.stationary_linear_threshold_mps=.051;
+    if(variant==1)c.stationary_linear_threshold_mps=0.;
+    if(variant==2)c.stationary_angular_threshold_radps=.101;
+    if(variant==3)c.stationary_angular_threshold_radps=NAN;
+    if(variant==4)c.stationary_reentry_duration_s=.59;
+    if(variant==5)c.stationary_reentry_duration_s=5.01;
+    if(variant==6)c.stationary_reentry_duration_s=NAN;
+    if(variant==7)c.stationary_minimum_samples=2;
+    if(variant==8)c.stationary_minimum_samples=513;
+    if(variant==9)c.stationary_linear_threshold_mps=NAN;
+    EXPECT_THROW(TrackerCore core(c),std::invalid_argument)<<variant;
+  }
+  auto c=config();c.stationary_linear_threshold_mps=.01;c.stationary_angular_threshold_radps=.02;
+  c.stationary_reentry_duration_s=1.;c.stationary_minimum_samples=5;
+  EXPECT_NO_THROW(TrackerCore core(c));
 }
 
 TEST(Tracker, SameXYOnAnotherFloorDoesNotCompleteOrResume) {
@@ -285,12 +704,12 @@ TEST(Tracker, ReplansCannotMoveTheSingleFloorHeightAnchor) {
 TEST(Tracker, EntireSplineHeightHullIsCheckedBeforeExecution) {
   TrackerCore core(config()); prepare(core);
   auto plan = trajectory(1, 2);
-  // The initial point is safe; a later rise is still a terminal rejection.
+  // Reject the later rise without discarding the separate safe incumbent.
   plan.points.back().z() += .4;
   EXPECT_FALSE(core.receiveTrajectory(plan, 100.1, 10.1));
-  EXPECT_FALSE(core.active());
-  EXPECT_EQ(core.reason(), "trajectory_outside_single_floor_envelope");
-  EXPECT_FALSE(core.receiveTask(task(), 100.15, 10.15));
+  EXPECT_TRUE(core.active());
+  EXPECT_EQ(core.trajectoryId(),1);
+  EXPECT_TRUE(core.receiveTask(task(), 100.15, 10.15));
 }
 
 TEST(Tracker, IdealSingleFloorClosedLoopReachesGoalWithoutRobot) {
@@ -332,9 +751,8 @@ TEST(Tracker, LocalEndpointIsNotTheGlobalGoal) {
     EXPECT_FALSE(out.finished);
     if (out.reason == "local_segment_finished_waiting_replan") {
       waited = true;
-      EXPECT_DOUBLE_EQ(out.forward, 0);
       EXPECT_TRUE(core.active());
-      break;
+      if(out.forward==0.)break; // Segment boundary uses the real limiter, not an abrupt zero.
     }
   }
   EXPECT_TRUE(waited);
@@ -365,7 +783,7 @@ TEST(Tracker, ValidReplanPreservesLinearAndAngularAccelerationHistory) {
   EXPECT_GT(output.yaw_rate, .1);  // not reset to the first acceleration tick
 }
 
-TEST(Tracker, InvalidReplanStillImmediatelyStopsEstablishedMotion) {
+TEST(Tracker, InvalidCandidateRetainsEstablishedCurveAndLimiter) {
   TrackerCore core(config()); prepare(core);
   for (int i = 1; i <= 20; ++i) {
     const double t = i * .05;
@@ -376,16 +794,16 @@ TEST(Tracker, InvalidReplanStillImmediatelyStopsEstablishedMotion) {
   auto invalid = trajectory(1, 2); invalid.start_time = 101; invalid.knots.clear();
   EXPECT_FALSE(core.receiveTrajectory(invalid, 101, 11));
   const auto output = core.step(101.05, 11.05);
-  EXPECT_DOUBLE_EQ(output.forward, 0);
+  EXPECT_DOUBLE_EQ(output.forward, config().max_speed);
   EXPECT_DOUBLE_EQ(output.yaw_rate, 0);
-  EXPECT_EQ(output.reason, "invalid_trajectory");
+  EXPECT_EQ(output.reason, "tracking");
 }
 
 TEST(Tracker, ForwardOnlyControllerSteersTowardBothSidesOfParallelPath) {
   for (const double offset : {-.7, -.3, .3, .7}) {
     TrackerCore core(config()); prepare(core);
-    auto pose = odom(); pose.position.y() = offset;
-    ASSERT_TRUE(core.receiveOdom(pose, 100, 10));
+    auto pose = odom(100.01); pose.position.y() = offset;
+    ASSERT_TRUE(core.receiveOdom(pose, 100.01, 10.01));
     const auto output = core.step(100.05, 10.05);
     EXPECT_LT(output.yaw_rate * offset, 0);
     EXPECT_GE(output.forward, 0);

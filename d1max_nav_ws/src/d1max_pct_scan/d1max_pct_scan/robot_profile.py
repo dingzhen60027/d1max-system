@@ -6,7 +6,8 @@ import yaml
 
 
 def load_robot_profile(path):
-    profile = yaml.safe_load(Path(path).read_text())
+    from d1max_pct_planner.paths import expand_tree
+    profile = expand_tree(yaml.safe_load(Path(path).read_text()))
     if not isinstance(profile, dict) or profile.get('schema') != 1 or profile.get('model') != 'D1 Max':
         raise ValueError('invalid D1 Max robot profile')
     official, engineering = profile['official'], profile['engineering']

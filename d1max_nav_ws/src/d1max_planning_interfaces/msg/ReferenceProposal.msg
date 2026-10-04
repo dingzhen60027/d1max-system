@@ -1,0 +1,13 @@
+# Prepare a candidate revision without withdrawing the committed reference.
+string proposal_id
+ExecutionVersion expected_version
+int64 expected_trajectory_id
+ExecutionVersion version
+ReferencePath reference
+geometry_msgs/Point goal_position
+bool has_goal_yaw
+float64 goal_yaw
+float64 goal_yaw_tolerance_rad
+builtin_interfaces/Time source_stamp
+builtin_interfaces/Time valid_until
+string transport_mode

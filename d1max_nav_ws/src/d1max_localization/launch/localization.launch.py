@@ -32,7 +32,7 @@ def launch_nodes(context):
               Node(package='robot_localization',executable='ekf_node',name='ekf_navigation',parameters=[config,ekf],output='screen',
                    remappings=[('odometry/filtered','/d1max/localization/estimator/odometry_raw'),
                                ('set_pose','/d1max/localization/estimator/set_pose')]),
-              Node(package='d1max_localization',executable='navigation_output',name='navigation_output',parameters=[output],output='screen')])
+              Node(package='d1max_localization',executable='navigation_output',name='navigation_output',parameters=[output, {'session_dir':session}],output='screen')])
         return [*[RegisterEventHandler(OnProcessExit(target_action=n,on_exit=[EmitEvent(event=Shutdown(reason='A localization node exited; stopping the complete session'))])) for n in nodes],*nodes]
     nodes = [
         Node(package='d1max_localization', executable='dual_lidar_adapter', name='dual_lidar_adapter', parameters=[config], output='screen'),

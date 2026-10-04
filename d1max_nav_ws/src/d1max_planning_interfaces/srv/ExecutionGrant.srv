@@ -1,0 +1,17 @@
+# Request/revoke one grant. A successful RPC only queues the transaction.
+ExecutionVersion version
+string execution_id
+uint64 control_epoch
+string confirmation_id
+string request_id
+string sdk_session
+string acceptance_record_sha256
+builtin_interfaces/Time source_stamp
+bool activate
+string transport_mode
+---
+bool accepted
+bool duplicate
+string sdk_session
+uint64 sdk_arm_generation
+string reason

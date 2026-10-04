@@ -7,6 +7,10 @@ no PCT worker, SDK, localization, tracker, RViz or velocity publisher. The test
 independently samples each accepted native spline against its known geometry.
 The multi-view fixture moves only its analytic ray origin while its synthetic
 body remains stationary: map acquisition, NOT a robot motion/dynamics loop.
+Optional per_sensor_rays exercises the real dual-source ProjectedRays native
+entry, with known synthetic origins, full source/context metadata and native
+both-source integration readiness before issuing a reference. It does not
+replace an actual-bag projection/calibration test.
 It is not a physical robot, perception, terrain-support or dynamics validation.
 """
 from array import array
@@ -27,12 +31,14 @@ import uuid
 import numpy as np
 from scipy.interpolate import BSpline
 import yaml
+from d1max_pct_planner.paths import expand_tree
 
 
 WS = Path(__file__).resolve().parents[3]
 PORT, DOMAIN = 17468, '225'
 FRAME = 'd1max_loc_map'
 PREFIX = '/TEST_ONLY_native_scan/'
+RAY_SCAN_DURATION_NS = 10_000_000
 ROOM = np.array([[-2., -2., 0.], [6., 2., 2.2]])
 CASES = {
     'straight_corridor': None,
@@ -43,17 +49,110 @@ CASES = {
 }
 
 
+def resolve_collision_policy(config, override=None):
+    policy = config.get('scan_collision_policy', 'official') if override is None else override
+    if policy not in ('official', 'observed_free'):
+        raise ValueError('Unknown SCAN collision policy: '+str(policy))
+    return policy
+
+
+def resolve_perception_backend(value='deskewed_cloud'):
+    if value not in ('deskewed_cloud', 'per_sensor_rays'):
+        raise ValueError('Unknown offline perception backend: '+str(value))
+    return value
+
+
+def projected_ray_records(points, origin, *, sensor_id, source_ns, source_indices=None):
+    """Encode ideal first returns with the production 64-byte ray schema.
+
+    This fixture already knows map-frame origins/endpoints. No synthetic free
+    mask, latest robot origin or simplified occupancy map is constructed.
+    Acquisition clocks are ideal and identical to the host epoch by fixture
+    definition; ring/intensity are explicitly synthetic, not captured data.
+    """
+    from d1max_pct_scan.ray_projection import RAY_DTYPE
+    points, origin = np.asarray(points, dtype=float), np.asarray(origin, dtype=float)
+    if (sensor_id not in (0, 1) or type(source_ns) is not int or source_ns <= 0
+            or points.ndim != 2 or points.shape[1] != 3 or not 2 <= len(points) <= 100000
+            or origin.shape != (3,) or not np.isfinite(points).all()
+            or not np.isfinite(origin).all()):
+        raise ValueError('invalid_synthetic_projected_rays')
+    indices = np.arange(len(points), dtype=np.uint32) if source_indices is None else np.asarray(source_indices)
+    if (indices.shape != (len(points),) or not np.issubdtype(indices.dtype, np.integer)
+            or indices.min() < 0 or indices.max() > np.iinfo(np.uint32).max
+            or np.any(np.diff(indices.astype(np.int64)) <= 0)):
+        raise ValueError('invalid_synthetic_source_indices')
+    out = np.zeros(len(points), dtype=RAY_DTYPE)
+    for index, axis in enumerate('xyz'):
+        out[axis], out['origin_'+axis] = points[:, index], origin[index]
+    out['sensor_id'], out['source_index'] = sensor_id, indices
+    out['offset_time'] = np.linspace(0, RAY_SCAN_DURATION_NS, len(points)).astype(np.uint32)
+    for key in ('timestamp', 'source_timestamp', 'raw_timestamp'):
+        out[key] = (source_ns+out['offset_time'].astype(np.int64))*1e-9
+    return out
+
+
+def projected_ray_message(records, context, *, source_ns, projection_sequence):
+    """Construct the real ProjectedRays wire message without ROS init."""
+    from d1max_planning_interfaces.msg import ProjectedRays
+    from sensor_msgs.msg import PointField
+    from d1max_pct_scan.ray_projection import FIELDS, RAY_DTYPE
+    if (records.dtype != RAY_DTYPE or source_ns <= context['barrier_ns']
+            or projection_sequence <= 0):
+        raise ValueError('invalid_synthetic_projected_context')
+    message = ProjectedRays()
+    message.session_id, message.epoch, message.seed_id = (
+        context['session_id'], context['epoch'], context['seed_id'])
+    message.context_sequence, message.barrier_ns = context['sequence'], context['barrier_ns']
+    message.projection_sequence = projection_sequence
+    for target, value in ((message.rays.header.stamp, source_ns),
+                          (message.acquisition_end, source_ns+RAY_SCAN_DURATION_NS),
+                          (message.alignment_stamp, source_ns)):
+        target.sec, target.nanosec = divmod(int(value), 1_000_000_000)
+    cloud = message.rays
+    cloud.header.frame_id = FRAME
+    cloud.height, cloud.width, cloud.point_step = 1, len(records), 64
+    cloud.row_step, cloud.is_bigendian, cloud.is_dense = cloud.width*64, False, True
+    cloud.fields = [PointField(name=n, offset=o, datatype=t, count=c) for n,o,t,c in FIELDS]
+    cloud.data = array('B', records.tobytes())
+    return message
+
+
+def projected_status_matches(status, context):
+    """Require native ACK identity plus completed integration of BOTH sources."""
+    try:
+        sources = {int(row['sensor_id']): row for row in status['sources']}
+        return (all(status[key] == context[key] for key in
+                    ('schema', 'session_id', 'epoch', 'seed_id', 'sequence', 'barrier_ns'))
+                and status['valid'] is True and status['reason'] == 'integrated_both_sources'
+                and len(status['sources']) == 2 and set(sources) == {0, 1}
+                and all(row['integrated_count'] > 0 and row['integrated_stamp_ns'] > context['barrier_ns']
+                        for row in sources.values())
+                and status['source_stamp_ns'] == min(row['integrated_stamp_ns'] for row in sources.values()))
+    except (KeyError, TypeError, ValueError):
+        return False
+
+
+def expected_acceptance(name, policy):
+    # Official occupancy does not require a never-observed region to be free.
+    # This one case observes its decision without imposing strict-mode refusal.
+    if name == 'box_occluded' and policy == 'official':
+        return None
+    return name in ('straight_corridor', 'box_detour_multiview', 'low_box_multiview')
+
+
 def source_digest(path):
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
 
-def first_return_cloud(origin, obstacle):
+def first_return_cloud(origin, obstacle, *, azimuth_stride=1, azimuth_offset=0):
     """Visible first intersections with room surfaces and one solid AABB.
 
     Dense ideal rays are deliberate: feeding all room points would send rays
     through the test box and manufacture free-space evidence behind it.
     """
-    azimuth, elevation = np.meshgrid(np.linspace(-math.pi, math.pi, 720, endpoint=False),
+    directions_xy = np.linspace(-math.pi, math.pi, 720, endpoint=False)[azimuth_offset::azimuth_stride]
+    azimuth, elevation = np.meshgrid(directions_xy,
                                    np.deg2rad(np.linspace(-88., 88., 201)))
     directions = np.c_[np.cos(elevation).ravel()*np.cos(azimuth).ravel(),
                        np.cos(elevation).ravel()*np.sin(azimuth).ravel(),
@@ -71,7 +170,7 @@ def first_return_cloud(origin, obstacle):
     return np.asarray(cloud, dtype='<f4')
 
 
-def check_native_curve(message, debug, params, obstacle):
+def check_native_curve(message, debug, params, obstacle, require_obstacle_progress=True):
     """Independent SciPy evaluation over the entire native cubic domain.
 
     Geometry checks use the production two-circle proxy plus vertical extent,
@@ -134,7 +233,8 @@ def check_native_curve(message, debug, params, obstacle):
     assert np.linalg.norm(xyz[-1]-target) < .05, 'native curve does not reach its selected target'
     required_advance = (float(obstacle[1, 0])+radius+offset if obstacle is not None
                         else min(1., params['fsm.planning_horizon']*.5))
-    assert xyz[-1, 0] > required_advance, 'accepted curve is only a short pre-obstacle stop'
+    if require_obstacle_progress:
+        assert xyz[-1, 0] > required_advance, 'accepted curve is only a short pre-obstacle stop'
     return dict(plan_id=int(debug.plan_id), generation=int(debug.generation),
                 sample_count=count, max_sample_spacing_m=float(np.linalg.norm(np.diff(xyz, axis=0), axis=1).max()),
                 duration_sec=float(end-begin), max_speed_mps=float(max_v), max_acceleration_mps2=float(max_a),
@@ -152,19 +252,35 @@ def process_record(pid):
         return None
 
 
-def prepare(directory, selected=None):
+def prepare(directory, selected=None, collision_policy=None, perception_backend='deskewed_cloud'):
     sys.path.insert(0, str(WS/'src/d1max_pct_scan'))
     from d1max_pct_scan.live_session import DEFAULT_CONFIG, scan_parameters
-    cfg = yaml.safe_load(DEFAULT_CONFIG.read_text())
-    # This synthetic harness supplies a single calibrated sensor, not the
-    # physical dual-source ray interface (covered by offline_projected_rays_bag).
-    cfg['perception_backend'] = 'deskewed_cloud'
+    cfg = expand_tree(yaml.safe_load(DEFAULT_CONFIG.read_text()))
+    # Synthetic policy regressions use an explicit unmasked 0.5-second
+    # baseline, independent of operator-only live preview experiments.
+    cfg.pop('preview_ray_exclusion', None)
+    cfg['perception_timeout_s'] = .5
+    cfg['scan_collision_policy'] = resolve_collision_policy(cfg, collision_policy)
+    cfg['perception_backend'] = resolve_perception_backend(perception_backend)
+    projected = cfg['perception_backend'] == 'per_sensor_rays'
     fixture = dict(kind='SYNTHETIC_NATIVE_SCAN_NO_HARDWARE', frame_id=FRAME,
                    perception_backend=cfg['perception_backend'],
+                   collision_policy=cfg['scan_collision_policy'],
                    room=ROOM.tolist(), production_config=str(DEFAULT_CONFIG),
                    source_hashes={str(p): source_digest(p) for p in
                                   (DEFAULT_CONFIG, Path(cfg['scan_config']), Path(cfg['robot_profile']))},
-                   motion_control_enabled=False, cases={})
+                   motion_control_enabled=False, physical_safety_validated=False,
+                   fixture_assumptions={
+                       'preview_ray_exclusion': 'disabled_baseline',
+                       'perception_timeout_s': .5,
+                       'sensor_count': 2 if projected else 1,
+                       'analytic_sensor_offsets_m': [[.20, 0., 0.], [-.20, 0., 0.]] if projected else [[0., 0., 0.]],
+                       'is_physical_d1_calibration': False,
+                       'source_clock': 'ideal host epoch; each projected acquisition lasts 10 ms',
+                       'synthetic_ring_and_intensity': True,
+                       'dual_source_return_selection': 'interleaved even/odd azimuths, 360 angles per source spanning full circle' if projected else None,
+                       'projection_scope': 'already-known analytic map-frame rays; not a TF/projector test',
+                       'multiview_scope': 'independently repositioned analytic sensor pair; stationary body, not dynamic simulation'}, cases={})
     for name, obstacle in CASES.items():
         if selected is not None and name != selected:
             continue
@@ -193,12 +309,27 @@ def prepare(directory, selected=None):
             filename = name+('_scan_'+str(index) if index else '')+'.npy'
             np.save(directory/filename, cloud)
             views.append(dict(origin=ray_origin.tolist(), point_count=len(cloud), file=filename))
+            if projected:
+                sources = []
+                for sensor_id, shift in enumerate((.20, -.20)):
+                    actual_origin = ray_origin+np.array([shift, 0., 0.])
+                    selected_returns = first_return_cloud(actual_origin, obstacle,
+                        azimuth_stride=2, azimuth_offset=sensor_id)
+                    indices = np.arange(len(selected_returns), dtype=np.uint32)
+                    source_file = name+'_view_'+str(index)+'_sensor_'+str(sensor_id)+'.npz'
+                    np.savez(directory/source_file, points=selected_returns, source_indices=indices)
+                    sources.append(dict(sensor_id=sensor_id, origin=actual_origin.tolist(),
+                        point_count=len(selected_returns), file=source_file))
+                views[-1]['sources'] = sources
         fixture['cases'][name] = dict(session_id=sid, origin=origin.tolist(),
             point_count=views[0]['point_count'], views=views,
             fixture_semantics='stationary synthetic body; independently positioned analytic lidar views',
             obstacle=None if obstacle is None else obstacle.tolist(),
-            expected_accepted=name in ('straight_corridor', 'box_detour_multiview', 'low_box_multiview'),
-            params_file=str(params_path))
+            expected_accepted=expected_acceptance(name, cfg['scan_collision_policy']),
+            acceptance_semantics=('decision_only_no_unknown_space_safety_claim'
+                if expected_acceptance(name, cfg['scan_collision_policy']) is None
+                else 'analytic_regression_expectation_not_physical_safety'),
+            resolved_native_parameters=params, params_file=str(params_path))
     scouting = {'multicast': {'enabled': False}, 'gossip': {'enabled': False}}
     common = dict(scouting=scouting, timestamping={'enabled': True, 'drop_future_timestamp': False})
     (directory/'router.json5').write_text(json.dumps(dict(common, mode='router',
@@ -229,11 +360,13 @@ def run(directory, fixture):
     from geometry_msgs.msg import PoseStamped
     from sensor_msgs.msg import PointCloud2, PointField
     from std_msgs.msg import Bool
-    from d1max_planning_interfaces.msg import ReferencePath, TaggedBspline, LocalPlanDebug
+    from d1max_planning_interfaces.msg import ReferencePath, TaggedBspline, LocalPlanDebug, ProjectedRays
 
     report = dict(kind=fixture['kind'], passed=False, isolation={'domain': DOMAIN, 'port': PORT,
         'router_listen': '127.0.0.1', 'upstream_endpoints': [], 'discovery': False},
-        no_robot_or_motion=True, scenarios={}, owned_processes=[], cleanup={})
+        no_robot_or_motion=True, collision_policy=fixture['collision_policy'],
+        perception_backend=fixture['perception_backend'], fixture_assumptions=fixture['fixture_assumptions'],
+        physical_safety_validated=False, scenarios={}, owned_processes=[], cleanup={})
     processes, streams, node = [], [], None
     began = time.monotonic()
     deadline = began+18.*len(fixture['cases'])+14.
@@ -265,11 +398,24 @@ def run(directory, fixture):
             self.name, self.item = name, fixture['cases'][name]
             self.params = yaml.safe_load(Path(self.item['params_file']).read_text())['/**']['ros__parameters']
             self.prefix = PREFIX+name+'/'
+            self.projected = fixture['perception_backend'] == 'per_sensor_rays'
             self.cloud_bytes = [array('B', np.load(directory/view['file']).tobytes())
                                 for view in self.item['views']]
+            self.source_views = []
+            if self.projected:
+                for view in self.item['views']:
+                    sources = []
+                    for source in view['sources']:
+                        with np.load(directory/source['file']) as packed:
+                            sources.append(dict(source, points=packed['points'].copy(),
+                                                source_indices=packed['source_indices'].copy()))
+                    self.source_views.append(sources)
             self.body_pub = self.create_publisher(Odometry, self.prefix+'body', qos_profile_sensor_data)
-            self.sensor_pub = self.create_publisher(Odometry, self.prefix+'sensor', qos_profile_sensor_data)
-            self.cloud_pub = self.create_publisher(PointCloud2, self.prefix+'cloud', qos_profile_sensor_data)
+            if self.projected:
+                self.rays_pub = self.create_publisher(ProjectedRays, self.prefix+'projected_rays', qos_profile_sensor_data)
+            else:
+                self.sensor_pub = self.create_publisher(Odometry, self.prefix+'sensor', qos_profile_sensor_data)
+                self.cloud_pub = self.create_publisher(PointCloud2, self.prefix+'cloud', qos_profile_sensor_data)
             self.freeze_pub = self.create_publisher(Bool, self.prefix+'frozen', 5)
             self.ref_pub = self.create_publisher(ReferencePath, self.prefix+'reference', 1)
             from std_msgs.msg import String
@@ -278,8 +424,15 @@ def run(directory, fixture):
             self.context_record = dict(schema=1, session_id=self.item['session_id'], epoch=1,
                 seed_id='TEST_ONLY_seed', sequence=1, barrier_ns=self.get_clock().now().nanoseconds)
             self.context_ack = False
+            self.ray_status, self.ray_status_received = {}, -math.inf
+            self.ray_status_count, self.both_sources_valid_count = 0, 0
+            self.ray_published, self.last_ray_source_ns = {0: 0, 1: 0}, {0: 0, 1: 0}
+            self.projection_sequence = 0
+            self.reference_source_status = None
             self.context_pub = self.create_publisher(String, self.prefix+'map_context', context_qos)
             self.create_subscription(String, self.prefix+'map_context_ack', self.on_context_ack, context_qos)
+            if self.projected:
+                self.create_subscription(String, self.prefix+'projected_rays_status', self.on_ray_status, 5)
             self.tags, self.accepted, self.phases, self.errors, self.checked = {}, {}, Counter(), [], {}
             self.occupancy_count, self.occupancy_received = 0, 0
             self.ticks, self.published_clouds, self.issued_ns = 0, 0, 0
@@ -291,6 +444,24 @@ def run(directory, fixture):
 
         def on_context_ack(self, message):
             self.context_ack = json.loads(message.data) == self.context_record
+
+        def on_ray_status(self, message):
+            status = json.loads(message.data)
+            self.ray_status_count += 1
+            self.ray_status, self.ray_status_received = status, time.monotonic()
+            if projected_status_matches(status, self.context_record):
+                self.both_sources_valid_count += 1
+
+        def both_sources_ready(self):
+            if not self.projected:
+                return True
+            if (not self.context_ack or time.monotonic()-self.ray_status_received > .5
+                    or not projected_status_matches(self.ray_status, self.context_record)):
+                return False
+            now_ns = self.get_clock().now().nanoseconds
+            limit = self.params.get('grid_map.cloud_pose_max_age', .5)
+            return all(-.1 <= (now_ns-row['integrated_stamp_ns'])*1e-9 <= limit
+                       for row in self.ray_status['sources'])
 
         def occupancy(self, msg):
             self.occupancy_count = max(self.occupancy_count, msg.width*msg.height)
@@ -319,6 +490,24 @@ def run(directory, fixture):
             if self.ticks % 5 == 0:
                 view_index = self.published_clouds % len(self.item['views'])
                 view = self.item['views'][view_index]
+                if self.projected:
+                    now_ns = stamp.sec*1_000_000_000+stamp.nanosec
+                    source_ns = now_ns-RAY_SCAN_DURATION_NS
+                    if source_ns > max(self.context_record['barrier_ns'], *self.last_ray_source_ns.values()):
+                        sources = self.source_views[view_index]
+                        for source in sources[::1 if self.published_clouds % 2 else -1]:
+                            sensor = source['sensor_id']
+                            records = projected_ray_records(source['points'], source['origin'],
+                                sensor_id=sensor, source_ns=source_ns, source_indices=source['source_indices'])
+                            self.projection_sequence += 1
+                            message = projected_ray_message(records, self.context_record,
+                                source_ns=source_ns, projection_sequence=self.projection_sequence)
+                            self.rays_pub.publish(message)
+                            self.ray_published[sensor] += 1
+                            self.last_ray_source_ns[sensor] = source_ns
+                        self.published_clouds += 1
+                    self.ticks += 1
+                    return
                 sensor_pose = Odometry(); sensor_pose.header = pose.header
                 sensor_pose.child_frame_id = 'TEST_ONLY_analytic_sensor'
                 sensor_pose.pose.pose.position.x, sensor_pose.pose.pose.position.y, sensor_pose.pose.pose.position.z = view['origin']
@@ -338,6 +527,9 @@ def run(directory, fixture):
             self.ticks += 1
 
         def send_reference(self, cancel=False):
+            if not cancel and self.projected:
+                assert self.both_sources_ready(), 'reference before two sources integrated/fresh'
+                self.reference_source_status = dict(self.ray_status)
             msg = ReferencePath(); msg.session_id = self.item['session_id']
             msg.generation = 2 if cancel else 1
             msg.path.header.frame_id = FRAME; msg.path.header.stamp = self.get_clock().now().to_msg()
@@ -359,7 +551,25 @@ def run(directory, fixture):
                 return
             self.phases[msg.phase] += 1
             if msg.valid:
-                if msg.phase != 'accepted':
+                if msg.phase == 'revalidated':
+                    # New proof of the immutable incumbent, not a new optimized
+                    # spline. Verify the real wire message instead of counting
+                    # heartbeat samples as additional accepted trajectories.
+                    original = self.accepted.get(int(msg.plan_id))
+                    try:
+                        assert original is not None, 'recheck without original native acceptance'
+                        assert msg.checked_context_sequence == self.context_record['sequence']
+                        assert msg.checked_map_revision > 0
+                        ns = msg.header.stamp.sec*10**9+msg.header.stamp.nanosec
+                        assert 0 <= ns-msg.checked_map_source_stamp_ns <= 750000000
+                        assert 0 <= ns-msg.checked_body_source_stamp_ns <= 500000000
+                        assert msg.header.frame_id == original.header.frame_id
+                        assert msg.projection == original.projection and msg.local_target == original.local_target
+                        assert msg.progress_arc_m == original.progress_arc_m and msg.target_arc_m == original.target_arc_m
+                        assert [p.pose for p in msg.selected_reference.poses] == [p.pose for p in original.selected_reference.poses]
+                    except AssertionError as error:
+                        self.errors.append(str(error))
+                elif msg.phase != 'accepted':
                     self.errors.append('valid debug was not accepted')
                 else:
                     self.accepted[int(msg.plan_id)] = msg
@@ -373,16 +583,18 @@ def run(directory, fixture):
                     start_ns = tag.trajectory.start_time.sec*10**9+tag.trajectory.start_time.nanosec
                     assert start_ns >= self.issued_ns > 0
                     assert debug.selected_reference.poses, 'accepted diagnostic has no actual reference'
-                    if not self.item['expected_accepted']:
+                    if self.item['expected_accepted'] is False:
                         raise AssertionError('blocked or unobserved corridor produced an accepted trajectory')
-                    self.checked[plan_id] = check_native_curve(tag, debug, self.params, CASES[self.name])
+                    self.checked[plan_id] = check_native_curve(tag, debug, self.params, CASES[self.name],
+                        require_obstacle_progress=self.item['expected_accepted'] is not None)
                 except (AssertionError, ValueError) as error:
                     self.checked[plan_id] = {'error': str(error)}
                     self.errors.append(str(error))
 
         def ready(self):
+            perception = (self.rays_pub,) if self.projected else (self.sensor_pub, self.cloud_pub)
             return self.context_ack and all(pub.get_subscription_count() > 0 for pub in
-                       (self.body_pub, self.sensor_pub, self.cloud_pub, self.freeze_pub, self.ref_pub))
+                       (self.body_pub, self.freeze_pub, self.ref_pub)+perception) and self.both_sources_ready()
 
     try:
         router = spawn('router', [str(Path(get_package_prefix('rmw_zenoh_cpp'))/'lib/rmw_zenoh_cpp/rmw_zenohd')])
@@ -407,6 +619,8 @@ def run(directory, fixture):
                 'typed_initial_path': 'reference', 'planning/go2_execution_frozen': 'frozen',
                 'grid_map/localization_context': 'map_context',
                 'grid_map/localization_context_ack': 'map_context_ack',
+                'projected_rays': 'projected_rays',
+                'grid_map/projected_rays_status': 'projected_rays_status',
                 'planning/tagged_bspline': 'tagged', 'planning/local_plan_debug': 'debug'}.items():
                 command += ['-r', source+':='+node.prefix+target]
             child = spawn(name, command)
@@ -422,21 +636,43 @@ def run(directory, fixture):
                 if issued is None and node.ready() and elapsed >= 2. and node.occupancy_count > 100:
                     node.send_reference(); issued = time.monotonic()
                 if issued is not None and time.monotonic()-issued >= 5.:
-                    if node.checked or (not item['expected_accepted'] and node.phases):
+                    if node.checked or (item['expected_accepted'] is not True and node.phases):
                         break
             assert issued is not None, f'{name}: input subscriptions/occupancy did not become ready'
             result = dict(phases=dict(node.phases), accepted_count=len(node.accepted),
                 tagged_count=len(node.tags), checked=list(node.checked.values()), errors=node.errors,
                 published_clouds=node.published_clouds, occupancy_points=node.occupancy_count,
-                elapsed_sec=time.monotonic()-started, reference_observed_sec=time.monotonic()-issued)
-            if item['expected_accepted']:
+                elapsed_sec=time.monotonic()-started, reference_observed_sec=time.monotonic()-issued,
+                expected_accepted=item['expected_accepted'], acceptance_semantics=item['acceptance_semantics'],
+                physical_safety_validated=False, resolved_native_parameters=node.params)
+            result['perception_backend'] = fixture['perception_backend']
+            result['context_ack_matched'] = node.context_ack
+            if node.projected:
+                result['projected_rays'] = dict(published_by_sensor=node.ray_published,
+                    last_published_source_ns=node.last_ray_source_ns,
+                    status_messages=node.ray_status_count, valid_both_sources_statuses=node.both_sources_valid_count,
+                    reference_issued_after_both_sources=node.reference_source_status,
+                    last_native_status=node.ray_status,
+                    point_schema_bytes=64, frame_id=FRAME, context=node.context_record)
+            if item['expected_accepted'] is True:
                 result['passed'] = bool(node.checked) and not node.errors
+            elif item['expected_accepted'] is None:
+                # Passing means native transport/decision and any returned
+                # curve's discrete analytic checks worked, never that unknown
+                # space is safe. A short approach is allowed in this case.
+                result['passed'] = bool(node.phases) and not node.errors and (
+                    not node.accepted or bool(node.checked))
             else:
                 result['passed'] = not node.accepted and any(k.startswith('failed_') or k == 'waiting_observed_space'
                                                            for k in node.phases)
             forbidden = ('/cmd_vel', '/d1max/navigation/cmd_vel', '/d1max/pct_scan/cmd_vel_safe')
             result['no_motion_publishers'] = not any(node.get_publishers_info_by_topic(t) for t in forbidden)
             result['passed'] &= result['no_motion_publishers']
+            if node.projected:
+                result['passed'] &= (node.context_ack and node.both_sources_valid_count > 0
+                    and node.reference_source_status is not None
+                    and projected_status_matches(node.reference_source_status, node.context_record)
+                    and all(value > 0 for value in node.ray_published.values()))
             report['scenarios'][name] = result
             native_outputs = []
             for plan_id in node.tags.keys() & node.accepted.keys():
@@ -551,6 +787,10 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--prepare-only', action='store_true', help='write fixture/config, do not import/init ROS')
     parser.add_argument('--case', choices=list(CASES), help='run one bounded diagnostic case only')
+    parser.add_argument('--collision-policy', choices=('official', 'observed_free'),
+                        help='default: current normal live configuration; no optimizer-weight override')
+    parser.add_argument('--perception-backend', choices=('deskewed_cloud', 'per_sensor_rays'),
+                        default='deskewed_cloud', help='legacy XYZ+pose or native dual-source ProjectedRays input')
     parser.add_argument('--render-report', type=Path, help='draw existing passing raw output only; no ROS')
     args = parser.parse_args()
     if args.render_report is not None:
@@ -559,7 +799,7 @@ def main():
     directory = WS/'log/offline_native_scan_scenarios'/(time.strftime('%Y%m%d_%H%M%S')+'_'+uuid.uuid4().hex[:8])
     directory.mkdir(parents=True)
     print('ARTIFACTS='+str(directory), flush=True)
-    fixture = prepare(directory, args.case)
+    fixture = prepare(directory, args.case, args.collision_policy, args.perception_backend)
     if args.prepare_only:
         print(json.dumps({k: v['point_count'] for k, v in fixture['cases'].items()}), flush=True)
         return 0

@@ -10,6 +10,7 @@ find_package(ament_cmake REQUIRED)
 find_package(ament_index_cpp REQUIRED)
 find_package(bspline_opt REQUIRED)
 find_package(Eigen3 REQUIRED)
+find_package(OpenSSL REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(d1max_planning_interfaces REQUIRED)
 find_package(nav_msgs REQUIRED)
@@ -31,12 +32,13 @@ set(scan_planner_dependencies
   traj_utils visualization_msgs d1max_planning_interfaces)
 
 add_executable(scan_planner_node
+  src/motion_sweep.cpp
   src/scan_planner_node.cpp
   src/scan_replan_fsm.cpp
   src/planner_manager.cpp)
 target_include_directories(scan_planner_node PRIVATE include)
 ament_target_dependencies(scan_planner_node ${scan_planner_dependencies})
-target_link_libraries(scan_planner_node Eigen3::Eigen)
+target_link_libraries(scan_planner_node Eigen3::Eigen OpenSSL::Crypto)
 
 foreach(target open_loop_controller closed_loop_controller go2_kinematic_sim go2_gait_publisher)
   add_executable(${target} src/${target}.cpp)
@@ -59,6 +61,27 @@ install(PROGRAMS scripts/keypoint_recorder.py
 
 if(BUILD_TESTING)
   find_package(ament_cmake_gtest REQUIRED)
+  find_package(Python3 REQUIRED COMPONENTS Interpreter)
+  add_test(NAME test_async_worker_no_ros
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test/test_async_worker_no_ros.py)
+  add_test(NAME test_replan_handoff_no_ros
+    COMMAND ${Python3_EXECUTABLE}
+      ${CMAKE_CURRENT_SOURCE_DIR}/test/test_replan_handoff_no_ros.py
+      --source ${CMAKE_CURRENT_SOURCE_DIR}/src/scan_replan_fsm.cpp)
+  add_test(NAME test_replan_recovery_no_ros
+    COMMAND ${Python3_EXECUTABLE}
+      ${CMAKE_CURRENT_SOURCE_DIR}/test/test_replan_recovery_no_ros.py
+      --source ${CMAKE_CURRENT_SOURCE_DIR}/src/scan_replan_fsm.cpp)
+  add_test(NAME test_reference_callback_no_ros
+    COMMAND ${Python3_EXECUTABLE}
+      ${CMAKE_CURRENT_SOURCE_DIR}/test/test_reference_callback_no_ros.py
+      --source ${CMAKE_CURRENT_SOURCE_DIR}/src/scan_replan_fsm.cpp
+      --build-dir ${CMAKE_CURRENT_BINARY_DIR}/reference_callback_no_ros)
+  add_test(NAME test_preview_revalidation_no_ros
+    COMMAND ${Python3_EXECUTABLE}
+      ${CMAKE_CURRENT_SOURCE_DIR}/test/test_preview_revalidation_no_ros.py
+      --source ${CMAKE_CURRENT_SOURCE_DIR}/src/scan_replan_fsm.cpp
+      --build-dir ${CMAKE_CURRENT_BINARY_DIR}/preview_revalidation_no_ros)
   ament_add_gtest(test_input_contract test/test_input_contract.cpp)
   target_include_directories(test_input_contract PRIVATE include)
   target_link_libraries(test_input_contract Eigen3::Eigen)
@@ -75,10 +98,30 @@ if(BUILD_TESTING)
   target_include_directories(test_trajectory_collision PRIVATE include)
   ament_target_dependencies(test_trajectory_collision bspline_opt)
   target_link_libraries(test_trajectory_collision Eigen3::Eigen)
+  ament_add_gtest(test_initial_yaw_native test/test_initial_yaw_native.cpp)
+  target_include_directories(test_initial_yaw_native PRIVATE include)
+  ament_target_dependencies(test_initial_yaw_native bspline_opt plan_env)
+  target_link_libraries(test_initial_yaw_native Eigen3::Eigen)
+  ament_add_gtest(test_candidate_adoption test/test_candidate_adoption.cpp)
+  target_include_directories(test_candidate_adoption PRIVATE include)
+  ament_target_dependencies(test_candidate_adoption bspline_opt plan_env)
+  target_link_libraries(test_candidate_adoption Eigen3::Eigen)
+  ament_add_gtest(test_execution_ledger test/test_execution_ledger.cpp)
+  target_include_directories(test_execution_ledger PRIVATE include)
+  ament_target_dependencies(test_execution_ledger bspline_opt plan_env d1max_planning_interfaces)
+  target_link_libraries(test_execution_ledger Eigen3::Eigen)
+  ament_add_gtest(test_motion_sweep test/test_motion_sweep.cpp src/motion_sweep.cpp)
+  target_include_directories(test_motion_sweep PRIVATE include)
+  ament_target_dependencies(test_motion_sweep plan_env d1max_planning_interfaces)
+  target_link_libraries(test_motion_sweep Eigen3::Eigen OpenSSL::Crypto)
   ament_add_gtest(test_reference_target test/test_reference_target.cpp)
   target_include_directories(test_reference_target PRIVATE include)
   ament_target_dependencies(test_reference_target bspline_opt)
   target_link_libraries(test_reference_target Eigen3::Eigen)
+  ament_add_gtest(test_visible_reference_target test/test_visible_reference_target.cpp)
+  target_include_directories(test_visible_reference_target PRIVATE include)
+  ament_target_dependencies(test_visible_reference_target bspline_opt plan_env path_searching d1max_planning_interfaces)
+  target_link_libraries(test_visible_reference_target Eigen3::Eigen)
   find_package(launch_testing_ament_cmake REQUIRED)
   add_launch_test(test/test_planner_startup.py TIMEOUT 30)
   add_launch_test(test/test_waypoint_parameters.py TIMEOUT 30)

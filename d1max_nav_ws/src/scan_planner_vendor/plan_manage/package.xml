@@ -11,6 +11,7 @@
   <exec_depend>ament_index_python</exec_depend>
   <depend>bspline_opt</depend>
   <depend>eigen</depend>
+  <depend>openssl</depend>
   <depend>geometry_msgs</depend>
   <depend>d1max_planning_interfaces</depend>
   <depend>nav_msgs</depend>

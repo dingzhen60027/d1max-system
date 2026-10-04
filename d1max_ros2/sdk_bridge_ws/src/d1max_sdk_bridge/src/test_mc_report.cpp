@@ -29,6 +29,18 @@ int main() {
    float bad[3]={0,std::numeric_limits<float>::quiet_NaN(),0};
    assert(!r.sample(1.02,100.02,1020000000,bad,zero,1.02));assert(r.invalid_samples==1);
    assert(!r.sample(1.02,110.,1020000000,zero,zero,1.02));assert(r.timestamp_rejections==4);}
+  {auto r=ready();assert(r.sourceOrder(0)==McReport::SourceOrder::Missing);
+   assert(r.sample(1.,100.,1000000000,zero,zero,1.));
+   assert(r.sourceOrder(1000000000)==McReport::SourceOrder::Duplicate);
+   assert(r.sourceOrder(999999999)==McReport::SourceOrder::Backward);
+   assert(r.sourceOrder(1020000000)==McReport::SourceOrder::New);
+   const auto anchor=r.anchor_source;const auto stamp=r.stamp_unix;const auto generation=r.generation;
+   assert(!r.sample(1.02,100.02,999999999,zero,zero,1.02));
+   assert(r.last_source==1000000000&&r.anchor_source==anchor&&r.stamp_unix==stamp&&r.generation==generation);
+   assert(r.sample(1.04,100.04,1040000000,zero,zero,1.04));
+   assert(r.sourceOrder(999999999)==McReport::SourceOrder::Backward);
+   assert(r.anchor_source==anchor&&r.generation==generation); // rejection cannot invent a new epoch
+  }
   {auto r=ready();r.ack(true);r.robot(4.);assert(r.request_due(true,false,4.));
    r.robot(7.);assert(r.request_due(true,false,7.));r.robot(10.);
    assert(!r.request_due(true,false,10.)&&r.state(10.)=="retry_cooldown");

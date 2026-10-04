@@ -10,11 +10,13 @@ from .preview_core import PreviewSelection, finite_xyz
 
 class TomogramSelection(PreviewSelection):
     def __init__(self, tomogram, height_tolerance=0.08, mode='ground',
-                 anchor_z=-0.6375, max_follow_height_change=0.3):
+                 anchor_z=-0.6375, max_follow_height_change=0.3, floor_ranges=None):
         super().__init__(tomogram, height_tolerance)
         self.layers = {'start': None, 'goal': None}
         self.mode = 'ground'
         self.active_layer = -1
+        self.floor_ranges = dict(floor_ranges or {})
+        self.active_floor = None
         self.anchor_z = float(anchor_z)
         self.max_follow_height_change = float(max_follow_height_change)
         if not np.isfinite(self.anchor_z) or not np.isfinite(self.max_follow_height_change) or self.max_follow_height_change <= 0:
@@ -33,6 +35,40 @@ class TomogramSelection(PreviewSelection):
         # This selects the layer for subsequent edits, never teleports existing
         # endpoints and never claims that a tomographic slice is a floor number.
         self.active_layer = layer
+        self.active_floor = None
+
+    def set_active_floor(self, floor):
+        if floor is not None and floor not in self.floor_ranges:
+            raise ValueError('Unknown physical floor')
+        # An editing constraint, not a task restriction. Each floor may use
+        # several native PCT slices; switching does not move an existing goal.
+        self.active_floor, self.active_layer = floor, -1
+
+    def floor_for_height(self, z):
+        matches = [name for name, (lo, hi) in self.floor_ranges.items() if lo <= z <= hi]
+        return matches[0] if len(matches) == 1 else None
+
+    def _select(self, point, role, *, snap=False):
+        mode = 'ground_follow' if snap or self.mode == 'ground' else 'free_xyz'
+        lock = self.active_layer if self.active_layer >= 0 else (self.layers[role] if snap else None)
+        if self.active_floor is not None:
+            from .tomogram_map import TomogramError
+            lo, hi = self.floor_ranges[self.active_floor]
+            candidates = [info for info in self.grid.sample_surfaces(
+                point[:2], traversable_only=False, deduplicate=False)
+                if info.get('ground_z') is not None and lo <= info['ground_z'] <= hi]
+            if not candidates:
+                raise TomogramError('no_ground_on_selected_floor',
+                                    'No measured ground on selected physical floor; XY was not moved',
+                                    floor_id=self.active_floor)
+            # Prefer a valid surface, then the old equivalent slice. Never
+            # borrow a surface from another physical level at the same XY.
+            candidates.sort(key=lambda info: (not info['valid'],
+                abs(info['ground_z']-point[2]), info['layer_id'] != self.layers[role], info['layer_id']))
+            lock = candidates[0]['layer_id']
+        return self.grid.select(point, mode=mode, preferred_layer=self.layers[role],
+            layer_lock=lock, height_tolerance_m=self.height_tolerance,
+            max_follow_height_change_m=10000. if snap else self.max_follow_height_change)
 
     def _store(self, role, xyz, layer, error=None):
         previous_layer = self.layers[role]
@@ -52,12 +88,7 @@ class TomogramSelection(PreviewSelection):
         if self.mode == 'ground' and self.points[role] is not None:
             hint[2] = self.points[role][2]
         try:
-            surface = self.grid.select(
-                hint, mode='ground_follow' if self.mode == 'ground' else 'free_xyz',
-                preferred_layer=self.layers[role],
-                layer_lock=self.active_layer if self.active_layer >= 0 else None,
-                height_tolerance_m=self.height_tolerance,
-                max_follow_height_change_m=self.max_follow_height_change)
+            surface = self._select(hint, role)
             return self._store(role, surface['xyz'], surface['layer_id'])
         except ValueError as exc:
             # Keep the requested XY visible, even over unsupported/blocked
@@ -75,6 +106,8 @@ class TomogramSelection(PreviewSelection):
         anchor = np.r_[np.asarray(anchor_xy, dtype=float), self.anchor_z]
         if role == 'goal' and self.points['start'] is not None:
             anchor = self.points['start'] + [0., 2., 0.]
+        if self.active_floor is not None:
+            anchor[2] = float(np.mean(self.floor_ranges[self.active_floor]))
         surface = self.grid.initial_seed(
             anchor, layer_lock=self.active_layer if self.active_layer >= 0 else None)
         return self._store(role, surface['xyz'], surface['layer_id'])
@@ -92,22 +125,32 @@ class TomogramSelection(PreviewSelection):
     def snap_ground(self, role):
         if self.points[role] is None:
             raise ValueError(f'Select {role} first')
-        lock = self.active_layer if self.active_layer >= 0 else self.layers[role]
-        surface = self.grid.select(
-            self.points[role], mode='ground_follow', preferred_layer=self.layers[role],
-            layer_lock=lock, height_tolerance_m=self.height_tolerance,
-            max_follow_height_change_m=10000.)
+        surface = self._select(self.points[role], role, snap=True)
         return self._store(role, surface['xyz'], surface['layer_id'])
 
     def validation(self, role):
+        evidence = {}
+        point = self.points[role]
+        if point is not None:
+            surfaces = self.grid.sample_surfaces(point[:2], traversable_only=False)
+            surfaces = [info for info in surfaces if info.get('ground_z') is not None]
+            if self.active_floor is not None and self.edit_errors[role] is not None:
+                lo, hi = self.floor_ranges[self.active_floor]
+                surfaces = [info for info in surfaces if lo <= info['ground_z'] <= hi]
+            if surfaces:
+                surface = min(surfaces, key=lambda info: abs(info['ground_z']-point[2]))
+                evidence = {key: surface.get(key) for key in
+                            ('ground_z', 'headroom_m', 'ceiling_state', 'cost')}
+                evidence.update(height_error_m=float(point[2]-surface['ground_z']),
+                    floor_id=self.floor_for_height(surface['ground_z']))
         try:
             self.validate(role)
             return {'valid': True, 'reason': 'traversable', 'reason_code': 'traversable',
-                    'layer_id': self.layers[role]}
+                    'layer_id': self.layers[role], **evidence}
         except ValueError as exc:
             return {'valid': False, 'reason': getattr(exc, 'code', str(exc)),
                     'reason_code': getattr(exc, 'code', 'invalid_endpoint'),
-                    'detail': str(exc), 'layer_id': self.layers[role]}
+                    'detail': str(exc), 'layer_id': self.layers[role], **evidence}
 
     def request(self):
         start, goal = self.validate('start'), self.validate('goal')

@@ -71,4 +71,36 @@ inline std::optional<d1max_planning_interfaces::msg::LocalPlanDebug> makeAccepte
   return message;
 }
 
+// A fresh complete native recheck may retain the exact accepted preview curve.
+// This does not modify its spline creation time, parameters, or plan identity.
+inline std::optional<d1max_planning_interfaces::msg::LocalPlanDebug> makeRevalidatedLocalPlanDebug(
+    const d1max_planning_interfaces::msg::LocalPlanDebug &accepted,
+    const std_msgs::msg::Header &checked_header,
+    std::int64_t map_source_ns, std::int64_t body_source_ns,
+    std::uint64_t map_revision, std::uint64_t context_sequence) {
+  const std::int64_t checked_ns=static_cast<std::int64_t>(checked_header.stamp.sec)*1000000000LL+
+      checked_header.stamp.nanosec;
+  const std::int64_t accepted_ns=static_cast<std::int64_t>(accepted.header.stamp.sec)*1000000000LL+
+      accepted.header.stamp.nanosec;
+  if (!accepted.valid || accepted.phase!="accepted" || accepted.plan_id==0 ||
+      accepted.header.frame_id!=checked_header.frame_id || checked_ns<=accepted_ns ||
+      map_source_ns<=0 || body_source_ns<=0 || map_source_ns>checked_ns ||
+      body_source_ns>checked_ns || map_revision==0 || context_sequence==0 ||
+      accepted.selected_reference.poses.size()<2)
+    return std::nullopt;
+  auto message=accepted;
+  message.header=checked_header;
+  message.phase="revalidated";
+  message.selected_reference.header=checked_header;
+  for (auto &pose:message.selected_reference.poses) pose.header=checked_header;
+  message.predecessor_id=0;
+  message.predecessor_safe=false;
+  message.predecessor_check_stamp=builtin_interfaces::msg::Time{};
+  message.checked_map_source_stamp_ns=map_source_ns;
+  message.checked_body_source_stamp_ns=body_source_ns;
+  message.checked_map_revision=map_revision;
+  message.checked_context_sequence=context_sequence;
+  return message;
+}
+
 }  // namespace scan_planner

@@ -1,7 +1,14 @@
 #include "d1max_pct_rviz_tools/navigation_diagnostics_panel.hpp"
 #include <cmath>
+#include <cerrno>
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <unistd.h>
 #include <QButtonGroup>
 #include <QDateTime>
+#include <QDir>
+#include <QFile>
+#include <QFileInfo>
 #include <QFormLayout>
 #include <QHBoxLayout>
 #include <QJsonArray>
@@ -9,6 +16,8 @@
 #include <QJsonObject>
 #include <QLabel>
 #include <QPushButton>
+#include <QRegularExpression>
+#include <QSaveFile>
 #include <QScrollArea>
 #include <QSignalBlocker>
 #include <QTimer>
@@ -19,6 +28,7 @@
 #include "rviz_common/display_group.hpp"
 #include "rviz_common/properties/property.hpp"
 #include "rviz_common/ros_integration/ros_node_abstraction_iface.hpp"
+#include "rviz_common/tool_manager.hpp"
 #include "rviz_common/view_manager.hpp"
 #include "rviz_common/view_controller.hpp"
 
@@ -54,6 +64,57 @@ rviz_common::Display * childDisplay(rviz_common::DisplayGroup * group, const QSt
 void enabled(rviz_common::DisplayGroup * group, const QString & name, bool value)
 {
   if (auto * display = childDisplay(group, name)) {display->setEnabled(value);}
+}
+bool nonce(const QString & value)
+{
+  static const QRegularExpression pattern("\\A[0-9a-f]{32}\\z");
+  return pattern.match(value).hasMatch();
+}
+bool privateFile(const struct stat & info)
+{
+  return S_ISREG(info.st_mode) && info.st_uid == getuid() && !(info.st_mode & 0077);
+}
+QString readLayoutRequest(const QString & path)
+{
+  if (!QDir::isAbsolutePath(path)) {return {};}
+  const auto encoded = QFile::encodeName(path);
+  const int fd = open(encoded.constData(), O_RDONLY | O_NOFOLLOW | O_CLOEXEC | O_NONBLOCK);
+  if (fd < 0) {return {};}
+  struct stat info{};
+  if (fstat(fd, &info) || !privateFile(info) || info.st_size < 1 || info.st_size > 4096) {
+    close(fd); return {};
+  }
+  QByteArray data(4097, Qt::Uninitialized);
+  const auto size = read(fd, data.data(), static_cast<size_t>(data.size()));
+  close(fd);
+  if (size < 1 || size > 4096) {return {};}
+  data.resize(static_cast<int>(size));
+  return QString::fromUtf8(data);
+}
+bool writeLayoutState(const QString & path, const QString & request_path, const QJsonObject & value)
+{
+  const QFileInfo target(path), source(request_path);
+  if (!target.isAbsolute() || target.fileName() != "navigation-view-layout-state.json" ||
+    source.fileName() != "navigation-view-layout-request.json" ||
+    target.absolutePath() != source.absolutePath()) {return false;}
+  const QFileInfo parent(target.absolutePath());
+  struct stat info{};
+  const auto parent_path = QFile::encodeName(parent.absoluteFilePath());
+  if (parent.canonicalFilePath() != parent.absoluteFilePath() ||
+    lstat(parent_path.constData(), &info) || !S_ISDIR(info.st_mode) ||
+    info.st_uid != getuid() || (info.st_mode & 0077)) {return false;}
+  const auto encoded = QFile::encodeName(path);
+  if (!lstat(encoded.constData(), &info)) {
+    if (!privateFile(info)) {return false;}
+  } else if (errno != ENOENT) {return false;}
+  const auto data = QJsonDocument(value).toJson(QJsonDocument::Compact);
+  if (data.size() > 4096) {return false;}
+  QSaveFile output(path);
+  output.setDirectWriteFallback(false);
+  if (!output.open(QIODevice::WriteOnly) ||
+    !output.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner) ||
+    output.write(data) != data.size()) {return false;}
+  return output.commit();
 }
 }
 
@@ -95,6 +156,9 @@ NavigationDiagnosticsPanel::NavigationDiagnosticsPanel(QWidget * parent)
   }
   layout->addLayout(layouts);
   auto * form = new QFormLayout;
+  task_ = label(content, "等待任务状态", "behavior_tree");
+  task_->setMinimumHeight(25);
+  form->addRow("任务", task_);
   const char * names[] = {"localization", "global", "local"};
   const QString captions[] = {"定位", "全局规划", "局部规划"};
   for (int i = 0; i < 3; ++i) {
@@ -120,7 +184,7 @@ NavigationDiagnosticsPanel::NavigationDiagnosticsPanel(QWidget * parent)
     {"#4191ff", "━  全局路径"}, {"#ff8c14", "━  当前参考段"},
     {"#ff941f", "●  局部目标"}, {"#33e680", "━  局部轨迹 · 机身"},
     {"#688cff", "●  参考锚点"}, {"#a046c8", "━  历史定位轨迹"},
-    {"#aab6c4", "■  滑动占据地图"}};
+    {"#aab6c4", "■  占据 / 膨胀地图 · Z 高度"}};
   // 1 = global, 2 = local; keep each layout's legend limited to its visible layers.
   const int legend_layouts[] = {2, 3, 3, 2, 2, 2, 2, 1, 2};
   auto * legend = new QVBoxLayout;
@@ -166,6 +230,10 @@ void NavigationDiagnosticsPanel::load(const rviz_common::Config & config)
 {
   Panel::load(config);
   config.mapGetString("Session ID", &session_);
+  layout_request_file_.clear(); layout_state_file_.clear(); last_layout_request_id_.clear();
+  config.mapGetString("Layout Request File", &layout_request_file_);
+  config.mapGetString("Layout State File", &layout_state_file_);
+  viewer_id_ = qEnvironmentVariable("D1MAX_NAV_RVIZ_VIEWER_ID");
   motion_capable_ = false; config.mapGetBool("Motion Capable", &motion_capable_);
   QString requested_layout;
   config.mapGetString("Layout", &requested_layout);
@@ -183,6 +251,8 @@ void NavigationDiagnosticsPanel::save(rviz_common::Config config) const
   Panel::save(config); config.mapSetValue("Session ID", session_);
   config.mapSetValue("Motion Capable", motion_capable_);
   config.mapSetValue("Layout", layout_);
+  config.mapSetValue("Layout Request File", layout_request_file_);
+  config.mapSetValue("Layout State File", layout_state_file_);
 }
 
 void NavigationDiagnosticsPanel::onInitialize()
@@ -220,6 +290,21 @@ void NavigationDiagnosticsPanel::acceptStatus(const QString & json)
       (tone != "ready" && tone != "muted" && tone != "warning" && tone != "error")) {return;}
   }
   source_stamp_ = stamp.toDouble(); receipt_ = std::chrono::steady_clock::now(); valid_ = true;
+  const auto tree = data["behavior_tree"].toObject();
+  const auto task_label = tree["label"].toString().left(30);
+  task_->setText(task_label.isEmpty() ? "等待任务状态" : task_label);
+  task_->setToolTip(tree["detail"].toString().left(500));
+  if (!tree.isEmpty()) {
+    detail += "任务: " + tree["task_id"].toString().left(128) + "\n";
+    detail += "行为树: " + tree["root_status"].toString().left(16) + " · " +
+      tree["detail"].toString().left(500) + "\n";
+    const auto nodes = tree["nodes"].toArray();
+    for (int i = 0; i < nodes.size() && i < 24; ++i) {
+      const auto node = nodes[i].toObject();
+      detail += "  " + node["name"].toString().left(160) + ": " +
+        node["status"].toString().left(16) + "\n";
+    }
+  }
   for (int i = 0; i < 3; ++i) {
     const auto row = stages[keys[i]].toObject();
     const auto tone = row["tone"].toString();
@@ -265,6 +350,7 @@ void NavigationDiagnosticsPanel::acceptStatus(const QString & json)
 
 void NavigationDiagnosticsPanel::unavailable()
 {
+  task_->setText("等待任务状态"); task_->setToolTip("");
   for (auto * value : stages_) {
     value->setText("●  等待数据"); value->setStyleSheet("color: #9ba5b3;"); value->setToolTip("");
   }
@@ -277,6 +363,7 @@ void NavigationDiagnosticsPanel::unavailable()
 
 void NavigationDiagnosticsPanel::refresh()
 {
+  pollLayoutRequest();
   QString value;
   {
     std::lock_guard<std::mutex> lock(inbox_->mutex);
@@ -286,6 +373,44 @@ void NavigationDiagnosticsPanel::refresh()
   if (valid_ && (wallNow()-source_stamp_ > 1.0 || wallNow()-source_stamp_ < -.1 ||
     std::chrono::steady_clock::now()-receipt_ > std::chrono::seconds(1)))
   {valid_ = false; unavailable();}
+}
+
+bool NavigationDiagnosticsPanel::acceptLayoutRequest(const QString & json)
+{
+  if (json.toUtf8().size() > 4096 || session_.isEmpty() || !nonce(viewer_id_)) {return false;}
+  const auto document = QJsonDocument::fromJson(json.toUtf8());
+  auto request = document.object();
+  const auto id = request["request_id"].toString();
+  const auto layout = request["layout"].toString();
+  const auto stamp = request["stamp"];
+  const auto age = wallNow() - stamp.toDouble();
+  if (!document.isObject() || request["schema"] != QJsonValue(1) ||
+    request["session_id"].toString() != session_ ||
+    request["viewer_id"].toString() != viewer_id_ || !nonce(id) ||
+    id == last_layout_request_id_ || (layout != "global" && layout != "local") ||
+    !finite(stamp) || age < -.1 || age > 10.) {return false;}
+  // This is an explicit presentation request, separate from status heartbeats.
+  // Re-selecting the active layout acknowledges it without moving the camera.
+  // Consume before acknowledging: an unwritable state file must not make an
+  // old request repeatedly undo a later manual camera/layout selection.
+  last_layout_request_id_ = id;
+  if (layout != layout_) {chooseLayout(layout, true);}
+  QJsonObject state;
+  for (const auto * key : {"schema", "session_id", "viewer_id", "request_id", "layout", "stamp"}) {
+    state[key] = request[key];
+  }
+  state["phase"] = "applied";
+  state["applied_at_unix"] = wallNow();
+  state["rviz_pid"] = static_cast<int>(getpid());
+  if (!writeLayoutState(layout_state_file_, layout_request_file_, state)) {return false;}
+  return true;
+}
+
+void NavigationDiagnosticsPanel::pollLayoutRequest()
+{
+  if (!nonce(viewer_id_) || layout_request_file_.isEmpty() || layout_state_file_.isEmpty()) {return;}
+  const auto json = readLayoutRequest(layout_request_file_);
+  if (!json.isEmpty()) {acceptLayoutRequest(json);}
 }
 
 void NavigationDiagnosticsPanel::chooseView(int index)
@@ -324,6 +449,11 @@ void NavigationDiagnosticsPanel::applyLayoutPresentation(const QString & layout)
   if (!getDisplayContext()) {return;}
   auto * root = getDisplayContext()->getRootDisplayGroup();
   applyLayoutVisibility(root, layout);
+  // Finish only the active mouse tool. A pending goal/initial-pose gesture
+  // must not follow the user into another camera; the task and route stay
+  // owned by the navigation graph and are never changed here.
+  auto * tools = getDisplayContext()->getToolManager();
+  if (tools && tools->getDefaultTool()) {tools->setCurrentTool(tools->getDefaultTool());}
   chooseView(layout == "local" ? 1 : 2);
   if (layout == "local") {
     auto * manager = getDisplayContext()->getViewManager();
@@ -361,8 +491,8 @@ void NavigationDiagnosticsPanel::applyLayoutVisibility(
       if (property->getName() == "Alpha") {property->setValue(local ? .35 : 1.);}
     }
   }
-  for (const auto & name : {"实时点云", "滑动占据地图（含地面）", "滑动窗口边界", "跟踪路段与局部目标",
-      "搜索尝试与受阻位置", "局部轨迹"})
+  for (const auto & name : {"实时点云", "滑动占据地图（高度）", "碰撞膨胀地图（高度）", "滑动窗口边界", "跟踪路段与局部目标",
+      "搜索尝试与受阻位置", "局部轨迹", "已提交局部轨迹"})
   {enabled(group("局部规划"), name, true);}
 }
 }  // namespace d1max_pct_rviz_tools

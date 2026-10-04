@@ -19,13 +19,20 @@ import yaml
 from .live_runtime import child_failure_reason, file_sha256, stop_owned_children
 from .live_visualization import configure as configure_rviz
 from .robot_profile import load_robot_profile, scan_robot_parameters
+from .navigation_contract import (localization_contract, artifact_identity, seal_bundle,
+    verify_bundle, deployment_evidence, verify_deployment, validate_perception_branch)
 from .live_view_reload import (VERSION as UI_RELOAD_VERSION, REQUEST_TTL,
     REQUEST_FILE, RESULT_FILE, owned_directory, preview_reload_session,
     read_owned_json, write_owned_json, write_owned_text, verify_runtime_owner, validate_request, verified_result,
-    replace_ui_children, RvizClosedDuringReload, token as reload_token)
+    replace_ui_children, RvizClosedDuringReload, token as reload_token,
+    presentation_exit_is_nonfatal)
+from .bt_configuration import (ORCHESTRATOR, prepare_tree, validate_tree_wiring,
+                               worker_arguments)
 
-WS = Path('/home/dndx/d1max_nav_ws')
-APP = Path('/home/dndx/智元四足机器人D1 Max二次开发文档资料包v0.1.0/d1max_ros2')
+from d1max_pct_planner import paths
+
+WS = paths.nav_root()
+APP = paths.app_root()
 ROOT = WS / 'log/live_planning'
 START_LOCK = WS / 'log/.localization-start.lock'
 UNIT = 'd1max-live-planning-view.service'
@@ -34,16 +41,47 @@ ACTIVE = {'active', 'activating', 'deactivating', 'reloading'}
 DEFAULT_CONFIG = WS / 'src/d1max_pct_scan/config/live_visualization.yaml'
 
 
+def perception_budget(cfg):
+    """Source-age budget; the extension is an explicit no-motion experiment."""
+    value = cfg.get('perception_timeout_s', .5)
+    if type(value) not in (int, float) or not math.isfinite(value) or not .1 <= value <= .75:
+        raise ValueError('Invalid perception_timeout_s')
+    if value > .5 and not (
+            cfg.get('mode') == 'LIVE_VISUALIZATION_NO_MOTION'
+            and cfg.get('motion_control_enabled') is False
+            and cfg.get('perception_backend') == 'per_sensor_rays'
+            and cfg.get('scan_collision_policy') == 'official'):
+        raise ValueError('Extended perception timeout is official per-sensor preview-only')
+    return float(value)
+
+
 def load_config(path):
-    cfg = yaml.safe_load(Path(path).read_text())
+    cfg = paths.expand_tree(yaml.safe_load(Path(path).read_text()))
     if (not isinstance(cfg, dict) or cfg.get('mode') != 'LIVE_VISUALIZATION_NO_MOTION'
             or cfg.get('motion_control_enabled') is not False):
         raise ValueError('Live visualization must explicitly forbid motion')
     if cfg.get('frame_id') != 'd1max_loc_map':
         raise ValueError('Do not relabel conditioned PCD as a localization map')
+    cfg.setdefault('task_orchestrator', ORCHESTRATOR)
+    cfg.setdefault('ui_lifetime_policy', 'independent')
+    if cfg['ui_lifetime_policy'] != 'independent':
+        raise ValueError('New navigation sessions require independent presentation lifetime')
+    if cfg['task_orchestrator'] != ORCHESTRATOR:
+        raise ValueError('This launcher requires the BehaviorTree.CPP task owner')
     cfg.setdefault('perception_backend', 'deskewed_cloud')
     if cfg['perception_backend'] not in ('deskewed_cloud', 'per_sensor_rays'):
         raise ValueError('Unknown local perception backend')
+    cfg.setdefault('scan_collision_policy', 'official')
+    if cfg['scan_collision_policy'] not in ('official', 'observed_free'):
+        raise ValueError('Unknown SCAN collision policy')
+    cfg.setdefault('perception_timeout_s', .5)
+    perception_budget(cfg)
+    if 'preview_ray_exclusion' in cfg:
+        from .preview_ray_exclusion import from_session
+        localization = yaml.safe_load(Path(cfg['localization_config']).read_text())
+        body_frame = localization.get('navigation_estimation', {}).get('ros__parameters', {}).get(
+            'body_frame', 'd1max_loc_base_link')
+        from_session(cfg, body_frame)
     for name in ('map_pcd', 'planning_manifest', 'tomogram_npz', 'crossfloor_route_config',
                  'localization_config', 'scan_config', 'robot_profile'):
         if not Path(cfg[name]).is_absolute() or not Path(cfg[name]).is_file():
@@ -77,10 +115,22 @@ def load_config(path):
     if (Path(manifest['source_path']).resolve() != Path(cfg['map_pcd']).resolve()
             or file_sha256(cfg['map_pcd']) != manifest['source_sha256']):
         raise ValueError('Localization must use the exact original coordinates/source of this PCT derivative')
+    localization = yaml.safe_load(Path(cfg['localization_config']).read_text())
+    cfg['navigation_contract'] = localization_contract(localization, cfg['frame_id'])
+    validate_perception_branch(cfg, localization)
     return cfg
 
 
+def official_ray_preview(cfg):
+    return (cfg.get('mode') == 'LIVE_VISUALIZATION_NO_MOTION'
+        and cfg.get('motion_control_enabled') is False
+        and cfg.get('perception_backend') == 'per_sensor_rays'
+        and cfg.get('scan_collision_policy', 'official') == 'official')
+
+
 def scan_parameters(cfg, session_id):
+    timeout = perception_budget(cfg)
+    preview_heading = official_ray_preview(cfg)
     params = next(iter(yaml.safe_load(Path(cfg['scan_config']).read_text()).values()))['ros__parameters']
     profile = cfg.get('robot_profile_snapshot') or load_robot_profile(cfg['robot_profile'])
     if profile['engineering']['ground_exclusion_height_m'] <= params['grid_map.resolution']:
@@ -96,13 +146,19 @@ def scan_parameters(cfg, session_id):
         'fsm.reference_start_tolerance': 1., 'grid_map.frame_id': cfg['frame_id'],
         'grid_map.sliding_map_frame_id': 'd1max_live_scan_' + session_id[:8],
         'grid_map.strict_input_frames': True, 'grid_map.maximum_cloud_pose_dt': .25,
-        'grid_map.require_observed_free': True,
+        'grid_map.require_observed_free': cfg.get('scan_collision_policy', 'official') == 'observed_free',
+        'grid_map.cloud_pose_max_age': timeout,
+        'grid_map.preview_only': timeout > .5 or preview_heading,
         'grid_map.require_localization_context': True,
         'grid_map.localization_session_id': session_id,
         'grid_map.visualization_rate_hz': 3.0,
         'grid_map.cloud_is_world': True, 'grid_map.need_extrinsic': False,
         'grid_map.use_projected_rays': cfg.get('perception_backend') == 'per_sensor_rays',
         'manager.max_vel': cfg['scan_preview_speed_mps'],
+        # Direction-confidence threshold, not a measured zero-velocity claim.
+        # Preserve measured v0; only the explicit preview heading model changes.
+        'manager.preview_body_heading_contract': preview_heading,
+        'manager.preview_direction_min_speed': .02,
         'optimization.max_vel': cfg['scan_preview_speed_mps'],
         'manager.max_acc': cfg['scan_preview_acc_mps2'],
         'optimization.max_acc': cfg['scan_preview_acc_mps2'],
@@ -127,12 +183,18 @@ def prepare_ground_support(cfg, directory):
 
 
 def bridge_parameters(cfg, session_id):
+    frames = cfg.get('navigation_contract', {}).get('frames', {})
     result = {name: cfg[name] for name in (
         'ground_support_index', 'ground_support_sha256',
         'ground_support_source_pcd_sha256', 'ground_support_tomogram_sha256',
         'ground_support_height_tolerance_m', 'ground_support_max_step_m')}
     return dict(result, session_id=session_id, localization_session_id=session_id,
+                map_version_id=cfg.get('version_id', ''),
                 map_frame=cfg['frame_id'], body_height=cfg['body_height'],
+                tracking_frame=frames.get('tracking_frame', 'd1max_loc_tracking'),
+                body_frame=frames.get('body_frame', 'd1max_loc_base_link'),
+                collision_policy=cfg.get('scan_collision_policy', 'official'),
+                perception_timeout=perception_budget(cfg),
                 perception_backend=cfg.get('perception_backend', 'deskewed_cloud'))
 
 
@@ -141,11 +203,11 @@ def prepare(path=DEFAULT_CONFIG):
     identifier = uuid.uuid4().hex
     directory = ROOT / (time.strftime('%Y%m%d_%H%M%S') + '_' + identifier[:8])
     directory.mkdir(mode=0o700, parents=True)
-    session = {**cfg, 'id': identifier, 'version_id': 'sc_pgo_20260923_original_coordinates',
+    map_version, _ = artifact_identity(cfg)
+    session = {**cfg, 'id': identifier, 'version_id': map_version,
         'created_at': time.time(), 'floor': cfg['current_floor'], 'config_source': str(Path(path).resolve()),
         'ui_reload_supported': UI_RELOAD_VERSION, 'preview_freeze_owner': 'supervisor_child'}
     session.update(prepare_ground_support(session, directory))
-    write_owned_json(directory / 'session.json', session)
     config = yaml.safe_load(Path(cfg['localization_config']).read_text())
     if cfg['perception_backend'] == 'per_sensor_rays':
         config['dual_lidar_adapter']['ros__parameters']['perception_rays.enabled'] = True
@@ -154,30 +216,47 @@ def prepare(path=DEFAULT_CONFIG):
     global_params = {k: cfg[k] for k in ('planning_manifest', 'tomogram_npz',
         'crossfloor_route_config', 'current_floor', 'goal_floor', 'body_height_min_m',
         'body_height_max_m', 'max_start_move_m', 'result_timeout_s', 'freshness_s')}
-    global_params.update(session_id=identifier, output_directory=str(directory))
+    global_params.update(session_id=identifier, output_directory=str(directory),
+                         retain_preview_task_on_soft_loss=official_ray_preview(cfg))
     (directory / 'global.yaml').write_text(yaml.safe_dump({'/**': {'ros__parameters': global_params}}))
     (directory / 'bridge.yaml').write_text(yaml.safe_dump(
         {'/**': {'ros__parameters': bridge_parameters(session, identifier)}}))
+    prepare_tree(directory, session, WS)
     write_view_configs(directory, identifier)
+    session['bundle_fingerprints'] = seal_bundle(directory, session)
+    write_owned_json(directory / 'session.json', session)
     return directory, session
 
 
 def prepare_motion(path=DEFAULT_CONFIG):
     """Offline preparation only. Existing calibration/profile flags stay intact."""
+    if 'preview_ray_exclusion' in yaml.safe_load(Path(path).read_text()):
+        raise ValueError('Experimental ray exclusion is forbidden in motion sessions')
     from .motion_stack import execution_config, parameters
-    if load_config(path).get('perception_backend') == 'per_sensor_rays':
+    cfg = load_config(path)
+    if perception_budget(cfg) > .5:
+        raise ValueError('Extended perception timeout is preview-only; motion forbidden')
+    if cfg.get('perception_backend') == 'per_sensor_rays':
         raise ValueError('Per-sensor ray integration is preview-only until physical validation')
+    if cfg['scan_collision_policy'] == 'official':
+        raise ValueError('Official SCAN preview policy does not authorize a motion session')
+    from .motion_stack import require_motion_architecture
+    require_motion_architecture(cfg)
+    if cfg.get('task_orchestrator') == ORCHESTRATOR:
+        raise ValueError('Behavior tree motion execution awaits the continuous-local-odom control adapter')
     directory, session = prepare(path)
     session.update(mode='LIVE_NAVIGATION', motion_control_enabled=True,
                    ui_reload_supported=0, preview_freeze_owner='motion_coordinator')
     session['motion'] = execution_config(session)
-    write_owned_json(directory / 'session.json', session)
+    session.pop('bundle_fingerprints', None)
     bridge = bridge_parameters(session, session['id'])
     bridge.update(execution_mode='execution',
                   execution_tracker_node='/d1max/live_planning/motion_coordinator')
     (directory / 'bridge.yaml').write_text(yaml.safe_dump({'/**': {'ros__parameters': bridge}}))
     (directory / 'motion.yaml').write_text(yaml.safe_dump(parameters(session, WS)))
     write_view_configs(directory, session['id'], motion=True)
+    session['bundle_fingerprints'] = seal_bundle(directory, session)
+    write_owned_json(directory / 'session.json', session)
     return directory, session
 
 
@@ -328,6 +407,8 @@ def _start_locked(config_path, *, motion=False):
                       stdout=subprocess.DEVNULL).returncode == 0:
         raise RuntimeError('Existing localization process; refusing a second TF authority')
     check_localization_imports()
+    from .interface_preflight import validate_interfaces
+    validate_interfaces()
     # Read the local connection manager directly. Do not make a recursive HTTP
     # request to the Web server which may be waiting for this launcher.
     credential = APP / 'foxglove_d1max/config/manager.local.json'
@@ -345,6 +426,8 @@ def _start_locked(config_path, *, motion=False):
     if not os.environ.get('DISPLAY'):
         raise RuntimeError('Missing desktop or the verified 09-23 source map')
     directory, session = prepare_motion(config_path) if motion else prepare(config_path)
+    session['deployment_evidence'] = deployment_evidence(WS, include_behavior_tree=True)
+    write_owned_json(directory / 'session.json', session)
     identifier = session['id']
     environment = {k: os.environ[k] for k in ('PATH', 'LD_LIBRARY_PATH', 'PYTHONPATH',
         'AMENT_PREFIX_PATH', 'CMAKE_PREFIX_PATH', 'COLCON_PREFIX_PATH', 'DISPLAY',
@@ -382,12 +465,24 @@ def run(directory):
     if unit_busy(unit('d1max-localization-managed.service')):
         raise RuntimeError('Conflicting Web localization; refusing duplicate TF authority')
     motion = s.get('mode') == 'LIVE_NAVIGATION' and s.get('motion_control_enabled') is True
+    perception_budget(s)  # Recheck stored sessions; prepare() is not an authority boundary.
+    if motion and 'preview_ray_exclusion' in s:
+        raise ValueError('Experimental ray exclusion is forbidden in motion sessions')
+    if motion and s.get('scan_collision_policy') == 'official':
+        raise ValueError('Official SCAN preview policy does not authorize a motion session')
     if not motion and (s['mode'] != 'LIVE_VISUALIZATION_NO_MOTION'
                        or s['motion_control_enabled'] is not False):
         raise ValueError('Invalid live session capability')
     if motion:
+        from .motion_stack import require_motion_architecture
+        require_motion_architecture(s)
         from .motion_execution import MotionConfig
         MotionConfig(session_id=s['id'], map_version_id=s['version_id'], **s['motion'])
+    verify_bundle(directory, s)
+    validate_tree_wiring(directory, s)
+    verify_deployment(s.get('deployment_evidence'), WS)
+    from .interface_preflight import validate_interfaces
+    validate_interfaces()
     # Environment overrides may not reconnect this process to a replay/private graph.
     os.environ.pop('ZENOH_CONFIG_OVERRIDE', None)
     os.environ.pop('ZENOH_SESSION_CONFIG', None)
@@ -467,6 +562,10 @@ def run(directory):
                       owner_pid=os.getpid(), invocation_id=os.environ.get('INVOCATION_ID'))
         try:
             validate_request(request, session_id=s['id'], owner_nonce=ui_nonce, now=time.time())
+            # Reload may import changed code even though the original planners
+            # still run old modules. Check BEFORE stopping the old UI children.
+            verify_bundle(directory, s)
+            verify_deployment(s.get('deployment_evidence'), WS)
         except ValueError as error:
             result.update(error=str(error), completed_at=time.time())
             reply_ui_reload(result)
@@ -485,7 +584,9 @@ def run(directory):
                 ui_state_reset=['unsubmitted_goal_editor', 'rviz_camera'],
                 goal_resubmitted=False, initial_pose_resubmitted=False)
         except RvizClosedDuringReload as error:
-            ui_state, ui_error, exit_reason, stopping = 'failed', str(error), 'rviz_closed', True
+            ui_state, ui_error = 'detached', str(error)
+            if not presentation_exit_is_nonfatal('rviz', s):
+                exit_reason, stopping = 'rviz_closed', True
             result['error'] = ui_error
         except Exception as error:
             ui_state, ui_error = 'failed', str(error)[:500]
@@ -505,7 +606,11 @@ def run(directory):
         spawn('view', ui_commands['view'])
         spawn('map_layers', [sys.executable, '-m', 'd1max_pct_scan.live_map_layers', '--session', str(directory)])
         spawn('global', [sys.executable, '-m', 'd1max_pct_scan.live_global_planner',
-            '--ros-args', '--params-file', str(directory / 'global.yaml')])
+            '--ros-args', '--params-file', str(directory / 'global.yaml')] + worker_arguments())
+        spawn('bt_adapters', [sys.executable, '-m', 'd1max_pct_scan.bt_adapters',
+            '--ros-args', '--params-file', str(directory / 'bt_adapter.yaml')])
+        spawn('navigator', ['ros2', 'run', 'd1max_navigation_bt', 'navigator_node',
+            '--ros-args', '--params-file', str(directory / 'bt.yaml')])
         spawn('bridge', [sys.executable, '-m', 'd1max_pct_scan.live_scan_bridge',
             '--ros-args', '--params-file', str(directory / 'bridge.yaml')])
         if s.get('perception_backend') == 'per_sensor_rays':
@@ -537,16 +642,29 @@ def run(directory):
         for source, target in remaps.items():
             scan_command += ['-r', source + ':=' + target]
         spawn('scan', scan_command)
+        # Configure/activate only after every owned dependency has been spawned.
+        # The navigator rejects work until ACTIVE; a node restart does not
+        # reconnect or restore execution authorization.
+        spawn('bt_lifecycle', ['ros2', 'run', 'nav2_lifecycle_manager', 'lifecycle_manager',
+            '--ros-args', '-r', '__node:=d1max_navigation_lifecycle',
+            '--params-file', str(directory / 'bt_lifecycle.yaml')])
         spawn('rviz', ui_commands['rviz'])
         record_runtime('running')
         last_runtime = time.monotonic()
         while not stopping:
-            # A failed explicit UI replacement must not destroy localization or
-            # the user's goal. A normal RViz close still stops the whole preview.
+            # UI is a client. Its exit must not destroy a committed task or
+            # localization; critical process exits still take the failure path.
             exited = next(((name, p.returncode) for name, p in children
                 if p.pid not in ignored_ui_pids and p.poll() is not None), None)
             if exited:
                 name, code = exited
+                if presentation_exit_is_nonfatal(name, s):
+                    ignored_ui_pids.update(p.pid for child_name, p in children
+                                           if child_name == name and p.poll() is not None)
+                    ui_state = 'detached'
+                    ui_error = '' if code == 0 else child_failure_reason(directory, name, code)
+                    record_runtime('running')
+                    continue
                 if name == 'rviz' and code == 0:
                     exit_reason = 'rviz_closed'
                     break
@@ -562,7 +680,13 @@ def run(directory):
         raise
     finally:
         record_runtime('stopping')
+        from .lifecycle_shutdown import drain_task_owner
+        drain = (drain_task_owner(s['id']) if any(name == 'navigator' and p.poll() is None
+                for name, p in children) else dict(request_accepted=False,
+                software_retired=False, physical_stop_confirmed=False,
+                reason='task_owner_not_alive'))
         cleanup = stop_owned_children(children)
+        cleanup['task_owner_drain'] = drain
         record_runtime('failed' if terminal_error else 'stopped', cleanup=cleanup)
         for stream in streams.values():
             stream.close()

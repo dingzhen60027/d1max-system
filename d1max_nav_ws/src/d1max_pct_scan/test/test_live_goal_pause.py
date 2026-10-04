@@ -129,11 +129,12 @@ def test_bad_sample_resets_resume_evidence_without_extending_ttl():
     assert pause.intent.user_stamp == 101. and pause.good_count == 0
 
 
-def test_soft_pause_withdraws_reference_but_keeps_immutable_native_work_and_goal():
+def test_soft_pause_suspends_admission_without_cancelling_immutable_task():
     pause = BoundedGoalPause()
     pause.install(INTENT)
     actions = []
-    fake = SimpleNamespace(pause=pause, generation=8, current=object(),
+    fake = SimpleNamespace(p=dict(retain_preview_task_on_soft_loss=True),
+                           pause=pause, generation=8, current=object(),
                            pending_goal=object(), active_context=(4, 'seed-a'),
                            now_s=lambda: 100.5, cached_result=None, commit_wait_started=None,
                            stop_child=lambda: actions.append('stop_child'),
@@ -143,7 +144,8 @@ def test_soft_pause_withdraws_reference_but_keeps_immutable_native_work_and_goal
     assert fake.current is not None and fake.pending_goal is not None
     assert fake.active_context is None
     assert fake.pause_wall == 100.5 and fake.state == 'computing_while_navigation_unavailable'
-    assert actions == ['paused:navigation_stale']
+    assert actions == []  # Empty Path is exclusively a hard cancellation.
+    assert not fake.active_reference and fake.reason == 'paused:navigation_stale'
     assert fake.pause.intent is INTENT
     LiveGlobalPlanner.pause_reference(fake, 'still_stale')
     assert fake.generation == 8  # no repeated cancellation churn
@@ -241,6 +243,49 @@ def test_new_attempt_reprojects_current_body_without_reusing_old_start():
     assert fake.pending_goal[1]['xyz'][:2] == [1., 2.]
 
 
+@pytest.mark.parametrize('same_frame',[True,False])
+def test_source_identity_3d_goal_uses_local_height_not_floor_median(same_frame):
+    """Keep the contract explicit even when source/planning frame aliases change.
+
+    The production identity bridge currently aliases both frame names, so the
+    old planning-frame branch also kept goal Z. The regression must not claim
+    that production had taken its conditioned/non-rigid source-frame branch.
+    """
+    ground=-.7043251991271973
+    class Floor:
+        reference_z_m=-.5535517632961273
+        def query(self,xy,limits):return np.array([ground]),np.array([.01])
+    class Bridge:
+        source_frame='d1max_loc_map'
+        planning_frame='d1max_loc_map' if same_frame else 'identity_planning_alias'
+        projection_kind='source_identity'
+        floors={'floor1':Floor()};protected_regions=[];limits=None
+        def project_live_pose_to_ground(self,body,floor,**kwargs):
+            return SimpleNamespace(xyz=np.array([body[0],body[1],ground]))
+    class Map:
+        def sample_surfaces(self,xy,deduplicate=True):
+            return [dict(xyz=[*xy,ground],ground_z=ground,layer_id=4)]
+    intent=GoalIntent(100.1,'3d','d1max_loc_map',
+        (-31.600778198242185,44.995704650878906,-.744481235742569),'floor1',IDENTITY)
+    pause=BoundedGoalPause();pause.install(intent)
+    fake=SimpleNamespace(pause=pause,bridge=Bridge(),tomogram=Map(),
+        route_settings={'floor_z_ranges':{'lower':[-.95,-.10]}},
+        p={'body_height_min_m':.25,'body_height_max_m':.85},body=np.array([1.,2.,-.2]),
+        generation=0,now_s=lambda:100.9,goal_deadline_monotonic=float('inf'),
+        _maybe_launch_pending=lambda:None)
+    LiveGlobalPlanner.plan_intent(fake,intent,context=(4,'seed-a'),attempt_stamp=100.9)
+    assert fake.pending_goal[1]['ground_z']==ground
+    assert np.array_equal(fake.pending_goal[1]['xyz'][:2],intent.xyz[:2])
+    from d1max_pct_scan.live_global_contract import choose_floor_surface
+    with pytest.raises(GlobalPlanError,match='no_traversable_measured'):
+        choose_floor_surface(fake.tomogram,intent.xyz[:2],'floor1',
+            fake.route_settings['floor_z_ranges'],hint_z=Bridge.floors['floor1'].reference_z_m)
+    wrong=GoalIntent(100.2,'3d','d1max_loc_map',(*intent.xyz[:2],ground-.151),'floor1',IDENTITY)
+    pause.install(wrong)
+    with pytest.raises(GlobalPlanError,match='uniquely_match_observed_floor'):
+        LiveGlobalPlanner.plan_intent(fake,wrong,context=(4,'seed-a'),attempt_stamp=100.9)
+
+
 def test_transient_invalid_pauses_then_requires_three_distinct_fresh_samples(monkeypatch):
     clock = [10.]
     monkeypatch.setattr('d1max_pct_scan.live_global_planner.time.monotonic',
@@ -249,6 +294,7 @@ def test_transient_invalid_pauses_then_requires_three_distinct_fresh_samples(mon
     pause.install(INTENT)
     actions = []
     fake = SimpleNamespace(
+        p=dict(retain_preview_task_on_soft_loss=True),
         pause=pause, pause_wall=None, generation=3, current=object(),
         pending_goal=None, active_context=(4, 'seed-a'),
         tomogram=SimpleNamespace(sha256='hash-a'), localizer=_localizer(),
@@ -277,7 +323,8 @@ def test_transient_invalid_pauses_then_requires_three_distinct_fresh_samples(mon
     fake.navigation.update(valid=False, seed_id=None)
     LiveGlobalPlanner._revoke_if_context_lost(fake)
     assert pause.intent is INTENT and pause.paused_at == 10.
-    assert actions == ['empty:paused:temporary_nav_invalid']
+    assert actions == []
+    assert fake.reason == 'paused:temporary_nav_invalid' and not fake.active_reference
     fake.navigation.update(valid=True, seed_id='seed-a')
     fake.body_received = fake.localizer_received = 10.05
     fake.localizer['wall_time'] = 100.6

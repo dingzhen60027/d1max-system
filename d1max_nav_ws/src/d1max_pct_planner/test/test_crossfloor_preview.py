@@ -133,6 +133,27 @@ def test_three_fixed_maps_share_identical_stair_resource_and_bound_memory(prepar
         route._resources('goal_201', route.settings)
 
 
+def test_warmup_materializes_three_resources_but_never_plans_a_route(prepared,monkeypatch):
+    native_calls=fixed_stair_native(prepared,monkeypatch)
+    route=preview.CrossfloorPreviewRoute(prepared.tomo,prepared.path)
+    metrics=route.warmup_resources()
+    assert metrics['native_map_cache']['entries']==3
+    assert metrics['fixed_stair_cache']['entries']==0
+    assert native_calls==[]
+    old_resources=dict(route._native_maps)
+    route.plan(xyz(1),xyz(4),0,0)
+    assert native_calls==[(1,4)]
+    assert all(route._native_maps[key] is value for key,value in old_resources.items())
+
+
+def test_warmup_rejects_changed_configuration_without_lazy_partial_cache(prepared):
+    route=preview.CrossfloorPreviewRoute(prepared.tomo,prepared.path)
+    route.raw['anchors']['start']['xyz'][0]+=1.
+    with pytest.raises(ValueError,match='configuration changed'):
+        route.warmup_resources()
+    assert route._native_maps=={} and route.cache_stats['invalidations']==1
+
+
 def fixed_stair_native(prepared, monkeypatch):
     """Native seam that serves arbitrary floor endpoints and both shared stairs."""
     calls = []

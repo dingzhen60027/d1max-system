@@ -1,0 +1,667 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="(empty)"
+	tests="5"
+	failures="0"
+	disabled="0"
+	skipped="0"
+	hostname="dndx-pc"
+	time="4"
+	timestamp="2026-10-04T14:54:22"
+	>
+	<testcase name="test_navigation_bt" classname="test_navigation_bt" time="3.87878" status="run">
+		<system-out>-- run_test.py: invoking following command in '/home/dndx/d1max_nav_ws/experiments/navigation_architecture_20261004/bt_initial_pose/build/d1max_navigation_bt':
+ - /home/dndx/d1max_nav_ws/experiments/navigation_architecture_20261004/bt_initial_pose/build/d1max_navigation_bt/test_navigation_bt --gtest_output=xml:/home/dndx/d1max_nav_ws/experiments/navigation_architecture_20261004/bt_initial_pose/build/d1max_navigation_bt/test_results/d1max_navigation_bt/test_navigation_bt.gtest.xml
+Running main() from /opt/ros/humble/src/gtest_vendor/src/gtest_main.cc
+[==========] Running 40 tests from 6 test suites.
+[----------] Global test environment set-up.
+[----------] 1 test from PreparationOwnership
+[ RUN      ] PreparationOwnership.StartupAndGlobalSearchDoNotSpendFollowBudget
+[       OK ] PreparationOwnership.StartupAndGlobalSearchDoNotSpendFollowBudget (0 ms)
+[----------] 1 test from PreparationOwnership (0 ms total)
+
+[----------] 23 tests from NavigationTree
+[ RUN      ] NavigationTree.NoTaskDoesNotRequestAnything
+[       OK ] NavigationTree.NoTaskDoesNotRequestAnything (0 ms)
+[ RUN      ] NavigationTree.RealXmlAndRealBehaviorTreeNodesAreVisible
+[       OK ] NavigationTree.RealXmlAndRealBehaviorTreeNodesAreVisible (0 ms)
+[ RUN      ] NavigationTree.InitialLocalizationWaitDoesNotBecomeContextFault
+[       OK ] NavigationTree.InitialLocalizationWaitDoesNotBecomeContextFault (0 ms)
+[ RUN      ] NavigationTree.NormalMovementNeverRecomputesCommittedRoute
+[       OK ] NavigationTree.NormalMovementNeverRecomputesCommittedRoute (0 ms)
+[ RUN      ] NavigationTree.CoarseCandidateCannotStartPlanningAndUpdatesDoNotReenterStartup
+[       OK ] NavigationTree.CoarseCandidateCannotStartPlanningAndUpdatesDoNotReenterStartup (0 ms)
+[ RUN      ] NavigationTree.CancelDuringInitialLocalizationDoesNotRequestRouteOrResumeOnLateReadiness
+[       OK ] NavigationTree.CancelDuringInitialLocalizationDoesNotRequestRouteOrResumeOnLateReadiness (0 ms)
+[ RUN      ] NavigationTree.InitialLocalizationHasBoundedFailureWithoutStartingRoute
+[       OK ] NavigationTree.InitialLocalizationHasBoundedFailureWithoutStartingRoute (4 ms)
+[ RUN      ] NavigationTree.InitialIndexWarmupDoesNotConsumePoseBudgetAndCannotRestartAfterCompletion
+[       OK ] NavigationTree.InitialIndexWarmupDoesNotConsumePoseBudgetAndCannotRestartAfterCompletion (8 ms)
+[ RUN      ] NavigationTree.RepeatedPauseResumePreservesBothActionsAndTaskIdentity
+[       OK ] NavigationTree.RepeatedPauseResumePreservesBothActionsAndTaskIdentity (1862 ms)
+[ RUN      ] NavigationTree.AsyncRouteCompletionDuringPauseIsConsumedOnlyAfterReadinessReturns
+[       OK ] NavigationTree.AsyncRouteCompletionDuringPauseIsConsumedOnlyAfterReadinessReturns (620 ms)
+[ RUN      ] NavigationTree.TemporaryLocalBlockIsNotNewGoalOrGlobalReplan
+[       OK ] NavigationTree.TemporaryLocalBlockIsNotNewGoalOrGlobalReplan (1 ms)
+[ RUN      ] NavigationTree.PreparationTimeoutRetiresRealTreeWithoutRecomputeOrRecoveryRetry
+[       OK ] NavigationTree.PreparationTimeoutRetiresRealTreeWithoutRecomputeOrRecoveryRetry (0 ms)
+[ RUN      ] NavigationTree.HardContextFaultHaltsFollowAndLatchesFailure
+[       OK ] NavigationTree.HardContextFaultHaltsFollowAndLatchesFailure (1 ms)
+[ RUN      ] NavigationTree.LostActionTransportIsNotHiddenBySoftInputPause
+[       OK ] NavigationTree.LostActionTransportIsNotHiddenBySoftInputPause (0 ms)
+[ RUN      ] NavigationTree.CancelHaltsExactlyOnceAndNeverRestarts
+[       OK ] NavigationTree.CancelHaltsExactlyOnceAndNeverRestarts (0 ms)
+[ RUN      ] NavigationTree.CancelDuringInitialReadinessNeverDispatchesAWorkerAfterRecovery
+[       OK ] NavigationTree.CancelDuringInitialReadinessNeverDispatchesAWorkerAfterRecovery (1 ms)
+[ RUN      ] NavigationTree.CancellationAtComputeCompletionDoesNotLeakIntoFollow
+[       OK ] NavigationTree.CancellationAtComputeCompletionDoesNotLeakIntoFollow (0 ms)
+[ RUN      ] NavigationTree.NewTaskRetiresOldBeforeRequestingNewRoute
+[       OK ] NavigationTree.NewTaskRetiresOldBeforeRequestingNewRoute (0 ms)
+[ RUN      ] NavigationTree.DuplicateGoalDeliveryIsIdempotentAndIdentityReuseRejected
+[       OK ] NavigationTree.DuplicateGoalDeliveryIsIdempotentAndIdentityReuseRejected (1 ms)
+[ RUN      ] NavigationTree.FollowSuccessWithoutMeasuredArrivalCannotCompleteTask
+[       OK ] NavigationTree.FollowSuccessWithoutMeasuredArrivalCannotCompleteTask (0 ms)
+[ RUN      ] NavigationTree.TerminalRouteFailureDoesNotBlindlyRetry
+[       OK ] NavigationTree.TerminalRouteFailureDoesNotBlindlyRetry (1 ms)
+[ RUN      ] NavigationTree.TerminalFollowFailureDoesNotBlindlyRestartLocalTask
+[       OK ] NavigationTree.TerminalFollowFailureDoesNotBlindlyRestartLocalTask (0 ms)
+[ RUN      ] NavigationTree.IllegalBackendIdleIsDiagnosableAndFailsClosed
+[       OK ] NavigationTree.IllegalBackendIdleIsDiagnosableAndFailsClosed (0 ms)
+[----------] 23 tests from NavigationTree (2499 ms total)
+
+[----------] 3 tests from InitialLocalizationBudget
+[ RUN      ] InitialLocalizationBudget.ColdIndexHasOne120SecondDeadlineThenOne60SecondWorkDeadline
+[       OK ] InitialLocalizationBudget.ColdIndexHasOne120SecondDeadlineThenOne60SecondWorkDeadline (0 ms)
+[ RUN      ] InitialLocalizationBudget.IndexHeartbeatsUnknownStatesAndLioResetDoNotRenewWarmup
+[       OK ] InitialLocalizationBudget.IndexHeartbeatsUnknownStatesAndLioResetDoNotRenewWarmup (0 ms)
+[ RUN      ] InitialLocalizationBudget.UnknownInitialStatusDoesNotReceiveExtraIndexAllowance
+[       OK ] InitialLocalizationBudget.UnknownInitialStatusDoesNotReceiveExtraIndexAllowance (0 ms)
+[----------] 3 tests from InitialLocalizationBudget (0 ms total)
+
+[----------] 2 tests from InitialLocalizationEvidence
+[ RUN      ] InitialLocalizationEvidence.OnlyMatchingFreshSequencedComponentStatusCanBudgetWarmup
+[       OK ] InitialLocalizationEvidence.OnlyMatchingFreshSequencedComponentStatusCanBudgetWarmup (0 ms)
+[ RUN      ] InitialLocalizationEvidence.GenuineIndexCompletionWorksDuringPausedROSClockAndNeverResets
+[       OK ] InitialLocalizationEvidence.GenuineIndexCompletionWorksDuringPausedROSClockAndNeverResets (0 ms)
+[----------] 2 tests from InitialLocalizationEvidence (0 ms total)
+
+[----------] 8 tests from NavigationTreeLimits
+[ RUN      ] NavigationTreeLimits.PersistentReadinessGapHasBoundedFailureNotEndlessRetry
+[       OK ] NavigationTreeLimits.PersistentReadinessGapHasBoundedFailureNotEndlessRetry (4 ms)
+[ RUN      ] NavigationTreeLimits.MissingXmlIsRejectedAtStartup
+[       OK ] NavigationTreeLimits.MissingXmlIsRejectedAtStartup (0 ms)
+[ RUN      ] NavigationTreeLimits.UnprovedFollowSuccessFailsWithoutLoopingOrRecomputing
+[       OK ] NavigationTreeLimits.UnprovedFollowSuccessFailsWithoutLoopingOrRecomputing (6 ms)
+[ RUN      ] NavigationTreeLimits.MeasuredArrivalBudgetExcludesPausedInputTime
+[       OK ] NavigationTreeLimits.MeasuredArrivalBudgetExcludesPausedInputTime (641 ms)
+[ RUN      ] NavigationTreeLimits.UnboundedArrivalTimeoutIsRejectedInsteadOfHanging
+[       OK ] NavigationTreeLimits.UnboundedArrivalTimeoutIsRejectedInsteadOfHanging (0 ms)
+[ RUN      ] NavigationTreeLimits.InvalidBudgetsFailAtStartupBeforeAnyAcceptedTask
+[       OK ] NavigationTreeLimits.InvalidBudgetsFailAtStartupBeforeAnyAcceptedTask (5 ms)
+[ RUN      ] NavigationTreeLimits.InputWaitTimeoutHaltsRetainedRunningAction
+[       OK ] NavigationTreeLimits.InputWaitTimeoutHaltsRetainedRunningAction (3 ms)
+[ RUN      ] NavigationTreeLimits.XmlPolicyIsFrozenAcrossTasksWithinOneEngine
+[       OK ] NavigationTreeLimits.XmlPolicyIsFrozenAcrossTasksWithinOneEngine (1 ms)
+[----------] 8 tests from NavigationTreeLimits (660 ms total)
+
+[----------] 3 tests from NavigationRouteDeadline
+[ RUN      ] NavigationRouteDeadline.WorkerPrewarmDoesNotSpendTheTenSecondWorkContract
+[       OK ] NavigationRouteDeadline.WorkerPrewarmDoesNotSpendTheTenSecondWorkContract (31 ms)
+[ RUN      ] NavigationRouteDeadline.WorkerPrewarmHasItsOwnBoundedFailure
+[       OK ] NavigationRouteDeadline.WorkerPrewarmHasItsOwnBoundedFailure (6 ms)
+[ RUN      ] NavigationRouteDeadline.PauseAndStableRecoveryCannotRenewStartedRouteWork
+[       OK ] NavigationRouteDeadline.PauseAndStableRecoveryCannotRenewStartedRouteWork (636 ms)
+[----------] 3 tests from NavigationRouteDeadline (673 ms total)
+
+[----------] Global test environment tear-down
+[==========] 40 tests from 6 test suites ran. (3832 ms total)
+[  PASSED  ] 40 tests.
+-- run_test.py: return code 0
+-- run_test.py: inject classname prefix into gtest result file '/home/dndx/d1max_nav_ws/experiments/navigation_architecture_20261004/bt_initial_pose/build/d1max_navigation_bt/test_results/d1max_navigation_bt/test_navigation_bt.gtest.xml'
+-- run_test.py: verify result file '/home/dndx/d1max_nav_ws/experiments/navigation_architecture_20261004/bt_initial_pose/build/d1max_navigation_bt/test_results/d1max_navigation_bt/test_navigation_bt.gtest.xml'
+</system-out>
+	</testcase>
+	<testcase name="test_navigation_bt_runtime" classname="test_navigation_bt_runtime" time="0.0517079" status="run">
+		<system-out>-- run_test.py: invoking following command in '/home/dndx/d1max_nav_ws/experiments/navigation_architecture_20261004/bt_initial_pose/build/d1max_navigation_bt':
+ - /home/dndx/d1max_nav_ws/experiments/navigation_architecture_20261004/bt_initial_pose/build/d1max_navigation_bt/test_navigation_bt_runtime --gtest_output=xml:/home/dndx/d1max_nav_ws/experiments/navigation_architecture_20261004/bt_initial_pose/build/d1max_navigation_bt/test_results/d1max_navigation_bt/test_navigation_bt_runtime.gtest.xml
+Running main() from /opt/ros/humble/src/gtest_vendor/src/gtest_main.cc
+[==========] Running 34 tests from 13 test suites.
+[----------] Global test environment set-up.
+[----------] 6 tests from StableRecovery
+[ RUN      ] StableRecovery.FirstAdmissionDoesNotRequireRobotMotionOrARecoveryEpisode
+[       OK ] StableRecovery.FirstAdmissionDoesNotRequireRobotMotionOrARecoveryEpisode (0 ms)
+[ RUN      ] StableRecovery.WithdrawalIsImmediateAndOneGoodPacketCannotResume
+[       OK ] StableRecovery.WithdrawalIsImmediateAndOneGoodPacketCannotResume (0 ms)
+[ RUN      ] StableRecovery.RepeatedAndReorderedSourcesCannotManufactureRecovery
+[       OK ] StableRecovery.RepeatedAndReorderedSourcesCannotManufactureRecovery (0 ms)
+[ RUN      ] StableRecovery.AnotherIdentityOrMissingSourceNeverResumesOldTask
+[       OK ] StableRecovery.AnotherIdentityOrMissingSourceNeverResumesOldTask (0 ms)
+[ RUN      ] StableRecovery.EveryBadSampleRestartsOnlyStabilityNotTheOuterWaitBudget
+[       OK ] StableRecovery.EveryBadSampleRestartsOnlyStabilityNotTheOuterWaitBudget (0 ms)
+[ RUN      ] StableRecovery.MonotonicRollbackNeverRestoresAuthority
+[       OK ] StableRecovery.MonotonicRollbackNeverRestoresAuthority (0 ms)
+[----------] 6 tests from StableRecovery (0 ms total)
+
+[----------] 1 test from RouteDeadline
+[ RUN      ] RouteDeadline.IncludesPauseAndDoesNotConfuseTerminalWorkWithPendingWork
+[       OK ] RouteDeadline.IncludesPauseAndDoesNotConfuseTerminalWorkWithPendingWork (0 ms)
+[----------] 1 test from RouteDeadline (0 ms total)
+
+[----------] 3 tests from ExecutionPurpose
+[ RUN      ] ExecutionPurpose.LivePlanningOnlyRetainsGeometryOwnerWithoutAnyMotionAuthority
+[       OK ] ExecutionPurpose.LivePlanningOnlyRetainsGeometryOwnerWithoutAnyMotionAuthority (0 ms)
+[ RUN      ] ExecutionPurpose.PlanningOnlyCannotBeMisconfiguredAsExecutionOrMock
+[       OK ] ExecutionPurpose.PlanningOnlyCannotBeMisconfiguredAsExecutionOrMock (0 ms)
+[ RUN      ] ExecutionPurpose.ExistingExecutionAndLegacyPreviewContractsAreUnchanged
+[       OK ] ExecutionPurpose.ExistingExecutionAndLegacyPreviewContractsAreUnchanged (0 ms)
+[----------] 3 tests from ExecutionPurpose (0 ms total)
+
+[----------] 1 test from TaskIdentity
+[ RUN      ] TaskIdentity.GeneratedIdsStayInsideAdapterContract
+[       OK ] TaskIdentity.GeneratedIdsStayInsideAdapterContract (0 ms)
+[----------] 1 test from TaskIdentity (0 ms total)
+
+[----------] 1 test from GoalFrame
+[ RUN      ] GoalFrame.RvizThreeDimensionalSelectionPreservesItsPlanningFrame
+[       OK ] GoalFrame.RvizThreeDimensionalSelectionPreservesItsPlanningFrame (0 ms)
+[----------] 1 test from GoalFrame (0 ms total)
+
+[----------] 6 tests from AsyncRequest
+[ RUN      ] AsyncRequest.DispatchIsExactlyOnce
+[       OK ] AsyncRequest.DispatchIsExactlyOnce (0 ms)
+[ RUN      ] AsyncRequest.CancelBeforeAcceptanceWaitsForHandle
+[       OK ] AsyncRequest.CancelBeforeAcceptanceWaitsForHandle (0 ms)
+[ RUN      ] AsyncRequest.RetiredResultDrainsWorkerButCannotCommitOldRoute
+[       OK ] AsyncRequest.RetiredResultDrainsWorkerButCannotCommitOldRoute (0 ms)
+[ RUN      ] AsyncRequest.DuplicateResultCannotReplaceCommittedResult
+[       OK ] AsyncRequest.DuplicateResultCannotReplaceCommittedResult (0 ms)
+[ RUN      ] AsyncRequest.UnrequestedResultIsNotAccepted
+[       OK ] AsyncRequest.UnrequestedResultIsNotAccepted (0 ms)
+[ RUN      ] AsyncRequest.IndependentGenerationsDoNotShareTerminalState
+[       OK ] AsyncRequest.IndependentGenerationsDoNotShareTerminalState (0 ms)
+[----------] 6 tests from AsyncRequest (0 ms total)
+
+[----------] 1 test from ActionAdmission
+[ RUN      ] ActionAdmission.GlobalDiscoveryIsNotALocalTrackingDependency
+[       OK ] ActionAdmission.GlobalDiscoveryIsNotALocalTrackingDependency (0 ms)
+[----------] 1 test from ActionAdmission (0 ms total)
+
+[----------] 3 tests from ActionTransport
+[ RUN      ] ActionTransport.MissingAcceptanceHasBoundedFailure
+[       OK ] ActionTransport.MissingAcceptanceHasBoundedFailure (0 ms)
+[ RUN      ] ActionTransport.AliveBlockedWorkerMayRunWithoutReachingAnArtificialTotalDuration
+[       OK ] ActionTransport.AliveBlockedWorkerMayRunWithoutReachingAnArtificialTotalDuration (0 ms)
+[ RUN      ] ActionTransport.WatchdogDoesNotPretendTheWorkerHasTerminated
+[       OK ] ActionTransport.WatchdogDoesNotPretendTheWorkerHasTerminated (0 ms)
+[----------] 3 tests from ActionTransport (0 ms total)
+
+[----------] 3 tests from Cancellation
+[ RUN      ] Cancellation.CleanupFailureQuarantinesEvenAfterActionHasTerminated
+[       OK ] Cancellation.CleanupFailureQuarantinesEvenAfterActionHasTerminated (0 ms)
+[ RUN      ] Cancellation.AcknowledgedPlannerFailureAndUnconfirmedCleanupAreDifferent
+[       OK ] Cancellation.AcknowledgedPlannerFailureAndUnconfirmedCleanupAreDifferent (0 ms)
+[ RUN      ] Cancellation.BoundedErrorNeverConvertsOldPendingIntoReady
+[       OK ] Cancellation.BoundedErrorNeverConvertsOldPendingIntoReady (0 ms)
+[----------] 3 tests from Cancellation (0 ms total)
+
+[----------] 2 tests from HealthReport
+[ RUN      ] HealthReport.BothReceiptAndSourceTimesMustBeFresh
+[       OK ] HealthReport.BothReceiptAndSourceTimesMustBeFresh (0 ms)
+[ RUN      ] HealthReport.FutureNaNAndInvalidBudgetsRejected
+[       OK ] HealthReport.FutureNaNAndInvalidBudgetsRejected (0 ms)
+[----------] 2 tests from HealthReport (0 ms total)
+
+[----------] 1 test from ArrivalProof
+[ RUN      ] ArrivalProof.AcknowledgedCleanupDelayDoesNotEraseARealMeasuredEvent
+[       OK ] ArrivalProof.AcknowledgedCleanupDelayDoesNotEraseARealMeasuredEvent (0 ms)
+[----------] 1 test from ArrivalProof (0 ms total)
+
+[----------] 4 tests from PublicAction
+[ RUN      ] PublicAction.CancelWaitsForWorkerTerminalNotJustCancelAck
+[       OK ] PublicAction.CancelWaitsForWorkerTerminalNotJustCancelAck (0 ms)
+[ RUN      ] PublicAction.CancelTimeoutAbortsInsteadOfReportingCanceled
+[       OK ] PublicAction.CancelTimeoutAbortsInsteadOfReportingCanceled (0 ms)
+[ RUN      ] PublicAction.PreemptionRetainsOldTaskUntilChildIsRetired
+[       OK ] PublicAction.PreemptionRetainsOldTaskUntilChildIsRetired (0 ms)
+[ RUN      ] PublicAction.SuccessCannotPrecedeWorkerResult
+[       OK ] PublicAction.SuccessCannotPrecedeWorkerResult (0 ms)
+[----------] 4 tests from PublicAction (0 ms total)
+
+[----------] 2 tests from Diagnostics
+[ RUN      ] Diagnostics.RunningActionsExposeActualFeedbackAndTerminalReasonIsExact
+[       OK ] Diagnostics.RunningActionsExposeActualFeedbackAndTerminalReasonIsExact (0 ms)
+[ RUN      ] Diagnostics.IntentionalCancellationIsNotReportedAsPlannerFailure
+[       OK ] Diagnostics.IntentionalCancellationIsNotReportedAsPlannerFailure (0 ms)
+[----------] 2 tests from Diagnostics (0 ms total)
+
+[----------] Global test environment tear-down
+[==========] 34 tests from 13 test suites ran. (0 ms total)
+[  PASSED  ] 34 tests.
+-- run_test.py: return code 0
+-- run_test.py: inject classname prefix into gtest result file '/home/dndx/d1max_nav_ws/experiments/navigation_architecture_20261004/bt_initial_pose/build/d1max_navigation_bt/test_results/d1max_navigation_bt/test_navigation_bt_runtime.gtest.xml'
+-- run_test.py: verify result file '/home/dndx/d1max_nav_ws/experiments/navigation_architecture_20261004/bt_initial_pose/build/d1max_navigation_bt/test_results/d1max_navigation_bt/test_navigation_bt_runtime.gtest.xml'
+</system-out>
+	</testcase>
+	<testcase name="test_navigation_task_contract" classname="test_navigation_task_contract" time="0.0401991" status="run">
+		<system-out>-- run_test.py: invoking following command in '/home/dndx/d1max_nav_ws/experiments/navigation_architecture_20261004/bt_initial_pose/build/d1max_navigation_bt':
+ - /home/dndx/d1max_nav_ws/experiments/navigation_architecture_20261004/bt_initial_pose/build/d1max_navigation_bt/test_navigation_task_contract --gtest_output=xml:/home/dndx/d1max_nav_ws/experiments/navigation_architecture_20261004/bt_initial_pose/build/d1max_navigation_bt/test_results/d1max_navigation_bt/test_navigation_task_contract.gtest.xml
+Running main() from /opt/ros/humble/src/gtest_vendor/src/gtest_main.cc
+[==========] Running 23 tests from 6 test suites.
+[----------] Global test environment set-up.
+[----------] 1 test from TransitionAdmission
+[ RUN      ] TransitionAdmission.CrossSessionOrMissingSessionCannotBeginDrain
+[       OK ] TransitionAdmission.CrossSessionOrMissingSessionCannotBeginDrain (0 ms)
+[----------] 1 test from TransitionAdmission (0 ms total)
+
+[----------] 6 tests from GoalAdmission
+[ RUN      ] GoalAdmission.CancelBeforeDelayedRequestRejectsOldSourceButAllowsNewIntent
+[       OK ] GoalAdmission.CancelBeforeDelayedRequestRejectsOldSourceButAllowsNewIntent (0 ms)
+[ RUN      ] GoalAdmission.CancelInitialPoseOrDrainBetweenAcceptanceAndDispatchPreventsSubmit
+[       OK ] GoalAdmission.CancelInitialPoseOrDrainBetweenAcceptanceAndDispatchPreventsSubmit (0 ms)
+[ RUN      ] GoalAdmission.TargetedOldActionCancelCannotRevokeNewAcceptedGoal
+[       OK ] GoalAdmission.TargetedOldActionCancelCannotRevokeNewAcceptedGoal (0 ms)
+[ RUN      ] GoalAdmission.ActionAndTopicShareOneSourceWatermark
+[       OK ] GoalAdmission.ActionAndTopicShareOneSourceWatermark (0 ms)
+[ RUN      ] GoalAdmission.ZeroFutureStaleAndClockRollbackDoNotBecomeNewTasks
+[       OK ] GoalAdmission.ZeroFutureStaleAndClockRollbackDoNotBecomeNewTasks (0 ms)
+[ RUN      ] GoalAdmission.CancelAllInvalidatesAlreadyReservedSlightlyFutureIntent
+[       OK ] GoalAdmission.CancelAllInvalidatesAlreadyReservedSlightlyFutureIntent (0 ms)
+[----------] 6 tests from GoalAdmission (0 ms total)
+
+[----------] 6 tests from Confirmation
+[ RUN      ] Confirmation.PreviewRejectsWithoutConsumingPermission
+[       OK ] Confirmation.PreviewRejectsWithoutConsumingPermission (0 ms)
+[ RUN      ] Confirmation.CapacityFailureDoesNotConsumeConfirmationIdentity
+[       OK ] Confirmation.CapacityFailureDoesNotConsumeConfirmationIdentity (0 ms)
+[ RUN      ] Confirmation.IdempotentConsumptionAndNoSecondGrant
+[       OK ] Confirmation.IdempotentConsumptionAndNoSecondGrant (0 ms)
+[ RUN      ] Confirmation.BindingAndSchemaCannotBeReplayed
+[       OK ] Confirmation.BindingAndSchemaCannotBeReplayed (0 ms)
+[ RUN      ] Confirmation.CancelRevokesEvenAnIdenticalRetry
+[       OK ] Confirmation.CancelRevokesEvenAnIdenticalRetry (0 ms)
+[ RUN      ] Confirmation.StaleContextAndUnverifiedGeometryNeverAuthorize
+[       OK ] Confirmation.StaleContextAndUnverifiedGeometryNeverAuthorize (0 ms)
+[----------] 6 tests from Confirmation (0 ms total)
+
+[----------] 3 tests from LifecycleDrain
+[ RUN      ] LifecycleDrain.WaitsAsynchronouslyBeforeReactivationAndCleanup
+[       OK ] LifecycleDrain.WaitsAsynchronouslyBeforeReactivationAndCleanup (0 ms)
+[ RUN      ] LifecycleDrain.SoftwareRetirementIsNotPhysicalStop
+[       OK ] LifecycleDrain.SoftwareRetirementIsNotPhysicalStop (0 ms)
+[ RUN      ] LifecycleDrain.UnconfirmedRetirementCannotBeClearedByLateReply
+[       OK ] LifecycleDrain.UnconfirmedRetirementCannotBeClearedByLateReply (0 ms)
+[----------] 3 tests from LifecycleDrain (0 ms total)
+
+[----------] 2 tests from PhysicalStop
+[ RUN      ] PhysicalStop.FreshPostRequestMeasurementsAndDwellAreRequired
+[       OK ] PhysicalStop.FreshPostRequestMeasurementsAndDwellAreRequired (0 ms)
+[ RUN      ] PhysicalStop.WrongIdentityRepeatedTimestampsAndMovementAreNotProof
+[       OK ] PhysicalStop.WrongIdentityRepeatedTimestampsAndMovementAreNotProof (0 ms)
+[----------] 2 tests from PhysicalStop (0 ms total)
+
+[----------] 5 tests from RouteSnapshot
+[ RUN      ] RouteSnapshot.TypedPreviewAndLegacyDisplayAgree
+[       OK ] RouteSnapshot.TypedPreviewAndLegacyDisplayAgree (0 ms)
+[ RUN      ] RouteSnapshot.RejectsProtocolAndContextMismatch
+[       OK ] RouteSnapshot.RejectsProtocolAndContextMismatch (0 ms)
+[ RUN      ] RouteSnapshot.RejectsMissingOrChangedGeometryAndProvenance
+[       OK ] RouteSnapshot.RejectsMissingOrChangedGeometryAndProvenance (0 ms)
+[ RUN      ] RouteSnapshot.SegmentCoverageAndLayerEvidenceCannotBeLost
+[       OK ] RouteSnapshot.SegmentCoverageAndLayerEvidenceCannotBeLost (0 ms)
+[ RUN      ] RouteSnapshot.PreviewIsNotExecutionCertification
+[       OK ] RouteSnapshot.PreviewIsNotExecutionCertification (0 ms)
+[----------] 5 tests from RouteSnapshot (0 ms total)
+
+[----------] Global test environment tear-down
+[==========] 23 tests from 6 test suites ran. (0 ms total)
+[  PASSED  ] 23 tests.
+-- run_test.py: return code 0
+-- run_test.py: inject classname prefix into gtest result file '/home/dndx/d1max_nav_ws/experiments/navigation_architecture_20261004/bt_initial_pose/build/d1max_navigation_bt/test_results/d1max_navigation_bt/test_navigation_task_contract.gtest.xml'
+-- run_test.py: verify result file '/home/dndx/d1max_nav_ws/experiments/navigation_architecture_20261004/bt_initial_pose/build/d1max_navigation_bt/test_results/d1max_navigation_bt/test_navigation_task_contract.gtest.xml'
+</system-out>
+	</testcase>
+	<testcase name="test_initial_pose_transaction" classname="test_initial_pose_transaction" time="0.0390776" status="run">
+		<system-out>-- run_test.py: invoking following command in '/home/dndx/d1max_nav_ws/experiments/navigation_architecture_20261004/bt_initial_pose/build/d1max_navigation_bt':
+ - /home/dndx/d1max_nav_ws/experiments/navigation_architecture_20261004/bt_initial_pose/build/d1max_navigation_bt/test_initial_pose_transaction --gtest_output=xml:/home/dndx/d1max_nav_ws/experiments/navigation_architecture_20261004/bt_initial_pose/build/d1max_navigation_bt/test_results/d1max_navigation_bt/test_initial_pose_transaction.gtest.xml
+Running main() from /opt/ros/humble/src/gtest_vendor/src/gtest_main.cc
+[==========] Running 12 tests from 3 test suites.
+[----------] Global test environment set-up.
+[----------] 9 tests from InitialPoseTransaction
+[ RUN      ] InitialPoseTransaction.InvalidDraftDoesNotRetireOrBlock
+[       OK ] InitialPoseTransaction.InvalidDraftDoesNotRetireOrBlock (0 ms)
+[ RUN      ] InitialPoseTransaction.ValidPrepareRetiresOnceAndCannotSkipActualStop
+[       OK ] InitialPoseTransaction.ValidPrepareRetiresOnceAndCannotSkipActualStop (0 ms)
+[ RUN      ] InitialPoseTransaction.BindingConflictAndConcurrentIntentCannotCancelAgain
+[       OK ] InitialPoseTransaction.BindingConflictAndConcurrentIntentCannotCancelAgain (0 ms)
+[ RUN      ] InitialPoseTransaction.PreviewRetirementIsNotPhysicalStopProof
+[       OK ] InitialPoseTransaction.PreviewRetirementIsNotPhysicalStopProof (0 ms)
+[ RUN      ] InitialPoseTransaction.UnrelatedNewSeedOrForeignOutcomeCannotReleaseAdmission
+[       OK ] InitialPoseTransaction.UnrelatedNewSeedOrForeignOutcomeCannotReleaseAdmission (0 ms)
+[ RUN      ] InitialPoseTransaction.MatchingAppliedWaitsStableDistinctRealSamples
+[       OK ] InitialPoseTransaction.MatchingAppliedWaitsStableDistinctRealSamples (0 ms)
+[ RUN      ] InitialPoseTransaction.BrokenReadinessResetsWindowAndDuplicateDoesNotCount
+[       OK ] InitialPoseTransaction.BrokenReadinessResetsWindowAndDuplicateDoesNotCount (0 ms)
+[ RUN      ] InitialPoseTransaction.KnownRejectionDiffersFromPartialApplication
+[       OK ] InitialPoseTransaction.KnownRejectionDiffersFromPartialApplication (0 ms)
+[ RUN      ] InitialPoseTransaction.PrepareExpiryAndPostCommitUnknownResultNeverRevive
+[       OK ] InitialPoseTransaction.PrepareExpiryAndPostCommitUnknownResultNeverRevive (0 ms)
+[----------] 9 tests from InitialPoseTransaction (0 ms total)
+
+[----------] 2 tests from DependencyHealth
+[ RUN      ] DependencyHealth.ReplayCannotRenewAndTimeoutLatches
+[       OK ] DependencyHealth.ReplayCannotRenewAndTimeoutLatches (0 ms)
+[ RUN      ] DependencyHealth.MalformedForeignFutureAndFatalAreNotReadiness
+[       OK ] DependencyHealth.MalformedForeignFutureAndFatalAreNotReadiness (0 ms)
+[----------] 2 tests from DependencyHealth (0 ms total)
+
+[----------] 1 test from TaskAdmission
+[ RUN      ] TaskAdmission.QuarantineRetirementAndSeedGateApplyBeforeReservingGoal
+[       OK ] TaskAdmission.QuarantineRetirementAndSeedGateApplyBeforeReservingGoal (0 ms)
+[----------] 1 test from TaskAdmission (0 ms total)
+
+[----------] Global test environment tear-down
+[==========] 12 tests from 3 test suites ran. (0 ms total)
+[  PASSED  ] 12 tests.
+-- run_test.py: return code 0
+-- run_test.py: inject classname prefix into gtest result file '/home/dndx/d1max_nav_ws/experiments/navigation_architecture_20261004/bt_initial_pose/build/d1max_navigation_bt/test_results/d1max_navigation_bt/test_initial_pose_transaction.gtest.xml'
+-- run_test.py: verify result file '/home/dndx/d1max_nav_ws/experiments/navigation_architecture_20261004/bt_initial_pose/build/d1max_navigation_bt/test_results/d1max_navigation_bt/test_initial_pose_transaction.gtest.xml'
+</system-out>
+	</testcase>
+	<testcase name="test_execution_owner" classname="test_execution_owner" time="0.0545731" status="run">
+		<system-out>-- run_test.py: invoking following command in '/home/dndx/d1max_nav_ws/experiments/navigation_architecture_20261004/bt_initial_pose/build/d1max_navigation_bt':
+ - /home/dndx/d1max_nav_ws/experiments/navigation_architecture_20261004/bt_initial_pose/build/d1max_navigation_bt/test_execution_owner --gtest_output=xml:/home/dndx/d1max_nav_ws/experiments/navigation_architecture_20261004/bt_initial_pose/build/d1max_navigation_bt/test_results/d1max_navigation_bt/test_execution_owner.gtest.xml
+Running main() from /opt/ros/humble/src/gtest_vendor/src/gtest_main.cc
+[==========] Running 124 tests from 12 test suites.
+[----------] Global test environment set-up.
+[----------] 53 tests from ExecutionOwner
+[ RUN      ] ExecutionOwner.PreviewCommitsGeometryButNeverPermission
+[       OK ] ExecutionOwner.PreviewCommitsGeometryButNeverPermission (0 ms)
+[ RUN      ] ExecutionOwner.SourceEvidencedRecoveryAllowsStationaryRobotWithoutMotionDeadlock
+[       OK ] ExecutionOwner.SourceEvidencedRecoveryAllowsStationaryRobotWithoutMotionDeadlock (0 ms)
+[ RUN      ] ExecutionOwner.RepeatedSourceCannotResumeEvenWithFreshSDKAndCollisionProof
+[       OK ] ExecutionOwner.RepeatedSourceCannotResumeEvenWithFreshSDKAndCollisionProof (0 ms)
+[ RUN      ] ExecutionOwner.McEvidenceHoldPreservesTaskAndRequiresStableSourceRecovery
+[       OK ] ExecutionOwner.McEvidenceHoldPreservesTaskAndRequiresStableSourceRecovery (0 ms)
+[ RUN      ] ExecutionOwner.McEvidenceHoldCannotRecoverFromRepeatedLocalEvidenceOrRenewBudget
+[       OK ] ExecutionOwner.McEvidenceHoldCannotRecoverFromRepeatedLocalEvidenceOrRenewBudget (1 ms)
+[ RUN      ] ExecutionOwner.McStaleReasonCannotSoftenActualSDKWithdrawal
+[       OK ] ExecutionOwner.McStaleReasonCannotSoftenActualSDKWithdrawal (0 ms)
+[ RUN      ] ExecutionOwner.LiveGeometryPreparationDoesNotRequireSDKAuthorityOrFakeAcceptance
+[       OK ] ExecutionOwner.LiveGeometryPreparationDoesNotRequireSDKAuthorityOrFakeAcceptance (0 ms)
+[ RUN      ] ExecutionOwner.SustainedBlockedExecutionStopsAtBoundAndStillRequiresMCProof
+[       OK ] ExecutionOwner.SustainedBlockedExecutionStopsAtBoundAndStillRequiresMCProof (1 ms)
+[ RUN      ] ExecutionOwner.ShortGoodProofCannotRenewBlockedBudget
+[       OK ] ExecutionOwner.ShortGoodProofCannotRenewBlockedBudget (0 ms)
+[ RUN      ] ExecutionOwner.ContinuousPermissionRecoveryStartsANewBlockedEpisode
+[       OK ] ExecutionOwner.ContinuousPermissionRecoveryStartsANewBlockedEpisode (0 ms)
+[ RUN      ] ExecutionOwner.PreviewAndArmingDoNotConsumeExecutionBlockedBudget
+[       OK ] ExecutionOwner.PreviewAndArmingDoNotConsumeExecutionBlockedBudget (0 ms)
+[ RUN      ] ExecutionOwner.FinalYawOrGoalHoldCannotBypassBlockedBudget
+[       OK ] ExecutionOwner.FinalYawOrGoalHoldCannotBypassBlockedBudget (0 ms)
+[ RUN      ] ExecutionOwner.UnboundedBlockedBudgetConfigurationIsRejected
+[       OK ] ExecutionOwner.UnboundedBlockedBudgetConfigurationIsRejected (0 ms)
+[ RUN      ] ExecutionOwner.RequiresBothFreshMatchingProofs
+[       OK ] ExecutionOwner.RequiresBothFreshMatchingProofs (0 ms)
+[ RUN      ] ExecutionOwner.IsolatedAndLiveProofsNeverMix
+[       OK ] ExecutionOwner.IsolatedAndLiveProofsNeverMix (0 ms)
+[ RUN      ] ExecutionOwner.CommitNeedsGrantAndCurrentCollisionProof
+[       OK ] ExecutionOwner.CommitNeedsGrantAndCurrentCollisionProof (0 ms)
+[ RUN      ] ExecutionOwner.BadCandidateDoesNotReplaceValidIncumbent
+[       OK ] ExecutionOwner.BadCandidateDoesNotReplaceValidIncumbent (0 ms)
+[ RUN      ] ExecutionOwner.RevocationCannotBeUndoneByLateGrant
+[       OK ] ExecutionOwner.RevocationCannotBeUndoneByLateGrant (0 ms)
+[ RUN      ] ExecutionOwner.StopSubmissionAndSoftwareResultAreNotStopProof
+[       OK ] ExecutionOwner.StopSubmissionAndSoftwareResultAreNotStopProof (0 ms)
+[ RUN      ] ExecutionOwner.NoStopProofBecomesNeedsReviewAndNoSuccess
+[       OK ] ExecutionOwner.NoStopProofBecomesNeedsReviewAndNoSuccess (0 ms)
+[ RUN      ] ExecutionOwner.NoReferenceReceiptDoesNotCommit
+[       OK ] ExecutionOwner.NoReferenceReceiptDoesNotCommit (0 ms)
+[ RUN      ] ExecutionOwner.IncorrectExpectedRevisionDoesNotCommit
+[       OK ] ExecutionOwner.IncorrectExpectedRevisionDoesNotCommit (0 ms)
+[ RUN      ] ExecutionOwner.LaterInvalidProofCannotBeHiddenByOlderValidProof
+[       OK ] ExecutionOwner.LaterInvalidProofCannotBeHiddenByOlderValidProof (0 ms)
+[ RUN      ] ExecutionOwner.AuthorityLeaseIsIndependentButSigningRequiresFreshEvidence
+[       OK ] ExecutionOwner.AuthorityLeaseIsIndependentButSigningRequiresFreshEvidence (0 ms)
+[ RUN      ] ExecutionOwner.AligningRequiresMatchingNativeSweepEvidence
+[       OK ] ExecutionOwner.AligningRequiresMatchingNativeSweepEvidence (0 ms)
+[ RUN      ] ExecutionOwner.SDKGrantWithdrawalStopsEvenWhileStillOwned
+[       OK ] ExecutionOwner.SDKGrantWithdrawalStopsEvenWhileStillOwned (0 ms)
+[ RUN      ] ExecutionOwner.ForeignStopGenerationAndMissingRawClockAreRejected
+[       OK ] ExecutionOwner.ForeignStopGenerationAndMissingRawClockAreRejected (0 ms)
+[ RUN      ] ExecutionOwner.CalibratedStationaryNoiseUsesSameConfiguredBoundWithoutChangingDefault
+[       OK ] ExecutionOwner.CalibratedStationaryNoiseUsesSameConfiguredBoundWithoutChangingDefault (0 ms)
+[ RUN      ] ExecutionOwner.RecordStricterDurationAndSamplesCannotBeBypassed
+[       OK ] ExecutionOwner.RecordStricterDurationAndSamplesCannotBeBypassed (0 ms)
+[ RUN      ] ExecutionOwner.StationaryCalibrationBoundsDoNotPermitUnboundedTolerance
+[       OK ] ExecutionOwner.StationaryCalibrationBoundsDoNotPermitUnboundedTolerance (0 ms)
+[ RUN      ] ExecutionOwner.StoppedOutsideFinalToleranceIsNotGoalSuccess
+[       OK ] ExecutionOwner.StoppedOutsideFinalToleranceIsNotGoalSuccess (0 ms)
+[ RUN      ] ExecutionOwner.NewCurveCommitUsesExactlyPreparedNativeSequence
+[       OK ] ExecutionOwner.NewCurveCommitUsesExactlyPreparedNativeSequence (0 ms)
+[ RUN      ] ExecutionOwner.NativeNegativeWithZeroDeadlineImmediatelyFencesPriorPositive
+[       OK ] ExecutionOwner.NativeNegativeWithZeroDeadlineImmediatelyFencesPriorPositive (0 ms)
+[ RUN      ] ExecutionOwner.NegativeEvidenceStillRequiresActualFreshMatchingSources
+[       OK ] ExecutionOwner.NegativeEvidenceStillRequiresActualFreshMatchingSources (0 ms)
+[ RUN      ] ExecutionOwner.CandidateSelectionIsLexicographicNotFastLaneSequencePriority
+[       OK ] ExecutionOwner.CandidateSelectionIsLexicographicNotFastLaneSequencePriority (0 ms)
+[ RUN      ] ExecutionOwner.RemainingProofOnlyForAlreadyCommittedCurve
+[       OK ] ExecutionOwner.RemainingProofOnlyForAlreadyCommittedCurve (0 ms)
+[ RUN      ] ExecutionOwner.RemainingProofCannotOmitTailOrReverseMargin
+[       OK ] ExecutionOwner.RemainingProofCannotOmitTailOrReverseMargin (0 ms)
+[ RUN      ] ExecutionOwner.ArmingAndHoldPreserveCommittedGeometryWithoutPermission
+[       OK ] ExecutionOwner.ArmingAndHoldPreserveCommittedGeometryWithoutPermission (0 ms)
+[ RUN      ] ExecutionOwner.HumanMayConfirmActuallyInstalledPreviewAfterInitialAdmissionExpires
+[       OK ] ExecutionOwner.HumanMayConfirmActuallyInstalledPreviewAfterInitialAdmissionExpires (0 ms)
+[ RUN      ] ExecutionOwner.CommittedPreviewDoesNotAuthorizeWithoutCurrentCollisionEvidence
+[       OK ] ExecutionOwner.CommittedPreviewDoesNotAuthorizeWithoutCurrentCollisionEvidence (0 ms)
+[ RUN      ] ExecutionOwner.PreparationEvidenceRequiresCommittedAndFreshActualSource
+[       OK ] ExecutionOwner.PreparationEvidenceRequiresCommittedAndFreshActualSource (0 ms)
+[ RUN      ] ExecutionOwner.PermissionAndZeroMotionProofNeverCountAsProgress
+[       OK ] ExecutionOwner.PermissionAndZeroMotionProofNeverCountAsProgress (0 ms)
+[ RUN      ] ExecutionOwner.NonzeroAdmittedButBodyStationaryStillTimesOut
+[       OK ] ExecutionOwner.NonzeroAdmittedButBodyStationaryStillTimesOut (1 ms)
+[ RUN      ] ExecutionOwner.ActualMotionInvalidIsDiagnosticAndCannotBeErasedByZeroProof
+[       OK ] ExecutionOwner.ActualMotionInvalidIsDiagnosticAndCannotBeErasedByZeroProof (1 ms)
+[ RUN      ] ExecutionOwner.ShortPhysicalMovementCannotRenewBlockedEpisode
+[       OK ] ExecutionOwner.ShortPhysicalMovementCannotRenewBlockedEpisode (0 ms)
+[ RUN      ] ExecutionOwner.OnePositionStepWithContinuousCommandsIsNotStableRecovery
+[       OK ] ExecutionOwner.OnePositionStepWithContinuousCommandsIsNotStableRecovery (1 ms)
+[ RUN      ] ExecutionOwner.BodySourceReplayCannotManufactureProgress
+[       OK ] ExecutionOwner.BodySourceReplayCannotManufactureProgress (0 ms)
+[ RUN      ] ExecutionOwner.MatchingAdmissionAndContinuousMeasuredProgressSustainTask
+[       OK ] ExecutionOwner.MatchingAdmissionAndContinuousMeasuredProgressSustainTask (2 ms)
+[ RUN      ] ExecutionOwner.RealLateralTravelCannotRenewFixedRouteBlockedBudget
+[       OK ] ExecutionOwner.RealLateralTravelCannotRenewFixedRouteBlockedBudget (1 ms)
+[ RUN      ] ExecutionOwner.FinalYawProgressUsesErrorReductionNotForwardDistance
+[       OK ] ExecutionOwner.FinalYawProgressUsesErrorReductionNotForwardDistance (0 ms)
+[ RUN      ] ExecutionOwner.ForeignVersionAndMismatchedMotionPairCannotRecover
+[       OK ] ExecutionOwner.ForeignVersionAndMismatchedMotionPairCannotRecover (5 ms)
+[ RUN      ] ExecutionOwner.ActualSweepMayUseNewerCurveEvidenceThanOriginalDemandFloor
+[       OK ] ExecutionOwner.ActualSweepMayUseNewerCurveEvidenceThanOriginalDemandFloor (1 ms)
+[ RUN      ] ExecutionOwner.EarlierCurveEvidenceCannotSatisfyDemandFloor
+[       OK ] ExecutionOwner.EarlierCurveEvidenceCannotSatisfyDemandFloor (1 ms)
+[----------] 53 tests from ExecutionOwner (15 ms total)
+
+[----------] 7 tests from ExecutionInitialGeometry
+[ RUN      ] ExecutionInitialGeometry.LatestUnadmittedProofCannotAdvanceFirstGeometryFloor
+[       OK ] ExecutionInitialGeometry.LatestUnadmittedProofCannotAdvanceFirstGeometryFloor (0 ms)
+[ RUN      ] ExecutionInitialGeometry.FreshCandidateRestagesBeforeAnyWriterCommit
+[       OK ] ExecutionInitialGeometry.FreshCandidateRestagesBeforeAnyWriterCommit (0 ms)
+[ RUN      ] ExecutionInitialGeometry.WholeCollisionProofWithoutTrackerReceiptCannotRenewInitialEntry
+[       OK ] ExecutionInitialGeometry.WholeCollisionProofWithoutTrackerReceiptCannotRenewInitialEntry (0 ms)
+[ RUN      ] ExecutionInitialGeometry.SDKAppliedStatusIsNotAnAckAndCannotAuthorizeDesiredRestaging
+[       OK ] ExecutionInitialGeometry.SDKAppliedStatusIsNotAnAckAndCannotAuthorizeDesiredRestaging (0 ms)
+[ RUN      ] ExecutionInitialGeometry.TrackerInstallationIsBoundToPublishedOriginalEvidence
+[       OK ] ExecutionInitialGeometry.TrackerInstallationIsBoundToPublishedOriginalEvidence (0 ms)
+[ RUN      ] ExecutionInitialGeometry.SoftwareReceiptDoesNotRestampInstallationOrCollisionLease
+[       OK ] ExecutionInitialGeometry.SoftwareReceiptDoesNotRestampInstallationOrCollisionLease (0 ms)
+[ RUN      ] ExecutionInitialGeometry.SameBodyNegativeReceiptFencesAndCannotReviveByRepeatingSource
+[       OK ] ExecutionInitialGeometry.SameBodyNegativeReceiptFencesAndCannotReviveByRepeatingSource (0 ms)
+[----------] 7 tests from ExecutionInitialGeometry (0 ms total)
+
+[----------] 3 tests from ExecutionTask
+[ RUN      ] ExecutionTask.HardSDKWithdrawalRetiresRunningFollowAndCannotReviveOnLateGrant
+[       OK ] ExecutionTask.HardSDKWithdrawalRetiresRunningFollowAndCannotReviveOnLateGrant (0 ms)
+[ RUN      ] ExecutionTask.SDKHardFailureCannotHideBehindPausedInputDecorator
+[       OK ] ExecutionTask.SDKHardFailureCannotHideBehindPausedInputDecorator (0 ms)
+[ RUN      ] ExecutionTask.EvidenceHoldAndNormalGoalStopDoNotAbortRunningTask
+[       OK ] ExecutionTask.EvidenceHoldAndNormalGoalStopDoNotAbortRunningTask (1 ms)
+[----------] 3 tests from ExecutionTask (1 ms total)
+
+[----------] 3 tests from LocalStateAdmission
+[ RUN      ] LocalStateAdmission.IndependentLocalEvidenceDoesNotRequireASyntheticGlobalPose
+[       OK ] LocalStateAdmission.IndependentLocalEvidenceDoesNotRequireASyntheticGlobalPose (0 ms)
+[ RUN      ] LocalStateAdmission.UsableEntryRequiresOriginalPropagationAndCausalTimestamps
+[       OK ] LocalStateAdmission.UsableEntryRequiresOriginalPropagationAndCausalTimestamps (0 ms)
+[ RUN      ] LocalStateAdmission.NewEpochWithSlightClockRollbackWithdrawsOldExecutionIdentity
+[       OK ] LocalStateAdmission.NewEpochWithSlightClockRollbackWithdrawsOldExecutionIdentity (0 ms)
+[----------] 3 tests from LocalStateAdmission (0 ms total)
+
+[----------] 4 tests from LocalTaskContinuity
+[ RUN      ] LocalTaskContinuity.TimerPhaseCannotTearDownAdmittedTaskOrAuthorizeMotion
+[       OK ] LocalTaskContinuity.TimerPhaseCannotTearDownAdmittedTaskOrAuthorizeMotion (0 ms)
+[ RUN      ] LocalTaskContinuity.RepeatedSnapshotCannotRenewSourceOrPosteriorLease
+[       OK ] LocalTaskContinuity.RepeatedSnapshotCannotRenewSourceOrPosteriorLease (0 ms)
+[ RUN      ] LocalTaskContinuity.ExplicitLossHardIdentityAndFramesRemainUnavailable
+[       OK ] LocalTaskContinuity.ExplicitLossHardIdentityAndFramesRemainUnavailable (0 ms)
+[ RUN      ] LocalTaskContinuity.OriginalPropagationAndFiniteGeometryCannotBeRelaxed
+[       OK ] LocalTaskContinuity.OriginalPropagationAndFiniteGeometryCannotBeRelaxed (0 ms)
+[----------] 4 tests from LocalTaskContinuity (0 ms total)
+
+[----------] 6 tests from ExecutionTrackerFence
+[ RUN      ] ExecutionTrackerFence.ExactActualInstallationHoldsWithoutCancellingOrBorrowingNewPositiveProof
+[       OK ] ExecutionTrackerFence.ExactActualInstallationHoldsWithoutCancellingOrBorrowingNewPositiveProof (0 ms)
+[ RUN      ] ExecutionTrackerFence.ForeignExpiredRepeatedAndMutatedInstallationCannotFence
+[       OK ] ExecutionTrackerFence.ForeignExpiredRepeatedAndMutatedInstallationCannotFence (0 ms)
+[ RUN      ] ExecutionTrackerFence.LaterActualCASInstallationKeepsFixedFactsAndCanFenceItsOwnGeometry
+[       OK ] ExecutionTrackerFence.LaterActualCASInstallationKeepsFixedFactsAndCanFenceItsOwnGeometry (0 ms)
+[ RUN      ] ExecutionTrackerFence.PreparedFloorExpiryDoesNotEraseInstallationOrRenewActualCollisionEvidence
+[       OK ] ExecutionTrackerFence.PreparedFloorExpiryDoesNotEraseInstallationOrRenewActualCollisionEvidence (0 ms)
+[ RUN      ] ExecutionTrackerFence.OnlyVerifiedStationaryReentryAppliedAckClearsTheGeometryFence
+[       OK ] ExecutionTrackerFence.OnlyVerifiedStationaryReentryAppliedAckClearsTheGeometryFence (0 ms)
+[ RUN      ] ExecutionTrackerFence.HealthyHeartbeatsCannotRenewItsBoundedBlockedEpisode
+[       OK ] ExecutionTrackerFence.HealthyHeartbeatsCannotRenewItsBoundedBlockedEpisode (0 ms)
+[----------] 6 tests from ExecutionTrackerFence (0 ms total)
+
+[----------] 2 tests from GoalLedger
+[ RUN      ] GoalLedger.PendingChurnCannotEvictCommittedFinalGoal
+[       OK ] GoalLedger.PendingChurnCannotEvictCommittedFinalGoal (0 ms)
+[ RUN      ] GoalLedger.FinalGoalIsImmutableWithinAnExactAnchorVersion
+[       OK ] GoalLedger.FinalGoalIsImmutableWithinAnExactAnchorVersion (0 ms)
+[----------] 2 tests from GoalLedger (0 ms total)
+
+[----------] 2 tests from BodyPairAdmission
+[ RUN      ] BodyPairAdmission.OrderedUnusableWithdrawsButBadOrOldCannotErase
+[       OK ] BodyPairAdmission.OrderedUnusableWithdrawsButBadOrOldCannotErase (0 ms)
+[ RUN      ] BodyPairAdmission.EpochOrderPrecedesSourceWatermarkAndNeverReturnsToOldEpoch
+[       OK ] BodyPairAdmission.EpochOrderPrecedesSourceWatermarkAndNeverReturnsToOldEpoch (0 ms)
+[----------] 2 tests from BodyPairAdmission (0 ms total)
+
+[----------] 22 tests from ExecutionHandoff
+[ RUN      ] ExecutionHandoff.InitialCommitRequiresAnActuallyPublishedLeaseAndWriterSubmission
+[       OK ] ExecutionHandoff.InitialCommitRequiresAnActuallyPublishedLeaseAndWriterSubmission (0 ms)
+[ RUN      ] ExecutionHandoff.StationaryReentryRequiresSDKWitnessAndNeverRestoresUnsafeIncumbentPermission
+[       OK ] ExecutionHandoff.StationaryReentryRequiresSDKWitnessAndNeverRestoresUnsafeIncumbentPermission (0 ms)
+[ RUN      ] ExecutionHandoff.StationaryEvidenceFailuresCannotAuthorizeNewGeometry
+[       OK ] ExecutionHandoff.StationaryEvidenceFailuresCannotAuthorizeNewGeometry (0 ms)
+[ RUN      ] ExecutionHandoff.NewUnusableSDKWitnessImmediatelyWithdrawsStationaryTransaction
+[       OK ] ExecutionHandoff.NewUnusableSDKWitnessImmediatelyWithdrawsStationaryTransaction (0 ms)
+[ RUN      ] ExecutionHandoff.MatchingRawRollbackWithdrawsPendingAndCannotResetTheAcceptedRawFloor
+[       OK ] ExecutionHandoff.MatchingRawRollbackWithdrawsPendingAndCannotResetTheAcceptedRawFloor (0 ms)
+[ RUN      ] ExecutionHandoff.MatchingClockEpochChangeHardRevokesEvenAnUnusableWitness
+[       OK ] ExecutionHandoff.MatchingClockEpochChangeHardRevokesEvenAnUnusableWitness (0 ms)
+[ RUN      ] ExecutionHandoff.StationaryReentryCannotBypassHardWithdrawalOrIdentityChange
+[       OK ] ExecutionHandoff.StationaryReentryCannotBypassHardWithdrawalOrIdentityChange (0 ms)
+[ RUN      ] ExecutionHandoff.StationaryWitnessCannotRenewPinnedDeadlineOrBlockedBudget
+[       OK ] ExecutionHandoff.StationaryWitnessCannotRenewPinnedDeadlineOrBlockedBudget (0 ms)
+[ RUN      ] ExecutionHandoff.ConditionalGrantKeepsIncumbentAndDoesNotRenewItsOriginalLease
+[       OK ] ExecutionHandoff.ConditionalGrantKeepsIncumbentAndDoesNotRenewItsOriginalLease (0 ms)
+[ RUN      ] ExecutionHandoff.CrossTopicPairCanPrepareBeforeNextTreeTickWithoutRenewingIncumbent
+[       OK ] ExecutionHandoff.CrossTopicPairCanPrepareBeforeNextTreeTickWithoutRenewingIncumbent (0 ms)
+[ RUN      ] ExecutionHandoff.FastPreparationCannotInventALeaseOrBorrowExpiredOrUnsafeIncumbent
+[       OK ] ExecutionHandoff.FastPreparationCannotInventALeaseOrBorrowExpiredOrUnsafeIncumbent (0 ms)
+[ RUN      ] ExecutionHandoff.ShortBirthWindowWaitsForNewEvidenceWithoutRenewingAnyDeadline
+[       OK ] ExecutionHandoff.ShortBirthWindowWaitsForNewEvidenceWithoutRenewingAnyDeadline (0 ms)
+[ RUN      ] ExecutionHandoff.EachOriginalReadyWindowCapMustFitTheSoftwareBudget
+[       OK ] ExecutionHandoff.EachOriginalReadyWindowCapMustFitTheSoftwareBudget (0 ms)
+[ RUN      ] ExecutionHandoff.OriginalNanosecondCapsAreNotReencodedThroughEpochDouble
+[       OK ] ExecutionHandoff.OriginalNanosecondCapsAreNotReencodedThroughEpochDouble (0 ms)
+[ RUN      ] ExecutionHandoff.FastPreparationRequiresTheExactFreshWholeProofAdmissionPair
+[       OK ] ExecutionHandoff.FastPreparationRequiresTheExactFreshWholeProofAdmissionPair (0 ms)
+[ RUN      ] ExecutionHandoff.ForeignOrZeroCASCannotAdvanceAnActiveWriter
+[       OK ] ExecutionHandoff.ForeignOrZeroCASCannotAdvanceAnActiveWriter (0 ms)
+[ RUN      ] ExecutionHandoff.ExpiredProofStillReportsActualAppliedIdentityButDoesNotAuthorizeMotion
+[       OK ] ExecutionHandoff.ExpiredProofStillReportsActualAppliedIdentityButDoesNotAuthorizeMotion (0 ms)
+[ RUN      ] ExecutionHandoff.NoAckCannotAssumeFailureAndRepeatedTicksCannotRenewTransition
+[       OK ] ExecutionHandoff.NoAckCannotAssumeFailureAndRepeatedTicksCannotRenewTransition (0 ms)
+[ RUN      ] ExecutionHandoff.RevocationAndLateAckCannotResurrectAnOldExecution
+[       OK ] ExecutionHandoff.RevocationAndLateAckCannotResurrectAnOldExecution (0 ms)
+[ RUN      ] ExecutionHandoff.FailedWriterSubmissionAdvancesIdentityIrreversiblyAndThenStops
+[       OK ] ExecutionHandoff.FailedWriterSubmissionAdvancesIdentityIrreversiblyAndThenStops (0 ms)
+[ RUN      ] ExecutionHandoff.OriginalDemandAndEntrySourceAreDistinctFromActualWriterMeasurement
+[       OK ] ExecutionHandoff.OriginalDemandAndEntrySourceAreDistinctFromActualWriterMeasurement (0 ms)
+[ RUN      ] ExecutionHandoff.AcknowledgementWindowIsBoundedAndNeverRestampsExpiredEvidence
+[       OK ] ExecutionHandoff.AcknowledgementWindowIsBoundedAndNeverRestampsExpiredEvidence (0 ms)
+[----------] 22 tests from ExecutionHandoff (0 ms total)
+
+[----------] 2 tests from ExecutionPublication
+[ RUN      ] ExecutionPublication.SequenceDoesNotResetAtSecondTask
+[       OK ] ExecutionPublication.SequenceDoesNotResetAtSecondTask (0 ms)
+[ RUN      ] ExecutionPublication.PriorTaskCanOnlyPublishStopWhileStillDraining
+[       OK ] ExecutionPublication.PriorTaskCanOnlyPublishStopWhileStillDraining (0 ms)
+[----------] 2 tests from ExecutionPublication (0 ms total)
+
+[----------] 11 tests from PreparationBudget
+[ RUN      ] PreparationBudget.EveryWaitHasItsOwnBoundAndFailureLatches
+[       OK ] PreparationBudget.EveryWaitHasItsOwnBoundAndFailureLatches (0 ms)
+[ RUN      ] PreparationBudget.FeedbackAndAlternatingWaitPhasesCannotRenewBudget
+[       OK ] PreparationBudget.FeedbackAndAlternatingWaitPhasesCannotRenewBudget (0 ms)
+[ RUN      ] PreparationBudget.MixedSubthresholdWaitsStillHaveATotalEpisodeBound
+[       OK ] PreparationBudget.MixedSubthresholdWaitsStillHaveATotalEpisodeBound (0 ms)
+[ RUN      ] PreparationBudget.RepeatedSourceEvidenceIsNotRecovery
+[       OK ] PreparationBudget.RepeatedSourceEvidenceIsNotRecovery (0 ms)
+[ RUN      ] PreparationBudget.ThreeDistinctSourceSamplesAndStableReadinessResetEpisode
+[       OK ] PreparationBudget.ThreeDistinctSourceSamplesAndStableReadinessResetEpisode (0 ms)
+[ RUN      ] PreparationBudget.MissingSourceProofCannotMarkReady
+[       OK ] PreparationBudget.MissingSourceProofCannotMarkReady (0 ms)
+[ RUN      ] PreparationBudget.ComputeHasItsOwnBoundButCannotResetAPriorWait
+[       OK ] PreparationBudget.ComputeHasItsOwnBoundButCannotResetAPriorWait (0 ms)
+[ RUN      ] PreparationBudget.HealthyPreviewDoesNotTimeOutWaitingForHumanConfirmation
+[       OK ] PreparationBudget.HealthyPreviewDoesNotTimeOutWaitingForHumanConfirmation (0 ms)
+[ RUN      ] PreparationBudget.RecoveryAtExpiredDeadlineCannotResurrectTask
+[       OK ] PreparationBudget.RecoveryAtExpiredDeadlineCannotResurrectTask (0 ms)
+[ RUN      ] PreparationBudget.InvalidConfigurationAndBackwardTimeFailClosed
+[       OK ] PreparationBudget.InvalidConfigurationAndBackwardTimeFailClosed (0 ms)
+[ RUN      ] PreparationBudget.ProductionFeedbackMapsToCorrectBudgetNotGenericReference
+[       OK ] PreparationBudget.ProductionFeedbackMapsToCorrectBudgetNotGenericReference (0 ms)
+[----------] 11 tests from PreparationBudget (0 ms total)
+
+[----------] 9 tests from RouteProgressSupervisor
+[ RUN      ] RouteProgressSupervisor.GenuineArcCanIncreaseWhileEuclideanGoalDistanceIncreases
+[       OK ] RouteProgressSupervisor.GenuineArcCanIncreaseWhileEuclideanGoalDistanceIncreases (0 ms)
+[ RUN      ] RouteProgressSupervisor.CornerUsesFullRouteArcNotTheLastLocalCurve
+[       OK ] RouteProgressSupervisor.CornerUsesFullRouteArcNotTheLastLocalCurve (0 ms)
+[ RUN      ] RouteProgressSupervisor.CorrectionRebasesButNeverManufacturesMotion
+[       OK ] RouteProgressSupervisor.CorrectionRebasesButNeverManufacturesMotion (0 ms)
+[ RUN      ] RouteProgressSupervisor.SameAnchorTransformCannotBeSilentlyChanged
+[       OK ] RouteProgressSupervisor.SameAnchorTransformCannotBeSilentlyChanged (0 ms)
+[ RUN      ] RouteProgressSupervisor.CrossingCannotJumpToAnotherNearbyRouteBranch
+[       OK ] RouteProgressSupervisor.CrossingCannotJumpToAnotherNearbyRouteBranch (0 ms)
+[ RUN      ] RouteProgressSupervisor.OtherFloorOrForeignIdentityCannotProvideProgress
+[       OK ] RouteProgressSupervisor.OtherFloorOrForeignIdentityCannotProvideProgress (0 ms)
+[ RUN      ] RouteProgressSupervisor.OriginalBodyPoseAndSourceMustMatchLocalObservation
+[       OK ] RouteProgressSupervisor.OriginalBodyPoseAndSourceMustMatchLocalObservation (0 ms)
+[ RUN      ] RouteProgressSupervisor.DuplicateAndOutOfOrderProgressDoesNotRenewSource
+[       OK ] RouteProgressSupervisor.DuplicateAndOutOfOrderProgressDoesNotRenewSource (0 ms)
+[ RUN      ] RouteProgressSupervisor.ClaimedArcWithoutActualLocalTravelCannotAdvance
+[       OK ] RouteProgressSupervisor.ClaimedArcWithoutActualLocalTravelCannotAdvance (0 ms)
+[----------] 9 tests from RouteProgressSupervisor (0 ms total)
+
+[----------] Global test environment tear-down
+[==========] 124 tests from 12 test suites ran. (18 ms total)
+[  PASSED  ] 124 tests.
+-- run_test.py: return code 0
+-- run_test.py: inject classname prefix into gtest result file '/home/dndx/d1max_nav_ws/experiments/navigation_architecture_20261004/bt_initial_pose/build/d1max_navigation_bt/test_results/d1max_navigation_bt/test_execution_owner.gtest.xml'
+-- run_test.py: verify result file '/home/dndx/d1max_nav_ws/experiments/navigation_architecture_20261004/bt_initial_pose/build/d1max_navigation_bt/test_results/d1max_navigation_bt/test_execution_owner.gtest.xml'
+</system-out>
+	</testcase>
+</testsuite>

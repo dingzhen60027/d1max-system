@@ -3,6 +3,31 @@ import math
 import json
 
 
+def floor_initial_body_z(bridge, floor_id, xy, body_height):
+    """Seed height from the selected ORIGINAL-map floor, never a control TF.
+
+    A seed is allowed to use an explicitly approximate standing height. It is
+    not a measured pose, a calibration certificate, or authority to move.
+    """
+    import numpy as np
+    if floor_id not in ('floor1', 'floor2') or floor_id not in bridge.floors:
+        raise ValueError('请选择初始楼层')
+    xy = np.asarray(xy, dtype=float)
+    if xy.shape != (2,) or not np.isfinite(xy).all():
+        raise ValueError('初始位置无效')
+    if type(body_height) not in (int, float) or not math.isfinite(body_height) or not .1 <= body_height <= 1.:
+        raise ValueError('机身参考高度无效')
+    field, distance = bridge.floors[floor_id].query(xy[None, :], bridge.limits)
+    ground = np.r_[xy, float(field[0])]
+    for region in bridge.protected_regions:
+        if np.all(ground >= np.asarray(region['min'])) and np.all(ground <= np.asarray(region['max'])):
+            raise ValueError('楼梯内部初值需要独立的支撑面确认，不能按平层高度猜测')
+    result = float(field[0]) + body_height
+    if not math.isfinite(result) or not -10 <= result <= 10:
+        raise ValueError('初始高度超出有效范围')
+    return result
+
+
 def localization_degradation(value):
     """Current scan/prediction quality only, never the lifetime maximum gap."""
     frontend = value.get('frontend')

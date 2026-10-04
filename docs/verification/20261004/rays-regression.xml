@@ -1,0 +1,147 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="(empty)"
+	tests="1"
+	failures="0"
+	disabled="0"
+	skipped="0"
+	hostname="dndx-pc"
+	time="0"
+	timestamp="2026-10-04T14:56:54"
+	>
+	<testcase name="test_projected_rays" classname="test_projected_rays" time="0.120207" status="run">
+		<system-out>-- run_test.py: invoking following command in '/home/dndx/d1max_nav_ws/experiments/single_floor_execution_20261003_system_v2/native/build/plan_env':
+ - /home/dndx/d1max_nav_ws/experiments/single_floor_execution_20261003_system_v2/native/build/plan_env/test_projected_rays --gtest_output=xml:/home/dndx/d1max_nav_ws/experiments/single_floor_execution_20261003_system_v2/native/build/plan_env/test_results/plan_env/test_projected_rays.gtest.xml
+Running main() from /opt/ros/humble/src/gtest_vendor/src/gtest_main.cc
+[==========] Running 49 tests from 8 test suites.
+[----------] Global test environment set-up.
+[----------] 6 tests from ProjectedRayIntegration
+[ RUN      ] ProjectedRayIntegration.CachedAddressLogOddsUpdateExactlyMatchesLegacyTransitions
+[       OK ] ProjectedRayIntegration.CachedAddressLogOddsUpdateExactlyMatchesLegacyTransitions (29 ms)
+[ RUN      ] ProjectedRayIntegration.SnapshotHookSeesCompletedBothSourceTransactionWithoutExtraTimer
+[       OK ] ProjectedRayIntegration.SnapshotHookSeesCompletedBothSourceTransactionWithoutExtraTimer (1 ms)
+[ RUN      ] ProjectedRayIntegration.NewDualSourceEventFusesImmediatelyButNeverExceedsFiveHz
+[       OK ] ProjectedRayIntegration.NewDualSourceEventFusesImmediatelyButNeverExceedsFiveHz (0 ms)
+[ RUN      ] ProjectedRayIntegration.MissingRearWatchdogCanAddFrontHitsWithoutRefreshingRear
+[       OK ] ProjectedRayIntegration.MissingRearWatchdogCanAddFrontHitsWithoutRefreshingRear (0 ms)
+[ RUN      ] ProjectedRayIntegration.DeadlineWakeTargetsDueInsteadOfRoundingToPollingPhase
+[       OK ] ProjectedRayIntegration.DeadlineWakeTargetsDueInsteadOfRoundingToPollingPhase (0 ms)
+[ RUN      ] ProjectedRayIntegration.SaturatedFreeNoOpStillRefreshesOnlyActualSourceEvidence
+[       OK ] ProjectedRayIntegration.SaturatedFreeNoOpStillRefreshesOnlyActualSourceEvidence (0 ms)
+[----------] 6 tests from ProjectedRayIntegration (30 ms total)
+
+[----------] 4 tests from ProjectedRayIngress
+[ RUN      ] ProjectedRayIngress.DrainIsBoundedEvenWhenProducerNeverEmpties
+[       OK ] ProjectedRayIngress.DrainIsBoundedEvenWhenProducerNeverEmpties (0 ms)
+[ RUN      ] ProjectedRayIngress.SlowSourceSurvivesEveryPositionInMixedFiveMessageWindow
+[       OK ] ProjectedRayIngress.SlowSourceSurvivesEveryPositionInMixedFiveMessageWindow (0 ms)
+[ RUN      ] ProjectedRayIngress.QueuedStaleSourceCannotRenewLeaseWhileOtherSourceContinues
+[       OK ] ProjectedRayIngress.QueuedStaleSourceCannotRenewLeaseWhileOtherSourceContinues (1 ms)
+[ RUN      ] ProjectedRayIngress.CompleteSelectedBatchesMatchNativeBuffersAndRejectPartialMalformedBatch
+[       OK ] ProjectedRayIngress.CompleteSelectedBatchesMatchNativeBuffersAndRejectPartialMalformedBatch (0 ms)
+[----------] 4 tests from ProjectedRayIngress (1 ms total)
+
+[----------] 2 tests from ProjectedRaysPreviewTiming
+[ RUN      ] ProjectedRaysPreviewTiming.ExplicitOfficialProjectedPreviewContractOnly
+[       OK ] ProjectedRaysPreviewTiming.ExplicitOfficialProjectedPreviewContractOnly (0 ms)
+[ RUN      ] ProjectedRaysPreviewTiming.OriginalSourceClockAcceptedThrough750msThenRevoked
+[       OK ] ProjectedRaysPreviewTiming.OriginalSourceClockAcceptedThrough750msThenRevoked (1 ms)
+[----------] 2 tests from ProjectedRaysPreviewTiming (1 ms total)
+
+[----------] 5 tests from ProjectedRaysOfficialScan
+[ RUN      ] ProjectedRaysOfficialScan.UnknownQueriesDoNotInventObservedFreeEvidence
+[       OK ] ProjectedRaysOfficialScan.UnknownQueriesDoNotInventObservedFreeEvidence (0 ms)
+[ RUN      ] ProjectedRaysOfficialScan.RealOccupiedInflationBlocksBothCentersAtRotatedHeadings
+[       OK ] ProjectedRaysOfficialScan.RealOccupiedInflationBlocksBothCentersAtRotatedHeadings (0 ms)
+[ RUN      ] ProjectedRaysOfficialScan.OutsideAndNonfiniteQueriesRemainBlocked
+[       OK ] ProjectedRaysOfficialScan.OutsideAndNonfiniteQueriesRemainBlocked (0 ms)
+[ RUN      ] ProjectedRaysOfficialScan.SamePerPointOriginsAndSourceTimesProduceIdenticalEvidence
+[       OK ] ProjectedRaysOfficialScan.SamePerPointOriginsAndSourceTimesProduceIdenticalEvidence (0 ms)
+[ RUN      ] ProjectedRaysOfficialScan.FreeExpiryDoesNotChangeOfficialQueryOrRenewSourceLease
+[       OK ] ProjectedRaysOfficialScan.FreeExpiryDoesNotChangeOfficialQueryOrRenewSourceLease (1 ms)
+[----------] 5 tests from ProjectedRaysOfficialScan (1 ms total)
+
+[----------] 9 tests from ProjectedRaysFreshness
+[ RUN      ] ProjectedRaysFreshness.FreshTraversalExpiresWithoutMutatingOddsOrOccupied
+[       OK ] ProjectedRaysFreshness.FreshTraversalExpiresWithoutMutatingOddsOrOccupied (0 ms)
+[ RUN      ] ProjectedRaysFreshness.FreshRemoteSourcesDoNotRenewNearRegionAndRealReobservationDoes
+[       OK ] ProjectedRaysFreshness.FreshRemoteSourcesDoNotRenewNearRegionAndRealReobservationDoes (0 ms)
+[ RUN      ] ProjectedRaysFreshness.ClockRollbackCannotRevivePreviouslyExpiredFree
+[       OK ] ProjectedRaysFreshness.ClockRollbackCannotRevivePreviouslyExpiredFree (0 ms)
+[ RUN      ] ProjectedRaysFreshness.QueryClockExpiresCacheWithoutAnIntegrationHeartbeat
+[       OK ] ProjectedRaysFreshness.QueryClockExpiresCacheWithoutAnIntegrationHeartbeat (0 ms)
+[ RUN      ] ProjectedRaysFreshness.ResetAndSlidingClearEvidenceWithoutAliasingNewWorldCells
+[       OK ] ProjectedRaysFreshness.ResetAndSlidingClearEvidenceWithoutAliasingNewWorldCells (1 ms)
+[ RUN      ] ProjectedRaysFreshness.PausedAndSlowSourceClockCannotRenewLeaseViaRepeatedTimerTicks
+[       OK ] ProjectedRaysFreshness.PausedAndSlowSourceClockCannotRenewLeaseViaRepeatedTimerTicks (0 ms)
+[ RUN      ] ProjectedRaysFreshness.EndpointHitNeverRenewsFreeLease
+[       OK ] ProjectedRaysFreshness.EndpointHitNeverRenewsFreeLease (0 ms)
+[ RUN      ] ProjectedRaysFreshness.PartialBatchCannotLendFreeEvidenceToLaterRemoteSuccess
+[       OK ] ProjectedRaysFreshness.PartialBatchCannotLendFreeEvidenceToLaterRemoteSuccess (0 ms)
+[ RUN      ] ProjectedRaysFreshness.ActualFreeRecoveryWakesPlannerButFreshHeartbeatsDoNot
+[       OK ] ProjectedRaysFreshness.ActualFreeRecoveryWakesPlannerButFreshHeartbeatsDoNot (0 ms)
+[----------] 9 tests from ProjectedRaysFreshness (1 ms total)
+
+[----------] 8 tests from ProjectedRaysDiagnostics
+[ RUN      ] ProjectedRaysDiagnostics.EnablingDiagnosticsLeavesAllNativeBuffersRevisionAndCollisionUnchanged
+[       OK ] ProjectedRaysDiagnostics.EnablingDiagnosticsLeavesAllNativeBuffersRevisionAndCollisionUnchanged (4 ms)
+[ RUN      ] ProjectedRaysDiagnostics.DenseNearReturnsDistinguishRayVisitsFromActualVotes
+[       OK ] ProjectedRaysDiagnostics.DenseNearReturnsDistinguishRayVisitsFromActualVotes (0 ms)
+[ RUN      ] ProjectedRaysDiagnostics.ConflictingDuplicateOptionalFieldDisablesWitnessMetadataNotAdmission
+[       OK ] ProjectedRaysDiagnostics.ConflictingDuplicateOptionalFieldDisablesWitnessMetadataNotAdmission (1 ms)
+[ RUN      ] ProjectedRaysDiagnostics.DetailedCylinderOverlapCountsUniqueWorldVoxelsExactlyOnce
+[       OK ] ProjectedRaysDiagnostics.DetailedCylinderOverlapCountsUniqueWorldVoxelsExactlyOnce (0 ms)
+[ RUN      ] ProjectedRaysDiagnostics.SlideClearsWorldWitnessBeforeCircularBufferSlotReuse
+[       OK ] ProjectedRaysDiagnostics.SlideClearsWorldWitnessBeforeCircularBufferSlotReuse (0 ms)
+[ RUN      ] ProjectedRaysDiagnostics.LargeWindowJumpAndNewLocalizationIdentityClearAllWitnesses
+[       OK ] ProjectedRaysDiagnostics.LargeWindowJumpAndNewLocalizationIdentityClearAllWitnesses (1 ms)
+[ RUN      ] ProjectedRaysDiagnostics.SubthresholdRealHitIsInsufficientNotNeverObservedAndStillBlocked
+[       OK ] ProjectedRaysDiagnostics.SubthresholdRealHitIsInsufficientNotNeverObservedAndStillBlocked (0 ms)
+[ RUN      ] ProjectedRaysDiagnostics.LowOrThinExternalReturnRemainsOccupiedAndOccludedSpaceUnknown
+[       OK ] ProjectedRaysDiagnostics.LowOrThinExternalReturnRemainsOccupiedAndOccludedSpaceUnknown (0 ms)
+[----------] 8 tests from ProjectedRaysDiagnostics (6 ms total)
+
+[----------] 11 tests from ProjectedRays
+[ RUN      ] ProjectedRays.DualOriginsDoNotInventFreeSpaceBetweenSensorsOrBeyondHits
+[       OK ] ProjectedRays.DualOriginsDoNotInventFreeSpaceBetweenSensorsOrBeyondHits (0 ms)
+[ RUN      ] ProjectedRays.NearReturnIsNotDiscardedAndDenseHitsCannotOverflowVotes
+[       OK ] ProjectedRays.NearReturnIsNotDiscardedAndDenseHitsCannotOverflowVotes (8 ms)
+[ RUN      ] ProjectedRays.RealHitWinsAgainstCrossingFreeRayInSameIntegration
+[       OK ] ProjectedRays.RealHitWinsAgainstCrossingFreeRayInSameIntegration (0 ms)
+[ RUN      ] ProjectedRays.ContextMismatchAndOldPacketsCannotRefillReplacementMap
+[       OK ] ProjectedRays.ContextMismatchAndOldPacketsCannotRefillReplacementMap (0 ms)
+[ RUN      ] ProjectedRays.BoundedIndependentQueuesRejectReplaysAndExpiredReceipts
+[       OK ] ProjectedRays.BoundedIndependentQueuesRejectReplaysAndExpiredReceipts (0 ms)
+[ RUN      ] ProjectedRays.OneSourceAndPausedSourceClockDoNotRenewBothSourceLease
+[       OK ] ProjectedRays.OneSourceAndPausedSourceClockDoNotRenewBothSourceLease (0 ms)
+[ RUN      ] ProjectedRays.MalformedFieldsTimesAndUnboundedPayloadAreRejected
+[       OK ] ProjectedRays.MalformedFieldsTimesAndUnboundedPayloadAreRejected (0 ms)
+[ RUN      ] ProjectedRays.TraversalBudgetCannotReportIncompleteWorkAsComplete
+[       OK ] ProjectedRays.TraversalBudgetCannotReportIncompleteWorkAsComplete (0 ms)
+[ RUN      ] ProjectedRays.ClippedDistantReturnPreservesNearFreeButNeverCreatesBoundaryHit
+[       OK ] ProjectedRays.ClippedDistantReturnPreservesNearFreeButNeverCreatesBoundaryHit (0 ms)
+[ RUN      ] ProjectedRays.MixedSensorPacketAndNonfiniteOriginAreNotPartiallyApplied
+[       OK ] ProjectedRays.MixedSensorPacketAndNonfiniteOriginAreNotPartiallyApplied (0 ms)
+[ RUN      ] ProjectedRays.SameCoordinateContextBarrierStillClearsPendingAndBothLeases
+[       OK ] ProjectedRays.SameCoordinateContextBarrierStillClearsPendingAndBothLeases (0 ms)
+[----------] 11 tests from ProjectedRays (8 ms total)
+
+[----------] 4 tests from ProjectedRayStatus
+[ RUN      ] ProjectedRayStatus.CompletedIntegrationBypassesDiagnosticHeartbeatDelay
+[       OK ] ProjectedRayStatus.CompletedIntegrationBypassesDiagnosticHeartbeatDelay (0 ms)
+[ RUN      ] ProjectedRayStatus.HeartbeatRepeatsOriginalLeaseAndReportsExpiryImmediately
+[       OK ] ProjectedRayStatus.HeartbeatRepeatsOriginalLeaseAndReportsExpiryImmediately (0 ms)
+[ RUN      ] ProjectedRayStatus.FreshIntegrationDoesNotBecomeStaleOnlyBecauseHeartbeatWasThrottled
+[       OK ] ProjectedRayStatus.FreshIntegrationDoesNotBecomeStaleOnlyBecauseHeartbeatWasThrottled (0 ms)
+[ RUN      ] ProjectedRayStatus.ContextChangeAndInvalidityCannotWaitForHeartbeat
+[       OK ] ProjectedRayStatus.ContextChangeAndInvalidityCannotWaitForHeartbeat (0 ms)
+[----------] 4 tests from ProjectedRayStatus (0 ms total)
+
+[----------] Global test environment tear-down
+[==========] 49 tests from 8 test suites ran. (48 ms total)
+[  PASSED  ] 49 tests.
+-- run_test.py: return code 0
+-- run_test.py: inject classname prefix into gtest result file '/home/dndx/d1max_nav_ws/experiments/single_floor_execution_20261003_system_v2/native/build/plan_env/test_results/plan_env/test_projected_rays.gtest.xml'
+-- run_test.py: verify result file '/home/dndx/d1max_nav_ws/experiments/single_floor_execution_20261003_system_v2/native/build/plan_env/test_results/plan_env/test_projected_rays.gtest.xml'
+</system-out>
+	</testcase>
+</testsuite>

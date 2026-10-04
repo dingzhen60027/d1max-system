@@ -1,8 +1,8 @@
 pct_route_server:
   ros__parameters:
     use_sim_time: false
-    planning_grid: /home/dndx/d1max_nav_ws/maps/processed/sc_pgo_20260919_ground_20260921/global_path_reachable/planning_grid.npz
-    vendor_root: /home/dndx/d1max_nav_ws/src/pct_planner_vendor
+    planning_grid: ${D1MAX_NAV_ROOT}/maps/processed/sc_pgo_20260919_ground_20260921/global_path_reachable/planning_grid.npz
+    vendor_root: ${D1MAX_NAV_ROOT}/src/pct_planner_vendor
     planning_frame: d1max_loc_map
     body_frame: d1max_loc_base_link
     odometry_topic: /d1max/localization/odometry/global

@@ -50,7 +50,8 @@ def unique_output(base):
 
 
 def load_config(path):
-    config = yaml.safe_load(Path(path).read_text())
+    from .paths import expand_tree
+    config = expand_tree(yaml.safe_load(Path(path).read_text()))
     allowed = {'schema_version', 'source_pcd', 'source_processing_manifest', 'output_directory', 'vendor_root', 'frame_id',
                'preprocessing', 'pct', 'export', 'notes'}
     if not isinstance(config, dict) or set(config) - allowed:

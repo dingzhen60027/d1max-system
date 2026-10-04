@@ -1,6 +1,7 @@
 """Small ROS-message adapters; numerical estimation modules do not import ROS."""
 
 import rclpy
+from rclpy.time import Time
 from geometry_msgs.msg import PoseStamped, PoseWithCovarianceStamped, TransformStamped
 from nav_msgs.msg import Odometry
 from .math_utils import Pose3, normalize_quaternion
@@ -8,7 +9,7 @@ from .estimation.contracts import vector
 
 
 def stamp_time(seconds):
-    return rclpy.time.Time(nanoseconds=round(seconds * 1e9)).to_msg()
+    return Time(nanoseconds=round(seconds * 1e9)).to_msg()
 
 
 def seconds(message):

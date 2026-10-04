@@ -17,6 +17,7 @@ import yaml
 
 from .multifloor_runner import FRAME, protected_mask
 from .pcd_io import read_pcd, _write_records
+from . import load_config
 from .runner import sha256
 
 SCHEMA = 'd1max.crossfloor_planning/v1'
@@ -171,12 +172,12 @@ def select_portal(tomogram, request, radius, height_tolerance):
 def run(path):
     config_path = Path(path).resolve(strict=True)
     config_hash = sha256(config_path)
-    cfg = yaml.safe_load(config_path.read_text())
+    cfg = load_config(config_path)
     if cfg.get('schema') != SCHEMA or cfg.get('planning_only') is not True:
         raise ValueError('An explicit offline cross-floor planning derivative is required')
     source = verified_file(cfg['source'])
     floor_config = verified_file(cfg['floor_conditioning_config'])
-    floor_cfg = yaml.safe_load(floor_config.read_text())
+    floor_cfg = load_config(floor_config)
     floor_dir = Path(floor_cfg['output_directory'])
     if not floor_dir.exists():
         from .multifloor_runner import run as build_floors
@@ -269,7 +270,7 @@ def run(path):
     assert_unchanged(inputs)
     from d1max_pct_planner.tomogram_map import TomogramMap
     tomo = TomogramMap(pct_dir / 'tomogram.npz', unknown_ceiling_policy='allow_unobserved', max_ground_step_m=.17)
-    route = yaml.safe_load(route_template_path.read_text())
+    route = load_config(route_template_path)
     for name, xyz in cfg.get('anchor_overrides', {}).items():
         if name not in route['anchors']:
             raise ValueError(f'Unknown portal override: {name}')

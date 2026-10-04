@@ -4,6 +4,22 @@ This package connects the D1 Max LIO output to SCAN-Planner's rolling 3D local
 map and B-spline planner. It intentionally launches no controller and publishes
 no `/cmd_vel` command.
 
+As of 2026-09-27 the live entry selects `scan_collision_policy: official`.
+This restores upstream double-cylinder-center inflated-buffer collision queries
+and inflation discretization. Unknown raw voxels remain unknown, but no longer
+veto planning merely for lacking fresh saturated-free evidence. Dual-source
+ray timing/origins and input checks are unchanged. D1 robot dimensions are
+retained; official-policy sessions remain visualization-only.
+
+The ROS 2 source comparison is pinned to `d0b921c9b05a6d291d144d60882b2e0e88d2c0e0`.
+Current objective weights match that source (1 / 1 / 0.1 / 1), with the D1-only
+reference attraction disabled (0). Normal live, standalone PCT and offline
+entries share this optimizer configuration. D1 input timing, geometry and
+ordered PCT reference adaptation remain explicit integrations; the Go2
+controller and simulator are not started as D1 controllers. Only the normal
+live entry supplies the independent per-sensor-ray backend; older standalone
+launch files retain their explicitly remapped cloud/sensor-pose interface.
+
 ## Robot parameters and their sources
 
 The live Web/RViz entry reads `config/d1max_robot.yaml`, snapshots it with the
@@ -34,8 +50,9 @@ height validation remain false. In particular, do not substitute the 0.585 m
 total standing height for a calibrated `base_link` height.
 
 Preview stays at 0.30 m/s with **no motion output**. The user's 1.5 m/s project
-ceiling is separate from the product's 8 m/s laboratory maximum. No product
-capability or profile field bypasses collision, ground-support or motion gates.
+ceiling is separate from the product's 8 m/s laboratory maximum. Product
+capability ratings do not authorize motion. The optional D1 PCT ground-support
+veto belongs to the retained observed-free policy, not the official default.
 
 ## PCT + SCAN single-floor session (2026-09-22)
 
@@ -96,9 +113,9 @@ transport and process lifetime.
 ### Vendor fixes required for this interface
 
 `fsm.reference_path_guidance=true` enables the PCT coupling. The configurable
-local D1 extra reference weight currently defaults to `optimization.lambda_reference=20.0`;
-zero retains the original rebound objective. This is not an upstream recommended
-weight, and route guidance does not require it (legacy defaults false/0).
+local D1 extra reference weight now defaults to `optimization.lambda_reference=0.0`,
+retaining the original rebound objective. The previous value 20 was not an
+upstream recommended weight; route guidance does not require it.
 The global route remains the original piecewise-linear PCT curve in arc-length
 coordinates; SCAN does not refit it with an overshooting global minimum-snap
 polynomial. Local targets and seed points use the same monotone-progress route
@@ -108,7 +125,9 @@ replaced by native A* detours in the current inflated occupancy map. The
 correspondence cost uses this collision-checked seed, not the obstructed
 original line. Search failure terminates the attempt instead of feeding an
 invalid seed to LBFGS. Collision and feasibility costs remain enabled; the
-final external ground-support/whole-curve safety guard is still mandatory.
+final native whole-curve collision guard remains active. The separate D1
+ground-support veto is not applied by the current official preview policy;
+physical execution remains disabled.
 Reference-mode Z follows the PCT surface and is not replaced by a linear ramp.
 These are soft reference costs, **not** permission to cross unknown/blocked cells.
 
@@ -118,7 +137,9 @@ changed occupancy or measured body position, instead of repeating the same
 seed at 100 Hz. Distinct failure phases identify search, optimization, final
 collision and dynamics; a hover/emergency spline is not an accepted route.
 Only a tagged spline paired with accepted diagnostics of the same plan ID is
-green in RViz. Failed attempts have a separate, short-lived diagnostic layer.
+displayed as a local trajectory in RViz. Its yellow-to-red colour is native
+B-spline speed, not acceptance state. Failed attempts have a separate,
+short-lived diagnostic layer.
 These changes have not been validated by a new robot run; no motion was enabled.
 
 For a numerically stationary initial velocity/acceleration (both norms <= 1e-6),
@@ -271,8 +292,8 @@ and static scenes do not validate live dynamic obstacles, tracking or hardware.
 Start one LIO backend first, then run one of:
 
 ```bash
-/home/dndx/d1max_nav_ws/start_scan_planner.sh faster_lio
-/home/dndx/d1max_nav_ws/start_scan_planner.sh fastlio2
+/home/dndx/d1max_nav_ws/scripts/planning/start_scan_planner.sh faster_lio
+/home/dndx/d1max_nav_ws/scripts/planning/start_scan_planner.sh fastlio2
 ```
 
 For non-default Faster-LIO topic remaps:

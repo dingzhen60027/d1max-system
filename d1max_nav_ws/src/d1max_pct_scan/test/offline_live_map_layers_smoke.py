@@ -11,6 +11,7 @@ import time
 import uuid
 import numpy as np
 import yaml
+from d1max_pct_planner.paths import expand_tree
 from offline_live_chain_smoke import WS, FRAME, PREFIX, PORT, isolated_environment
 
 
@@ -18,7 +19,7 @@ def main():
     directory = WS/'log/offline_live_map_layers_smoke'/(
         time.strftime('%Y%m%d_%H%M%S')+'_'+uuid.uuid4().hex[:8])
     directory.mkdir(parents=True)
-    session = yaml.safe_load((WS/'src/d1max_pct_scan/config/live_visualization.yaml').read_text())
+    session = expand_tree(yaml.safe_load((WS/'src/d1max_pct_scan/config/live_visualization.yaml').read_text()))
     session.update(id='TEST_ONLY_'+uuid.uuid4().hex[:12], mode='OFFLINE_STATIC_DISPLAY_TEST_ONLY')
     (directory/'session.json').write_text(json.dumps(session))
     common = {'scouting': {'multicast': {'enabled': False}, 'gossip': {'enabled': False}},

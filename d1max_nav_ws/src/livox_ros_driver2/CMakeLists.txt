@@ -246,10 +246,12 @@ else(ROS_EDITION STREQUAL "ROS2")
   )
 
   ## make sure the livox_lidar_sdk_shared library is installed
+  # Extra SDK prefix, e.g. -DLIVOX_SDK2_PREFIX=<livox-sdk2-install>.
+  set(LIVOX_SDK2_PREFIX "$ENV{LIVOX_SDK2_PREFIX}" CACHE PATH "Livox-SDK2 install prefix")
   set(LIVOX_SDK_SEARCH_PATHS
     /usr/local/lib
     /usr/local/lib64
-    /home/dndx/go2_nav/thirdparty/livox-sdk2-install/lib
+    ${LIVOX_SDK2_PREFIX}/lib
     $ENV{LIVOX_SDK_ROOT}/lib
     $ENV{LIVOX_SDK_PATH}/lib
   )
@@ -265,7 +267,7 @@ else(ROS_EDITION STREQUAL "ROS2")
     NAMES "livox_lidar_api.h" "livox_lidar_def.h"
     PATHS
       /usr/local/include
-      /home/dndx/go2_nav/thirdparty/livox-sdk2-install/include
+      ${LIVOX_SDK2_PREFIX}/include
       $ENV{LIVOX_SDK_ROOT}/include
       $ENV{LIVOX_SDK_PATH}/include
     REQUIRED)

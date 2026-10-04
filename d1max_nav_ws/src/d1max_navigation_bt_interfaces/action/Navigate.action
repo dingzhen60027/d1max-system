@@ -1,0 +1,21 @@
+# Algorithm-neutral task entry point; SDK execution permission is separate.
+uint32 schema_version
+string goal_kind
+geometry_msgs/PoseStamped goal
+bool has_goal_yaw
+float64 goal_yaw_tolerance_rad
+---
+uint32 schema_version
+bool success
+string reason
+bool retirement_confirmed
+bool physical_stop_confirmed
+---
+string task_id
+string phase
+string active_node
+string reason
+string route_id
+string route_hash
+bool preview_only
+bool execution_authorized

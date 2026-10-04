@@ -134,7 +134,7 @@ def floor_from_planning_z(z, floor_z_ranges):
     if not math.isfinite(z):
         raise GlobalPlanError('goal_height_invalid')
     matches = [floor for floor, name in FLOOR_NAMES.items()
-               if floor_z_ranges[name][0] <= z <= floor_z_ranges[name][1]]
+               if name in floor_z_ranges and floor_z_ranges[name][0] <= z <= floor_z_ranges[name][1]]
     if len(matches) != 1:
         raise GlobalPlanError('3d_goal_height_must_select_exactly_one_floor')
     return matches[0]
@@ -153,7 +153,7 @@ def floor_from_original_ground_z(bridge, xyz, *, tolerance_m=.15):
             field, _ = floor.query(point[:2].reshape(1, 2), bridge.limits)
             if abs(point[2]-field[0]) <= tolerance_m:
                 matches.append(floor_id)
-        except ValueError:
+        except (ValueError,KeyError):
             pass
     if len(matches) != 1:
         raise GlobalPlanError('source_3d_goal_z_does_not_uniquely_match_observed_floor')

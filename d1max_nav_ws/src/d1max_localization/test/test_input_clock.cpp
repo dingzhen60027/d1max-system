@@ -29,3 +29,20 @@ TEST(InputClock, DelayedPacketStillChecksHostClock){
  InputClock c;ASSERT_TRUE(c.observe(100.,100.,1.));
  EXPECT_FALSE(c.observe(100.01,102.,2.));EXPECT_TRUE(c.faulted());
 }
+TEST(InputClock, RecordedClockPauseKeepsRealSourceIntervals){
+ InputClock c(false,100,1.,true);
+ ASSERT_TRUE(c.observe(100.,100.01,1.));
+ EXPECT_FALSE(c.offset(21.));  // no invented fresh sensor during pause
+ EXPECT_TRUE(c.observe(100.02,100.03,21.02));
+ EXPECT_DOUBLE_EQ(*c.offset(21.02),0.);
+ EXPECT_FALSE(c.faulted());
+}
+TEST(InputClock, RecordedClockCannotAcceptOldOrFutureOrRollback){
+ InputClock c(false,100,1.,true);
+ ASSERT_TRUE(c.observe(100.,100.01,1.));
+ EXPECT_FALSE(c.observe(100.02,100.5,2.));
+ EXPECT_FALSE(c.observe(101.,100.1,2.1));
+ EXPECT_FALSE(c.observe(99.,99.01,3.));
+ EXPECT_TRUE(c.faulted());
+ EXPECT_THROW(InputClock(true,100,1.,true),std::invalid_argument);
+}

@@ -13,7 +13,11 @@ int main(int argc, char **argv)
   {
     scan_planner::SCANReplanFSM planner;
     planner.init(node.get());
-    rclcpp::executors::SingleThreadedExecutor executor;
+    // Grid fusion, reference solving/adoption and normal FSM callbacks remain
+    // in ONE mutually-exclusive default owner group. Only the transaction
+    // ledger permit/revocation callback has a separate group and does not
+    // access live map/query buffers. Validation has its private snapshot thread.
+    rclcpp::executors::MultiThreadedExecutor executor(rclcpp::ExecutorOptions{},2);
     executor.add_node(node);
     executor.spin();
   }

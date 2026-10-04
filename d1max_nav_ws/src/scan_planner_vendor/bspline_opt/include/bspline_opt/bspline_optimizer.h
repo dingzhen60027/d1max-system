@@ -4,6 +4,7 @@
 #include <Eigen/Eigen>
 #include <path_searching/dyn_a_star.h>
 #include <bspline_opt/uniform_bspline.h>
+#include <bspline_opt/spline_heading_contract.hpp>
 #include <plan_env/grid_map.h>
 #include <rclcpp/rclcpp.hpp>
 #include "bspline_opt/lbfgs.hpp"
@@ -62,6 +63,11 @@ namespace scan_planner
     // required inputs
     void setControlPoints(const Eigen::MatrixXd &points);
     void setBsplineInterval(const double &ts);
+    void setPreviewHeadingContract(const SplineHeadingContract &contract) { heading_contract_=contract; }
+    void setSolveBudget(const SolveBudget::Ptr &budget) {
+      solve_budget_=budget;
+      if (a_star_) a_star_->setSolveBudget(budget);
+    }
     void setCostFunction(const int &cost_function);
     void setTerminateCond(const int &max_num_id, const int &max_time_id);
 
@@ -89,7 +95,15 @@ namespace scan_planner
 
   private:
     GridMap::Ptr grid_map_;
+    SolveBudget::Ptr solve_budget_;
+    int queryOccupancy(const Eigen::Vector3d &p,double yaw) {
+      // The caller separately reports cancellation/deadline, never an invented
+      // obstacle witness. Fail-closed here also stops LBFGS line searches.
+      if (!solveAllowed(solve_budget_)) { force_stop_type_=STOP_FOR_ERROR; return 1; }
+      return grid_map_->getInflateOccupancy(p,yaw);
+    }
     bool control_points_initialized_{false};
+    SplineHeadingContract heading_contract_;
 
     enum FORCE_STOP_OPTIMIZE_TYPE
     {

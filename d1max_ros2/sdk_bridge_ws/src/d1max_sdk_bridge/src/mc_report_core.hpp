@@ -27,7 +27,20 @@ template<class T, size_t Capacity> struct Inbox {
 // SetMcConfig only switches reporting on/off. expected_hz is a diagnostic
 // reference from this SDK's docs, NOT a frequency argument sent to the robot.
 struct McReport {
-  static constexpr double expected_hz=50.;
+  enum class SourceOrder {New,Missing,Duplicate,Backward};
+  SourceOrder sourceOrder(uint64_t source)const {
+    if(!source)return SourceOrder::Missing;
+    if(last_source&&source==last_source)return SourceOrder::Duplicate;
+    if(last_source&&source<last_source)return SourceOrder::Backward;
+    return SourceOrder::New;
+  }
+  double expected_hz=50.,minimum_hz=40.,maximum_hz=60.;
+  void configureAcceptedRate(double expected,double minimum,double maximum){
+    if(!std::isfinite(expected)||expected<10||expected>200||!std::isfinite(minimum)||minimum<10||minimum>expected||
+       !std::isfinite(maximum)||maximum<expected||maximum>300)
+      throw std::invalid_argument("invalid_accepted_mc_rate");
+    expected_hz=expected;minimum_hz=minimum;maximum_hz=maximum;
+  }
   // max_attempts is a per-burst budget, never a lifetime retry limit.
   unsigned max_attempts=3, attempts=0, retry_cycles=0;
   uint64_t total_attempts=0;
@@ -74,7 +87,7 @@ struct McReport {
     const double span=(timings.back().source-timings.front().source)*1e-9;
     return span>=1.?(timings.size()-1)/span:0.;
   }
-  bool rate_ok(double now) const {const auto hz=observed_hz(now);return hz>=expected_hz*.8&&hz<=expected_hz*1.2;}
+  bool rate_ok(double now) const {const auto hz=observed_hz(now);return hz>=minimum_hz&&hz<=maximum_hz;}
   double cooldown() const {
     return std::min(max_cooldown_sec,cooldown_sec*std::pow(2.,std::min(retry_cycles,8u)));
   }
@@ -89,7 +102,7 @@ struct McReport {
     if(!connected||replay||!total_attempts||arrival<first_request_at)return false;
     if(now<arrival||now-arrival>=stale_sec){++stale_samples;return false;}
     for(int i=0;i<3;++i)if(!std::isfinite(v[i])||!std::isfinite(omega[i])){++invalid_samples;return false;}
-    if(!source||source<=last_source){++timestamp_rejections;return false;}
+    if(sourceOrder(source)!=SourceOrder::New){++timestamp_rejections;return false;}
     // SDK timestamp epoch is undocumented: retain uint64 ns and use source
     // deltas anchored to the first host receipt. This is approximate, NOT PTP.
     const auto candidate=anchor_source?anchor_wall+(source-anchor_source)*1e-9:received;

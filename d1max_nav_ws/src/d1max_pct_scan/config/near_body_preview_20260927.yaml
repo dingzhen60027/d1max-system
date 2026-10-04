@@ -1,0 +1,25 @@
+# Explicit optional fragment, NOT included by the default configuration.
+# No-motion diagnostic only; NOT a calibrated self/ground filter.
+# Measured 2026-09-27 05:32:19..27 in the operator-confirmed empty standing scene.
+# 3 small sensor-specific raw-endpoint boxes; padding is XY only, NEVER Z.
+# External objects inside these boxes are indistinguishable and also hidden.
+# The whole matching ray is dropped; no free-space inference/map clearing.
+preview_ray_exclusion:
+  schema: 1
+  mode: preview_drop_rays
+  frame_id: d1max_loc_base_link
+  calibration_verified: false
+  pad_m: [0.02, 0.02, 0.0]
+  boxes:
+    - name: current_rear_positive_y
+      sensor_id: 1
+      min_m: [-0.390209, 0.225234, -0.489559]
+      max_m: [-0.373180, 0.304533, -0.455643]
+    - name: current_front_positive_y
+      sensor_id: 0
+      min_m: [0.449969, 0.251207, -0.483020]
+      max_m: [0.484808, 0.325541, -0.446211]
+    - name: current_front_negative_y
+      sensor_id: 0
+      min_m: [0.466737, -0.310894, -0.491300]
+      max_m: [0.477081, -0.270023, -0.458142]

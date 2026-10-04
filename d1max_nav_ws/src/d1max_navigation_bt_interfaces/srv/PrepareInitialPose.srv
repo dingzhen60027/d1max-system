@@ -1,0 +1,19 @@
+# Initial-pose intent is not a robot command, localization success, or stop proof.
+# PREPARE validates and retires the current task; COMMIT authorizes application
+# only after retirement/necessary measured stop. ABORT never restores old grants.
+uint8 PREPARE=0
+uint8 COMMIT=1
+uint8 ABORT=2
+uint32 schema_version
+uint8 operation
+string session_id
+string request_id
+string source_map_sha256
+geometry_msgs/PoseWithCovarianceStamped body_pose
+---
+uint32 schema_version
+bool accepted
+bool ready
+bool application_authorized
+bool physical_stop_confirmed
+string reason

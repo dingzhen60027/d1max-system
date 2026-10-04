@@ -6,6 +6,7 @@
 <exec_depend>d1max_pct_planner</exec_depend><exec_depend>d1max_scan_planner</exec_depend>
 <exec_depend>d1max_trajectory_tracker</exec_depend><exec_depend>d1max_navigation</exec_depend>
 <exec_depend>d1max_pct_rviz_tools</exec_depend>
+<exec_depend>d1max_navigation_bt</exec_depend><exec_depend>d1max_navigation_bt_interfaces</exec_depend>
 <exec_depend>nav2_collision_monitor</exec_depend><exec_depend>nav2_lifecycle_manager</exec_depend>
 <exec_depend>d1max_motion_safety</exec_depend>
 <exec_depend>d1max_planning_interfaces</exec_depend><exec_depend>python3-yaml</exec_depend>

@@ -1,11 +1,13 @@
 #include <limits>
 #include <vector>
+#include <sys/stat.h>
 #include <QApplication>
 #include <QDateTime>
 #include <QAbstractItemModel>
 #include <QComboBox>
 #include <QDoubleSpinBox>
 #include <QEventLoop>
+#include <QFile>
 #include <QLineEdit>
 #include <QLabel>
 #include <QJsonArray>
@@ -16,6 +18,7 @@
 #include <QScrollArea>
 #include <QScrollBar>
 #include <QTimer>
+#include <QTemporaryDir>
 #include <QToolButton>
 #include <gtest/gtest.h>
 #include "d1max_pct_rviz_tools/point_tools.hpp"
@@ -478,6 +481,32 @@ TEST(SelectionMode, LayerUsesExplicitIdAndWaitsForAcknowledgement)
   EXPECT_TRUE(panel.findChild<QLabel *>("start_validation")->text().contains("分层 #0"));
 }
 
+TEST(SelectionMode, PhysicalFloorsAreNotNativeSliceIdsAndHeightWitnessIsShown)
+{
+  SelectionPanelProbe panel;
+  auto state = QJsonDocument::fromJson(selectionStatus().toUtf8()).object();
+  auto layers = state["available_layers"].toArray();
+  layers.prepend(QJsonObject{{"id", -3}, {"label", "二楼 · 多切片地面"}});
+  layers.prepend(QJsonObject{{"id", -2}, {"label", "一楼 · 多切片地面"}});
+  state["available_layers"] = layers;
+  state["start_validation"] = QJsonObject{{"valid", true}, {"layer_id", 0},
+    {"floor_id", "floor1"}, {"height_error_m", 0.0}};
+  state["goal_validation"] = QJsonObject{{"valid", false}, {"layer_id", 3},
+    {"floor_id", "floor2"}, {"height_error_m", 0.4}, {"reason_code", "height_off_surface"}};
+  panel.acceptStatus(QString::fromUtf8(QJsonDocument(state).toJson()));
+  auto * selector = panel.findChild<QComboBox *>("active_layer");
+  EXPECT_GE(selector->findData(-2), 0);
+  EXPECT_GE(selector->findData(-3), 0);
+  selector->setCurrentIndex(selector->findData(-3));
+  EXPECT_EQ(panel.requested_layer, -3);
+  auto * start = panel.findChild<QLabel *>("start_validation");
+  auto * goal = panel.findChild<QLabel *>("goal_validation");
+  EXPECT_TRUE(start->text().contains("一楼"));
+  EXPECT_TRUE(goal->text().contains("二楼"));
+  EXPECT_TRUE(goal->text().contains("0.40"));
+  EXPECT_FALSE(panel.findChild<QPushButton *>("plan")->isEnabled());
+}
+
 TEST(SelectionMode, UnappliedDraftBlocksModeAndLayerChanges)
 {
   SelectionPanelProbe panel;
@@ -762,6 +791,29 @@ TEST(NavigationDiagnostics, RejectsReplayWrongSessionAndStaleSource)
   EXPECT_TRUE(panel.findChild<QLabel *>("local")->text().contains("轨迹有效"));
 }
 
+TEST(NavigationDiagnostics, ShowsActualTreeNodeWithoutGrantingMotion)
+{
+  NavigationDiagnosticsPanel panel;
+  configureDiagnostics(panel);
+  const auto now = QDateTime::currentMSecsSinceEpoch() / 1000.;
+  auto value = QJsonDocument::fromJson(liveDiagnostics(now).toUtf8()).object();
+  value["behavior_tree"] = QJsonObject{{"label", "等待输入恢复"},
+    {"task_id", "test-session.2"}, {"root_status", "RUNNING"},
+    {"detail", "WaitForNavigationInputs · waiting_localization"},
+    {"nodes", QJsonArray{QJsonObject{{"name", "ComputeRouteOnce"}, {"status", "SUCCESS"}},
+                        QJsonObject{{"name", "FollowRoute"}, {"status", "RUNNING"}}}}};
+  panel.acceptStatus(QString::fromUtf8(QJsonDocument(value).toJson()));
+  EXPECT_EQ(panel.findChild<QLabel *>("behavior_tree")->text(), "等待输入恢复");
+  EXPECT_TRUE(panel.findChild<QLabel *>("behavior_tree")->toolTip().contains("WaitForNavigationInputs"));
+  EXPECT_TRUE(panel.findChild<QLabel *>("detail")->text().contains("ComputeRouteOnce: SUCCESS"));
+  EXPECT_TRUE(panel.findChild<QLabel *>("mode")->text().contains("运动关闭"));
+  EXPECT_TRUE(panel.findChild<QLabel *>("navigation_admission")->text().contains("未通过"));
+  value.remove("behavior_tree");
+  value["stamp"] = now + .001;
+  panel.acceptStatus(QString::fromUtf8(QJsonDocument(value).toJson()));
+  EXPECT_EQ(panel.findChild<QLabel *>("behavior_tree")->text(), "等待任务状态");
+}
+
 TEST(NavigationDiagnostics, PreviewSuccessDoesNotConcealNavigationAdmission)
 {
   NavigationDiagnosticsPanel panel;
@@ -923,6 +975,140 @@ TEST(NavigationLayouts, InvalidSavedLayoutUsesGlobalWithoutEnablingNavigation)
   EXPECT_TRUE(panel.findChild<QLabel *>("mode")->text().contains("运动关闭"));
 }
 
+class LayoutRequestFixture : public testing::Test
+{
+protected:
+  QTemporaryDir directory;
+  QByteArray previous_viewer;
+  bool previous_set{false};
+  const QString viewer{"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"};
+  QString requestPath() const {return directory.path() + "/navigation-view-layout-request.json";}
+  QString statePath() const {return directory.path() + "/navigation-view-layout-state.json";}
+  void SetUp() override
+  {
+    ASSERT_TRUE(directory.isValid());
+    previous_set = qEnvironmentVariableIsSet("D1MAX_NAV_RVIZ_VIEWER_ID");
+    previous_viewer = qgetenv("D1MAX_NAV_RVIZ_VIEWER_ID");
+    qputenv("D1MAX_NAV_RVIZ_VIEWER_ID", viewer.toUtf8());
+  }
+  void TearDown() override
+  {
+    if (previous_set) {qputenv("D1MAX_NAV_RVIZ_VIEWER_ID", previous_viewer);}
+    else {qunsetenv("D1MAX_NAV_RVIZ_VIEWER_ID");}
+  }
+  void configure(LayoutPanelProbe & panel)
+  {
+    rviz_common::Config config;
+    config.mapSetValue("Session ID", "test-session");
+    config.mapSetValue("Layout Request File", requestPath());
+    config.mapSetValue("Layout State File", statePath());
+    panel.load(config); QApplication::processEvents();
+  }
+  QJsonObject request(const QString & id = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb") const
+  {
+    return {{"schema", 1}, {"session_id", "test-session"}, {"viewer_id", viewer},
+      {"request_id", id}, {"layout", "local"},
+      {"stamp", QDateTime::currentMSecsSinceEpoch() / 1000.}};
+  }
+  QString encode(const QJsonObject & value) const
+  {return QString::fromUtf8(QJsonDocument(value).toJson(QJsonDocument::Compact));}
+  void writeRequest(const QJsonObject & value)
+  {
+    QFile file(requestPath()); ASSERT_TRUE(file.open(QIODevice::WriteOnly | QIODevice::Truncate));
+    ASSERT_TRUE(file.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner));
+    const auto data = encode(value).toUtf8(); ASSERT_EQ(file.write(data), data.size());
+  }
+};
+
+TEST_F(LayoutRequestFixture, PrivateRequestSwitchesSamePanelAndAcknowledgesActualProcess)
+{
+  LayoutPanelProbe panel; configure(panel);
+  const auto value = request(); writeRequest(value); panel.refresh();
+  ASSERT_TRUE(panel.findChild<QPushButton *>("layout_local")->isChecked());
+  ASSERT_EQ(panel.layouts.back(), "local");
+  QFile state(statePath()); ASSERT_TRUE(state.open(QIODevice::ReadOnly));
+  const auto ack = QJsonDocument::fromJson(state.readAll()).object();
+  for (const auto * field : {"schema", "session_id", "viewer_id", "request_id", "layout", "stamp"}) {
+    EXPECT_EQ(ack[field], value[field]);
+  }
+  EXPECT_EQ(ack["phase"].toString(), "applied");
+  EXPECT_EQ(ack["rviz_pid"].toInt(), QApplication::applicationPid());
+  EXPECT_GT(ack["applied_at_unix"].toDouble(), 0.);
+  EXPECT_FALSE(state.permissions() & (QFileDevice::ReadGroup | QFileDevice::WriteGroup |
+    QFileDevice::ExeGroup | QFileDevice::ReadOther | QFileDevice::WriteOther | QFileDevice::ExeOther));
+  const auto applied = panel.layouts.size();
+  panel.refresh(); panel.acceptStatus(liveDiagnostics(QDateTime::currentMSecsSinceEpoch() / 1000.));
+  panel.refresh(); EXPECT_EQ(panel.layouts.size(), applied);
+  panel.findChild<QPushButton *>("layout_global")->click();
+  panel.refresh(); EXPECT_TRUE(panel.findChild<QPushButton *>("layout_global")->isChecked());
+  EXPECT_EQ(panel.layouts.size(), applied + 1);  // Old request cannot undo the mouse selection.
+}
+
+TEST_F(LayoutRequestFixture, RejectsWrongOwnerContractReplayExpiryAndUnknownLayouts)
+{
+  LayoutPanelProbe panel; configure(panel);
+  const auto applied = panel.layouts.size();
+  const auto valid = request();
+  for (const auto * field : {"session_id", "viewer_id", "request_id", "layout"}) {
+    auto bad = valid; bad[field] = "wrong"; EXPECT_FALSE(panel.acceptLayoutRequest(encode(bad)));
+  }
+  for (const double offset : {-10.5, .5}) {
+    auto bad = valid; bad["stamp"] = valid["stamp"].toDouble() + offset;
+    EXPECT_FALSE(panel.acceptLayoutRequest(encode(bad)));
+  }
+  auto bad = valid; bad["schema"] = 2; EXPECT_FALSE(panel.acceptLayoutRequest(encode(bad)));
+  bad = valid; bad["stamp"] = "now"; EXPECT_FALSE(panel.acceptLayoutRequest(encode(bad)));
+  EXPECT_FALSE(panel.acceptLayoutRequest(QString(5000, 'x')));
+  EXPECT_FALSE(panel.acceptLayoutRequest("[]"));
+  EXPECT_EQ(panel.layouts.size(), applied); EXPECT_FALSE(QFile::exists(statePath()));
+  EXPECT_TRUE(panel.acceptLayoutRequest(encode(valid)));
+  EXPECT_FALSE(panel.acceptLayoutRequest(encode(valid)));
+  auto same = request("cccccccccccccccccccccccccccccccc");
+  const auto selected = panel.layouts.size(); EXPECT_TRUE(panel.acceptLayoutRequest(encode(same)));
+  EXPECT_EQ(panel.layouts.size(), selected);  // A new same-layout request does not reset the camera.
+}
+
+TEST_F(LayoutRequestFixture, PollRejectsSymlinkPublicAndOversizedFilesAndUnsafeState)
+{
+  LayoutPanelProbe panel; configure(panel);
+  const auto applied = panel.layouts.size();
+  writeRequest(request());
+  ASSERT_TRUE(QFile::setPermissions(requestPath(), QFileDevice::ReadOwner |
+    QFileDevice::WriteOwner | QFileDevice::ReadOther));
+  panel.refresh(); EXPECT_EQ(panel.layouts.size(), applied);
+  ASSERT_TRUE(QFile::remove(requestPath()));
+  QFile real(directory.path() + "/actual.json"); ASSERT_TRUE(real.open(QIODevice::WriteOnly));
+  ASSERT_TRUE(real.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner));
+  const auto content = encode(request()).toUtf8(); ASSERT_EQ(real.write(content), content.size());
+  real.close(); ASSERT_TRUE(QFile::link(real.fileName(), requestPath()));
+  panel.refresh(); EXPECT_EQ(panel.layouts.size(), applied);
+  ASSERT_TRUE(QFile::remove(requestPath()));
+  QFile large(requestPath()); ASSERT_TRUE(large.open(QIODevice::WriteOnly));
+  ASSERT_TRUE(large.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner));
+  ASSERT_EQ(large.write(QByteArray(5000, 'x')), 5000); large.close();
+  panel.refresh(); EXPECT_EQ(panel.layouts.size(), applied);
+  ASSERT_TRUE(QFile::remove(requestPath()));
+  ASSERT_EQ(::mkfifo(QFile::encodeName(requestPath()).constData(), 0600), 0);
+  panel.refresh(); EXPECT_EQ(panel.layouts.size(), applied);  // No writer: O_NONBLOCK must return.
+  ASSERT_TRUE(QFile::link(real.fileName(), statePath()));
+  EXPECT_FALSE(panel.acceptLayoutRequest(encode(request())));
+  panel.findChild<QPushButton *>("layout_global")->click();
+  EXPECT_FALSE(panel.acceptLayoutRequest(encode(request())));
+  EXPECT_TRUE(panel.findChild<QPushButton *>("layout_global")->isChecked());
+  QFile untouched(real.fileName()); ASSERT_TRUE(untouched.open(QIODevice::ReadOnly));
+  EXPECT_EQ(untouched.readAll(), content);  // ACK never writes through an existing symlink.
+}
+
+TEST_F(LayoutRequestFixture, MissingViewerNonceDisablesOnlyExternalRequests)
+{
+  qunsetenv("D1MAX_NAV_RVIZ_VIEWER_ID");
+  LayoutPanelProbe panel; configure(panel); writeRequest(request()); panel.refresh();
+  EXPECT_TRUE(panel.findChild<QPushButton *>("layout_global")->isChecked());
+  EXPECT_FALSE(QFile::exists(statePath()));
+  panel.findChild<QPushButton *>("layout_local")->click();
+  EXPECT_TRUE(panel.findChild<QPushButton *>("layout_local")->isChecked());
+}
+
 TEST(NavigationLayouts, VisibilityTreeAndRouteEmphasisAreReversible)
 {
   HeadlessDisplayGroup root;
@@ -945,7 +1131,10 @@ TEST(NavigationLayouts, VisibilityTreeAndRouteEmphasisAreReversible)
   auto * handle = add(global, "3D 目标手柄");
   auto * width = new rviz_common::properties::Property("Line Width", .065, "", route);
   auto * alpha = new rviz_common::properties::Property("Alpha", 1., "", route);
-  auto * occupancy = add(local, "滑动占据地图（含地面）");
+  auto * occupancy = add(local, "滑动占据地图（高度）");
+  auto * inflated = add(local, "碰撞膨胀地图（高度）");
+  auto * legacy_trajectory = add(local, "局部轨迹");
+  auto * committed_trajectory = add(local, "已提交局部轨迹");
   auto * boundary = add(local, "滑动窗口边界");
   root.setEnabled(true);
   NavigationDiagnosticsPanel::applyLayoutVisibility(&root, "global");
@@ -958,10 +1147,17 @@ TEST(NavigationLayouts, VisibilityTreeAndRouteEmphasisAreReversible)
   EXPECT_FALSE(maps->isEnabled()); EXPECT_TRUE(local->isEnabled());
   EXPECT_FALSE(history->isEnabled()); EXPECT_FALSE(initial->isEnabled());
   EXPECT_TRUE(axes->isEnabled()); EXPECT_FALSE(handle->isEnabled());
-  EXPECT_TRUE(occupancy->isEnabled()); EXPECT_TRUE(boundary->isEnabled());
+  EXPECT_TRUE(occupancy->isEnabled()); EXPECT_TRUE(inflated->isEnabled());
+  EXPECT_TRUE(legacy_trajectory->isEnabled()); EXPECT_TRUE(committed_trajectory->isEnabled());
+  EXPECT_TRUE(boundary->isEnabled());
   EXPECT_TRUE(route->isEnabled());
   EXPECT_DOUBLE_EQ(width->getValue().toDouble(), .035);
   EXPECT_DOUBLE_EQ(alpha->getValue().toDouble(), .35);
+  occupancy->setEnabled(false); inflated->setEnabled(false);
+  legacy_trajectory->setEnabled(false); committed_trajectory->setEnabled(false);
+  NavigationDiagnosticsPanel::applyLayoutVisibility(&root, "local");
+  EXPECT_TRUE(occupancy->isEnabled()); EXPECT_TRUE(inflated->isEnabled());
+  EXPECT_TRUE(legacy_trajectory->isEnabled()); EXPECT_TRUE(committed_trajectory->isEnabled());
   NavigationDiagnosticsPanel::applyLayoutVisibility(&root, "invalid");
   EXPECT_TRUE(local->isEnabled());
   NavigationDiagnosticsPanel::applyLayoutVisibility(&root, "global");

@@ -5,6 +5,11 @@
 #include <algorithm>
 #include <geometry_msgs/msg/pose_stamped.hpp>
 #include <iostream>
+#include <optional>
+#include <future>
+#include <plan_env/collision_snapshot_pool.hpp>
+#include <plan_env/pending_snapshot_request.hpp>
+#include <plan_manage/execution_validator.hpp>
 #include <nav_msgs/msg/odometry.hpp>
 #include <nav_msgs/msg/path.hpp>
 #include <rclcpp/rclcpp.hpp>
@@ -20,6 +25,7 @@
 #include <plan_manage/planner_manager.h>
 #include <d1max_planning_interfaces/msg/reference_path.hpp>
 #include <d1max_planning_interfaces/msg/tagged_bspline.hpp>
+#include <d1max_planning_interfaces/msg/tracking_progress.hpp>
 #include <d1max_planning_interfaces/msg/local_plan_debug.hpp>
 #include <bspline_opt/reference_path.hpp>
 #include <plan_manage/reference_target.hpp>
@@ -54,6 +60,44 @@ namespace scan_planner
 
     /* planning utils */
     SCANPlannerManager::Ptr planner_manager_;
+    SCANPlannerManager::Ptr solve_worker_;
+    CollisionSnapshotPool snapshot_pool_;
+    std::unique_ptr<ExecutionValidator> execution_validator_;
+    std::optional<ew::ReferenceProposal> execution_proposal_;
+    rclcpp::TimerBase::SharedPtr validation_snapshot_timer_;
+    rclcpp::Subscription<ew::ReferenceProposal>::SharedPtr execution_proposal_sub_;
+    rclcpp::Subscription<ew::SupportReference>::SharedPtr execution_support_sub_;
+    rclcpp::Subscription<ew::ExecutionPermit>::SharedPtr execution_permit_sub_;
+    rclcpp::Subscription<ew::TrackingProgress>::SharedPtr execution_progress_sub_;
+    rclcpp::Subscription<ew::MotionDemand>::SharedPtr execution_demand_sub_;
+    rclcpp::Subscription<ew::MotionValidation>::SharedPtr execution_blocked_entry_sub_;
+    rclcpp::Subscription<ew::TrajectoryAdmission>::SharedPtr execution_admission_sub_;
+    rclcpp::Subscription<ew::ExecutionHandoffGrant>::SharedPtr execution_handoff_sub_;
+    rclcpp::Subscription<ew::PreparedMotionDemand>::SharedPtr execution_prepared_sub_;
+    rclcpp::Subscription<ew::ExecutionCommitAck>::SharedPtr execution_commit_ack_sub_;
+    bool force_visible_side_target_{false},blocked_entry_replan_pending_{false};
+    Eigen::Vector3d blocked_entry_position_{Eigen::Vector3d::Zero()};
+    rclcpp::Publisher<ew::ReferenceReceipt>::SharedPtr execution_receipt_pub_;
+    rclcpp::CallbackGroup::SharedPtr execution_control_group_;
+    struct WorkerResult {
+      std::optional<SCANPlannerManager::SolvedCandidate> candidate;
+      std::string failure;
+      double solve_ms{0.},queue_ms{0.};
+    };
+    std::future<WorkerResult> solve_future_;
+    SolveBudget::Ptr active_solve_budget_;
+    PendingSnapshotRequest pending_snapshot_request_;
+    bool solve_worker_enabled_{true};
+    std::uint64_t solve_generation_{0};
+    std::chrono::steady_clock::time_point last_solve_submit_{};
+    std_msgs::msg::Header solve_attempt_header_;
+    std::optional<UniformBspline> solve_predecessor_;
+    std::int64_t solve_predecessor_id_{0};
+    double solve_predecessor_measured_time_{0.};
+    double snapshot_copy_ms_{0.};
+    d1max_planning_interfaces::msg::ReferencePath reference_metadata_;
+    std::optional<d1max_planning_interfaces::msg::TrackingProgress> tracking_progress_;
+    bool require_schema_v2_{false};
     PlanningVisualization::Ptr visualization_;
     scan_planner_msgs::msg::DataDisp data_disp_;
 
@@ -85,8 +129,11 @@ namespace scan_planner
     double failed_replan_monotonic_{0.0};
     double failed_map_stamp_{0.0};
     std::uint64_t failed_environment_revision_{0};
+    std::array<std::int64_t,2> failed_ray_stamps_{{0,0}};
     Eigen::Vector3d failed_body_position_{Eigen::Vector3d::Zero()};
     Eigen::Vector3d failed_body_velocity_{Eigen::Vector3d::Zero()};
+    Eigen::Quaterniond failed_body_orientation_{Eigen::Quaterniond::Identity()};
+    std::int64_t failed_body_source_ns_{0};
     bool reference_path_guidance_{false};
     DiscreteReference discrete_reference_;
     double discrete_progress_{0.0};
@@ -99,6 +146,7 @@ namespace scan_planner
     double local_debug_target_arc_{0.0};
     std::vector<Eigen::Vector3d> local_debug_selected_reference_;
     ReferenceTargetResult local_target_query_debug_;
+    std::chrono::steady_clock::time_point last_target_evidence_diagnostic_{};
     std::int64_t last_local_debug_stamp_ns_{0};
     uint64_t last_local_debug_generation_{0};
     std::string last_local_debug_phase_;
@@ -109,6 +157,9 @@ namespace scan_planner
     std::uint64_t predecessor_id_{0};
     bool predecessor_safe_{false};
     builtin_interfaces::msg::Time predecessor_check_stamp_;
+    std::optional<d1max_planning_interfaces::msg::LocalPlanDebug> accepted_preview_debug_;
+    std::uint64_t accepted_curve_context_sequence_{0};
+    enum class PreviewRecheck { Unavailable, Stale, Safe, Unsafe, Uncertified };
 
     /* planning data */
     bool trigger_, have_target_, have_odom_, have_new_target_;
@@ -138,9 +189,11 @@ namespace scan_planner
     rclcpp::TimerBase::SharedPtr exec_timer_, safety_timer_;
     rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr goal_sub_;
     rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr odom_sub_;
+    rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr execution_body_sub_;
     rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr cloud_health_sub_;
     rclcpp::Subscription<nav_msgs::msg::Path>::SharedPtr path_sub_;
     rclcpp::Subscription<d1max_planning_interfaces::msg::ReferencePath>::SharedPtr typed_path_sub_;
+    rclcpp::Subscription<d1max_planning_interfaces::msg::TrackingProgress>::SharedPtr tracking_progress_sub_;
     rclcpp::Publisher<d1max_planning_interfaces::msg::TaggedBspline>::SharedPtr tagged_bspline_pub_;
     rclcpp::Publisher<d1max_planning_interfaces::msg::LocalPlanDebug>::SharedPtr local_plan_debug_pub_;
     rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr local_attempt_debug_pub_;
@@ -151,6 +204,12 @@ namespace scan_planner
 
     /* helper functions */
     bool callReboundReplan(bool flag_use_poly_init, bool flag_randomPolyTraj); // front-end and back-end method
+    bool pollSolveWorker();
+    void cancelSolveWorker();
+    void cancelSnapshotAcquisition();
+    bool snapshotAcquisitionCurrent();
+    void publishCommittedTrajectory();
+    void trackingProgressCallback(const d1max_planning_interfaces::msg::TrackingProgress::ConstSharedPtr &msg);
     bool callEmergencyStop(Eigen::Vector3d stop_pos);                          // front-end and back-end method
     bool planFromCurrentTraj();
     void setStartStateFromOdomOrCurrentTraj();
@@ -165,14 +224,20 @@ namespace scan_planner
     bool planNextWaypoint();
     bool isWaypointSequenceMode() const;
     bool adjustGlobalTargetIfOccupied();
-    bool getLocalTarget();
+    bool getLocalTarget(const SolveBudget::Ptr &budget = {},GridMap::Ptr* reserved_snapshot=nullptr);
     void publishAcceptedLocalPlanDebug(std::uint64_t plan_id);
+    bool publishExecutionLedgerDebug();
+    PreviewRecheck revalidatePreviewIncumbent();
     void publishInvalidLocalPlanDebug(const std::string &phase, bool force = false);
     std_msgs::msg::Header localPlanDebugHeader();
     void publishAttemptDebug(const std_msgs::msg::Header &header, bool clear_only=false,
                              bool include_optimizer_diagnostics=true);
     void finishProcess();
     void waitForChangedEnvironment();
+    bool failedAttemptRetryReady(double monotonic_now);
+    bool environmentChangedSinceFailure();
+    bool keepPreviewIncumbentForPeriodicReplan();
+    bool shouldReplanUncertifiedPreview();
     void publishSelfInflationMarker();
     double getOdomYaw() const;
     double estimateYawFromSegment(const Eigen::Vector3d &from, const Eigen::Vector3d &to) const;
@@ -197,6 +262,8 @@ namespace scan_planner
     }
     ~SCANReplanFSM()
     {
+      cancelSolveWorker();
+      if (solve_future_.valid()) solve_future_.wait();
     }
 
     void init(rclcpp::Node *node);

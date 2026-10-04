@@ -37,7 +37,7 @@ try{
   await route.fulfill({json:state});
  });
  await page.goto('http://127.0.0.1:8766/#/2d/navigation');
- await page.getByRole('heading',{name:'单楼层导航'}).waitFor();
+ await page.getByRole('heading',{name:'导航',exact:true}).waitFor();
  await page.getByRole('button',{name:'定位 / 初始位姿',exact:true}).click();
  const submit=page.getByRole('button',{name:'提交定位初值',exact:true});
  assert(await page.getByRole('button',{name:'启动定位',exact:true}).isDisabled());assert(await submit.isDisabled());

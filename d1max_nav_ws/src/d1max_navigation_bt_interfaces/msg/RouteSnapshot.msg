@@ -1,0 +1,29 @@
+# Immutable schema-2 source-map ground route. Timestamps are not its identity.
+uint32 schema_version
+string session_id
+string task_id
+string route_id
+string route_hash
+string map_version_id
+string source_map_sha256
+string tomogram_sha256
+string conditioning_sha256
+string frame_id
+string point_reference
+string direction
+int64 localization_epoch
+string localization_seed_id
+nav_msgs/Path path
+int32[] source_layer_ids
+int32[] layer_ids
+string[] point_floor_ids
+string[] edge_segments
+RouteSegment[] segments
+# Inspectable producer evidence, not authority to override typed eligibility.
+string geometry_evidence_json
+bool preview_ready
+bool execution_eligible
+string eligibility_reason
+bool has_goal_yaw
+float64 goal_yaw
+float64 goal_yaw_tolerance_rad

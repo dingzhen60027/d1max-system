@@ -7,10 +7,29 @@ import math
 import numpy as np
 from scipy.interpolate import BSpline
 
+from .navigation_task_policy import LocalAction, TaskEvent, task_transition
+
 
 def fresh(stamp, now, timeout, future=0.1):
     return (type(stamp) in (int, float) and math.isfinite(stamp) and stamp > 0
             and math.isfinite(now) and -future <= now - stamp <= timeout)
+
+
+def perception_timeout(params):
+    """Bound only the ray-map lease; never broaden pose or execution leases."""
+    value = params.get('perception_timeout', .5)
+    if (type(value) not in (int, float) or not math.isfinite(value)
+            or not .1 <= value <= .75):
+        raise ValueError('invalid_bounded_perception_timeout')
+    if value > .5 and not (
+            params.get('collision_policy') == 'official'
+            and params.get('execution_mode', 'preview') == 'preview'
+            and params.get('perception_backend') == 'per_sensor_rays'):
+        raise ValueError('extended_perception_timeout_requires_official_ray_preview')
+    if params.get('perception_backend') == 'per_sensor_rays':
+        return float(value)
+    # Keep the pre-existing deskewed-cloud adapter contract unchanged.
+    return params['input_timeout']
 
 
 def cloud_source_issue(*, frame_id, tracking_frame, stamp, now, timeout, context,
@@ -73,10 +92,10 @@ def validate_continuous_pose(pose, *, epoch, seed, now, map_frame='d1max_loc_map
     return epoch, seed
 
 
-def localization_context(localizer, navigation, *, pose_status=None, session_id, now, timeout=.5,
-                         map_frame='d1max_loc_map', tracking_frame='d1max_loc_tracking',
-                         body_frame='d1max_loc_base_link', pose_receipt_age=None):
-    """Confirmed map identity + continuous pose; map-match quality is separate."""
+def localization_identity_context(localizer, navigation, *, session_id, now, timeout=.5,
+                                  map_frame='d1max_loc_map',
+                                  tracking_frame='d1max_loc_tracking'):
+    """Fresh confirmed identity only. This NEVER admits a pose or trajectory."""
     if (not isinstance(localizer, dict) or not isinstance(navigation, dict)
             or not session_id or localizer.get('session_id') != session_id
             or not fresh(localizer.get('wall_time'), now, timeout)
@@ -96,10 +115,20 @@ def localization_context(localizer, navigation, *, pose_status=None, session_id,
                 or value.get('fault') or value.get('reset_pending') is True
                 or not fresh(value.get('received_at_unix'), now, timeout)):
             raise ValueError('navigation_not_same_localization_context')
+    return session_id, epoch, seed
+
+
+def localization_context(localizer, navigation, *, pose_status=None, session_id, now, timeout=.5,
+                         map_frame='d1max_loc_map', tracking_frame='d1max_loc_tracking',
+                         body_frame='d1max_loc_base_link', pose_receipt_age=None):
+    """Confirmed map identity + continuous pose; map-match quality is separate."""
+    context = localization_identity_context(localizer, navigation, session_id=session_id,
+        now=now, timeout=timeout, map_frame=map_frame, tracking_frame=tracking_frame)
+    _, epoch, seed = context
     validate_continuous_pose(pose_status, epoch=epoch, seed=seed, now=now,
                              map_frame=map_frame, body_frame=body_frame, timeout=timeout,
                              receipt_age=pose_receipt_age)
-    return session_id, epoch, seed
+    return context
 
 
 def sample_shadow_spline(*, order, knots, points):
@@ -136,7 +165,8 @@ def admissible_tagged_spline(*, session_id, generation, frame_id, trajectory_id,
     return (gate.ready and gate.active and session_id == expected_session
             and type(generation) is int and generation == gate.generation
             and frame_id == gate.frame_id and type(trajectory_id) is int
-            and trajectory_id > last_id and start_time >= gate.issued_at
+            and trajectory_id > last_id and start_time >= max(
+                gate.issued_at, getattr(gate, 'trajectory_barrier', 0.))
             and fresh(start_time, now, 2.))
 
 
@@ -245,7 +275,12 @@ def take_latest_exact(pending, *, rejection, resolve):
 
 @dataclass
 class ReferenceGate:
-    """Fail-closed latch: sensor recovery never resurrects an old reference."""
+    """Local following permission, distinct from the owner's immutable route.
+
+    The strict/execution adapter still withdraws on bad input. The explicitly
+    selected no-motion adapter suspends its task and needs fresh trajectory
+    proof on recovery. Neither path invents a new global planning request.
+    """
     frame_id: str = 'd1max_loc_map'
     body_height: float = .55
     generation: int = 0
@@ -253,28 +288,67 @@ class ReferenceGate:
     active: bool = False
     barrier: float = 0.
     last_path_stamp: float = 0.
+    last_owner_sequence: int = 0
     issued_at: float = 0.
     digest: str = ''
     reason: str = 'waiting_for_localization_and_cloud'
     context: tuple | None = None
+    preview_paused: bool = False
+    trajectory_barrier: float = 0.
+
+    def pause_preview_reference(self, now):
+        """Suspend graphics, not owner task identity; caller admits preview only."""
+        return self._preview_task_transition(TaskEvent.INPUT_LOST, now)
+
+    def resume_preview_reference(self, now, context):
+        """Keep the task; require new native trajectory proof after recovery."""
+        return self._preview_task_transition(TaskEvent.INPUT_RECOVERED, now, context)
+
+    def _preview_task_transition(self, event, now, context=None):
+        decision = task_transition(event, route_committed=self.active)
+        if not self.active or not math.isfinite(now):
+            return False
+        if decision.local is LocalAction.SUSPEND:
+            if self.preview_paused:
+                return False
+            self.ready, self.preview_paused = False, True
+            self.reason = 'preview_reference_paused_for_sensor'
+        elif decision.local is LocalAction.REVALIDATE:
+            if not self.preview_paused or context != self.context:
+                return False
+            self.ready, self.preview_paused = True, False
+            self.reason = 'preview_reference_resumed_waiting_new_native_plan'
+        else:
+            return False
+        self.trajectory_barrier = max(self.trajectory_barrier, now)
+        return True
 
     def revoke(self, now, reason, *, advance_barrier=True):
         self.generation += 1
         self.active = False
+        self.preview_paused = False
         if advance_barrier:
             self.barrier = max(self.barrier, now)
         self.reason = reason
 
-    def observe(self, valid, now, context=None):
+    def observe(self, valid, now, context=None, *, retain_inactive_generation=False):
         """Return True exactly when a cancel publication is required."""
         # A transient unavailable status is not evidence of a different
         # localization epoch/seed. Still revoke immediately and require a NEW
         # target after recovery; retain the last real tuple for diagnosis.
         changed = self.context is not None and context is not None and context != self.context
-        if self.ready and (not valid or changed):
+        if (self.ready or self.preview_paused) and (not valid or changed):
             self.ready = False
             if context is not None:
                 self.context = context
+            if retain_inactive_generation and not self.active and not changed:
+                # There is no native task to cancel. Repeated ray ready/not-
+                # ready transitions must not manufacture new generations or
+                # empty Paths while the owner refresh is in flight. Preserve
+                # the freshness barrier: this does not admit an old reference.
+                self.barrier = max(self.barrier, now)
+                self.reason = 'input_stale_or_invalid'
+                return False
             self.revoke(now, 'localization_context_changed' if changed else 'input_stale_or_invalid')
             return True
         if valid and not self.ready:
@@ -284,28 +358,42 @@ class ReferenceGate:
             self.reason = 'ready_requires_new_target'
         return False
 
-    def accept(self, xyz, *, frame_id, stamp, now, body_xyz):
+    def accept(self, xyz, *, frame_id, stamp, now, body_xyz, owner_sequence=None):
         points = np.asarray(xyz, dtype=float)
         if not self.ready:
             raise ValueError('inputs_not_ready_requires_new_target')
-        if not fresh(stamp, now, 2.) or stamp <= max(self.barrier, self.last_path_stamp):
+        if owner_sequence is None:
+            obsolete = stamp <= max(self.barrier, self.last_path_stamp)
+        else:
+            # Only the typed ingress may supply this already identity-checked
+            # sequence. Equal source time is allowed; no clock is fabricated.
+            obsolete = (type(owner_sequence) is not int or owner_sequence <= self.last_owner_sequence
+                        or stamp < self.barrier)
+        if not fresh(stamp, now, 2.) or obsolete:
             raise ValueError('obsolete_or_stale_reference')
-        self.last_path_stamp = stamp
+        self.last_path_stamp = max(self.last_path_stamp, stamp)
+        if owner_sequence is not None:
+            self.last_owner_sequence = owner_sequence
         if (frame_id != self.frame_id or points.ndim != 2 or points.shape[1] != 3
                 or not 2 <= len(points) <= 20000 or not np.isfinite(points).all()):
             raise ValueError('invalid_reference_geometry_or_frame')
         body = np.asarray(body_xyz, dtype=float)
         if body.shape != (3,) or not np.isfinite(body).all():
             raise ValueError('invalid_body_position')
-        if np.linalg.norm(points[0] + [0, 0, self.body_height] - body) > 1.:
-            raise ValueError('reference_start_not_near_live_body')
         steps = np.linalg.norm(np.diff(points, axis=0), axis=1)
         if steps.max() > 1. or steps.sum() < .05 or steps.sum() > 2000.:
             raise ValueError('reference_discontinuous_or_degenerate')
         digest = hashlib.sha256(np.asarray(points, dtype='<f8').tobytes()).hexdigest()
         if self.active and digest == self.digest:
+            # A confirmed owner's refresh of this exact active route is an
+            # acknowledgement, not a new start. Normal progress may place the
+            # robot far from route[0]. All message/context/geometry checks still
+            # apply; a new or inactive route must satisfy start admission below.
             return False
+        if np.linalg.norm(points[0] + [0, 0, self.body_height] - body) > 1.:
+            raise ValueError('reference_start_not_near_live_body')
         self.generation += 1
         self.active, self.issued_at, self.digest = True, stamp, digest
+        self.preview_paused = False
         self.reason = 'shadow_reference_active_no_motion'
         return True

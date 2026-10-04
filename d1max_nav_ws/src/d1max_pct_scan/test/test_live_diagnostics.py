@@ -67,6 +67,86 @@ def test_paused_goal_is_visible_but_never_shown_as_an_active_route():
     assert result['stages']['local']['tone'] != 'ready'
 
 
+def test_committed_global_output_does_not_borrow_local_following_permission():
+    loc, glob, local = states()
+    glob.update(route_committed=True, visual_path_available=True, goal_retained=True,
+        planning_phase='active', active_goal=dict(session_id='s', epoch=2, seed_id='seed'))
+    baseline = diagnostics(loc, glob, local, session_id='s', now=100.)
+    assert baseline['stages']['global']['label'] == '路径已生成'
+    loc.update(localized=False, continuous_pose_valid=False)
+    loc['navigation']['valid'] = False
+    glob.update(active_reference=False, paused_for_recovery=True,
+                state='route_retained_following_paused')
+    local.update(ready=False, spline_visual_valid=False)
+    paused = diagnostics(loc, glob, local, session_id='s', now=100.)
+    assert paused['stages']['global'] == baseline['stages']['global']
+    assert paused['stages']['local']['tone'] != 'ready'
+    assert paused['motion_enabled'] is False and paused['plan_id'] is None
+    for source, changes in ((loc, dict(reset_pending=True)),
+                            (loc, dict(active_seed_ns='new')),
+                            (glob, dict(localization_epoch=3))):
+        original = deepcopy(source)
+        source.update(changes)
+        result = diagnostics(loc, glob, local, session_id='s', now=100.)
+        assert result['stages']['global']['label'] != '路径已生成'
+        source.clear(); source.update(original)
+
+
+def retained_goal_state(reason='current_floor_requires_unique_measured_ground_support'):
+    loc, glob, local = states()
+    glob.update(state='goal_retained_waiting_recovery',
+        planning_phase='goal_retained_waiting_recovery', active_reference=False,
+        goal_retained=True, paused_for_recovery=False, last_route={},
+        recovery_hold=dict(reason=reason, user_stamp=90.),
+        active_goal=dict(session_id='s', epoch=2, seed_id='seed', user_stamp=90.))
+    return loc, glob, local
+
+
+@pytest.mark.parametrize('reason,global_label,local_label', [
+    ('current_floor_requires_unique_measured_ground_support',
+     '目标保留 · 等待可用起点', '等待可用起点'),
+    ('snapshot_replan_limit_exceeded', '规划未完成', '等待重新规划'),
+    ('total_goal_computation_deadline_expired', '规划未完成', '等待重新规划'),
+    ('global_result_commit_wait_expired', '规划未完成', '等待重新规划'),
+])
+def test_retained_mission_labels_are_not_missing_goal_or_executable_path(reason, global_label, local_label):
+    loc, glob, local = retained_goal_state(reason)
+    # Cross-stream arrival may leave an older valid local curve in the view.
+    result = diagnostics(loc, glob, local, session_id='s', now=100.)
+    assert result['stages']['global']['label'] == global_label
+    assert result['stages']['local']['label'] == local_label
+    assert result['stages']['global']['tone'] == result['stages']['local']['tone'] == 'warning'
+    assert result['plan_id'] is None and result['local_target'] is None
+    assert result['reference_horizon_m'] is None and result['motion_enabled'] is False
+
+
+def test_hold_remains_visible_during_soft_pose_gap_without_hiding_localization_wait():
+    loc, glob, local = retained_goal_state()
+    loc.update(localized=False, continuous_pose_valid=False, state='output_waiting')
+    loc['navigation']['valid'] = False
+    local.update(active_reference=False, ready=False)
+    result = diagnostics(loc, glob, local, session_id='s', now=100.)
+    assert result['stages']['global']['label'] == '目标保留 · 等待可用起点'
+    assert result['stages']['local']['label'] == '等待可用起点'
+    assert result['stages']['localization']['tone'] != 'ready'
+
+
+@pytest.mark.parametrize('scope,change', [
+    ('global', dict(session_id='other')), ('global', dict(goal_retained=False)),
+    ('global', dict(active_reference=True)), ('global', dict(recovery_hold=None)),
+    ('global', dict(active_goal=None)),
+    ('goal', dict(user_stamp=89.)), ('goal', dict(session_id='other')),
+    ('localization', dict(local_epoch=3)), ('localization', dict(active_seed_ns='new')),
+    ('localization', dict(local_fault='imu_fault')),
+])
+def test_malformed_or_old_identity_hold_cannot_claim_retained_current_mission(scope, change):
+    loc, glob, local = retained_goal_state()
+    {'global': glob, 'goal': glob['active_goal'], 'localization': loc}[scope].update(change)
+    result = diagnostics(loc, glob, local, session_id='s', now=100.)
+    assert result['stages']['global']['label'] != '目标保留 · 等待可用起点'
+    assert result['stages']['local']['label'] != '等待可用起点'
+
+
 @pytest.mark.parametrize('phase,label', [
     ('initializing_map', '加载规划地图'),
     ('native_search_and_validation', '搜索与路径检查'),
@@ -101,6 +181,44 @@ def test_fresh_paired_plan_and_real_target_are_visible():
     assert value['local_target'] == [1., 2., 3.]
     assert value['reference_horizon_m'] == 6.
     assert value['motion_enabled'] is False
+
+
+def revalidated_preview():
+    loc, glob, local = states()
+    local.update(execution_mode='preview', collision_policy='official',
+        perception_backend='per_sensor_rays', last_spline_stamp=91.,
+        trajectory_revalidation=dict(enabled=True, valid=True,
+            proof_kind='revalidated', original_spline_stamp=91.,
+            checked_at=99.9, plan_id=4))
+    return loc, glob, local
+
+
+def test_native_revalidated_preview_keeps_original_creation_time():
+    loc, glob, local = revalidated_preview()
+    value = diagnostics(loc, glob, local, session_id='s', now=100.)
+    assert value['stages']['local']['label'] == '轨迹有效'
+    assert local['last_spline_stamp'] == 91.
+    assert value['motion_enabled'] is False
+
+
+@pytest.mark.parametrize('changes', [dict(valid=False), dict(checked_at=97.),
+    dict(checked_at=100.02), dict(plan_id=5), dict(original_spline_stamp=90.),
+    dict(proof_kind='heartbeat')])
+def test_stale_mismatched_or_missing_native_proof_cannot_validate_old_curve(changes):
+    loc, glob, local = revalidated_preview()
+    local['trajectory_revalidation'].update(changes)
+    value = diagnostics(loc, glob, local, session_id='s', now=100.)
+    assert value['stages']['local']['tone'] != 'ready'
+
+
+@pytest.mark.parametrize('changes', [dict(execution_mode='execution'),
+    dict(collision_policy='observed_free'), dict(perception_backend='deskewed_cloud'),
+    dict(ready=False), dict(spline_visual_valid=False), dict(local_debug_valid=False)])
+def test_preview_recheck_does_not_relax_other_modes_or_input_admission(changes):
+    loc, glob, local = revalidated_preview()
+    local.update(changes)
+    value = diagnostics(loc, glob, local, session_id='s', now=100.)
+    assert value['stages']['local']['tone'] != 'ready'
 
 
 def test_preview_ready_is_separate_from_unverified_navigation_acceptance():
@@ -197,13 +315,14 @@ def test_native_failure_is_distinct_from_waiting_for_reference():
     ('failed_reference_geometry', '参考路径无效'),
     ('failed_reference_search_budget', '绕行搜索达到上限'),
     ('failed_reference_target_occupied', '局部目标被占用'),
-    ('failed_reference_start_occupied', '起点包络与占据格重叠'),
+    ('failed_reference_start_occupied', '绕行起点受阻'),
     ('failed_reference_lattice_occupied', '搜索格端点受阻'),
     ('failed_reference_outside_map', '局部端点超出地图'),
     ('waiting_observed_space', '绕行空间尚未观测'),
     ('failed_reference_search_collision', '绕行连接段碰撞'),
     ('failed_optimization', '轨迹优化未收敛'),
     ('failed_final_collision', '轨迹碰撞校验未通过'),
+    ('failed_current_validation', '当前轨迹需重新规划'),
     ('waiting_sensor_map', '等待局部地图'),
     ('waiting_goal_reached', '已接近局部目标'),
 ])
@@ -211,6 +330,15 @@ def test_real_native_failure_phase_is_not_guessed_or_shown_as_success(phase, lab
     value = sample(local_debug_valid=False, spline_visual_valid=False, local_debug_phase=phase)
     assert value['stages']['local']['label'] == label
     assert value['stages']['local']['tone'] == 'warning'
+    assert value['local_target'] is None and value['plan_id'] is None
+
+
+def test_retained_task_waits_for_data_not_another_user_reference():
+    value=sample(ready=False, preview_reference_paused=True,
+                 spline_visual_valid=False, local_debug_valid=False,
+                 local_debug_phase='inactive')
+    assert value['stages']['local']['label'] == '等待局部数据'
+    assert value['stages']['local']['tone'] != 'ready'
     assert value['local_target'] is None and value['plan_id'] is None
 
 

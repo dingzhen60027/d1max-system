@@ -30,13 +30,13 @@ Web/普通 `start` 仍只启动预览；初始位姿和可拖动三维目标仍�
 
 1. 如原来的只读 monitor 正在运行，先通过原 manager 正常停止，等进程清理完成。启动工具不会偷偷重启或再开一个 SDK。
 2. 在 Foxglove 管理包的 `scripts` 目录，显式运行 `python3 sdk_motion_startup.py start`。它通过原 manager 启动具备运动接口的 monitor，仍为 DISARMED。`check` / `status` 只读。
-3. 在导航工作区执行 `./start_live_planning_view.sh start-motion`。保持机器人静止，在 RViz 用 `2D Pose Estimate` 给初始位姿，再编辑三维目标并明确提交规划。
+3. 在导航工作区执行 `scripts/planning/start_live_planning_view.sh start-motion`。保持机器人静止，在 RViz 用 `2D Pose Estimate` 给初始位姿，再编辑三维目标并明确提交规划。
 4. RViz「运动控制」面板显示通过检查后，点击「开始执行」并确认。SDK 确认使能后，执行器仍会等待一条新产生的、通过检查的局部样条，旧预览样条不会被重戳复用。
-5. 「停止导航」撤销任务和运动许可；重新开始需要重新提交目标。「停止导航」不是硬件急停。关闭 RViz 或执行 `./start_live_planning_view.sh stop` 会清理本次会话的子进程，原 SDK monitor 由 manager 单独管理。
+5. 「停止导航」撤销任务和运动许可；重新开始需要重新提交目标。「停止导航」不是硬件急停。关闭 RViz 或执行 `scripts/planning/start_live_planning_view.sh stop` 会清理本次会话的子进程，原 SDK monitor 由 manager 单独管理。
 
 禁止在机器人未独立准备好时强行绕过门禁。当前外参、时间对齐、机身高度、碰撞包络和速度映射的未验收标志均原样保留。RViz 显示的阻塞原因是待完成的实机验收条件，不是需要随手改成 true 的开关。
 
-离线准备：`./start_live_planning_view.sh prepare-motion` 只生成会话配置，不连接 SDK、不启动任何节点、不发送运动。
+离线准备：`scripts/planning/start_live_planning_view.sh prepare-motion` 只生成会话配置，不连接 SDK、不启动任何节点、不发送运动。
 
 ## 执行与失效规则
 

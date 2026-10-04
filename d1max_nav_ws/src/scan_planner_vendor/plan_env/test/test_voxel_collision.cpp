@@ -3,6 +3,7 @@
 #include <plan_env/observed_ray.hpp>
 #include <set>
 #include <tuple>
+#include <random>
 
 using scan_planner::conservativeCylinderInflation;
 using scan_planner::observedCylinderStatus;
@@ -70,6 +71,9 @@ TEST(VoxelCollision, UnknownBodyCornerBlocksEvenWhenCenterIsMeasuredFree) {
 }
 
 TEST(VoxelCollision, ReflectedBodyVerticalExtentIsNotSwapped) {
+  const scan_planner::ObstacleDilation obstacle{.29,.2,.15,.45};
+  const auto body=scan_planner::reflectedBodyEnvelope(obstacle);
+  EXPECT_DOUBLE_EQ(body.below,.15);EXPECT_DOUBLE_EQ(body.above,.45);
   const auto kernel=conservativeCylinderInflation(.08,.29,.15,.45);
   // Actual body reaches +.45 above the query; query-cell quantization makes
   // cell +6 intersect it. The lower body is only .15, so cell -6 is outside.
@@ -176,6 +180,26 @@ TEST(ObservedRay, LocalWindowClipsNegativeAndVerticalDirectionsOnSameRay) {
   EXPECT_NEAR(end.y()/end.z(),.25,1e-9);
 }
 
+TEST(ObservedRay, CachedWindowAddressExactlyMatchesModuloAtNegativeAndWrappedEdges) {
+  const auto positive_mod=[](int value,int size) {int r=value%size;return r<0?r+size:r;};
+  for(const Cell &size:{Cell(1,1,1),Cell(3,5,2),Cell(150,150,80),Cell(200,200,100)}) {
+    for(const Cell &minimum:{Cell(-401,-199,-101),Cell(-1,0,1),Cell(199,401,-200)}) {
+      const scan_planner::ObservedRayMapIndex index(minimum,size);
+      for(int axis=0;axis<3;++axis) {
+        // Exhaust an axis including all wrap locations with the other two
+        // axes at both window edges. Includes the degenerate one-cell map.
+        for(int edge=0;edge<2;++edge) for(int step=0;step<size[axis];++step) {
+          Cell value=minimum+(edge ? (size-Cell::Ones()).eval() : Cell::Zero());
+          value[axis]=minimum[axis]+step;
+          const int expected=positive_mod(value.x(),size.x())*size.y()*size.z()+
+              positive_mod(value.y(),size.y())*size.z()+positive_mod(value.z(),size.z());
+          EXPECT_EQ(index.address(value),expected);
+        }
+      }
+    }
+  }
+}
+
 TEST(ObservedRay, ExactFloatDirectionHitEndpointAndOriginEvidence) {
   std::set<std::tuple<int,int,int>> visited;
   std::size_t budget=100;
@@ -185,6 +209,38 @@ TEST(ObservedRay, ExactFloatDirectionHitEndpointAndOriginEvidence) {
   EXPECT_EQ(visited.count({2,0,0}),1U); // True floating ray, not integer-cell slope.
   EXPECT_EQ(visited.count({2,1,0}),0U); // Occupied endpoint never contributes miss.
   EXPECT_EQ(visited.count({1,1,0}),0U); // Not crossed by this actual ray.
+}
+
+TEST(ObservedRay, IncrementalAddressRetainsExactRayCellsBudgetAndRingIndex) {
+  std::mt19937 random(9027);
+  std::uniform_real_distribution<double> coordinate(-11.,11.);
+  for(const Cell &size:{Cell(200,200,100),Cell(7,11,5)}) {
+    for(int iteration=0;iteration<2500;++iteration) {
+      Point origin(coordinate(random),coordinate(random),coordinate(random));
+      Point end(coordinate(random),coordinate(random),coordinate(random));
+      // Axis-aligned, simultaneous crossings, and exact negative grid faces.
+      if(iteration%4==0) end.y()=origin.y();
+      if(iteration%5==0) origin=Point(-.1,.1,-.05),end=Point(1.1,-1.1,.05);
+      if(iteration%7==0) end=Point(-.15,-.05,0.);
+      const bool include_end=iteration%2;
+      std::size_t normal_budget=iteration%3==0 ? 2U:10000U,indexed_budget=normal_budget;
+      std::vector<Cell> normal,indexed;
+      const bool a=scan_planner::visitObservedRay(origin,end,.05,include_end,normal_budget,
+          [&](const Cell &cell){normal.push_back(cell);});
+      const bool b=scan_planner::visitObservedRayIndexed(origin,end,.05,include_end,indexed_budget,size,
+          [&](const Cell &cell,int address) {
+            indexed.push_back(cell);
+            const auto wrap=[](int c,int s){return (c%s+s)%s;};
+            const int expected=(wrap(cell.x(),size.x())*size.y()+wrap(cell.y(),size.y()))*
+                size.z()+wrap(cell.z(),size.z());
+            ASSERT_EQ(address,expected)<<cell.transpose();
+          });
+      ASSERT_EQ(a,b);
+      ASSERT_EQ(normal_budget,indexed_budget);
+      ASSERT_EQ(normal.size(),indexed.size());
+      for(std::size_t i=0;i<normal.size();++i) ASSERT_EQ(normal[i],indexed[i]);
+    }
+  }
 }
 
 TEST(ObservedRay, SharedCellsDoNotTerminateNewRayCoverage) {

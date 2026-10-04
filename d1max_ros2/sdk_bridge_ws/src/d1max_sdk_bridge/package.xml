@@ -14,6 +14,8 @@
   <depend>std_srvs</depend>
   <depend>rosgraph_msgs</depend>
   <depend>nlohmann_json</depend>
+  <depend>d1max_planning_interfaces</depend>
+  <depend>openssl</depend>
 
   <exec_depend>launch</exec_depend>
   <exec_depend>launch_ros</exec_depend>

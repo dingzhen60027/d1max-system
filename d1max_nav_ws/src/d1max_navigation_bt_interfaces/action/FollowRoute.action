@@ -1,0 +1,25 @@
+# Follow this route without recomputing the user's global mission.
+uint32 schema_version
+string session_id
+string task_id
+string route_id
+int64 localization_epoch
+string localization_seed_id
+nav_msgs/Path route
+RouteSnapshot snapshot
+bool execution_confirmed
+string confirmation_id
+---
+uint32 schema_version
+bool success
+string reason
+bool retirement_confirmed
+# Software worker retirement is never proof that hardware stopped.
+bool physical_stop_confirmed
+# Immutable odometry source time at measured arrival, before cancellation ACKs.
+builtin_interfaces/Time measured_arrival_stamp
+---
+string phase
+string reason
+int64 local_plan_id
+float64 progress_m

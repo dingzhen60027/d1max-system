@@ -34,7 +34,7 @@ class PctRouteServer(Node):
     def __init__(self):
         super().__init__('pct_route_server')
         defaults = {
-            'planning_grid': '', 'vendor_root': '/home/dndx/d1max_nav_ws/src/pct_planner_vendor',
+            'planning_grid': '', 'vendor_root': '',
             'planning_frame': 'd1max_loc_map', 'body_frame': 'd1max_loc_base_link',
             'odometry_topic': '/d1max/localization/odometry/global',
             'goal_topic': '/d1max/pct_scan/goal', 'cancel_topic': '/d1max/pct_scan/cancel',

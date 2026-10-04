@@ -19,27 +19,30 @@
     fsm.reference_target_min_advance: 0.30
     fsm.reference_target_exit_margin: 0.20
 
-    # Rolling 3D map for the two Airy96 lidars. The LIO cloud is already in map.
-    grid_map.resolution: 0.08
-    grid_map.sliding_map_size_x: 12.0
-    grid_map.sliding_map_size_y: 12.0
-    grid_map.sliding_map_size_z: 6.4
-    grid_map.local_update_range_x: 6.0
-    grid_map.local_update_range_y: 6.0
-    grid_map.local_update_range_z: 3.2
+    # Official ROS 2 rolling-grid resolution/window. With the unchanged .45 m
+    # vertical envelope, .08 m ceil inflation aliases floor z=0 into body z=.55.
+    # .05 m resolves that quantization; no ground/self returns are erased and
+    # the robot envelope is NOT reduced. Window bounds cap the 3D memory cost.
+    grid_map.resolution: 0.05
+    grid_map.sliding_map_size_x: 10.0
+    grid_map.sliding_map_size_y: 10.0
+    grid_map.sliding_map_size_z: 5.0
+    grid_map.local_update_range_x: 5.0
+    grid_map.local_update_range_y: 5.0
+    grid_map.local_update_range_z: 2.5
     grid_map.map_sliding_en: true
-    grid_map.map_sliding_thresh: 0.32
+    grid_map.map_sliding_thresh: 0.20
 
     # Unvalidated engineering proxy, not an official calibrated safety footprint.
     # Its 0.98 x 0.58 m bounding box does not prove rectangular-corner coverage.
     grid_map.double_cylinder_radius: 0.29
     grid_map.double_cylinder_offset: 0.20
-    grid_map.body_height: 0.55
-    # Match d1max_robot.yaml: the assumed 0.55 m body reference minus the
-    # provisional 0.10 m ground exclusion gives 0.45 m BELOW the body. This is
+    grid_map.body_height: 0.50
+    # Match d1max_robot.yaml: the 0.50 m body reference minus the
+    # provisional 0.10 m ground exclusion gives 0.40 m BELOW the body. This is
     # obstacle-UP dilation, not upper-body clearance. Neither value is calibrated.
     # This legacy entry retains its own unknown-space policy; no motion approval.
-    grid_map.obstacles_inflation_z_up: 0.45
+    grid_map.obstacles_inflation_z_up: 0.40
     grid_map.obstacles_inflation_z_down: 0.45
 
     grid_map.frame_id: map
@@ -80,12 +83,14 @@
     manager.reference_detour_anchor_margin: 0.5
 
     optimization.lambda_smooth: 1.0
-    optimization.lambda_collision: 1.5
-    optimization.lambda_feasibility: 0.2
+    # Official ros2-community d0b921c9 optimizer weights. D1 motion limits and
+    # measured/configured geometry remain separate from the objective terms.
+    optimization.lambda_collision: 1.0
+    optimization.lambda_feasibility: 0.1
     optimization.lambda_fitness: 1.0
-    # D1 extension, NOT an upstream SCAN-recommended weight. Set 0 for the native
-    # rebound objective. Positive values attract the verified detour seed only.
-    optimization.lambda_reference: 20.0
+    # Disable the D1-only extra attraction term: use upstream rebound objective.
+    # The ordered PCT reference is still the input seed/height guide, not a cost.
+    optimization.lambda_reference: 0.0
     optimization.dist0: 0.28
     optimization.max_vel: 0.45
     optimization.max_acc: 0.35

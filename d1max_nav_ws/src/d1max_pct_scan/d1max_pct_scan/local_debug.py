@@ -15,16 +15,20 @@ DEBUG_TIMEOUT = 2.
 MAX_DEBUG_POINTS = 4096
 MAX_DEBUG_COORDINATE_M = 10000.
 MAX_DEBUG_ARC_M = 10000.
+REFERENCE_REJECTION_PHASES = frozenset(('reference_rejected_odometry',
+                                      'reference_rejected_frame', 'reference_rejected_geometry'))
 INVALID_PHASES = frozenset(('reference_replaced', 'cancelled', 'failed', 'completed',
                             'emergency_stop', 'debug_overflow', 'debug_invalid',
                             'failed_reference_search', 'failed_rebound_search',
                             'failed_optimization', 'failed_final_collision',
+                            'failed_current_validation',
                             'failed_dynamics', 'waiting_environment',
                             'failed_reference_geometry', 'failed_reference_search_budget',
                             'failed_reference_target_occupied', 'failed_reference_search_collision',
                             'failed_reference_start_occupied', 'failed_reference_lattice_occupied',
                             'failed_reference_outside_map',
-                            'waiting_goal_reached', 'waiting_sensor_map', 'waiting_observed_space'))
+                            'waiting_goal_reached', 'waiting_sensor_map', 'waiting_recheck',
+                            'waiting_observed_space')) | REFERENCE_REJECTION_PHASES
 
 
 def attempt_marker_contract(markers, *, session_id, generation, frame_id, issued_at, now):
@@ -97,6 +101,10 @@ class DebugSnapshot:
     predecessor_id: int = 0
     predecessor_safe: bool = False
     predecessor_check_stamp: float = 0.
+    checked_map_source_stamp_ns: int = 0
+    checked_body_source_stamp_ns: int = 0
+    checked_map_revision: int = 0
+    checked_context_sequence: int = 0
 
 
 class LocalDebugGate:

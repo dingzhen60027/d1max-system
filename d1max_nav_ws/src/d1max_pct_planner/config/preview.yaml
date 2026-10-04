@@ -1,12 +1,12 @@
 # Planning only. No odometry, simulated body, controller or SDK is started.
-map_pcd: /home/dndx/d1max_nav_ws/maps/runs/20260919_125722_855277_central_imu_faster_lio_sc_pgo_zenoh/sc_pgo/optimized_map.pcd
+map_pcd: ${D1MAX_NAV_ROOT}/maps/runs/20260919_125722_855277_central_imu_faster_lio_sc_pgo_zenoh/sc_pgo/optimized_map.pcd
 map_backend: official_tomogram
-tomogram_path: /home/dndx/d1max_nav_ws/maps/processed/sc_pgo_20260919_pct_official_20260922/tomogram.npz
+tomogram_path: ${D1MAX_NAV_ROOT}/maps/processed/sc_pgo_20260919_pct_official_20260922/tomogram.npz
 # Build the artifact using config/official_single_floor.yaml. No legacy grid fallback.
 selection_mode: ground
 minimum_headroom_m: 0.55
 unknown_ceiling_policy: allow_unobserved
-vendor_root: /home/dndx/d1max_nav_ws/src/pct_planner_vendor
+vendor_root: ${D1MAX_NAV_ROOT}/src/pct_planner_vendor
 planning_frame: d1max_loc_map
 initial_start_xyz: []
 # Place both editable handles immediately. This never starts planning or motion.

@@ -1,11 +1,11 @@
 # Planning-only RViz. Reduced extra PCT margin, no robot or control interfaces.
-map_pcd: /home/dndx/智元四足机器人D1 Max二次开发文档资料包v0.1.0/d1max_ros2/map_manager/data/processed/20260922_164231_sc-pgo-0919-structure-v1_572b51/processed_map.pcd
+map_pcd: ${D1MAX_APP_ROOT}/map_manager/data/processed/20260922_164231_sc-pgo-0919-structure-v1_572b51/processed_map.pcd
 map_backend: official_tomogram
-tomogram_path: /home/dndx/d1max_nav_ws/maps/processed/sc_pgo_20260919_pct_compact_20260922/tomogram.npz
+tomogram_path: ${D1MAX_NAV_ROOT}/maps/processed/sc_pgo_20260919_pct_compact_20260922/tomogram.npz
 selection_mode: ground
 minimum_headroom_m: 0.55
 unknown_ceiling_policy: allow_unobserved
-vendor_root: /home/dndx/d1max_nav_ws/src/pct_planner_vendor
+vendor_root: ${D1MAX_NAV_ROOT}/src/pct_planner_vendor
 planning_frame: d1max_loc_map
 initial_start_xyz: []
 place_endpoints_on_start: true
@@ -21,5 +21,5 @@ max_heading_rate: 10.0
 max_ground_step_m: 0.17
 # Preserve the user's route only after independently proving that the measured
 # surfaces are identical and every new cost is no greater. Not a Plan fallback.
-restore_tomogram_path: /home/dndx/d1max_nav_ws/maps/processed/sc_pgo_20260919_pct_cleaned_20260922/tomogram.npz
-restore_route_file: /home/dndx/d1max_nav_ws/log/pct_preview/20260922_171007_e1e9efe114c0/path_000117.json
+restore_tomogram_path: ${D1MAX_NAV_ROOT}/maps/processed/sc_pgo_20260919_pct_cleaned_20260922/tomogram.npz
+restore_route_file: ${D1MAX_NAV_ROOT}/log/pct_preview/20260922_171007_e1e9efe114c0/path_000117.json

@@ -14,6 +14,16 @@
 
 namespace scan_planner {
 
+// The obstacle dilation is not the robot's vertical extent. A query at q
+// examines raw obstacles at q-kernel_offset: the body is the REFLECTED kernel.
+// Named types keep an asymmetric up/down calibration from silently changing
+// meaning between pose, rotation and command-sweep checks.
+struct ObstacleDilation { double radius, offset, up, down; };
+struct BodyEnvelope { double radius, offset, below, above; };
+inline BodyEnvelope reflectedBodyEnvelope(const ObstacleDilation& kernel) {
+  return {kernel.radius,kernel.offset,kernel.up,kernel.down};
+}
+
 // Native low occupied probability is not itself free evidence: one hit added to
 // the negative unknown prior can still lie below the occupied threshold. Strict
 // mode admits only saturated free cells; intermediate evidence stays uncertain.
@@ -22,6 +32,38 @@ inline int strictRawVoxelStatus(double odds,double free_log,double occupied_log)
   if (odds>occupied_log) return 1;
   return odds<=free_log+1e-9 ? 0:2;
 }
+
+// Diagnostic refinement only: native status 2 intentionally remains blocked
+// for BOTH never-observed and measured-but-insufficient evidence.
+enum class RawVoxelDiagnostic {Free,Occupied,NeverObserved,Insufficient,Outside,Invalid,StaleFree};
+inline RawVoxelDiagnostic diagnoseRawVoxel(double odds,double free_log,double occupied_log,double unknown_flag) {
+  if (!std::isfinite(odds)) return RawVoxelDiagnostic::Invalid;
+  if (std::abs(odds-(free_log-unknown_flag))<=1e-9) return RawVoxelDiagnostic::NeverObserved;
+  if (odds<free_log-1e-9) return RawVoxelDiagnostic::Invalid;
+  const int native=strictRawVoxelStatus(odds,free_log,occupied_log);
+  return native==0 ? RawVoxelDiagnostic::Free : native==1 ? RawVoxelDiagnostic::Occupied :
+      RawVoxelDiagnostic::Insufficient;
+}
+inline const char *diagnosticName(RawVoxelDiagnostic state) {
+  switch(state) {
+    case RawVoxelDiagnostic::Free:return "observed_free";
+    case RawVoxelDiagnostic::Occupied:return "occupied";
+    case RawVoxelDiagnostic::NeverObserved:return "never_observed";
+    case RawVoxelDiagnostic::Insufficient:return "observed_insufficient";
+    case RawVoxelDiagnostic::Outside:return "outside";
+    case RawVoxelDiagnostic::StaleFree:return "stale_free";
+    default:return "invalid";
+  }
+}
+struct CollisionVoxelDiagnostic {
+  Eigen::Vector3i index{Eigen::Vector3i::Zero()};
+  double log_odds{std::numeric_limits<double>::quiet_NaN()};
+  int native_state{-1};
+  int raw_state{-1};
+  std::int64_t free_observation_stamp_ns{0};
+  RawVoxelDiagnostic classification{RawVoxelDiagnostic::Outside};
+  unsigned cylinder_mask{0}; // bit 0 rear, bit 1 front. Never a ring-buffer address.
+};
 
 // Snapshot-scoped: the owner must clear it for every raw-map mutation/integration
 // and ring-buffer slide. The bound limits memory even during a failed search.
@@ -79,6 +121,11 @@ struct CollisionEvidence {
   // count a voxel twice; this does not change the decision or marker identity.
   std::array<std::size_t,4> counts{{0,0,0,0}};
   std::array<Eigen::Vector3i,3> first;
+  std::array<std::size_t,4> unique_counts{{0,0,0,0}};
+  std::vector<CollisionVoxelDiagnostic> voxels;
+  // Indexed by RawVoxelDiagnostic. Only detailed queries populate these;
+  // counts are UNIQUE global voxel indices, never envelope-query counts.
+  std::array<std::size_t,7> classification_counts{{0,0,0,0,0,0,0}};
   int state() const {
     return counts[1] ? 1 : counts[3] ? -1 : counts[2] ? 2 : 0;
   }

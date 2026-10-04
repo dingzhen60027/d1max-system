@@ -1,9 +1,9 @@
 # 2026-09-23 SC-PGO corrected map: measured, non-flattened two-floor PCT build.
 # The input was conservatively filtered by sc_pgo_0923_crossfloor_structure.yaml.
 schema_version: 1
-source_pcd: /home/dndx/智元四足机器人D1 Max二次开发文档资料包v0.1.0/d1max_ros2/map_manager/data/processed/20260923_141005_sc-pgo-0923-crossfloor-structure-v1_2c7218/processed_map.pcd
-output_directory: /home/dndx/d1max_nav_ws/maps/processed/sc_pgo_20260923_pct_crossfloor
-vendor_root: /home/dndx/d1max_nav_ws/src/pct_planner_vendor
+source_pcd: ${D1MAX_APP_ROOT}/map_manager/data/processed/20260923_141005_sc-pgo-0923-crossfloor-structure-v1_2c7218/processed_map.pcd
+output_directory: ${D1MAX_NAV_ROOT}/maps/processed/sc_pgo_20260923_pct_crossfloor
+vendor_root: ${D1MAX_NAV_ROOT}/src/pct_planner_vendor
 frame_id: d1max_loc_map
 preprocessing:
   # Remove only far-outside spurious returns; preserve the complete driven loop,

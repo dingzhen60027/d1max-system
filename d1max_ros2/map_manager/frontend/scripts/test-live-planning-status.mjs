@@ -55,17 +55,16 @@ test('known runtime failure is not hidden by polling timeout or generic launch e
  assert.deepEqual(livePlanningFailure(data,{readError:'状态读取超时',error:'启动失败，请核对日志'}),{message:data.error,title:'运行异常'})
  assert.deepEqual(livePlanningFailure(null,{readError:'状态读取超时'}),{message:'状态读取超时',title:'状态不可用'})
  assert.deepEqual(livePlanningFailure(fixture(),{error:'启动请求失败',readError:'状态读取超时'}),{message:'启动请求失败',title:'运行异常'})
- const panel=readFileSync(new URL('../src/LivePlanningPanel.jsx',import.meta.url),'utf8')
+ const panel=readFileSync(new URL('../src/NavigationLaunch.jsx',import.meta.url),'utf8')
  assert.match(panel,/setData\(value\);setReadError\(''\)/)
 })
 test('shell and planning page do not contain algorithm branding or numeric workflow decoration',()=>{
- for(const file of ['App.jsx','LivePlanningPanel.jsx','live-planning-status.mjs']){
+ for(const file of ['App.jsx','LivePlanningPanel.jsx','NavigationLaunch.jsx','live-planning-status.mjs']){
   const source=readFileSync(new URL('../src/'+file,import.meta.url),'utf8')
   assert.doesNotMatch(source,/PCT|SCAN|pct_global|scan_local|planning_native_pct/)
  }
- const panel=readFileSync(new URL('../src/LivePlanningPanel.jsx',import.meta.url),'utf8')
- assert.match(panel,/<details className="live-configuration">/)
+ const panel=readFileSync(new URL('../src/NavigationLaunch.jsx',import.meta.url),'utf8')
  assert.doesNotMatch(panel,/live-stage-index|启动后自动打开 RViz|RViz 工作流/)
- assert.match(panel,/仅预览 · 运动关闭/)
- assert.match(panel,/停止并清理本次进程；不是机器人急停/)
+ assert.match(panel,/启动不执行运动/)
+ assert.match(panel,/退役当前任务并停止本次服务；不是急停/)
 })

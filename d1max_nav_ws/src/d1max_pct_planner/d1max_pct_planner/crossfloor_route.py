@@ -386,7 +386,8 @@ def _sha256(path):
 
 def run_from_config(config_path, route_factory=None):
     config_path = Path(config_path).resolve(strict=True)
-    raw = yaml.safe_load(config_path.read_text())
+    from .paths import expand_tree
+    raw = expand_tree(yaml.safe_load(config_path.read_text()))
     settings = validate_config(raw)
     for key in ('tomogram_path', 'source_pcd', 'vendor_root'):
         target = Path(settings[key])
@@ -433,7 +434,8 @@ def main(argv=None):
         # Re-exec in a child exactly as the existing preview worker does; do
         # not mutate this process or the user's ROS/Zenoh environment.
         from .native_runtime import prepare_native_environment
-        settings = validate_config(yaml.safe_load(args.config.read_text()))
+        from .paths import expand_tree
+        settings = validate_config(expand_tree(yaml.safe_load(args.config.read_text())))
         environment = prepare_native_environment(settings['vendor_root'])
         environment['D1MAX_PCT_CROSSFLOOR_CHILD'] = '1'
         completed = subprocess.run([sys.executable, '-m', 'd1max_pct_planner.crossfloor_route',

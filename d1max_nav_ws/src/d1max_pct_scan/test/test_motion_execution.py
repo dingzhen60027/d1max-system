@@ -5,6 +5,7 @@ from pathlib import Path
 from unittest.mock import patch
 import pytest
 import yaml
+from d1max_pct_planner.paths import expand_tree
 from d1max_pct_scan.motion_execution import MotionConfig, ExecutionLease
 from d1max_pct_scan.motion_stack import parameters
 from d1max_pct_scan import live_session
@@ -414,28 +415,53 @@ def test_normal_local_endpoint_gets_bounded_replan_wait_not_200ms_fault():
     assert core.step(100.8,100.8)[0] == (.2, 0., .1)
 
 
-def test_motion_preparation_writes_no_false_acceptance_and_starts_nothing(tmp_path):
+def test_legacy_motion_preparation_also_refuses_missing_control_contract(tmp_path):
+    # Changing perception/policy must not bypass the architecture preflight.
+    configuration = expand_tree(yaml.safe_load(live_session.DEFAULT_CONFIG.read_text()))
+    configuration.pop('preview_ray_exclusion', None)
+    configuration['perception_timeout_s'] = .5
+    configuration['perception_backend'] = 'deskewed_cloud'
+    configuration['scan_collision_policy'] = 'observed_free'
+    profile = tmp_path/'legacy_fixture.yaml'
+    profile.write_text(yaml.safe_dump(configuration))
     with patch.object(live_session, 'ROOT', tmp_path), \
          patch.object(live_session.subprocess, 'Popen') as popen, \
          patch.object(live_session.subprocess, 'run') as run, \
          patch.object(live_session, 'build_opener') as network:
-        directory, session = live_session.prepare_motion()
+        with pytest.raises(ValueError, match='motion architecture incomplete'):
+            live_session.prepare_motion(profile)
     popen.assert_not_called(); run.assert_not_called(); network.assert_not_called()
-    assert session['mode'] == 'LIVE_NAVIGATION'
-    assert session['motion']['sdk_speed_mapping_validated'] is False
-    assert session['motion']['max_speed'] == .3
-    bridge = yaml.safe_load((directory/'bridge.yaml').read_text())['/**']['ros__parameters']
-    assert bridge['execution_mode'] == 'execution'
-    assert bridge['execution_tracker_node'] == '/d1max/live_planning/motion_coordinator'
-    nodes = yaml.safe_load((directory/'motion.yaml').read_text())
-    gate_params = nodes['/d1max/live_planning/navigation_command_gate']['ros__parameters']
-    assert gate_params['require_execution_permit'] is True
-    assert gate_params['input_topic'].endswith('/cmd_vel_collision_checked')
-    track = nodes['/d1max/live_planning/trajectory_tracker']['ros__parameters']
-    assert track['frozen_topic'].endswith('/tracker_frozen')
-    assert track['trajectory_topic'].endswith('/execution_bspline')
-    rviz = yaml.safe_load((directory/'live.rviz').read_text())
-    assert rviz['Panels'][0]['Class'].endswith('/MotionControlPanel')
+
+
+def test_current_per_sensor_profile_remains_preview_only_without_side_effects(tmp_path):
+    configuration = expand_tree(yaml.safe_load(live_session.DEFAULT_CONFIG.read_text()))
+    assert configuration['perception_backend'] == 'per_sensor_rays'
+    # Isolate this independent backend guard from the default preview mask.
+    configuration.pop('preview_ray_exclusion', None)
+    configuration['perception_timeout_s'] = .5
+    profile = tmp_path/'unmasked_ray_fixture.yaml'
+    profile.write_text(yaml.safe_dump(configuration))
+    with patch.object(live_session, 'ROOT', tmp_path), \
+         patch.object(live_session.subprocess, 'Popen') as popen, \
+         patch.object(live_session.subprocess, 'run') as run, \
+         patch.object(live_session, 'build_opener') as network:
+        with pytest.raises(ValueError, match='preview-only until physical validation'):
+            live_session.prepare_motion(profile)
+    popen.assert_not_called(); run.assert_not_called(); network.assert_not_called()
+    assert list(tmp_path.iterdir()) == [profile]
+
+
+def test_default_near_body_mask_refuses_motion_before_any_side_effect(tmp_path):
+    configuration = expand_tree(yaml.safe_load(live_session.DEFAULT_CONFIG.read_text()))
+    assert configuration['preview_ray_exclusion']['scope'] == 'near_body_preview'
+    with patch.object(live_session, 'ROOT', tmp_path), \
+         patch.object(live_session.subprocess, 'Popen') as popen, \
+         patch.object(live_session.subprocess, 'run') as run, \
+         patch.object(live_session, 'build_opener') as network:
+        with pytest.raises(ValueError, match='ray exclusion is forbidden in motion sessions'):
+            live_session.prepare_motion()
+    popen.assert_not_called(); run.assert_not_called(); network.assert_not_called()
+    assert list(tmp_path.iterdir()) == []
 
 
 def test_no_sdk_or_automatic_robot_state_changes_in_coordinator():

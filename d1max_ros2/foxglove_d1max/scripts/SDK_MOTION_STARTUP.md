@@ -69,6 +69,23 @@ python3 scripts/sdk_motion_startup.py start
 原有 `start_live_monitor.sh` 的“不提供运动控制”提示描述默认监控模式；显式启动时
 以 SDK monitor 的 `motion-capable, startup DISARMED` 提示及实际状态为准。
 
+## 导航 release 的 schema-3 执行通道（可选，默认关闭）
+
+导航 v3（BT Owner → Permit/Demand → SDK）只接受已封存 release 中的
+`sdk_monitor_bridge`。启用方式是在 `config/monitor-release` 写一行 release 绝对路径
+（或给 `start_sdk_monitor.sh` 设置 `D1MAX_MONITOR_RELEASE`）。文件与变量都不存在时，
+行为与之前完全相同。启用后：
+
+- `start_sdk_monitor.sh` 额外 source release 的 `interfaces`、`sdk` 两个 install；
+- 启动前重算 release 封存清单全部文件的 SHA256，任一变化或 SDK 二进制未封存都拒绝启动；
+- 参数追加 `execution_v3_enabled:=true`，`navigation_control_enabled` 保持 false；
+  旧运动票据与 v3 互斥（monitor 本身也会拒绝两者同时开启）；
+- 物理验收绑定只来自 `D1MAX_EXECUTION_ACCEPTANCE_RECORD / _ROBOT_ID / _SDK_VERSION /
+  _CALIBRATION_SHA256 / _ROBOT_PROFILE_SHA256`，必须五项齐全或全不设置。
+  不设置时通道处于“未验收”，每个 activation grant 都被 monitor 拒绝，只能监视。
+
+切换通道要停止再启动受管 monitor（经 manager），不会自动重启。
+
 ## SDK 契约与当前边界
 
 - 官方 `Move(left_right, forward_back, yaw)` 参数顺序是 **vy、vx、wz**，

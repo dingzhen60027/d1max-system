@@ -8,6 +8,7 @@ from types import SimpleNamespace
 
 import pytest
 import yaml
+from d1max_pct_planner.paths import expand_tree
 
 from d1max_pct_scan import session
 
@@ -20,7 +21,7 @@ def harness(tmp_path, monkeypatch):
     workspace = tmp_path / 'ws'
     root = workspace / 'log/pct_scan'
     root.mkdir(parents=True)
-    config = yaml.safe_load((PACKAGE_ROOT / 'config/offline.yaml').read_text())
+    config = expand_tree(yaml.safe_load((PACKAGE_ROOT / 'config/offline.yaml').read_text()))
     for name in ('map_pcd', 'ground_pcd', 'planning_grid'):
         fake = tmp_path / name
         fake.touch()

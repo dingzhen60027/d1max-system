@@ -1,8 +1,13 @@
 import unittest
-from scripts.monitor_health import mc_health
+from scripts.monitor_health import mc_health, monitor_identity
 
 
 class McHealthTests(unittest.TestCase):
+    def test_monitor_identity_requires_actual_fresh_status(self):
+        report=dict(mode='monitor',session='sdk-1',wall_time=100.,execution_v3=dict(enabled=True,acceptance_record_valid=True))
+        self.assertEqual(monitor_identity(report,100.1)['sdk_session'],'sdk-1')
+        for bad in ({**report,'session':''},{**report,'wall_time':98.},{**report,'wall_time':101.},{**report,'mode':'replay'},None):
+            self.assertEqual(monitor_identity(bad,100.1),{})
     def setUp(self):
         self.report = dict(source='sdk_mc', received_at_unix=100., stream_fresh=True,
                            observed_hz=50., rate_ok=True, acknowledged=True, ack_on=True, state='streaming')

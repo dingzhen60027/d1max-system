@@ -4,6 +4,8 @@ from pathlib import Path
 
 import numpy as np
 
+from .paths import expand, vendor_checkout
+
 
 def validate_native_parameters(astar_cost_weight=.2, optimizer_cost_margin=15.0):
     """Bound native cost parameters; these do not change the hard cutoff 20.
@@ -49,7 +51,8 @@ class TomogramPlanner:
                                   'optimizer_sample_interval_units': 'astar_path_indices',
                                   'max_heading_rate': float(max_heading_rate),
                                   'use_quintic': bool(use_quintic)}
-        planner_root = Path(vendor_root) / 'planner'
+        # An empty vendor_root means the configured/workspace PCT checkout.
+        planner_root = Path(expand(vendor_root) or vendor_checkout()).expanduser().resolve() / 'planner'
         sys.path.insert(0, str(planner_root))
         sys.path.insert(0, str(planner_root / 'lib'))
         from lib import a_star, ele_planner, traj_opt
@@ -119,6 +122,26 @@ class TomogramPlanner:
             raise ValueError('PCT endpoints must contain finite x/y')
         idx = np.rint((np.asarray(xy) - self.center) / self.resolution).astype(np.int32) + self.offset
         return np.array([idx[1], idx[0]], dtype=np.int32)
+
+    def plan_astar(self, start_xy, goal_xy, start_layer, goal_layer):
+        """Explicit native A* strategy, not a fallback from failed GPMP."""
+        start = np.r_[int(start_layer), self._position_index(start_xy)].astype(np.int32)
+        goal = np.r_[int(goal_layer), self._position_index(goal_xy)].astype(np.int32)
+        for index in (start, goal):
+            layer, y, x = index
+            if (not 0 <= layer < len(self.ground) or not 0 <= x < self.map_dim[0]
+                    or not 0 <= y < self.map_dim[1] or not np.isfinite(self.ground[layer,x,y])
+                    or self.cost[layer,x,y] > 20):
+                raise ValueError('Native A-star endpoint blocked, unsupported or outside map')
+        if not self.planner.plan(start, goal, False):
+            return None
+        grid = np.asarray(self.planner.get_path_finder().get_result_matrix())
+        if grid.ndim != 2 or grid.shape[1] != 3 or not len(grid):
+            return None
+        layers = grid[:,0].astype(int)
+        indices = grid[:,1:3].astype(int)
+        xy = self.center + (indices-self.offset)*self.resolution
+        return {'path': np.c_[xy,self.ground[layers,indices[:,0],indices[:,1]]], 'layer_ids':layers}
 
     def plan(self, start_xy, goal_xy, start_layer=0, goal_layer=0, return_details=False):
         start = np.zeros(3, dtype=np.int32)

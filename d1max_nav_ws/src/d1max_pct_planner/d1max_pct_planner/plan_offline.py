@@ -12,8 +12,7 @@ def main():
     parser = argparse.ArgumentParser(description='Run PCT global planning from a tomogram.')
     parser.add_argument('--tomogram', required=True, type=Path)
     parser.add_argument('--vendor-root', type=Path,
-                        default=Path(os.environ.get('PCT_PLANNER_ROOT',
-                            '/home/dndx/d1max_nav_ws/src/pct_planner_vendor')))
+                        default=None, help='default: PCT_PLANNER_ROOT or the workspace vendor checkout')
     parser.add_argument('--start', required=True, nargs=2, type=float, metavar=('X', 'Y'))
     parser.add_argument('--goal', required=True, nargs=2, type=float, metavar=('X', 'Y'))
     parser.add_argument('--start-layer', type=int, default=0)

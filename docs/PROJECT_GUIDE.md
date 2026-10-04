@@ -1,6 +1,6 @@
 # 项目入口与职责
 
-2026-09-12。此目录说明当前系统，不把各模块按日期保留的历史验收记录当作实时状态。
+2026-10-04。此目录说明源码主线和入口，不把各模块按日期保留的历史验收记录当作实时状态。
 
 ## 三个目录的关系
 
@@ -21,10 +21,12 @@
 | Web 启停 | Foxglove Web 按钮；`d1max-web-managed.service` | Web 独立生命周期；停止清理所属任务 |
 | 本机管理器安装 | `foxglove_d1max/scripts/install-session-manager.py` | 部署操作，不是日常连接按钮；重装/重启可能联动停止服务 |
 | Web 备用终端入口 | 根目录 `start_d1max_map_manager.sh` | 确认受管 Web 已停止再用，避免重复实例 |
-| 建图 | Web 3D 建图；`d1max_nav_ws/start_slam*.sh` | 保存原始结果，回放/实机环境需分别核对 |
+| 导航主线 | `d1max_nav_ws/tools/navigation_entry.sh`；Web 导航启停 | 唯一 BT owner；需匹配封存版本及验收记录；不是 checkout 后自动可执行 |
+| 初值、目标和任务操作 | 同一个 RViz 导航面板 | 事务初值、XYZ 目标、预览、执行确认和取消；Web 不提供导航初值 |
+| 建图 | Web 3D 建图；`d1max_nav_ws/scripts/mapping/start_slam*.sh` | 保存原始结果，回放/实机环境需分别核对 |
 | PCD 处理 | Web 3D → 原始点云 → 参数与处理 | 原图保留；处理结果另存、可追溯 |
 | 2D 地图准备 | Web 2D → 生成 / 修整 / 选用 | 同版保留定位 PCD；栅格自由区不是已验收的可通行区 |
-| 定位 | Web 2D → 单楼层定位调试 | 选定版本 → 新会话 → 等待有效局部数据 → 拖箭头初值 |
+| 历史定位调试 | Web 2D → 单楼层定位调试 | 历史非导航入口，不替代 BT 主线的定位事务或运动授权 |
 | 查看定位 | Foxglove 唯一工作台左侧 `PCD · LOCALIZATION` | 静态地图、实时扫描、位姿和轨迹；旧画面不代表数据新鲜 |
 
 上述相对 `foxglove_d1max/` 路径位于 `d1max_ros2/` 下。根目录 `start_d1max_communication.sh` 是旧的手动通信诊断入口，不能与受管实机连接链路混用。

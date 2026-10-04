@@ -208,8 +208,18 @@ def test_cli_refuses_old_supervisor_without_writing_request(tmp_path, monkeypatc
     assert not (directory/REQUEST_FILE).exists()
 
 
-@pytest.mark.parametrize('configure_failure', [False, True])
-def test_mock_supervisor_preserves_backends_and_normal_rviz_close(tmp_path, monkeypatch, configure_failure):
+@pytest.mark.parametrize('configure_failure, deployment_failure', [(False, False), (True, False), (False, True)])
+def test_mock_supervisor_preserves_backends_and_normal_rviz_close(tmp_path, monkeypatch, configure_failure, deployment_failure):
+    # This mocked supervisor fixture starts after contract admission; rejection
+    # before any child is separately covered by test_navigation_contract.py.
+    monkeypatch.setattr(live_session, 'verify_bundle', lambda *_: None)
+    monkeypatch.setattr(live_session, 'validate_tree_wiring', lambda *_: None)
+    deployment_checks = []
+    def verify_deployment(*_):
+        deployment_checks.append(True)
+        if deployment_failure and len(deployment_checks) > 1:
+            raise ValueError('fixture source changed after initial launch')
+    monkeypatch.setattr(live_session, 'verify_deployment', verify_deployment)
     directory = tmp_path/'session'; directory.mkdir(mode=0o700)
     write_owned_json(directory/'session.json', session())
     monkeypatch.setattr(live_session, 'ROOT', tmp_path)
@@ -238,6 +248,9 @@ def test_mock_supervisor_preserves_backends_and_normal_rviz_close(tmp_path, monk
         return {'test_only_session': sid, 'layout': layout}
     monkeypatch.setattr(live_session.subprocess, 'Popen', fake_popen)
     monkeypatch.setattr(live_session, 'stop_owned_children', fake_stop)
+    from d1max_pct_scan import lifecycle_shutdown
+    monkeypatch.setattr(lifecycle_shutdown, 'drain_task_owner', lambda *_:
+        dict(request_accepted=True, software_retired=True, physical_stop_confirmed=False))
     monkeypatch.setattr(live_session, 'view_config', configure)
     monkeypatch.setattr(live_session, 'replace_ui_children', lambda children, **kwargs:
         replace_ui_children(children, settle_s=0., **kwargs))
@@ -256,26 +269,28 @@ def test_mock_supervisor_preserves_backends_and_normal_rviz_close(tmp_path, monk
         elif phase == 1:
             result = read_owned_json(directory/RESULT_FILE)
             snapshots.append(runtime)
-            if configure_failure:
+            if configure_failure or deployment_failure:
                 assert result['status'] == 'failed' and not stops
-                launches[7][1].returncode = 0  # User closes the untouched old RViz.
+                next(child for args, child in launches if args[0] == 'rviz2').returncode = 0
             else:
                 assert result['status'] == 'reloaded' and not result['goal_resubmitted']
                 assert not result['initial_pose_resubmitted']
                 write_owned_json(directory/REQUEST_FILE, dict(initial_request, request_id='e'*32))
             phase = 2
         else:
-            assert not configure_failure, 'Closing untouched RViz must stop, not loop headless'
+            assert not (configure_failure or deployment_failure), 'Closing untouched RViz must stop, not loop headless'
             result = read_owned_json(directory/RESULT_FILE)
             assert result['status'] == 'failed' and 'nonce' in result['error']
             handlers[live_session.signal.SIGTERM]()
     monkeypatch.setattr(live_session.time, 'sleep', advance)
     live_session.run(directory)
-    assert phase == 2 and len(launches) == (8 if configure_failure else 10)
+    assert phase == 2 and len(launches) == (11 if configure_failure or deployment_failure else 13)
     before, after = [{c['name']: c['pid'] for c in value['children']} for value in snapshots]
     assert {n: p for n, p in before.items() if n not in UI_NAMES} == {
         n: p for n, p in after.items() if n not in UI_NAMES}
-    if configure_failure:
+    assert before['navigator'] == after['navigator']
+    assert before['bt_adapters'] == after['bt_adapters']
+    if configure_failure or deployment_failure:
         assert read_owned_json(directory/'runtime_status.json')['reason'] == 'rviz_closed'
     else:
         assert before['view'] != after['view'] and before['rviz'] != after['rviz']

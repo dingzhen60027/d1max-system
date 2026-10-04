@@ -12,6 +12,7 @@ from std_msgs.msg import String
 from d1max_localization.navigation_output import NavigationOutput
 from d1max_localization.estimation.navigation import NavigationState
 from d1max_localization.estimation_ros import stamp_time
+from d1max_localization.math_utils import Pose3
 from test_navigation_estimation import alignment, local, diagonal, locked, pending_local
 
 
@@ -30,7 +31,98 @@ def node():
     node.request_key = None
     node.request_stamp = 0.0
     node.request_at = 0.0
+    # Match constructor-owned independent-local wire state. Do not hide a
+    # missing producer initialization behind production getattr defaults.
+    node.local_state_pub = Mock()
+    node.last_local_state_identity = None
+    node.last_local_state_event = 0.0
+    node.last_local_unavailable = None
     return node
+
+
+def local_wire_boundary(node):
+    node.p.update(odom_frame='d1max_loc_odom', body_frame='d1max_loc_base_link')
+    node.wire_session = {'id': 'session', 'version_id': 'map'}
+    node.extrinsic = Pose3((0., 0., 0.), (0., 0., 0., 1.))
+    node.local_pub, node.global_pub, node.state_pair_pub = Mock(), Mock(), Mock()
+    node.tf = Mock()
+    node.last_local_sent = 0.
+    node.local_times, node.local_arrivals = deque(), deque()
+    return node
+
+
+@pytest.mark.parametrize('unavailable', ['filter', 'map'])
+def test_soft_global_ekf_or_map_expiry_does_not_revoke_actual_local_output(node, unavailable):
+    node = local_wire_boundary(node)
+    if unavailable == 'filter':
+        node.core.filter_fault = 'filter_stale'
+    else:
+        # Expire only global alignment, then receive a new local observation.
+        node.now_s.return_value = 10.81
+    now = node.now_s()
+    assert node.core.push_local(local(now), now)
+    assert node.core.local_ready(now) and node.core.output(now) is None
+    assert node.publish_local(node.core.local[-1])
+    message = node.local_state_pub.publish.call_args.args[0]
+    assert message.usable and message.reason == 'continuous_local_measurement'
+    assert message.source_stamp == message.local_odometry.header.stamp == stamp_time(now)
+    assert message.posterior_stamp == stamp_time(now-.04)
+    assert message.imu_stamp == stamp_time(now)
+    node.publish_local_unavailable(now)
+    assert node.local_state_pub.publish.call_count == 1
+    assert node.global_pub.publish.call_count == node.state_pair_pub.publish.call_count == 0
+
+
+def test_local_producer_uses_measurement_time_not_late_callback_or_timer(node):
+    node = local_wire_boundary(node)
+    assert node.publish_local(node.core.local[-1])
+    message = node.local_state_pub.publish.call_args.args[0]
+    assert message.source_stamp == stamp_time(10.20)  # receive clock is 10.22
+    assert message.posterior_stamp == stamp_time(10.16)
+    node.now_s.return_value = 10.25
+    assert not node.publish_local(node.core.local[-1])
+    node.publish_local_unavailable(10.25)
+    assert node.local_state_pub.publish.call_count == 1
+    assert node.last_local_state_event == pytest.approx(10.20)
+
+
+@pytest.mark.parametrize('change', ['epoch', 'seed', 'fault'])
+def test_local_producer_explicit_hard_revocation_is_not_a_pose_heartbeat(node, change):
+    node = local_wire_boundary(node)
+    assert node.publish_local(node.core.local[-1])
+    if change == 'epoch':
+        assert node.core.push_local(local(10.24, epoch=2), 10.24)
+    elif change == 'seed':
+        assert node.core.accept_map(alignment(10.24, seed='seed-b'), 10.24)
+    else:
+        node.core.fault = 'weak_geometry'
+    node.publish_local_unavailable(10.25)
+    event = node.local_state_pub.publish.call_args.args[0]
+    assert not event.usable
+    assert event.reason == ('hard_localization_lost' if change == 'fault' else 'localization_reset')
+    assert event.local_odometry.header.stamp == stamp_time(0.)
+    assert event.posterior_stamp == event.imu_stamp == stamp_time(0.)
+    # Only reset envelopes may use reset-event time; usable observations never do.
+    node.publish_local_unavailable(10.30)
+    assert node.local_state_pub.publish.call_count == 2
+
+
+def test_soft_local_expiry_sends_one_watermark_without_suppressing_new_sensor_sample(node):
+    node = local_wire_boundary(node)
+    assert node.publish_local(node.core.local[-1])
+    node.publish_local_unavailable(10.34)
+    event = node.local_state_pub.publish.call_args.args[0]
+    source_ns = event.source_stamp.sec*10**9+event.source_stamp.nanosec
+    assert not event.usable and event.reason == 'local_navigation_unavailable'
+    assert source_ns == round(10.20*1e9)+1
+    assert event.local_odometry.header.stamp == stamp_time(0.)
+    node.publish_local_unavailable(10.36)
+    assert node.local_state_pub.publish.call_count == 2
+    assert node.core.push_local(local(10.36), 10.36)
+    assert node.publish_local(node.core.local[-1])
+    newer = node.local_state_pub.publish.call_args.args[0]
+    assert newer.usable and newer.source_stamp == stamp_time(10.36)
+    assert node.last_local_unavailable is None
 
 
 def test_ros_numpy_covariance_is_converted_before_strict_contract(node):

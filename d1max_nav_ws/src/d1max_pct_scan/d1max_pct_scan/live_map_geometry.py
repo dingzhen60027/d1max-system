@@ -31,6 +31,13 @@ def initial_goal_from_candidates(planning_xyz, original_xyz, source_indices, can
 
 def map_surfaces(xyz, bridge, settings):
     points = np.asarray(xyz, dtype=float).reshape(-1, 3)
+    if getattr(bridge,'projection_kind',None)=='source_identity':
+        # Display real source-coordinate surfaces; no plane or inverse field.
+        low,high=bridge.input_z_band
+        keep=(points[:,2]>=low)&(points[:,2]<=high)
+        keep &= ~np.all((points[:,:2]>=bridge.forbidden[0])&(points[:,:2]<=bridge.forbidden[1]),axis=1)
+        ids=np.flatnonzero(keep)
+        return points[ids].astype('<f4'),ids
     labels = np.full(len(points), '', dtype='<U16')
     protected = np.zeros(len(points), dtype=bool)
     for region in bridge.protected_regions:
@@ -68,11 +75,18 @@ def map_surfaces(xyz, bridge, settings):
 
 
 def build_layers(session):
-    from tools.pointcloud_preprocessing.ground_path_bridge import GroundPathBridge
+    from .pointcloud_helpers.ground_path_bridge import GroundPathBridge
     from d1max_pct_planner.tomogram_map import TomogramMap
     from d1max_pct_planner.tomogram_display import surface_clouds
     from d1max_pct_planner.crossfloor_preview import load_config, visible_surfaces
-    bridge = GroundPathBridge.from_artifacts(session['planning_manifest'])
+    import json
+    identity=json.loads(Path(session['planning_manifest']).read_text()).get('geometry_operation')=='source_identity'
+    if identity:
+        from .source_identity import SourceIdentityBridge
+        from d1max_pct_planner.singlefloor_route import load_config
+        bridge=SourceIdentityBridge.from_artifacts(session['planning_manifest'])
+    else:
+        bridge = GroundPathBridge.from_artifacts(session['planning_manifest'])
     if bridge.source_frame != session['frame_id']:
         raise ValueError('Terrain visualization frame does not match localization')
     raw = yaml.safe_load(Path(session['crossfloor_route_config']).read_text())
@@ -84,9 +98,12 @@ def build_layers(session):
     validate_map_binding(session['planning_manifest'], bridge, settings,
                          source_frame=session['frame_id'])
     xyz, costs, blocked = surface_clouds(tomogram, range(tomogram.layers))
-    keep = visible_surfaces(xyz, settings)
+    visible=(lambda values: (values[:,2]>=settings['floor_z_ranges']['lower'][0]) &
+             (values[:,2]<=settings['floor_z_ranges']['lower'][1])) if identity else (
+             lambda values:visible_surfaces(values,settings))
+    keep = visible(xyz)
     xyz, costs = xyz[keep], costs[keep]
-    blocked = blocked[visible_surfaces(blocked, settings)]
+    blocked = blocked[visible(blocked)]
     if len(xyz)+len(blocked) > 1000000:
         raise ValueError('Terrain visualization exceeds one-million-cell display budget')
     original, ids = map_surfaces(xyz, bridge, settings)
@@ -99,6 +116,11 @@ def build_layers(session):
         'source_tomogram_sha256': tomogram.sha256, 'ground_display_only': True,
         'estimated_inverse_not_tf': True, 'motion_enabled': False}
     floor = session.get('current_floor', 'floor1')
+    if identity:
+        metadata.update(estimated_inverse_not_tf=False,geometry_operation='source_identity')
+        if len(original):
+            metadata['initial_goal_xyz']=original[len(original)//2].tolist()
+        return original,costs[ids],red,metadata
     candidates = np.flatnonzero(np.abs(xyz[ids, 2]-bridge.floors[floor].reference_z_m)
                                <= bridge.limits.max_ground_residual_m)
     if len(candidates):

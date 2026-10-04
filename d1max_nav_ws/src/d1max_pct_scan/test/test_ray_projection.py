@@ -230,6 +230,80 @@ def test_map_correction_jump_latches_until_new_map_context():
     assert not value.fault
 
 
+@pytest.mark.parametrize('axis', ['x', 'z', 'yaw'])
+def test_substep_corrections_accumulate_against_fixed_context_anchor(axis):
+    value = core()
+    for i in range(12):
+        stamp = EPOCH+i*20000000
+        correction = (planar(i*.012) if axis == 'x' else
+                      Pose3((0., 0., i*.012), IDENTITY.orientation) if axis == 'z' else
+                      planar(yaw=i*.006))
+        value.add_local_body(stamp, IDENTITY, CTX)
+        if i == 9:
+            with pytest.raises(ProjectionError, match='alignment_accumulation'):
+                value.add_global_tracking(stamp, correction, CTX)
+            break
+        value.add_global_tracking(stamp, correction, CTX)
+    assert value.alignment_anchor[0] == EPOCH
+    assert value.fault == 'map_alignment_accumulation_requires_context_reset'
+    assert value.alignments[-1][0] == EPOCH+8*20000000
+    value.reset(CTX)
+    assert value.fault  # owner heartbeat is not a rebuild acknowledgement
+
+
+def test_alignment_anchor_does_not_roll_with_bounded_pose_history():
+    value = core(limits=Limits(max_history_samples=20))
+    feed(value, count=80, correction=lambda t: planar(.03*math.sin(t)))
+    assert len(value.alignments) == 20
+    assert value.alignment_anchor[0] == EPOCH
+    stamp = EPOCH+1600000000
+    value.add_local_body(stamp, IDENTITY, CTX)
+    with pytest.raises(ProjectionError, match='alignment_accumulation'):
+        value.add_global_tracking(stamp, planar(.108), CTX)
+
+
+def test_old_completed_worker_cannot_commit_after_new_alignment_fault():
+    value = core()
+    feed(value)
+    result = project(value.projection_snapshot(), decode(raw_points()))
+    stamp = EPOCH+180000000
+    value.add_local_body(stamp, IDENTITY, CTX)
+    with pytest.raises(ProjectionError, match='alignment_accumulation'):
+        value.add_global_tracking(stamp, planar(.108), CTX)
+    with pytest.raises(ProjectionError, match='context_changed'):
+        value.commit_projection(result)
+    assert value.sequence == 0 and value.last_input == [-1, -1]
+
+
+def test_acknowledged_replacement_context_starts_fresh_anchor_without_retiming():
+    value = core()
+    feed(value, count=2)
+    value.add_local_body(EPOCH+40000000, IDENTITY, CTX)
+    with pytest.raises(ProjectionError):
+        value.add_global_tracking(EPOCH+40000000, planar(.12), CTX)
+    replacement = replace(CTX, sequence=2, barrier_ns=EPOCH+50000000)
+    value.reset(replacement)
+    value.set_extrinsics(body_to_tracking=IDENTITY, ray_to_tracking=IDENTITY)
+    feed(value, start=EPOCH+60000000, correction=lambda _: planar(.12))
+    assert value.fault is None
+    assert value.alignment_anchor[0] == EPOCH+60000000
+    points = raw_points(start=EPOCH+60000000)
+    raw = RawRays(points, EPOCH+60000000, EPOCH+160000000, 0)
+    result = project(value, raw, now_ns=EPOCH+220000000, authorized_pose_ns=EPOCH+220000000)
+    for name in ('timestamp', 'source_timestamp', 'raw_timestamp', 'offset_time'):
+        np.testing.assert_array_equal(result.points[name], points[name])
+
+
+@pytest.mark.parametrize('values', [
+    dict(max_alignment_translation_from_anchor_m=.101),
+    dict(max_alignment_rotation_from_anchor_rad=.051),
+    dict(max_alignment_translation_from_anchor_m=0.),
+    dict(max_alignment_rotation_from_anchor_rad=float('nan'))])
+def test_alignment_rebuild_limits_cannot_be_disabled_or_silently_relaxed(values):
+    with pytest.raises(ValueError, match='invalid_projection_limits'):
+        Limits(**values)
+
+
 def test_changed_static_extrinsic_cannot_silently_reinterpret_same_epoch_history():
     value = core()
     feed(value)

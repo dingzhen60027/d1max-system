@@ -57,8 +57,12 @@ def test_native_pair_queues_and_waits_are_bounded_without_relaxing_source_age():
     assert 'std::chrono::steady_clock::now()' in pairs
     assert 'mp_.cloud_pose_pair_wait_' in pairs
     assert '!cloudPoseStampFresh(entry.first)' in pairs
-    assert 'mp_.cloud_pose_pair_wait_ > 0.25' in GRID
-    assert 'mp_.cloud_pose_max_age_ > 0.5' in GRID
+    # Timing validation now lives in the shared production/probe validator.
+    timing = (SRC/'scan_planner_vendor/plan_env/include/plan_env/projected_rays.hpp').read_text()
+    assert 'validateCloudPoseTiming(mp_.cloud_pose_pair_wait_,mp_.cloud_pose_max_age_' in GRID
+    assert 'wait>.25' in timing
+    assert 'maximum_age=preview_only ? .75 : .5' in timing
+    assert 'preview_only && (require_observed_free || !use_projected_rays)' in timing
 
 
 def test_clearing_cloud_revokes_integration_authority_and_old_queue_entries():

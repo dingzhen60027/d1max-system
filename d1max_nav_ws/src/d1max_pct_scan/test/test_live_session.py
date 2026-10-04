@@ -8,6 +8,7 @@ from unittest.mock import patch
 
 import pytest
 import yaml
+from d1max_pct_planner.paths import expand_tree
 
 from d1max_pct_scan import live_session
 from d1max_pct_scan.live_ui_contract import (initial_pose_command, initial_pose_feedback,
@@ -16,13 +17,84 @@ from d1max_pct_scan.live_ui_contract import (initial_pose_command, initial_pose_
 
 @pytest.fixture
 def config():
-    return yaml.safe_load(live_session.DEFAULT_CONFIG.read_text())
+    return expand_tree(yaml.safe_load(live_session.DEFAULT_CONFIG.read_text()))
 
 
 def test_current_map_is_bound_to_original_coordinates():
     cfg = live_session.load_config(live_session.DEFAULT_CONFIG)
     assert cfg['frame_id'] == 'd1max_loc_map'
     assert 'crossfloor_complete' not in cfg['map_pcd']
+
+
+def test_extended_perception_budget_propagates_without_relaxing_pose(tmp_path, config):
+    # Exercise the timing gate independently of the default preview mask.
+    config.pop('preview_ray_exclusion', None)
+    config.update(perception_timeout_s=.75, perception_backend='per_sensor_rays',
+                  scan_collision_policy='official')
+    path = tmp_path / 'preview.yaml'
+    path.write_text(yaml.safe_dump(config))
+    cfg = live_session.load_config(path)
+    scan = live_session.scan_parameters(cfg, 'test')
+    assert scan['grid_map.preview_only'] is True
+    assert scan['grid_map.cloud_pose_max_age'] == .75
+    assert scan['grid_map.maximum_cloud_pose_dt'] == .25
+    assert scan['fsm.odom_timeout'] == .5
+    cfg.update({key: 'test' for key in ('ground_support_index', 'ground_support_sha256',
+        'ground_support_source_pcd_sha256', 'ground_support_tomogram_sha256')})
+    bridge = live_session.bridge_parameters(cfg, 'test')
+    assert bridge['perception_timeout'] == .75
+    assert 'input_timeout' not in bridge and 'pose_timeout' not in bridge
+    with pytest.raises(ValueError, match='preview-only'):
+        live_session.prepare_motion(path)
+
+
+@pytest.mark.parametrize('override', [
+    {'mode': 'LIVE_NAVIGATION', 'motion_control_enabled': True},
+    {'motion_control_enabled': True}, {'perception_backend': 'deskewed_cloud'},
+    {'scan_collision_policy': 'observed_free'}, {'perception_timeout_s': .750001},
+    {'perception_timeout_s': float('nan')}, {'perception_timeout_s': True},
+])
+def test_perception_budget_rejects_non_preview_or_unbounded_override(config, override):
+    config.update(perception_timeout_s=.75, perception_backend='per_sensor_rays',
+                  scan_collision_policy='official')
+    config.update(override)
+    with pytest.raises(ValueError):
+        live_session.perception_budget(config)
+
+
+def test_default_perception_budget_remains_half_second(config):
+    config.pop('perception_timeout_s', None)
+    assert live_session.perception_budget(config) == .5
+    params = live_session.scan_parameters(config, 'test')
+    assert params['grid_map.cloud_pose_max_age'] == .5
+    assert params['grid_map.preview_only'] == params['manager.preview_body_heading_contract']
+
+
+def test_operator_preview_profile_uses_bounded_three_quarter_second_budget(config):
+    assert live_session.perception_budget(config) == .75
+    assert config['preview_ray_exclusion']['scope'] == 'near_body_preview'
+    params = live_session.scan_parameters(config, 'test')
+    assert params['grid_map.cloud_pose_max_age'] == .75
+    assert params['grid_map.preview_only'] is True
+
+
+@pytest.mark.parametrize('override,enabled', [
+    ({}, True),
+    ({'mode': 'LIVE_NAVIGATION', 'motion_control_enabled': True}, False),
+    ({'motion_control_enabled': True}, False),
+    ({'perception_backend': 'deskewed_cloud'}, False),
+    ({'scan_collision_policy': 'observed_free'}, False),
+])
+def test_heading_contract_never_leaks_to_motion_or_other_backends(config, override, enabled):
+    config.update(mode='LIVE_VISUALIZATION_NO_MOTION', motion_control_enabled=False,
+                  perception_timeout_s=.5, perception_backend='per_sensor_rays',
+                  scan_collision_policy='official')
+    config.update(override)
+    params=live_session.scan_parameters(config, 'test')
+    assert params['manager.preview_body_heading_contract'] is enabled
+    assert params['grid_map.preview_only'] is enabled
+    assert params['manager.preview_direction_min_speed'] == .02
+    assert params['grid_map.cloud_pose_max_age'] == .5
 
 
 @pytest.mark.parametrize('key,value', [
@@ -53,16 +125,19 @@ def test_prepare_snapshots_without_any_process_or_connection(tmp_path):
     assert session['motion_control_enabled'] is False
     assert set(p.name for p in directory.iterdir()) == {
         'session.json', 'localization.yaml', 'global.yaml', 'bridge.yaml', 'scan.yaml', 'live.rviz',
-        'pct_ground_support.npz', 'global_planning.rviz', 'local_planning.rviz'}
+        'pct_ground_support.npz', 'global_planning.rviz', 'local_planning.rviz',
+        'navigation.xml', 'bt.yaml', 'bt_adapter.yaml', 'bt_lifecycle.yaml'}
     scan = yaml.safe_load((directory / 'scan.yaml').read_text())['/**']['ros__parameters']
     bridge = yaml.safe_load((directory / 'bridge.yaml').read_text())['/**']['ros__parameters']
     global_ = yaml.safe_load((directory / 'global.yaml').read_text())['/**']['ros__parameters']
     assert scan['fsm.navigation_session_id'] == bridge['session_id'] == global_['session_id'] == session['id']
+    assert global_['retain_preview_task_on_soft_loss'] == live_session.official_ray_preview(session)
     assert scan['fsm.require_tagged_reference'] is True
     assert scan['fsm.max_replan_interval'] == 1.
     assert scan['fsm.planning_horizon'] == scan['manager.planning_horizon'] == 2.
     assert scan['manager.max_vel'] == .3
-    assert scan['grid_map.require_observed_free'] is True
+    assert session['scan_collision_policy'] == bridge['collision_policy'] == 'official'
+    assert scan['grid_map.require_observed_free'] is False
     assert bridge['ground_support_sha256'] == session['ground_support_sha256']
     assert Path(bridge['ground_support_index']).is_file()
 
@@ -126,6 +201,8 @@ def test_start_obeys_shared_web_localization_lease(tmp_path):
 
 
 def test_per_sensor_rays_is_one_explicit_preview_branch(tmp_path, config):
+    config.pop('preview_ray_exclusion', None)
+    config['perception_timeout_s'] = .5
     original = Path(config['localization_config']).read_text()
     config['perception_backend'] = 'per_sensor_rays'
     path = tmp_path / 'input.yaml'
@@ -195,6 +272,8 @@ def test_retained_global_display_has_no_reference_authority_source_contract():
     methods = {node.name: node for node in ast.walk(tree) if isinstance(node, ast.FunctionDef)}
     def calls(name):
         return {ast.unparse(node.func) for node in ast.walk(methods[name]) if isinstance(node, ast.Call)}
+    # Only explicitly configured previews retain owner intent. The default
+    # branch still revokes; callback tests verify each branch and admission.
     assert 'self.publish_empty' in calls('pause_reference')
     assert 'self.clear_visual_path' not in calls('pause_reference')
     assert 'self.visual_path_pub.publish' not in calls('pause_reference')

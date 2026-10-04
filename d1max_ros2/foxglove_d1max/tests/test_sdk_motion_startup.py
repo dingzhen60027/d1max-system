@@ -439,3 +439,89 @@ def test_private_ticket_and_lock_reject_symlinks(isolated, tmp_path):
     with pytest.raises(OSError):
         startup.read_private_json(path)
     assert target.read_text() == "unchanged"
+
+
+def sealed_release(tmp_path, *, seal_binary=True):
+    import hashlib
+    release = tmp_path / "release"
+    binary = release / startup.RELEASE_MONITOR
+    binary.parent.mkdir(parents=True)
+    binary.write_bytes(b"schema3-monitor")
+    descriptor = release / "release.json"
+    descriptor.write_text(json.dumps({"schema": 1, "sealed_manifest": "manifest.json"}))
+    sealed = [descriptor] + ([binary] if seal_binary else [])
+    files = {str(path): hashlib.sha256(path.read_bytes()).hexdigest() for path in sealed}
+    (release / "manifest.json").write_text(json.dumps({"files": files}))
+    return release, binary
+
+
+IDENTITY = {"D1MAX_EXECUTION_ACCEPTANCE_RECORD": "/data/acceptance/record.json",
+            "D1MAX_EXECUTION_ROBOT_ID": "0123", "D1MAX_EXECUTION_SDK_VERSION": "1.2.0",
+            "D1MAX_EXECUTION_CALIBRATION_SHA256": "c" * 64, "D1MAX_EXECUTION_ROBOT_PROFILE_SHA256": "d" * 64}
+
+
+def test_release_monitor_is_opt_in_and_default_is_unchanged(monkeypatch):
+    monkeypatch.delenv(startup.RELEASE_ENV, raising=False)
+    args = startup.sdk_arguments(False)
+    assert args[0].endswith("sdk_bridge_ws/install/d1max_sdk_bridge/lib/d1max_sdk_bridge/sdk_monitor_bridge")
+    assert not any(arg.startswith("execution_") for arg in args)
+
+
+def test_release_monitor_uses_sealed_schema3_binary_without_acceptance(tmp_path, monkeypatch):
+    release, binary = sealed_release(tmp_path)
+    monkeypatch.setenv(startup.RELEASE_ENV, str(release))
+    for variable in IDENTITY:
+        monkeypatch.delenv(variable, raising=False)
+    args = startup.sdk_arguments(False)
+    assert args[0] == str(binary)
+    assert "execution_v3_enabled:=true" in args
+    assert "navigation_control_enabled:=false" in args
+    # No identity means an unaccepted channel; no record is invented here.
+    assert not any(arg.startswith(("execution_acceptance_record", "execution_robot_id")) for arg in args)
+
+
+def test_release_monitor_rejects_legacy_motion_ticket(tmp_path, monkeypatch):
+    release, _ = sealed_release(tmp_path)
+    monkeypatch.setenv(startup.RELEASE_ENV, str(release))
+    with pytest.raises(RuntimeError, match="互斥"):
+        startup.sdk_arguments(True)
+
+
+@pytest.mark.parametrize("change", ["binary", "unsealed", "relative", "manifest_outside"])
+def test_release_monitor_refuses_changed_or_unsealed_release(tmp_path, monkeypatch, change):
+    release, binary = sealed_release(tmp_path, seal_binary=change != "unsealed")
+    value = str(release)
+    if change == "binary":
+        binary.write_bytes(b"replaced")
+    elif change == "relative":
+        value = "release"
+    elif change == "manifest_outside":
+        (release / "release.json").write_text(json.dumps({"schema": 1, "sealed_manifest": "../manifest.json"}))
+    monkeypatch.setenv(startup.RELEASE_ENV, value)
+    with pytest.raises(RuntimeError):
+        startup.sdk_arguments(False)
+
+
+def test_release_monitor_binds_all_five_identities_as_strings(tmp_path, monkeypatch):
+    release, _ = sealed_release(tmp_path)
+    monkeypatch.setenv(startup.RELEASE_ENV, str(release))
+    for variable, value in IDENTITY.items():
+        monkeypatch.setenv(variable, value)
+    args = startup.sdk_arguments(False)
+    assert 'execution_robot_id:="0123"' in args
+    assert 'execution_sdk_version:="1.2.0"' in args
+    assert 'execution_acceptance_record:="/data/acceptance/record.json"' in args
+
+
+@pytest.mark.parametrize("variable,value", [("D1MAX_EXECUTION_ROBOT_ID", ""),
+                                            ("D1MAX_EXECUTION_CALIBRATION_SHA256", "C" * 64),
+                                            ("D1MAX_EXECUTION_ACCEPTANCE_RECORD", "relative.json"),
+                                            ("D1MAX_EXECUTION_ROBOT_ID", "a b")])
+def test_release_monitor_rejects_partial_or_malformed_identity(tmp_path, monkeypatch, variable, value):
+    release, _ = sealed_release(tmp_path)
+    monkeypatch.setenv(startup.RELEASE_ENV, str(release))
+    for name, good in IDENTITY.items():
+        monkeypatch.setenv(name, good)
+    monkeypatch.setenv(variable, value)
+    with pytest.raises(RuntimeError, match=variable):
+        startup.sdk_arguments(False)

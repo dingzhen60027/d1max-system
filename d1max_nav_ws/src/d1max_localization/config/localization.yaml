@@ -398,6 +398,12 @@ dual_lidar_adapter:
     relative_timestamp_scale: 1.0
     min_range: 0.5
     max_range: 60.0
+    # Safety returns have their own bounds. Valid far hits retain their ray;
+    # GridMap clips at its window without inventing a hit at the clip boundary.
+    # Invalid/no-return samples remain unknown, never max-range clearing rays.
+    perception_rays.min_range: 0.0
+    perception_rays.max_range: 1000.0
+    perception_rays.max_input_points: 100000
     rear_ring_offset: 96
     imu_acceleration_scale: 9.80665
 

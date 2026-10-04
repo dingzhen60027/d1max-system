@@ -5,12 +5,13 @@ import pytest
 import yaml
 import numpy as np
 
+from pointcloud_preprocessing import load_config
 from pointcloud_preprocessing.flat_floor_runner import validate, structural_cleanup
 from pointcloud_preprocessing.flat_floor import DEFAULTS, _config
 
 
 def config():
-    return yaml.safe_load((Path(__file__).parents[1]/'configs/sc_pgo_0919_flat_floor.yaml').read_text())
+    return load_config(Path(__file__).parents[1]/'configs/sc_pgo_0919_flat_floor.yaml')
 
 
 def test_actual_profile_has_explicit_parameters_and_scene_prior():

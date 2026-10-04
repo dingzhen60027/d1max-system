@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 
 from ament_index_python.packages import get_package_share_directory
@@ -57,7 +58,11 @@ def generate_launch_description():
         [
             DeclareLaunchArgument("use_rviz", default_value="true"),
             DeclareLaunchArgument(
-                "output_dir", default_value="/home/dndx/d1max_nav_ws/maps"
+                "output_dir",
+                default_value=os.environ.get(
+                    "D1MAX_MAPS_ROOT",
+                    str(Path(os.environ.get("D1MAX_NAV_ROOT") or slam_share.parents[3]) / "maps"),
+                ),
             ),
             GroupAction(actions=[frontend], scoped=True),
             pgo,

@@ -1,0 +1,10 @@
+# Nonblocking admission close + asynchronous retirement before lifecycle stop.
+uint32 schema_version
+string session_id
+string reason
+---
+uint32 schema_version
+bool accepted
+bool drained
+bool physical_stop_confirmed
+string reason

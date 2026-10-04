@@ -104,3 +104,68 @@ def test_reset_barrier_covers_future_old_clouds_and_context_uses_that_same_bound
         stamp=102.1,now=102.01,timeout=.5,context=('session',2,'new-seed'),
         sensor_barrier=node.sensor_barrier,last_input_stamp=0.,data_size=12,
         point_count=1,max_input_points=100)=='before_sensor_barrier'
+
+
+def projector_fault(node, **changes):
+    value = dict(schema=1, session_id='session', received_at_unix=100.,
+                 context={k:v for k,v in node.map_context_record.items() if k != 'schema'},
+                 valid=False, fault='map_alignment_accumulation_requires_context_reset')
+    value.update(changes)
+    return String(data=json.dumps(value))
+
+
+def fault_harness():
+    node,sent,cleared,updates=harness()
+    node.p=dict(perception_backend='per_sensor_rays',input_timeout=.5)
+    node.map_context_fault=None
+    LiveScanBridge.sync_map_context(node,('session',1,'seed'),100.,50.)
+    LiveScanBridge.on_map_context_ack(node,sent[-1])
+    return node,sent,cleared,updates
+
+
+def test_projector_fault_revokes_without_waiting_for_native_ray_source_lease():
+    node,sent,cleared,_=fault_harness()
+    node.gate.ready=True
+    LiveScanBridge.on_projector_status(node,projector_fault(node))
+    assert node.map_context_fault=='map_alignment_accumulation_requires_context_reset'
+    assert not node.map_context_ready and not node.gate.ready
+    assert cleared[-1]==node.map_context_fault
+    count=len(cleared)
+    LiveScanBridge.on_projector_status(node,projector_fault(node))
+    assert len(cleared)==count  # idempotent fault heartbeat
+    LiveScanBridge.on_map_context_ack(node,sent[-1])
+    LiveScanBridge.sync_map_context(node,('session',1,'seed'),100.1,50.1)
+    assert not node.map_context_ready and len(sent)==1
+    # A healthy status or delayed native receipt does not undo a latched fault.
+    LiveScanBridge.on_projector_status(node,projector_fault(node,valid=True,fault=None))
+    node.cloud_stamp=0.
+    LiveScanBridge.on_native_rays(node,String(data=json.dumps({'received_at_unix':100.1})))
+    assert node.cloud_stamp==0. and node.map_context_fault is not None
+
+
+@pytest.mark.parametrize('changes', [dict(session_id='foreign'),dict(received_at_unix=99.),
+    dict(schema=True),
+    dict(context={}),dict(context=None),dict(valid=True),dict(fault=None),
+    dict(fault='waiting_local_pose_history'),
+    dict(context=dict(session_id='session',epoch=1,seed_id='seed',sequence=2,barrier_ns=100000000000))])
+def test_foreign_stale_nonfault_status_cannot_revoke_current_context(changes):
+    node,_,cleared,_=fault_harness()
+    LiveScanBridge.on_projector_status(node,projector_fault(node,**changes))
+    assert node.map_context_ready and node.map_context_fault is None and len(cleared)==1
+
+
+def test_recovery_requires_owner_replacement_and_its_exact_ack():
+    node,sent,_,_=fault_harness()
+    rejected=projector_fault(node)
+    LiveScanBridge.on_projector_status(node,rejected)
+    old_ack=sent[-1]
+    replacement=('session',2,'seed')
+    node.current_context=lambda _:replacement
+    LiveScanBridge.sync_map_context(node,replacement,100.1,50.1)
+    assert node.map_context_fault is None and not node.map_context_ready
+    LiveScanBridge.on_map_context_ack(node,old_ack)
+    assert not node.map_context_ready
+    LiveScanBridge.on_map_context_ack(node,sent[-1])
+    assert node.map_context_ready
+    LiveScanBridge.on_projector_status(node,rejected)
+    assert node.map_context_ready and node.map_context_fault is None

@@ -12,11 +12,15 @@ import threading
 import time
 
 from .motion_execution import ExecutionLease, MotionConfig, fresh
+from .motion_stack import require_motion_architecture
 
 PREFIX = '/d1max/live_planning/'
 
 
 def main(args=None):
+    # Old saved motion sessions must not bypass new preparation-time checks.
+    # Fail before creating ROS endpoints, an arm client or any command timer.
+    require_motion_architecture()
     import rclpy
     from rclpy.node import Node
     from rclpy.signals import SignalHandlerOptions

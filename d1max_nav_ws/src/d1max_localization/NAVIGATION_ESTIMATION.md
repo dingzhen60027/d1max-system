@@ -172,7 +172,7 @@ EKF 和公开 body twist 始终来自原始运动估计，不能把姿态平滑/
 - 全部输入停止后最后公开输出约在 43 ms，之后无位姿/TF伪续发；最终有效性为 false。
 - 16 项验收通过，所有 4 个子进程正常退出，测试端口释放。
 
-复验入口 `tools/smoke_navigation_continuity.py`；证据见
+复验入口 `tools/validation/smoke_navigation_continuity.py`；证据见
 `log/offline_navigation_continuity/20260924_183940_ede3acec/report.json`。
 这是边界与实时发布验证，不是“永远不断流”的保证；剩余实机验收是独立门槛。
 

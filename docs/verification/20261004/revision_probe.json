@@ -1,0 +1,88 @@
+{
+  "schema": 1,
+  "date": "2026-10-04",
+  "workspace": "/home/dndx/d1max_nav_ws",
+  "checkout_head": "76e1ccb5a081af13be22eac6c1d7deb31ba5ae61",
+  "dirty_checkout": true,
+  "scope": "source and isolated build spot-check; NOT a sealed/deployed release",
+  "production_release_pointer_changed_by_this_work": false,
+  "no_production_services_started": true,
+  "no_sdk_connection_or_motion": true,
+  "no_full_bag_replay": true,
+  "regression": {
+    "python": {
+      "passed": 2017,
+      "skipped": 1,
+      "junit": "python-regression.xml",
+      "skip_reason": "audited large local map not installed",
+      "scope": "full Python regression before final startup-budget consistency change; affected contracts rerun separately"
+    },
+    "bt": {
+      "native_cases": 233,
+      "ctest_targets": 5,
+      "junit": "bt-regression.xml"
+    },
+    "sdk": {
+      "ctest_targets": 11,
+      "junit": "sdk-regression.xml"
+    },
+    "raw_acquisition": {
+      "cases": 17,
+      "junit": "acquisition-regression.xml"
+    },
+    "projected_rays": {
+      "cases": 49,
+      "junit": "rays-regression.xml"
+    },
+    "motion_sweep": {
+      "cases": 18,
+      "junit": "sweep-regression.xml"
+    },
+    "tracker": {
+      "native_cases": 152,
+      "ctest_targets": 3,
+      "junit": "tracker-regression.xml",
+      "worker_cases": 9,
+      "worker_repeat_rounds": 100,
+      "worker_runs": 900
+    },
+    "final_contracts": {
+      "passed": 129,
+      "junit": "final-contract-regression.xml",
+      "scope": "rerun after final startup-budget consistency change"
+    }
+  },
+  "spot_checked_sha256": {
+    "src/d1max_navigation_bt/src/navigator_node.cpp": "70882b7cdb4ad7a90d9b19d74870a430f498e5161bd8c9a31b904d422514c444",
+    "src/d1max_navigation_bt/include/d1max_navigation_bt/initial_pose_transaction.hpp": "729e0fbbec6eb529edd7ce889526a672ae058209af84bd90432207e605406454",
+    "src/d1max_navigation_bt_interfaces/msg/InitialPoseOutcome.msg": "995b72ad2bf56f40cca2c9fdc676147a9b6f3045589ff92a957a8779ce2dd479",
+    "src/d1max_navigation_bt_interfaces/srv/PrepareInitialPose.srv": "c9f46bc5ac6e108da359aa1fb60bbc879c387996d72db3c293277f9ae7a579c9",
+    "src/d1max_pct_scan/d1max_pct_scan/single_floor_session.py": "fd5051d351612dec988b598ca246a381c3cce4030b401c83b4584829a1003306",
+    "src/d1max_pct_scan/d1max_pct_scan/continuous_reference_node.py": "599d3c0c597260347198b6abe55c4d980bebb9f9ca1bf24565c91c5731f369a4",
+    "src/d1max_pct_scan/d1max_pct_scan/component_health.py": "de1698fe3ba4100c78956eca57006cf8950a6b4b29553cbfdf42ded6ed53f28d",
+    "src/d1max_pct_scan/d1max_pct_scan/execution_timing.py": "b2c0c5a2cee77c68116e59c2e5aba029e9b6cc3486f74b4b3a6b071ceacac013",
+    "src/d1max_pct_scan/d1max_pct_scan/perception_contract.py": "ba1d07e9ddf4ecb0afb88daef15edadac0c054e0d59934c0fbab90e6aaaf9e22",
+    "src/d1max_localization/src/dual_lidar_adapter.cpp": "600ab1eaec939e1043525ccc87fdfacb69fa4e8a845149607b1e3a9d3639f4a1",
+    "src/scan_planner_vendor/plan_manage/src/motion_sweep.cpp": "97544e6620938ef44ab878a455748899cf1730e0f110940101f2ab621de2f6e4",
+    "deploy/single_floor_release.json": "6aeb6dd5b57a97de146fbf36260ad78210678f0befe6e1eee0be5f6524085f4a",
+    "experiments/navigation_architecture_20261004/bt_initial_pose/build/d1max_navigation_bt/navigator_node": "d2c23ed2f6b4d61e6ea84ca110a46461c7c122f29da70277c46dee30bf040e75",
+    "experiments/single_floor_execution_20261003_system_v2/native/build/scan_planner/scan_planner_node": "619761085e826efc8cf32605d37a95243f8e5305051301304e92b5d3b387b6cc",
+    "experiments/single_floor_execution_20261003_system_v2/application/build/d1max_localization/dual_lidar_adapter": "365f7108e526e10101c57390dbe462a4a3e69492985fbfd718cb2d762413f31c",
+    "experiments/single_floor_execution_20261003_system_v2/tracker/build/d1max_trajectory_tracker/trajectory_tracker": "507f66e6bd5e90a397d4cd5150e47ddbe5b4bd660c9ab61861d8455991977f6d",
+    "src/d1max_trajectory_tracker/include/d1max_trajectory_tracker/tracker_core.hpp": "65718817633baf97cae4f210e13558a7ec86ced8f5b26404b6271e9773b31c04",
+    "src/d1max_trajectory_tracker/include/d1max_trajectory_tracker/execution_contract.hpp": "166f38fbee136fb66ca59f21aad7a57ebc2658892e0e2f29fb1867ee33460ed5",
+    "src/d1max_trajectory_tracker/src/trajectory_tracker.cpp": "5594436b5faa3b181007a9d20bc37b6820613983e4477bbe17464041aa714490",
+    "/tmp/d1max-sdk-architecture-gtUR7F/sdk_monitor_bridge": "4cdf647e0366f3884108d3c4c4a3e26c98a7c4daad9fc49c43d5d5dd58956aa5",
+    "/tmp/d1max-sdk-architecture-gtUR7F/sdk_execution_mock": "f6569e587f5bb99904d3dec68fb471516465f54c4d434d5d067aa8bc65b21575",
+    "/home/dndx/智元四足机器人D1 Max二次开发文档资料包v0.1.0/d1max_ros2/sdk_bridge_ws/src/d1max_sdk_bridge/src/sdk_monitor_bridge.cpp": "73a2da57887bd39dca168d7815f86f87d24b95660ce0893b820de2ce84de04c1"
+  },
+  "unverified": [
+    "full ROS graph integration",
+    "all dependency nodes converted to ROS LifecycleNode",
+    "20 ms end-to-end latency and sustained CPU pressure",
+    "physical geometry and braking",
+    "MC clock capture delay",
+    "vendor blocked calls or disconnected-network stop",
+    "cross-floor SDK mode transitions"
+  ]
+}

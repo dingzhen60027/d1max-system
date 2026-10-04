@@ -22,7 +22,7 @@ def profile():
 def test_official_dimensions_and_engineering_assumptions_keep_separate_provenance(profile):
     official, engineering = profile['official'], profile['engineering']
     assert official['standing_size_m'] == {'length': .930, 'width': .480, 'height': .585}
-    assert engineering['body_reference_height_m'] == .55
+    assert engineering['body_reference_height_m'] == .50
     assert engineering['body_reference_height_m'] != official['standing_size_m']['height']
     assert engineering['mode'] == 'standing_preview_only'
     for flag in ('motion_authorized', 'body_height_calibrated', 'collision_envelope_validated',
@@ -39,8 +39,8 @@ def test_native_footprint_is_derived_from_dimensions_and_explicit_margins(profil
     value = scan_robot_parameters(profile)
     assert value['grid_map.double_cylinder_radius'] == pytest.approx(.29)
     assert value['grid_map.double_cylinder_offset'] == pytest.approx(.20)
-    assert value['grid_map.body_height'] == .55
-    assert value['grid_map.obstacles_inflation_z_up'] == .45
+    assert value['grid_map.body_height'] == .50
+    assert value['grid_map.obstacles_inflation_z_up'] == .40
     assert value['grid_map.obstacles_inflation_z_down'] == .45
     assert not any('extrinsic' in key or 'sdk' in key for key in value)
     larger = deepcopy(profile)

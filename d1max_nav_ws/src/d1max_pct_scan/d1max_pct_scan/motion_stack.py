@@ -3,11 +3,25 @@ from pathlib import Path
 import yaml
 from .motion_execution import MotionConfig
 from .robot_profile import load_robot_profile, safety_scan_parameters
+from .control_frame_contract import control_frame_blockers
 
 PREFIX = '/d1max/live_planning/'
 
 
+def motion_architecture_blockers(session=None):
+    """Software integration requirements, distinct from physical acceptance flags."""
+    from .safety_input_contract import safety_input_blockers
+    return control_frame_blockers() + safety_input_blockers(session)
+
+
+def require_motion_architecture(session=None):
+    blockers = motion_architecture_blockers(session)
+    if blockers:
+        raise ValueError('motion architecture incomplete: ' + ', '.join(blockers))
+
+
 def execution_config(session):
+    require_motion_architecture(session)
     e = session['robot_profile_snapshot']['engineering']
     result = dict(body_height=session['body_height'], max_speed=.30, max_yaw=.50,
                   single_floor_height_span=.25)
@@ -18,7 +32,13 @@ def execution_config(session):
 
 
 def parameters(session, workspace):
-    """All runtime topics explicit. Raw tracker Twist is never an SDK input."""
+    """Deployable parameters; unavailable until software contracts are complete."""
+    require_motion_architecture(session)
+    return describe_parameters(session, workspace)
+
+
+def describe_parameters(session, workspace):
+    """Read-only description of the blocked wiring, not a deploy/prepare API."""
     m = session['motion']
     profile = session.get('robot_profile_snapshot') or load_robot_profile(
         Path(workspace)/'src/d1max_scan_planner/config/d1max_robot.yaml')

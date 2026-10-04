@@ -2,9 +2,44 @@
 # No controller, command gate, cmd_vel publisher or SDK connection is launched.
 mode: LIVE_VISUALIZATION_NO_MOTION
 motion_control_enabled: false
+task_orchestrator: behaviortree_cpp_v3
+follow_recovery_policy:
+  follow_pose_wait_s: 30.0
+  follow_map_wait_s: 15.0
+  follow_reference_wait_s: 5.0
+  follow_trajectory_wait_s: 20.0
+  follow_recovery_episode_s: 30.0
+  follow_stable_reset_s: 0.6
+# Snapshotted per session, independently editable from algorithm parameters.
+behavior_tree_xml: ${D1MAX_NAV_ROOT}/src/d1max_navigation_bt/trees/navigate_committed_route.xml
 # Independent, per-acquisition dual-LiDAR rays; preview only until robot
 # collision geometry / blind-space handling have been physically validated.
 perception_backend: per_sensor_rays
+# Official SCAN inflated-obstacle query; unknown is not an extra planning veto.
+# This changes planning only, not the no-motion capability of this session.
+scan_collision_policy: official
+# Explicit no-motion preview budget; source stamps remain acquisition times.
+perception_timeout_s: 0.75
+# Operator-requested near-body suppression to exercise the planning pipeline.
+# NOT a physical self-filter: real obstacles in this box are also hidden.
+# Rebuild the preview map on activation; never mutate a running map/config.
+# Raw scan visualization is unchanged; all motion entry points reject this key.
+preview_ray_exclusion:
+  schema: 2
+  scope: near_body_preview
+  mode: preview_drop_rays
+  frame_id: d1max_loc_base_link
+  calibration_verified: false
+  pad_m: 0.0
+  boxes:
+    - name: near_body_front
+      sensor_id: 0
+      min_m: [-0.60, -0.35, -0.55]
+      max_m: [0.60, 0.35, 0.40]
+    - name: near_body_rear
+      sensor_id: 1
+      min_m: [-0.60, -0.35, -0.55]
+      max_m: [0.60, 0.35, 0.40]
 # Read-only UI metadata, snapshotted with the session; not an algorithm selector.
 display:
   map_name: 09-23 跨楼层 SC-PGO
@@ -12,23 +47,23 @@ display:
     localization: {id: lio_pcd, name: LIO + PCD 定位}
     global_planner: {id: pct_native, name: PCT 全局规划}
     local_planner: {id: scan_planner, name: SCAN 局部规划}
-map_pcd: /home/dndx/智元四足机器人D1 Max二次开发文档资料包v0.1.0/d1max_ros2/map_manager/data/processed/20260923_141005_sc-pgo-0923-crossfloor-structure-v1_2c7218/processed_map.pcd
-planning_manifest: /home/dndx/d1max_nav_ws/maps/processed/sc_pgo_20260923_crossfloor_complete_001/manifest.json
-tomogram_npz: /home/dndx/d1max_nav_ws/maps/processed/sc_pgo_20260923_crossfloor_complete_001/pct/tomogram.npz
-crossfloor_route_config: /home/dndx/d1max_nav_ws/maps/processed/sc_pgo_20260923_crossfloor_complete_001/route.yaml
-localization_config: /home/dndx/d1max_nav_ws/src/d1max_localization/config/localization.yaml
-scan_config: /home/dndx/d1max_nav_ws/src/d1max_scan_planner/config/d1max_scan_planner.yaml
-robot_profile: /home/dndx/d1max_nav_ws/src/d1max_scan_planner/config/d1max_robot.yaml
+map_pcd: ${D1MAX_APP_ROOT}/map_manager/data/processed/20260923_141005_sc-pgo-0923-crossfloor-structure-v1_2c7218/processed_map.pcd
+planning_manifest: ${D1MAX_NAV_ROOT}/maps/processed/sc_pgo_20260923_crossfloor_complete_001/manifest.json
+tomogram_npz: ${D1MAX_NAV_ROOT}/maps/processed/sc_pgo_20260923_crossfloor_complete_001/pct/tomogram.npz
+crossfloor_route_config: ${D1MAX_NAV_ROOT}/maps/processed/sc_pgo_20260923_crossfloor_complete_001/route.yaml
+localization_config: ${D1MAX_NAV_ROOT}/src/d1max_localization/config/localization.yaml
+scan_config: ${D1MAX_NAV_ROOT}/src/d1max_scan_planner/config/d1max_scan_planner.yaml
+robot_profile: ${D1MAX_NAV_ROOT}/src/d1max_scan_planner/config/d1max_robot.yaml
 frame_id: d1max_loc_map
 current_floor: floor1
 goal_floor: floor1
 # Seed height is a user-adjustable initial guess, never a ground constraint.
 initial_body_z: -0.05
-body_height: 0.55
+body_height: 0.50
 body_height_min_m: 0.25
 body_height_max_m: 0.85
 max_start_move_m: 0.30
-result_timeout_s: 45.0
+result_timeout_s: 10.0
 freshness_s: 0.5
 scan_preview_speed_mps: 0.30
 scan_preview_acc_mps2: 0.35

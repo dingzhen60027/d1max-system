@@ -1,0 +1,15 @@
+# Execute exactly this preview. This service never chooses/replans a route.
+uint32 schema_version
+string session_id
+string task_id
+string route_id
+string route_hash
+string request_id
+---
+uint32 schema_version
+bool accepted
+bool execution_authorized
+bool duplicate
+bool preview_only
+string confirmation_id
+string reason

@@ -1,14 +1,14 @@
 # Offline only. Keep the existing RViz 3D pose controls, use the cross-floor coordinator.
-map_pcd: /home/dndx/d1max_nav_ws/maps/processed/sc_pgo_20260923_crossfloor_complete_001/processed_map.pcd
+map_pcd: ${D1MAX_NAV_ROOT}/maps/processed/sc_pgo_20260923_crossfloor_complete_001/processed_map.pcd
 map_backend: official_tomogram
-tomogram_path: /home/dndx/d1max_nav_ws/maps/processed/sc_pgo_20260923_crossfloor_complete_001/pct/tomogram.npz
-crossfloor_route_config: /home/dndx/d1max_nav_ws/maps/processed/sc_pgo_20260923_crossfloor_complete_001/route.yaml
-restore_route_file: /home/dndx/d1max_nav_ws/maps/processed/sc_pgo_20260923_crossfloor_complete_001/route_001/audit.json
-restore_tomogram_path: /home/dndx/d1max_nav_ws/maps/processed/sc_pgo_20260923_crossfloor_complete_001/pct/tomogram.npz
+tomogram_path: ${D1MAX_NAV_ROOT}/maps/processed/sc_pgo_20260923_crossfloor_complete_001/pct/tomogram.npz
+crossfloor_route_config: ${D1MAX_NAV_ROOT}/maps/processed/sc_pgo_20260923_crossfloor_complete_001/route.yaml
+restore_route_file: ${D1MAX_NAV_ROOT}/maps/processed/sc_pgo_20260923_crossfloor_complete_001/route_001/audit.json
+restore_tomogram_path: ${D1MAX_NAV_ROOT}/maps/processed/sc_pgo_20260923_crossfloor_complete_001/pct/tomogram.npz
 selection_mode: free
 minimum_headroom_m: 0.55
 unknown_ceiling_policy: allow_unobserved
-vendor_root: /home/dndx/d1max_nav_ws/src/pct_planner_vendor
+vendor_root: ${D1MAX_NAV_ROOT}/src/pct_planner_vendor
 planning_frame: d1max_multifloor_planning
 initial_start_xyz: []
 place_endpoints_on_start: false

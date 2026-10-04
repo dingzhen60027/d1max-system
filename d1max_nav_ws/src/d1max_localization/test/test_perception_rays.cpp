@@ -302,6 +302,27 @@ TEST(PerceptionRays, BoundsAreExplicitAndDoNotLowerExistingBlindRange)
   EXPECT_FALSE(rays::validOptions(options));
 }
 
+TEST(PerceptionRays, SafetyRetainsMeasuredNearAndFarHitsWithoutLioRangeGate)
+{
+  auto raw=inputCloud();
+  change<float>(raw,0,0,.20F);change<float>(raw,0,8,.01F);
+  change<float>(raw,3,0,80.F);
+  const auto result=convert(raw);
+  ASSERT_TRUE(result);
+  EXPECT_EQ(result.cloud.width,4U);
+  EXPECT_FLOAT_EQ(field<float>(result.cloud,0,"x"),.20F);
+  EXPECT_FLOAT_EQ(field<float>(result.cloud,3,"x"),80.F);
+  EXPECT_DOUBLE_EQ(field<double>(result.cloud,3,"source_timestamp"),kEpoch+.075);
+}
+
+TEST(PerceptionRays, SafetyBudgetMatchesProductionBeforeAllocating)
+{
+  rays::Options options;options.max_input_points=100001;
+  EXPECT_FALSE(rays::validOptions(options));
+  EXPECT_EQ(convert(inputCloud(),0,kEpoch+.1,options).error,"invalid_options");
+  EXPECT_EQ(convert(inputCloud(100001)).error,"point_count_limit");
+}
+
 TEST(PerceptionRayQueue, FrontAndRearHaveIndependentBoundedLatestSlots)
 {
   rays::LatestQueue queue;

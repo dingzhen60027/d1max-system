@@ -21,3 +21,15 @@ __pycache__/
 .idea/
 *~
 
+
+# Recordings and experiment outputs are data, not source (101G / 7.7G).
+/bags/
+/experiments/
+symlink_install_manifest.txt
+
+# Generated / packaged artifacts.
+node_modules/
+*.zip
+
+# Independent nested git repo (upstream PCT_planner + local branch d1max/local-*).
+/src/pct_planner_vendor/

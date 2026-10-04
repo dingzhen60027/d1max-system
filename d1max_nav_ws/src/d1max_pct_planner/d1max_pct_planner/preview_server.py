@@ -39,7 +39,7 @@ class PctPreviewServer(Node):
             'selection_mode': 'ground', 'placement_anchor_z': -0.6375,
             'max_follow_height_change_m': 0.3,
             'planning_grid': '', 'map_pcd': '',
-            'vendor_root': '/home/dndx/d1max_nav_ws/src/pct_planner_vendor',
+            'vendor_root': '',
             'planning_frame': 'd1max_loc_map', 'output_directory': '',
             'max_selection_height_error_m': 0.08, 'selection_max_age_s': 5.0,
             'planning_timeout_s': 20.0, 'handle_scale_m': 1.2,
@@ -54,6 +54,7 @@ class PctPreviewServer(Node):
             'max_ground_step_m': 0.15,
             'restore_route_file': '', 'restore_tomogram_path': '',
             'crossfloor_route_config': '',
+            'external_planner': False,
         }
         self.settings = {key: self.declare_parameter(key, value).value for key, value in defaults.items()}
         validate_native_parameters(self.settings['astar_cost_weight'], self.settings['optimizer_cost_margin'])
@@ -93,6 +94,8 @@ class PctPreviewServer(Node):
         if self.settings['crossfloor_route_config']:
             from .crossfloor_preview import load_config
             _, self.crossfloor_settings = load_config(self.settings['crossfloor_route_config'], grid)
+            self.selection.floor_ranges = {'floor1': self.crossfloor_settings['floor_z_ranges']['lower'],
+                                           'floor2': self.crossfloor_settings['floor_z_ranges']['upper']}
         self.display_layers = None
         self.state, self.reason = 'initializing', 'Loading PCT'
         self.ready = False
@@ -135,9 +138,11 @@ class PctPreviewServer(Node):
         self.results = self.worker_context.Queue(maxsize=4)
         from .compute_budget import budgeted_worker, spawn_with_environment
         from .native_runtime import prepare_native_environment
-        self.worker = self.worker_context.Process(target=budgeted_worker,
-            args=(worker_target, self.settings, self.requests, self.results), daemon=True)
-        spawn_with_environment(self.worker, prepare_native_environment(self.settings['vendor_root']))
+        self.worker = None
+        if not self.settings['external_planner']:
+            self.worker = self.worker_context.Process(target=budgeted_worker,
+                args=(worker_target, self.settings, self.requests, self.results), daemon=True)
+            spawn_with_environment(self.worker, prepare_native_environment(self.settings['vendor_root']))
         self.created_at = time.monotonic()
         self.timer = self.create_timer(0.2, self.tick)
         self.publish_map()
@@ -304,7 +309,10 @@ class PctPreviewServer(Node):
         if not self.layered:
             return
         try:
-            self.selection.set_active_layer(message.data)
+            if self.crossfloor_settings and message.data in (-2, -3):
+                self.selection.set_active_floor('floor1' if message.data == -2 else 'floor2')
+            else:
+                self.selection.set_active_layer(message.data)
             self.publish_tomogram()
         except ValueError as exc:
             self.get_logger().warning(str(exc))
@@ -328,6 +336,7 @@ class PctPreviewServer(Node):
         self.marker_server.clear()
         self.marker_server.applyChanges()
         self.state, self.reason = 'waiting_start', 'Select 3D Start, then 3D Goal'
+        self.publish_selection_evidence()
         self.publish_tomogram()
         self.publish_status()
 
@@ -375,12 +384,28 @@ class PctPreviewServer(Node):
                 feedback_callback=self.on_feedback)
             self.marker_server.applyChanges()
         self.publish_tomogram()
+        self.publish_selection_evidence()
+
+    def publish_selection_evidence(self):
+        if not self.layered:
+            return
+        from .selection_markers import selection_evidence_markers
+        markers = []
+        for index, role in enumerate(('start', 'goal')):
+            markers.extend(selection_evidence_markers(role, self.selection.points[role],
+                self.selection.validation(role), self.header(), index*3))
+        self.marker_pub.publish(MarkerArray(markers=markers))
 
     def publish_tomogram(self):
         if not self.layered:
             return
         chosen = ({self.selection.active_layer} if self.selection.active_layer >= 0 else
                   {layer for layer in self.selection.layers.values() if layer is not None})
+        if self.selection.active_floor is not None:
+            lo, hi = self.selection.floor_ranges[self.selection.active_floor]
+            chosen.update(item['layer_id'] for item in self.layer_metadata
+                if item['ground_min_m'] is not None and item['ground_min_m'] <= hi
+                and item['ground_max_m'] >= lo)
         if self.selection.active_layer < 0 and self.last_result:
             chosen.update(self.last_result.get('layer_ids', []))
         if not chosen:
@@ -395,8 +420,10 @@ class PctPreviewServer(Node):
                 except ValueError:
                     pass
         signature = tuple(sorted(chosen))
-        if signature == self.display_layers:
+        display_key = (signature, self.selection.active_floor)
+        if display_key == getattr(self, '_display_key', None):
             return
+        self._display_key = display_key
         self.display_layers = signature
         xyz, costs, xyz_blocked = surface_clouds(self.grid, signature)
         if self.crossfloor_settings:
@@ -404,6 +431,11 @@ class PctPreviewServer(Node):
             mask = visible_surfaces(xyz, self.crossfloor_settings)
             xyz, costs = xyz[mask], costs[mask]
             xyz_blocked = xyz_blocked[visible_surfaces(xyz_blocked, self.crossfloor_settings)]
+            if self.selection.active_floor is not None:
+                lo, hi = self.selection.floor_ranges[self.selection.active_floor]
+                mask = (xyz[:, 2] >= lo) & (xyz[:, 2] <= hi)
+                xyz, costs = xyz[mask], costs[mask]
+                xyz_blocked = xyz_blocked[(xyz_blocked[:, 2] >= lo) & (xyz_blocked[:, 2] <= hi)]
         def cloud_message(xyz, costs=None):
             xyz = np.asarray(xyz, dtype=np.float32).reshape(-1, 3)
             count = len(xyz)
@@ -460,9 +492,13 @@ class PctPreviewServer(Node):
     def publish_status(self):
         layer_status = {}
         if self.layered:
+            floors = ([{'id': -2, 'label': '一楼 · 多切片地面'},
+                       {'id': -3, 'label': '二楼 · 多切片地面'}] if self.crossfloor_settings else [])
             layer_status = {'selection_mode': self.selection.mode,
-                'active_layer': self.selection.active_layer,
-                'available_layers': [{'id': -1, 'label': '自动跟随当前地面'}] + [
+                'active_layer': ({'floor1': -2, 'floor2': -3}.get(self.selection.active_floor,
+                                 self.selection.active_layer)),
+                'active_floor': self.selection.active_floor,
+                'available_layers': [{'id': -1, 'label': '自动跟随当前地面'}] + floors + [
                     {'id': item['layer_id'],
                      'label': f'分层 #{item["layer_id"]} · 切面 {item["slice_height_m"]:.2f} m',
                      **item} for item in self.layer_metadata if item['traversable_cells'] > 0],
@@ -525,6 +561,9 @@ class PctPreviewServer(Node):
             self.get_logger().warning(self.reason)
 
     def tick(self):
+        if self.settings['external_planner']:
+            self.publish_status()
+            return
         try:
             while True:
                 result = self.results.get_nowait()
@@ -559,9 +598,10 @@ class PctPreviewServer(Node):
 
     def destroy_node(self):
         self.marker_server.shutdown()
-        if self.worker.is_alive():
+        if self.worker is not None and self.worker.is_alive():
             self.worker.terminate()
-        self.worker.join(timeout=2)
+        if self.worker is not None:
+            self.worker.join(timeout=2)
         for channel in (self.requests, self.results):
             channel.cancel_join_thread()
             channel.close()

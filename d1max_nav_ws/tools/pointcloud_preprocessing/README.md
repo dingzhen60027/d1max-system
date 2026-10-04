@@ -3,7 +3,7 @@
 独立于 PCT、ROS、SDK 和 Web 任务执行器。一个 YAML 定义原始 PCD、参数、保护策略及结果库目录：
 
 ```bash
-python3 /home/dndx/d1max_nav_ws/tools/preprocess_structure_cloud.py \
+python3 /home/dndx/d1max_nav_ws/tools/map/preprocess_structure_cloud.py \
   --config /home/dndx/d1max_nav_ws/tools/pointcloud_preprocessing/configs/sc_pgo_0919_structure.yaml
 ```
 
@@ -73,9 +73,9 @@ PYTHONPATH=tools:src/d1max_pct_planner OPENBLAS_NUM_THREADS=2 OMP_NUM_THREADS=4 
 预览（私有 Zenoh，无 SDK/运动）：
 
 ```bash
-./start_pct_preview.sh start --config /home/dndx/d1max_nav_ws/src/d1max_pct_planner/config/preview_flat_floor.yaml
+scripts/planning/start_pct_preview.sh start --config /home/dndx/d1max_nav_ws/src/d1max_pct_planner/config/preview_flat_floor.yaml
 ```
 
-已有本工具预览时先 `./start_pct_preview.sh stop`，避免堆叠。新几何必须重新规划，不复用旧图曲线。详细诊断见 `log/pct_preview/flat_floor_20260922_audit/RESULT.md`。
+已有本工具预览时先 `scripts/planning/start_pct_preview.sh stop`，避免堆叠。新几何必须重新规划，不复用旧图曲线。详细诊断见 `log/pct_preview/flat_floor_20260922_audit/RESULT.md`。
 
 连通验收单独运行 `python3 -m d1max_pct_planner.map_acceptance --tomogram TOMOGRAM --trajectory KITTI_POSES --output NEW_AUDIT_DIR`。它使用已知、可通行地面的四邻接图及高度阶跃限制，不允许借对角接触跨墙。沿历史轨迹关联到同一分量只是离线覆盖检查，不是机器人净空证明；还须对实际端点运行原生规划和完整曲线碰撞检查。

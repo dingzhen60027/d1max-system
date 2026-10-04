@@ -1,0 +1,21 @@
+# One immutable user request. Goal kind is "2d" or "3d"; z is preserved.
+uint32 schema_version
+string session_id
+string task_id
+string goal_kind
+geometry_msgs/PoseStamped goal
+bool has_goal_yaw
+float64 goal_yaw_tolerance_rad
+---
+uint32 schema_version
+bool success
+string reason
+bool retirement_confirmed
+string route_id
+int64 localization_epoch
+string localization_seed_id
+nav_msgs/Path route
+RouteSnapshot snapshot
+---
+string phase
+string reason

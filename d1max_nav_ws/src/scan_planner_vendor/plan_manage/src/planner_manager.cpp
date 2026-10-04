@@ -73,6 +73,24 @@ namespace scan_planner
     grid_map_.reset(new GridMap);
     grid_map_->initMap(node_);
 
+    if (!node_->has_parameter("manager.preview_body_heading_contract"))
+      node_->declare_parameter<bool>("manager.preview_body_heading_contract",false);
+    preview_heading_contract_.preview_only_enabled=
+        node_->get_parameter("manager.preview_body_heading_contract").as_bool();
+    preview_heading_contract_.minimum_direction_speed=
+        get_double("manager.preview_direction_min_speed",.02);
+    preview_heading_contract_.body_extent=
+        node_->get_parameter("grid_map.double_cylinder_radius").as_double()+
+        node_->get_parameter("grid_map.double_cylinder_offset").as_double();
+    if (preview_heading_contract_.preview_only_enabled &&
+        !validPreviewHeadingContract(preview_heading_contract_))
+      throw std::invalid_argument("invalid preview body heading contract");
+    if (preview_heading_contract_.preview_only_enabled &&
+        (!node_->get_parameter("grid_map.preview_only").as_bool() ||
+         node_->get_parameter("grid_map.require_observed_free").as_bool() ||
+         !node_->get_parameter("grid_map.use_projected_rays").as_bool()))
+      throw std::invalid_argument("body heading contract requires explicit official per-ray no-motion preview");
+
     bspline_optimizer_rebound_.reset(new BsplineOptimizer);
     bspline_optimizer_rebound_->setParam(node_);
     bspline_optimizer_rebound_->setEnvironment(grid_map_);
@@ -86,13 +104,141 @@ namespace scan_planner
 
   // SECTION rebond replanning
 
+  void SCANPlannerManager::initSolveWorker(const SCANPlannerManager &owner)
+  {
+    worker_only_=true;
+    node_=owner.node_; // thread-safe clock/logger/immutable parameter reads only
+    pp_=owner.pp_;
+    preview_heading_contract_=owner.preview_heading_contract_;
+    reference_detour_anchor_margin_=owner.reference_detour_anchor_margin_;
+    bspline_optimizer_rebound_=std::make_unique<BsplineOptimizer>();
+    bspline_optimizer_rebound_->setParam(node_);
+    bspline_optimizer_rebound_->a_star_=std::make_shared<AStar>();
+    bspline_optimizer_rebound_->a_star_->initGridMap({},Eigen::Vector3i(100,100,100));
+  }
+
+  void SCANPlannerManager::prepareSolveWorker(const SCANPlannerManager &owner,
+                                             const GridMap::Ptr &snapshot)
+  {
+    if (!worker_only_ || !snapshot) throw std::logic_error("invalid solve worker snapshot");
+    grid_map_=snapshot;
+    bspline_optimizer_rebound_->setEnvironment(snapshot);
+    bspline_optimizer_rebound_->a_star_->setEnvironment(snapshot);
+    measured_body_pose_=owner.measured_body_pose_;
+    measured_body_frame_=owner.measured_body_frame_;
+    measured_body_maximum_age_=owner.measured_body_maximum_age_;
+    measured_body_velocity_=owner.measured_body_velocity_;
+    measured_join_single_segment_=owner.measured_join_single_segment_;
+    local_reference_=owner.local_reference_;
+    // Guided mode does not use the polynomial global trajectory. Do not copy
+    // uninitialized upstream storage before the first accepted local solve.
+    if (owner.local_data_.traj_id_>0) local_data_=owner.local_data_;
+    accepted_heading_contract_=owner.accepted_heading_contract_;
+    discardPreviewCandidate();
+  }
+
+  void SCANPlannerManager::releaseSolveSnapshot() noexcept
+  {
+    if (!worker_only_) return; // Cleanup must never release a live owner's map.
+    grid_map_.reset();
+    bspline_optimizer_rebound_->setEnvironment({});
+    bspline_optimizer_rebound_->a_star_->setEnvironment({});
+  }
+
+  std::optional<SCANPlannerManager::SolvedCandidate> SCANPlannerManager::takeSolvedCandidate()
+  {
+    if (!pending_preview_candidate_) return std::nullopt;
+    SolvedCandidate result{pending_preview_candidate_->curve,pending_preview_candidate_->heading,
+                           pending_preview_candidate_->context_sequence,measured_body_pose_,
+                           measured_join_single_segment_};
+    pending_preview_candidate_.reset();
+    return result;
+  }
+
+  void SCANPlannerManager::importAttemptDiagnostics(const SCANPlannerManager &worker)
+  {
+    last_failure_phase_=worker.last_failure_phase_;
+    attempt_blocked_points_=worker.attempt_blocked_points_;
+    attempt_detour_seed_=worker.attempt_detour_seed_;
+  }
+
+  bool SCANPlannerManager::adoptSolvedCandidate(SolvedCandidate candidate,
+                                               const SolveBudget::Ptr &budget)
+  {
+    // Owner thread only. Never substitute the worker's old pose or map here.
+    const auto current_lease=[&]() {
+      return CandidateSourceLease{grid_map_->latestCloudStampNs(),
+          grid_map_->localizationContextSequence(),grid_map_->occupancyRevision(),
+          measured_body_pose_.source_stamp};
+    };
+    const auto sources_fresh=[&]() {
+      const auto now=node_->now();
+      double yaw=0.;
+      return std::make_pair(
+          grid_map_->integratedCloudFreshAt(now.nanoseconds()),
+          measuredBodyYaw(measured_body_pose_,measured_body_frame_,now.seconds(),
+                          measured_body_maximum_age_,yaw));
+    };
+    std::atomic_store(&solve_budget_,budget);
+    const auto join=certifyCandidateAdoption(candidate.curve,candidate.solve_body,
+        measured_body_pose_,measured_body_velocity_,grid_map_->getResolution(),
+        pp_.max_vel_,pp_.max_acc_,candidate.single_segment,candidate.context_sequence,
+        budget,current_lease,sources_fresh,[&](double measured_time) {
+      return checkWholeTrajectoryCollision(candidate.curve,200000,
+          budget->remainingSeconds(),true,measured_time,candidate.heading);
+    });
+    std::atomic_store(&solve_budget_,SolveBudget::Ptr{});
+    // Checking may consume 100 ms. A fresh map at check START is not a fresh
+    // map at publication, and neither source may be renewed by this operation.
+    if (!join) return false;
+    updateTrajInfo(candidate.curve,node_->now());
+    accepted_join_=join;
+    accepted_heading_contract_=candidate.heading;
+    preview_curve_progress_time_=join->curve_time;
+    return true;
+  }
+
   bool SCANPlannerManager::reboundReplan(Eigen::Vector3d start_pt, Eigen::Vector3d start_vel,
+                                        Eigen::Vector3d start_acc, Eigen::Vector3d local_target_pt,
+                                        Eigen::Vector3d local_target_vel, bool flag_polyInit, bool flag_randomPolyTraj,
+                                        SolveBudget::Ptr budget)
+  {
+    if (!budget) budget=std::make_shared<SolveBudget>();
+    std::atomic_store(&solve_budget_,budget);
+    bspline_optimizer_rebound_->setSolveBudget(budget);
+    try {
+      const bool result=reboundReplanImpl(start_pt,start_vel,start_acc,local_target_pt,
+                                         local_target_vel,flag_polyInit,flag_randomPolyTraj);
+      const bool allowed=budget->allowed();
+      if (!allowed) {
+        last_failure_phase_=budget->reason();
+        discardPreviewCandidate();
+      }
+      bspline_optimizer_rebound_->setSolveBudget({});
+      std::atomic_store(&solve_budget_,SolveBudget::Ptr{});
+      return result && allowed;
+    } catch (...) {
+      bspline_optimizer_rebound_->setSolveBudget({});
+      std::atomic_store(&solve_budget_,SolveBudget::Ptr{});
+      discardPreviewCandidate();
+      throw;
+    }
+  }
+
+  bool SCANPlannerManager::reboundReplanImpl(Eigen::Vector3d start_pt, Eigen::Vector3d start_vel,
                                         Eigen::Vector3d start_acc, Eigen::Vector3d local_target_pt,
                                         Eigen::Vector3d local_target_vel, bool flag_polyInit, bool flag_randomPolyTraj)
   {
     last_failure_phase_="failed_optimization";
     attempt_blocked_points_.clear();
     attempt_detour_seed_.clear();
+    double measured_yaw=0.;
+    if (!measuredBodyYaw(measured_body_pose_,measured_body_frame_,node_->now().seconds(),
+                         measured_body_maximum_age_,measured_yaw) ||
+        (start_pt-measured_body_pose_.position).norm()>grid_map_->getResolution()*.25) {
+      last_failure_phase_="waiting_body_pose";
+      return false;
+    }
     static int count = 0;
     std::cout << endl
               << "[rebo replan]: -------------------------------------" << count++ << std::endl;
@@ -115,6 +261,11 @@ namespace scan_planner
     double ts = (start_pt - local_target_pt).norm() > 0.1 ? pp_.ctrl_pt_dist / pp_.max_vel_ * 1.2 : pp_.ctrl_pt_dist / pp_.max_vel_ * 5; // pp_.ctrl_pt_dist / pp_.max_vel_ is too tense, and will surely exceed the acc/vel limits
     vector<Eigen::Vector3d> point_set, start_end_derivatives;
     const bool guided = !local_reference_.empty();
+    auto heading_contract=preview_heading_contract_;
+    heading_contract.preview_only_enabled=heading_contract.preview_only_enabled && guided;
+    heading_contract.measured_yaw=measured_yaw;
+    attempt_heading_contract_=heading_contract;
+    bspline_optimizer_rebound_->setPreviewHeadingContract(heading_contract);
     const CubicMotionBoundary motion_boundary{start_pt,start_vel,start_acc,
         local_target_pt,local_target_vel,Eigen::Vector3d::Zero()};
     if (guided && (!start_vel.allFinite() || !start_acc.allFinite() ||
@@ -132,6 +283,7 @@ namespace scan_planner
       std::vector<Eigen::Vector3d> collision_aware_reference;
       std::string seed_reason;
       const auto occupancy=[this](const Eigen::Vector3d &p, double yaw) {
+        if (!solveAllowed(solve_budget_)) return -1;
         return grid_map_->getInflateOccupancy(p, yaw);
       };
       for (std::size_t i=1; i<local_reference_.size(); ++i) {
@@ -140,16 +292,20 @@ namespace scan_planner
         const int count=std::min(4096, std::max(1, static_cast<int>(std::ceil(
             (b-a).norm()/(grid_map_->getResolution()*.5)))));
         for (int j=0; j<=count && attempt_blocked_points_.size()<4096; ++j) {
+          if (!solveAllowed(solve_budget_)) return false;
           const Eigen::Vector3d p=a+(b-a)*(static_cast<double>(j)/count);
           if (occupancy(p, yaw)!=0) attempt_blocked_points_.push_back(p);
         }
       }
       ASTAR_RET search_result=ASTAR_RET::SEARCH_ERR;
-      const auto search=[this, t_start, &search_result](const Eigen::Vector3d &a, const Eigen::Vector3d &b) {
-        if (std::chrono::duration<double>(std::chrono::steady_clock::now()-t_start).count()>.4)
+      const auto search=[this, &search_result](const Eigen::Vector3d &a, const Eigen::Vector3d &b) {
+        if (!solveAllowed(solve_budget_))
           return std::vector<Eigen::Vector3d>{};
+        // Keep exact PCT anchors. Only a free exact point whose nearest grid
+        // cell or exact connector is blocked may use a checked nearby connector.
+        // This is NOT rebound's movable internal-anchor mode.
         search_result=bspline_optimizer_rebound_->a_star_->AstarSearch(
-            grid_map_->getResolution(), a, b, false);
+            grid_map_->getResolution(), a, b, false, true);
         if (search_result!=ASTAR_RET::SUCCESS)
           return std::vector<Eigen::Vector3d>{};
         return bspline_optimizer_rebound_->a_star_->getPath();
@@ -162,6 +318,7 @@ namespace scan_planner
             case ASTAR_RET::INIT_START_OCCUPIED: last_failure_phase_="failed_reference_start_occupied";break;
             case ASTAR_RET::INIT_TARGET_OCCUPIED: last_failure_phase_="failed_reference_target_occupied";break;
             case ASTAR_RET::INIT_LATTICE_OCCUPIED: last_failure_phase_="failed_reference_lattice_occupied";break;
+            case ASTAR_RET::INIT_CONNECTOR_COLLISION: last_failure_phase_="failed_reference_search_collision";break;
             case ASTAR_RET::INIT_UNOBSERVED: last_failure_phase_="waiting_observed_space";break;
             case ASTAR_RET::INIT_OUTSIDE_MAP: last_failure_phase_="failed_reference_outside_map";break;
             default: break;
@@ -187,6 +344,7 @@ namespace scan_planner
     bool flag_regenerate = false;
     do
     {
+      if (!solveAllowed(solve_budget_)) return false;
       point_set.clear();
       start_end_derivatives.clear();
       flag_regenerate = false;
@@ -346,14 +504,17 @@ namespace scan_planner
     t_init = std::chrono::duration<double>(std::chrono::steady_clock::now() - t_start).count();
 
     static int vis_id = 0;
-    visualization_->displayInitPathList(point_set, 0.2, 0);
-    visualization_->displayAStarList(a_star_paths, vis_id);
+    if (visualization_) {
+      visualization_->displayInitPathList(point_set, 0.2, 0);
+      visualization_->displayAStarList(a_star_paths, vis_id);
+    }
 
     t_start = std::chrono::steady_clock::now();
 
     /*** STEP 2: OPTIMIZE ***/
     bool flag_step_1_success = bspline_optimizer_rebound_->BsplineOptimizeTrajRebound(ctrl_pts, ts);
     cout << "first_optimize_step_success=" << flag_step_1_success << endl;
+    if (!solveAllowed(solve_budget_)) return false;
     if (!flag_step_1_success)
     {
       if (!bspline_optimizer_rebound_->controlPointsInitialized()) last_failure_phase_="failed_rebound_search";
@@ -380,6 +541,7 @@ namespace scan_planner
     {
       try {
         const auto refine_interior=[this](Eigen::MatrixXd &controls,double dt) {
+          if (!solveAllowed(solve_budget_)) return false;
           UniformBspline reference(controls,3,dt);
           bspline_optimizer_rebound_->ref_pts_.clear();
           const int spans=controls.cols()-3;
@@ -433,6 +595,7 @@ namespace scan_planner
       }
     }
 
+    if (!solveAllowed(solve_budget_)) return false;
     if (!flag_step_2_success || !checkDynamicFeasibility(pos))
     {
       last_failure_phase_="failed_dynamics";
@@ -443,7 +606,7 @@ namespace scan_planner
     // Only queries on this actual final curve may classify its rejection.
     // Unknown cells explored by an earlier A* are not its terminal failure.
     grid_map_->resetCollisionDiagnostics();
-    if (!checkWholeTrajectoryCollision(pos)) {
+    if (!checkWholeTrajectoryCollision(pos,200000,0.,true,0.,attempt_heading_contract_)) {
       last_failure_phase_=grid_map_->unknownCollisionQueries()>0 ?
           "waiting_observed_space":"failed_final_collision";
       ++continuous_failures_count_;
@@ -453,7 +616,14 @@ namespace scan_planner
     t_refine = std::chrono::duration<double>(std::chrono::steady_clock::now() - t_start).count();
 
     // save planned results
-    updateTrajInfo(pos, node_->now());
+    if (!solveAllowed(solve_budget_)) return false;
+    if (worker_only_ || attempt_heading_contract_.preview_only_enabled) {
+      pending_preview_candidate_=PreviewCandidate{pos,attempt_heading_contract_,node_->now(),
+          grid_map_->localizationContextSequence()};
+    } else {
+      updateTrajInfo(pos, node_->now());
+      accepted_heading_contract_=attempt_heading_contract_;
+    }
 
     cout << "total time:\033[42m" << (t_init + t_opt + t_refine)
          << "\033[0m,optimize:" << (t_init + t_opt) << ",refine:" << t_refine << endl;
@@ -466,6 +636,7 @@ namespace scan_planner
 
   bool SCANPlannerManager::EmergencyStop(Eigen::Vector3d stop_pos)
   {
+    accepted_heading_contract_=SplineHeadingContract{};
     Eigen::MatrixXd control_points(3, 6);
     for (int i = 0; i < 6; i++)
     {
@@ -646,6 +817,8 @@ namespace scan_planner
 
   void SCANPlannerManager::updateTrajInfo(const UniformBspline &position_traj, const rclcpp::Time time_now)
   {
+    accepted_join_.reset(); // No stale entry proof for emergency/legacy splines.
+    preview_curve_progress_time_=0.;
     local_data_.start_time_ = time_now;
     local_data_.position_traj_ = position_traj;
     local_data_.velocity_traj_ = local_data_.position_traj_.getDerivative();
@@ -656,19 +829,45 @@ namespace scan_planner
   }
 
   bool SCANPlannerManager::checkWholeTrajectoryCollision(UniformBspline &position_traj,
-      std::size_t query_budget, double wall_budget_seconds, bool diagnostic)
+      std::size_t query_budget, double wall_budget_seconds, bool diagnostic, double measured_curve_time,
+      const SplineHeadingContract &heading_contract, CurveCheckEvidence *evidence)
   {
-    const double body_extent=node_->get_parameter("grid_map.double_cylinder_radius").as_double()+
-        node_->get_parameter("grid_map.double_cylinder_offset").as_double();
-    return wholeCurveCollisionFree(position_traj, grid_map_->getResolution(), body_extent,
+    const double body_extent=preview_heading_contract_.body_extent;
+    bool occupied_witness=false;
+    const bool safe=wholeCurveCollisionFree(position_traj, grid_map_->getResolution(), body_extent,
       [&](const Eigen::Vector3d &p,double yaw) {
+      if (!solveAllowed(solve_budget_)) return -1;
       const int collision=grid_map_->getInflateOccupancy(p,yaw);
+      occupied_witness=occupied_witness || collision>0;
       if (collision!=0 && diagnostic)
         RCLCPP_WARN(node_->get_logger(),
           "Final curve rejected: state=%d xyz=(%.6f,%.6f,%.6f) yaw=%.6f",
           collision,p.x(),p.y(),p.z(),yaw);
       return collision;
-    }, query_budget, wall_budget_seconds);
+    }, measured_body_pose_, measured_body_frame_, node_->now().seconds(), measured_body_maximum_age_,
+       query_budget, wall_budget_seconds, measured_curve_time,heading_contract);
+    double yaw=0.;
+    const bool pose_fresh=measuredBodyYaw(measured_body_pose_,measured_body_frame_,node_->now().seconds(),
+                                         measured_body_maximum_age_,yaw);
+    if (evidence) *evidence=pose_fresh ? curveCheckEvidence(safe,occupied_witness) :
+        CurveCheckEvidence::Uncertified;
+    return safe && pose_fresh;
+  }
+
+  bool SCANPlannerManager::commitPreviewCandidate()
+  {
+    if (!pending_preview_candidate_) return true; // unchanged default/execution path
+    const auto &candidate=*pending_preview_candidate_;
+    double yaw=0.;
+    const bool fresh=grid_map_->integratedCloudFreshAt(node_->now().nanoseconds()) &&
+        candidate.context_sequence==grid_map_->localizationContextSequence() &&
+        measuredBodyYaw(measured_body_pose_,measured_body_frame_,node_->now().seconds(),
+                        measured_body_maximum_age_,yaw);
+    if (!fresh) { pending_preview_candidate_.reset(); return false; }
+    updateTrajInfo(candidate.curve,candidate.solved_at);
+    accepted_heading_contract_=candidate.heading;
+    pending_preview_candidate_.reset();
+    return true;
   }
 
   bool SCANPlannerManager::checkDynamicFeasibility(UniformBspline position_traj)
@@ -682,6 +881,7 @@ namespace scan_planner
 
     for (double t = 0.0; t < duration + 1e-6; t += sample_dt)
     {
+      if (!solveAllowed(solve_budget_)) return false;
       const double tc = std::min(t, duration);
       Eigen::Vector3d vel = vel_traj.evaluateDeBoorT(tc);
       if (vel.norm() > vel_limit)

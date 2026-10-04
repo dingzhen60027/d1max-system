@@ -1,7 +1,11 @@
 #pragma once
 
 #include <bspline_opt/reference_path.hpp>
+#include <algorithm>
+#include <cmath>
+#include <stdexcept>
 #include <string>
+#include <vector>
 
 namespace scan_planner {
 
@@ -23,13 +27,14 @@ struct ReferenceTargetResult {
   bool has_first_blocked{false};
   Eigen::Vector3d first_blocked{Eigen::Vector3d::Zero()};
   int first_blocked_value{0};
+  double first_blocked_yaw{0.};
   // Actual endpoint-query locations, not inferred obstacles or a path proof.
   // Bound diagnostic work independently of the unchanged selector query cap.
   static constexpr std::size_t max_blocked_points{256};
   std::vector<Eigen::Vector3d> blocked_points;
   std::string reason{"failed_reference_target_occupied"};
 
-  void observe(const Eigen::Vector3d &position, int value) {
+  void observe(const Eigen::Vector3d &position, int value,double yaw=0.) {
     ++queries;
     if (value == 0) { ++free_queries; return; }
     if (value < 0) ++outside_queries;
@@ -37,10 +42,26 @@ struct ReferenceTargetResult {
     else ++occupied_queries;
     if (!has_first_blocked) {
       has_first_blocked=true; first_blocked=position; first_blocked_value=value;
+      first_blocked_yaw=yaw;
     }
     if (blocked_points.size() < max_blocked_points) blocked_points.push_back(position);
   }
 };
+
+// The measured body is prepended only as a connector for local slices. Route
+// progress begins at the first route waypoint: when a new window arrives while
+// the body is off-centerline (e.g. mid box detour), the lateral connector is
+// not route and must not become progress or a "shortened" target that pulls
+// the body back beside the obstacle. Returns the route-begin arc.
+inline double setReferenceFromBody(DiscreteReference &reference, const Eigen::Vector3d &body,
+                                   const std::vector<Eigen::Vector3d> &waypoints) {
+  if (waypoints.empty()) throw std::invalid_argument("reference needs route waypoints");
+  std::vector<Eigen::Vector3d> full{body};
+  full.insert(full.end(), waypoints.begin(), waypoints.end());
+  reference.set(full);
+  // set() drops a connector shorter than 1e-6; the norm is then equally ~0.
+  return std::min(reference.length(), (waypoints.front() - body).norm());
+}
 
 // Select only points on the original, ordered reference. This is an endpoint
 // selector, NOT a proof that the intervening route is collision-free: native
@@ -101,7 +122,7 @@ ReferenceTargetResult selectReferenceTarget(
                                     reference.sample(std::max(0.0, arc - options.sample_step));
     const double yaw = std::atan2(tangent.y(), tangent.x());
     const int value = occupancy(point, yaw);
-    result.observe(point, value);
+    result.observe(point, value,yaw);
     if (value < 0) break;
     if (value != 0) { free_begin=std::numeric_limits<double>::quiet_NaN(); continue; }
     if (!std::isfinite(free_begin)) free_begin=arc;
@@ -109,9 +130,22 @@ ReferenceTargetResult selectReferenceTarget(
     // the detour initializer needs a free departure segment, not just one point.
     const bool free_approach=arc-free_begin+1e-9>=options.exit_margin;
     // 0.2 m matches the manager's existing no-hover-as-navigation boundary.
-    if (free_approach && arc >= lower - 1e-9 && arc > progress + 1e-6 &&
-        (point - actual_start).norm() > 0.2 + 1e-9)
-      available.push_back(arc);
+    if (!(free_approach && arc >= lower - 1e-9 && arc > progress + 1e-6 &&
+          (point - actual_start).norm() > 0.2 + 1e-9)) continue;
+    // Native A* checks the endpoint body at the start->end heading, not the
+    // route tangent. An endpoint unobserved at that heading would be selected
+    // forever and rejected forever while the stopped body cannot observe it.
+    // Require both headings; this never turns unknown space into free.
+    const Eigen::Vector2d approach = (point - actual_start).head<2>();
+    if (approach.norm() > 1e-6) {
+      const double approach_yaw = std::atan2(approach.y(), approach.x());
+      if (std::abs(std::remainder(approach_yaw - yaw, 2.0 * M_PI)) > 1e-6) {
+        const int endpoint = occupancy(point, approach_yaw);
+        result.observe(point, endpoint,approach_yaw);
+        if (endpoint != 0) continue;
+      }
+    }
+    available.push_back(arc);
   }
   if (available.empty()) return result;
   // Keep a free nominal endpoint. If blocked, prefer the next free point after

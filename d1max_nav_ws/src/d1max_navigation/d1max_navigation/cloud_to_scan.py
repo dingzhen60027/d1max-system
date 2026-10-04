@@ -41,6 +41,38 @@ def project_points(points, translation, quaternion, *, min_height=-0.45, max_hei
     return ranges
 
 
+def projection_health(*, received_monotonic, source_stamp, now_monotonic, now_wall,
+                      max_cloud_age, frame, finite_bins, bins, error, input_topic):
+    """Report transport freshness separately from usable endpoint evidence.
+
+    A fresh all-NaN scan is a fresh message, not a valid obstacle observation.
+    Conversely, even 720 endpoint bins cannot certify observed free volume:
+    this producer has neither per-sensor acquisition provenance nor ray origins.
+    """
+    def real(value):
+        return type(value) in (int, float) and math.isfinite(value)
+
+    source_fresh = bool(
+        all(real(value) for value in (received_monotonic, source_stamp, now_monotonic,
+                                     now_wall, max_cloud_age))
+        and max_cloud_age > 0 and 0 <= now_monotonic-received_monotonic <= max_cloud_age
+        and 0 <= now_wall-source_stamp <= max_cloud_age)
+    counts_valid = (type(bins) is int and bins > 0 and type(finite_bins) is int
+                    and 0 <= finite_bins <= bins)
+    has_returns = counts_valid and finite_bins > 0
+    valid = bool(source_fresh and has_returns and not error)
+    return dict(source='lio_cloud_projection' if input_topic == '/d1max/localization/lio/deskewed'
+                else 'endpoint_cloud_projection', input_topic=input_topic,
+                fresh=valid, valid=valid, source_fresh=source_fresh,
+                wall_time=now_wall, source_stamp_sec=source_stamp, frame=frame,
+                finite_bins=finite_bins, total_bins=bins,
+                unknown_bins=bins-finite_bins if counts_valid else None,
+                has_obstacle_returns=bool(has_returns), coverage_verified=False,
+                unobserved_semantics='unknown_nan_not_clear',
+                error=error or ('' if valid else 'no_obstacle_slice_returns' if source_fresh
+                               and not has_returns else 'stale_cloud'))
+
+
 def main(args=None):
     import rclpy
     from rclpy.node import Node
@@ -67,7 +99,8 @@ def main(args=None):
             self.pub = self.create_publisher(LaserScan, self.p['output_topic'], qos_profile_sensor_data)
             self.health = self.create_publisher(String, '/d1max/navigation/scan_status', 1)
             self.sub = self.create_subscription(PointCloud2, self.p['input_topic'], self.cloud, qos_profile_sensor_data)
-            self.received = 0.; self.last_error = 'waiting_cloud'; self.hits = 0
+            self.received = None; self.source_stamp = None
+            self.last_error = 'waiting_cloud'; self.hits = 0
             self.timer = self.create_timer(.5, self.status)
 
         def cloud(self, msg):
@@ -87,16 +120,19 @@ def main(args=None):
                 out.angle_max = out.angle_min+(self.p['bins']-1)*out.angle_increment
                 out.scan_time = .1; out.range_min = self.p['range_min']; out.range_max = self.p['range_max']
                 out.ranges = ranges.tolist()
-                self.pub.publish(out); self.received = time.monotonic()
+                self.pub.publish(out); self.received = time.monotonic(); self.source_stamp = stamp
                 self.hits = int(np.count_nonzero(np.isfinite(ranges)))
                 self.last_error = '' if self.hits else 'no_obstacle_slice_returns'
             except (TransformException, ValueError, TypeError, AssertionError) as error:
                 self.last_error = type(error).__name__ + ': ' + str(error)[:150]
 
         def status(self):
-            msg = String(); msg.data = json.dumps({'source': 'lio_cloud_projection',
-                'fresh': time.monotonic()-self.received < .6, 'wall_time': time.time(),
-                'frame': self.p['target_frame'], 'finite_bins': self.hits, 'error': self.last_error})
+            msg = String(); msg.data = json.dumps(projection_health(
+                received_monotonic=self.received, source_stamp=self.source_stamp,
+                now_monotonic=time.monotonic(), now_wall=self.get_clock().now().nanoseconds*1e-9,
+                max_cloud_age=self.p['max_cloud_age'], frame=self.p['target_frame'],
+                finite_bins=self.hits, bins=self.p['bins'], error=self.last_error,
+                input_topic=self.p['input_topic']), allow_nan=False)
             self.health.publish(msg)
 
     stop = threading.Event()

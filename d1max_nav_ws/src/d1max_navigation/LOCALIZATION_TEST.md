@@ -1,6 +1,6 @@
 # D1 Max：地图与定位诊断入口（不含完整导航）
 
-完整 Nav2 导航现在请使用 [README.md](README.md) 中的 `start_navigation.sh`。
+完整 Nav2 导航现在请使用 [README.md](README.md) 中的 `scripts/navigation/start_navigation.sh`。
 本文件保留之前地图/定位诊断入口的说明，不应当成完整导航的启动方法。
 
 本模块是 2D 导航的第一阶段：Nav2 `map_server`、生命周期管理、RViz2 初值入口。
@@ -11,9 +11,9 @@
 
 ```bash
 cd /home/dndx/d1max_nav_ws
-./start_nav2_localization_test.sh start --mode offline
-./start_nav2_localization_test.sh status
-./start_nav2_localization_test.sh stop
+scripts/navigation/start_nav2_localization_test.sh start --mode offline
+scripts/navigation/start_nav2_localization_test.sh status
+scripts/navigation/start_nav2_localization_test.sh stop
 ```
 
 离线模式只读 Web 当前选中的完整地图版本，不需要 Web 运行。RViz 自动缩放到全图；
@@ -24,7 +24,7 @@ cd /home/dndx/d1max_nav_ws
 重新连接机器人后，先在 Web 连接数据链路，确认雷达、IMU、MC 状态正常，然后：
 
 ```bash
-./start_nav2_localization_test.sh restart --mode live
+scripts/navigation/start_nav2_localization_test.sh restart --mode live
 ```
 
 实机模式复用现有 `127.0.0.1:7448` Zenoh 链路。如果尚未定位，通过 Web 原有受托管 API

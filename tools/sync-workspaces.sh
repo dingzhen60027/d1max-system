@@ -4,7 +4,7 @@ set -euo pipefail
 
 usage() {
   printf '%s\n' \
-    'Usage: bash tools/sync-workspaces.sh --app-root PATH --nav-root PATH [--apply]' \
+    'Usage: bash tools/sync-workspaces.sh --app-root PATH --nav-root PATH [--skip-experiments] [--apply]' \
     'Default: checksum dry run. --apply backs up overwritten files under /tmp.' \
     'No deletion, service operation, Git staging, commit or push is performed.'
 }
@@ -12,6 +12,7 @@ usage() {
 app_root=''
 nav_root=''
 apply=false
+skip_experiments=false
 while (($#)); do
   case "$1" in
     --app-root|--nav-root)
@@ -20,6 +21,7 @@ while (($#)); do
       shift 2
       ;;
     --apply) apply=true; shift ;;
+    --skip-experiments) skip_experiments=true; shift ;;
     --help|-h) usage; exit 0 ;;
     *) usage >&2; exit 2 ;;
   esac
@@ -61,7 +63,11 @@ for destination in "$repo_root/d1max_ros2" "$repo_root/d1max_nav_ws"; do
 done
 
 args=(-rlpt --checksum --itemize-changes --omit-dir-times --safe-links
-      --prune-empty-dirs --filter="merge $script_dir/snapshot.rsync-filter")
+      --prune-empty-dirs)
+if "$skip_experiments"; then
+  args+=(--exclude=/experiments/)
+fi
+args+=(--filter="merge $script_dir/snapshot.rsync-filter")
 if "$apply"; then
   backup_root="$(mktemp -d /tmp/d1max-source-backup-XXXXXXXX)"
   printf 'Backup of overwritten publication files: %s\n' "$backup_root"

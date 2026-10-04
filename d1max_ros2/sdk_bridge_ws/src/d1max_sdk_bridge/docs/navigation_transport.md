@@ -1,5 +1,54 @@
 # Nav2 速度出口：单 SDK 会话，可选启用
 
+## 当前主线 schema-3 执行出口（2026-10-04）
+
+当前 BT 导航主线使用 `execution_v3_enabled` 和类型化的 `/d1max/live_planning/execution/` 合同；下文 JSON/Nav2 arm 协议是历史兼容入口，不能与 schema-3 同时启用。启动不会授权运动，未验收记录仍拒绝 live grant。
+
+SDK 数据回调只向有界邮箱复制。MC/RobotState 状态处理、typed 输入/撤许可、20 Hz 唯一速度 writer、普通 ROS 服务/图发现、遥测 JSON 发布分别运行：
+
+- typed 输入使用专属 callback group/executor，普通服务或 JSON 不排在它之前。
+- writer 使用 steady clock 独立线程，错过周期直接跳过，不补发旧命令。最终检查与异步 `Move(..., 0)` 仍在同一状态锁中串行提交，回调只写原子 veto/ACK 邮箱，不在回调中反锁。
+- 状态处理不做 JSON 或 ROS publish。MC/RobotState/SDK 执行状态各用一个 latest 遥测槽，保留原始源时；CAS 回执单独固定 8 槽，满槽锁存否决，不无界排队。
+- writer 不直接 publish；JSON 构造、网络发布不持控制状态锁。诊断提供 `writer_last_duration_s`、`writer_deadlines_skipped` 和 `writer_overruns`，这些是实测诊断，不是实时性验收结果。
+
+物理验收 JSON 仍为 schema 3，新增两个必需顶层合同：
+
+```json
+{
+  "execution_timing": {
+    "sensor_source_age_bound_s": 0.5,
+    "command_pipeline_bound_s": 0.1,
+    "writer_period_s": 0.05,
+    "source_time_uncertainty_s": 0.02
+  },
+  "stationary_evidence": {
+    "profile": "general_low_speed",
+    "linear_threshold_mps": 0.03,
+    "angular_threshold_radps": 0.05,
+    "stationary_duration_s": 1.0,
+    "reentry_duration_s": 0.6,
+    "minimum_new_samples": 3,
+    "measured_static_linear_bound_mps": 0.01,
+    "measured_static_angular_bound_radps": 0.02,
+    "mc_expected_hz": 50.0,
+    "mc_min_hz": 40.0,
+    "mc_max_hz": 60.0
+  }
+}
+```
+
+以上数字只是**隔离模拟结构示例，不是机器狗实测参数**。`measurements.reaction_bound_s` 必须覆盖 `execution_timing` 四项之和；示例需要至少 0.67 秒。运行的感知源龄、命令管线和 writer 周期不能超过记录预算；命令管线预算至少 0.1 秒，覆盖现有 100 ms 原始运动/proof 源龄。最终 writer 的前后雷达、曲线和运动证明直接使用记录的 `sensor_source_age_bound_s`，不会把后续检查时间当作新观测时间或用管线预算续租。MC 的 `mc_delay_bound_s` 与近似源时基准仍独立绑定停稳证据，不能把它冒充雷达时钟误差，也不能改成 PTP。
+
+停稳阈值必须覆盖实测 MC 静止噪声上界，且不得超过 0.05 m/s / 0.1 rad/s；终止持续至少一秒、静止重接至少 0.6 秒、至少三个新的有效样本。频率范围来自同一验收记录；`SetMcConfig` 仍只有开/关，没有频率设置。适用状态仍是普通模式、正常站立/运动状态、低速档、机头前向，不能把平地记录用于楼梯或趴下。原始 MC 时间、会话/代次、零发送 ACK 和保守采集区间仍逐项核验；零指令或 ACK 不等于已停稳。
+
+旧 live 记录缺少上述任一合同时 fail-closed，不补默认值、不置真原有物理验收标志。`execution_acceptance_check` 输出对应合同，隔离 mock 也加载同一个模型结构，但 `fixture_only` 仍不能用于 live。
+
+**线程隔离不是独立硬件看门狗。** 它解决普通 executor/JSON 排队导致的租约延迟，但厂商 `Move` 调用若阻塞、SDK 内部锁/网络停滞、进程被杀、主机掉电或 OS 调度失效时，软件无法保证 250 ms 内物理停车。已经提交的命令也不能撤回。析构先撤许可并 join 唯一 writer，再进行现有有界零提交事务；不会另起一个竞争 writer 或 detach 一个仍可能提交的线程。若厂商调用本身卡死，join/SDK Disconnect 的有限时间不能证明。独立停车、断网残留指令、制动距离/延迟仍须实际硬件与现场验收；本轮没有启动 SDK、部署或改变任何未验收标志。
+
+纯测试增加 deadline 跳周期、遥测消费者阻塞下 latest 有界覆盖、验收字段缺失/反应预算不足/噪声超阈值/错误模式、记录化停稳阈值和真实超阈值运动撤销。它们不连接 SDK、不启动 ROS 图，不替代现场制动和压力验收。
+
+## 历史兼容入口
+
 默认仍为监控 + MC 速度读取 + 单向软件急停。新增导航出口复用 `sdk_monitor_bridge` 内已经存在的 `SDKClient`，不再连接第二个 SDK 客户端，不运行旧的 `sdk_state_bridge` 或 `sdk_console_bridge`。当前实机断开；代码、纯状态机和编译检查不代表实机导航验收。
 
 ## 三个独立条件

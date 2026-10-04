@@ -6,6 +6,7 @@ bound integration receipts renew perception freshness. Neither backend is a
 hardware-validated motion permit.
 """
 from collections import deque
+from copy import deepcopy
 import json
 import math
 import os
@@ -21,22 +22,55 @@ from rclpy.qos import QoSProfile, DurabilityPolicy, qos_profile_sensor_data
 from rclpy.time import Time
 from nav_msgs.msg import Odometry, Path
 from sensor_msgs.msg import PointCloud2, PointField
-from std_msgs.msg import Bool, String
+from std_msgs.msg import Bool, ColorRGBA, String
 from geometry_msgs.msg import Point
 from visualization_msgs.msg import Marker, MarkerArray
 from tf2_ros import Buffer, TransformListener, TransformException
 from d1max_planning_interfaces.msg import LocalPlanDebug, ReferencePath, TaggedBspline
+from d1max_navigation_bt_interfaces.msg import RouteReference
+from .route_ingress import RouteIngress, annotate_native_reference, spline_matches_route
 
 from .live_scan_contract import (ReferenceGate, admissible_tagged_spline, checked_pose_status_envelope,
                                  cloud_source_issue, decode_xyz,
-                                 fresh, localization_context, quaternion_matrix,
-                                 pack_xyz, sample_shadow_spline, take_latest_exact, transform_xyz)
-from .local_debug import (DEBUG_TIMEOUT, INVALID_PHASES, MAX_DEBUG_POINTS, DebugSnapshot,
+                                 fresh, localization_context, localization_identity_context, quaternion_matrix,
+                                 pack_xyz, perception_timeout, sample_shadow_spline,
+                                 take_latest_exact, transform_xyz)
+from .local_debug import (DEBUG_TIMEOUT, INVALID_PHASES, REFERENCE_REJECTION_PHASES, MAX_DEBUG_POINTS, DebugSnapshot,
                           LocalDebugGate, attempt_marker_contract, local_debug_specs)
 from .pct_ground_support import PCTGroundSupport, GroundSupportError
 from .perception_status import integrated_ray_stamp
+from .ray_projection import MapContext
+from .scan_visual_style import official_spline_style
+from .preview_trajectory import (PreviewTrajectoryLease, PreviewTrajectoryDelivery,
+                                 preview_revalidation_enabled)
 
 PREFIX = '/d1max/live_planning/'
+
+
+def preview_lease(node):
+    if not preview_revalidation_enabled(node.p):
+        return None
+    if not hasattr(node, 'preview_trajectory_lease'):
+        node.preview_trajectory_lease = PreviewTrajectoryLease()
+        node.preview_trajectory_record = None
+    return node.preview_trajectory_lease
+
+
+def preview_remaining(node, now=None, mono=None):
+    lease = preview_lease(node)
+    if lease is None:
+        return 0.
+    return lease.remaining(gate=node.gate, sequence=node.map_context_sequence,
+        now=node.now_s() if now is None else now,
+        mono=time.monotonic() if mono is None else mono)
+
+
+def preview_delivery(node):
+    if not preview_revalidation_enabled(node.p):
+        return None
+    if not hasattr(node, 'preview_trajectory_delivery'):
+        node.preview_trajectory_delivery = PreviewTrajectoryDelivery()
+    return node.preview_trajectory_delivery
 
 
 def seconds(stamp):
@@ -67,21 +101,27 @@ class LiveScanBridge(Node):
         super().__init__('live_scan_bridge')
         if os.environ.get('RMW_IMPLEMENTATION') != 'rmw_zenoh_cpp':
             raise ValueError('live shadow adapter requires unchanged rmw_zenoh_cpp')
-        defaults = dict(session_id='', localization_session_id='', map_frame='d1max_loc_map',
+        defaults = dict(session_id='', localization_session_id='', map_version_id='',
+                        map_frame='d1max_loc_map',
                         perception_backend='deskewed_cloud',
+                        collision_policy='official',
                         execution_mode='preview',
                         execution_tracker_node='/d1max/live_planning/motion_coordinator',
                         tracking_frame='d1max_loc_tracking', body_frame='d1max_loc_base_link',
-                        body_height=.55, input_timeout=.5, tf_wait_timeout=.25,
+                        body_height=.55, input_timeout=.5, perception_timeout=.5,
+                        tf_wait_timeout=.25,
                         cloud_rate_hz=10., max_input_points=250000, max_output_points=100000,
                         ground_support_index='', ground_support_sha256='',
                         ground_support_source_pcd_sha256='', ground_support_tomogram_sha256='',
                         ground_support_height_tolerance_m=.20, ground_support_max_step_m=.17)
         self.p = {key: self.declare_parameter(key, value).value for key, value in defaults.items()}
         self.p['localization_session_id'] = self.p['localization_session_id'] or self.p['session_id']
+        perception_timeout(self.p)
         if (not self.p['session_id'] or len(self.p['session_id']) > 128
                 or self.p['perception_backend'] not in ('deskewed_cloud', 'per_sensor_rays')
+                or self.p['collision_policy'] not in ('official', 'observed_free')
                 or self.p['execution_mode'] not in ('preview', 'execution')
+                or (self.p['collision_policy'] == 'official' and self.p['execution_mode'] != 'preview')
                 or not self.p['execution_tracker_node'].startswith('/')
                 or not .1 <= self.p['input_timeout'] <= .75
                 or not .02 <= self.p['tf_wait_timeout'] <= .4
@@ -92,14 +132,24 @@ class LiveScanBridge(Node):
                 or not 100 <= self.p['max_output_points'] <= self.p['max_input_points'] <= 250000
                 or len({self.p['map_frame'], self.p['tracking_frame'], self.p['body_frame']}) != 3):
             raise ValueError('invalid_bounded_live_shadow_parameters')
-        # No optional bypass: live PCT preview must bind its exact support map.
+        # Bind the displayed map provenance in either mode. Only observed_free
+        # mode uses this D1 support checker as a planning veto.
         self.ground_support = PCTGroundSupport.from_npz(self.p['ground_support_index'],
             expected_sha256=self.p['ground_support_sha256'],
             expected_source_pcd_sha256=self.p['ground_support_source_pcd_sha256'],
             expected_tomogram_sha256=self.p['ground_support_tomogram_sha256'],
             expected_frame=self.p['map_frame'])
         self.ground_support_check = {}
+        self.current_body_ground_support_check = {}
+        self.current_body_ground_support_key = None
+        self.sensor_ready = False
+        self.ready_failure_reasons = []
+        self.body_ready_checks = {}
+        self.context_readiness_reason = 'waiting_for_localization_status'
+        self.preview_sensor_pauses = self.preview_sensor_resumes = 0
         self.gate = ReferenceGate(self.p['map_frame'], self.p['body_height'])
+        self.route_ingress = RouteIngress(self.p['session_id'], self.p['map_version_id'])
+        self.active_route_snapshot = None
         self.debug_gate = LocalDebugGate()
         self.navigation, self.localizer, self.pose_status = {}, {}, {}
         self.pose_received = -math.inf
@@ -124,6 +174,7 @@ class LiveScanBridge(Node):
         self.attempt_visible_until = -math.inf
         self.attempt_marker_count = 0
         self.attempt_marker_keys = set()
+        self.debug_marker_keys = set()
         self.body = None
         self.body_context = None
         self.cloud_stamp = self.last_input_stamp = self.last_output_stamp = 0.
@@ -132,6 +183,8 @@ class LiveScanBridge(Node):
         self.map_context_record = None
         self.map_context_sequence = 0
         self.map_context_ready = False
+        self.map_context_fault = None
+        self.pose_identity_fault = None
         self.map_context_last_publish = -math.inf
         # Do not cache/re-stamp a rejected Path. Ask its owning global planner
         # to revalidate the CURRENT goal and publish a new reference instead.
@@ -139,6 +192,7 @@ class LiveScanBridge(Node):
         self.reference_refresh = None
         self.reference_refresh_id = 0
         self.reference_refresh_last = -math.inf
+        self.native_reference_recovery = None
         self.last_publish = self.last_status = -math.inf
         self.pending = deque(maxlen=3)
         self.counts = dict(cloud_received=0, cloud_published=0, cloud_dropped=0,
@@ -179,7 +233,10 @@ class LiveScanBridge(Node):
             TaggedBspline, PREFIX+'validated_tagged_bspline', 1)
         self.admission_pub = self.create_publisher(String, PREFIX+'execution_admission', 1)
         marker_qos = QoSProfile(depth=2, durability=DurabilityPolicy.TRANSIENT_LOCAL)
-        self.marker_pub = self.create_publisher(Marker, PREFIX+'scan_optimal', marker_qos)
+        # A visual snapshot is DELETEALL + LINE_STRIP + SPHERE_LIST. Match
+        # RViz's five-sample history so burst/late readers receive both graphics.
+        spline_marker_qos = QoSProfile(depth=5, durability=DurabilityPolicy.TRANSIENT_LOCAL)
+        self.marker_pub = self.create_publisher(Marker, PREFIX+'scan_optimal', spline_marker_qos)
         self.debug_pub = self.create_publisher(MarkerArray, PREFIX+'local_debug', marker_qos)
         self.attempt_debug_pub = self.create_publisher(MarkerArray, PREFIX+'local_attempt_debug', marker_qos)
         self.create_subscription(String, '/d1max/localization/navigation/status', self.on_navigation, 5)
@@ -189,9 +246,10 @@ class LiveScanBridge(Node):
         self.create_subscription(Odometry, '/d1max/localization/odometry/global', self.on_body, qos_profile_sensor_data)
         if self.p['perception_backend'] == 'per_sensor_rays':
             self.create_subscription(String, PREFIX+'rays_status', self.on_native_rays, 5)
+            self.create_subscription(String, PREFIX+'ray_projector_status', self.on_projector_status, 5)
         else:
             self.create_subscription(PointCloud2, '/d1max/localization/lio/deskewed', self.on_cloud, qos_profile_sensor_data)
-        self.create_subscription(Path, PREFIX+'reference_path', self.on_reference, 1)
+        self.create_subscription(RouteReference, PREFIX+'committed_route', self.on_committed_route, 1)
         self.create_subscription(TaggedBspline, PREFIX+'scan_tagged_bspline', self.on_spline, 1)
         self.create_subscription(LocalPlanDebug, PREFIX+'native_local_debug', self.on_local_debug, 2)
         self.create_subscription(MarkerArray, PREFIX+'native_local_attempt_debug', self.on_attempt_debug, 2)
@@ -214,14 +272,20 @@ class LiveScanBridge(Node):
                 freeze_ready = names == [self.p['execution_tracker_node']]
             except (RCLError, RuntimeError):
                 freeze_ready = False
-        return (context is not None and self.map_context_ready
-                and self.map_context_identity == context and self.body_context == context
-                and 0 <= mono-self.nav_received <= self.p['input_timeout']
-                and 0 <= mono-self.localizer_received <= self.p['input_timeout']
-                and freeze_ready and 0 <= mono-self.freeze_received <= self.p['input_timeout']
-                and self.body is not None and fresh(seconds(self.body.header.stamp), now, self.p['input_timeout'])
-                and seconds(self.body.header.stamp) > self.sensor_barrier
-                and 0 <= mono-self.body_received <= self.p['input_timeout'])
+        self.body_ready_checks = dict(
+            localization_context=context is not None,
+            native_map_ack=self.map_context_ready,
+            native_map_fault_absent=getattr(self, 'map_context_fault', None) is None,
+            native_map_identity=self.map_context_identity == context,
+            body_identity=self.body_context == context,
+            navigation_status_receipt=0 <= mono-self.nav_received <= self.p['input_timeout'],
+            localizer_status_receipt=0 <= mono-self.localizer_received <= self.p['input_timeout'],
+            freeze_state=freeze_ready,
+            freeze_receipt=0 <= mono-self.freeze_received <= self.p['input_timeout'],
+            body_source=(self.body is not None and fresh(seconds(self.body.header.stamp), now, self.p['input_timeout'])),
+            body_after_barrier=(self.body is not None and seconds(self.body.header.stamp) > self.sensor_barrier),
+            body_receipt=0 <= mono-self.body_received <= self.p['input_timeout'])
+        return all(self.body_ready_checks.values())
 
     def current_context(self, now, *, mono=None):
         try:
@@ -229,28 +293,143 @@ class LiveScanBridge(Node):
             if not (0 <= mono-self.nav_received <= self.p['input_timeout']
                     and 0 <= mono-self.localizer_received <= self.p['input_timeout']):
                 raise ValueError('localization_status_receipt_stale')
-            return localization_context(self.localizer, self.navigation,
+            context = localization_context(self.localizer, self.navigation,
                                         pose_status=self.pose_status,
                                         session_id=self.p['localization_session_id'], now=now,
                                         timeout=self.p['input_timeout'], map_frame=self.p['map_frame'],
                                         tracking_frame=self.p['tracking_frame'],
                                         body_frame=self.p['body_frame'],
                                         pose_receipt_age=mono-self.pose_received)
-        except ValueError:
+            self.context_readiness_reason = 'valid_same_context'
+            return context
+        except ValueError as exc:
+            self.context_readiness_reason = str(exc)
             return None
+
+    def retained_preview_context(self, now, mono):
+        """Identity for retaining a task, deliberately not pose admission.
+
+        A temporarily invalid/missing pose may suspend a task without erasing
+        it. Contradictory epoch, frame, fault or reset evidence never may. The
+        normal nav_body_ready path still requires the unchanged fresh, valid
+        continuous pose before publishing body data or accepting trajectories.
+        """
+        try:
+            if (getattr(self, 'pose_identity_fault', None) is not None
+                    or not (0 <= mono-getattr(self, 'nav_received', -math.inf) <= self.p['input_timeout']
+                    and 0 <= mono-getattr(self, 'localizer_received', -math.inf) <= self.p['input_timeout']
+                    and getattr(self, 'execution_frozen', False)
+                    and 0 <= mono-getattr(self, 'freeze_received', -math.inf) <= self.p['input_timeout'])):
+                return None
+            context = localization_identity_context(self.localizer, self.navigation,
+                session_id=self.p['localization_session_id'], now=now,
+                timeout=self.p['input_timeout'], map_frame=self.p['map_frame'],
+                tracking_frame=self.p['tracking_frame'])
+            pose = self.pose_status
+            if pose and (pose.get('epoch') != context[1] or pose.get('seed_id') != context[2]
+                    or pose.get('frame_id') != self.p['map_frame']
+                    or pose.get('body_frame') != self.p['body_frame']
+                    or pose.get('fault') or pose.get('reset_pending') is not False
+                    or pose.get('motion_control_enabled') is not False):
+                return None
+            return context
+        except (ValueError, TypeError, KeyError, AttributeError):
+            return None
+
+    def current_body_ground_support_ready(self, context):
+        """Check the unchanged body point once per source stamp and map context.
+
+        This is the configured height contract, not posture recognition. Missing
+        cells and ambiguous floors retain their own support failure reasons.
+        """
+        if self.p.get('collision_policy', 'observed_free') == 'official':
+            self.current_body_ground_support_key = None
+            self.current_body_ground_support_check = dict(
+                enabled=False, valid=None, reason='not_part_of_official_scan_policy')
+            return True
+        body = getattr(self, 'body', None)
+        if body is None or context is None or getattr(self, 'body_context', None) != context:
+            self.current_body_ground_support_key = None
+            self.current_body_ground_support_check = {}
+            return False
+        stamp = body.header.stamp
+        key = (context, self.map_context_sequence, stamp.sec, stamp.nanosec)
+        if key != getattr(self, 'current_body_ground_support_key', None):
+            result = dict(source_stamp=seconds(stamp), localization_context=list(context),
+                          map_context_sequence=self.map_context_sequence)
+            try:
+                support = getattr(self, 'ground_support', None)
+                if support is None:
+                    raise GroundSupportError('pct_support_unavailable')
+                point = xyz(body.pose.pose.position)
+                checked = support.validate_body_samples([point, point],
+                    body_height_m=self.p['body_height'],
+                    height_tolerance_m=self.p['ground_support_height_tolerance_m'],
+                    max_ground_step_m=self.p['ground_support_max_step_m'])
+                result.update(checked, valid=True, reason='current_body_height_contract_valid')
+            except (ValueError, TypeError) as exc:
+                result.update(valid=False, reason=str(exc))
+            self.current_body_ground_support_check = result
+            self.current_body_ground_support_key = key
+        return self.current_body_ground_support_check.get('valid') is True
 
     def update_gate(self):
         now, mono = self.now_s(), time.monotonic()
         context = self.current_context(now)
         self.sync_map_context(context, now, mono)
-        ready = (self.nav_body_ready(now, mono)
-                 and fresh(self.cloud_stamp, now, self.p['input_timeout'])
-                 and 0 <= mono-self.cloud_received <= self.p['input_timeout'])
+        body_ready = self.nav_body_ready(now, mono)
+        ray_timeout = perception_timeout(self.p)
+        cloud_source_ready = fresh(self.cloud_stamp, now, ray_timeout)
+        cloud_receipt_ready = 0 <= mono-self.cloud_received <= ray_timeout
+        self.sensor_ready = body_ready and cloud_source_ready and cloud_receipt_ready
+        height_ready = self.current_body_ground_support_ready(context)
+        height_failed = body_ready and not height_ready
+        ready = self.sensor_ready and height_ready
+        checks = dict(getattr(self, 'body_ready_checks', {}),
+                      body_context_and_freeze=body_ready, cloud_source=cloud_source_ready,
+                      cloud_receipt=cloud_receipt_ready, body_height_contract=height_ready)
+        self.ready_failure_reasons = [name for name, valid in checks.items() if not valid]
+        # A source lease and a user's task are different things. In official
+        # preview only, a freshly confirmed unchanged identity may wait for
+        # valid pose/ray evidence without cancelling its task on every gap.
+        # Native SCAN independently rejects stale maps; graphics/admission are
+        # withdrawn immediately and a post-recovery spline is required.
+        retained_context = LiveScanBridge.retained_preview_context(self, now, mono)
+        can_pause_sensor = (self.p.get('collision_policy') == 'official'
+            and self.p.get('execution_mode', 'preview') == 'preview'
+            and self.p.get('perception_backend') == 'per_sensor_rays'
+            and height_ready and self.map_context_ready
+            and getattr(self, 'map_context_fault', None) is None
+            and self.gate.context == self.map_context_identity and self.gate.active
+            and ((body_ready and context is not None and context == self.gate.context)
+                 or retained_context is not None and retained_context == self.gate.context))
+        if can_pause_sensor and not ready:
+            if self.gate.pause_preview_reference(now):
+                self.preview_sensor_pauses = getattr(self, 'preview_sensor_pauses', 0)+1
+                self.reference_refresh = None
+                self.clear_marker(reset_order=False, reason='preview_sensor_paused',
+                                  retain_preview=True)
+                self.clear_attempt_debug()
+                self.revoke_execution('preview_sensor_paused')
+            return False
+        if ready and can_pause_sensor and self.gate.preview_paused:
+            if self.gate.resume_preview_reference(now, context):
+                self.preview_sensor_resumes = getattr(self, 'preview_sensor_resumes', 0)+1
+                self.reference_refresh = None
+            return True
         # Duplicate geometry can acknowledge a newer owner-issued Path without
         # starting a native generation. Refresh binds to that latest owner
         # stamp; issued_at must remain the actual native generation boundary.
         was_active, old_context, old_stamp = self.gate.active, self.gate.context, self.gate.last_path_stamp
-        if self.gate.observe(ready, now, context):
+        changed = self.gate.observe(ready, now, context,
+            retain_inactive_generation=(self.p.get('collision_policy') == 'official'
+                and self.p.get('execution_mode', 'preview') == 'preview'
+                and self.p.get('perception_backend') == 'per_sensor_rays'))
+        if height_failed:
+            self.gate.reason = self.current_body_ground_support_check.get(
+                'reason', 'current_body_ground_support_unavailable')
+            self.reference_refresh = None
+        if changed:
             if (was_active and old_context is not None
                     and self.gate.reason == 'input_stale_or_invalid'):
                 # The user goal belongs to the global coordinator. Losing a
@@ -262,7 +441,24 @@ class LiveScanBridge(Node):
                 self.reference_refresh_last = -math.inf
             elif self.gate.reason == 'localization_context_changed':
                 self.reference_refresh = None
-            self.clear_outputs(self.gate.reason)
+            # A lost pose/input lease revokes the task immediately, but is not
+            # a new native map context. Advancing sensor_barrier here rejects
+            # completed same-context ray integrations acquired just before the
+            # pause even while their original source leases remain valid.
+            # Never renew those leases: source ages, exact context ACK and the
+            # native per-voxel evidence checks still apply on recovery. The
+            # task barrier/generation is separate and still requires a newly
+            # owner-validated reference. Keep legacy-cloud invalidation intact.
+            retain_ray_evidence = (
+                self.p.get('perception_backend') == 'per_sensor_rays'
+                and self.gate.reason == 'input_stale_or_invalid'
+                and old_context is not None
+                and old_context == self.map_context_identity
+                and getattr(self, 'map_context_fault', None) is None)
+            # Height admission never invalidates localization, body odometry or
+            # perception. Recovery still needs a newly issued reference.
+            self.clear_outputs(self.gate.reason,
+                               clear_sensors=not (height_failed or retain_ray_evidence))
         return self.gate.ready
 
     def sync_map_context(self, context, now, mono):
@@ -276,6 +472,7 @@ class LiveScanBridge(Node):
         if context != self.map_context_identity:
             self.map_context_identity = context
             self.map_context_ready = False
+            self.map_context_fault = None
             self.map_context_sequence += 1
             self.reference_refresh = None
             self.gate.revoke(now, 'localization_context_changed')
@@ -286,6 +483,10 @@ class LiveScanBridge(Node):
                 seed_id=context[2], sequence=self.map_context_sequence,
                 barrier_ns=int(math.ceil(self.sensor_barrier*1e9)))
             self.map_context_last_publish = -math.inf
+        if getattr(self, 'map_context_fault', None) is not None:
+            # A retry of the rejected context is not a map rebuild. Only the
+            # owner-issued replacement context and its native clear ACK recover.
+            return
         if not self.map_context_ready and mono-self.map_context_last_publish >= .25:
             self.map_context_pub.publish(String(data=json.dumps(self.map_context_record, sort_keys=True)))
             self.map_context_last_publish = mono
@@ -296,6 +497,7 @@ class LiveScanBridge(Node):
                 return
             value = json.loads(message.data)
             if (self.map_context_record is not None and value == self.map_context_record
+                    and getattr(self, 'map_context_fault', None) is None
                     and self.current_context(self.now_s()) == self.map_context_identity):
                 self.map_context_ready = True
                 self.update_gate()
@@ -366,8 +568,11 @@ class LiveScanBridge(Node):
                 return
             self.pose_status_stamp = stamp
             self.pose_status, self.pose_received = value, time.monotonic()
+            self.pose_identity_fault = None
         except (ValueError, TypeError) as exc:
             self.pose_status = {}
+            if str(exc) == 'continuous_pose_frame_mismatch':
+                self.pose_identity_fault = str(exc)
             self.error = str(exc)
         self.update_gate()
 
@@ -389,7 +594,15 @@ class LiveScanBridge(Node):
                 return
             self.last_body_stamp = stamp
             self.body, self.body_received = message, time.monotonic()
+            # Bind identity separately from health; a pose-status callback can
+            # arrive just after its matching odometry. This does not publish an
+            # invalid pose: update_gate/nav_body_ready below still check health.
             self.body_context = self.current_context(self.now_s())
+            if (self.body_context is None and self.p.get('collision_policy') == 'official'
+                    and self.p.get('execution_mode', 'preview') == 'preview'
+                    and self.p.get('perception_backend') == 'per_sensor_rays'):
+                self.body_context = LiveScanBridge.retained_preview_context(
+                    self, self.now_s(), self.body_received)
             # Cancel the old generation before exposing a new-epoch body pose.
             self.update_gate()
             if self.nav_body_ready(self.now_s(), self.body_received):
@@ -408,10 +621,22 @@ class LiveScanBridge(Node):
                 return
             value = json.loads(message.data)
             now, mono = self.now_s(), time.monotonic()
-            if not self.map_context_ready or self.current_context(now) != self.map_context_identity:
+            context = self.current_context(now)
+            if context is None and preview_revalidation_enabled(self.p):
+                # A completed map integration and permission to use the
+                # current body pose have different lifetimes. A short pose
+                # receipt gap must not discard independently source-timed,
+                # same-context map evidence. Soft pose valid=false withdraws
+                # pose permission, not truth of an already completed native
+                # integration. Retained identity still rejects explicit faults,
+                # resets and contradictory frames/epochs/seeds. update_gate
+                # below independently requires a fresh valid pose for readiness.
+                context = LiveScanBridge.retained_preview_context(self, now, mono)
+            if (not self.map_context_ready or getattr(self, 'map_context_fault', None) is not None
+                    or context != self.map_context_identity):
                 return
             stamp = integrated_ray_stamp(value, self.map_context_record, now=now,
-                timeout=self.p['input_timeout'], barrier=self.sensor_barrier)
+                timeout=perception_timeout(self.p), barrier=self.sensor_barrier)
             if value['received_at_unix'] <= self.ray_status_stamp or stamp < self.cloud_stamp:
                 return
             self.ray_status_stamp = value['received_at_unix']
@@ -424,6 +649,40 @@ class LiveScanBridge(Node):
             # lease. Genuine missing data expires on its original source clock.
             self.error = str(error)[:180]
         self.update_gate()
+
+    def on_projector_status(self, message):
+        """A geometry fault cannot be hidden behind the last completed ray lease."""
+        if self.p.get('perception_backend') != 'per_sensor_rays':
+            return
+        try:
+            if len(message.data) > 16384 or self.map_context_record is None:
+                return
+            value = json.loads(message.data)
+            if (not isinstance(value, dict) or type(value.get('schema')) is not int or value.get('schema') != 1
+                    or value.get('session_id') != self.map_context_record['session_id']
+                    or not fresh(value.get('received_at_unix'), self.now_s(), self.p['input_timeout'])
+                    or value.get('fault') not in (
+                        'map_alignment_jump_requires_context_reset',
+                        'map_alignment_accumulation_requires_context_reset',
+                        'static_extrinsic_changed_requires_context_reset')
+                    or value.get('valid') is not False):
+                return
+            current = MapContext.parse(self.map_context_record)
+            reported = value.get('context')
+            if not isinstance(reported, dict) or MapContext.parse(dict(reported, schema=1)) != current:
+                return
+            if getattr(self, 'map_context_fault', None) is not None:
+                return
+            self.map_context_fault = value['fault']
+            self.map_context_ready = False
+            self.reference_refresh = None
+            self.gate.revoke(self.now_s(), value['fault'])
+            self.gate.ready = False
+            self.clear_outputs(value['fault'])
+            self.error = value['fault']
+            self.update_gate()
+        except (ValueError, TypeError, KeyError):
+            return
 
     def on_cloud(self, message):
         self.counts['cloud_received'] += 1
@@ -537,20 +796,55 @@ class LiveScanBridge(Node):
                 self.error = str(exc)
             return
 
-    def on_reference(self, message):
+    def on_committed_route(self, message):
+        """Sole task-owner ingress; raw display Path cannot issue a task."""
+        try:
+            context = self.current_context(self.now_s())
+            if context is None:
+                context = self.retained_preview_context(self.now_s(), time.monotonic())
+            snapshot = self.route_ingress.accept(message, now=self.now_s(), context=context)
+            if snapshot is None:
+                return
+            self.active_route_snapshot = deepcopy(message.snapshot)
+            path = deepcopy(message.snapshot.path)
+            path.header.stamp = message.source_stamp
+            for pose in path.poses:
+                pose.header = path.header
+            if not message.active:
+                path.poses = []
+            self.on_reference(path, owner_sequence=message.delivery_sequence)
+        except (ValueError, TypeError, AttributeError) as error:
+            self.error = str(error)
+            self.counts['rejected_references'] += 1
+
+    def on_reference(self, message, *, owner_sequence=None):
         was_ready = self.gate.ready
         self.update_gate()
         try:
             stamp, now = seconds(message.header.stamp), self.now_s()
-            if not new_reference_message(stamp, now, self.reference_seen_stamp,
-                                         self.gate.last_path_stamp,
-                                         message.header.frame_id, self.p['map_frame']):
+            if owner_sequence is None:
+                ordered = new_reference_message(stamp, now, self.reference_seen_stamp,
+                    self.gate.last_path_stamp, message.header.frame_id, self.p['map_frame'])
+            else:
+                # This path was decoded from the immediately accepted v2
+                # envelope, not from an anonymous display Path. Verify that
+                # proof again before bypassing legacy float-clock ordering.
+                ingress = getattr(self, 'route_ingress', None)
+                source_ns = message.header.stamp.sec*1_000_000_000+message.header.stamp.nanosec
+                ordered = (ingress is not None and type(owner_sequence) is int
+                    and owner_sequence == ingress.last_sequence
+                    and source_ns == ingress.last_stamp_ns
+                    and owner_sequence > getattr(self, 'reference_delivery_sequence', 0)
+                    and message.header.frame_id == self.p['map_frame'] and fresh(stamp, now, 2.))
+            if not ordered:
                 # Stale/duplicate cancels are ignored, never allowed to clear
                 # a newer active target or refresh handshake.
                 return
+            if owner_sequence is not None:
+                self.reference_delivery_sequence = owner_sequence
             if not message.poses:
                 self.reference_refresh = None
-                self.reference_seen_stamp = stamp
+                self.reference_seen_stamp = max(self.reference_seen_stamp, stamp)
                 # New-goal handover cancels only the old route. Sensor readiness
                 # and its epoch barrier must not oscillate while PCT computes.
                 self.gate.revoke(self.now_s(), 'explicit_reference_cancel', advance_barrier=False)
@@ -559,15 +853,27 @@ class LiveScanBridge(Node):
             if len(message.poses) > 20000 or any(p.header.frame_id not in ('', self.p['map_frame']) for p in message.poses):
                 raise ValueError('reference_pose_frame_or_size_invalid')
             points = [xyz(p.pose.position) for p in message.poses]
+            if self.gate.preview_paused and self.gate.active:
+                # Same owner geometry can be refreshed while a sensor waits;
+                # it does not create a different native task or renew sensors.
+                import hashlib
+                values = np.asarray(points, dtype='<f8')
+                if (values.ndim == 2 and values.shape[1] == 3 and np.isfinite(values).all()
+                        and hashlib.sha256(values.tobytes()).hexdigest() == self.gate.digest):
+                    self.reference_seen_stamp = self.gate.last_path_stamp = stamp
+                    self.reference_refresh = None
+                    return
             # A path published while the sensor gate was down can race the
             # ready edge, which raises the reference barrier. In either case
             # request a fresh owner-issued path, never relax that barrier.
             if (not self.gate.ready or not was_ready or stamp <= self.gate.barrier):
                 self.arm_reference_refresh(points, message.header.frame_id, stamp, now)
+            sequence_args = {} if owner_sequence is None else {'owner_sequence': owner_sequence}
             if not self.gate.accept(points,
                                     frame_id=message.header.frame_id,
                                     stamp=stamp, now=now,
-                                    body_xyz=xyz(self.body.pose.pose.position) if self.body else []):
+                                    body_xyz=xyz(self.body.pose.pose.position) if self.body else [],
+                                    **sequence_args):
                 self.reference_seen_stamp = stamp
                 self.reference_refresh = None
                 return
@@ -575,6 +881,9 @@ class LiveScanBridge(Node):
             self.reference_refresh = None
             typed = ReferencePath()
             typed.session_id, typed.generation, typed.path = self.p['session_id'], self.gate.generation, message
+            if getattr(self, 'active_route_snapshot', None) is not None:
+                annotate_native_reference(typed, self.active_route_snapshot,
+                                          context_sequence=self.map_context_sequence)
             self.clear_marker()
             self.clear_attempt_debug()
             self.reference_pub.publish(typed)
@@ -588,6 +897,13 @@ class LiveScanBridge(Node):
                 return
             if self.error != 'inputs_not_ready_requires_new_target':
                 self.reference_refresh = None
+            elif (self.p.get('collision_policy') == 'official'
+                    and self.p.get('execution_mode', 'preview') == 'preview'
+                    and not self.gate.active):
+                # Nothing active can be revoked again. Keep the bounded owner
+                # refresh handshake, without manufacturing cancel generations.
+                self.revoke_execution(self.error)
+                return
             # Any rejected reference revokes; never silently continue an older one.
             self.gate.revoke(self.now_s(), self.error, advance_barrier=False)
             self.clear_outputs(self.error, clear_sensors=False)
@@ -649,8 +965,18 @@ class LiveScanBridge(Node):
 
     def on_spline(self, message):
         self.update_gate()
+        if hasattr(self, 'route_ingress') and not spline_matches_route(message,
+                self.active_route_snapshot, context_sequence=self.map_context_sequence):
+            self.counts['rejected_splines'] += 1
+            return
         raw, stamp = message.trajectory, seconds(message.trajectory.start_time)
-        if not admissible_tagged_spline(session_id=message.session_id, generation=message.generation,
+        delivery = preview_delivery(self)
+        delivery_args = dict(session_id=message.session_id, generation=message.generation,
+            frame_id=message.frame_id, plan_id=raw.traj_id, stamp=stamp,
+            gate=self.gate, sequence=self.map_context_sequence,
+            expected_session=self.p['session_id'], now=self.now_s())
+        cacheable = delivery is not None and delivery.eligible_spline(**delivery_args)
+        if not cacheable and not admissible_tagged_spline(session_id=message.session_id, generation=message.generation,
                                        frame_id=message.frame_id, trajectory_id=raw.traj_id,
                                        start_time=stamp, expected_session=self.p['session_id'],
                                        gate=self.gate, last_id=self.last_spline_id, now=self.now_s()):
@@ -662,20 +988,33 @@ class LiveScanBridge(Node):
                 raise ValueError('native_spline_message_budget_exceeded')
             points = sample_shadow_spline(order=raw.order, knots=raw.knots,
                                           points=[xyz(point) for point in raw.pos_pts])
+            # Match upstream ROS 2 visualization using the unchanged native
+            # spline derivative, not distances on the global/reference path.
+            style = official_spline_style(order=raw.order, knots=raw.knots,
+                                          points=[xyz(point) for point in raw.pos_pts])
             started = time.perf_counter()
-            try:
-                support = self.ground_support.validate_body_samples(points,
-                    body_height_m=self.p['body_height'],
-                    height_tolerance_m=self.p['ground_support_height_tolerance_m'],
-                    max_ground_step_m=self.p['ground_support_max_step_m'])
-            except GroundSupportError as exc:
-                self.ground_support_check = dict(valid=False, reason=str(exc),
+            if self.p.get('collision_policy', 'observed_free') == 'official':
+                # Native SCAN already evaluated this curve with the selected
+                # obstacle policy. Do not re-veto it with a D1-only PCT-height
+                # checker. This remains a no-motion visualization session.
+                self.ground_support_check = dict(enabled=False, valid=None,
+                    reason='not_part_of_official_scan_policy',
+                    generation=int(message.generation), plan_id=int(raw.traj_id),
+                    source_stamp=stamp)
+            else:
+                try:
+                    support = self.ground_support.validate_body_samples(points,
+                        body_height_m=self.p['body_height'],
+                        height_tolerance_m=self.p['ground_support_height_tolerance_m'],
+                        max_ground_step_m=self.p['ground_support_max_step_m'])
+                except GroundSupportError as exc:
+                    self.ground_support_check = dict(valid=False, reason=str(exc),
+                        generation=int(message.generation), plan_id=int(raw.traj_id),
+                        source_stamp=stamp, elapsed_ms=(time.perf_counter()-started)*1000.)
+                    raise
+                self.ground_support_check = dict(support, valid=True,
                     generation=int(message.generation), plan_id=int(raw.traj_id),
                     source_stamp=stamp, elapsed_ms=(time.perf_counter()-started)*1000.)
-                raise
-            self.ground_support_check = dict(support, valid=True,
-                generation=int(message.generation), plan_id=int(raw.traj_id),
-                source_stamp=stamp, elapsed_ms=(time.perf_counter()-started)*1000.)
         except (ValueError, TypeError) as exc:
             self.counts['rejected_splines'] += 1
             self.error = str(exc)
@@ -688,24 +1027,32 @@ class LiveScanBridge(Node):
         # Map admission does not extend the sensor/identity lifetime consumed
         # during its computation, even if a large curve took longer to check.
         self.update_gate()
-        if not admissible_tagged_spline(session_id=message.session_id, generation=message.generation,
-                frame_id=message.frame_id, trajectory_id=raw.traj_id, start_time=stamp,
-                expected_session=self.p['session_id'], gate=self.gate,
-                last_id=self.last_spline_id, now=self.now_s()):
-            self.counts['rejected_splines'] += 1
-            return
         marker = Marker()
         marker.header.frame_id, marker.header.stamp = message.frame_id, raw.start_time
         marker.ns, marker.id = 'scan_shadow_not_execution_authority', 0
         marker.type, marker.action = Marker.LINE_STRIP, Marker.ADD
         marker.pose.orientation.w = 1.
-        marker.scale.x = .035
-        marker.color.r, marker.color.g, marker.color.b, marker.color.a = .12, .95, .25, 1.
-        marker.points = [Point(x=float(x), y=float(y), z=float(z)) for x, y, z in points]
+        marker.scale.x = style['line_width']
+        marker.color.r = marker.color.g = marker.color.b = marker.color.a = 1.
+        marker.points = [Point(x=float(x), y=float(y), z=float(z)) for x, y, z in style['points']]
+        marker.colors = [ColorRGBA(r=float(r), g=float(g), b=float(b), a=float(a))
+                         for r, g, b, a in style['colors']]
+        if delivery is not None:
+            delivery_args.update(gate=self.gate, sequence=self.map_context_sequence, now=self.now_s())
+            delivery.capture_spline(dict(marker=marker, message=message),
+                **delivery_args, mono=time.monotonic())
+        if not admissible_tagged_spline(session_id=message.session_id, generation=message.generation,
+                frame_id=message.frame_id, trajectory_id=raw.traj_id, start_time=stamp,
+                expected_session=self.p['session_id'], gate=self.gate,
+                last_id=self.last_spline_id, now=self.now_s()):
+            self.counts['rejected_splines'] += 1
+            LiveScanBridge.recover_pending_preview(self)
+            return
         # TaggedBspline also carries emergency-stop/hover splines. A tag alone
         # is therefore not evidence of a successful native optimization. Keep
         # one bounded candidate until its exact accepted debug arrives.
-        self.delete_spline_marker()
+        if not preview_remaining(self):
+            self.delete_spline_marker()
         self.pending_spline_marker = marker
         self.pending_spline_message = message
         self.spline_received = time.monotonic()
@@ -713,10 +1060,12 @@ class LiveScanBridge(Node):
         action = self.debug_gate.pair(spline_id=self.last_spline_id,
             spline_stamp=self.last_spline_stamp, now=self.now_s(), mono=time.monotonic())
         if action == 'draw':
+            self.native_reference_recovery = None
             self.publish_debug()
-        elif self.debug_gate.active is None:
+        elif self.debug_gate.active is None and not preview_remaining(self):
             self.publish_debug_delete()
         self.publish_execution_admission()
+        LiveScanBridge.recover_pending_preview(self)
 
     def on_local_debug(self, message):
         self.update_gate()
@@ -734,7 +1083,53 @@ class LiveScanBridge(Node):
             progress_arc_m=message.progress_arc_m, target_arc_m=message.target_arc_m,
             matching_path_headers=headers_match,
             predecessor_id=message.predecessor_id, predecessor_safe=message.predecessor_safe,
-            predecessor_check_stamp=seconds(message.predecessor_check_stamp))
+            predecessor_check_stamp=seconds(message.predecessor_check_stamp),
+            checked_map_source_stamp_ns=getattr(message, 'checked_map_source_stamp_ns', 0),
+            checked_body_source_stamp_ns=getattr(message, 'checked_body_source_stamp_ns', 0),
+            checked_map_revision=getattr(message, 'checked_map_revision', 0),
+            checked_context_sequence=getattr(message, 'checked_context_sequence', 0))
+        lease = preview_lease(self)
+        delivery = preview_delivery(self)
+        if delivery is not None:
+            delivery.capture_debug(snapshot, gate=self.gate, sequence=self.map_context_sequence,
+                expected_session=self.p['session_id'], now=self.now_s(), mono=time.monotonic())
+        if seconds(stamp) < self.gate.trajectory_barrier:
+            self.counts['debug_rejected'] += 1
+            LiveScanBridge.recover_pending_preview(self)
+            return
+        if message.phase == 'revalidated':
+            # Rechecking proves only a previously paired immutable curve. It
+            # cannot introduce geometry, admit motion, or revive a cancelled
+            # task. Preserve the original spline stamp for provenance.
+            proof_args = dict(gate=self.gate, sequence=self.map_context_sequence,
+                now=self.now_s(), mono=time.monotonic(), perception_timeout=perception_timeout(self.p),
+                body_timeout=self.p['input_timeout'], sensor_barrier=self.sensor_barrier)
+            recovered = None
+            current = lease is not None and lease.revalidate(snapshot, **proof_args)
+            if not current and delivery is not None:
+                # Same-context storage is not validity. A NEW native proof,
+                # with fresh physical input stamps, must validate this exact
+                # originally accepted curve after the recovery barrier.
+                recovered = delivery.recover(snapshot, **proof_args)
+                if recovered is not None:
+                    self.preview_trajectory_lease, self.preview_trajectory_record = recovered
+            if current or recovered is not None:
+                LiveScanBridge.publish_preview_trajectory(self)
+            else:
+                self.counts['debug_rejected'] += 1
+            return
+        if (lease is not None and lease.snapshot is not None and not message.valid
+                and headers_match and snapshot.session_id == self.p['session_id']
+                and snapshot.generation == self.gate.generation
+                and snapshot.frame_id == self.p['map_frame']
+                and snapshot.plan_id >= lease.snapshot.plan_id
+                and snapshot.stamp_ns > lease.proof_stamp_ns
+                and fresh(snapshot.stamp, self.now_s(), DEBUG_TIMEOUT)):
+            if snapshot.phase in ('waiting_sensor_map', 'waiting_recheck'):
+                lease.suspend(proof_barrier_ns=snapshot.stamp_ns)
+            else:
+                lease.reset()
+                self.preview_trajectory_record = None
         record = self.admitted_record
         revoke_reason = None
         if (record is not None and not message.valid and self.gate.ready and self.gate.active
@@ -751,15 +1146,21 @@ class LiveScanBridge(Node):
         action = self.debug_gate.receive(snapshot, expected_session=self.p['session_id'],
             gate=self.gate, now=self.now_s(), mono=time.monotonic(),
             spline_id=self.last_spline_id, spline_stamp=self.last_spline_stamp)
+        if (action == 'clear' and headers_match and not message.valid
+                and self.debug_gate.phase in REFERENCE_REJECTION_PHASES):
+            self.reject_native_reference(self.debug_gate.phase)
+            return
         if action == 'ignore':
             self.counts['debug_rejected'] += 1
         elif action == 'draw':
+            self.native_reference_recovery = None
             self.publish_debug()
         else:
             # A fresh accepted diagnostic awaiting its spline is not failure.
             # Keep the previous admitted record within its original lease.
-            self.publish_debug_delete()
-            self.delete_spline_marker()
+            if not preview_remaining(self):
+                self.publish_debug_delete()
+                self.delete_spline_marker()
             if not message.valid or self.debug_gate.phase == 'invalid_debug':
                 # Clear display/execution admission, while retaining the
                 # reference so native planning can report a later valid replan.
@@ -769,13 +1170,69 @@ class LiveScanBridge(Node):
                 phase = self.debug_gate.phase
                 revoke_reason = revoke_reason or ('native_'+phase if phase in INVALID_PHASES else phase)
                 self.last_spline_id = max(self.last_spline_id, self.debug_gate.highest_plan_id)
-                self.clear_marker(reset_order=False, clear_debug=False, reason=revoke_reason)
+                self.clear_marker(reset_order=False, clear_debug=False, reason=revoke_reason,
+                                  retain_preview=(lease is not None and phase in
+                                                  ('waiting_sensor_map', 'waiting_recheck')))
                 revoke_reason = None
         if revoke_reason is not None:
             # A rejected old executing plan can be ignored by the diagnostic
             # high-water mark while a newer accepted debug awaits its spline.
             self.revoke_execution(revoke_reason, clear_candidate=False)
         self.publish_execution_admission()
+        LiveScanBridge.recover_pending_preview(self)
+
+    def recover_pending_preview(self):
+        """Complete a reordered native proof/pair without manufacturing times."""
+        delivery = preview_delivery(self)
+        if delivery is None:
+            return False
+        recovered = delivery.recover_pending(gate=self.gate, sequence=self.map_context_sequence,
+            now=self.now_s(), mono=time.monotonic(), perception_timeout=perception_timeout(self.p),
+            body_timeout=self.p['input_timeout'], sensor_barrier=self.sensor_barrier)
+        if recovered is None:
+            return False
+        self.preview_trajectory_lease, self.preview_trajectory_record = recovered
+        LiveScanBridge.publish_preview_trajectory(self)
+        return True
+
+    def reject_native_reference(self, phase):
+        """A published path is not an acknowledgement that native SCAN accepted it.
+
+        Cross-topic delivery can put a new reference ahead of body odometry.
+        Revoke that consumed native generation, then ask the global owner to
+        validate its still-current goal and issue a NEW reference. This is a
+        bounded preview recovery, never a replay or automatic execution retry.
+        Frame/geometry failures need correction, not blind retries.
+        """
+        now, mono = self.now_s(), time.monotonic()
+        context, source = self.gate.context, self.gate.last_path_stamp
+        self.reference_refresh = None
+        self.error = phase
+        if (phase == 'reference_rejected_odometry'
+                and self.p.get('execution_mode', 'preview') == 'preview'
+                and context is not None and self.current_context(now) == context
+                and self.map_context_ready and getattr(self, 'map_context_fault', None) is None):
+            # Path geometry is not user-goal identity: the global owner may
+            # replan the SAME goal from a new body pose. A new digest must not
+            # renew the 3-attempt / 10-second recovery budget. Conservatively
+            # share it in this context until an actual debug/spline pair is
+            # admitted; an empty Path is also used by automatic replanning.
+            key = context
+            recovery = getattr(self, 'native_reference_recovery', None)
+            if recovery is None or recovery['key'] != key:
+                recovery = dict(key=key, attempts=0, deadline=mono+10.)
+                self.native_reference_recovery = recovery
+            if recovery['attempts'] < 3 and mono < recovery['deadline']:
+                recovery['attempts'] += 1
+                self.reference_refresh = dict(context=context, source_stamp=source,
+                    deadline=recovery['deadline'], attempts=0)
+                self.reference_refresh_last = -math.inf
+            else:
+                self.error = phase+':revalidation_budget_exhausted'
+        self.counts['native_reference_rejections'] = self.counts.get('native_reference_rejections', 0)+1
+        self.gate.revoke(now, phase)
+        # This changes task ownership, not the unchanged native map identity.
+        self.clear_outputs(phase, clear_sensors=False)
 
     def on_attempt_debug(self, message):
         self.update_gate()
@@ -785,7 +1242,8 @@ class LiveScanBridge(Node):
         try:
             stamp_ns, lifetime, count = attempt_marker_contract(message.markers,
                 session_id=self.p['session_id'], generation=self.gate.generation,
-                frame_id=self.p['map_frame'], issued_at=self.gate.issued_at, now=self.now_s())
+                frame_id=self.p['map_frame'], issued_at=max(self.gate.issued_at,
+                    self.gate.trajectory_barrier), now=self.now_s())
             if stamp_ns <= self.last_attempt_stamp_ns:
                 raise ValueError('obsolete_attempt_diagnostic')
             # Native diagnostics are a complete snapshot prefixed by DELETEALL.
@@ -828,7 +1286,11 @@ class LiveScanBridge(Node):
         if snapshot is None:
             return
         support = self.ground_support_check
-        if (support.get('valid') is not True or support.get('plan_id') != snapshot.plan_id
+        support_accepted = (support.get('valid') is True
+            if self.p.get('collision_policy', 'observed_free') != 'official'
+            else support.get('enabled') is False
+                 and support.get('reason') == 'not_part_of_official_scan_policy')
+        if (not support_accepted or support.get('plan_id') != snapshot.plan_id
                 or support.get('generation') != self.gate.generation
                 or support.get('source_stamp') != self.last_spline_stamp):
             self.revoke_execution('ground_support_pair_invalid')
@@ -843,18 +1305,42 @@ class LiveScanBridge(Node):
             self.delete_spline_marker()
             self.clear_debug('expired_or_unpaired')
             return
-        # Draw green and native reference/target together only after pairing.
+        # Draw upstream speed colours and native reference/target only after pairing.
         # Preserve the spline's real start_time; never freshen an old trajectory.
         self.admit_execution()
         marker = self.pending_spline_marker
+        lease = preview_lease(self)
+        if lease is not None and lease.accept(snapshot, gate=self.gate,
+                sequence=self.map_context_sequence, spline_stamp=self.last_spline_stamp,
+                now=self.now_s(), mono=time.monotonic()):
+            self.preview_trajectory_record = dict(marker=deepcopy(marker),
+                message=deepcopy(self.pending_spline_message), snapshot=deepcopy(snapshot))
+        LiveScanBridge.draw_debug_geometry(self, snapshot, marker, remaining)
+
+    def publish_preview_trajectory(self):
+        remaining = preview_remaining(self)
+        record = getattr(self, 'preview_trajectory_record', None)
+        if remaining <= 0 or record is None:
+            return
+        # Revalidation updates only the evidence lease. Marker coordinates and
+        # original source time remain exactly those accepted by native SCAN.
+        LiveScanBridge.draw_debug_geometry(self, record['snapshot'],
+            deepcopy(record['marker']), remaining)
+
+    def draw_debug_geometry(self, snapshot, marker, remaining):
         marker.lifetime = Duration(seconds=remaining).to_msg()
         self.marker_pub.publish(marker)
+        samples = deepcopy(marker)
+        samples.id, samples.type = 1, Marker.SPHERE_LIST
+        samples.scale.y = samples.scale.z = samples.scale.x
+        self.marker_pub.publish(samples)
         self.visible_spline_id = snapshot.plan_id
         self.counts['marker_published'] += 1
         stamp = Time(nanoseconds=snapshot.stamp_ns).to_msg()
-        clear = Marker()
-        clear.header.frame_id, clear.header.stamp, clear.action = snapshot.frame_id, stamp, Marker.DELETEALL
-        markers = [clear]
+        # Stable IDs replace existing RViz objects in place. DELETEALL here
+        # destroys even unchanged reference/target geometry on every heartbeat.
+        # Missing kinds are removed explicitly; hard revoke still clears all.
+        markers = []
         for spec in local_debug_specs(selected_reference=snapshot.selected_reference,
                 projection=snapshot.projection, local_target=snapshot.local_target):
             marker = Marker()
@@ -874,7 +1360,15 @@ class LiveScanBridge(Node):
                                  for x, y, z in spec['points']]
             marker.lifetime = Duration(seconds=remaining).to_msg()
             markers.append(marker)
-        self.debug_pub.publish(MarkerArray(markers=markers))
+        keys = {(item.ns, item.id) for item in markers}
+        removals = []
+        for namespace, identifier in sorted(getattr(self, 'debug_marker_keys', set())-keys):
+            deletion = Marker()
+            deletion.header.frame_id, deletion.header.stamp = snapshot.frame_id, stamp
+            deletion.ns, deletion.id, deletion.action = namespace, identifier, Marker.DELETE
+            removals.append(deletion)
+        self.debug_pub.publish(MarkerArray(markers=removals+markers))
+        self.debug_marker_keys = keys
         self.counts['debug_published'] += 1
 
     def publish_debug_delete(self):
@@ -883,9 +1377,20 @@ class LiveScanBridge(Node):
         marker.header.stamp = self.get_clock().now().to_msg()
         marker.action = Marker.DELETEALL
         self.debug_pub.publish(MarkerArray(markers=[marker]))
+        self.debug_marker_keys = set()
         self.counts['debug_cleared'] += 1
 
-    def clear_debug(self, phase='inactive'):
+    def clear_debug(self, phase='inactive', *, retain_preview=False):
+        delivery = preview_delivery(self)
+        if delivery is not None and not retain_preview:
+            delivery.clear()
+        lease = preview_lease(self)
+        if lease is not None:
+            if retain_preview:
+                lease.suspend()
+            else:
+                lease.reset()
+                self.preview_trajectory_record = None
         self.revoke_execution(phase)
         if self.debug_gate.generation != self.gate.generation:
             self.debug_gate.reset(self.gate.generation)
@@ -900,7 +1405,18 @@ class LiveScanBridge(Node):
         self.marker_pub.publish(marker)
         self.visible_spline_id = -1
 
-    def clear_marker(self, *, reset_order=True, clear_debug=True, reason='trajectory_cleared'):
+    def clear_marker(self, *, reset_order=True, clear_debug=True, reason='trajectory_cleared',
+                     retain_preview=False):
+        delivery = preview_delivery(self)
+        if delivery is not None and not retain_preview:
+            delivery.clear()
+        lease = preview_lease(self)
+        if lease is not None:
+            if retain_preview:
+                lease.suspend()
+            else:
+                lease.reset()
+                self.preview_trajectory_record = None
         self.delete_spline_marker()
         if reset_order:
             self.last_spline_id = -1
@@ -908,7 +1424,10 @@ class LiveScanBridge(Node):
         self.pending_spline_marker = None
         self.spline_received = -math.inf
         if clear_debug:
-            self.clear_debug()
+            if retain_preview:
+                self.clear_debug(retain_preview=True)
+            else:
+                self.clear_debug()
         self.revoke_execution(reason)
 
     def clear_outputs(self, reason, *, clear_sensors=True):
@@ -930,6 +1449,9 @@ class LiveScanBridge(Node):
         typed.session_id, typed.generation = self.p['session_id'], self.gate.generation
         typed.path.header.frame_id = self.p['map_frame']
         typed.path.header.stamp = self.get_clock().now().to_msg()
+        if getattr(self, 'active_route_snapshot', None) is not None:
+            annotate_native_reference(typed, self.active_route_snapshot,
+                                      context_sequence=self.map_context_sequence)
         self.reference_pub.publish(typed)
         self.clear_marker()
         self.clear_attempt_debug()
@@ -947,6 +1469,7 @@ class LiveScanBridge(Node):
             return False
         raw = message.trajectory
         return (self.p.get('execution_mode', 'preview') == 'execution'
+                and self.p.get('collision_policy', 'observed_free') != 'official'
                 and self.gate.ready and self.gate.active
                 and message.session_id == self.p['session_id']
                 and message.generation == self.gate.generation
@@ -995,6 +1518,7 @@ class LiveScanBridge(Node):
         raw = message.trajectory
         now, mono = self.now_s(), time.monotonic()
         return (self.p.get('execution_mode', 'preview') == 'execution'
+                and self.p.get('collision_policy', 'observed_free') != 'official'
                 and self.gate.ready and self.gate.active and record['context'] == self.gate.context
                 and message.session_id == self.p['session_id']
                 and message.generation == self.gate.generation
@@ -1056,13 +1580,25 @@ class LiveScanBridge(Node):
         self.publish_pending(now, mono)
         self.update_gate()
         self.request_reference_refresh(now, mono)
-        if self.last_spline_stamp > 0 and not fresh(self.last_spline_stamp, now, DEBUG_TIMEOUT):
-            self.clear_marker(reset_order=False, clear_debug=False)
-            self.clear_debug('expired')
-        if self.debug_gate.expire(now=now, mono=mono, gate=self.gate):
-            self.revoke_execution('native_acceptance_expired')
-            self.publish_debug_delete()
-            self.delete_spline_marker()
+        lease = preview_lease(self)
+        if lease is None:
+            if self.last_spline_stamp > 0 and not fresh(self.last_spline_stamp, now, DEBUG_TIMEOUT):
+                self.clear_marker(reset_order=False, clear_debug=False)
+                self.clear_debug('expired')
+            if self.debug_gate.expire(now=now, mono=mono, gate=self.gate):
+                self.revoke_execution('native_acceptance_expired')
+                self.publish_debug_delete()
+                self.delete_spline_marker()
+        else:
+            # Candidate acceptance is transient; a current preview curve has
+            # its own native recheck evidence. Neither a pending successor nor
+            # the original spline start time destroys that independent proof.
+            self.debug_gate.expire(now=now, mono=mono, gate=self.gate)
+            if self.last_spline_stamp > 0 and not fresh(self.last_spline_stamp, now, DEBUG_TIMEOUT):
+                self.pending_spline_marker = self.pending_spline_message = None
+            if preview_remaining(self, now, mono) <= 0 and self.visible_spline_id >= 0:
+                self.publish_debug_delete()
+                self.delete_spline_marker()
         if self.attempt_marker_count and (
                 not self.gate.ready or not self.gate.active or mono >= self.attempt_visible_until
                 or not fresh(self.last_attempt_stamp_ns*1e-9, now, DEBUG_TIMEOUT)):
@@ -1072,7 +1608,10 @@ class LiveScanBridge(Node):
         self.last_status = mono
         self.publish_execution_admission()
         age = lambda stamp: now-stamp if stamp > 0 and math.isfinite(stamp) else None
-        debug = self.debug_gate.active
+        preview_current = (preview_remaining(self, now, mono) > 0
+                           and lease is not None and lease.snapshot is not None
+                           and self.visible_spline_id == lease.snapshot.plan_id)
+        debug = lease.snapshot if preview_current else self.debug_gate.active
         support = self.ground_support_check
         support_failed = (support.get('valid') is False
             and support.get('generation') == self.gate.generation
@@ -1080,9 +1619,18 @@ class LiveScanBridge(Node):
             and fresh(support.get('source_stamp', 0.), now, DEBUG_TIMEOUT))
         status = dict(schema=1, mode='LIVE_SHADOW_NO_MOTION', session_id=self.p['session_id'],
                       execution_mode=self.p['execution_mode'],
+                      collision_policy=self.p['collision_policy'],
+                      perception_timeout_s=perception_timeout(self.p),
                       received_at_unix=now, frame_id=self.p['map_frame'], ready=self.gate.ready,
-                      sensor_ready=self.gate.ready,
+                      sensor_ready=getattr(self, 'sensor_ready', self.gate.ready),
+                      ready_failure_reasons=getattr(self, 'ready_failure_reasons', []),
+                      context_readiness_reason=getattr(self, 'context_readiness_reason', ''),
+                      preview_reference_paused=self.gate.preview_paused,
+                      preview_sensor_pauses=getattr(self, 'preview_sensor_pauses', 0),
+                      preview_sensor_resumes=getattr(self, 'preview_sensor_resumes', 0),
+                      new_trajectory_required_after=self.gate.trajectory_barrier,
                       native_map_context_ready=self.map_context_ready,
+                      native_map_context_fault=self.map_context_fault,
                       native_map_context_sequence=self.map_context_sequence,
                       localization_session_id=self.p['localization_session_id'],
                       localization_epoch=self.navigation.get('epoch'),
@@ -1097,16 +1645,36 @@ class LiveScanBridge(Node):
                       execution_frozen=self.execution_frozen,
                       execution_freeze_fresh=0 <= mono-self.freeze_received <= self.p['input_timeout'],
                       spline_geometry_source='TaggedBspline_session_generation_verified_visualization_only',
-                      last_spline_id=self.last_spline_id, last_spline_stamp=self.last_spline_stamp,
-                      spline_visual_valid=(self.gate.ready and self.gate.active
+                      # Display identity belongs to the currently proved curve,
+                      # not an unpaired successor or a cleared candidate slot.
+                      # Keep the internal ordering high-water marks untouched.
+                      last_spline_id=lease.snapshot.plan_id if preview_current else self.last_spline_id,
+                      last_spline_stamp=lease.spline_source_stamp if preview_current else self.last_spline_stamp,
+                      latest_candidate_spline_id=self.last_spline_id,
+                      latest_candidate_spline_stamp=self.last_spline_stamp,
+                      spline_visual_valid=(preview_current if lease is not None else
+                                           self.gate.ready and self.gate.active
                                            and self.visible_spline_id == self.last_spline_id
                                            and debug is not None and debug.plan_id == self.last_spline_id
                                            and fresh(self.last_spline_stamp, now, DEBUG_TIMEOUT)),
                       spline_waiting_for_native_acceptance=(self.pending_spline_marker is not None
                                                             and self.visible_spline_id != self.last_spline_id),
                       local_debug_valid=debug is not None,
-                      local_debug_phase='failed_ground_support' if support_failed else self.debug_gate.phase,
+                      local_debug_phase=('failed_ground_support' if support_failed else
+                                         'accepted' if preview_current else self.debug_gate.phase),
+                      trajectory_revalidation=dict(enabled=lease is not None,
+                          valid=preview_current,
+                          proof_kind=lease.proof_kind if lease is not None else 'none',
+                          original_spline_stamp=lease.spline_source_stamp if lease is not None else 0.,
+                          checked_at=lease.proof_stamp if lease is not None else 0.,
+                          checked_map_source_stamp_ns=lease.map_source_stamp_ns if lease is not None else 0,
+                          checked_body_source_stamp_ns=lease.body_source_stamp_ns if lease is not None else 0,
+                          checked_map_revision=lease.map_revision if lease is not None else 0,
+                          checked_context_sequence=lease.context_sequence if lease is not None else 0,
+                          plan_id=lease.snapshot.plan_id if lease is not None and lease.snapshot else -1),
                       ground_support_check=support,
+                      current_body_ground_support_check=getattr(
+                          self, 'current_body_ground_support_check', {}),
                       local_debug_plan_id=debug.plan_id if debug else self.debug_gate.highest_plan_id,
                       local_debug_target=debug.local_target if debug else None,
                       local_debug_progress_arc_m=debug.progress_arc_m if debug else None,

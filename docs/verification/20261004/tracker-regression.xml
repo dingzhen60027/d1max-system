@@ -1,0 +1,393 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="(empty)"
+	tests="3"
+	failures="0"
+	disabled="0"
+	skipped="0"
+	hostname="dndx-pc"
+	time="0"
+	timestamp="2026-10-04T15:12:13"
+	>
+	<testcase name="test_tracker_core" classname="test_tracker_core" time="0.0682074" status="run">
+		<system-out>-- run_test.py: invoking following command in '/home/dndx/d1max_nav_ws/experiments/single_floor_execution_20261003_system_v2/tracker/build/d1max_trajectory_tracker':
+ - /home/dndx/d1max_nav_ws/experiments/single_floor_execution_20261003_system_v2/tracker/build/d1max_trajectory_tracker/test_tracker_core --gtest_output=xml:/home/dndx/d1max_nav_ws/experiments/single_floor_execution_20261003_system_v2/tracker/build/d1max_trajectory_tracker/test_results/d1max_trajectory_tracker/test_tracker_core.gtest.xml
+Running main() from /opt/ros/humble/src/gtest_vendor/src/gtest_main.cc
+[==========] Running 52 tests from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 52 tests from Tracker
+[ RUN      ] Tracker.DoesNotStartWithoutExplicitTask
+[       OK ] Tracker.DoesNotStartWithoutExplicitTask (0 ms)
+[ RUN      ] Tracker.RuntimeRequiresVersionedControlContractEvenIfStandalone
+[       OK ] Tracker.RuntimeRequiresVersionedControlContractEvenIfStandalone (0 ms)
+[ RUN      ] Tracker.OutOfOrderAndDuplicateOdomCannotRewindOrRefreshSource
+[       OK ] Tracker.OutOfOrderAndDuplicateOdomCannotRewindOrRefreshSource (0 ms)
+[ RUN      ] Tracker.LegacyMapCorrectionChangesCommandWithoutPhysicalMotion
+[       OK ] Tracker.LegacyMapCorrectionChangesCommandWithoutPhysicalMotion (0 ms)
+[ RUN      ] Tracker.UsesVendorCurveAndOutputsBoundedSI
+[       OK ] Tracker.UsesVendorCurveAndOutputsBoundedSI (0 ms)
+[ RUN      ] Tracker.AcceptedRouteYawToleranceRangeIsNotSilentlyRejectedAtAlignment
+[       OK ] Tracker.AcceptedRouteYawToleranceRangeIsNotSilentlyRejectedAtAlignment (0 ms)
+[ RUN      ] Tracker.SessionGenerationAndIdAreEnforced
+[       OK ] Tracker.SessionGenerationAndIdAreEnforced (0 ms)
+[ RUN      ] Tracker.EmptyInvalidOrWrongFrameCandidateDoesNotWithdrawIncumbent
+[       OK ] Tracker.EmptyInvalidOrWrongFrameCandidateDoesNotWithdrawIncumbent (1 ms)
+[ RUN      ] Tracker.CandidateDiagnosticsSeparateFormatClockAndGeometryWithoutChangingAdmission
+[       OK ] Tracker.CandidateDiagnosticsSeparateFormatClockAndGeometryWithoutChangingAdmission (0 ms)
+[ RUN      ] Tracker.ExpiredPendingCandidateDoesNotWithdrawOrRestampAcceptedCurve
+[       OK ] Tracker.ExpiredPendingCandidateDoesNotWithdrawOrRestampAcceptedCurve (0 ms)
+[ RUN      ] Tracker.OdomFramesQuaternionAndSpeedCannotBypassSafety
+[       OK ] Tracker.OdomFramesQuaternionAndSpeedCannotBypassSafety (0 ms)
+[ RUN      ] Tracker.StaleOdometryStopsAndRevokesCurrentTrajectory
+[       OK ] Tracker.StaleOdometryStopsAndRevokesCurrentTrajectory (0 ms)
+[ RUN      ] Tracker.HeartbeatTimeoutCannotResumeSameGeneration
+[       OK ] Tracker.HeartbeatTimeoutCannotResumeSameGeneration (0 ms)
+[ RUN      ] Tracker.CancelCannotResumeSameGeneration
+[       OK ] Tracker.CancelCannotResumeSameGeneration (0 ms)
+[ RUN      ] Tracker.InvalidMutableHeartbeatIsNotAccepted
+[       OK ] Tracker.InvalidMutableHeartbeatIsNotAccepted (0 ms)
+[ RUN      ] Tracker.RotatesAndFreezesBeforeForwardMotion
+[       OK ] Tracker.RotatesAndFreezesBeforeForwardMotion (0 ms)
+[ RUN      ] Tracker.OccupiedForwardTurnRequestsControlledStopBeforePureMeasuredTurn
+[       OK ] Tracker.OccupiedForwardTurnRequestsControlledStopBeforePureMeasuredTurn (0 ms)
+[ RUN      ] Tracker.TurnFirstNeedsDistinctMeasuredAlignmentSamplesAndHasHysteresis
+[       OK ] Tracker.TurnFirstNeedsDistinctMeasuredAlignmentSamplesAndHasHysteresis (0 ms)
+[ RUN      ] Tracker.TurnRestUsesRecordLimitsAndFreshMovingSampleRestartsDuration
+[       OK ] Tracker.TurnRestUsesRecordLimitsAndFreshMovingSampleRestartsDuration (1 ms)
+[ RUN      ] Tracker.TurnRestSampleMinimumCannotBeSatisfiedByTimerOrReplayedSource
+[       OK ] Tracker.TurnRestSampleMinimumCannotBeSatisfiedByTimerOrReplayedSource (0 ms)
+[ RUN      ] Tracker.WrongOldZeroFeedbackCannotRequestManeuverAndStaleBodyCannotTurn
+[       OK ] Tracker.WrongOldZeroFeedbackCannotRequestManeuverAndStaleBodyCannotTurn (0 ms)
+[ RUN      ] Tracker.SameTaskCandidateAndTemporaryProofHoldDoNotResetTurnPhase
+[       OK ] Tracker.SameTaskCandidateAndTemporaryProofHoldDoNotResetTurnPhase (0 ms)
+[ RUN      ] Tracker.OccupiedAlignedEntryWaitsWithoutRepeatedForwardAndRetainsTask
+[       OK ] Tracker.OccupiedAlignedEntryWaitsWithoutRepeatedForwardAndRetainsTask (0 ms)
+[ RUN      ] Tracker.OccupiedInPlaceAlignTurnWaitsForAnotherEntryInsteadOfRepeatingIt
+[       OK ] Tracker.OccupiedInPlaceAlignTurnWaitsForAnotherEntryInsteadOfRepeatingIt (0 ms)
+[ RUN      ] Tracker.InPlaceTurnFeedbackOutsideAligningCannotRequestManeuver
+[       OK ] Tracker.InPlaceTurnFeedbackOutsideAligningCannotRequestManeuver (0 ms)
+[ RUN      ] Tracker.OnlyAdmittedReplacementCanRetryBlockedEntryAndStillMustStopAndAlign
+[       OK ] Tracker.OnlyAdmittedReplacementCanRetryBlockedEntryAndStillMustStopAndAlign (0 ms)
+[ RUN      ] Tracker.RealProgressAfterAlignedEntryDistinguishesANewObstacle
+[       OK ] Tracker.RealProgressAfterAlignedEntryDistinguishesANewObstacle (0 ms)
+[ RUN      ] Tracker.RealSplineCurvatureConstrainsForwardSpeedWithoutGuessingLateralAcceleration
+[       OK ] Tracker.RealSplineCurvatureConstrainsForwardSpeedWithoutGuessingLateralAcceleration (0 ms)
+[ RUN      ] Tracker.FutureBendIsReachedThroughBrakingEnvelopeNotWholeCurveMinimum
+[       OK ] Tracker.FutureBendIsReachedThroughBrakingEnvelopeNotWholeCurveMinimum (0 ms)
+[ RUN      ] Tracker.BrakingEnvelopeCannotBorrowVerticalDistanceOrIgnoreCloseTurn
+[       OK ] Tracker.BrakingEnvelopeCannotBorrowVerticalDistanceOrIgnoreCloseTurn (0 ms)
+[ RUN      ] Tracker.NormalCurvatureControlNeverHardClipsThroughTheAccelerationLimit
+[       OK ] Tracker.NormalCurvatureControlNeverHardClipsThroughTheAccelerationLimit (0 ms)
+[ RUN      ] Tracker.PoseJumpIntoUnreachableCurveSpeedRequestsExplicitStopAndPreservesAppliedGeometry
+[       OK ] Tracker.PoseJumpIntoUnreachableCurveSpeedRequestsExplicitStopAndPreservesAppliedGeometry (1 ms)
+[ RUN      ] Tracker.DoesNotChaseAPlanInADifferentHeightOrFarAway
+[       OK ] Tracker.DoesNotChaseAPlanInADifferentHeightOrFarAway (0 ms)
+[ RUN      ] Tracker.GoalCompletionStopsAndRemainsTerminal
+[       OK ] Tracker.GoalCompletionStopsAndRemainsTerminal (0 ms)
+[ RUN      ] Tracker.TrajectoryLeaseStopsEvenWithFreshTaskAndOdom
+[       OK ] Tracker.TrajectoryLeaseStopsEvenWithFreshTaskAndOdom (0 ms)
+[ RUN      ] Tracker.ClockJumpStopsInsteadOfExtrapolating
+[       OK ] Tracker.ClockJumpStopsInsteadOfExtrapolating (0 ms)
+[ RUN      ] Tracker.PausedRosClockCannotKeepAdvancingAPlan
+[       OK ] Tracker.PausedRosClockCannotKeepAdvancingAPlan (0 ms)
+[ RUN      ] Tracker.FutureTrajectoryDoesNotExecuteEarly
+[       OK ] Tracker.FutureTrajectoryDoesNotExecuteEarly (0 ms)
+[ RUN      ] Tracker.ConfigurationCannotRelaxHardCeiling
+[       OK ] Tracker.ConfigurationCannotRelaxHardCeiling (0 ms)
+[ RUN      ] Tracker.StationaryRecordThresholdsAreBoundedAndStricterValuesRemainValid
+[       OK ] Tracker.StationaryRecordThresholdsAreBoundedAndStricterValuesRemainValid (0 ms)
+[ RUN      ] Tracker.SameXYOnAnotherFloorDoesNotCompleteOrResume
+[       OK ] Tracker.SameXYOnAnotherFloorDoesNotCompleteOrResume (0 ms)
+[ RUN      ] Tracker.GoalRequiresHeightToleranceWithinSingleFloorEnvelope
+[       OK ] Tracker.GoalRequiresHeightToleranceWithinSingleFloorEnvelope (0 ms)
+[ RUN      ] Tracker.GoalThresholdsMatchMeasuredReferenceXYZCompletion
+[       OK ] Tracker.GoalThresholdsMatchMeasuredReferenceXYZCompletion (0 ms)
+[ RUN      ] Tracker.ReplansCannotMoveTheSingleFloorHeightAnchor
+[       OK ] Tracker.ReplansCannotMoveTheSingleFloorHeightAnchor (0 ms)
+[ RUN      ] Tracker.EntireSplineHeightHullIsCheckedBeforeExecution
+[       OK ] Tracker.EntireSplineHeightHullIsCheckedBeforeExecution (0 ms)
+[ RUN      ] Tracker.IdealSingleFloorClosedLoopReachesGoalWithoutRobot
+[       OK ] Tracker.IdealSingleFloorClosedLoopReachesGoalWithoutRobot (0 ms)
+[ RUN      ] Tracker.LocalEndpointIsNotTheGlobalGoal
+[       OK ] Tracker.LocalEndpointIsNotTheGlobalGoal (0 ms)
+[ RUN      ] Tracker.ValidReplanPreservesLinearAndAngularAccelerationHistory
+[       OK ] Tracker.ValidReplanPreservesLinearAndAngularAccelerationHistory (1 ms)
+[ RUN      ] Tracker.InvalidCandidateRetainsEstablishedCurveAndLimiter
+[       OK ] Tracker.InvalidCandidateRetainsEstablishedCurveAndLimiter (0 ms)
+[ RUN      ] Tracker.ForwardOnlyControllerSteersTowardBothSidesOfParallelPath
+[       OK ] Tracker.ForwardOnlyControllerSteersTowardBothSidesOfParallelPath (0 ms)
+[ RUN      ] Tracker.ParallelOffsetsConvergeWithReplansAndBoundedForwardOnlyCommands
+[       OK ] Tracker.ParallelOffsetsConvergeWithReplansAndBoundedForwardOnlyCommands (1 ms)
+[ RUN      ] Tracker.BoundedSpatialSearchDoesNotJumpToDistantSplineEnd
+[       OK ] Tracker.BoundedSpatialSearchDoesNotJumpToDistantSplineEnd (0 ms)
+[----------] 52 tests from Tracker (5 ms total)
+
+[----------] Global test environment tear-down
+[==========] 52 tests from 1 test suite ran. (5 ms total)
+[  PASSED  ] 52 tests.
+-- run_test.py: return code 0
+-- run_test.py: inject classname prefix into gtest result file '/home/dndx/d1max_nav_ws/experiments/single_floor_execution_20261003_system_v2/tracker/build/d1max_trajectory_tracker/test_results/d1max_trajectory_tracker/test_tracker_core.gtest.xml'
+-- run_test.py: verify result file '/home/dndx/d1max_nav_ws/experiments/single_floor_execution_20261003_system_v2/tracker/build/d1max_trajectory_tracker/test_results/d1max_trajectory_tracker/test_tracker_core.gtest.xml'
+</system-out>
+	</testcase>
+	<testcase name="test_tracker_v2" classname="test_tracker_v2" time="0.159872" status="run">
+		<system-out>-- run_test.py: invoking following command in '/home/dndx/d1max_nav_ws/experiments/single_floor_execution_20261003_system_v2/tracker/build/d1max_trajectory_tracker':
+ - /home/dndx/d1max_nav_ws/experiments/single_floor_execution_20261003_system_v2/tracker/build/d1max_trajectory_tracker/test_tracker_v2 --gtest_output=xml:/home/dndx/d1max_nav_ws/experiments/single_floor_execution_20261003_system_v2/tracker/build/d1max_trajectory_tracker/test_results/d1max_trajectory_tracker/test_tracker_v2.gtest.xml
+Running main() from /opt/ros/humble/src/gtest_vendor/src/gtest_main.cc
+[==========] Running 88 tests from 9 test suites.
+[----------] Global test environment set-up.
+[----------] 30 tests from TrackerV2
+[ RUN      ] TrackerV2.LegacyInputsCannotManufactureControlIdentity
+[       OK ] TrackerV2.LegacyInputsCannotManufactureControlIdentity (0 ms)
+[ RUN      ] TrackerV2.MissingOrDifferentMapGeometryRevisionCannotEnterTheAdmittedCurve
+[       OK ] TrackerV2.MissingOrDifferentMapGeometryRevisionCannotEnterTheAdmittedCurve (0 ms)
+[ RUN      ] TrackerV2.PredictedStateHeadersDoNotManufactureIndependentTurnRestSamples
+[       OK ] TrackerV2.PredictedStateHeadersDoNotManufactureIndependentTurnRestSamples (0 ms)
+[ RUN      ] TrackerV2.WrongEpochOdometryInvalidatesWholeTask
+[       OK ] TrackerV2.WrongEpochOdometryInvalidatesWholeTask (1 ms)
+[ RUN      ] TrackerV2.RetiredExpiredAndDuplicateObservationsCannotStopNewTaskOrRenewItsBody
+[       OK ] TrackerV2.RetiredExpiredAndDuplicateObservationsCannotStopNewTaskOrRenewItsBody (0 ms)
+[ RUN      ] TrackerV2.RetiredEpochWithNewerTimestampCannotCancelRelocalizedTask
+[       OK ] TrackerV2.RetiredEpochWithNewerTimestampCannotCancelRelocalizedTask (0 ms)
+[ RUN      ] TrackerV2.FreshEvidenceFaultCannotBeClearedByOlderValidPacket
+[       OK ] TrackerV2.FreshEvidenceFaultCannotBeClearedByOlderValidPacket (0 ms)
+[ RUN      ] TrackerV2.NewEpochWithResetClockRevokesInsteadOfHidingBehindPriorSourceFloor
+[       OK ] TrackerV2.NewEpochWithResetClockRevokesInsteadOfHidingBehindPriorSourceFloor (0 ms)
+[ RUN      ] TrackerV2.ForeignAndFutureFaultsCannotPoisonNextExpectedSource
+[       OK ] TrackerV2.ForeignAndFutureFaultsCannotPoisonNextExpectedSource (0 ms)
+[ RUN      ] TrackerV2.NewerForeignSessionMapOrSchemaDoesNotStopFreshTrajectoryOrEraseMeasuredProgress
+[       OK ] TrackerV2.NewerForeignSessionMapOrSchemaDoesNotStopFreshTrajectoryOrEraseMeasuredProgress (0 ms)
+[ RUN      ] TrackerV2.MatchingXYZProgressUsesRealSourceTimeNotControlTicks
+[       OK ] TrackerV2.MatchingXYZProgressUsesRealSourceTimeNotControlTicks (1 ms)
+[ RUN      ] TrackerV2.SmallPhysicalBacktrackPreservesOnlyCommittedHighWater
+[       OK ] TrackerV2.SmallPhysicalBacktrackPreservesOnlyCommittedHighWater (0 ms)
+[ RUN      ] TrackerV2.VerticalMeasurementIsNotLostByXYProjection
+[       OK ] TrackerV2.VerticalMeasurementIsNotLostByXYProjection (0 ms)
+[ RUN      ] TrackerV2.DifferentSegmentOrAnchorNeverReplacesCurve
+[       OK ] TrackerV2.DifferentSegmentOrAnchorNeverReplacesCurve (0 ms)
+[ RUN      ] TrackerV2.HigherIdCannotHideOlderSolveOrDistantJoin
+[       OK ] TrackerV2.HigherIdCannotHideOlderSolveOrDistantJoin (1 ms)
+[ RUN      ] TrackerV2.ValidReplacementPreservesLimiterAndDoesNotInventGlobalProgress
+[       OK ] TrackerV2.ValidReplacementPreservesLimiterAndDoesNotInventGlobalProgress (0 ms)
+[ RUN      ] TrackerV2.CancelNeedsSameIdentityNotMerelyMatchingGeneration
+[       OK ] TrackerV2.CancelNeedsSameIdentityNotMerelyMatchingGeneration (0 ms)
+[ RUN      ] TrackerV2.FreshPublishStampCannotLeaseOldOrFutureMeasurementEvidence
+[       OK ] TrackerV2.FreshPublishStampCannotLeaseOldOrFutureMeasurementEvidence (0 ms)
+[ RUN      ] TrackerV2.FreshBodyStateCannotHideReorderedInputs
+[       OK ] TrackerV2.FreshBodyStateCannotHideReorderedInputs (0 ms)
+[ RUN      ] TrackerV2.SourceEvidenceExpiresWithoutAnyNewCallback
+[       OK ] TrackerV2.SourceEvidenceExpiresWithoutAnyNewCallback (1 ms)
+[ RUN      ] TrackerV2.MovingBodyAdmitsMeasuredNonzeroCurveParameterWithoutRestarting
+[       OK ] TrackerV2.MovingBodyAdmitsMeasuredNonzeroCurveParameterWithoutRestarting (0 ms)
+[ RUN      ] TrackerV2.DeliveryTimeDoesNotAdvanceAStationaryJoin
+[       OK ] TrackerV2.DeliveryTimeDoesNotAdvanceAStationaryJoin (0 ms)
+[ RUN      ] TrackerV2.InvalidHandoffProofNeverReplacesIncumbent
+[       OK ] TrackerV2.InvalidHandoffProofNeverReplacesIncumbent (2 ms)
+[ RUN      ] TrackerV2.MatchingPositionCannotHideVelocityMismatchOrUnboundedCurveDynamics
+[       OK ] TrackerV2.MatchingPositionCannotHideVelocityMismatchOrUnboundedCurveDynamics (1 ms)
+[ RUN      ] TrackerV2.ActualVendorCurveAllowsDistantBendButRejectsUnbrakeableEntryWithoutResettingLimiter
+[       OK ] TrackerV2.ActualVendorCurveAllowsDistantBendButRejectsUnbrakeableEntryWithoutResettingLimiter (0 ms)
+[ RUN      ] TrackerV2.HandoffCannotJumpPastBoundedArcWindowOrOntoOtherFloor
+[       OK ] TrackerV2.HandoffCannotJumpPastBoundedArcWindowOrOntoOtherFloor (0 ms)
+[ RUN      ] TrackerV2.RemainingDomainIncludesMeasuredBacktrackingNotHighWaterCutoff
+[       OK ] TrackerV2.RemainingDomainIncludesMeasuredBacktrackingNotHighWaterCutoff (0 ms)
+[ RUN      ] TrackerV2.LocalEndpointRetainsFreshMeasuredCurveWhileSuccessorIsOnlyPrepared
+[       OK ] TrackerV2.LocalEndpointRetainsFreshMeasuredCurveWhileSuccessorIsOnlyPrepared (3 ms)
+[ RUN      ] TrackerV2.RecoverableSourceGapRetainsCurveAndNeedsDistinctSamplesOverPointSixSeconds
+[       OK ] TrackerV2.RecoverableSourceGapRetainsCurveAndNeedsDistinctSamplesOverPointSixSeconds (1 ms)
+[ RUN      ] TrackerV2.SupportRelativeHeightAllowsVerifiedCorridorButNotCrossFloorSupport
+[       OK ] TrackerV2.SupportRelativeHeightAllowsVerifiedCorridorButNotCrossFloorSupport (1 ms)
+[----------] 30 tests from TrackerV2 (12 ms total)
+
+[----------] 2 tests from TrackerJoinDiagnostic
+[ RUN      ] TrackerJoinDiagnostic.EveryEvidencePredicateReportsItsOriginalReasonWithoutChangingVerdict
+[       OK ] TrackerJoinDiagnostic.EveryEvidencePredicateReportsItsOriginalReasonWithoutChangingVerdict (0 ms)
+[ RUN      ] TrackerJoinDiagnostic.FailedTrialPreservesOriginalFineNanosecondEvidenceAndSafeIncumbent
+[       OK ] TrackerJoinDiagnostic.FailedTrialPreservesOriginalFineNanosecondEvidenceAndSafeIncumbent (0 ms)
+[----------] 2 tests from TrackerJoinDiagnostic (0 ms total)
+
+[----------] 4 tests from TrackerGeometryReceipt
+[ RUN      ] TrackerGeometryReceipt.PreparationAndUnconnectedFreshBodyCannotClaimSoftwareInstallation
+[       OK ] TrackerGeometryReceipt.PreparationAndUnconnectedFreshBodyCannotClaimSoftwareInstallation (0 ms)
+[ RUN      ] TrackerGeometryReceipt.InstalledFactsStayFixedAcrossProofRenewalHoldingAndRepeatedBody
+[       OK ] TrackerGeometryReceipt.InstalledFactsStayFixedAcrossProofRenewalHoldingAndRepeatedBody (1 ms)
+[ RUN      ] TrackerGeometryReceipt.MotionFencePreservesActualInstallationAndCannotBorrowMovingHandoff
+[       OK ] TrackerGeometryReceipt.MotionFencePreservesActualInstallationAndCannotBorrowMovingHandoff (1 ms)
+[ RUN      ] TrackerGeometryReceipt.UnixOriginalBodyFactsAreExactAtInstallationAndDoNotRenewWithTimer
+[       OK ] TrackerGeometryReceipt.UnixOriginalBodyFactsAreExactAtInstallationAndDoNotRenewWithTimer (0 ms)
+[----------] 4 tests from TrackerGeometryReceipt (2 ms total)
+
+[----------] 3 tests from TrackerEntryReobservation
+[ RUN      ] TrackerEntryReobservation.FreshWholeProofUsesActualNewBoundaryNotAnExpiredWorkerSample
+[       OK ] TrackerEntryReobservation.FreshWholeProofUsesActualNewBoundaryNotAnExpiredWorkerSample (1 ms)
+[ RUN      ] TrackerEntryReobservation.CurrentMeasurementAndFiniteNativeDomainRemainStrict
+[       OK ] TrackerEntryReobservation.CurrentMeasurementAndFiniteNativeDomainRemainStrict (0 ms)
+[ RUN      ] TrackerEntryReobservation.StaleOrNegativeWholeProofCannotRefreshEntry
+[       OK ] TrackerEntryReobservation.StaleOrNegativeWholeProofCannotRefreshEntry (1 ms)
+[----------] 3 tests from TrackerEntryReobservation (2 ms total)
+
+[----------] 10 tests from TrackerWriterCAS
+[ RUN      ] TrackerWriterCAS.InitialAckBindsActualInstallationNotLatestIntentAndCannotRollback
+[       OK ] TrackerWriterCAS.InitialAckBindsActualInstallationNotLatestIntentAndCannotRollback (2 ms)
+[ RUN      ] TrackerWriterCAS.InitialFactRequiresSignedLeaseAndRealInstallationButAcceptsExpiredReceiptTime
+[       OK ] TrackerWriterCAS.InitialFactRequiresSignedLeaseAndRealInstallationButAcceptsExpiredReceiptTime (2 ms)
+[ RUN      ] TrackerWriterCAS.ConditionalGrantNeverChangesIncumbentBeforeActualWriterFact
+[       OK ] TrackerWriterCAS.ConditionalGrantNeverChangesIncumbentBeforeActualWriterFact (2 ms)
+[ RUN      ] TrackerWriterCAS.FixedGrantRejectsOverwriteAndPreparationUsesActualMovingBoundary
+[       OK ] TrackerWriterCAS.FixedGrantRejectsOverwriteAndPreparationUsesActualMovingBoundary (1 ms)
+[ RUN      ] TrackerWriterCAS.PreparedExpiryCopiesOriginalFineNanosecondCapsWithoutRoundTrip
+[       OK ] TrackerWriterCAS.PreparedExpiryCopiesOriginalFineNanosecondCapsWithoutRoundTrip (2 ms)
+[ RUN      ] TrackerWriterCAS.LateAppliedFactMovesIdentityForwardAndHoldsWithoutRollback
+[       OK ] TrackerWriterCAS.LateAppliedFactMovesIdentityForwardAndHoldsWithoutRollback (0 ms)
+[ RUN      ] TrackerWriterCAS.NegativeFactReleasesSlotButLateAppliedTombstoneCannotResume
+[       OK ] TrackerWriterCAS.NegativeFactReleasesSlotButLateAppliedTombstoneCannotResume (1 ms)
+[ RUN      ] TrackerWriterCAS.SameReferenceDifferentCurveNegativeFactResolvesOnlyExactUnchangedWriter
+[       OK ] TrackerWriterCAS.SameReferenceDifferentCurveNegativeFactResolvesOnlyExactUnchangedWriter (1 ms)
+[ RUN      ] TrackerWriterCAS.WrongAppliedOwnerOrChangedCommandNeverReplacesGeometry
+[       OK ] TrackerWriterCAS.WrongAppliedOwnerOrChangedCommandNeverReplacesGeometry (4 ms)
+[ RUN      ] TrackerWriterCAS.StationaryReentryRequiresOriginalSdkWitnessAndNewCurveProofNotOldProof
+[       OK ] TrackerWriterCAS.StationaryReentryRequiresOriginalSdkWitnessAndNewCurveProofNotOldProof (33 ms)
+[----------] 10 tests from TrackerWriterCAS (48 ms total)
+
+[----------] 1 test from TrackerTimeContract
+[ RUN      ] TrackerTimeContract.RealUnixLeaseFactsRemainExactAndCanOnlyCapFreshDeadline
+[       OK ] TrackerTimeContract.RealUnixLeaseFactsRemainExactAndCanOnlyCapFreshDeadline (0 ms)
+[----------] 1 test from TrackerTimeContract (0 ms total)
+
+[----------] 25 tests from TrackerExecution
+[ RUN      ] TrackerExecution.CandidatePreparationDoesNotActivateBeforeMatchingOwnerCommit
+[       OK ] TrackerExecution.CandidatePreparationDoesNotActivateBeforeMatchingOwnerCommit (0 ms)
+[ RUN      ] TrackerExecution.NewCandidateCannotBeActivatedWithPredecessorAdmissionAndProof
+[       OK ] TrackerExecution.NewCandidateCannotBeActivatedWithPredecessorAdmissionAndProof (0 ms)
+[ RUN      ] TrackerExecution.GeometryOnlyCommitNeverProducesMotionAndCanLaterAuthorize
+[       OK ] TrackerExecution.GeometryOnlyCommitNeverProducesMotionAndCanLaterAuthorize (1 ms)
+[ RUN      ] TrackerExecution.ArmingHeartbeatDoesNotEraseCommittedGeometryOrNeedOldAdmission
+[       OK ] TrackerExecution.ArmingHeartbeatDoesNotEraseCommittedGeometryOrNeedOldAdmission (0 ms)
+[ RUN      ] TrackerExecution.ProofGapStopsImmediatelyButDoesNotInventOdometryRecoveryDelay
+[       OK ] TrackerExecution.ProofGapStopsImmediatelyButDoesNotInventOdometryRecoveryDelay (0 ms)
+[ RUN      ] TrackerExecution.ThirtySecondStationaryPreviewCanExecuteOnlyWithCurrentExactProof
+[       OK ] TrackerExecution.ThirtySecondStationaryPreviewCanExecuteOnlyWithCurrentExactProof (5 ms)
+[ RUN      ] TrackerExecution.NativeUnknownExpiredProofWrongOwnerAndMockLeakCannotCommit
+[       OK ] TrackerExecution.NativeUnknownExpiredProofWrongOwnerAndMockLeakCannotCommit (2 ms)
+[ RUN      ] TrackerExecution.FreshNextProofDoesNotRevokeStillFreshLeasedPredecessor
+[       OK ] TrackerExecution.FreshNextProofDoesNotRevokeStillFreshLeasedPredecessor (0 ms)
+[ RUN      ] TrackerExecution.TwoHundredMillisecondProofRefreshDoesNotWaitForOwnerHeartbeat
+[       OK ] TrackerExecution.TwoHundredMillisecondProofRefreshDoesNotWaitForOwnerHeartbeat (1 ms)
+[ RUN      ] TrackerExecution.ProofFloorCannotBorrowForeignGeometryOrCrossLatestInvalidFence
+[       OK ] TrackerExecution.ProofFloorCannotBorrowForeignGeometryOrCrossLatestInvalidFence (2 ms)
+[ RUN      ] TrackerExecution.FreshCollisionProofCannotRenewAuthorityOrResumeHoldingPhase
+[       OK ] TrackerExecution.FreshCollisionProofCannotRenewAuthorityOrResumeHoldingPhase (0 ms)
+[ RUN      ] TrackerExecution.OwnerCanCommitAdmittedProofWhenNextValidSequenceArrivesFirst
+[       OK ] TrackerExecution.OwnerCanCommitAdmittedProofWhenNextValidSequenceArrivesFirst (1 ms)
+[ RUN      ] TrackerExecution.MissingSupportAndStairSemanticsNeverBecomeFlatFloorByDefault
+[       OK ] TrackerExecution.MissingSupportAndStairSemanticsNeverBecomeFlatFloorByDefault (1 ms)
+[ RUN      ] TrackerExecution.RemainingProofIsOnlyForCommittedCurveAndRecomputesArcCoverage
+[       OK ] TrackerExecution.RemainingProofIsOnlyForCommittedCurveAndRecomputesArcCoverage (2 ms)
+[ RUN      ] TrackerExecution.OlderFreshHeartbeatCanUseExactProofHistoryButNeverMaskNewInvalid
+[       OK ] TrackerExecution.OlderFreshHeartbeatCanUseExactProofHistoryButNeverMaskNewInvalid (0 ms)
+[ RUN      ] TrackerExecution.GeometryPreviewProjectsOnlyNewMeasuredPositionWhileDemandStaysZero
+[       OK ] TrackerExecution.GeometryPreviewProjectsOnlyNewMeasuredPositionWhileDemandStaysZero (1 ms)
+[ RUN      ] TrackerExecution.ControlDeadlineDoesNotFreezeThePriorCollisionSnapshotsDeadline
+[       OK ] TrackerExecution.ControlDeadlineDoesNotFreezeThePriorCollisionSnapshotsDeadline (1 ms)
+[ RUN      ] TrackerExecution.IndependentControlDeadlineNeverExtendsOriginalOwnerLease
+[       OK ] TrackerExecution.IndependentControlDeadlineNeverExtendsOriginalOwnerLease (0 ms)
+[ RUN      ] TrackerExecution.OnlyOwnExactFreshBlockedForwardTurnCanRequestDifferentManeuver
+[       OK ] TrackerExecution.OnlyOwnExactFreshBlockedForwardTurnCanRequestDifferentManeuver (0 ms)
+[ RUN      ] TrackerExecution.UnknownStaleForeignOrMutatedSweepCannotRequestTurn
+[       OK ] TrackerExecution.UnknownStaleForeignOrMutatedSweepCannotRequestTurn (7 ms)
+[ RUN      ] TrackerExecution.NeverGeneratedOrRevokedDemandCannotRequestTurn
+[       OK ] TrackerExecution.NeverGeneratedOrRevokedDemandCannotRequestTurn (1 ms)
+[ RUN      ] TrackerExecution.BlockedEntryReportsExactOriginalSweepOnceWithoutRestampingOrAuthority
+[       OK ] TrackerExecution.BlockedEntryReportsExactOriginalSweepOnceWithoutRestampingOrAuthority (1 ms)
+[ RUN      ] TrackerExecution.OccupiedInPlaceAlignTurnReportsBlockedEntryInsteadOfRepeatingIt
+[       OK ] TrackerExecution.OccupiedInPlaceAlignTurnReportsBlockedEntryInsteadOfRepeatingIt (1 ms)
+[ RUN      ] TrackerExecution.NewerProposalCannotRedatePreparedCurveTask
+[       OK ] TrackerExecution.NewerProposalCannotRedatePreparedCurveTask (0 ms)
+[ RUN      ] TrackerExecution.FailedCommitStillFollowsOwnerLeaseForSuccessorProposal
+[       OK ] TrackerExecution.FailedCommitStillFollowsOwnerLeaseForSuccessorProposal (1 ms)
+[----------] 25 tests from TrackerExecution (28 ms total)
+
+[----------] 4 tests from TrackerSpatialBudget
+[ RUN      ] TrackerSpatialBudget.FlatSlopeAndReversedOrRotatedTravelUseTheSameSpatialLimit
+[       OK ] TrackerSpatialBudget.FlatSlopeAndReversedOrRotatedTravelUseTheSameSpatialLimit (0 ms)
+[ RUN      ] TrackerSpatialBudget.UndefinedAndVerticalDirectionsCannotBecomeFlatGround
+[       OK ] TrackerSpatialBudget.UndefinedAndVerticalDirectionsCannotBecomeFlatGround (0 ms)
+[ RUN      ] TrackerSpatialBudget.ProductionCurveControllerPreservesTrueVerticalVelocityAndAcceleration
+[       OK ] TrackerSpatialBudget.ProductionCurveControllerPreservesTrueVerticalVelocityAndAcceleration (3 ms)
+[ RUN      ] TrackerSpatialBudget.UncommittedCandidateCannotChangeTheIncumbentBudgetOrLimiter
+[       OK ] TrackerSpatialBudget.UncommittedCandidateCannotChangeTheIncumbentBudgetOrLimiter (0 ms)
+[----------] 4 tests from TrackerSpatialBudget (3 ms total)
+
+[----------] 9 tests from TrackerPreparationWorker
+[ RUN      ] TrackerPreparationWorker.LatestPendingIsBoundedAndOldCompletionCannotWin
+[       OK ] TrackerPreparationWorker.LatestPendingIsBoundedAndOldCompletionCannotWin (2 ms)
+[ RUN      ] TrackerPreparationWorker.CancelNeverQueuesBehindBuildAndRetiredResultCannotReturn
+[       OK ] TrackerPreparationWorker.CancelNeverQueuesBehindBuildAndRetiredResultCannotReturn (1 ms)
+[ RUN      ] TrackerPreparationWorker.ExceptionsBecomeFailedCompletionNotSharedControllerMutation
+[       OK ] TrackerPreparationWorker.ExceptionsBecomeFailedCompletionNotSharedControllerMutation (1 ms)
+[ RUN      ] TrackerPreparationWorker.ProductionGeometryPreparesOffOwnerButOnlyExactPermitCommits
+[       OK ] TrackerPreparationWorker.ProductionGeometryPreparesOffOwnerButOnlyExactPermitCommits (2 ms)
+[ RUN      ] TrackerPreparationWorker.CancelAndDuplicateCannotInstallRetiredCandidateOrMutateCachedCurve
+[       OK ] TrackerPreparationWorker.CancelAndDuplicateCannotInstallRetiredCandidateOrMutateCachedCurve (2 ms)
+[ RUN      ] TrackerPreparationWorker.CachedGeometryCannotBeReusedForMutatedShapeOrRelaxedConfiguration
+[       OK ] TrackerPreparationWorker.CachedGeometryCannotBeReusedForMutatedShapeOrRelaxedConfiguration (0 ms)
+[ RUN      ] TrackerPreparationWorker.CachedSupportCannotAuthorizeDifferentEvidenceWithReusedHash
+[       OK ] TrackerPreparationWorker.CachedSupportCannotAuthorizeDifferentEvidenceWithReusedHash (0 ms)
+[ RUN      ] TrackerPreparationWorker.RejectedCandidatePreservesIncumbentAndWorkerNeverPredictsActualEntry
+[       OK ] TrackerPreparationWorker.RejectedCandidatePreservesIncumbentAndWorkerNeverPredictsActualEntry (5 ms)
+[ RUN      ] TrackerPreparationWorker.FreshContextResetRetiresPreparedCandidateAndPriorPermit
+[       OK ] TrackerPreparationWorker.FreshContextResetRetiresPreparedCandidateAndPriorPermit (2 ms)
+[----------] 9 tests from TrackerPreparationWorker (15 ms total)
+
+[----------] Global test environment tear-down
+[==========] 88 tests from 9 test suites ran. (111 ms total)
+[  PASSED  ] 88 tests.
+-- run_test.py: return code 0
+-- run_test.py: inject classname prefix into gtest result file '/home/dndx/d1max_nav_ws/experiments/single_floor_execution_20261003_system_v2/tracker/build/d1max_trajectory_tracker/test_results/d1max_trajectory_tracker/test_tracker_v2.gtest.xml'
+-- run_test.py: verify result file '/home/dndx/d1max_nav_ws/experiments/single_floor_execution_20261003_system_v2/tracker/build/d1max_trajectory_tracker/test_results/d1max_trajectory_tracker/test_tracker_v2.gtest.xml'
+</system-out>
+	</testcase>
+	<testcase name="test_navigation_state_contract" classname="test_navigation_state_contract" time="0.0366785" status="run">
+		<system-out>-- run_test.py: invoking following command in '/home/dndx/d1max_nav_ws/experiments/single_floor_execution_20261003_system_v2/tracker/build/d1max_trajectory_tracker':
+ - /home/dndx/d1max_nav_ws/experiments/single_floor_execution_20261003_system_v2/tracker/build/d1max_trajectory_tracker/test_navigation_state_contract --gtest_output=xml:/home/dndx/d1max_nav_ws/experiments/single_floor_execution_20261003_system_v2/tracker/build/d1max_trajectory_tracker/test_results/d1max_trajectory_tracker/test_navigation_state_contract.gtest.xml
+Running main() from /opt/ros/humble/src/gtest_vendor/src/gtest_main.cc
+[==========] Running 12 tests from 2 test suites.
+[----------] Global test environment set-up.
+[----------] 7 tests from NavigationStateContract
+[ RUN      ] NavigationStateContract.UsesLocalSourcePoseNeverGlobalCorrectionOrTaskEpoch
+[       OK ] NavigationStateContract.UsesLocalSourcePoseNeverGlobalCorrectionOrTaskEpoch (0 ms)
+[ RUN      ] NavigationStateContract.RejectsUnpairedStampsFramesIdentityAndUnusableState
+[       OK ] NavigationStateContract.RejectsUnpairedStampsFramesIdentityAndUnusableState (0 ms)
+[ RUN      ] NavigationStateContract.RotatesMeasuredChildTwistToLocalFrameNotGlobalFrame
+[       OK ] NavigationStateContract.RotatesMeasuredChildTwistToLocalFrameNotGlobalFrame (0 ms)
+[ RUN      ] NavigationStateContract.InvalidGlobalHalfCannotHideBehindValidLocalHalf
+[       OK ] NavigationStateContract.InvalidGlobalHalfCannotHideBehindValidLocalHalf (0 ms)
+[ RUN      ] NavigationStateContract.IndependentLocalTransportHasNoGlobalDependencyOrRestamping
+[       OK ] NavigationStateContract.IndependentLocalTransportHasNoGlobalDependencyOrRestamping (0 ms)
+[ RUN      ] NavigationStateContract.LocalTransportRejectsInvalidIdentitySourceFrameAndGeometry
+[       OK ] NavigationStateContract.LocalTransportRejectsInvalidIdentitySourceFrameAndGeometry (0 ms)
+[ RUN      ] NavigationStateContract.UnixSourceNanosecondsArePreservedIndependentlyOfDoubleArithmetic
+[       OK ] NavigationStateContract.UnixSourceNanosecondsArePreservedIndependentlyOfDoubleArithmetic (0 ms)
+[----------] 7 tests from NavigationStateContract (0 ms total)
+
+[----------] 5 tests from NavigationStateIngress
+[ RUN      ] NavigationStateIngress.OldUnusableEpochAndExpiredDuplicateCannotClearNewObservation
+[       OK ] NavigationStateIngress.OldUnusableEpochAndExpiredDuplicateCannotClearNewObservation (0 ms)
+[ RUN      ] NavigationStateIngress.NewFaultCreatesSourceBarrierButFutureClockCannotPoisonRecovery
+[       OK ] NavigationStateIngress.NewFaultCreatesSourceBarrierButFutureClockCannotPoisonRecovery (0 ms)
+[ RUN      ] NavigationStateIngress.EpochClockResetIsNotAnOldPacketAndForeignStreamCannotPoisonWatermark
+[       OK ] NavigationStateIngress.EpochClockResetIsNotAnOldPacketAndForeignStreamCannotPoisonWatermark (0 ms)
+[ RUN      ] NavigationStateIngress.ForeignMapSessionOrSchemaNeverReachesFaultHandlingButOwnMalformedInputDoes
+[       OK ] NavigationStateIngress.ForeignMapSessionOrSchemaNeverReachesFaultHandlingButOwnMalformedInputDoes (0 ms)
+[ RUN      ] NavigationStateIngress.UnusableFreshResetIsHardButForeignOrFutureEnvelopeIsNotAnEstimatorReset
+[       OK ] NavigationStateIngress.UnusableFreshResetIsHardButForeignOrFutureEnvelopeIsNotAnEstimatorReset (0 ms)
+[----------] 5 tests from NavigationStateIngress (0 ms total)
+
+[----------] Global test environment tear-down
+[==========] 12 tests from 2 test suites ran. (0 ms total)
+[  PASSED  ] 12 tests.
+-- run_test.py: return code 0
+-- run_test.py: inject classname prefix into gtest result file '/home/dndx/d1max_nav_ws/experiments/single_floor_execution_20261003_system_v2/tracker/build/d1max_trajectory_tracker/test_results/d1max_trajectory_tracker/test_navigation_state_contract.gtest.xml'
+-- run_test.py: verify result file '/home/dndx/d1max_nav_ws/experiments/single_floor_execution_20261003_system_v2/tracker/build/d1max_trajectory_tracker/test_results/d1max_trajectory_tracker/test_navigation_state_contract.gtest.xml'
+</system-out>
+	</testcase>
+</testsuite>

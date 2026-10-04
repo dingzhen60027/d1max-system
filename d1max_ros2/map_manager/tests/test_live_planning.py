@@ -54,6 +54,7 @@ class LivePlanningTests(unittest.TestCase):
         self.calls = []
         self.runtime = LivePlanningRuntime(self.nav, FakeLocalization(),
                                            system=self.system, runner=self.runner)
+        self.runtime.script.parent.mkdir(parents=True)
         self.runtime.script.write_text('#!/bin/sh\nexit 0\n')
         self.runtime.script.chmod(0o700)
         self.runtime.config.parent.mkdir(parents=True)

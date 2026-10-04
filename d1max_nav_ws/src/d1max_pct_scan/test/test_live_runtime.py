@@ -100,6 +100,11 @@ def test_partial_launch_failure_cleans_its_children_and_records_cause(tmp_path, 
         spawned.append(child)
         return child
     monkeypatch.setattr(live_session.subprocess, 'Popen', fixture_popen)
+    # This fixture tests post-preflight process cleanup only. Bundle/overlay
+    # rejection before any Popen is covered by test_navigation_contract.py.
+    monkeypatch.setattr(live_session, 'verify_bundle', lambda *_: None)
+    monkeypatch.setattr(live_session, 'validate_tree_wiring', lambda *_: None)
+    monkeypatch.setattr(live_session, 'verify_deployment', lambda *_: None)
     with pytest.raises(OSError, match='deliberate'):
         live_session.run(tmp_path)
     report = json.loads((tmp_path / 'runtime_status.json').read_text())

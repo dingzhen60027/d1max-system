@@ -16,6 +16,8 @@ from test_live_goal_pause import IDENTITY, INTENT, _localizer, _navigation
 
 
 class FakePlanner:
+    def warmup_resources(self):
+        return {'native_map_cache':{'entries':3},'scope':'resources_only'}
     def plan(self, start, goal, start_layer, goal_layer):
         if goal == 'fail':
             raise ValueError('native failed search')
@@ -65,6 +67,90 @@ def test_many_goals_share_one_instance_but_never_a_stale_result():
         assert not thread.is_alive()
     finally:
         parent.close()
+
+
+def test_startup_warmup_has_no_goal_generation_or_route_and_first_plan_reuses():
+    parent,child=multiprocessing.Pipe()
+    built=[]
+    def build():
+        built.append(1);return FakePlanner()
+    thread=threading.Thread(target=serve_requests,args=(child,build),daemon=True)
+    thread.start()
+    try:
+        parent.send({'kind':'warmup','warmup_id':17})
+        assert parent.poll(2.)
+        assert parent.recv()==dict(kind='warmup_progress',warmup_id=17,
+                                  phase='initializing_native_resources')
+        assert parent.poll(2.)
+        warmed=parent.recv()
+        assert warmed['kind']=='warmed' and warmed['warmup_id']==17
+        assert 'generation' not in warmed and 'result' not in warmed
+        assert warmed['metrics']['native_map_cache']['entries']==3
+        parent.send(request(1,[3,0,0]))
+        result=receive_result(parent)[-1]
+        assert result['kind']=='planned' and result['generation']==1
+        assert result['worker_reused'] is True and len(built)==1
+        parent.send({'kind':'shutdown'});thread.join(timeout=2.)
+        assert not thread.is_alive()
+    finally:
+        parent.close()
+
+
+def test_repeated_warmup_is_not_unbounded_rebuild():
+    parent,child=multiprocessing.Pipe()
+    thread=threading.Thread(target=serve_requests,args=(child,FakePlanner),daemon=True)
+    thread.start()
+    try:
+        parent.send({'kind':'warmup','warmup_id':1})
+        for _ in range(2):
+            assert parent.poll(2.);parent.recv()
+        parent.send({'kind':'warmup','warmup_id':2})
+        assert parent.poll(2.)
+        assert parent.recv()['kind']=='warmup_failed'
+        thread.join(timeout=2.);assert not thread.is_alive()
+    finally:
+        parent.close()
+
+
+def warmup_owner(monkeypatch):
+    now=[10.]
+    monkeypatch.setattr('d1max_pct_scan.live_global_planner.time.monotonic',lambda:now[0])
+    events=[]
+    obj=SimpleNamespace(child=None,pipe=None,retired_children=SimpleNamespace(pending=[]),
+        warmup={'phase':'not_started','warmup_id':0},p={'warmup_timeout_s':3.},
+        current=None,generation=91)
+    def spawn(owner):
+        events.append('spawn')
+        owner.child=SimpleNamespace(is_alive=lambda:True)
+        owner.pipe=SimpleNamespace(send=lambda packet:events.append(packet),poll=lambda _:False)
+    monkeypatch.setattr(LiveGlobalPlanner,'_spawn_native_worker',spawn)
+    def stop():
+        events.append('stop');obj.child=obj.pipe=None
+    obj.stop_child=stop
+    return obj,now,events
+
+
+def test_warmup_timeout_latches_without_tick_respawn_or_goal_changes(monkeypatch):
+    obj,now,events=warmup_owner(monkeypatch)
+    assert LiveGlobalPlanner._start_warmup(obj)
+    assert obj.generation==91 and events[1]==dict(kind='warmup',warmup_id=1)
+    assert not LiveGlobalPlanner._start_warmup(obj)
+    now[0]=13.
+    LiveGlobalPlanner._poll_warmup(obj)
+    assert obj.warmup['phase']=='failed' and events.count('stop')==1
+    for _ in range(20):
+        LiveGlobalPlanner._poll_warmup(obj)
+        assert not LiveGlobalPlanner._start_warmup(obj)
+    assert events.count('spawn')==1 and obj.generation==91
+
+
+@pytest.mark.parametrize('token,kind',[(2,'warmed'),(1,'planned'),(1,'warmup_failed')])
+def test_warmup_wrong_token_route_packet_or_failure_cannot_be_ready(monkeypatch,token,kind):
+    obj,_,events=warmup_owner(monkeypatch);LiveGlobalPlanner._start_warmup(obj)
+    obj.pipe=SimpleNamespace(poll=lambda _:True,
+        recv=lambda:dict(kind=kind,warmup_id=token,metrics={}))
+    LiveGlobalPlanner._poll_warmup(obj)
+    assert obj.warmup['phase']=='failed' and obj.child is None and events[-1]=='stop'
 
 
 @pytest.mark.parametrize('second', [request(1,[2,0,0]),request(2,'fail')])
@@ -178,6 +264,7 @@ def test_success_retains_idle_worker_but_error_does_not():
     obj.static_validator = SimpleNamespace(submit=lambda generation,call:jobs.append((generation,call)))
     obj.tomogram = SimpleNamespace(sha256='hash-a')
     obj.bridge = object()
+    obj.source_route_builder = object()
     obj.pose_status = _navigation()
     obj._commit_cached_result = lambda:actions.append('commit')
     obj.revoke = lambda reason:actions.append('revoke')

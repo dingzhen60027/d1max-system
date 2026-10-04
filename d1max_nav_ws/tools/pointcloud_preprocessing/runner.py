@@ -17,6 +17,7 @@ import uuid
 import numpy as np
 import yaml
 
+from . import load_config
 from .algorithms import filter_indices
 from .pcd_io import read_pcd, write_subset
 
@@ -85,7 +86,7 @@ def validate(config):
 def run(config_path):
     started = time.monotonic()
     config_path = Path(config_path).resolve()
-    config = validate(yaml.safe_load(config_path.read_text()))
+    config = validate(load_config(config_path))
     source = Path(config['input']['path']).resolve(strict=True)
     original_hash, config_hash = sha256(source), sha256(config_path)
     if config['input'].get('sha256') and config['input']['sha256'] != original_hash:

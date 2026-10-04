@@ -67,6 +67,23 @@ TEST(InputContract, PeriodicReplanUsesIndependentTimeAndDefaultsDisabled) {
   EXPECT_FALSE(periodicReplanDue(std::numeric_limits<double>::quiet_NaN(), 1, 1));
 }
 
+TEST(InputContract, FormalEntryEventSharesOneWorkerAndHalfSecondMonotonicSubmissionGuard) {
+  using C=std::chrono::steady_clock;using scan_planner::formalReseedSubmissionDue;
+  const auto last=C::time_point{}+std::chrono::seconds(10);
+  EXPECT_TRUE(formalReseedSubmissionDue(last,{},false));
+  EXPECT_FALSE(formalReseedSubmissionDue(last+std::chrono::milliseconds(499),last,false));
+  EXPECT_TRUE(formalReseedSubmissionDue(last+std::chrono::milliseconds(500),last,false));
+  EXPECT_FALSE(formalReseedSubmissionDue(last+std::chrono::seconds(20),last,true));
+  EXPECT_FALSE(formalReseedSubmissionDue(last-std::chrono::seconds(1),last,false));
+}
+
+TEST(InputContract, ReferenceTargetDiagnosticsDoNotCallUnobservedQueriesOccupied) {
+  EXPECT_STREQ(scan_planner::referenceTargetEvidenceClass(0,56,0),"target_unknown");
+  EXPECT_STREQ(scan_planner::referenceTargetEvidenceClass(48,0,0),"target_occupied");
+  EXPECT_STREQ(scan_planner::referenceTargetEvidenceClass(36,56,0),"target_mixed_occupied_unknown");
+  EXPECT_STREQ(scan_planner::referenceTargetEvidenceClass(0,0,2),"target_outside");
+}
+
 TEST(InputContract, MeasuredReferenceCompletionUsesXYAndHeightTogether) {
   using scan_planner::measuredReferenceGoalReached;
   EXPECT_TRUE(measuredReferenceGoalReached({.1,.1,.66},{0.,0.,.55},.20,.15));
@@ -84,4 +101,19 @@ TEST(InputContract, DynamicsRecoveryDoesNotRequirePoseOrOccupancyChange) {
   EXPECT_FALSE(failedDynamicsBoundaryChanged({.1,0,0},{.1,0,0},.30));
   EXPECT_FALSE(failedDynamicsBoundaryChanged({.1,0,0},{.101,0,0},.30));
   EXPECT_TRUE(failedDynamicsBoundaryChanged({.2,0,0},{0,0,0},.30));
+}
+
+TEST(InputContract, RotationInPlaceChangesBoundaryWithoutTranslationOrMapChange) {
+  using scan_planner::failedOrientationBoundaryChanged;
+  const auto initial = Eigen::Quaterniond::Identity();
+  EXPECT_TRUE(failedOrientationBoundaryChanged(initial,
+      Eigen::Quaterniond(Eigen::AngleAxisd(.15, Vector3d::UnitZ()))));
+  EXPECT_TRUE(failedOrientationBoundaryChanged(initial,
+      Eigen::Quaterniond(Eigen::AngleAxisd(.15, Vector3d::UnitY()))));
+  EXPECT_FALSE(failedOrientationBoundaryChanged(initial,
+      Eigen::Quaterniond(Eigen::AngleAxisd(.01, Vector3d::UnitZ()))));
+  EXPECT_FALSE(failedOrientationBoundaryChanged(initial, Eigen::Quaterniond(-1,0,0,0)));
+  EXPECT_FALSE(failedOrientationBoundaryChanged(initial, Eigen::Quaterniond(0,0,0,0)));
+  EXPECT_FALSE(failedOrientationBoundaryChanged(initial,
+      Eigen::Quaterniond(std::numeric_limits<double>::quiet_NaN(),0,0,0)));
 }

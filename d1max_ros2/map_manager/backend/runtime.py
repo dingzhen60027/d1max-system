@@ -20,9 +20,9 @@ class RuntimeManager:
     """Own exactly one D1 Max SLAM process group and retain its recent logs."""
 
     COMMANDS = {
-        "faster_lio": ["start_slam.sh", "faster_lio", "false"],
-        "fastlio2": ["start_fastlio2.sh", "false"],
-        "faster_lio_pgo": ["start_slam_pgo.sh", "false"],
+        "faster_lio": ["scripts/mapping/start_slam.sh", "faster_lio", "false"],
+        "fastlio2": ["scripts/mapping/start_fastlio2.sh", "false"],
+        "faster_lio_pgo": ["scripts/mapping/start_slam_pgo.sh", "false"],
     }
 
     def __init__(self, nav_root: Path, state_path: Path) -> None:
@@ -186,7 +186,7 @@ class RuntimeManager:
             return self.snapshot()
 
     def save(self, timeout: float = 90.0) -> dict[str, Any]:
-        script = self.nav_root / "save_map.sh"
+        script = self.nav_root / "scripts/mapping/save_map.sh"
         if not script.is_file():
             raise FileNotFoundError(f"保存脚本不存在: {script}")
         result = subprocess.run(

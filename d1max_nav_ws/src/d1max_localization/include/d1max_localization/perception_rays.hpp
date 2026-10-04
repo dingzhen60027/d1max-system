@@ -18,15 +18,21 @@ namespace d1max_localization::perception_rays
 {
 // Version 1: raw acquisition geometry, NOT a deskewed or map-frame ray cloud.
 constexpr uint32_t kPointStep = 64;
+// The production GridMap decoder has the same bounded acquisition budget.
+// Reject an oversized acquisition before allocating/projecting it; never
+// silently sample away collision evidence to fit a downstream queue.
+constexpr uint32_t kMaxAcquisitionPoints = 100000;
 enum class Sensor : uint16_t {Front = 0, Rear = 1};
 
 struct Options
 {
-  double min_range{0.35};
-  double max_range{120.0};
+  // Safety consumes finite measured returns, not the LIO registration range.
+  // This is a plausibility bound, NOT a declaration of free-space coverage.
+  double min_range{0.0};
+  double max_range{1000.0};
   double scan_period{0.10};
   double relative_timestamp_scale{1.0};
-  uint32_t max_input_points{250000};
+  uint32_t max_input_points{kMaxAcquisitionPoints};
 };
 
 struct Result
@@ -49,7 +55,7 @@ inline bool validOptions(const Options & options)
          options.scan_period > 0.0 && options.scan_period <= 0.15 &&
          std::isfinite(options.relative_timestamp_scale) &&
          options.relative_timestamp_scale > 0.0 && options.max_input_points > 0 &&
-         options.max_input_points <= 1000000;
+         options.max_input_points <= kMaxAcquisitionPoints;
 }
 
 inline double stampSeconds(const builtin_interfaces::msg::Time & stamp)
@@ -219,7 +225,7 @@ inline Result convert(
         ++result.invalid_geometry;
         continue;
       }
-      if (point.length2() < min_squared || point.length2() > max_squared) {
+      if (point.length2() < 1e-12 || point.length2() < min_squared || point.length2() > max_squared) {
         ++result.outside_range;
         continue;
       }

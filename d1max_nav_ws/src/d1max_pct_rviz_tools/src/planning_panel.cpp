@@ -213,8 +213,8 @@ PlanningPanel::PlanningPanel(QWidget * parent)
   layer_selector_ = new QComboBox(this);
   layer_selector_->setObjectName("active_layer");
   layer_selector_->setMinimumHeight(32);
-  layer_selector_->setToolTip("只影响之后的放置和移动，不搬动已选点。分层切片不等于物理楼层；XY 不吸附。");
-  selection_form->addRow("编辑层", layer_selector_);
+  layer_selector_->setToolTip("先选一楼/二楼，再拖动或点贴地；同层可使用多个切片。自由 XYZ 保留三轴移动，XY 不吸附。");
+  selection_form->addRow("楼层 / 切片", layer_selector_);
   layout->addLayout(selection_form);
   selection_note_ = new QLabel("高度跟随当前层表面", this);
   selection_note_->setObjectName("selection_note");
@@ -400,7 +400,7 @@ void PlanningPanel::updateSelectionContext(const QJsonObject & status)
     const auto layer = layers[i].toObject();
     const auto id = layer["id"];
     if (!id.isDouble() || !std::isfinite(id.toDouble()) ||
-      id.toDouble() != std::floor(id.toDouble()) || id.toDouble() < -1 ||
+      id.toDouble() != std::floor(id.toDouble()) || id.toDouble() < -3 ||
       id.toDouble() > std::numeric_limits<int>::max()) {continue;}
     const int number = id.toInt();
     if (std::any_of(layer_items.begin(), layer_items.end(),
@@ -668,12 +668,18 @@ void PlanningPanel::setEndpoint(int index, const QJsonObject & status)
     const int layer_index = layer_selector_->findData(layer_id);
     layer_name = layer_index >= 0 ? layer_selector_->itemText(layer_index) : QString("层 %1").arg(layer_id);
   }
+  const auto floor_id = validation["floor_id"].toString();
+  if (floor_id == "floor1" || floor_id == "floor2") {
+    layer_name = floor_id == "floor1" ? "一楼" : "二楼";
+  }
   const auto reason = reasonCode(validation);
   const auto lower_reason = reason.toLower();
   endpoint.requires_grounding = selected && endpoint.validation_known && !endpoint.valid_location &&
     (lower_reason.contains("height") || lower_reason.contains("z differs") || lower_reason.contains("off_ground"));
   endpoint.validation->setText(!selected ? "未放置" :
-    layer_name + " · " + (endpoint.valid_location ? "可通行" : locationReason(reason)));
+    layer_name + " · " + (endpoint.valid_location ? "地面可通行（路线待计算）" : locationReason(reason)) +
+    (validation["height_error_m"].isDouble() ? QString(" · ΔZ %1 m")
+    .arg(validation["height_error_m"].toDouble(), 0, 'f', 2) : QString()));
   endpoint.validation->setToolTip(reasonTooltip(validation));
   endpoint.validation->setStyleSheet(selected && endpoint.validation_known && !endpoint.valid_location ?
     "color: #b45309;" : "");

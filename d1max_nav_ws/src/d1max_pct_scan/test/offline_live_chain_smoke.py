@@ -28,6 +28,7 @@ import uuid
 
 import numpy as np
 import yaml
+from d1max_pct_planner.paths import expand_tree
 
 
 WS = Path(__file__).resolve().parents[3]
@@ -99,10 +100,30 @@ def digest(path):
         return hashlib.file_digest(source, 'sha256').hexdigest() if hasattr(hashlib, 'file_digest') else hashlib.sha256(source.read()).hexdigest()
 
 
-def prepare(directory, sensor_fixture='pcd_crop'):
+def validate_support_policy(policy, evidence, support_sha256):
+    """Check the selected production policy, not a test-side trajectory veto."""
+    assert evidence, 'no native spline support-policy evidence received'
+    if policy == 'official':
+        assert all(e.get('enabled') is False and e.get('valid') is None
+                   and e.get('reason') == 'not_part_of_official_scan_policy'
+                   for e in evidence), 'official policy unexpectedly applied a PCT support veto'
+        return 'official_native_splines_have_no_additional_pct_support_veto'
+    assert policy == 'observed_free', 'unknown fixture collision policy'
+    assert all(e.get('valid') is True and e.get('support_index_sha256') == support_sha256
+               and e.get('motion_authorized') is False
+               and e.get('foot_placement_or_swept_volume_certified') is False
+               for e in evidence), 'ground support provenance/boundary mismatch'
+    return 'native_splines_checked_against_exact_pct_support_index'
+
+
+def prepare(directory, sensor_fixture='pcd_crop', collision_policy=None):
     """Construct a source-backed, static test fixture; no network/ROS operations."""
     from tools.pointcloud_preprocessing.ground_path_bridge import GroundPathBridge
     from d1max_pct_scan.simulation import read_xyz
+    from d1max_pct_scan.live_session import DEFAULT_CONFIG, scan_parameters
+    from offline_native_scan_scenarios import resolve_collision_policy
+    normal = expand_tree(yaml.safe_load(DEFAULT_CONFIG.read_text()))
+    policy = resolve_collision_policy(normal, collision_policy)
     manifest = ARTIFACTS / 'manifest.json'
     record = json.loads(manifest.read_text())
     route = json.loads((ARTIFACTS / 'route_001/audit.json').read_text())
@@ -146,6 +167,7 @@ def prepare(directory, sensor_fixture='pcd_crop'):
     np.save(directory / 'synthetic_tracking_cloud.npy', local_points)
     sid = 'TEST_ONLY_' + uuid.uuid4().hex[:12]
     fixture = dict(kind=KIND, session_id=sid, localization_session_id=sid,
+        scan_collision_policy=policy, perception_backend='deskewed_cloud',
         map_version_id='TEST_ONLY_map_' + record['source_sha256'][:16],
         frame_id=FRAME, body_frame=BODY, tracking_frame=TRACKING, body_height=.55,
         start_body=start_body.tolist(), goal_body=goal_body.tolist(), yaw=yaw,
@@ -157,6 +179,11 @@ def prepare(directory, sensor_fixture='pcd_crop'):
         crossfloor_route_config=str(ARTIFACTS / 'route.yaml'),
         ground_support_height_tolerance_m=.20, ground_support_max_step_m=.17,
         robot_connected=False, motion_enabled=False, real_localization=False)
+    scan_cfg = dict(normal, scan_collision_policy=policy, perception_backend='deskewed_cloud',
+                    body_height=fixture['body_height'], frame_id=FRAME, motion_control_enabled=False)
+    fixture['native_scan_parameters'] = scan_parameters(scan_cfg, sid)
+    fixture['parameter_sources'] = {str(p): digest(p) for p in
+        (DEFAULT_CONFIG, Path(scan_cfg['scan_config']), Path(scan_cfg['robot_profile']))}
     from d1max_pct_scan.live_session import prepare_ground_support
     fixture.update(prepare_ground_support(fixture, directory))
     (directory / 'fixture.json').write_text(json.dumps(fixture, indent=2))
@@ -206,6 +233,8 @@ def run(directory, fixture, points, started):
     processes, streams = [], []
     deadline = started + 92.  # reserve up to eight seconds for owned-group cleanup
     report = dict(kind=KIND, passed=False, fixture=fixture, tests={}, processes=[], latencies={},
+        collision_policy=fixture['scan_collision_policy'],
+        resolved_native_parameters=fixture['native_scan_parameters'],
         isolation={'domain': DOMAIN, 'port': PORT, 'robot_uplink': False},
         limitations=[fixture['sensor_semantics'], 'Ideal stationary TF/odom only.',
                      'No robot, SDK, localization algorithm, dynamics or controller tested.',
@@ -274,6 +303,7 @@ def run(directory, fixture, points, started):
                              start_parameter_services=False)
             self.statuses, self.events = {}, []
             self.support_evidence = {}
+            self.admissions = []
             self.valid, self.cloud_enabled, self.ticks = True, True, 0
             self.soft_invalid = False
             self.epoch = 1
@@ -303,6 +333,8 @@ def run(directory, fixture, points, started):
             self.create_subscription(Marker, PREFIX+'scan_optimal', self.on_marker, 5)
             self.create_subscription(LocalPlanDebug, PREFIX+'native_local_debug', self.on_debug, 5)
             self.create_subscription(MarkerArray, PREFIX+'local_debug', self.on_debug_markers, 5)
+            self.create_subscription(String, PREFIX+'execution_admission',
+                                     lambda m: self.admissions.append(json.loads(m.data)), 5)
             for name in ('global_status', 'scan_bridge_status'):
                 self.create_subscription(String, PREFIX+name,
                     lambda m, k=name: self.on_status(k, m), 5)
@@ -312,7 +344,9 @@ def run(directory, fixture, points, started):
             value = json.loads(message.data)
             self.statuses[name] = value
             support = value.get('ground_support_check')
-            if name == 'scan_bridge_status' and isinstance(support, dict) and support.get('valid') is True:
+            if (name == 'scan_bridge_status' and isinstance(support, dict)
+                    and 'generation' in support and 'plan_id' in support
+                    and (support.get('valid') is True or support.get('enabled') is False)):
                 self.support_evidence[(support['generation'], support['plan_id'])] = support
 
         def on_visual_path(self, msg):
@@ -422,6 +456,12 @@ def run(directory, fixture, points, started):
             elif msg.action == Marker.ADD and len(msg.points) > 1:
                 self.markers.append({'at_s': time.monotonic()-started,
                                      'frame': msg.header.frame_id, 'points': len(msg.points),
+                                     'namespace': msg.ns, 'marker_id': msg.id, 'marker_type': msg.type,
+                                     'uniform_color_rgba': [getattr(msg.color,k) for k in ('r','g','b','a')],
+                                     'point_color_count': len(msg.colors),
+                                     'point_color_first_last_rgba': [
+                                         [getattr(c,k) for k in ('r','g','b','a')]
+                                         for c in ([msg.colors[0],msg.colors[-1]] if msg.colors else [])],
                                      'stamp_ns': msg.header.stamp.sec*1000000000+msg.header.stamp.nanosec})
 
         def publish_test_inputs(self):
@@ -525,12 +565,7 @@ def run(directory, fixture, points, started):
         bridge_params = bridge_parameters(fixture, fixture['session_id'])
         spawn('bridge', [sys.executable, '-m', 'd1max_pct_scan.live_scan_bridge'] + params('bridge', bridge_params))
         # Exercise the production SCAN settings, not a more permissive test variant.
-        from d1max_pct_scan.live_session import scan_parameters
-        scan_params = scan_parameters(dict(
-            scan_config=str(WS/'src/d1max_scan_planner/config/d1max_scan_planner.yaml'),
-            robot_profile=str(WS/'src/d1max_scan_planner/config/d1max_robot.yaml'),
-            body_height=.55, frame_id=FRAME, scan_preview_speed_mps=.30,
-            scan_preview_acc_mps2=.35, scan_local_horizon_m=2.), fixture['session_id'])
+        scan_params = fixture['native_scan_parameters']
         scan_exe = Path(get_package_prefix('scan_planner'))/'lib/scan_planner/scan_planner_node'
         remaps = {'__ns': PREFIX+'scan', 'body_pose': PREFIX+'body_pose',
             'sensor_pose': PREFIX+'sensor_pose', 'cloud': PREFIX+'cloud_map',
@@ -566,8 +601,8 @@ def run(directory, fixture, points, started):
                             and tag['trajectory_id'] == source['plan_id']), None)
                 if tag is None:
                     continue
-                green = next((mark for mark in node.markers if mark['stamp_ns'] == tag['start_stamp_ns']), None)
-                if green is None:
+                gated = next((mark for mark in node.markers if mark['stamp_ns'] == tag['start_stamp_ns']), None)
+                if gated is None:
                     continue
                 assert source['phase'] == 'accepted', 'displayed debug is not a successful native plan'
                 assert source['origin'] == 'native_transport', 'test replay was displayed as current native geometry'
@@ -595,7 +630,7 @@ def run(directory, fixture, points, started):
                 return dict(**evidence, session_id=source['session_id'], generation=source['generation'],
                             native_plan_id=source['plan_id'], native_source_stamp_ns=source['stamp_ns'],
                             matching_tagged_spline_id=tag['trajectory_id'],
-                            gated_marker_at_s=green['at_s'], gated_debug_at_s=displayed['at_s'],
+                            gated_marker_at_s=gated['at_s'], gated_debug_at_s=displayed['at_s'],
                             marker_lifetime_max_s=max(m['lifetime_s'] for m in marks))
             return None
         def plan_once(label, timeout):
@@ -806,12 +841,16 @@ def run(directory, fixture, points, started):
         forbidden = ('/cmd_vel', '/d1max/pct_scan/cmd_vel_safe', '/d1max/navigation/cmd_vel')
         assert not any(node.get_publishers_info_by_topic(t) for t in forbidden), 'Unexpected motion publisher'
         report['tests']['no_motion_publishers'] = True
-        assert node.support_evidence, 'native local spline never passed actual PCT support validation'
-        assert all(e['support_index_sha256'] == fixture['ground_support_sha256']
-                   and e['motion_authorized'] is False
-                   and e['foot_placement_or_swept_volume_certified'] is False
-                   for e in node.support_evidence.values()), 'ground support provenance/boundary mismatch'
-        report['tests']['native_splines_checked_against_exact_pct_support_index'] = True
+        policy_check = validate_support_policy(fixture['scan_collision_policy'],
+            list(node.support_evidence.values()), fixture['ground_support_sha256'])
+        report['tests'][policy_check] = True
+        assert all(any(t['generation'] == e['generation'] and t['trajectory_id'] == e['plan_id']
+                       and t['session_id'] == fixture['session_id'] for t in node.tags)
+                   for e in node.support_evidence.values()), 'support-policy evidence lacks matching native tag'
+        assert node.admissions and all(a.get('valid') is False
+            and a.get('execution_mode') == 'preview' and a.get('session_id') == fixture['session_id']
+            for a in node.admissions), 'preview gained execution authority or wrong admission identity'
+        report['tests']['native_policy_evidence_matches_tags_and_has_no_execution_authority'] = True
         report['passed'] = True
     except BaseException as error:
         report['error'] = type(error).__name__ + ': ' + str(error)
@@ -820,6 +859,8 @@ def run(directory, fixture, points, started):
         if node is not None:
             report.update(statuses=node.statuses, events=node.events, paths=node.paths,
                           ground_support_evidence=list(node.support_evidence.values()),
+                          execution_admission_count=len(node.admissions),
+                          valid_execution_admission_count=sum(a.get('valid') is True for a in node.admissions),
                           visual_paths=node.visual_paths, visual_path_clears=node.visual_clears,
                           tagged_splines=node.tags, gated_markers=node.markers,
                           native_debug=node.native_debug, gated_debug_markers=node.debug_markers,
@@ -893,6 +934,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--prepare-only', action='store_true')
     parser.add_argument('--sensor-fixture', choices=('pcd_crop', 'analytic_room'), default='pcd_crop')
+    parser.add_argument('--collision-policy', choices=('official', 'observed_free'),
+                        help='default: current normal live configuration; no optimizer-weight override')
     args = parser.parse_args()
     # Required modules are workspace source, not whatever previous install happens to contain.
     for path in (WS, WS/'src/d1max_pct_scan', WS/'src/d1max_pct_planner'):
@@ -901,7 +944,7 @@ def main():
     directory = WS/'log/offline_live_chain_smoke'/(
         datetime.now().strftime('%Y%m%d_%H%M%S')+'_'+uuid.uuid4().hex[:8])
     directory.mkdir(parents=True)
-    fixture, points = prepare(directory, args.sensor_fixture)
+    fixture, points = prepare(directory, args.sensor_fixture, args.collision_policy)
     if args.prepare_only:
         print(json.dumps({'kind': KIND, 'prepared': str(directory), 'fixture': fixture}, indent=2))
         return 0

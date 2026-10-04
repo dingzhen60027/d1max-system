@@ -16,7 +16,8 @@ from backend.navigation import NavigationRuntime, NavigationCommand, StartNaviga
 class NavigationTests(unittest.TestCase):
     def setUp(self):
         self.temp = TemporaryDirectory(); self.addCleanup(self.temp.cleanup)
-        self.root = Path(self.temp.name); (self.root/'start_navigation.sh').touch()
+        self.root = Path(self.temp.name); script = self.root/'scripts/navigation/start_navigation.sh'
+        script.parent.mkdir(parents=True); script.touch()
         self.version = {'id':'grid-'+'a'*24,'selected':True,'archived':False,'complete':True}
         self.active = False; self.mode = 'sim'; self.motion = False; self.calls = []
         self.local = Mock()

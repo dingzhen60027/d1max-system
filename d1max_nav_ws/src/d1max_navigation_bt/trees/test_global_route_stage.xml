@@ -1,0 +1,13 @@
+<?xml version="1.0"?>
+<!-- Stage test only: SUCCESS means a route was computed, never robot arrival.
+     No FollowCommittedRoute, execution confirmation, SDK grant or controller. -->
+<root main_tree_to_execute="TestGlobalRouteStage">
+  <BehaviorTree ID="TestGlobalRouteStage">
+    <ReactiveSequence name="GlobalPlanningStage">
+      <TaskContextValid name="CheckTaskIdentity"/>
+      <PauseOnUnavailable name="WaitForPlanningInputs" timeout_s="30">
+        <ComputeGlobalRoute name="ComputeRouteOnce" timeout_s="10"/>
+      </PauseOnUnavailable>
+    </ReactiveSequence>
+  </BehaviorTree>
+</root>

@@ -42,7 +42,6 @@ def _setup(context):
             "grid_map.need_extrinsic": False,
             "manager.max_vel": 0.30,
             "optimization.max_vel": 0.30,
-            "optimization.lambda_reference": 20.0,
         }],
         remappings=[
             ("body_pose", value("odom_topic")),

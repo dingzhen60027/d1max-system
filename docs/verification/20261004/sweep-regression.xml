@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="(empty)"
+	tests="1"
+	failures="0"
+	disabled="0"
+	skipped="0"
+	hostname="dndx-pc"
+	time="0"
+	timestamp="2026-10-04T15:06:38"
+	>
+	<testcase name="test_motion_sweep" classname="test_motion_sweep" time="0.0923914" status="run">
+		<system-out>-- run_test.py: invoking following command in '/home/dndx/d1max_nav_ws/experiments/single_floor_execution_20261003_system_v2/native/build/scan_planner':
+ - /home/dndx/d1max_nav_ws/experiments/single_floor_execution_20261003_system_v2/native/build/scan_planner/test_motion_sweep --gtest_output=xml:/home/dndx/d1max_nav_ws/experiments/single_floor_execution_20261003_system_v2/native/build/scan_planner/test_results/scan_planner/test_motion_sweep.gtest.xml
+Running main() from /opt/ros/humble/src/gtest_vendor/src/gtest_main.cc
+[==========] Running 18 tests from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 18 tests from MotionSweep
+[ RUN      ] MotionSweep.ActualNativeObservedMapProvesMovingAndTurningReachableEnvelope
+[       OK ] MotionSweep.ActualNativeObservedMapProvesMovingAndTurningReachableEnvelope (3 ms)
+[ RUN      ] MotionSweep.AsymmetricReflectedEnvelopeDoesNotInventGroundAndCannotMissHeadObstacle
+[       OK ] MotionSweep.AsymmetricReflectedEnvelopeDoesNotInventGroundAndCannotMissHeadObstacle (10 ms)
+[ RUN      ] MotionSweep.FailedEnvelopeDiagnosticsSeparateClassesAndUniqueFromRawOverlap
+[       OK ] MotionSweep.FailedEnvelopeDiagnosticsSeparateClassesAndUniqueFromRawOverlap (3 ms)
+[ RUN      ] MotionSweep.NewBodyOrNewProofDoesNotRenewOriginalDemandBodyOrExpiredRaySource
+[       OK ] MotionSweep.NewBodyOrNewProofDoesNotRenewOriginalDemandBodyOrExpiredRaySource (0 ms)
+[ RUN      ] MotionSweep.FreeCurrentBodyAndShortNominalCurveDoNotProveBrakingDistance
+[       OK ] MotionSweep.FreeCurrentBodyAndShortNominalCurveDoNotProveBrakingDistance (1 ms)
+[ RUN      ] MotionSweep.PlanningCorridorIncludesFutureBrakingAndDoesNotReplaceCommandProof
+[       OK ] MotionSweep.PlanningCorridorIncludesFutureBrakingAndDoesNotReplaceCommandProof (0 ms)
+[ RUN      ] MotionSweep.TurningSweepCoversCylinderRotationAwayFromFreeCurrentPose
+[       OK ] MotionSweep.TurningSweepCoversCylinderRotationAwayFromFreeCurrentPose (1 ms)
+[ RUN      ] MotionSweep.NeverObservedAndInsufficientEvidenceAreNotAssumedFree
+[       OK ] MotionSweep.NeverObservedAndInsufficientEvidenceAreNotAssumedFree (1 ms)
+[ RUN      ] MotionSweep.TTLExpiryDoesNotClearOccupancyOrRenewFreeEvidence
+[       OK ] MotionSweep.TTLExpiryDoesNotClearOccupancyOrRenewFreeEvidence (0 ms)
+[ RUN      ] MotionSweep.SourceGroundGapWrongFloorOrMissingBodySupportRejects
+[       OK ] MotionSweep.SourceGroundGapWrongFloorOrMissingBodySupportRejects (0 ms)
+[ RUN      ] MotionSweep.DeployedEnvelopeRejectsLowObstacleInsideBrakingSweep
+[       OK ] MotionSweep.DeployedEnvelopeRejectsLowObstacleInsideBrakingSweep (1 ms)
+[ RUN      ] MotionSweep.DeployedEnvelopeDoesNotClaimContactBelowOrAboveProtectedHeight
+[       OK ] MotionSweep.DeployedEnvelopeDoesNotClaimContactBelowOrAboveProtectedHeight (1 ms)
+[ RUN      ] MotionSweep.DeployedEnvelopeRejectsLowUnknownAndInsufficientEvidence
+[       OK ] MotionSweep.DeployedEnvelopeRejectsLowUnknownAndInsufficientEvidence (1 ms)
+[ RUN      ] MotionSweep.DeployedEnvelopeRejectsMissingSupportEvenWhenAllRawVoxelsAreFree
+[       OK ] MotionSweep.DeployedEnvelopeRejectsMissingSupportEvenWhenAllRawVoxelsAreFree (1 ms)
+[ RUN      ] MotionSweep.EitherRawRaySourceIndependentlyCapsCommandEvidenceDeadline
+[       OK ] MotionSweep.EitherRawRaySourceIndependentlyCapsCommandEvidenceDeadline (0 ms)
+[ RUN      ] MotionSweep.BoundsBudgetAndNonForwardCommandFailClosed
+[       OK ] MotionSweep.BoundsBudgetAndNonForwardCommandFailClosed (1 ms)
+[ RUN      ] MotionSweep.ExactFileBytesAndTransportAreBoundToMeasuredModel
+[       OK ] MotionSweep.ExactFileBytesAndTransportAreBoundToMeasuredModel (3 ms)
+[ RUN      ] MotionSweep.RecordSourceAgeOverridesLegacyDefaultAndCannotRenewEitherSensor
+[       OK ] MotionSweep.RecordSourceAgeOverridesLegacyDefaultAndCannotRenewEitherSensor (0 ms)
+[----------] 18 tests from MotionSweep (27 ms total)
+
+[----------] Global test environment tear-down
+[==========] 18 tests from 1 test suite ran. (27 ms total)
+[  PASSED  ] 18 tests.
+-- run_test.py: return code 0
+-- run_test.py: inject classname prefix into gtest result file '/home/dndx/d1max_nav_ws/experiments/single_floor_execution_20261003_system_v2/native/build/scan_planner/test_results/scan_planner/test_motion_sweep.gtest.xml'
+-- run_test.py: verify result file '/home/dndx/d1max_nav_ws/experiments/single_floor_execution_20261003_system_v2/native/build/scan_planner/test_results/scan_planner/test_motion_sweep.gtest.xml'
+</system-out>
+	</testcase>
+</testsuite>

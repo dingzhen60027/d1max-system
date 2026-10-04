@@ -41,13 +41,21 @@ class FakeNode:
     def __init__(self, name):
         self._now = EPOCH+180000000
         self.publishers = {}
+        self.subscriptions = []
+        self.destroyed_subscriptions = []
 
     def create_publisher(self, kind, topic, qos):
         self.publishers[topic] = Publisher()
         return self.publishers[topic]
 
     def create_subscription(self, *args):
-        return None
+        self.subscriptions.append(args)
+        return args
+
+    def destroy_subscription(self, subscription):
+        self.destroyed_subscriptions.append(subscription)
+        self.subscriptions.remove(subscription)
+        return True
 
     def create_timer(self, *args):
         return None
@@ -68,7 +76,8 @@ def node(monkeypatch):
         'sensor_msgs.msg': {'PointCloud2': Cloud}, 'nav_msgs.msg': {'Odometry': object},
         'geometry_msgs.msg': {'PoseStamped': object}, 'std_msgs.msg': {'String': lambda **kw: NS(**kw)},
         'tf2_msgs.msg': {'TFMessage': object},
-        'd1max_planning_interfaces.msg': {'ProjectedRays': ProjectedRays},
+        'd1max_planning_interfaces.msg': {'ProjectedRays': ProjectedRays,
+            'NavigationState':object,'LocalNavigationState':object},
     }
     for name, values in modules.items():
         module = ModuleType(name)
@@ -189,6 +198,65 @@ def test_missing_static_edge_cannot_default_to_body_equals_tracking(node):
     assert not node.core.local and node.counts['pose_rejected'] == 1
 
 
+def test_static_reader_uses_tf_depth_and_retries_only_while_missing(node):
+    assert node.static_qos['depth'] == 100
+    original = node.last_static_retry
+    node.retry_static_extrinsics(original+.99)
+    assert not node.destroyed_subscriptions
+    node.retry_static_extrinsics(original+1.)
+    assert node.static_retry_count == 1
+    assert len([item for item in node.subscriptions if item[1] == '/tf_static']) == 1
+    assert len(node.destroyed_subscriptions) == 1
+    assert node.core.body_to_tracking is None  # no guessed fallback
+    static(node)
+    node.retry_static_extrinsics(original+5.)
+    assert node.static_retry_count == 1
+    assert not node.missing_static_edges()
+
+
+def test_late_separate_static_publishers_restore_pose_history_without_reset(node):
+    statuses(node)
+    node.on_context(message(context()))
+    node.on_ack(message(context()))
+    body = NS(header=NS(frame_id='odom', stamp=stamp(EPOCH)),
+              child_frame_id='body', pose=NS(pose=pose()))
+    node.on_local(body)
+    assert not node.core.local
+    for parent, child in (('tracking', 'lidar'), ('body', 'tracking')):
+        node.on_static(NS(transforms=[NS(header=NS(frame_id=parent), child_frame_id=child,
+            transform=NS(translation=NS(x=0., y=0., z=0.), rotation=NS(x=0., y=0., z=0., w=1.)))]))
+    node.on_local(body)
+    assert len(node.core.local) == 1 and node.counts['context_resets'] == 1
+    node.publish_status(node.current_context(), node.now_ns(), node.last_static_retry)
+    status = json.loads(node.status_pub.messages[-1].data)['static_extrinsics']
+    assert status['ready'] and not status['missing']
+
+
+def test_static_changed_fault_is_not_hidden_by_resubscription(node):
+    ready(node)
+    node.core.fault = 'static_extrinsic_changed_requires_context_reset'
+    node.static_edges.clear()
+    node.retry_static_extrinsics(node.last_static_retry+2.)
+    assert not node.destroyed_subscriptions
+    assert node.core.fault == 'static_extrinsic_changed_requires_context_reset'
+
+
+def test_missing_static_retries_back_off_without_duplicating_readers(node):
+    started = node.last_static_retry
+    node.retry_static_extrinsics(started+1.)
+    assert node.static_retry_count == 1 and node.static_retry_delay == 2.
+    node.retry_static_extrinsics(started+2.)
+    assert node.static_retry_count == 1
+    for elapsed in (3., 7., 15., 23.):
+        node.retry_static_extrinsics(started+elapsed)
+    assert node.static_retry_count == 5 and node.static_retry_delay == 8.
+    assert len([item for item in node.subscriptions if item[1] == '/tf_static']) == 1
+    node.publish_status(None, node.now_ns(), started+23.)
+    static_status = json.loads(node.status_pub.messages[-1].data)['static_extrinsics']
+    assert static_status['ready'] is False
+    assert static_status['missing'] == [['body', 'tracking'], ['tracking', 'lidar']]
+
+
 def test_expired_pending_frame_cannot_have_its_wait_budget_renewed_by_duplicate(node):
     ready(node)
     node.core.local.clear()
@@ -238,6 +306,37 @@ def test_completed_old_worker_snapshot_cannot_publish_after_context_transition(n
     node.on_ack(message(context(sequence=2, barrier=EPOCH+90000000)))
     node.tick()
     assert not node.publisher.messages
+
+
+def test_alignment_fault_immediately_publishes_context_bound_revoke_and_drops_worker(node):
+    ready(node)
+    node.on_rays(raw_cloud())
+    node.tick()
+    node.inflight[0].result(timeout=2.)
+    # Single correction remains below the old 0.20 m step limit, but exceeds
+    # the independent 0.10 m context-history bound.
+    node.on_local(NS(header=NS(frame_id='odom', stamp=stamp(EPOCH+180000000)),
+                     child_frame_id='body', pose=NS(pose=pose())))
+    node.on_global(NS(header=NS(frame_id='map', stamp=stamp(EPOCH+180000000)),
+                      pose=pose(.108)))
+    status = json.loads(node.status_pub.messages[-1].data)
+    assert status['fault'] == 'map_alignment_accumulation_requires_context_reset'
+    assert status['context']['sequence'] == 1 and status['valid'] is False
+    assert status['alignment_displacement']['translation_m'] == pytest.approx(.108)
+    assert status['alignment_rebuild_limits'] == dict(translation_m=.10, rotation_rad=.05)
+    fault_status_count = len(node.status_pub.messages)
+    node.on_global(NS(header=NS(frame_id='map', stamp=stamp(EPOCH+180000000)),
+                      pose=pose(.108)))
+    assert len(node.status_pub.messages) == fault_status_count  # no pose-rate fault flood
+    node.tick()
+    assert not node.publisher.messages
+    node.on_context(message(context()))
+    node.on_ack(message(context()))
+    assert node.core.fault is not None
+    node.on_context(message(context(sequence=2, barrier=EPOCH+180000000)))
+    assert node.current_context() is None
+    node.on_ack(message(context(sequence=2, barrier=EPOCH+180000000)))
+    assert node.current_context().sequence == 2 and node.core.fault is None
     assert node.core.sequence == 0
 
 

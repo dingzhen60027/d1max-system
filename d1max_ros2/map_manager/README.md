@@ -3,6 +3,29 @@
 该工具参考 `/home/dndx/go2_nav/tools/map_manager` 的 Web 工作台布局和交互，面向
 D1 Max 当前建图链路做了适配。首页提供独立的 **2D 导航** 与 **3D 地图** 入口。
 
+## 导航主线（2026-10-04）
+
+`/#/planning` 只有一个启动入口：BehaviorTree.CPP →
+`tools/navigation_entry.sh` → `d1max_pct_scan.navigation_session`。
+架构面向室内外、多楼层导航，单楼层只是当前测试范围；页面范围来自实际版本，
+通用名称不代表楼梯或室外运动已经验收。新旧名称调用同一实现、同一个任务管理者。
+Web 负责显式连接、启动、停止和打开唯一 RViz；初值、三维目标、执行确认及取消由 RViz/BT 管理。
+启动默认尝试打开全局布局，局部布局在同一个 RViz 面板切换。关闭 RViz 不取消核心任务。
+
+- `/api/navigation-session/{overview,connect,start,stop,view/global,view/local}` 是主线生命周期 API，不提供目标或运动授权接口。
+- 旧 `/api/single-floor` 是同一 runtime 的兼容 URL；`single_floor_session`、旧 dispatcher、systemd 单元名和 `data/single_floor` 路径保留版本/所有权兼容，不启动第二套服务、不迁移或遗失现有会话。
+- 旧 `/api/live-planning/start` 返回 410，不回退到旧预览。旧状态与停止 API 仅用于核对、清理历史会话。
+- 页面区分默认选择、Web 配置和实际运行版本。发布校验由单 worker 有界缓存执行；启动时再次同步检查，不用旧快照放行。
+- 停止先让核心协调退役，再核对所属进程组和唯一视图；旧双窗口单元只作所有权核对后的清理兼容。软件退役与实测停稳分别记录。未知进程不清理、重复启动不叠加。
+- Web 只有一个「打开 RViz」按钮。兼容的 `view/global` / `view/local` API 向同一窗口发显示请求，不能启动第二个进程；旧插件缺少切换合同会明确要求更新版本，不退回双开。
+- 私有 `data/single_floor/activation.json` 必须绑定已封存版本。只规划用途可使用 `sdk_session_policy: bind_current_on_start`，在启动时只读捕获当前数据会话并固定到本次 session；执行用途仍要求固定 SDK 会话及物理验收记录。
+- 新公开 dispatcher 的私有配置同时固定 `entrypoint_sha256` 和 `compatibility_entrypoint_sha256`，后者绑定实际调用的旧 loader；旧封存合同不改。RViz 重开仍使用该会话记录的入口闭包，不随新配置切换。
+- 浏览器实际使用 `frontend/dist`，修改 JSX 后必须重新构建；源码更新不等于静态网页或导航发布包已更新。
+
+页面及后端接线不构成实机验收，也不会自动连接 SDK、发送初值、目标或运动命令。
+验证：`tests/test_single_floor.py`、`tests/test_mainline_release.py`、`tests/test_mainline_views.py`、
+前端 `scripts/test-navigation-launch-status.mjs`；`scripts/verify-live-planning.mjs` 使用实际 dist 和全部拦截的 API，仅读取静态页面，不接触生产后端。
+
 ## 页面层级
 
 - 首页 `/#/`：仅加载地图索引，不加载 Three.js、PCD 或 ROS。

@@ -13,6 +13,7 @@ import json
 import math
 import signal
 import time
+from pathlib import Path as FilePath
 import rclpy
 from rclpy._rclpy_pybind11 import RCLError
 from rclpy.node import Node
@@ -57,6 +58,10 @@ class NavigationOutput(Node):
             "trajectory_max_points": 1800,
         }
         self.p = {key: self.declare_parameter(key, value).value for key, value in defaults.items()}
+        session_dir = self.declare_parameter('session_dir', '').value
+        self.wire_session = {}
+        if session_dir:
+            self.wire_session = json.loads((FilePath(session_dir)/'session.json').read_text())
         if (
             not math.isfinite(self.p["trajectory_rate_hz"])
             or not 0.1 <= self.p["trajectory_rate_hz"] <= self.rate
@@ -91,6 +96,13 @@ class NavigationOutput(Node):
         )
         self.local_pub = self.create_publisher(Odometry, PREFIX + "odometry/local", 20)
         self.global_pub = self.create_publisher(Odometry, PREFIX + "odometry/global", 20)
+        from d1max_planning_interfaces.msg import NavigationState as NavigationStateMessage
+        self.state_pair_pub = self.create_publisher(NavigationStateMessage, PREFIX+'navigation/state', 5)
+        from d1max_planning_interfaces.msg import LocalNavigationState
+        self.local_state_pub = self.create_publisher(LocalNavigationState, PREFIX+'navigation/local_state', 5)
+        self.last_local_state_identity = None
+        self.last_local_state_event = 0.
+        self.last_local_unavailable = None
         self.pose_pub = self.create_publisher(PoseStamped, PREFIX + "pose", 20)
         self.path_pub = self.create_publisher(Path, PREFIX + "trajectory", 2)
         self.status_pub = self.create_publisher(String, PREFIX + "navigation/status", 10)
@@ -283,8 +295,7 @@ class NavigationOutput(Node):
         # Pose correction is not physical body motion. Keep twist sourced from
         # the original posterior/IMU estimate, not from its smoothed attitude.
         _, linear, angular, _, tc = body_state(self.core.raw_local, self.extrinsic)
-        self.local_pub.publish(
-            odometry(
+        local_message = odometry(
                 self.p["odom_frame"],
                 self.p["body_frame"],
                 pose,
@@ -294,7 +305,17 @@ class NavigationOutput(Node):
                 pc,
                 tc,
             )
-        )
+        self.local_pub.publish(local_message)
+        key = self.core.key()
+        if key and self.wire_session.get('id') and self.wire_session.get('version_id'):
+            from .navigation_wire import local_body_message
+            self.local_state_pub.publish(local_body_message(local=local_message,
+                session_id=self.wire_session['id'],map_version_id=self.wire_session['version_id'],
+                epoch=self.core.epoch,seed_id=str(key[1]),posterior_stamp=state.source_stamp,
+                imu_stamp=state.imu_stamp,extrapolation_sec=state.extrapolation))
+            self.last_local_state_identity = (self.core.epoch,str(key[1]))
+            self.last_local_state_event = state.stamp
+            self.last_local_unavailable = None
         self.tf.sendTransform(
             transform(self.p["odom_frame"], self.p["body_frame"], pose, state.stamp)
         )
@@ -316,8 +337,7 @@ class NavigationOutput(Node):
             local.extrapolation,
         )
         body, linear, angular, body_cov, tc = body_state(state, self.extrinsic)
-        self.global_pub.publish(
-            odometry(
+        global_message = odometry(
                 self.p["map_frame"],
                 self.p["body_frame"],
                 body,
@@ -327,7 +347,22 @@ class NavigationOutput(Node):
                 body_cov,
                 tc,
             )
-        )
+        self.global_pub.publish(global_message)
+        # Build both members from the SAME output sample, not two latest
+        # subscribers. Epoch/seed are estimator-owned, never supplied by tasks.
+        key = self.core.key()
+        if key and self.wire_session.get('id') and self.wire_session.get('version_id'):
+            raw = self.core.local_at(local.stamp, raw=True)
+            if raw is not None:
+                local_pose, _, _, local_cov, _ = body_state(local, self.extrinsic)
+                _, local_linear, local_angular, _, local_tc = body_state(raw, self.extrinsic)
+                local_message = odometry(self.p['odom_frame'], self.p['body_frame'], local_pose,
+                    local.stamp, local_linear, local_angular, local_cov, local_tc)
+                from .navigation_wire import body_pair_message
+                self.state_pair_pub.publish(body_pair_message(local=local_message, global_=global_message,
+                    session_id=self.wire_session['id'], map_version_id=self.wire_session['version_id'],
+                    epoch=self.core.epoch, seed_id=str(key[1]), posterior_stamp=local.source_stamp,
+                    imu_stamp=local.imu_stamp, extrapolation_sec=local.extrapolation))
         self.tf.sendTransform(
             transform(
                 self.p["map_frame"],
@@ -390,9 +425,41 @@ class NavigationOutput(Node):
             'reason': self.core.output_attempt_reason,
         }
 
+    def publish_local_unavailable(self, now):
+        """One explicit revocation per episode, never a pose heartbeat.
+
+        Soft expiry uses the last measurement watermark + 1 ns, so it cannot
+        suppress a newer causal sample merely because transport was delayed.
+        Epoch/seed loss is hard. Map/EKF freshness alone does not revoke odom.
+        """
+        identity=self.last_local_state_identity
+        if identity is None:
+            return
+        key=self.core.key()
+        changed=(self.core.epoch!=identity[0] or not key or str(key[1])!=identity[1])
+        if not changed and self.core.local_ready(now):
+            return
+        reason='localization_reset' if changed else ('hard_localization_lost'
+            if self.core.fault else 'local_navigation_unavailable')
+        token=(identity,reason)
+        if self.last_local_unavailable==token:
+            return
+        from d1max_planning_interfaces.msg import LocalNavigationState
+        event=LocalNavigationState(schema_version=1,session_id=self.wire_session['id'],
+            map_version_id=self.wire_session['version_id'],localization_epoch=max(identity[0],self.core.epoch),
+            localization_seed_id=identity[1],usable=False,reason=reason)
+        watermark=max(round(self.last_local_state_event*1e9)+1,1)
+        # The envelope is an unavailable event; no geometry or renewed sensor
+        # timestamp is carried. Current time is used only for a hard reset.
+        if changed: watermark=max(watermark,round(now*1e9))
+        event.source_stamp.sec,event.source_stamp.nanosec=divmod(watermark,10**9)
+        self.local_state_pub.publish(event)
+        self.last_local_unavailable=token
+
     def tick(self):
         now = self.now_s()
         self.filter_lifecycle(now)
+        self.publish_local_unavailable(now)
         # Watchdog/reset/status only; input callbacks own actual sample delivery.
         # A reset acknowledgement can make an already received pair admissible.
         self.publish_aligned(now)

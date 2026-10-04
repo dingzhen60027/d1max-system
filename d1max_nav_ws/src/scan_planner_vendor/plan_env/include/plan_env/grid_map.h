@@ -9,6 +9,7 @@
 #include <map>
 #include <array>
 #include <limits>
+#include <functional>
 #include <cv_bridge/cv_bridge.h>
 #include <cmath>
 #include <geometry_msgs/msg/pose_stamped.hpp>
@@ -104,6 +105,7 @@ struct MappingParameters {
   bool exact_cloud_pose_sync_{false};
   bool require_observed_free_{false};
   bool use_projected_rays_{false};
+  bool preview_only_{false};  // Diagnostic lease only, never execution authority.
   double cloud_pose_pair_wait_{0.25};
   double cloud_pose_max_age_{0.5};
   bool require_localization_context_{false};
@@ -192,7 +194,9 @@ public:
   inline int getOccupancy(Eigen::Vector3i id);
   inline int getInflateOccupancy(Eigen::Vector3d pos, double yaw);
   std::string describeInflateOccupancy(const Eigen::Vector3d &position,double yaw);
-  scan_planner::CollisionEvidence inspectInflateOccupancy(const Eigen::Vector3d &position,double yaw);
+  scan_planner::CollisionEvidence inspectInflateOccupancy(const Eigen::Vector3d &position,double yaw,bool detailed=false);
+  // Offline diagnostic enablement only; no live config or permission changed.
+  scan_planner::NearFieldDiagnostics &nearFieldDiagnostics() {return near_field_diagnostics_;}
 
   inline void boundIndex(Eigen::Vector3i& id);
   inline bool isUnknown(const Eigen::Vector3i& id);
@@ -220,8 +224,74 @@ public:
   // Source time of the cloud actually integrated into occupancy, not merely
   // the latest message arrival. Zero means explicitly invalidated/no cloud.
   double latestCloudStamp() const { return integrated_cloud_stamp_ns_ * 1e-9; }
-  std::uint64_t occupancyRevision() const { return occupancy_revision_; }
+  std::int64_t latestCloudStampNs() const { return integrated_cloud_stamp_ns_; }
+  // Acquisition BEGIN of the physical ray batch actually integrated. Never
+  // receipt time, alignment time or acquisition_end.
+  std::int64_t integratedRaySourceStamp(unsigned sensor) const {
+    return sensor<2?ray_integrated_stamps_[sensor]:0;
+  }
+  // Diagnostic transaction clocks only. Never used as evidence acquisition
+  // times or to extend a collision lease.
+  struct FusionTiming {
+    std::uint64_t sequence{0};
+    std::int64_t begin_ns{0},end_ns{0},begin_steady_ns{0},end_steady_ns{0};
+    std::array<std::int64_t,2> source_stamps{{0,0}};
+  };
+  FusionTiming fusionTiming() const {return fusion_timing_;}
+  // Set before spinning. Runs on the existing serialized fusion writer only,
+  // after all ray updates and source-lease checks have committed.
+  void setCollisionUpdateCallback(std::function<void()> callback) {
+    collision_update_callback_=std::move(callback);
+  }
+  void requireObservedSnapshot() {
+    if(!collision_snapshot_ || node_) throw std::logic_error("strict evidence query requires private snapshot");
+    mp_.require_observed_free_=true;enforce_free_freshness_=true;
+    rebuildInflationOffsets();
+  }
+  bool isRawRaySnapshot() const {return collision_snapshot_ && mp_.use_projected_rays_;}
+  scan_planner::ObstacleDilation obstacleDilation() const {
+    return {mp_.double_cylinder_radius_,mp_.double_cylinder_offset_,
+      mp_.obstacles_inflation_z_up,mp_.obstacles_inflation_z_down};
+  }
+  scan_planner::BodyEnvelope bodyEnvelope() const {
+    return scan_planner::reflectedBodyEnvelope(obstacleDilation());
+  }
+  // Compatibility for older probes: these are obstacle-kernel dimensions,
+  // NOT body up/down. New collision consumers must use bodyEnvelope().
+  using CollisionShape=scan_planner::ObstacleDilation;
+  CollisionShape collisionShape() const { return obstacleDilation(); }
+  // The command reachable-volume checker uses the production raw evidence,
+  // not getOccupancy() (whose zero also includes unseen voxels). An exclusive
+  // private snapshot lease is mandatory. Call beginObservedProof before the
+  // batch; observedProofDeadlineNs must still be fresh after the entire batch.
+  int observedRawSnapshotStatus(const Eigen::Vector3i& cell) {
+    if(!collision_snapshot_||node_||!mp_.require_observed_free_||!mp_.use_projected_rays_)
+      throw std::logic_error("raw swept query requires observed native snapshot");
+    if(collision_cache_clock_ns_==0)beginCollisionQuery();
+    return rawCollisionStatus(cell);
+  }
+  std::int64_t observedProofDeadlineNs() const {return collision_cache_deadline_ns_;}
+  // Each trajectory proof owns its queried evidence set. An earlier curve's
+  // cached expiry must not become this curve's apparent minimum source time.
+  void beginObservedProof() {
+    if(!collision_snapshot_ || node_)throw std::logic_error("proof scope requires private snapshot");
+    observed_cylinder_cache_.clear();collision_cache_deadline_ns_=collision_cache_clock_ns_=0;
+  }
+  std::uint64_t localizationContextSequence() const { return localization_context_sequence_; }
+  // Consumers must use the map's validated source-age contract, not an
+  // unrelated odometry timeout. This query never renews an integrated stamp.
+  bool integratedCloudFreshAt(std::int64_t now_ns) const {
+    return scan_planner::rayStampFresh(integrated_cloud_stamp_ns_, now_ns,
+                                       mp_.cloud_pose_max_age_);
+  }
+  // Effective collision evidence changes also wake WAIT_ENVIRONMENT without
+  // forcing regeneration of unchanged visual occupancy clouds.
+  std::uint64_t occupancyRevision() const { return occupancy_revision_+free_evidence_revision_; }
   bool requiresObservedFree() const { return mp_.require_observed_free_; }
+  const char *collisionQueryPolicy() const {
+    return mp_.require_observed_free_ ? "strict_observed_double_cylinder" :
+        "official_inflated_double_cylinder";
+  }
   void resetCollisionDiagnostics() { unknown_collision_queries_=0; }
   std::uint64_t unknownCollisionQueries() const { return unknown_collision_queries_; }
   // Separate from goal/reference generations: only a localization coordinate
@@ -229,6 +299,18 @@ public:
   bool applyLocalizationContext(const std::string &payload);
 
   typedef std::shared_ptr<GridMap> Ptr;
+  // Called only by the map writer, between completed updates. Destination is
+  // a memory-only native map, never a ROS owner. Queries require an exclusive
+  // lease because the native query cache/diagnostics are mutable.
+  void copyCollisionSnapshotTo(GridMap &destination, std::int64_t source_now_ns,
+                               std::chrono::steady_clock::time_point captured) const;
+  std::size_t collisionSnapshotBytes() const {
+    return md_.occupancy_buffer_.size()*sizeof(double)+
+        md_.occupancy_buffer_inflate_.size()*sizeof(md_.occupancy_buffer_inflate_[0])+
+        md_.occupancy_buffer_inflate_cnt_.size()*sizeof(md_.occupancy_buffer_inflate_cnt_[0])+
+        md_.inflate_offsets_.size()*sizeof(Eigen::Vector3i)+
+        free_observation_stamps_.size()*sizeof(std::int64_t);
+  }
 
   EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
@@ -236,6 +318,7 @@ private:
   friend struct GridMapTestAccess;
   MappingParameters mp_;
   MappingData md_;
+  std::function<void()> collision_update_callback_;
 
   // get depth image and sensor pose
   void depthPoseCallback(const sensor_msgs::msg::Image::ConstSharedPtr& img,
@@ -249,6 +332,10 @@ private:
   bool acceptProjectedRays(const d1max_planning_interfaces::msg::ProjectedRays &message,
                            std::int64_t now_ns, std::chrono::steady_clock::time_point received);
   void processProjectedRays(std::int64_t now_ns, std::chrono::steady_clock::time_point now);
+  void drainProjectedIngress();
+  bool tryProjectedFusion(std::int64_t now_ns,std::chrono::steady_clock::time_point now,bool watchdog);
+  std::chrono::nanoseconds projectedFusionWakeDelay(std::chrono::steady_clock::time_point now) const;
+  void scheduleProjectedFusionWake();
   void publishProjectedRaysStatus(std::int64_t now_ns, std::chrono::steady_clock::time_point now);
   bool cloudPoseStampFresh(std::int64_t stamp) const;
   void invalidateCloudPosePairs(std::int64_t barrier);
@@ -271,6 +358,20 @@ private:
   std::array<std::int64_t, 2> ray_received_stamps_{{0,0}}, ray_integrated_stamps_{{0,0}};
   std::array<std::uint64_t, 2> ray_projection_sequences_{{0,0}}, ray_integrations_{{0,0}}, ray_drops_{{0,0}};
   std::array<PairReceipt, 2> ray_integrated_receipts_;
+  // Diagnostics only: callback/take admission time is not middleware arrival
+  // time. These clocks never replace source stamps or authorize freshness.
+  std::array<std::int64_t, 2> ray_accept_clock_ns_{{0,0}};
+  std::array<std::int64_t, 2> ray_integration_start_ns_{{0,0}}, ray_integration_start_stamps_{{0,0}};
+  std::array<double, 2> ray_pending_wait_s_{{0.,0.}};
+  std::uint64_t ray_ingress_callback_count_{0},ray_ingress_drain_taken_count_{0},ray_ingress_drain_accepted_count_{0};
+  std::chrono::steady_clock::time_point ray_fusion_last_start_{};
+  bool ray_fusion_started_{false};
+  double ray_integration_period_s_{.2};
+  std::int64_t ray_fusion_last_pair_stamp_{0};
+  FusionTiming fusion_timing_;
+  std::uint64_t ray_timer_schedule_errors_{0};
+  std::int64_t ray_timer_delay_ns_{20000000};
+  scan_planner::ProjectedRayIngressDrain ray_ingress_last_drain_;
   scan_planner::ProjectedRayStatusSchedule ray_status_schedule_;
   std::uint64_t ray_unattributed_drops_{0}, localization_context_barrier_ns_{0};
   std::int64_t pair_barrier_ns_{0}, last_paired_stamp_ns_{0};
@@ -278,6 +379,28 @@ private:
   std::uint64_t occupancy_revision_{0};
   std::uint64_t cloud_pose_pairs_{0}, cloud_pose_pair_drops_{0};
   scan_planner::VoxelStatusCache observed_cylinder_cache_;
+  scan_planner::NearFieldDiagnostics near_field_diagnostics_;
+  std::vector<scan_planner::RayDiagnosticMetadata> projected_diagnostics_;
+  // Fixed-size ring sidecar, not diagnostic witnesses. Only real traversals
+  // renew it. Scan BEGIN is a conservative source-time bound for every ray.
+  std::vector<std::int64_t> free_observation_stamps_, projected_ray_stamps_;
+  std::int64_t ray_query_clock_ns_{0}, ray_tick_clock_ns_{0};
+  std::int64_t ray_tick_effective_ns_{0};
+  PairReceipt ray_tick_receipt_{};
+  std::int64_t collision_cache_deadline_ns_{0}, collision_cache_clock_ns_{0};
+  // Memory-only probe may disable for legacy comparison; no ROS opt-out.
+  bool enforce_free_freshness_{true};
+  bool ray_clock_fault_{false};
+  bool collision_snapshot_{false};
+  std::int64_t snapshot_clock_ns_{0};
+  PairReceipt snapshot_captured_{};
+  std::uint64_t free_evidence_revision_{0};
+  bool free_evidence_recovered_{false};
+  std::int64_t collisionQueryClock();
+  std::int64_t collisionQueryClockAt(std::int64_t source,PairReceipt now) const;
+  void advanceRayEvidenceClock(std::int64_t source,PairReceipt now,bool age_by_steady);
+  void beginCollisionQuery();
+  int rawCollisionStatus(const Eigen::Vector3i &cell);
   std::uint64_t unknown_collision_queries_{0};
   int observedCylinderStatus(const Eigen::Vector3d &center);
   std::string localization_context_payload_, localization_seed_;
@@ -303,6 +426,7 @@ private:
   inline int toAddressLocal(const Eigen::Vector3i& id_l) const;
   inline int toAddressLocal(int x, int y, int z) const;
   int setCacheOccupancy(Eigen::Vector3d pos, int occ);
+  inline void cacheOccupancyAtIndex(const Eigen::Vector3i &id,int address,int occ);
   Eigen::Vector3d closetPointInMap(const Eigen::Vector3d& pt, const Eigen::Vector3d& ray_pos);
   void updateSlidingMap(const Eigen::Vector3d& center);
   void updateMapBoundaryFromIndex();
@@ -311,6 +435,7 @@ private:
   void resetCellByAddressForSliding(int addr, const std::vector<char>& clear_mask);
   void hashIdToGlobalIndex(int addr, Eigen::Vector3i& id_g) const;
   void applyOccupancyUpdate(const Eigen::Vector3i& id, double new_log_odds);
+  void applyOccupancyUpdateAtIndex(const Eigen::Vector3i& id, int addr, double new_log_odds);
   void rebuildInflationOffsets();
   void updateInflation(const Eigen::Vector3i& id, int delta, const std::vector<char>* ignore_mask = nullptr);
   void updateInflationLayer(const Eigen::Vector3i& id, int delta,
@@ -360,6 +485,12 @@ private:
 inline int GridMap::toAddress(const Eigen::Vector3i& id) {
   return getLocalIndex(id(0), 0) * mp_.map_voxel_num_(1) * mp_.map_voxel_num_(2) +
          getLocalIndex(id(1), 1) * mp_.map_voxel_num_(2) + getLocalIndex(id(2), 2);
+}
+
+inline void GridMap::cacheOccupancyAtIndex(const Eigen::Vector3i &id,int address,int occ) {
+  // Caller has already checked the voxel and computed its current ring address.
+  if (++md_.count_hit_and_miss_[address] == 1) md_.cache_voxel_.push(id);
+  if (occ == 1) ++md_.count_hit_[address];
 }
 
 inline int GridMap::toAddress(int& x, int& y, int& z) {
@@ -457,11 +588,25 @@ inline int GridMap::getInflateOccupancy(Eigen::Vector3d pos, double yaw) {
   Eigen::Vector3d front = pos + mp_.double_cylinder_offset_ * heading;
   Eigen::Vector3d rear = pos - mp_.double_cylinder_offset_ * heading;
 
-  // The geometry is shared by strict and legacy preview policies. The display
-  // inflation covers ANY query Z in a voxel and cannot preempt actual-height
-  // collision tests. Unknown-space policy is applied inside the raw query.
+  if (!mp_.require_observed_free_) {
+    // Upstream SCAN queries the two cylinder centers in the inflated buffer.
+    // Zero inflation is not a claim that the underlying raw voxel was seen.
+    const int front_occ=getInflateOccupancyFromBuffer(front,md_.occupancy_buffer_inflate_);
+    if (front_occ!=0) return front_occ;
+    return getInflateOccupancyFromBuffer(rear,md_.occupancy_buffer_inflate_);
+  }
+
+  // Retained opt-in strict policy: actual-height raw-voxel evidence and expiry.
+  beginCollisionQuery();
   const int front_state=observedCylinderStatus(front);
-  return front_state!=0 ? front_state:observedCylinderStatus(rear);
+  const int state=front_state!=0 ? front_state:observedCylinderStatus(rear);
+  if(state==0 && mp_.use_projected_rays_ && enforce_free_freshness_) {
+    const auto now=collisionQueryClock();
+    // Do not return a cached free certificate that expired during this query.
+    if(ray_clock_fault_ || now<=0 || now<collision_cache_clock_ns_ ||
+        now>=collision_cache_deadline_ns_) return 2;
+  }
+  return state;
 }
 
 inline int GridMap::getInflateOccupancyFromBuffer(Eigen::Vector3d pos, const std::vector<char>& buffer) {

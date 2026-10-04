@@ -1,0 +1,9 @@
+# Development-package schedule, not a physical calibration or motion permit.
+# 10 Hz LIO: ~125 ms processing + a missed 100 ms scan + one 20 ms tick.
+# 350 ms measured-posterior horizon leaves 50 ms within downstream's 400 ms
+# source contract. The independent 100 ms IMU/coast limit is NOT enlarged.
+navigation_estimation:
+  ros__parameters:
+    output_rate_hz: 50.0
+    prediction.max_horizon: 0.35
+    limits.max_prediction_horizon: 0.35

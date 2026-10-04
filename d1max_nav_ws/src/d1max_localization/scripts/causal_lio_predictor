@@ -1,0 +1,5 @@
+#!/usr/bin/env python3
+from d1max_localization.causal_lio_predictor import main
+
+if __name__ == '__main__':
+    main()

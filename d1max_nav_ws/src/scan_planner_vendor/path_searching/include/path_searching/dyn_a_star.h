@@ -6,7 +6,9 @@
 #include <Eigen/Eigen>
 #include <plan_env/grid_map.h>
 #include <queue>
+#include <chrono>
 #include <path_searching/search_lattice.hpp>
+#include <plan_env/solve_budget.hpp>
 
 constexpr double inf = 1 >> 20;
 struct GridNode;
@@ -21,7 +23,8 @@ enum ASTAR_RET
     INIT_TARGET_OCCUPIED,
     INIT_LATTICE_OCCUPIED,
     INIT_UNOBSERVED,
-    INIT_OUTSIDE_MAP
+    INIT_OUTSIDE_MAP,
+    INIT_CONNECTOR_COLLISION
 };
 
 struct GridNode
@@ -64,6 +67,7 @@ class AStar
 {
 private:
 	GridMap::Ptr grid_map_;
+    scan_planner::SolveBudget::Ptr solve_budget_;
 
 	inline void coord2gridIndexFast(const double x, const double y, const double z, int &id_x, int &id_y, int &id_z);
 
@@ -72,7 +76,9 @@ private:
 	double getEuclHeu(GridNodePtr node1, GridNodePtr node2);
 	inline double getHeu(GridNodePtr node1, GridNodePtr node2);
 
-	bool ConvertToIndexAndAdjustStartEndPoints(const Eigen::Vector3d start_pt, const Eigen::Vector3d end_pt, Eigen::Vector3i &start_idx, Eigen::Vector3i &end_idx);
+	bool ConvertToIndexAndAdjustStartEndPoints(Eigen::Vector3d &start_pt, Eigen::Vector3d &end_pt,
+        Eigen::Vector3i &start_idx, Eigen::Vector3i &end_idx,const Eigen::Vector3d &direction,
+        int &remaining_shifts,const std::chrono::steady_clock::time_point &deadline);
 
 	inline Eigen::Vector3d Index2Coord(const Eigen::Vector3i &index) const;
 	inline bool Coord2Index(const Eigen::Vector3d &pt, Eigen::Vector3i &idx) const;
@@ -85,26 +91,32 @@ private:
 
 	double step_size_, inv_step_size_;
 	Eigen::Vector3d center_;
-	Eigen::Vector3i CENTER_IDX_, POOL_SIZE_;
+	Eigen::Vector3i CENTER_IDX_{Eigen::Vector3i::Zero()}, POOL_SIZE_{Eigen::Vector3i::Zero()};
 	const double tie_breaker_ = 1.0 + 1.0 / 10000;
 
-	std::vector<GridNodePtr> gridPath_;
+		std::vector<GridNodePtr> gridPath_;
+		// Only the opt-in reference lattice recovery owns exact endpoint connectors.
+		std::vector<Eigen::Vector3d> connected_reference_path_;
 
-	GridNodePtr ***GridNodeMap_;
+	GridNodePtr ***GridNodeMap_{nullptr};
 	std::priority_queue<OpenNodeEntry, std::vector<OpenNodeEntry>, NodeComparator> openSet_;
 
 	int rounds_{0};
 
 public:
 	typedef std::shared_ptr<AStar> Ptr;
+    // Called only by the owning solve worker between searches. The node pool
+    // is retained; occupancy belongs to the exclusive snapshot lease.
+    void setEnvironment(const GridMap::Ptr &map) { grid_map_=map; }
 
 	AStar(){};
 	~AStar();
 
 	void initGridMap(GridMap::Ptr occ_map, const Eigen::Vector3i pool_size);
+    void setSolveBudget(const scan_planner::SolveBudget::Ptr &budget) { solve_budget_=budget; }
 
-	ASTAR_RET AstarSearch(const double step_size, Eigen::Vector3d start_pt, Eigen::Vector3d end_pt,
-                         bool adjust_endpoints = true);
+		ASTAR_RET AstarSearch(const double step_size, Eigen::Vector3d start_pt, Eigen::Vector3d end_pt,
+                         bool adjust_endpoints = true, bool recover_reference_lattice = false);
 
 	std::vector<Eigen::Vector3d> getPath();
 };

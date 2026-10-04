@@ -230,3 +230,64 @@ TEST(ReferenceTarget, SuccessfulTargetKeepsMixedQueryStatisticsWithoutChangingCh
   EXPECT_EQ(result.queries,result.free_queries+result.occupied_queries);
   EXPECT_EQ(result.unknown_queries,0U);
 }
+
+TEST(ReferenceTarget, OffCenterlineReissueNeverTargetsTheBodyConnector) {
+  // Box detour: body .45 m beside the route; the inflated box and the unknown
+  // space behind it block the centerline from y=1.2 to the window end.
+  const Point body(.45,1.,.55);
+  std::vector<Point> waypoints;
+  for (int i=0;i<=20;++i) waypoints.emplace_back(0.,1.+.1*i,.55);
+  DiscreteReference path;
+  const double begin=scan_planner::setReferenceFromBody(path,body,waypoints);
+  EXPECT_NEAR(begin,.45,1e-9);
+  EXPECT_TRUE(path.sample(begin).isApprox(waypoints.front()));
+  const auto occupancy=[](const Point &p,double) {
+    return std::abs(p.x())<=.3 && p.y()>=1.2 ? 1:0;
+  };
+  const double progress=path.project(body,begin,std::min(path.length(),begin+2.));
+  EXPECT_NEAR(progress,begin,1e-9);
+  // No route target exists: the caller must use the observed side target,
+  // whose origin/tangent is now the route (not the lateral connector).
+  const auto result=selectReferenceTarget(path,body,progress,2.,{},occupancy);
+  EXPECT_FALSE(result.valid);
+  // The legacy zero-progress start picked the centerline beside the box.
+  const auto legacy=selectReferenceTarget(path,body,0.,2.,{},occupancy);
+  ASSERT_TRUE(legacy.valid);
+  EXPECT_EQ(legacy.reason,"reference_target_shortened");
+  EXPECT_LT(legacy.point.y(),1.2);
+  EXPECT_LT(std::abs(legacy.point.x()),.2);
+}
+
+TEST(ReferenceTarget, OnRouteBodyKeepsZeroRouteBegin) {
+  DiscreteReference path;
+  const double begin=scan_planner::setReferenceFromBody(path,Point(0,0,.55),
+      {Point(0,0,.55),Point(3,0,.55)});
+  EXPECT_NEAR(begin,0.,1e-9);
+  EXPECT_NEAR(path.length(),3.,1e-9);
+  EXPECT_THROW(scan_planner::setReferenceFromBody(path,Point(0,0,.55),{}),std::invalid_argument);
+}
+
+TEST(ReferenceTarget, EndpointMustBeObservedAtTheSearchApproachHeading) {
+  // static_box_04/05: free at the route tangent, unknown at the start->end
+  // heading that native A* checks. Such an endpoint is never adopted.
+  const auto path=line();
+  const Point body(0.,.8,.55);
+  const auto occupancy=[](const Point &p,double yaw) {
+    return p.x()>=1.9 && std::abs(yaw)>1e-3 ? 2:0;
+  };
+  const auto tangent_only=selectReferenceTarget(path,body,0.,2.,{},
+      [](const Point &,double){return 0;});
+  ASSERT_TRUE(tangent_only.valid);
+  EXPECT_NEAR(tangent_only.arc,2.,1e-9);
+  const auto result=selectReferenceTarget(path,body,0.,2.,{},occupancy);
+  ASSERT_TRUE(result.valid);
+  EXPECT_EQ(result.reason,"reference_target_shortened");
+  EXPECT_LT(result.arc,1.9);
+  EXPECT_GT(result.unknown_queries,0U);
+  EXPECT_EQ(result.queries,result.free_queries+result.unknown_queries+
+                            result.occupied_queries+result.outside_queries);
+  // Fully unknown at every approach heading: invalid, never unknown-as-free.
+  const auto none=selectReferenceTarget(path,body,0.,2.,{},
+      [](const Point &,double yaw){return std::abs(yaw)>1e-3 ? 2:0;});
+  EXPECT_FALSE(none.valid);
+}

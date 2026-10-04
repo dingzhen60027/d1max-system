@@ -142,6 +142,11 @@ bool Astar::Search(const Eigen::Vector3i& start, const Eigen::Vector3i& goal) {
 
   std::priority_queue<Node*, std::vector<Node*>, NodeCompare> open_set;
   std::unordered_map<int, Node*> closed_set;
+  const auto state_key = [this](const Node* node) {
+    // Equal measured heights in different PCT slices are not equal search
+    // states: their future traversability can differ at a ceiling or boundary.
+    return node->layer * xy_size_ + node->idx[1] * max_x_ + node->idx[2];
+  };
 
   open_set.push(start_node);
 
@@ -151,7 +156,7 @@ bool Astar::Search(const Eigen::Vector3i& start, const Eigen::Vector3i& goal) {
     Node* current_node = open_set.top();
     open_set.pop();
 
-    if (current_node->idx == goal_node->idx) {
+    if (current_node->idx == goal_node->idx && current_node->layer == goal_node->layer) {
       while (current_node->parent != nullptr) {
         // search_result_.emplace_back(Eigen::Vector3i(
         //     current_node->layer, current_node->idx[1],
@@ -170,7 +175,7 @@ bool Astar::Search(const Eigen::Vector3i& start, const Eigen::Vector3i& goal) {
       return true;
     }
 
-    closed_set[GetHash(current_node->idx)] = current_node;
+    closed_set[state_key(current_node)] = current_node;
 
     // int layer = current_node->layer;
     // if (current_node->ele > 0.5) {
@@ -178,8 +183,19 @@ bool Astar::Search(const Eigen::Vector3i& start, const Eigen::Vector3i& goal) {
     // } else if (current_node->ele < -0.5) {
     //   layer = std::max(layer - 1, 0);
     // }
-    int layer = DecideLayer(current_node);
-
+    // A greedy DecideLayer discarded a valid same-floor continuation when
+    // an overlapping thinner slice led to a dead end. Explore the incumbent
+    // slice and genuine adjacent measured overlap states independently.
+    std::vector<int> layers{current_node->layer};
+    for (int other : {current_node->layer - 1, current_node->layer + 1}) {
+      if (other < 0 || other >= max_layers_) continue;
+      const int row = other * max_y_ + current_node->idx[1];
+      const int col = current_node->idx[2];
+      if ((*cost_map_)(row,col) <= cost_threshold_ &&
+          std::abs((*height_map_)(row,col) - current_node->height) <= 0.1)
+        layers.push_back(other);
+    }
+    for (const int layer : layers) {
     int i, j = 0;
     double tentative_g = 0.0;
     for (const auto& neighbor : kNeighbors) {
@@ -190,12 +206,25 @@ bool Astar::Search(const Eigen::Vector3i& start, const Eigen::Vector3i& goal) {
         continue;
       }
 
+      // A diagonal traverses the shared corner of four cells. Checking only
+      // its destination lets A* seed GPMP through an occupied/unknown corner;
+      // the downstream continuous-curve validator then correctly rejects it.
+      // Keep the same native cost threshold and require both swept side cells
+      // to be admissible in the selected slice. Do not weaken blocked cells
+      // via the gateway exception (a gateway is a slice transition, not free
+      // space on the side of a diagonal).
+      if (neighbor[0] != 0 && neighbor[1] != 0 &&
+          ((*cost_map_)(layer * max_y_ + i, current_node->idx[2]) > cost_threshold_ ||
+           (*cost_map_)(layer * max_y_ + current_node->idx[1], j) > cost_threshold_)) {
+        continue;
+      }
+
       const int matrix_row = layer * max_y_ + i;
       if ((*cost_map_)(matrix_row, j) > cost_threshold_) {
-        if (abs((*ele_map_)(matrix_row, j)) < 0.5 ||
-            std::abs((*height_map_)(matrix_row, j) - current_node->height) > 0.3) {
-          continue;
-        }
+        // A gateway annotates a real overlap; it is not permission to insert
+        // a blocked cell into the global route. Slice changes are selected at
+        // the current measured overlap in DecideLayer below.
+        continue;
       }
       auto neighbor_node = GetOrCreateNode(layer, i, j);
 
@@ -210,9 +239,9 @@ bool Astar::Search(const Eigen::Vector3i& start, const Eigen::Vector3i& goal) {
       tentative_g =
           current_node->g +
           std::sqrt(diff[0] * diff[0] + diff[1] * diff[1] + diff[2] * diff[2]) +
-          step_cost;
+          step_cost + (layer == current_node->layer ? 0.0 : 0.05);
 
-      auto p_neighbor = closed_set.find(GetHash(neighbor_node->idx));
+      auto p_neighbor = closed_set.find(state_key(neighbor_node));
       if (p_neighbor != closed_set.end()) {
         if (tentative_g >= p_neighbor->second->g) {
           continue;
@@ -228,6 +257,7 @@ bool Astar::Search(const Eigen::Vector3i& start, const Eigen::Vector3i& goal) {
         neighbor_node->parent = current_node;
         open_set.push(neighbor_node);
       }
+    }
     }
   }
 
@@ -263,11 +293,19 @@ int Astar::DecideLayer(const Node* cur_node) const {
     }
 
     if ((*ele_map_)(matrix_row, j) > 0.5) {
-      true_layer = std::min(cur_layer + 1, max_layers_ - 1);
-      break;
+      const int next = std::min(cur_layer + 1, max_layers_ - 1);
+      if ((*cost_map_)(next * max_y_ + i, j) <= cost_threshold_ &&
+          std::abs((*height_map_)(next * max_y_ + i, j) - cur_height) <= 0.1) {
+        true_layer = next;
+        break;
+      }
     } else if ((*ele_map_)(matrix_row, j) < -0.5) {
-      true_layer = std::max(cur_layer - 1, 0);
-      break;
+      const int next = std::max(cur_layer - 1, 0);
+      if ((*cost_map_)(next * max_y_ + i, j) <= cost_threshold_ &&
+          std::abs((*height_map_)(next * max_y_ + i, j) - cur_height) <= 0.1) {
+        true_layer = next;
+        break;
+      }
     }
   }
 

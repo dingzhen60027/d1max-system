@@ -1,0 +1,18 @@
+<?xml version="1.0"?>
+<root main_tree_to_execute="NavigateCommittedRoute">
+  <BehaviorTree ID="NavigateCommittedRoute">
+    <ReactiveSequence name="NavigateTask">
+      <TaskContextValid name="CheckTaskIdentity"/>
+      <!-- A soft pause suspends ticking WITHOUT halting the running action or
+           erasing the committed route. A hard context change halts the tree. -->
+      <PauseOnUnavailable name="WaitForNavigationInputs" timeout_s="30">
+        <!-- Humble's BehaviorTree.CPP v3 calls its memory sequence SequenceStar. -->
+        <SequenceStar name="CommittedRouteLifecycle">
+          <ComputeGlobalRoute name="ComputeRouteOnce" timeout_s="60"/>
+          <FollowCommittedRoute name="FollowRoute"/>
+          <VerifyMeasuredArrival name="VerifyArrival" timeout_s="3"/>
+        </SequenceStar>
+      </PauseOnUnavailable>
+    </ReactiveSequence>
+  </BehaviorTree>
+</root>

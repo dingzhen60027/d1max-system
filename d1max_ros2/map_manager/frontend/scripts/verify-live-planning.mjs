@@ -1,4 +1,4 @@
-// Private static fixture. ALL lifecycle writes are intercepted; never contacts ROS/robot/Web backend.
+// Built UI only. Every API request is intercepted; no ROS, SDK or production backend.
 import assert from 'node:assert/strict'
 import {createServer} from 'node:http'
 import {readFile,mkdir,writeFile} from 'node:fs/promises'
@@ -10,14 +10,14 @@ const dist=fileURLToPath(new URL('../dist/',import.meta.url))
 const output=fileURLToPath(new URL('../artifacts/live-planning/',import.meta.url))
 const types={'.html':'text/html','.js':'text/javascript','.css':'text/css','.woff2':'font/woff2'}
 const forbidden=[],errors=[],writes=[],checks=[]
-const data={phase:'stopped',busy:false,installed:true,mode:'LIVE_VISUALIZATION_NO_MOTION',motion_enabled:false,session_id:null,map_name:'09-23 跨楼层 SC-PGO',current_floor:'floor1',health:{},global_status:{},scan_status:{},stages:{},components:{localization:{name:'Faster-LIO + PCD'},global_planner:{name:'PCT'},local_planner:{name:'SCAN'}},connection:{phase:'stopped',active:false,health:{sdk_fresh:false,lidar_fresh:false,replay:false}}}
-const snapshot=()=>{
- const result=structuredClone(data),now=Date.now()/1000
- result.snapshot_at_unix=now
- // A continuously reporting fixture renews source expiry; explicit expired stages stay expired.
- for(const stage of Object.values(result.stages))if(stage.tone==='ready'&&stage.expires_at_unix===undefined)stage.expires_at_unix=now+2
- return result
-}
+let expired=false
+const data={phase:'stopped',busy:false,owned:false,release_configured:false,can_start:false,
+ quarantined:false,session_id:null,purpose:'planning_only',motion_capable:false,execution_available:false,
+ mainline:{entry_module:'d1max_pct_scan.navigation_session',task_owner:'BehaviorTree.CPP',entrypoint:'/fixture/tools/navigation_entry.sh'},
+ release:{selected_id:'fixture-mainline',configured_id:null,running_id:null,readiness:'missing_activation',reason:'未配置主线发布版本',scope:{floors:['floor1'],stairs_enabled:false}},
+ start_blocker:'未配置主线发布版本',
+ connection:{phase:'stopped',active:false,health:{sdk_fresh:false,lidar_fresh:false,replay:false}}}
+const snapshot=()=>({...structuredClone(data),snapshot_at_unix:Date.now()/1000-(expired?10:0)})
 const server=createServer(async(req,res)=>{
  try {
   if(req.method!=='GET'||req.url.startsWith('/api/')){forbidden.push(req.method+' '+req.url);res.writeHead(403);res.end();return}
@@ -27,105 +27,96 @@ const server=createServer(async(req,res)=>{
  }catch{res.writeHead(404);res.end()}
 })
 let browser
-try{
+try {
  await mkdir(output,{recursive:true})
  await new Promise(done=>server.listen(0,'127.0.0.1',done))
  const base='http://127.0.0.1:'+server.address().port
  browser=await chromium.launch({executablePath:'/usr/bin/google-chrome',headless:true})
  const page=await browser.newPage({viewport:{width:1440,height:980}});page.setDefaultTimeout(6500)
- const waitEnabled=name=>page.waitForFunction(label=>[...document.querySelectorAll('button')].some(button=>button.textContent.trim()===label&&!button.disabled),name)
  page.on('pageerror',e=>errors.push(e.message))
  await page.route('**/*',async route=>{
   const req=route.request(),url=new URL(req.url()),path=url.pathname
   if(url.origin!==base){forbidden.push(req.method()+' '+req.url());return route.abort()}
   if(req.method()==='POST'){
-   if(!['/api/localization/connect','/api/live-planning/start','/api/live-planning/stop'].includes(path)){forbidden.push('POST '+path);return route.abort()}
-   assert.deepEqual(req.postDataJSON(),{})
-   writes.push(path)
+   if(!['/api/navigation-session/connect','/api/navigation-session/start','/api/navigation-session/stop',
+    '/api/navigation-session/view/global'].includes(path)){
+    forbidden.push('POST '+path);return route.abort()
+   }
+   assert.deepEqual(req.postDataJSON(),{});writes.push(path)
    if(path.endsWith('/connect'))data.connection={phase:'running',active:true,health:{sdk_fresh:true,lidar_fresh:true,replay:false}}
-   if(path.endsWith('/start')){data.phase='running';data.busy=true;data.session_id='fixture-owned';data.health={state:'waiting_initial_pose',localized:false};data.stages={localization:{label:'待初值',tone:'waiting'},global_planner:{label:'待定位',tone:'waiting'},local_planner:{label:'待全局路径',tone:'waiting'}}}
-   if(path.endsWith('/stop')){data.phase='stopped';data.busy=false;data.session_id=null;data.health={};data.global_status={};data.scan_status={};data.stages={}}
+   if(path.endsWith('/start')){
+    data.phase='running';data.busy=true;data.owned=true;data.can_start=false
+    data.session_id='fixture-owned';data.release.running_id='fixture-mainline'
+   }
+   if(path.endsWith('/stop')){
+    data.phase='stopped';data.busy=false;data.owned=false;data.can_start=true
+    data.session_id=null;data.release.running_id=null
+   }
    return route.fulfill({json:snapshot()})
   }
   if(req.method()!=='GET'){forbidden.push(req.method()+' '+path);return route.abort()}
-  if(path==='/api/live-planning/overview')return route.fulfill({json:snapshot()})
+  if(path==='/api/navigation-session/overview')return route.fulfill({json:snapshot()})
   if(path==='/api/overview')return route.fulfill({json:{items:[],summary:{map_count:0},processing_job:{running:false}}})
   if(path==='/api/2d/overview')return route.fulfill({json:{versions:[],profiles:[],job:{running:false,status:'idle'},invalid:[]}})
-  if(path==='/api/navigation/overview')return route.fulfill({json:{phase:'stopped',busy:false,installed:true,health:{}}})
   if(path.startsWith('/api/')){forbidden.push('Unmocked '+path);return route.abort()}
   return route.continue()
  })
  await page.goto(base+'/#/');await page.locator('.home-planning-entry a[href="#/planning"]').click()
- await page.getByRole('heading',{name:'定位与规划',exact:true}).waitFor()
- assert.equal(await page.locator('.live-planning-page input,.live-planning-page canvas,.live-planning-page form').count(),0)
- assert(await page.getByRole('button',{name:'启动',exact:true}).isDisabled())
- assert(await page.getByRole('button',{name:'停止',exact:true}).isDisabled())
- assert.equal(await page.getByRole('button',{name:/解锁|速度控制|提交定位初值/}).count(),0)
- const configuration=page.locator('.live-configuration')
- assert.equal(await configuration.getAttribute('open'),null)
- assert(await configuration.locator('summary').getByText('运行配置',{exact:true}).isVisible())
- for(const component of Object.values(data.components))assert.equal(await configuration.getByText(component.name,{exact:true}).isVisible(),false)
- await page.screenshot({path:output+'/disconnected.png',fullPage:true})
- checks.push('Home leads to localization and planning; algorithm details collapsed; no Web coordinates, canvas, targets or motion controls')
- await page.getByRole('button',{name:'连接',exact:true}).click()
- await page.getByText('已连接',{exact:true}).waitFor()
- await waitEnabled('启动')
- assert(await page.getByRole('button',{name:'启动',exact:true}).isEnabled())
- await page.getByRole('button',{name:'启动',exact:true}).dblclick()
- await page.getByText('待初值',{exact:true}).waitFor()
+ await page.getByRole('heading',{name:'导航',exact:true}).waitFor()
+ const start=page.getByRole('button',{name:'启动导航服务',exact:true})
+ const stop=page.getByRole('button',{name:'停止服务',exact:true})
+ const refresh=page.getByRole('button',{name:'刷新导航服务状态',exact:true})
+ const openRviz=page.getByRole('button',{name:'打开 RViz',exact:true})
+ assert.equal(await openRviz.count(),1)
+ assert.equal(await page.getByRole('button',{name:/^(全局视图|局部视图)$/}).count(),0)
+ assert(await start.isDisabled());assert(await stop.isDisabled());assert(await openRviz.isDisabled())
+ assert.equal(await page.locator('.navigation-profile-selector,.live-planning-page input,.live-planning-page canvas,.live-planning-page form').count(),0)
+ assert.equal(await page.getByRole('button',{name:/解锁|速度控制|提交定位初值|确认执行/}).count(),0)
+ await page.getByText('未配置主线发布版本',{exact:true}).waitFor()
+ assert.deepEqual(writes,[])
+ await page.screenshot({path:output+'/mainline-unconfigured.png',fullPage:true})
+ checks.push('Built entry is the unique mainline; unconfigured release cannot launch or fall back')
+
+ await page.getByRole('button',{name:'连接机器狗',exact:true}).click()
+ await page.getByText('机器狗已连接',{exact:true}).waitFor()
+ assert(await start.isDisabled());assert.equal(writes.length,1)
+ data.release_configured=true;data.can_start=true;data.release.readiness='ready'
+ data.release.configured_id='fixture-mainline';data.release.reason='发布版本校验通过';data.start_blocker=''
+ await refresh.click();await page.waitForFunction(()=>[...document.querySelectorAll('button')].some(b=>b.textContent.trim()==='启动导航服务'&&!b.disabled))
+ await start.click();await page.getByText('运行中',{exact:true}).waitFor()
+ assert(await start.isDisabled());assert(await stop.isEnabled())
  assert.equal(writes.filter(v=>v.endsWith('/start')).length,1)
- assert(await page.getByRole('button',{name:'启动',exact:true}).isDisabled())
- assert(await page.getByRole('button',{name:'停止',exact:true}).isEnabled())
- checks.push('Mocked connect/start works once, duplicate start disabled, RViz initial-pose handoff')
- data.health={state:'tracking',localized:true,navigation:{valid:true}}
- data.global_status={state:'shadow_path_published',active_reference:true}
- data.scan_status={ready:true,active_reference:true,last_spline_id:7,last_spline_stamp:Date.now()/1000}
- data.stages={localization:{label:'已定位',tone:'ready'},global_planner:{label:'已生成',tone:'ready'},local_planner:{label:'已生成',tone:'ready'}}
- await page.getByRole('button',{name:'刷新运行状态'}).click()
- await page.locator('.live-stage').filter({hasText:'局部规划'}).getByText('已生成',{exact:true}).waitFor()
- assert.equal(await page.locator('.live-stage.ready').count(),3)
- assert.equal(await page.locator('.live-stage[data-slot="card"]').count(),0)
- data.components={localization:{name:'替代定位器'},global_planner:{name:'替代全局规划器'},local_planner:{name:'替代局部规划器'}}
- await page.getByRole('button',{name:'刷新运行状态'}).click()
- await configuration.locator('summary').click()
- for(const component of Object.values(data.components))await configuration.getByText(component.name,{exact:true}).waitFor()
- assert(await configuration.getByText('RViz',{exact:true}).isVisible())
- assert.doesNotMatch(await page.locator('.live-planning-page').innerText(),/Faster-LIO|PCT|SCAN/)
- await configuration.locator('summary').click()
- checks.push('Renamed backend components render in configuration with no hardcoded algorithms in the workflow')
- await page.screenshot({path:output+'/running.png',fullPage:true})
+ await Promise.all([
+  page.waitForResponse(response=>new URL(response.url()).pathname==='/api/navigation-session/view/global'&&response.request().method()==='POST'),
+  openRviz.click(),
+ ])
+ assert.deepEqual(writes.filter(v=>v.includes('/view/')),['/api/navigation-session/view/global'])
+ assert.equal(data.phase,'running')
+ await page.screenshot({path:output+'/mainline-running.png',fullPage:true})
+ checks.push('Explicit mocked connection/start and one Open RViz entry with one global view write')
+
  for(const width of [1920,1440,1100,800,390]){
   await page.setViewportSize({width,height:1000})
-  assert.deepEqual(await page.locator('.live-planning-page,.live-planning-launch,.live-stage').evaluateAll(nodes=>nodes.filter(n=>n.scrollWidth>n.clientWidth+2).map(n=>n.className)),[],String(width))
+  const overflow=await page.locator('.live-planning-page,.live-planning-heading,.live-mainline-row,.live-planning-launch').evaluateAll(
+   nodes=>nodes.filter(n=>n.scrollWidth>n.clientWidth+2).map(n=>n.className))
+  assert.deepEqual(overflow,[],String(width))
  }
- await page.screenshot({path:output+'/mobile.png',fullPage:true})
- checks.push('Three live stages render; no horizontal stage overflow at five viewport sizes')
- data.stages.local_planner.expires_at_unix=Date.now()/1000-10
- await page.getByRole('button',{name:'刷新运行状态'}).click()
- await page.locator('.live-stage').filter({hasText:'局部规划'}).getByText('状态待更新',{exact:true}).waitFor()
- assert.equal(await page.locator('.live-stage.ready').count(),2)
- checks.push('A fresh response cannot renew an explicitly expired local-planner stage')
- data.health={};data.global_status={};data.scan_status={};data.stages={}
- await page.getByRole('button',{name:'刷新运行状态'}).click()
- await page.locator('.live-stage').filter({hasText:'定位'}).getByText('状态待更新',{exact:true}).waitFor()
- assert.equal(await page.locator('.live-stage.ready').count(),0)
- await page.getByRole('button',{name:'停止',exact:true}).click()
- await waitEnabled('启动')
- assert(await page.getByRole('button',{name:'启动',exact:true}).isEnabled())
- assert.equal(writes.filter(v=>v.endsWith('/stop')).length,1)
- checks.push('Missing health cannot remain green; stop is one owned lifecycle request')
- await page.setViewportSize({width:1440,height:980})
- await page.goto(base+'/#/2d/navigation')
- await page.getByRole('heading',{name:'Nav2（独立）',exact:true}).waitFor()
- assert.equal(await page.getByRole('button',{name:'提交定位初值',exact:true}).count(),0)
- await page.locator('.navigation-tabs').getByRole('button',{name:'返回定位与规划',exact:true}).click()
- await page.getByRole('heading',{name:'定位与规划',exact:true}).waitFor()
- checks.push('Legacy Nav2 URL stays independent; old Web initial-pose UI removed')
+ await page.screenshot({path:output+'/mainline-mobile.png',fullPage:true})
+ checks.push('No horizontal overflow at five viewport sizes')
+ expired=true;await refresh.click();await page.getByText('状态已过期，请刷新',{exact:true}).waitFor()
+ assert(await stop.isDisabled());assert(await openRviz.isDisabled())
+ expired=false;await refresh.click();await page.waitForFunction(()=>[...document.querySelectorAll('button')].some(b=>b.textContent.trim()==='停止服务'&&!b.disabled))
+ await stop.click();await page.getByText('可启动',{exact:true}).waitFor()
+ assert.equal(writes.filter(v=>v.endsWith('/stop')).length,1);assert(await openRviz.isDisabled())
+ data.release.readiness='invalid';data.release.reason='发布文件已变化';data.can_start=false;data.release_configured=false
+ await refresh.click();await page.getByText('发布文件已变化',{exact:true}).waitFor();assert(await start.isDisabled())
+ checks.push('Expired reads and changed release fail closed; stop is a single owned request')
  assert.deepEqual(errors,[]);assert.deepEqual(forbidden,[])
- const report={checks,errors,forbidden,intercepted_writes:writes,screenshots:output,real_backend_posts:0}
+ const report={checks,errors,forbidden,intercepted_writes:writes,screenshots:output,
+  fixture_only:true,real_backend_posts:0,ros_initialized:false,sdk_connected:false}
  await writeFile(output+'/report.json',JSON.stringify(report,null,2))
  console.log(JSON.stringify(report,null,2))
-}finally{
+} finally {
  if(browser)await browser.close()
  if(server.listening)await new Promise(done=>server.close(done))
 }

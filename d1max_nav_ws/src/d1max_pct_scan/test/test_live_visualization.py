@@ -46,7 +46,7 @@ def test_crossfloor_default_is_3d_and_follow_has_local_scale():
     assert current == views['Saved'][2]
 
 
-def test_raw_hit_voxels_do_not_masquerade_as_classified_obstacles():
+def test_rolling_maps_use_official_ros2_height_style_not_traversability_colours():
     cfg = configure(configuration(), layout='local')
     local = next(g for g in cfg['Visualization Manager']['Displays'] if g['Name'] == '局部规划')
     assert local['Enabled']
@@ -54,14 +54,22 @@ def test_raw_hit_voxels_do_not_masquerade_as_classified_obstacles():
                and d['Enabled'] for d in local['Displays'])
     obstacle = next(d for d in local['Displays'] if d.get('Topic', {}).get('Value') == PREFIX+'scan/grid_map/occupancy')
     assert obstacle['Enabled'] and obstacle['Value']
-    assert obstacle['Name'] == '滑动占据地图（含地面）'
-    assert '含地面' in obstacle['Name'] and obstacle['Alpha'] <= .25
-    assert obstacle['Color'] == '170; 182; 196'
+    assert obstacle['Name'] == '滑动占据地图（高度）'
     assert obstacle['Topic']['Reliability Policy'] == 'Best Effort'
     assert obstacle['Decay Time'] == LOCAL_MAP_DISPLAY_TTL
     inflated = displays(cfg)[PREFIX+'scan/grid_map/occupancy_inflate']
-    assert not inflated['Enabled']  # diagnostic envelope must not obscure the real obstacle
+    assert inflated['Enabled'] and inflated['Value']
+    assert inflated['Name'] == '碰撞膨胀地图（高度）'
     assert inflated['Decay Time'] == LOCAL_MAP_DISPLAY_TTL
+    # This matches upstream's sparse squares, not opaque full voxel Boxes.
+    # Both maps are height-coloured; orange/red is not a terrain class here.
+    for layer, size in ((obstacle, .05), (inflated, .04)):
+        assert layer['Color Transformer'] == 'AxisColor' and layer['Axis'] == 'Z'
+        assert layer['Use rainbow'] and not layer['Invert Rainbow']
+        assert layer['Autocompute Value Bounds'] == {'Value': True}
+        assert layer['Alpha'] == 1.0 and layer['Style'] == 'Squares'
+        assert layer['Size (Pixels)'] == 3 and layer['Size (m)'] == size
+        assert layer['Use Fixed Frame'] and 'Color' not in layer
     # Native snapshots are 3 Hz: no deterministic 83 ms hole each frame, with
     # one lost frame tolerated visually only. The sensor/command lease is unchanged.
     assert 2/3. < LOCAL_MAP_DISPLAY_TTL <= 1.
@@ -70,6 +78,10 @@ def test_raw_hit_voxels_do_not_masquerade_as_classified_obstacles():
     assert boundary['Name'] == '滑动窗口边界' and boundary['Enabled']
     assert boundary['Topic']['Durability Policy'] == 'Volatile'
     assert boundary['Topic']['Reliability Policy'] == 'Reliable'
+    spline_topic = displays(cfg)[PREFIX+'scan_optimal']['Topic']
+    assert spline_topic['Depth'] == 5  # DELETEALL + two markers may arrive as a burst
+    assert spline_topic['Durability Policy'] == 'Transient Local'
+    assert spline_topic['Reliability Policy'] == 'Reliable'
 
 
 def test_structural_context_is_faint_but_height_information_retained():
@@ -119,6 +131,7 @@ def test_profiles_separate_heavy_map_layers_and_keep_same_tree_and_coordinate_fr
     for topic in ('/d1max/localization/map_cloud', PREFIX+'traversable_surface', PREFIX+'blocked_surface'):
         assert topic in global_topics and topic not in local_topics
     for topic in ('/d1max/localization/lio/deskewed', PREFIX+'scan/grid_map/occupancy',
+                  PREFIX+'scan/grid_map/occupancy_inflate',
                   PREFIX+'scan/grid_map/sliding_map_bbox', PREFIX+'local_debug',
                   PREFIX+'local_attempt_debug', PREFIX+'scan_optimal'):
         assert topic in local_topics and topic not in global_topics
@@ -144,6 +157,37 @@ def test_local_profile_hides_goal_editing_but_preserves_tools_and_goal_topic():
                   if d['Class'].endswith('/InteractiveMarkers'))
     assert not handle['Enabled'] and not handle['Value']
     assert handle['Interactive Markers Namespace'] == '/d1max_live_goal'
+
+
+def test_single_window_file_contract_is_bound_to_explicit_session_directory(tmp_path):
+    configured = configure(configuration(), session_id='viewer-session',
+                           session_directory=tmp_path, layout='global')
+    panel = configured['Panels'][0]
+    assert panel['Layout Request File'] == str(tmp_path/'navigation-view-layout-request.json')
+    assert panel['Layout State File'] == str(tmp_path/'navigation-view-layout-state.json')
+    assert panel['Session ID'] == 'viewer-session'
+    assert 'Layout Request File' not in configure(configuration())['Panels'][0]
+    layers = displays(configured)
+    assert list(layers).count('/d1max/localization/map_cloud') == 1
+    assert len([d for g in groups(configured).values() for d in g['Displays']
+                if d.get('Topic', {}).get('Value') == '/d1max/localization/map_cloud']) == 1
+
+
+def test_rolling_map_style_matches_pinned_ros2_reference():
+    path = Path(__file__).resolve().parents[2] / 'scan_planner_vendor/plan_manage/launch/default.rviz'
+    native = yaml.safe_load(path.read_text())['Visualization Manager']['Displays']
+    native = {layer.get('Topic', {}).get('Value'): layer for layer in native}
+    layers = displays(configure(configuration(), layout='local'))
+    for suffix in ('occupancy', 'occupancy_inflate'):
+        expected = native['/grid_map/'+suffix]
+        actual = layers[PREFIX+'scan/grid_map/'+suffix]
+        for field in ('Class', 'Color Transformer', 'Axis', 'Use rainbow',
+                      'Invert Rainbow', 'Alpha', 'Style', 'Size (Pixels)',
+                      'Use Fixed Frame', 'Position Transformer'):
+            assert actual[field] == expected[field], field
+        assert actual['Size (m)'] == pytest.approx(expected['Size (m)'])
+        assert actual['Autocompute Value Bounds']['Value'] == expected['Autocompute Value Bounds']['Value']
+        assert actual['Topic']['Reliability Policy'] == expected['Topic']['Reliability Policy']
 
 
 @pytest.mark.parametrize('layout', ['', 'all', 'LOCAL', None])

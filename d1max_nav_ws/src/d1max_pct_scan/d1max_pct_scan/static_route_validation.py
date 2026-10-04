@@ -7,7 +7,7 @@ import numpy as np
 from .live_global_contract import GlobalPlanError, labels_for_result
 
 
-def validate_static_route(result, tomogram, bridge):
+def validate_static_route(result, tomogram, bridge, *, builder=None, map_version_id=''):
     if (not isinstance(result, dict)
             or result.get('source_tomogram_sha256') != tomogram.sha256
             or result.get('execution_authorized') is not False):
@@ -22,14 +22,20 @@ def validate_static_route(result, tomogram, bridge):
     if len(points) > 20000 or len(layers) != len(points):
         raise GlobalPlanError('native_result_size_or_layers_invalid')
     tomogram.validate_path(points,layers)
-    converted = bridge.to_localization_ground(points,labels)
-    xyz = np.asarray(converted.xyz,dtype=float)
+    if builder is None or not map_version_id:
+        raise GlobalPlanError('source_route_builder_and_map_identity_required')
+    # Preserve physical source-layer IDs even when the PCT runtime returns
+    # compact indices for a same-floor route.
+    enriched = dict(result, source_layer_ids=tomogram.source_layers[layers].astype(int).tolist())
+    snapshot = builder.build(enriched, points, labels, map_version_id=map_version_id)
+    payload = snapshot.payload()
+    xyz = np.asarray(payload['xyz'],dtype=float)
     if xyz.shape != points.shape or not np.isfinite(xyz).all():
         raise GlobalPlanError('source_frame_ground_path_invalid')
     xyz = xyz.copy()
     xyz.flags.writeable = False
-    return dict(xyz=xyz,diagnostics=converted.diagnostics,
-                source_tomogram_sha256=tomogram.sha256)
+    return dict(xyz=xyz,diagnostics=payload['geometry_evidence']['projection'],
+                source_tomogram_sha256=tomogram.sha256, route_snapshot=snapshot)
 
 
 def _timed(call):
