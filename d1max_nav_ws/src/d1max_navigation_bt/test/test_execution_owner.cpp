@@ -65,6 +65,22 @@ RouteProgress routeProgress(double t,uint64_t seq,double x=0.,double y=0.) {
  r.source_map_body_xyz.x=x;r.source_map_body_xyz.y=y;r.source_map_body_xyz.z=.5;r.body_reference_height_m=.5;
  r.measured_arc_m=r.confirmed_arc_m=x;r.cross_track_m=std::abs(y);return r;
 }
+RouteProgress projectedProgress(const d1max_navigation_bt_interfaces::msg::RouteSnapshot&route,
+    double time,uint64_t sequence,uint32_t edge,double measured,std::array<double,3>position,double confirmed=-1.) {
+ auto r=routeProgress(time,sequence,position[0],position[1]);r.edge_index=edge;
+ r.odom_body_pose.pose.position.z=position[2];r.source_map_body_xyz.z=.5+position[2];
+ double before=0.;
+ for(size_t i=1;i<=edge;++i){const auto&a=route.path.poses[i-1].pose.position;const auto&b=route.path.poses[i].pose.position;
+  before+=std::hypot(b.x-a.x,b.y-a.y,b.z-a.z);}
+ const auto&a=route.path.poses[edge].pose.position;const auto&b=route.path.poses[edge+1].pose.position;
+ const double span=std::hypot(b.x-a.x,b.y-a.y,b.z-a.z),fraction=std::clamp((measured-before)/span,0.,1.);
+ r.measured_arc_m=measured;r.confirmed_arc_m=confirmed<0.?measured:confirmed;
+ r.cross_track_m=std::hypot(position[0]-(a.x+fraction*(b.x-a.x)),position[1]-(a.y+fraction*(b.y-a.y)));
+ return r;
+}
+void observeProjected(RouteProgressSupervisor&s,const RouteProgress&p,double time) {
+ auto b=body(time);b.local_odometry.pose.pose=p.odom_body_pose.pose;s.observeBody(b);ASSERT_TRUE(s.observe(p,time));
+}
 void feedback(Owner&o,double t,uint64_t seq,double x=0.){const auto d=movingDemand(t,seq);
  ASSERT_TRUE(o.observe(d,t));ASSERT_TRUE(o.observe(motionProof(d),t));ASSERT_TRUE(o.observe(routeProgress(t,seq,x),t));}
 CommitAck initialCommit(Owner&o,Permit p,double time=10.11) {
@@ -1454,6 +1470,112 @@ TEST(RouteProgressSupervisor, ClaimedArcWithoutActualLocalTravelCannotAdvance){
   s.observeBody(body(10.+i*.1));ASSERT_TRUE(s.observe(p,10.+i*.1));EXPECT_FALSE(s.advance(ver(),"d1max_loc_odom",10.+i*.1));
  }
 }
+TEST(RouteProgressSupervisor, InsideCircularOffsetHasIndependentRouteAndPhysicalProgress){
+ std::vector<std::array<double,3>>points;for(int i=0;i<=20;++i){const double angle=i*M_PI/40.;points.push_back({std::cos(angle),std::sin(angle),0.});}
+ const auto route=routeSnapshot(points);RouteProgressSupervisor s;ASSERT_TRUE(s.bind(route,ver(),"isolated_mock"));
+ const double span=2*std::sin(M_PI/80.);int credits=0;
+ for(int i=0;i<=20;++i){const double time=10.+i*.1,angle=i*M_PI/40.;
+  auto p=projectedProgress(route,time,i+1,i?i-1:0,i*span,{.8*std::cos(angle),.8*std::sin(angle),0.});
+  observeProjected(s,p,time);credits+=s.advance(ver(),"d1max_loc_odom",time);
+ }
+ EXPECT_EQ(credits,20); // Actual inner arc is 20% shorter than the route arc.
+}
+TEST(RouteProgressSupervisor, CuttingInsideCornerDoesNotCreatePermanentArcDistanceDebt){
+ const auto route=routeSnapshot({{0.,0.,0.},{1.,0.,0.},{1.,1.,0.}});RouteProgressSupervisor s;
+ ASSERT_TRUE(s.bind(route,ver(),"isolated_mock"));
+ auto p=projectedProgress(route,10.,1,0,.97,{.97,0.,0.});observeProjected(s,p,10.);EXPECT_FALSE(s.advance(ver(),"d1max_loc_odom",10.));
+ p=projectedProgress(route,10.1,2,1,1.015,{.985,.015,0.});observeProjected(s,p,10.1);EXPECT_FALSE(s.advance(ver(),"d1max_loc_odom",10.1));
+ p=projectedProgress(route,10.2,3,1,1.04,{1.,.04,0.});observeProjected(s,p,10.2);EXPECT_TRUE(s.advance(ver(),"d1max_loc_odom",10.2));
+ p=projectedProgress(route,10.3,4,1,1.08,{1.,.08,0.});observeProjected(s,p,10.3);EXPECT_TRUE(s.advance(ver(),"d1max_loc_odom",10.3));
+}
+TEST(RouteProgressSupervisor, DenseShortEdgesAndOldFixedAnchorKeepIndependentProgressWitness){
+ std::vector<std::array<double,3>>points;for(int i=0;i<=100;++i)points.push_back({i*.01,0.,0.});
+ const auto route=routeSnapshot(points);RouteProgressSupervisor s;ASSERT_TRUE(s.bind(route,ver(),"isolated_mock"));int credits=0;
+ for(int i=0;i<=100;++i){const double time=10.+i*.1,x=i*.01;
+  auto p=projectedProgress(route,time,i+1,i?i-1:0,x,{x,0.,0.});observeProjected(s,p,time);
+  credits+=s.advance(ver(),"d1max_loc_odom",time);EXPECT_EQ(p.anchor_source_stamp,stamp(9.));
+ }
+ EXPECT_GE(credits,24); // Edge changes do not erase sub-threshold real movement.
+}
+TEST(RouteProgressSupervisor, SameAnchorNewReferenceGenerationKeepsRealProgressWitness){
+ const auto route=routeSnapshot();RouteProgressSupervisor s;ASSERT_TRUE(s.bind(route,ver(),"isolated_mock"));
+ for(int i=0;i<5;++i){const double time=10.+i*.1,x=i*.02;
+  auto p=projectedProgress(route,time,i+1,0,x,{x,0.,0.});p.version.reference_generation=i?i:1;
+  observeProjected(s,p,time);EXPECT_EQ(s.advance(p.version,"d1max_loc_odom",time),i==2||i==4);
+ }
+}
+TEST(RouteProgressSupervisor, PureLateralMotionCannotSupportEvenClaimedForwardArc){
+ const auto route=routeSnapshot();RouteProgressSupervisor s;ASSERT_TRUE(s.bind(route,ver(),"isolated_mock"));
+ for(int i=0;i<=7;++i){const double time=10.+i*.1;
+  auto p=projectedProgress(route,time,i+1,0,i*.04,{0.,i*.04,0.});observeProjected(s,p,time);
+  EXPECT_FALSE(s.advance(ver(),"d1max_loc_odom",time));
+ }
+}
+TEST(RouteProgressSupervisor, OldLateralMovementCannotUnlockInsufficientNewForwardMovement){
+ const auto route=routeSnapshot();RouteProgressSupervisor s;ASSERT_TRUE(s.bind(route,ver(),"isolated_mock"));
+ auto p=projectedProgress(route,10.,1,0,0.,{0.,0.,0.});observeProjected(s,p,10.);EXPECT_FALSE(s.advance(ver(),"d1max_loc_odom",10.));
+ p=projectedProgress(route,10.1,2,0,0.,{0.,.029,0.});observeProjected(s,p,10.1);EXPECT_FALSE(s.advance(ver(),"d1max_loc_odom",10.1));
+ p=projectedProgress(route,10.2,3,0,.03,{.01,.029,0.});observeProjected(s,p,10.2);EXPECT_FALSE(s.advance(ver(),"d1max_loc_odom",10.2));
+}
+TEST(RouteProgressSupervisor, ChangingRouteChordsCannotIntegrateClosedMicroscopicJitter){
+ const auto route=routeSnapshot({{0.,0.,0.},{.2,0.,0.},{.2,.2,0.},{0.,.2,0.},{0.,0.,0.}});
+ const std::array<std::array<double,3>,5>poses={{{0.,0.,0.},{.02,0.,0.},{.02,.02,0.},{0.,.02,0.},{0.,0.,0.}}};
+ RouteProgressSupervisor s;ASSERT_TRUE(s.bind(route,ver(),"isolated_mock"));
+ for(size_t i=0;i<poses.size();++i){const double time=10.+i*.1;
+  auto p=projectedProgress(route,time,i+1,i?i-1:0,i*.2,poses[i]);observeProjected(s,p,time);
+  EXPECT_FALSE(s.advance(ver(),"d1max_loc_odom",time)); // Net displacement never reaches .03 m.
+ }
+}
+TEST(RouteProgressSupervisor, BackwardAndReturningLiteralPosesCannotAccumulateForwardSupport){
+ const auto route=routeSnapshot();RouteProgressSupervisor s;ASSERT_TRUE(s.bind(route,ver(),"isolated_mock"));
+ auto p=projectedProgress(route,10.,1,0,.5,{.5,0.,0.});observeProjected(s,p,10.);EXPECT_FALSE(s.advance(ver(),"d1max_loc_odom",10.));
+ const std::array<double,6>positions={.48,.5,.52,.5,.48,.5};
+ for(size_t i=0;i<positions.size();++i){const double time=10.1+i*.1;
+  p=projectedProgress(route,time,i+2,0,.532+i*.002,{positions[i],0.,0.});observeProjected(s,p,time);
+  EXPECT_FALSE(s.advance(ver(),"d1max_loc_odom",time));
+ }
+}
+TEST(RouteProgressSupervisor, PreviousConfirmedPeakCannotSubstituteForCurrentMeasuredGain){
+ const auto route=routeSnapshot();
+ for(const double current:{.49,.5,.51}){RouteProgressSupervisor s;ASSERT_TRUE(s.bind(route,ver(),"isolated_mock"));
+  auto p=projectedProgress(route,10.,1,0,.5,{.5,0.,0.});observeProjected(s,p,10.);EXPECT_FALSE(s.advance(ver(),"d1max_loc_odom",10.));
+  p=projectedProgress(route,10.1,2,0,.7,{.5,0.,0.});observeProjected(s,p,10.1);EXPECT_FALSE(s.advance(ver(),"d1max_loc_odom",10.1));
+  p=projectedProgress(route,10.2,3,0,current,{.54,0.,0.},.7);observeProjected(s,p,10.2);
+  EXPECT_FALSE(s.advance(ver(),"d1max_loc_odom",10.2)); // Genuine 4 cm motion cannot borrow the old peak.
+ }
+}
+TEST(RouteProgressSupervisor, CreditDiscardsPhysicalSurplusBeforeNextProgress){
+ const auto route=routeSnapshot();RouteProgressSupervisor s;ASSERT_TRUE(s.bind(route,ver(),"isolated_mock"));
+ auto p=projectedProgress(route,10.,1,0,0.,{0.,0.,0.});observeProjected(s,p,10.);EXPECT_FALSE(s.advance(ver(),"d1max_loc_odom",10.));
+ p=projectedProgress(route,10.1,2,0,.065,{.065,0.,0.});observeProjected(s,p,10.1);EXPECT_TRUE(s.advance(ver(),"d1max_loc_odom",10.1));
+ p=projectedProgress(route,10.2,3,0,.1,{.085,0.,0.});observeProjected(s,p,10.2);EXPECT_FALSE(s.advance(ver(),"d1max_loc_odom",10.2));
+ p=projectedProgress(route,10.3,4,0,.12,{.105,0.,0.});observeProjected(s,p,10.3);EXPECT_TRUE(s.advance(ver(),"d1max_loc_odom",10.3));
+}
+TEST(RouteProgressSupervisor, AnchorRebaseDiscardsPriorPhysicalWitnessWithoutCreditingCorrection){
+ const auto route=routeSnapshot();RouteProgressSupervisor s;ASSERT_TRUE(s.bind(route,ver(),"isolated_mock"));
+ auto p=projectedProgress(route,10.,1,0,0.,{0.,0.,0.});observeProjected(s,p,10.);EXPECT_FALSE(s.advance(ver(),"d1max_loc_odom",10.));
+ p=projectedProgress(route,10.1,2,0,.025,{.025,0.,0.});observeProjected(s,p,10.1);EXPECT_FALSE(s.advance(ver(),"d1max_loc_odom",10.1));
+ Version corrected=ver();corrected.anchor_id="corrected";corrected.anchor_revision=2;
+ for(int i=0;i<3;++i){const double time=10.2+i*.1,x=.025+i*.02;
+  p=projectedProgress(route,time,i+3,0,x+.02,{x+.02,0.,0.});p.version=corrected;
+  p.odom_body_pose.pose.position.x=x;p.map_from_odom.position.x=.02;p.anchor_source_stamp=stamp(10.2);
+  observeProjected(s,p,time);EXPECT_EQ(s.advance(corrected,"d1max_loc_odom",time),i==2);
+ }
+}
+TEST(RouteProgressSupervisor, ForwardSupportRotatesDirectionIntoLiteralOdomFrame){
+ const auto route=routeSnapshot();RouteProgressSupervisor s;ASSERT_TRUE(s.bind(route,ver(),"isolated_mock"));
+ for(int i=0;i<3;++i){const double time=10.+i*.1,x=i*.02;
+  auto p=projectedProgress(route,time,i+1,0,x,{x,0.,0.});p.odom_body_pose.pose.position.x=0.;p.odom_body_pose.pose.position.y=-x;
+  p.map_from_odom.orientation.z=p.map_from_odom.orientation.w=std::sqrt(.5)*1.00000005;
+  observeProjected(s,p,time);EXPECT_EQ(s.advance(ver(),"d1max_loc_odom",time),i==2);
+ }
+}
+TEST(RouteProgressSupervisor, ClaimedMapPositionRoundoffCannotLiftLiteralMotionAboveThreshold){
+ const auto route=routeSnapshot();RouteProgressSupervisor s;ASSERT_TRUE(s.bind(route,ver(),"isolated_mock"));
+ auto p=projectedProgress(route,10.,1,0,0.,{0.,0.,0.});observeProjected(s,p,10.);EXPECT_FALSE(s.advance(ver(),"d1max_loc_odom",10.));
+ p=projectedProgress(route,10.1,2,0,.0300055,{.029999,0.,0.});p.source_map_body_xyz.x=.0300055;p.cross_track_m=0.;
+ observeProjected(s,p,10.1);EXPECT_FALSE(s.advance(ver(),"d1max_loc_odom",10.1));
+}
 TEST(ExecutionOwner, FinalYawProgressUsesErrorReductionNotForwardDistance){
  Owner o("isolated_mock");begin(o);auto p=o.tick(10.1,true);p.frame_id="d1max_loc_odom";
  p.phase="aligning";p.goal_yaw=2.;
@@ -1488,4 +1610,25 @@ TEST(ExecutionOwner, EarlierCurveEvidenceCannotSatisfyDemandFloor){
   m.trajectory_validation_sequence=d.validation_sequence-1;
   o.observe(d,t);o.observe(m,t);auto b=body(t,i*.02);const auto reason=o.supervise(p,t,&b);
   if(i<300)EXPECT_TRUE(reason.empty());else {EXPECT_FALSE(reason.empty());break;}}
+}
+
+TEST(ExecutionSourceClock, ExactEpochPermitAndOneNanosecondBounds) {
+  constexpr std::int64_t ns=1791124691902856036LL;
+  const auto now=SourceClock::fromNanoseconds(ns);const auto exact=stamp(now);
+  EXPECT_GT(exact.sec+exact.nanosec*1e-9,static_cast<double>(now));
+  EXPECT_EQ(nanoseconds(exact),ns);
+  EXPECT_NE(stamp(seconds(exact)),exact);
+  Owner owner("isolated_mock");owner.bind(ver());
+  const auto permit=owner.tick(now,false);
+  EXPECT_EQ(permit.source_stamp,exact);
+  EXPECT_EQ(nanoseconds(permit.valid_until),ns+250000000);
+  auto native=proof();
+  native.source_stamp=native.check_begin=native.check_end=native.body_source_stamp=
+    native.front_ray_source_stamp=native.rear_ray_source_stamp=exact;
+  native.valid_until=stamp(after(now,.25));
+  EXPECT_TRUE(owner.observe(native,now));
+  auto future=native;future.sequence=2;future.check_end=stamp(SourceClock::fromNanoseconds(ns+1));
+  EXPECT_FALSE(owner.observe(future,now));
+  EXPECT_TRUE(fresh(exact,SourceClock::fromNanoseconds(ns+350000000),.35));
+  EXPECT_FALSE(fresh(exact,SourceClock::fromNanoseconds(ns+350000001),.35));
 }

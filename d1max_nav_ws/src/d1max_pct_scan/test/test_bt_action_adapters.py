@@ -64,6 +64,8 @@ def harness(monkeypatch):
         goal_xy_tolerance_m=.2, goal_z_tolerance_m=.15)
     node.get_clock = lambda: SimpleNamespace(now=lambda: module.rclpy.time.Time(
         nanoseconds=round(clock.wall*1e9)))
+    node.cancel_timeout_warnings=[]
+    node.get_logger=lambda:SimpleNamespace(warning=node.cancel_timeout_warnings.append)
     node.initialize_state()
     for name in ('goal_pub', 'goal3d_pub', 'worker_cancel_pub', 'reference_pub', 'route_reference_pub', 'health_pub'):
         setattr(node, name, Publisher())
@@ -343,6 +345,44 @@ def test_cancel_timeout_quarantines_session_instead_of_overlapping_tasks(monkeyp
     node.compute_tick()
     assert handle.terminal == 'aborted' and node.quarantine
     assert node.compute_goal(request('new-task')) == GoalResponse.REJECT
+
+
+@pytest.mark.parametrize('missing_ack', ['scan', 'native', 'worker'])
+def test_follow_cancel_timeout_diagnostic_preserves_failed_gate_and_logs_once(monkeypatch, missing_ack):
+    node, clock = harness(monkeypatch)
+    _, handle = commit(node, clock)
+    assert node.cancel_follow(handle) == CancelResponse.ACCEPT
+    slot=node.follow
+    cancel_mono=slot['cancel']['mono']
+    # ROS source advances only .2 s while the actual 2.5 s wall fence expires.
+    clock.wall,clock.mono=100.3,cancel_mono+2.6
+    if missing_ack!='scan':
+        node.on_scan_status(String(data=json.dumps(dict(session_id='session',
+            received_at_unix=clock.wall,active_reference=False,generation=4))))
+    if missing_ack!='native': native_cancel(node,clock)
+    worker_retired(node,clock)
+    if missing_ack=='worker': node.worker['retired_native_workers']=1
+    node.follow_tick()
+    result=slot['future'].result()
+    assert handle.terminal=='aborted' and not result.retirement_confirmed
+    assert result.reason=='cancel_ack_timeout_requires_session_restart'
+    assert node.p['cancel_timeout_s']==2.5
+    assert len(node.cancel_timeout_warnings)==1
+    prefix,encoded=node.cancel_timeout_warnings[0].split(' ',1)
+    assert prefix=='cancel_ack_timeout_diagnostic'
+    diagnostic=json.loads(encoded)
+    assert diagnostic['event']=='cancel_ack_timeout' and diagnostic['worker_kind']=='follow'
+    assert diagnostic['deadline_mono']==cancel_mono+2.5
+    assert diagnostic['cancel_source_stamp']==pytest.approx(100.1)
+    assert diagnostic['source_now']==pytest.approx(100.3)
+    assert diagnostic['scan']['fresh_status']==(missing_ack!='scan')
+    assert diagnostic['native']['present']==(missing_ack!='native')
+    assert diagnostic['worker']['retirement_ack']==(missing_ack!='worker')
+    if missing_ack=='worker':
+        assert diagnostic['worker']['retired_native_workers']==1
+        assert not diagnostic['worker']['retired_conditions']['retired_native_workers_zero']
+    node.cancellation_tick(slot,compute=False)
+    assert len(node.cancel_timeout_warnings)==1
 
 
 @pytest.mark.parametrize('change', ['route', 'task', 'epoch', 'seed'])
@@ -767,3 +807,96 @@ def test_cancel_undelivered_follow_needs_worker_retirement_not_nonexistent_nativ
     node.follow_tick()
     assert handle.terminal == 'canceled' and not node.quarantine
     assert node.executions[id(handle)]['future'].result().retirement_confirmed
+
+
+def exact_epoch_cancel_harness(monkeypatch):
+    node, clock = harness(monkeypatch)
+    _, handle = commit(node, clock)
+    # Use the real v13 clock domain, retaining all native header nanoseconds.
+    clock.source_ns = 1791129505309507931
+    clock.wall = clock.source_ns*1e-9
+    node.get_clock = lambda: SimpleNamespace(now=lambda: module.rclpy.time.Time(
+        nanoseconds=clock.source_ns))
+    refresh(node, clock)
+    worker_retired(node, clock)
+    return node, clock, handle
+
+
+def exact_native_cancel(node, clock, stamp_ns, generation=4):
+    message = LocalPlanDebug()
+    message.session_id, message.phase, message.valid = 'session', 'cancelled', False
+    message.header.frame_id = 'd1max_loc_map'
+    message.header.stamp = module.rclpy.time.Time(nanoseconds=stamp_ns).to_msg()
+    message.generation = generation
+    original = deepcopy(message.header.stamp)
+    node.on_native_debug(message)
+    assert message.header.stamp == original  # The ACK source is never rewritten.
+
+
+def exact_cancel_peer_retirement(node, clock, *, generation=4, active=False, worker_running=False):
+    clock.source_ns += 100_000_000
+    clock.wall = clock.source_ns*1e-9
+    clock.mono += .1
+    node.on_scan_status(String(data=json.dumps(dict(session_id='session',
+        received_at_unix=clock.wall, active_reference=active, generation=generation))))
+    worker_retired(node, clock)
+    if worker_running:
+        node.worker['retired_native_workers'] = 1
+
+
+@pytest.mark.parametrize('ack_source_delta_ns', [0, 1])
+def test_follow_cancel_epoch_ack_can_be_causally_later_in_same_source_tick(monkeypatch, ack_source_delta_ns):
+    node, clock, handle = exact_epoch_cancel_harness(monkeypatch)
+    assert node.cancel_follow(handle) == CancelResponse.ACCEPT
+    slot = node.follow
+    cancel_ns = slot['cancel']['source_ns']
+    clock.mono += .001
+    clock.source_ns += ack_source_delta_ns
+    exact_native_cancel(node, clock, clock.source_ns)
+    assert node.native_cancel_ack['stamp_ns'] == cancel_ns+ack_source_delta_ns
+    exact_cancel_peer_retirement(node, clock)
+    node.follow_tick()
+    assert handle.terminal == 'canceled' and node.follow is None
+    assert slot['future'].result().retirement_confirmed
+    assert not node.quarantine and not node.cancel_timeout_warnings
+
+
+@pytest.mark.parametrize('invalid_guard', ['before_source', 'future_source', 'before_receipt',
+    'wrong_generation', 'unchanged_generation', 'worker_running', 'reference_active'])
+def test_follow_cancel_same_source_ack_does_not_bypass_other_retirement_proofs(monkeypatch, invalid_guard):
+    node, clock, handle = exact_epoch_cancel_harness(monkeypatch)
+    source_ns = clock.source_ns
+    if invalid_guard == 'before_receipt':
+        exact_native_cancel(node, clock, source_ns)
+    assert node.cancel_follow(handle) == CancelResponse.ACCEPT
+    clock.mono += .001
+    if invalid_guard != 'before_receipt':
+        delta = -1 if invalid_guard == 'before_source' else 1 if invalid_guard == 'future_source' else 0
+        generation = 5 if invalid_guard == 'wrong_generation' else 3 if invalid_guard == 'unchanged_generation' else 4
+        exact_native_cancel(node, clock, source_ns+delta, generation=generation)
+    if invalid_guard == 'future_source':
+        assert node.native_cancel_ack is None  # One genuinely future nanosecond.
+    exact_cancel_peer_retirement(node, clock,
+        generation=3 if invalid_guard == 'unchanged_generation' else 4,
+        active=invalid_guard == 'reference_active', worker_running=invalid_guard == 'worker_running')
+    node.follow_tick()
+    assert handle.terminal is None and node.follow is not None
+    assert not node.follow['future'].done()
+
+
+def test_native_cancel_ack_same_tick_generation_order_and_duplicates(monkeypatch):
+    node, clock, _ = exact_epoch_cancel_harness(monkeypatch)
+    source_ns = clock.source_ns
+    exact_native_cancel(node, clock, source_ns, generation=4)
+    original_receipt = node.native_cancel_ack['received']
+    clock.mono += .001
+    exact_native_cancel(node, clock, source_ns, generation=4)
+    assert node.native_cancel_ack['received'] == original_receipt
+    exact_native_cancel(node, clock, source_ns, generation=5)
+    assert node.native_cancel_ack['generation'] == 5
+    assert node.native_cancel_ack['stamp_ns'] == source_ns
+    exact_native_cancel(node, clock, source_ns-1, generation=6)
+    assert node.native_cancel_ack['generation'] == 5
+    clock.source_ns += 1
+    exact_native_cancel(node, clock, clock.source_ns, generation=4)
+    assert node.native_cancel_ack['generation'] == 5

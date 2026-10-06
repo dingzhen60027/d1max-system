@@ -1,0 +1,424 @@
+{
+  "schema": 1,
+  "kind": "public_summary_of_failed_live_navigation_fixture",
+  "date": "2026-10-06",
+  "physical_acceptance": false,
+  "production_release": false,
+  "artifact_root_semantics": "artifact fields are paths relative to the local build artifact root; raw logs, reports, builds and videos are not committed",
+  "candidate": {
+    "artifact": "isaac-candidate-v22",
+    "integrity": {
+      "artifact": "isaac-candidate-v22/isaac_candidate_integrity.json",
+      "sha256": "64fdd4e62dbd8ee226825399e2de699baac292bac52c0b5e6b88c1a2bfccec48",
+      "snapshot_size_bytes": 670663,
+      "hash_scope": "complete_file"
+    },
+    "integrity_record_kind": "isaac_fixture_integrity_not_production_release_seal",
+    "manifest_entry_count": 2889,
+    "scope": "sealed fixture candidate; this summary does not re-audit every candidate artifact"
+  },
+  "session_artifact": "runs/live_view_20261006_001",
+  "session_id": "77297d330e244a33982b3cea11e0c249",
+  "result": {
+    "passed": false,
+    "case": "goal",
+    "test_scope": "original_BT_PCT_SCAN_tracker_safety_mock_writer_PhysX_wheel_fixture",
+    "physical_acceptance": false,
+    "localization": "groundtruth_fixture_not_LIO_localization_validation",
+    "goal": [
+      4.0,
+      -3.0,
+      0.0
+    ],
+    "result": {
+      "success": false,
+      "reason": "execution_blocked_timeout:waiting_admitted_nonzero_command",
+      "retirement_confirmed": true,
+      "physical_stop_confirmed": false
+    },
+    "error": "",
+    "counts": {
+      "measured_state": 4284,
+      "native_imu_received": 7136,
+      "stop_report": 1428,
+      "permit": 709,
+      "applied_motion": 1408,
+      "commit_ack": 28
+    },
+    "action_result_status": 6,
+    "execution_motion_test": true,
+    "measured_stationary": true,
+    "measured_distance_m": 8.00103079996913,
+    "measured_final_position": [
+      3.200201988220215,
+      -2.393979787826538,
+      0.3499996066093445
+    ],
+    "measured_max_speed_mps": 0.2979765700081574,
+    "nonzero_applied_count": 739,
+    "latest_applied": {
+      "vx": 0.0,
+      "wz": 0.0,
+      "hold": true,
+      "reason": "local_segment_finished_waiting_replan",
+      "execution_id": "77297d330e244a33982b3cea11e0c249.1:execution"
+    },
+    "imu_source_matching": true,
+    "imu_evidence": {
+      "matched": true,
+      "state_count": 4282,
+      "captured_state_count": 4284,
+      "fence_source_stamp_ns": 1791285709313510955,
+      "missing_imu_source_stamps_ns": [],
+      "receipt_wait_budget_s": 1.0,
+      "receipt_wait_elapsed_s": 0.0012187128886580467,
+      "fence_elapsed_s": 71.43960050493479
+    },
+    "stationarity_evidence": {
+      "fence_elapsed_s": 71.43960050493479,
+      "window_s": 1.0,
+      "sample_count": 60
+    },
+    "body_height_consistent": true,
+    "expected_body_reference_z": 0.35,
+    "measured_body_z_range": [
+      0.34999921917915344,
+      0.3500012457370758
+    ]
+  },
+  "writer_stop": {
+    "execution_id": "77297d330e244a33982b3cea11e0c249.1:execution",
+    "stop_submitted": true,
+    "measured_stop_confirmed": true,
+    "physical_acceptance_verified": false,
+    "stationary_samples": 158,
+    "measured_linear_mps": 0.00030819972112351685,
+    "measured_angular_radps": 0.00035302673781281566,
+    "reason": "execution_blocked_timeout:waiting_admitted_nonzero_command"
+  },
+  "bridge_at_observer_fence": {
+    "fault": "",
+    "measured_state_samples": 8542,
+    "ray_scans": [
+      1424,
+      1424
+    ],
+    "incomplete_scans_dropped": 0,
+    "native_imu_samples": 14239,
+    "localization": "groundtruth_fixture",
+    "transport": "isolated_mock",
+    "clock": "simulation_time_with_fixed_session_anchor"
+  },
+  "terminal_bt": {
+    "active": false,
+    "phase": "failed",
+    "reason": "execution_blocked_timeout:waiting_admitted_nonzero_command",
+    "execution_progress_reason": "waiting_admitted_nonzero_command",
+    "execution_blocked_age_s": 32.700000047683716,
+    "dependency_health_reason": "",
+    "lifecycle_active": true,
+    "writer_commit_sequence": 16
+  },
+  "terminal_tracker": {
+    "generation": 7,
+    "trajectory_id": 41,
+    "installation_sequence": 16,
+    "writer_commit_sequence": 16,
+    "reason": "handoff_retired_or_applied_uncertain",
+    "prepare_reason": "prepared_not_committed",
+    "handoff_reason": "writer_applied",
+    "execution_frozen": true,
+    "accepted_trajectories": 901,
+    "rejected_trajectories": 492
+  },
+  "sources": [
+    {
+      "artifact": "runs/live_view_20261006_001/isaac_smoke_report.json",
+      "sha256": "3155d477d2ef14e7d48ee26d77a70fc2426a7c3aa04a7df2fd34c092af7f5af0",
+      "snapshot_size_bytes": 5850062,
+      "hash_scope": "complete_file"
+    },
+    {
+      "artifact": "runs/live_view_20261006_001/control_trace.jsonl",
+      "sha256": "49f8d4646517cdfbde84b07ccfe4664be8c34c4f0fac31cf162a2e2c8a8cfbf3",
+      "snapshot_size_bytes": 10815779,
+      "hash_scope": "complete_file"
+    },
+    {
+      "artifact": "runs/live_view_20261006_001/session.json",
+      "sha256": "6c4358a72b129e0497c1a5923065f540ff43268e21159fc2ed7efca689bf5dc6",
+      "snapshot_size_bytes": 12071,
+      "hash_scope": "complete_file"
+    },
+    {
+      "artifact": "runs/live_view_20261006_001/scan.log",
+      "sha256": "1d086cfb317706c237959ddb3cce6f1f70e5ade955eb47b8120642a2f0c7d02d",
+      "snapshot_size_bytes": 124245,
+      "hash_scope": "captured_prefix_of_append_only_live_log"
+    },
+    {
+      "artifact": "runs/live_view_20261006_001/tracker.log",
+      "sha256": "698658a14bcaca9b3a098c649e6b4e636961651738db0dd925736145c885ea5c",
+      "snapshot_size_bytes": 197,
+      "hash_scope": "captured_prefix_of_append_only_live_log"
+    },
+    {
+      "artifact": "runs/live_view_20261006_001/navigator.log",
+      "sha256": "3f81e97e9ea54b1b1e16fa8b63af259f51b594d8b7c61b423234ad4cb234a852",
+      "snapshot_size_bytes": 821,
+      "hash_scope": "captured_prefix_of_append_only_live_log"
+    },
+    {
+      "artifact": "runs/live_view_20261006_001/navigation.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "snapshot_size_bytes": 0,
+      "hash_scope": "captured_prefix_of_append_only_live_log"
+    },
+    {
+      "artifact": "runs/live_view_20261006_001/isaac_bridge.log",
+      "sha256": "46f9c4c3e2be088c5155fb15c7a01ab9a8a29683906e6fe5ea2ccbb0781eb655",
+      "snapshot_size_bytes": 157,
+      "hash_scope": "captured_prefix_of_append_only_live_log"
+    },
+    {
+      "artifact": "runs/live_view_20261006_001/reference.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "snapshot_size_bytes": 0,
+      "hash_scope": "captured_prefix_of_append_only_live_log"
+    },
+    {
+      "artifact": "runs/live_view_20261006_001/adapters.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "snapshot_size_bytes": 0,
+      "hash_scope": "captured_prefix_of_append_only_live_log"
+    }
+  ],
+  "count_semantics": "observer counts, bridge lifetime counts, trace messages and validator counters describe different scopes and must not be summed",
+  "trace_derivation": {
+    "source_clock_axis": "seconds since first recorded control_trace source_clock_ns; distinct from report event elapsed wall time",
+    "total_messages": 16797,
+    "duration_source_s": 71.366666667,
+    "kind_counts": {
+      "demand": 3556,
+      "tracker": 244,
+      "safety": 83,
+      "permit": 709,
+      "trajectory_validation": 2049,
+      "route_progress": 4075,
+      "applied": 1408,
+      "motion_validation": 1602,
+      "safe_demand": 3043,
+      "commit_ack": 28
+    },
+    "route_progress_generation_message_counts": {
+      "1": 403,
+      "2": 217,
+      "3": 223,
+      "4": 343,
+      "5": 229,
+      "6": 241,
+      "7": 2419
+    },
+    "last_route_progress": {
+      "reference_generation": 7,
+      "position": [
+        3.2002007961273193,
+        -2.3939812183380127,
+        0.34999969601631165
+      ],
+      "measured_arc_m": 8.004190851481027,
+      "confirmed_arc_m": 8.004234737523628,
+      "cross_track_m": 0.003474652895366619
+    },
+    "last_applied_commit": {
+      "trace_source_elapsed_s": 32.85,
+      "report_event_elapsed_wall_s": 32.93057055794634,
+      "handoff_id": "77297d330e244a33982b3cea11e0c249.1:execution:handoff:27",
+      "applied_at_ns": 1791285670796844288
+    },
+    "first_local_segment_finished_trace_source_elapsed_s": 38.483333334,
+    "last_15_source_seconds": {
+      "start_source_elapsed_s": 56.366666667000004,
+      "end_source_elapsed_s": 71.366666667,
+      "channels": {
+        "applied": {
+          "messages": 300,
+          "reason_counts": {
+            "local_segment_finished_waiting_replan": 300
+          },
+          "last_trajectory_id": 41
+        },
+        "demand": {
+          "messages": 750,
+          "reason_counts": {
+            "local_segment_finished_waiting_replan": 613,
+            "waiting_trajectory_clock": 2,
+            "handoff_retired_or_applied_uncertain": 135
+          },
+          "last_trajectory_id": 41
+        },
+        "permit": {
+          "messages": 151,
+          "reason_counts": {
+            "committed_execution_lease": 123,
+            "execution_blocked_timeout:waiting_admitted_nonzero_command": 28
+          },
+          "last_trajectory_id": 41
+        },
+        "route_progress": {
+          "messages": 745,
+          "reason_counts": {
+            "": 745
+          }
+        },
+        "safe_demand": {
+          "messages": 616,
+          "reason_counts": {
+            "local_segment_finished_waiting_replan": 614,
+            "waiting_trajectory_clock": 2
+          },
+          "last_trajectory_id": 41
+        },
+        "safety": {
+          "messages": 1,
+          "reason_counts": {
+            "task_owner_revoked": 1
+          },
+          "last_trajectory_id": null
+        },
+        "tracker": {
+          "messages": 27,
+          "reason_counts": {
+            "local_segment_finished_waiting_replan": 24,
+            "waiting_trajectory_clock": 2,
+            "handoff_retired_or_applied_uncertain": 1
+          },
+          "last_trajectory_id": 41
+        },
+        "trajectory_validation": {
+          "messages": 391,
+          "reason_counts": {
+            "observed_free": 377,
+            "source_expired_during_check": 7,
+            "unknown_or_unobserved": 7
+          },
+          "last_trajectory_id": 77
+        }
+      }
+    },
+    "max_measured_state_source_gap_ns": 16666667
+  },
+  "observed_failure_facts": [
+    "SCAN accepted a generation 8 reference and produced generation 8 solves toward the final goal; the tracker remained at generation 7 trajectory 41.",
+    "RouteProgress contains generations 1 through 7 only; terminal installation_sequence and writer_commit_sequence are 16.",
+    "After the generation 7 local segment finished, applied commands stayed at zero while new trajectories continued to receive observed_free validations.",
+    "The original task ended with ABORTED status 6 and execution_blocked_timeout:waiting_admitted_nonzero_command; software retirement and measured stop were confirmed."
+  ],
+  "native_generation_log_derivation": {
+    "solve_counts": {
+      "1": 9,
+      "2": 5,
+      "3": 4,
+      "4": 5,
+      "5": 6,
+      "6": 7,
+      "7": 8,
+      "8": 36
+    },
+    "first_generation_8_solve_scan_log_line": 657
+  },
+  "unknown_diagnostics": {
+    "scope": "all Execution unknown diagnostic_after_failure lines in captured scan log prefix",
+    "count": 7,
+    "details": [
+      {
+        "scan_log_line": 1015,
+        "curve": 71,
+        "never_observed": 0,
+        "stale_free": 3762,
+        "front_age_ms": 500.1,
+        "rear_age_ms": 500.1
+      },
+      {
+        "scan_log_line": 1028,
+        "curve": 72,
+        "never_observed": 0,
+        "stale_free": 3762,
+        "front_age_ms": 500.1,
+        "rear_age_ms": 500.1
+      },
+      {
+        "scan_log_line": 1041,
+        "curve": 73,
+        "never_observed": 0,
+        "stale_free": 3740,
+        "front_age_ms": 500.1,
+        "rear_age_ms": 500.1
+      },
+      {
+        "scan_log_line": 1056,
+        "curve": 74,
+        "never_observed": 0,
+        "stale_free": 3740,
+        "front_age_ms": 500.1,
+        "rear_age_ms": 500.1
+      },
+      {
+        "scan_log_line": 1069,
+        "curve": 75,
+        "never_observed": 0,
+        "stale_free": 3751,
+        "front_age_ms": 500.1,
+        "rear_age_ms": 500.1
+      },
+      {
+        "scan_log_line": 1071,
+        "curve": 75,
+        "never_observed": 0,
+        "stale_free": 3817,
+        "front_age_ms": 500.1,
+        "rear_age_ms": 500.1
+      },
+      {
+        "scan_log_line": 1085,
+        "curve": 76,
+        "never_observed": 0,
+        "stale_free": 3696,
+        "front_age_ms": 500.1,
+        "rear_age_ms": 500.1
+      }
+    ],
+    "interpretation": "these seven diagnostics report never_observed=0 and front/rear source ages 500.1 ms, beyond the original 500 ms lease; they do not establish a recurrence of the original permanent geometric blind-region blockage"
+  },
+  "cause_assessment": {
+    "status": "hypothesis_not_transactionally_confirmed",
+    "hypothesis": "A next-generation ReferenceReceipt may bind the incumbent trajectory before an in-flight same-generation writer CAS advances that incumbent. Owner candidate selection then excludes the pending generation because its expected_trajectory_id no longer equals the actual active trajectory. The reference transport retains the accepted pending proposal and does not automatically re-propose, allowing the incumbent local segment to finish without a successor installation.",
+    "support": "The generation 7 to 8 split, completed old local endpoint, continuing accepted free-space candidate validations, and absent subsequent writer commits match this race. The trace does not capture the predecessor receipt identity, so no specific predecessor trajectory number is asserted.",
+    "reproduction_candidate": "Accept a generation 8 proposal while a generation 7 writer handoff is in flight; deliver the old-generation applied CAS ACK before admission of the generation 8 candidate, then inspect candidate selection and pending-reference retention.",
+    "missing_transaction_fields": [
+      "ReferenceProposal.version, proposal_id, expected_version, expected_trajectory_id",
+      "ReferenceReceipt.version, proposal_id, expected_version, expected_trajectory_id, accepted",
+      "TrajectoryAdmission.version, trajectory_id, validation_sequence, accepted, reason",
+      "ExecutionHandoffGrant.incumbent, candidate, expected_commit_sequence, transition_mode",
+      "ExecutionCommitAck.incumbent_version, candidate_version, incumbent_trajectory_id, candidate_trajectory_id, previous_commit_sequence, commit_sequence",
+      "TrackerGeometryReceipt complete installation identity",
+      "SDK stationary evidence complete identity"
+    ],
+    "code_pointers": [
+      {
+        "path": "d1max_nav_ws/src/d1max_navigation_bt/include/d1max_navigation_bt/execution_owner.hpp",
+        "symbol": "Owner::candidate"
+      },
+      {
+        "path": "d1max_nav_ws/src/d1max_pct_scan/d1max_pct_scan/continuous_reference_node.py",
+        "symbol": "prepare / on_receipt / tick"
+      }
+    ]
+  },
+  "scope_limits": [
+    "PhysX wheel fixture and ground-truth localization; not Faster-LIO or real SDK performance validation.",
+    "This is a failed navigation result despite successful measured stop.",
+    "The GUI supervisor was running while log prefixes were captured; no clean shutdown result is inferred.",
+    "This evidence describes the frozen candidate, not a claim that the newly published source tree was rebuilt or revalidated."
+  ]
+}

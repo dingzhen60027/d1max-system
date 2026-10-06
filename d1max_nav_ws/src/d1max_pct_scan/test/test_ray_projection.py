@@ -370,6 +370,40 @@ def test_session_entrypoint_is_default_off_and_requires_explicit_matching_profil
         session_settings(session, localization)
 
 
+def test_native_simultaneous_snapshot_preserves_actual_source_time_and_geometry():
+    points = raw_points(duration=0)
+    raw = decode(points)
+    ordinary = core()
+    feed(ordinary)
+    with pytest.raises(ProjectionError, match='stale_duplicate_future'):
+        project(ordinary, raw)
+    fixture = RayProjectorCore(allow_simulation_snapshot=True)
+    fixture.reset(CTX)
+    fixture.set_extrinsics(body_to_tracking=IDENTITY, ray_to_tracking=IDENTITY)
+    feed(fixture)
+    worker = fixture.projection_snapshot()
+    result = project(worker, raw)
+    assert result.start_ns == result.end_ns == EPOCH
+    for name in ('offset_time','timestamp','source_timestamp','raw_timestamp','source_index'):
+        np.testing.assert_array_equal(result.points[name], points[name])
+    np.testing.assert_array_equal(result.points['x'], points['x'])
+    # A positive but undersized scan is not silently reclassified as a snapshot.
+    with pytest.raises(ProjectionError, match='stale_duplicate_future'):
+        project(fixture, decode(raw_points(duration=500000)))
+
+
+@pytest.mark.parametrize('key,value', [('transport_mode','live'), ('simulation_backend',None),
+    ('simulation_clock',None), ('perception_acquisition','unrecognized')])
+def test_snapshot_acquisition_is_rejected_without_explicit_isolated_fixture(key, value):
+    session, localization = session_config()
+    session.update(transport_mode='isolated_mock', simulation_backend='isaacsim_physx',
+        simulation_clock='isaac_fixed_anchor_v1', perception_acquisition='isaac_physx_snapshot_v1')
+    assert session_settings(session, localization)['allow_simulation_snapshot'] is True
+    session[key] = value
+    with pytest.raises(ProjectionError, match='snapshot_acquisition_requires'):
+        session_settings(session, localization)
+
+
 @pytest.mark.parametrize('key,value', [('schema', True), ('epoch', True), ('epoch', 0),
     ('seed_id', ''), ('sequence', -1), ('barrier_ns', -1), ('session_id', 'a'*129)])
 def test_map_context_requires_exact_bounded_identity(key, value):

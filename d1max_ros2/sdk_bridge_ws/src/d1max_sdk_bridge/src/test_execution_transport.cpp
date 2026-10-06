@@ -52,6 +52,39 @@ static void refreshBody(Transport&t,double now) {
  assert(t.trajectoryValidation(c,now));
 }
 int main(){
+ // A real Unix-epoch source equal to ROS time used to fail grant admission:
+ // sec + nanosec*1e-9 rounded above ns/1e9. Exact clocks also distinguish a
+ // genuinely future or expired sample by one nanosecond, without tolerance.
+ {constexpr std::int64_t ns=1791124691902856036LL;
+  const auto now=SourceClock::fromNanoseconds(ns);const auto exact=stamp(now);
+  const double old_source=exact.sec+exact.nanosec*1e-9;
+  assert(old_source>static_cast<double>(now));
+  assert(stamp(secs(exact))!=exact);assert(nanoseconds(exact)==ns);
+  for(const auto delta:{0LL,500000000LL,500000001LL,-1LL}){
+   Transport t("sdk","isolated_mock");t.configureMcCaptureBound(.02,"isolated_simulated_source_clock");
+   t.configureExecutionPolicy(testExecutionPolicy(),.8);t.configureBrakingModel(std::string(64,'c'));
+   auto request=g();request.source_stamp=stamp(SourceClock::fromNanoseconds(ns-delta));
+   const auto reply=t.grant(request,now,h());
+   assert(reply.accepted==(delta>=0&&delta<=500000000));
+   if(!reply.accepted)assert(reply.reason=="grant_binding_or_time_invalid");
+  }
+  auto exact_now=SourceClock::fromNanoseconds(ns);
+  assert(nanoseconds(stamp(after(exact_now,.25)))==ns+250000000);
+  Transport t("sdk","isolated_mock");t.configureMcCaptureBound(.02,"isolated_simulated_source_clock");
+  t.configureExecutionPolicy(testExecutionPolicy(),.8);t.configureBrakingModel(std::string(64,'c'));
+  auto request=g();request.source_stamp=exact;assert(t.grant(request,exact_now,h()).accepted);
+  auto permit=p();permit.source_stamp=exact;permit.valid_until=stamp(after(exact_now,.25));
+  assert(t.permit(permit,exact_now));assert(t.state(exact_now).source_stamp==exact);
+  Local m;m.schema_version=1;m.session_id="nav";m.map_version_id="map";m.localization_epoch=1;
+  m.localization_seed_id="seed";m.usable=true;m.source_stamp=m.posterior_stamp=m.imu_stamp=exact;
+  m.local_odometry.header.stamp=exact;m.local_odometry.header.frame_id="d1max_loc_odom";
+  m.local_odometry.child_frame_id="d1max_loc_base_link";m.local_odometry.pose.pose.orientation.w=1.;
+  assert(t.localState(m,exact_now));
+  ++m.source_stamp.nanosec;m.posterior_stamp=m.imu_stamp=m.local_odometry.header.stamp=m.source_stamp;
+  assert(!t.localState(m,exact_now));
+  assert(!fresh(exact,SourceClock::fromNanoseconds(ns+100000001),.1));
+  assert(fresh(exact,SourceClock::fromNanoseconds(ns+100000000),.1));
+ }
  // A tighter physical source-age record must reach the FINAL writer, not
  // merely the Python/native validators. A later proof check cannot renew it.
  {auto policy=testExecutionPolicy();policy.sensor_source_age_bound_s=.2;auto t=ready(policy);

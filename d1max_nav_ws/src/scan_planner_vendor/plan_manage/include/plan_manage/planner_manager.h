@@ -83,7 +83,7 @@ namespace scan_planner
       const auto source=grid_map_->latestCloudStampNs();
       const auto context=grid_map_->localizationContextSequence();
       const auto revision=grid_map_->occupancyRevision();
-      const auto body_source=measured_body_pose_.source_stamp;
+      const auto body_source=measuredBodySourceNs(measured_body_pose_);
       const auto projected=measuredPreviewCurveTime(local_data_.position_traj_,
           measured_body_pose_.position,preview_curve_progress_time_,grid_map_->getResolution());
       if (!projected) return evidence;
@@ -91,7 +91,7 @@ namespace scan_planner
                                     accepted_heading_contract_,&evidence);
       if (!grid_map_->integratedCloudFreshAt(node_->now().nanoseconds()) ||
           source!=grid_map_->latestCloudStampNs() || context!=grid_map_->localizationContextSequence() ||
-          revision!=grid_map_->occupancyRevision() || body_source!=measured_body_pose_.source_stamp)
+          revision!=grid_map_->occupancyRevision() || body_source!=measuredBodySourceNs(measured_body_pose_))
         return CurveCheckEvidence::Uncertified;
       if (evidence==CurveCheckEvidence::Clear) preview_curve_progress_time_=*projected;
       return evidence;

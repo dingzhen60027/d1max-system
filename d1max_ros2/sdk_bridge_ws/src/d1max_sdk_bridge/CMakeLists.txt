@@ -19,6 +19,16 @@ find_package(rosgraph_msgs REQUIRED)
 find_package(d1max_planning_interfaces REQUIRED)
 find_package(OpenSSL REQUIRED)
 
+option(D1MAX_BUILD_ISOLATED_EXECUTION_ONLY
+  "Build only SDK-free execution mock, acceptance checker and tests" OFF)
+option(D1MAX_BUILD_CONSOLE_MOCK "Build non-installed SDK-free console test adapter" OFF)
+if(D1MAX_BUILD_ISOLATED_EXECUTION_ONLY AND D1MAX_BUILD_CONSOLE_MOCK)
+  message(FATAL_ERROR
+    "D1MAX_BUILD_CONSOLE_MOCK needs manufacturer SDK headers and cannot be "
+    "combined with D1MAX_BUILD_ISOLATED_EXECUTION_ONLY")
+endif()
+
+if(NOT D1MAX_BUILD_ISOLATED_EXECUTION_ONLY)
 set(ROBOT_SDK_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/vendor/robot_sdk")
 set(ROBOT_SDK_ARCH "${CMAKE_SYSTEM_PROCESSOR}")
 set(ROBOT_SDK_LIBRARY
@@ -56,11 +66,12 @@ add_executable(sdk_console_bridge src/sdk_console_bridge.cpp)
 ament_target_dependencies(sdk_console_bridge rclcpp std_msgs std_srvs rosgraph_msgs)
 target_link_libraries(sdk_console_bridge robot_sdk_vendor Threads::Threads nlohmann_json::nlohmann_json)
 set_target_properties(sdk_console_bridge PROPERTIES INSTALL_RPATH "\$ORIGIN/..")
-option(D1MAX_BUILD_CONSOLE_MOCK "Build non-installed SDK-free console test adapter" OFF)
 add_executable(sdk_monitor_bridge src/sdk_monitor_bridge.cpp)
 ament_target_dependencies(sdk_monitor_bridge rclcpp std_msgs std_srvs rosgraph_msgs d1max_planning_interfaces)
 target_link_libraries(sdk_monitor_bridge robot_sdk_vendor Threads::Threads nlohmann_json::nlohmann_json OpenSSL::Crypto)
 set_target_properties(sdk_monitor_bridge PROPERTIES INSTALL_RPATH "\$ORIGIN/..")
+endif()
+
 add_executable(sdk_execution_mock src/sdk_execution_mock.cpp)
 ament_target_dependencies(sdk_execution_mock rclcpp d1max_planning_interfaces)
 target_link_libraries(sdk_execution_mock nlohmann_json::nlohmann_json OpenSSL::Crypto)
@@ -73,12 +84,16 @@ if(D1MAX_BUILD_CONSOLE_MOCK)
   target_link_libraries(sdk_console_bridge_mock Threads::Threads nlohmann_json::nlohmann_json)
 endif()
 
-install(TARGETS sdk_state_bridge sdk_telemetry_bridge sdk_console_bridge sdk_monitor_bridge sdk_execution_mock execution_acceptance_check
+install(TARGETS sdk_execution_mock execution_acceptance_check
+  DESTINATION lib/${PROJECT_NAME})
+if(NOT D1MAX_BUILD_ISOLATED_EXECUTION_ONLY)
+install(TARGETS sdk_state_bridge sdk_telemetry_bridge sdk_console_bridge sdk_monitor_bridge
   DESTINATION lib/${PROJECT_NAME})
 install(DIRECTORY
   "${ROBOT_SDK_ROOT}/lib/${ROBOT_SDK_ARCH}/"
   DESTINATION lib
   FILES_MATCHING PATTERN "librobot_sdk.so*")
+endif()
 install(DIRECTORY launch config
   DESTINATION share/${PROJECT_NAME})
 

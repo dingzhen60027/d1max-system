@@ -13,10 +13,112 @@ static scan_planner::MeasuredBodyPose bodyAt(scan_planner::UniformBspline &curve
   return {curve.evaluateDeBoorT(0.),Eigen::Quaterniond(Eigen::AngleAxisd(yaw,Eigen::Vector3d::UnitZ())),10.,"map"};
 }
 
+TEST(TrajectoryCollision, OriginalUnixNanosecondsSurviveBodyCopyAndFreshnessBoundaries) {
+  constexpr std::int64_t ns=1791124691902856036LL;
+  auto curve=line();auto pose=bodyAt(curve);
+  pose.source_stamp=static_cast<double>(ns)*1e-9;pose.source_stamp_ns=ns;
+  const auto copy=pose;EXPECT_EQ(scan_planner::measuredBodySourceNs(copy),ns);
+  double yaw=0.;
+  EXPECT_TRUE(scan_planner::measuredBodyYaw(copy,"map",pose.source_stamp,.4,yaw,ns));
+  EXPECT_TRUE(scan_planner::measuredBodyYaw(copy,"map",pose.source_stamp+.4,.4,yaw,ns+400000000LL));
+  EXPECT_FALSE(scan_planner::measuredBodyYaw(copy,"map",pose.source_stamp+.4,.4,yaw,ns+400000001LL));
+  EXPECT_TRUE(scan_planner::measuredBodyYaw(copy,"map",pose.source_stamp-.1,.4,yaw,ns-100000000LL));
+  EXPECT_FALSE(scan_planner::measuredBodyYaw(copy,"map",pose.source_stamp-.1,.4,yaw,ns-100000001LL));
+  EXPECT_TRUE(scan_planner::measuredPoseSourceAccepted(ns+1,ns+1,.4,ns));
+  EXPECT_FALSE(scan_planner::measuredPoseSourceAccepted(ns,ns+1,.4,ns));
+}
+
+TEST(TrajectoryCollision, WholeCurveProofDoesNotRenewOriginalUnixBodyFreshness) {
+  constexpr std::int64_t ns=1791124691902856036LL;
+  auto curve=line();auto pose=bodyAt(curve);
+  pose.source_stamp=static_cast<double>(ns)*1e-9;pose.source_stamp_ns=ns;
+  const auto check_at=[&](std::int64_t now) {
+    return scan_planner::wholeCurveCollisionFree(curve,.05,.49,
+      [](const Eigen::Vector3d&,double){return 0;},pose,"map",static_cast<double>(now)*1e-9,.4,
+      200000,0.,0.,{},0.,scan_planner::MeasuredConnectionPolicy::CandidateAdmission,now);
+  };
+  EXPECT_TRUE(check_at(ns+400000000LL));
+  EXPECT_FALSE(check_at(ns+400000001LL));
+  EXPECT_EQ(pose.source_stamp_ns,ns);
+}
+
 template<class Query> static bool check(scan_planner::UniformBspline &curve, Query query,
-    std::size_t budget=200000,double wall_budget=0.) {
+    std::size_t budget=200000,double wall_budget=0.,scan_planner::CurveCheckTrace* trace=nullptr) {
   return scan_planner::wholeCurveCollisionFree(curve,.08,.49,query,bodyAt(curve),"map",10.,.5,
-                                               budget,wall_budget);
+      budget,wall_budget,0.,{},0.,scan_planner::MeasuredConnectionPolicy::CandidateAdmission,0,trace);
+}
+
+TEST(TrajectoryCollision, TraceCapturesOriginalFirstNonFreeActualBodyQuery) {
+  auto curve=line();const auto measured=bodyAt(curve,.7);
+  for(int state:{-1,1,2}) {
+    scan_planner::CurveCheckTrace trace;std::size_t queries=0;
+    EXPECT_FALSE(scan_planner::wholeCurveCollisionFree(curve,.08,.49,
+      [&](const Eigen::Vector3d&,double){++queries;return state;},
+      measured,"map",10.,.5,200000,0.,0.,{},0.,
+      scan_planner::MeasuredConnectionPolicy::CandidateAdmission,0,&trace));
+    ASSERT_TRUE(trace.first_non_free);
+    EXPECT_EQ(queries,1U);EXPECT_EQ(trace.first_non_free->query_index,1U);
+    EXPECT_EQ(trace.first_non_free->state,state);
+    EXPECT_TRUE(trace.first_non_free->position.isApprox(measured.position,1e-12));
+    EXPECT_NEAR(trace.first_non_free->yaw,.7,1e-12);
+  }
+}
+
+TEST(TrajectoryCollision, TracePreservesQuerySequenceAndCapturesLateUnknown) {
+  auto curve=line();scan_planner::CurveCheckTrace trace;
+  std::vector<scan_planner::CurveQueryWitness> original,traced;
+  const auto query=[&](std::vector<scan_planner::CurveQueryWitness>& seen) {
+    return [&](const Eigen::Vector3d& p,double yaw) {
+      const int state=p.x()>.85?2:0;
+      seen.push_back({p,yaw,state,seen.size()+1});return state;
+    };
+  };
+  EXPECT_FALSE(check(curve,query(original)));
+  EXPECT_FALSE(check(curve,query(traced),200000,0.,&trace));
+  ASSERT_TRUE(trace.first_non_free);ASSERT_GT(original.size(),1U);
+  ASSERT_EQ(traced.size(),original.size());
+  for(std::size_t i=0;i<original.size();++i) {
+    EXPECT_TRUE(traced[i].position.isApprox(original[i].position,1e-12));
+    EXPECT_DOUBLE_EQ(traced[i].yaw,original[i].yaw);EXPECT_EQ(traced[i].state,original[i].state);
+  }
+  EXPECT_EQ(trace.first_non_free->state,2);
+  EXPECT_EQ(trace.first_non_free->query_index,original.size());
+  EXPECT_TRUE(trace.first_non_free->position.isApprox(original.back().position,1e-12));
+  EXPECT_DOUBLE_EQ(trace.first_non_free->yaw,original.back().yaw);
+}
+
+TEST(TrajectoryCollision, TraceCapturesPreviewRotationUnknownWithoutSkippingSweep) {
+  auto curve=line();const auto measured=bodyAt(curve,1.2);
+  scan_planner::SplineHeadingContract heading;heading.preview_only_enabled=true;
+  scan_planner::CurveCheckTrace trace;std::size_t queries=0;
+  EXPECT_FALSE(scan_planner::wholeCurveCollisionFree(curve,.08,.49,
+    [&](const Eigen::Vector3d&,double yaw){++queries;return yaw>.3&&yaw<1.?2:0;},
+    measured,"map",10.,.5,200000,0.,0.,heading,0.,
+    scan_planner::MeasuredConnectionPolicy::CandidateAdmission,0,&trace));
+  ASSERT_TRUE(trace.first_non_free);
+  EXPECT_GT(queries,1U);EXPECT_EQ(trace.first_non_free->query_index,queries);
+  EXPECT_EQ(trace.first_non_free->state,2);
+  EXPECT_TRUE(trace.first_non_free->position.isApprox(measured.position,1e-12));
+  EXPECT_GT(trace.first_non_free->yaw,.3);EXPECT_LT(trace.first_non_free->yaw,1.);
+}
+
+TEST(TrajectoryCollision, TraceCannotInventWitnessForClearBudgetOrStaleSource) {
+  auto curve=line();scan_planner::CurveCheckTrace trace;
+  const auto unknown=[](const Eigen::Vector3d&,double){return 2;};
+  const auto free=[](const Eigen::Vector3d&,double){return 0;};
+  EXPECT_FALSE(check(curve,unknown,200000,0.,&trace));ASSERT_TRUE(trace.first_non_free);
+  EXPECT_TRUE(check(curve,free,200000,0.,&trace));EXPECT_FALSE(trace.first_non_free);
+  EXPECT_FALSE(check(curve,unknown,200000,0.,&trace));ASSERT_TRUE(trace.first_non_free);
+  std::size_t queries=0;
+  const auto counted_free=[&](const Eigen::Vector3d&,double){++queries;return 0;};
+  EXPECT_FALSE(check(curve,counted_free,20,0.,&trace));
+  EXPECT_EQ(queries,0U);EXPECT_FALSE(trace.first_non_free);
+  EXPECT_FALSE(check(curve,unknown,200000,0.,&trace));ASSERT_TRUE(trace.first_non_free);
+  auto stale=bodyAt(curve);stale.source_stamp=9.;
+  EXPECT_FALSE(scan_planner::wholeCurveCollisionFree(curve,.08,.49,counted_free,
+    stale,"map",10.,.5,200000,0.,0.,{},0.,
+    scan_planner::MeasuredConnectionPolicy::CandidateAdmission,0,&trace));
+  EXPECT_EQ(queries,0U);EXPECT_FALSE(trace.first_non_free);
 }
 
 TEST(TrajectoryCollision, PredecessorFullCurveIncludesFinalThirdAndEndpoint) {

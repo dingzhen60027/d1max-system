@@ -5,6 +5,7 @@
 #include <tuple>
 #include <random>
 #include <map>
+#include "voxel_cache_test_access.hpp"
 
 using scan_planner::conservativeCylinderInflation;
 using scan_planner::observedCylinderStatus;
@@ -145,6 +146,85 @@ TEST(VoxelCollision, SameCellCacheReusesOnlyCurrentSnapshotAndCannotGrowUnbounde
     EXPECT_EQ(cache.get(i,query),2);
     EXPECT_LE(cache.size(),4U);
   }
+}
+
+TEST(VoxelCollision, EveryClearChangesGenerationIdentityEvenWhenAlreadyEmpty) {
+  scan_planner::VoxelStatusCache cache(4);
+  const auto initial=cache.generationIdentifier();
+  int calls=0;
+  EXPECT_EQ(cache.get(10,[&](){++calls;return 0;}),0);
+  EXPECT_EQ(cache.get(10,[&](){++calls;return 2;}),0);
+  EXPECT_EQ(calls,1);EXPECT_EQ(cache.generationIdentifier(),initial);
+  auto previous=initial;
+  for(unsigned i=0;i<16;++i) {
+    cache.clear();
+    EXPECT_GT(cache.generationIdentifier(),previous);
+    EXPECT_EQ(cache.size(),0U);previous=cache.generationIdentifier();
+  }
+  EXPECT_EQ(cache.get(10,[&](){++calls;return 2;}),2);
+  EXPECT_EQ(calls,2);EXPECT_EQ(cache.generationIdentifier(),previous);
+}
+
+TEST(VoxelCollision, CapacityFlushChangesGenerationIdentityAndInvalidatesFree) {
+  scan_planner::VoxelStatusCache cache(2);
+  int calls=0;
+  const auto free=[&](){++calls;return 0;};
+  const auto unknown=[&](){++calls;return 2;};
+  const auto occupied=[&](){++calls;return 1;};
+  const auto before=cache.generationIdentifier();
+  EXPECT_EQ(cache.get(10,free),0);EXPECT_EQ(cache.get(20,free),0);
+  EXPECT_EQ(cache.generationIdentifier(),before);
+  // A cache miss at capacity invokes the production clear path internally.
+  EXPECT_EQ(cache.get(30,unknown),2);
+  const auto flushed=cache.generationIdentifier();
+  EXPECT_GT(flushed,before);EXPECT_EQ(cache.size(),1U);
+  EXPECT_EQ(cache.get(10,occupied),1);EXPECT_EQ(calls,4);
+  EXPECT_EQ(cache.get(10,unknown),1);EXPECT_EQ(calls,4);
+  EXPECT_EQ(cache.generationIdentifier(),flushed);
+  EXPECT_EQ(cache.get(40,unknown),2);
+  EXPECT_GT(cache.generationIdentifier(),flushed);
+  EXPECT_EQ(cache.get(10,unknown),2);EXPECT_EQ(calls,6);
+}
+
+TEST(VoxelCollision, SlotGenerationWrapCannotRevalidateOldFreeOrReuseIdentity) {
+  using Access=scan_planner::VoxelStatusCacheTestAccess;
+  scan_planner::VoxelStatusCache cache(4);int calls=0;
+  ASSERT_EQ(Access::slotGeneration(cache),1U);
+  EXPECT_EQ(cache.get(10,[&](){++calls;return 0;}),0);
+  const auto first_identity=cache.generationIdentifier();
+  cache.clear();
+  ASSERT_GT(Access::slotsTagged(cache,1U),0U); // Old FREE's stale index remains.
+  const auto before_wrap=cache.generationIdentifier();
+  Access::forceNextSlotGenerationWrap(cache);
+  EXPECT_EQ(cache.generationIdentifier(),before_wrap); // Test seam is not a clear.
+  cache.clear(); // Execute the real uint32 wrap and slot invalidation.
+  EXPECT_EQ(Access::slotGeneration(cache),1U);
+  ASSERT_EQ(Access::slotsTagged(cache,1U),0U); // Do not dereference a stale index if broken.
+  EXPECT_GT(cache.generationIdentifier(),before_wrap);
+  EXPECT_NE(cache.generationIdentifier(),first_identity);
+  // Repeated slot generation 1 must query current evidence, not old FREE.
+  EXPECT_EQ(cache.get(10,[&](){++calls;return 2;}),2);EXPECT_EQ(calls,2);
+  EXPECT_EQ(cache.get(10,[&](){++calls;return 0;}),2);EXPECT_EQ(calls,2);
+  cache.clear();
+  EXPECT_EQ(cache.get(10,[&](){++calls;return 1;}),1);EXPECT_EQ(calls,3);
+}
+
+TEST(VoxelCollision, ExhaustedGenerationIdentityIsPermanentlyNonReusable) {
+  scan_planner::VoxelStatusCache cache(4);int calls=0;
+  EXPECT_EQ(cache.get(10,[&](){++calls;return 0;}),0);
+  scan_planner::VoxelStatusCacheTestAccess::forceNextSerialSaturation(cache);
+  EXPECT_TRUE(cache.generationReusable());
+  EXPECT_EQ(cache.generationIdentifier(),std::numeric_limits<std::uint64_t>::max()-1);
+  cache.clear();
+  EXPECT_FALSE(cache.generationReusable());
+  EXPECT_EQ(cache.generationIdentifier(),std::numeric_limits<std::uint64_t>::max());
+  EXPECT_EQ(cache.get(10,[&](){++calls;return 2;}),2);EXPECT_EQ(calls,2);
+  for(unsigned i=0;i<4;++i) {
+    cache.clear();
+    EXPECT_FALSE(cache.generationReusable());
+    EXPECT_EQ(cache.generationIdentifier(),std::numeric_limits<std::uint64_t>::max());
+  }
+  EXPECT_EQ(cache.get(10,[&](){++calls;return 1;}),1);EXPECT_EQ(calls,3);
 }
 
 TEST(VoxelCollision, DenseCacheMatchesExactLegacyKeysAcrossGrowthClearAndCapacityFlush) {

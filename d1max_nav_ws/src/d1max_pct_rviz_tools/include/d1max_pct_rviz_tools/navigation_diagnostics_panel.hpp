@@ -31,6 +31,7 @@ public:
   static void applyLayoutVisibility(rviz_common::DisplayGroup * root, const QString & layout);
 
 protected:
+  virtual double statusNow() const;
   virtual void applyLayoutPresentation(const QString & layout);
 
 private:

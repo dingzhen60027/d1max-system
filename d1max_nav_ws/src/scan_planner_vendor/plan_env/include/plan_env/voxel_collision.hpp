@@ -68,6 +68,7 @@ struct CollisionVoxelDiagnostic {
 // Snapshot-scoped: the owner must clear it for every raw-map mutation/integration
 // and ring-buffer slide. The bound limits memory even during a failed search.
 class VoxelStatusCache {
+  friend struct VoxelStatusCacheTestAccess;
  public:
   explicit VoxelStatusCache(std::size_t capacity=32768):capacity_(capacity) {
     if (!capacity_) throw std::invalid_argument("zero voxel cache capacity");
@@ -76,6 +77,7 @@ class VoxelStatusCache {
   }
   void clear() {
     entries_.clear();
+    if(clear_serial_<std::numeric_limits<std::uint64_t>::max())++clear_serial_;
     // Retain bounded storage across cloud/proof changes. A new generation
     // invalidates the index without freeing/reallocating one node per query.
     if (++generation_==0) {
@@ -83,6 +85,11 @@ class VoxelStatusCache {
       generation_=1;
     }
   }
+  // Dense dependants must follow every clear, even when the slot generation
+  // wraps to an old value. At the serial limit they fall back to uncached
+  // evidence, rather than ever reuse an ambiguous generation.
+  std::uint64_t generationIdentifier() const {return clear_serial_;}
+  bool generationReusable() const {return clear_serial_<std::numeric_limits<std::uint64_t>::max();}
   std::size_t size() const { return entries_.size(); }
   template <class Query> int get(int address, Query query) {
     return get(address, 0, 0, query);
@@ -153,6 +160,7 @@ class VoxelStatusCache {
   }
   std::size_t capacity_;
   std::uint32_t generation_{1};
+  std::uint64_t clear_serial_{1};
   std::vector<Entry> entries_;
   std::vector<Slot> slots_;
 };

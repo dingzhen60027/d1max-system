@@ -1,5 +1,13 @@
 # 源码快照记录
 
+## Isaac Sim 仿真分支（2026-10-06）
+
+用户指定将当前测试版本保存为 `isaacsim-simulation` 分支。起点为本次最初 clone 的 `5dfaf8cddec952b3453a02e3a231de5228bd6017`；原基线已经包含 BT 主线、PCT/SCAN、逐束射线、独立执行验证和唯一 writer。本轮在现有主线上接入 Isaac Sim，并修复静态自由体积证据融合、关键整数源时间、重复 tick、原始位姿证据、锚点计算、弯道进度、取消/退出和 RViz 初始化/时间显示。
+
+`simulation/isaacsim/` 保存自主构建的场景配置、轮式 URDF、静态 USD 模板、仿真桥接/构建/取证脚本及测试。完整运行场景和地图由脚本生成；Isaac Sim 安装、外部依赖 overlay、厂商 SDK、原始大报告、点云、录屏和安装产物继续留在 Git 外。源码依赖和本机路径说明见 [仿真 README](simulation/isaacsim/README.md)。
+
+该分支保留最新跨参考窗口换轨失败，当前状态见 [问题清单](docs/KNOWN_ISSUES.md) 和 [验证边界](VERIFICATION.md)。默认生产 release 选择器未修改，分支提交/推送不自动部署、不改变已在运行的封存 v22 候选。
+
 ## 最新整理与迁移准备
 
 2026-10-04，在发布基线 `b344f52501851a109c5b55220e7f7b75fd638962` 上同步当日性能整改：原生 GridMap 快照及精确缓存、跟踪热循环、不可变参考、完整帧 worker IPC 和 SDK 有界遥测。仍由两处实际开发目录提供源码，发布位置为本仓库 `main`；没有移动工作区、重编生产 install、切换 release、连接 SDK 或修改物理验收。

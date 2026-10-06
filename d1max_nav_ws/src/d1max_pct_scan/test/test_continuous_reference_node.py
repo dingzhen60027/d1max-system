@@ -7,18 +7,58 @@ from d1max_pct_scan.continuous_reference_transport import set_stamp
 from test_continuous_reference_transport import state,envelope,BASE_NS
 
 
-def harness():
+def harness(**overrides):
     clock=SimpleNamespace(ns=BASE_NS,mono=100.)
     output=[]
     p=dict(session_id='session',map_version_id='map',expected_source_map_sha256='a'*64,
         expected_tomogram_sha256='c'*64,expected_conditioning_sha256='b'*64,body_height_m=.55,
         body_height_calibration_id='fixture',transport_mode='isolated_mock',floor_id='floor1')
+    p.update(overrides)
     c=ReferenceCallbacks(p,lambda k,v:output.append((k,deepcopy(v))),lambda:clock.ns,lambda:clock.mono)
     c.on_navigation(state())
     c.on_context_ack(c.context)
     c.on_map(dict(c.context,valid=True,source_stamp_ns=clock.ns,
         sources=[dict(sensor_id=i,integrated_stamp_ns=clock.ns) for i in (0,1)]))
     return c,clock,output
+
+
+def test_static_prior_context_attests_exact_map_and_identity_and_revokes_on_correction():
+    c,clock,out=harness(collision_evidence_mode='validated_static_prior',
+        static_prior_manifest_sha256='d'*64,static_prior_geometry_sha256='e'*64,
+        static_prior_map_frame='d1max_loc_map',
+        static_prior_transform_contract='fixed_identity_map_from_odom_v1')
+    assert c.context['map_version']=='map'
+    assert c.context['static_prior_manifest_sha256']=='d'*64
+    assert c.context['map_from_odom_translation']==[0.,0.,0.]
+    before=deepcopy(c.context)
+    clock.ns+=100_000_000;clock.mono+=.1
+    assert not c.on_navigation(state(t=.1,correction=.01))
+    assert c.context['sequence']>before['sequence']
+    assert c.context['static_prior_manifest_sha256']=='revoked'
+    assert not c.context_ready and c.transport.quarantined
+    assert [v for k,v in out if k=='context'][-1]==c.context
+    # Returning to the old transform cannot resurrect the same seed's prior.
+    clock.ns+=100_000_000;clock.mono+=.1
+    assert not c.on_navigation(state(t=.2))
+    assert not c.context_ready
+
+
+def test_static_prior_requires_complete_reference_authorization():
+    with pytest.raises(ValueError,match='invalid_static_prior_reference_contract'):
+        harness(collision_evidence_mode='validated_static_prior')
+
+
+def test_static_prior_unusable_atomic_state_revokes_previous_authorization():
+    c,clock,out=harness(collision_evidence_mode='validated_static_prior',
+        static_prior_manifest_sha256='d'*64,static_prior_geometry_sha256='e'*64,
+        static_prior_map_frame='d1max_loc_map',
+        static_prior_transform_contract='fixed_identity_map_from_odom_v1')
+    previous_barrier=c.context['barrier_ns']
+    invalid=state();invalid.usable=False
+    with pytest.raises(ValueError):c.on_navigation(invalid)
+    assert not c.context_ready and c.transport.quarantined
+    assert c.context['barrier_ns']==previous_barrier
+    assert [v for k,v in out if k=='context'][-1]['static_prior_manifest_sha256']=='revoked'
 
 
 def admit(c, sequence=1):
@@ -185,6 +225,133 @@ def local_state_from_pair(pair, *, usable=True, reason=''):
         local_odometry=deepcopy(pair.local_odometry),source_stamp=deepcopy(pair.source_stamp),
         posterior_stamp=deepcopy(pair.posterior_stamp),imu_stamp=deepcopy(pair.imu_stamp),
         extrapolation_sec=pair.extrapolation_sec)
+
+
+def set_measured_float32_orientation(pair):
+    # An actual PhysX sample from task_cross_room_v16_001. Its norm differs
+    # from one by 1.28e-7; it is valid measurement geometry, not corrupt data.
+    raw=(1.1576373282196073e-07,-2.8764244319745558e-08,
+        .31948283314704895,.9475921988487244)
+    for odom in (pair.local_odometry,pair.global_odometry):
+        q=odom.pose.pose.orientation
+        q.x,q.y,q.z,q.w=raw
+    return pair
+
+
+@pytest.mark.parametrize('global_first',[False,True])
+def test_route_progress_keeps_literal_measured_local_quaternion_in_both_topic_orders(global_first):
+    from d1max_pct_scan.ray_projection import checked_pose
+    c,clock,out=harness(local_state_enabled=True);c.on_route(envelope());permit=admit(c)
+    assert c.on_local_navigation(local_state_from_pair(state()))
+    clock.ns+=100_000_000;clock.mono+=.1
+    pair=set_measured_float32_orientation(state(t=.1,x=.03))
+    local=local_state_from_pair(pair)
+    expected=deepcopy(local.local_odometry)
+    if global_first:
+        assert c.on_navigation(pair)
+        assert [v for k,v in out if k=='route_progress'][-1].body_source_stamp==state().source_stamp
+    assert c.on_local_navigation(local)
+    if not global_first:
+        assert c.on_navigation(pair)
+    reports=[v for k,v in out if k=='route_progress']
+    report=reports[-1]
+    assert len(reports)==2
+    assert report.body_source_stamp==local.source_stamp==expected.header.stamp
+    assert report.odom_body_pose.header==expected.header
+    assert report.odom_body_pose.pose==expected.pose.pose
+    assert report.measured_arc_m==pytest.approx(.03)
+    q=expected.pose.pose.orientation
+    raw=(q.x,q.y,q.z,q.w)
+    assert c.local_inbox.latest.state.local_body.orientation==checked_pose((.03,0.,.55),raw).orientation
+    assert c.local_inbox.latest.state.local_body.orientation!=raw  # Math still normalizes.
+    # Neither caller mutation nor a same-source heartbeat may replace this
+    # original witness or manufacture another progress observation.
+    local.local_odometry.pose.pose.orientation.w=1.
+    assert not c.on_local_navigation(local)
+    heartbeat=deepcopy(permit);heartbeat.sequence+=1
+    heartbeat.source_stamp=deepcopy(pair.source_stamp)
+    set_stamp(heartbeat.valid_until,clock.ns+400_000_000)
+    assert c.on_permit(heartbeat)
+    assert not c.publish_route_progress()
+    assert len([v for k,v in out if k=='route_progress'])==2
+    assert c.route_progress_body_observation[2]==expected
+
+
+def test_global_only_progress_also_copies_literal_trusted_odometry_and_requires_its_witness():
+    c,clock,out=harness(local_state_enabled=False);c.on_route(envelope());admit(c)
+    clock.ns+=100_000_000;clock.mono+=.1
+    pair=set_measured_float32_orientation(state(t=.1,x=.03))
+    assert c.on_navigation(pair)
+    report=[v for k,v in out if k=='route_progress'][-1]
+    assert report.body_source_stamp==pair.source_stamp
+    assert report.odom_body_pose.header==pair.local_odometry.header
+    assert report.odom_body_pose.pose==pair.local_odometry.pose.pose
+    assert not c.on_navigation(pair)
+    # No reconstructed projection may substitute for missing original wire
+    # evidence, even if all accepted-core facts otherwise remain usable.
+    c.route_progress_body_observation=None;c.route_progress_key=None
+    assert not c.publish_route_progress()
+
+
+def test_normalization_does_not_allow_a_different_same_source_rotation_as_progress():
+    c,clock,out=harness(local_state_enabled=True);c.on_route(envelope());admit(c)
+    assert c.on_local_navigation(local_state_from_pair(state()))
+    clock.ns+=100_000_000;clock.mono+=.1
+    pair=set_measured_float32_orientation(state(t=.1,x=.03))
+    assert c.on_navigation(pair)
+    different=local_state_from_pair(pair)
+    different.local_odometry.pose.pose.orientation.z=0.
+    different.local_odometry.pose.pose.orientation.w=1.
+    assert c.on_local_navigation(different)
+    assert not c.publish_route_progress()
+    reports=[v for k,v in out if k=='route_progress']
+    assert len(reports)==1 and reports[0].body_source_stamp==state().source_stamp
+
+
+@pytest.mark.parametrize('global_first',[False,True])
+def test_float32_body_motion_keeps_original_anchor_while_true_map_correction_is_staged(global_first):
+    c,clock,out=harness(local_state_enabled=True);c.on_route(envelope());admit(c)
+    assert c.on_local_navigation(local_state_from_pair(state()))
+    original=deepcopy(c.transport.core.anchor)
+    # Actual v16 measured orientations on both sides of unit norm. Global
+    # and local poses are identical: body translation/rotation is not a map
+    # correction, regardless of representational quaternion round-off.
+    orientations=(
+        (1.1576373282196073e-07,-2.8764244319745558e-08,.31948283314704895,.9475921988487244),
+        (4.170931333646877e-07,-5.416194426288712e-07,.3348539471626282,.9422699809074402),
+        (1.8761319608984195e-07,4.2760063934110804e-07,.33339858055114746,.942785918712616))
+    for i in range(1,13):
+        clock.ns=BASE_NS+i*20_000_000;clock.mono=100.+i*.02
+        pair=state(t=i*.02,x=i*.02)
+        for odom in (pair.local_odometry,pair.global_odometry):
+            q=odom.pose.pose.orientation;q.x,q.y,q.z,q.w=orientations[(i-1)%len(orientations)]
+        local=local_state_from_pair(pair)
+        if not global_first:assert c.on_local_navigation(local)
+        assert c.on_navigation(pair)
+        if global_first:assert c.on_local_navigation(local)
+        assert c.transport.core.anchor==original
+        assert c.transport.core.candidate_anchor is None
+        report=[v for k,v in out if k=='route_progress'][-1]
+        assert report.odom_body_pose.pose==local.local_odometry.pose.pose
+        assert report.body_source_stamp==local.source_stamp
+        assert report.anchor_source_stamp==state().source_stamp
+        assert report.version.anchor_id==original.anchor_id
+        assert report.version.anchor_revision==original.revision
+        assert report.version.map_geometry_revision==1
+        assert report.measured_arc_m==pytest.approx(i*.02)
+    # A genuine geometric correction still exceeds the unchanged 1 nm
+    # correspondence bound and stages a new revision, not task motion.
+    clock.ns+=20_000_000;clock.mono+=.02
+    correction=state(t=.26,x=.26,correction=.001)
+    q=orientations[0]
+    for odom in (correction.local_odometry,correction.global_odometry):
+        r=odom.pose.pose.orientation;r.x,r.y,r.z,r.w=q
+    assert c.on_navigation(correction)
+    candidate=c.transport.core.candidate_anchor
+    assert candidate is not None and candidate.revision==original.revision+1
+    assert candidate.source_ns==clock.ns
+    assert candidate.map_from_odom.xyz[0]==pytest.approx(.001,abs=1e-14)
+    assert c.transport.core.anchor==original
 
 
 def test_global_pair_ahead_of_local_cannot_replace_literal_route_progress_source():

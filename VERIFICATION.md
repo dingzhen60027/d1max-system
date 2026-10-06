@@ -1,4 +1,33 @@
-# 发布整理与验证边界 — 2026-10-04
+# Isaac Sim 分支整理与验证边界 — 2026-10-06
+
+分支 `isaacsim-simulation` 保存基于 `5dfaf8cddec952b3453a02e3a231de5228bd6017` 的当前仿真源码。整理包含原导航模块修复、仿真启动/构建/场景/传感器、回归与取证；没有新增另一套任务所有者，没有切换默认生产 release，也没有将 `physical_acceptance` 或 `physical_stop_confirmed` 改为通过。
+
+## 当前运行结论
+
+- 2026-10-05：v19 的近距离到达、跨门到达、运动中取消分别通过；v22 的可见 Isaac Sim + RViz 跨门录屏通过。它们是具体会话结果，详见 [历史验证摘要](simulation/isaacsim/verification/20261005/historical_verification.json)。
+- 2026-10-06：同一 v22 候选复跑 `live_view_20261006_001` 未到达。原 Action status 6，实测行驶 8.0010308 m，局部段结束后换轨未完成，最终 `execution_blocked_timeout:waiting_admitted_nonzero_command`。任务软件退役、同身份 writer 实测停止、PhysX 静止与 IMU 源时间匹配成立。[最新失败证据](simulation/isaacsim/verification/20261006/live_view_failure.json)
+- 尚未取得连续运行稳定性、真实定位、动态场景、跨层控制、通用轮地接触或实机验收。根因待查的换轨失败随本分支一起保存，不以 push 或单元测试通过将其标为解决。
+
+## 发布前核对
+
+本次重跑不启动 ROS 图、Isaac Sim 或 SDK 的离线回归，并检查源码/文档、资产和历史证据一致性。先前测试计数保持各版本范围，不重复累计。
+
+| 本次检查 | 结果与边界 |
+| --- | --- |
+| 修改过的 9 份 `d1max_pct_scan` Python 测试 | 281 通过、2 跳过；两项均因没有发布地图包而跳过 |
+| 8 份仿真测试及 `tools/test_build_source.py` | 74 通过、无跳过；构建工具测试使用临时文件和 fake colcon，不代表新机完整编译 |
+| 新增／修改的 Python、Shell | 43 份 Python `ast.parse`、4 份 Shell `bash -n` 全部通过 |
+| 发布文件与证据 | 无新增视频、录包、安装库、厂商 SDK 或大于 5 MB 的文件；有限凭据规则无命中；两份公开 JSON 不含本机绝对路径或邮箱 |
+
+上述两组 Python 测试共 355 通过、2 跳过，使用本机既有依赖及生成消息 overlay。命令均先 `source simulation/isaacsim/env.sh`，随后以 `/usr/bin/python3 -m pytest -q -p no:cacheprovider` 运行；导航组显式加入源码及测试目录的 `PYTHONPATH`，覆盖适配器、组件健康、连续参考、关闭顺序、局部状态、感知状态、射线投影和会话。仿真组覆盖协议、静态真值、先验桥接、独立轨迹审计、候选完整性、启动、smoke 取证与桥接关闭顺序。
+
+本次没有重新编译或重跑全部 C++／SDK 原生测试，2026-10-05 原生结果仍作为对应候选的历史记录。734 个导航源码／配置／接口／CMake 文件、46 个 SDK 源码配置文件、23 个仿真代码配置文件与 v22 封存清单的 SHA256 完全一致；另一个导出 USD 仅清理描述字符串末尾空格和文件尾空行，几何未改。此次分支整理保持算法实现不变。既有 GUI 会话保持，离线测试通过不表示最新换轨失败已解决。
+
+完整原始报告、轨迹、传感器数据、安装产物和视频留在本机构建目录；仓库仅收录精简结果、相对 artifact 标识和原始文件 SHA256，便于审阅，不宣称公开仓库含有全部原始字节。
+
+以下保留原基线的发布整理记录，各日期结论属于当时验证范围。
+
+# 历史发布整理与验证边界 — 2026-10-04
 
 ## 最新性能与迁移整理
 

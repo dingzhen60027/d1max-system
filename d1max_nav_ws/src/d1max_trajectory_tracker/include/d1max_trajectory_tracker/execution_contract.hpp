@@ -34,6 +34,16 @@ inline builtin_interfaces::msg::Time stampNs(std::int64_t ns) {
   t.sec=static_cast<std::int32_t>(ns/1000000000LL);
   t.nanosec=static_cast<std::uint32_t>(ns%1000000000LL);return t;
 }
+inline builtin_interfaces::msg::Time stamp(SourceTime t) {return stampNs(t.nanoseconds());}
+inline bool validSourceTime(const builtin_interfaces::msg::Time& t) {
+  return t.sec>=0&&t.nanosec<1000000000U&&timeNs(t)>0;
+}
+inline SourceTime sourceTime(const builtin_interfaces::msg::Time& t) {
+  return SourceTime::fromNanoseconds(validSourceTime(t)?timeNs(t):0);
+}
+inline bool freshStamp(SourceTime now,const builtin_interfaces::msg::Time& t,double maximum,double future=.02) {
+  return validSourceTime(t)&&sourceFresh(now,timeNs(t),maximum,future);
+}
 inline builtin_interfaces::msg::Time originalTimeCap(builtin_interfaces::msg::Time fresh,
     std::initializer_list<builtin_interfaces::msg::Time> caps) {
   // A signed original lease is an integer transport fact. At Unix-scale
@@ -56,9 +66,10 @@ inline bool versionValid(const wire::ExecutionVersion& v,const Config& c) {
   return v.schema_version==3 && v.session_id==c.session_id && v.map_version_id==c.map_version_id &&
     v.reference_generation>0 && v.map_geometry_revision>0 && identity(v).valid();
 }
-inline bool timed(double now,double source,double until,double maximum) {
-  return finite(now)&&finite(source)&&finite(until)&&source>0.&&source<=now+.02&&
-    now-source<=maximum&&until>now&&until-source>0.&&until-source<=maximum;
+inline bool timed(SourceTime now,const builtin_interfaces::msg::Time& source,
+    const builtin_interfaces::msg::Time& until,double maximum) {
+  return freshStamp(now,source,maximum)&&validSourceTime(until)&&timeNs(until)>now.nanoseconds()&&
+    timeNs(until)>timeNs(source)&&timeNs(until)-timeNs(source)<=durationNs(maximum);
 }
 inline SupportEvidence supportEvidence(const wire::SupportReference& s) {
   SupportEvidence out;
@@ -96,20 +107,20 @@ public:
     else if(candidate_)retired_task_=candidate_->identity.task_id;
     candidate_.reset();candidate_entry_curve_.reset();admission_.reset();committed_version_.reset();demands_.clear();
     preparation_failure_.clear();
-    blocked_entry_.reset();core_.cancel(reason);
+    blocked_entry_.reset();last_emission_.reset();paused_source_ns_=0;core_.cancel(reason);
     if(worker_)worker_->invalidate();
     preparation_request_.reset();
     if(handoff_)handoff_->retired=true;
   }
-  bool receiveOdom(const Odom& state,double now,double receipt) {
+  bool receiveOdom(const Odom& state,SourceTime now,double receipt) {
     const bool was_active=core_.active();
     const bool accepted=core_.receiveOdom(state,now,receipt);
     if(was_active&&!core_.active())cancel(core_.reason());
     return accepted;
   }
-  void proposal(const wire::ReferenceProposal& p,double now) {
+  void proposal(const wire::ReferenceProposal& p,SourceTime now) {
     if(!versionValid(p.version,config_)||p.transport_mode!=mode_||p.proposal_id.empty()||
-       !timed(now,seconds(p.source_stamp),seconds(p.valid_until),1.)||
+       !timed(now,p.source_stamp,p.valid_until,1.)||
        p.reference.path.header.frame_id!=config_.planning_frame||p.reference.point_reference!="body_center") return;
     // Compare with the owner's current lease, even one whose commit failed
     // here: SCAN and the BT already build on it. A stale local view would
@@ -159,8 +170,15 @@ public:
   }
   bool preparationPending()const{return candidate_&&!candidate_->prepared&&preparation_failure_.empty();}
   double preparationWorkerSeconds()const{return last_preparation_seconds_;}
-  void validation(const wire::TrajectoryValidation& v,double now) {
+  void validation(const wire::TrajectoryValidation& v,SourceTime now) {
     if(!versionValid(v.version,config_)||v.transport_mode!=mode_) return;
+    if(proofFresh(v,now))for(auto& e:emissions_) {
+      if(e.demand.version==v.version&&e.demand.trajectory_id==v.trajectory_id&&
+         v.sequence>=e.demand.validation_sequence) {
+        capTrajectory(e,v);
+        if(last_emission_&&last_emission_->demand.sequence==e.demand.sequence)capTrajectory(*last_emission_,v);
+      }
+    }
     const auto duplicate=std::find_if(proofs_.begin(),proofs_.end(),[&](const auto& old){
       return old.version==v.version&&old.trajectory_id==v.trajectory_id&&old.sequence==v.sequence;
     });
@@ -177,16 +195,17 @@ public:
       (v.version==pending_validation_->version&&v.sequence>pending_validation_->sequence)) pending_validation_=v;
     (void)now;
   }
-  bool motionValidation(const wire::MotionValidation& v,double now) {
+  bool motionValidation(const wire::MotionValidation& v,SourceTime now) {
     // This is controller feedback, never permission to move. Only an actual
     // collision on our own still-live forward+turn or in-place turn command
     // can request a different maneuver; unknown/late/foreign evidence cannot.
+    observeMotionExpiry(v,now);
     if(v.valid||v.reason!="motion_sweep_occupied"||!permit_||!committed_version_||
        braking_model_sha256_.size()!=64||v.braking_model_sha256!=braking_model_sha256_||
        v.sequence<=last_motion_sequence_||v.version!=*committed_version_||
        v.version!=permit_->version||v.trajectory_id!=core_.trajectoryId()||
        !permit_->allowed||permit_->revoked||permit_->phase!="tracking"||
-       !timed(now,seconds(permit_->source_stamp),seconds(permit_->valid_until),.75)||
+       !timed(now,permit_->source_stamp,permit_->valid_until,.75)||
        v.transport_mode!=mode_||v.frame_id!=config_.planning_frame||v.map_snapshot_revision==0)return false;
     const auto it=std::find_if(demands_.rbegin(),demands_.rend(),[&](const auto& d){
       return d.sequence==v.demand_sequence&&d.version==v.version;
@@ -201,13 +220,14 @@ public:
        d.valid_until!=v.demand_valid_until||d.velocity!=v.velocity||
        d.execution_id!=permit_->execution_id||d.control_epoch!=permit_->control_epoch||
        d.sdk_session!=permit_->sdk_session||d.sdk_arm_generation!=permit_->sdk_arm_generation||
-       !timed(now,seconds(d.source_stamp),seconds(d.valid_until),.100001))return false;
-    const double begin=seconds(v.check_begin),end=seconds(v.check_end),until=seconds(v.valid_until);
+       !timed(now,d.source_stamp,d.valid_until,.100001))return false;
+    const auto begin=timeNs(v.check_begin),end=timeNs(v.check_end),until=timeNs(v.valid_until);
     const auto fresh=[&](const auto& t,double maximum){
-      const double source=seconds(t);return source>0.&&source<=now+.02&&now-source<=maximum;
+      return freshStamp(now,t,maximum);
     };
-    if(begin<seconds(d.source_stamp)||end<begin||end>now+.02||now-end>.1||until<=now||
-       until>seconds(d.valid_until)||!fresh(d.body_source_stamp,.1)||!fresh(v.body_source_stamp,.1)||
+    if(!validSourceTime(v.check_begin)||!validSourceTime(v.check_end)||!validSourceTime(v.valid_until)||
+       begin<timeNs(d.source_stamp)||end<begin||!sourceFresh(now,end,.1,.02)||until<=now.nanoseconds()||
+       until>timeNs(d.valid_until)||!fresh(d.body_source_stamp,.1)||!fresh(v.body_source_stamp,.1)||
        !fresh(v.front_ray_source_stamp,.5)||!fresh(v.rear_ray_source_stamp,.5))return false;
     const auto* current=proofFor(*permit_,now);
     if(!current||current->sequence<v.trajectory_validation_sequence)return false;
@@ -215,7 +235,7 @@ public:
       return p.version==v.version&&p.trajectory_id==v.trajectory_id&&p.sequence==v.trajectory_validation_sequence;
     });
     if(exact==proofs_.rend()||!proofFresh(*exact,now))return false;
-    if(!core_.notifyBlockedForwardTurn(d.trajectory_id,seconds(d.source_stamp),now,
+    if(!core_.notifyBlockedForwardTurn(d.trajectory_id,sourceTime(d.source_stamp),now,
        d.velocity.linear.x,d.velocity.angular.z))return false;
     last_motion_sequence_=v.sequence;
     if(std::string(core_.maneuverPhase())=="waiting_executable_entry")blocked_entry_=v;
@@ -243,7 +263,7 @@ public:
     // can renew installed_at, the original admission/proof, or body evidence.
     return r;
   }
-  std::optional<wire::TrajectoryAdmission> prepare(double now,double receipt) {
+  std::optional<wire::TrajectoryAdmission> prepare(SourceTime now,double receipt) {
     pollPreparation();
     if(!candidate_||!pending_validation_||!pending_support_) return {};
     if(!candidate_->prepared&&preparation_failure_.empty()) {last_prepare_reason_="waiting_candidate_preparation";return {};}
@@ -259,7 +279,7 @@ public:
     a.body_source_stamp=bodySourceStamp(core_.odometry());a.checked_at=stamp(now);
     a.valid_until=originalTimeCap(stampNs(timeNs(a.checked_at)+150000000LL),
       {stampNs(timeNs(v.check_end)+250000000LL),v.valid_until});a.transport_mode=mode_;
-    Task task=taskFor(v.version,bound->goal_position,seconds(bound->source_stamp));
+    Task task=taskFor(v.version,bound->goal_position,sourceTime(bound->source_stamp));
     // Re-query current measured entry only AFTER the native certificate is
     // known fresh. This does not refresh that certificate or the worker data.
     std::string reason;
@@ -280,9 +300,9 @@ public:
     }
     return a;
   }
-  bool permit(const wire::ExecutionPermit& p,double now,double receipt) {
+  bool permit(const wire::ExecutionPermit& p,SourceTime now,double receipt) {
     if(!versionValid(p.version,config_)||p.transport_mode!=mode_||p.frame_id!=config_.planning_frame||
-       p.sequence<=last_permit_sequence_||!timed(now,seconds(p.source_stamp),seconds(p.valid_until),.75)) return false;
+       p.sequence<=last_permit_sequence_||!timed(now,p.source_stamp,p.valid_until,.75)) return false;
     if(permit_ && p.control_epoch<permit_->control_epoch) return false;
     permit_history_.push_back(p);while(permit_history_.size()>32)permit_history_.pop_front();
     if(retired_task_&&p.version.task_id==*retired_task_&&!p.revoked)return false;
@@ -291,8 +311,8 @@ public:
     if(writer_handoff_&&writer_commit_sequence_&&committed_version_&&
        (p.version!=*committed_version_||p.trajectory_id!=core_.trajectoryId())&&
        p.version.reference_generation<=committed_version_->reference_generation&&!p.revoked)return false;
-    if(p.revoked) { cancel("execution_revoked");retired_task_=p.version.task_id;permit_=owner_permit_=p;last_permit_sequence_=p.sequence;return true; }
-    if(!p.geometry_committed) {permit_=owner_permit_=p;last_permit_sequence_=p.sequence;return true;}
+    if(p.revoked) { cancel("execution_revoked");retired_task_=p.version.task_id;permit_=owner_permit_=p;last_permit_sequence_=p.sequence;capPermitEmissions(p);return true; }
+    if(!p.geometry_committed) {permit_=owner_permit_=p;last_permit_sequence_=p.sequence;capPermitEmissions(p);return true;}
     if(p.allowed&&(p.execution_id.empty()||p.confirmation_id.empty()||p.control_epoch==0||p.sdk_session.empty()||p.sdk_arm_generation==0))
       return false;
     if(writer_handoff_&&writer_commit_sequence_&&committed_version_&&
@@ -308,7 +328,7 @@ public:
        p.trajectory_id==core_.trajectoryId()&&p.version.reference_generation==core_.generation()&&
        identity(p.version)==core_.task().identity) {
       if(!proofFor(p,now)) {last_permit_reject_="heartbeat_proof_not_fresh";return false;}
-      permit_=p;last_permit_sequence_=p.sequence;core_.refreshTaskLease(receipt);return true;
+      permit_=p;last_permit_sequence_=p.sequence;core_.refreshTaskLease(receipt);capPermitEmissions(p);return true;
     }
     // A first geometry commit still binds the exact two-phase admission.
     // Only an already committed curve may advance beyond the permit's floor.
@@ -324,14 +344,14 @@ public:
     const auto* bound=proposalFor(p.version,prepared_proof->proposal_id);
     if(!bound)return rejectPermit("commit_proposal_missing");
     if(!pending_support_)return rejectPermit("commit_support_missing");
-    if(!admission->accepted||!timed(now,seconds(admission->checked_at),seconds(admission->valid_until),.25))
+    if(!admission->accepted||!timed(now,admission->checked_at,admission->valid_until,.25))
       return rejectPermit("commit_admission_expired");
     if(prepared_proof->version!=p.version||prepared_proof->trajectory_id!=p.trajectory_id||!proofFresh(*prepared_proof,now))
       return rejectPermit("commit_proof_not_fresh");
     if(pending_validation_&&pending_validation_->version==p.version&&pending_validation_->trajectory_id==p.trajectory_id&&
        pending_validation_->sequence>=p.validation_sequence&&!pending_validation_->valid)
       return rejectPermit("commit_newer_invalid_proof");
-    const Task task=taskFor(p.version,p.goal_position,seconds(bound->source_stamp));
+    const Task task=taskFor(p.version,p.goal_position,sourceTime(bound->source_stamp));
     std::string entry_reason;const auto observed=observeCandidateEntry(*prepared_proof,now,entry_reason);
     if(!observed) {last_permit_reject_="commit_candidate:"+entry_reason;return false;}
     if(!core_.admitRevision(task,*observed,preparedSupport(*pending_support_),now,receipt,true)) {
@@ -342,49 +362,50 @@ public:
     committed_version_=p.version;
     permit_=p;last_permit_sequence_=p.sequence;
     recordInstallation(p,*admission,*prepared_proof,task,stamp(now));
-    admission_.reset();return true;
+    admission_.reset();capPermitEmissions(p);return true;
   }
-  wire::MotionDemand step(double now,double receipt) {
+  // false means retain the last signed finite output; publish nothing. All
+  // faults use the ordinary stop path, including exact 1 ns source regression.
+  bool controlTickRequired(SourceTime now,double receipt)const {
+    const wire::TrajectoryValidation* proof=nullptr;
+    if(!last_emission_||last_emission_->demand.hold||paused_source_ns_||
+       now.nanoseconds()!=last_emission_->control_source_ns||
+       now.nanoseconds()!=core_.lastControlSourceNs()||
+       last_emission_->control_revision!=core_.outputControlRevision()||
+       !std::isfinite(receipt)||receipt<last_emission_->emitted_receipt||
+       receipt>=last_emission_->steady_until||ordinaryBlockReason(now,proof)||
+       !sameAuthority(last_emission_->authority,*permit_)||
+       last_emission_->demand.version!=permit_->version||last_emission_->demand.trajectory_id!=core_.trajectoryId()||
+       !core_.active()||!core_.hasInstalledGeometry()||core_.holding())return true;
+    const auto& p=*permit_;
+    return !core_.duplicateControlStateSafe(now,receipt,p.phase=="aligning",p.goal_yaw,p.goal_yaw_tolerance_rad);
+  }
+  wire::MotionDemand step(SourceTime now,double receipt) {
     wire::MotionDemand d;
     d.source_stamp=stamp(now);d.body_source_stamp=bodySourceStamp(core_.odometry());
     d.valid_until=stampNs(timeNs(d.source_stamp)+100000000LL);d.sequence=++demand_sequence_;d.transport_mode=mode_;
     d.hold=true;d.reason="waiting_execution_permission";
-    if(!permit_) return d;
+    const wire::TrajectoryValidation* proof=nullptr;
+    const auto finish=[&]() {recordEmission(d,receipt,proof,false);return d;};
+    if(!permit_)return finish();
     const auto& p=*permit_;
     d.version=p.version;d.execution_id=p.execution_id;d.control_epoch=p.control_epoch;
     d.sdk_session=p.sdk_session;d.sdk_arm_generation=p.sdk_arm_generation;d.permit_sequence=p.sequence;
     d.validation_sequence=p.validation_sequence;d.trajectory_id=p.trajectory_id;
-    if(writer_handoff_&&handoff_&&!handoff_->applied&&
-       handoff_->grant.transition_mode==wire::ExecutionHandoffGrant::STATIONARY_REENTRY) {
-      d.reason="stationary_reentry_waiting_writer";core_.suspendOutput(now,receipt,d.reason,false);return d;
+    const char* blocked=ordinaryBlockReason(now,proof);
+    if(blocked) {
+      if(std::string(blocked)=="handoff_ack_timeout")handoff_->retired=true;
+      d.reason=blocked;core_.suspendOutput(now,receipt,d.reason,false);return finish();
     }
-    if(writer_handoff_&&handoff_&&handoff_->retired&&(!handoff_->applied||
-       (p.version==handoff_->grant.candidate.version&&p.trajectory_id==handoff_->grant.candidate.trajectory_id))) {
-      d.reason="handoff_retired_or_applied_uncertain";core_.suspendOutput(now,receipt,d.reason,false);return d;
-    }
-    if(writer_handoff_&&handoff_&&!handoff_->applied&&seconds(handoff_->grant.transition_deadline)<=now) {
-      handoff_->retired=true;d.reason="handoff_ack_timeout";core_.suspendOutput(now,receipt,d.reason,false);return d;
-    }
-    if(!p.allowed&&!p.revoked) {
-      d.reason="geometry_only_no_motion_permission";core_.suspendOutput(now,receipt,d.reason,false);return d;
-    }
-    const auto* proof=proofFor(p,now);
-    if(!p.allowed||p.revoked||!timed(now,seconds(p.source_stamp),seconds(p.valid_until),.75)||
-       core_.trajectoryId()!=p.trajectory_id||core_.generation()!=p.version.reference_generation||
-       !(core_.task().identity==identity(p.version))||
-       !proof||!proofFresh(*proof,now)||!active_support_||!supportMatches(*proof,*active_support_)||
-       (active_validation_&&!active_validation_->valid&&active_validation_->sequence>=p.validation_sequence)) {
-      // A collision/permission lease is independent of odometry recovery.
-      // Stop immediately, but do not label fresh measured state as a sensor
-      // fault and restart the 0.6 s source-recovery window at every 50 Hz tick.
-      d.reason="permission_or_native_proof_expired";core_.suspendOutput(now,receipt,d.reason,false);return d;
-    }
-    if(p.phase=="holding"||p.phase=="stopping"||p.phase=="terminal") {
-      d.reason=p.phase;core_.suspendOutput(now,receipt,d.reason,false);return d;
-    }
-    if(p.phase=="aligning"&&(!p.has_goal_yaw||!proof->goal_yaw_checked||
-       std::abs(angle(proof->checked_goal_yaw-p.goal_yaw))>1e-6)) {
-      d.reason="goal_yaw_sweep_not_verified";core_.suspendOutput(now,receipt,d.reason,false);return d;
+    // A skipped tick cannot refresh any source or steady lease. After the
+    // earliest original lease expires, this source remains stopped until the
+    // actual source clock advances, even if another proof arrives meanwhile.
+    if(paused_source_ns_&&now.nanoseconds()!=paused_source_ns_)paused_source_ns_=0;
+    if(paused_source_ns_==now.nanoseconds()||
+       (last_emission_&&last_emission_->control_source_ns==now.nanoseconds()&&
+        (!std::isfinite(receipt)||receipt>=last_emission_->steady_until))) {
+      paused_source_ns_=now.nanoseconds();d.reason="source_clock_paused_command_expired";
+      core_.suspendOutput(now,receipt,d.reason,false);return finish();
     }
     // The BT owns authority; the validator owns collision evidence. This
     // sequence records the actual evidence used to generate the command and
@@ -404,11 +425,11 @@ public:
     if(!d.hold) {
       demands_.push_back(d);while(demands_.size()>16)demands_.pop_front();
     }
-    return d;
+    return finish();
   }
   std::uint64_t writerCommitSequence()const{return writer_commit_sequence_;}
   const std::string& handoffReason()const{return handoff_reason_;}
-  bool handoff(const wire::ExecutionHandoffGrant& g,double now,double receipt) {
+  bool handoff(const wire::ExecutionHandoffGrant& g,SourceTime now,double receipt) {
     if(!writer_handoff_||g.schema_version!=2||g.handoff_id.empty()||g.sequence==0||
        !versionValid(g.candidate.version,config_)||g.candidate.transport_mode!=mode_||
        g.candidate.frame_id!=config_.planning_frame||!g.candidate.allowed||g.candidate.geometry_committed||
@@ -426,9 +447,9 @@ public:
     if(core_.requiresMeasuredReentry()&&g.transition_mode!=wire::ExecutionHandoffGrant::STATIONARY_REENTRY) {
       handoff_reason_="braking_envelope_requires_stationary_reentry";return false;
     }
-    if(g.revoked||!timed(now,seconds(g.source_stamp),seconds(g.valid_until),.75)||
-       seconds(g.transition_deadline)<=now||seconds(g.transition_deadline)>seconds(g.valid_until)||
-       !timed(now,seconds(g.candidate.source_stamp),seconds(g.candidate.valid_until),.75)||
+    if(g.revoked||!timed(now,g.source_stamp,g.valid_until,.75)||
+       !validSourceTime(g.transition_deadline)||timeNs(g.transition_deadline)<=now.nanoseconds()||timeNs(g.transition_deadline)>timeNs(g.valid_until)||
+       !timed(now,g.candidate.source_stamp,g.candidate.valid_until,.75)||
        !permit_||g.incumbent.version!=permit_->version||g.incumbent.trajectory_id!=permit_->trajectory_id||
        g.incumbent.execution_id!=permit_->execution_id||g.incumbent.control_epoch!=permit_->control_epoch)return false;
     const auto* proof=proofFor(g.candidate,now);
@@ -440,7 +461,7 @@ public:
        candidate_->id!=g.candidate.trajectory_id||candidate_->generation!=g.candidate.version.reference_generation||
        !(candidate_->identity==identity(g.candidate.version)))return false;
     TrackerCore trial(core_);
-    const auto task=taskFor(g.candidate.version,g.candidate.goal_position,seconds(bound->source_stamp));
+    const auto task=taskFor(g.candidate.version,g.candidate.goal_position,sourceTime(bound->source_stamp));
     const bool already=committed_version_&&g.candidate.version==*committed_version_&&
       core_.trajectoryId()==g.candidate.trajectory_id;
     std::string entry_reason;const auto observed=observeCandidateEntry(*proof,now,entry_reason);
@@ -452,10 +473,10 @@ public:
     handoff_=PendingHandoff{g,*observed,*s,task,std::move(trial),false,false,{}};
     handoff_reason_="prepared_waiting_writer";return true;
   }
-  std::optional<wire::PreparedMotionDemand> preparedStep(double now,double receipt) {
+  std::optional<wire::PreparedMotionDemand> preparedStep(SourceTime now,double receipt) {
     if(!writer_handoff_||!handoff_||handoff_->retired||handoff_->applied)return {};
     auto& h=*handoff_;const auto& g=h.grant;const auto& p=g.candidate;
-    if(seconds(g.transition_deadline)<=now||seconds(g.valid_until)<=now||seconds(p.valid_until)<=now) {
+    if(timeNs(g.transition_deadline)<=now.nanoseconds()||timeNs(g.valid_until)<=now.nanoseconds()||timeNs(p.valid_until)<=now.nanoseconds()) {
       h.retired=true;handoff_reason_="handoff_ack_timeout";return {};
     }
     const auto* proof=proofFor(p,now);
@@ -491,10 +512,17 @@ public:
     auto& a=out.entry_admission;a.sequence=++admission_sequence_;a.version=p.version;
     a.trajectory_id=p.trajectory_id;a.validation_sequence=proof->sequence;a.body_source_stamp=d.body_source_stamp;
     a.checked_at=stamp(now);a.valid_until=d.valid_until;a.accepted=true;a.reason="actual_entry_prepared_not_applied";a.transport_mode=mode_;
+    recordEmission(d,receipt,proof,true,&p);
+    if(!emissions_.empty()) {
+      capEmission(emissions_.back(),timeNs(g.valid_until));
+      capEmission(emissions_.back(),timeNs(g.transition_deadline));
+      capEmission(emissions_.back(),timeNs(p.valid_until));
+      capEmission(emissions_.back(),timeNs(p.source_stamp)+durationNs(.75));
+    }
     h.demands.push_back(out);while(h.demands.size()>8)h.demands.pop_front();
     handoff_reason_="prepared_waiting_writer";return out;
   }
-  bool commitAck(const wire::ExecutionCommitAck& a,double now,double receipt) {
+  bool commitAck(const wire::ExecutionCommitAck& a,SourceTime now,double receipt) {
     if(!writer_handoff_||a.schema_version!=1||a.sequence<=ack_sequence_||a.transport_mode!=mode_)return false;
     // The initial ordinary writer call records commit 1 without a handoff.
     if(a.handoff_id.empty()) {
@@ -524,15 +552,22 @@ public:
       const bool current=committed_version_&&a.candidate_version==*committed_version_&&
         core_.hasInstalledGeometry()&&core_.trajectoryId()==a.candidate_trajectory_id;
       writer_commit_sequence_=1;ack_sequence_=a.sequence;initial_writer_ack_=a;
-      if(!current||!a.write_submitted||seconds(a.valid_until)<=now||
-         !permit_||!timed(now,seconds(permit_->source_stamp),seconds(permit_->valid_until),.75)) {
+      if(!current||!a.write_submitted||timeNs(a.valid_until)<=now.nanoseconds()||
+         !permit_||!timed(now,permit_->source_stamp,permit_->valid_until,.75)) {
         committed_version_=a.candidate_version;permit_=owner_permit_=*first;
         last_permit_sequence_=std::max(last_permit_sequence_,first->sequence);
         if(handoff_)handoff_->retired=true;
         initial_ack_reason_="initial_writer_applied_fact_restored_hold";
         installation_=*installed; // Original installation fact, never re-dated.
         core_.recordAppliedHold(installed->task,a.candidate_trajectory_id,receipt,initial_ack_reason_);
-      } else initial_ack_reason_="initial_writer_applied_installed_geometry";
+      } else {
+        initial_ack_reason_="initial_writer_applied_installed_geometry";
+        if(last_emission_&&a.demand_sequence==last_emission_->demand.sequence&&
+           a.demand_source_stamp==last_emission_->demand.source_stamp&&
+           a.demand_body_source_stamp==last_emission_->demand.body_source_stamp&&
+           a.applied_velocity==last_emission_->demand.velocity)
+          capEmission(*last_emission_,timeNs(a.valid_until));
+      }
       return true;
     }
     PendingHandoff* target=handoff_&&handoff_->grant.handoff_id==a.handoff_id?&*handoff_:
@@ -573,13 +608,22 @@ public:
     const auto* proof=proofFor(p,now);if(proof)active_validation_=leased_validation_=*proof;
     const auto entry=h.controller.refreshPreparedState(core_,now,receipt);
     const bool sdk_entry=sdkAppliedEntry(h.trajectory,*found,a);
-    if(was_retired||!a.write_submitted||seconds(a.valid_until)<=now||
-       seconds(p.valid_until)<=now||!entry||!proof||!sdk_entry) {
+    if(was_retired||!a.write_submitted||timeNs(a.valid_until)<=now.nanoseconds()||
+       timeNs(p.valid_until)<=now.nanoseconds()||!entry||!proof||!sdk_entry) {
       h.retired=true;handoff_reason_="writer_applied_new_identity_hold";
       core_.recordAppliedHold(h.task,p.trajectory_id,receipt,handoff_reason_);return true;
     }
     h.controller.recordAppliedOutput(a.applied_velocity.linear.x,a.applied_velocity.angular.z,now,receipt);
     core_=std::move(h.controller);
+    const auto emission=std::find_if(emissions_.rbegin(),emissions_.rend(),[&](const auto& e){
+      return e.demand.sequence==found->demand.sequence&&e.demand==found->demand;
+    });
+    last_emission_.reset();
+    if(emission!=emissions_.rend()&&!found->demand.hold) {
+      last_emission_=*emission;capEmission(*last_emission_,timeNs(a.valid_until));
+      last_emission_->control_source_ns=now.nanoseconds();
+      last_emission_->control_revision=core_.outputControlRevision();
+    }
     const auto admitted_proof=std::find_if(proofs_.rbegin(),proofs_.rend(),[&](const auto& v){
       return v.version==p.version&&v.trajectory_id==p.trajectory_id&&v.sequence==found->entry_admission.validation_sequence;
     });
@@ -587,6 +631,104 @@ public:
     handoff_reason_="writer_applied";return true;
   }
 private:
+  struct ControlEmission {
+    wire::MotionDemand demand;
+    wire::ExecutionPermit authority;
+    double emitted_receipt,steady_until;
+    std::int64_t control_source_ns;
+    std::uint64_t control_revision;
+  };
+  static void capEmission(ControlEmission& e,std::int64_t until_ns) {
+    // Always measured from the ORIGINAL demand emission, never proof receipt.
+    e.steady_until=std::min(e.steady_until,e.emitted_receipt+
+      sourceDeltaSeconds(until_ns,timeNs(e.demand.source_stamp)));
+  }
+  static bool sameAuthority(const wire::ExecutionPermit& a,const wire::ExecutionPermit& b) {
+    return a.version==b.version&&a.trajectory_id==b.trajectory_id&&a.execution_id==b.execution_id&&
+      a.control_epoch==b.control_epoch&&a.sdk_session==b.sdk_session&&a.sdk_arm_generation==b.sdk_arm_generation&&
+      a.phase==b.phase&&a.has_goal_yaw==b.has_goal_yaw&&a.goal_yaw==b.goal_yaw&&
+      a.goal_yaw_tolerance_rad==b.goal_yaw_tolerance_rad&&a.goal_position==b.goal_position;
+  }
+  static void capTrajectory(ControlEmission& e,const wire::TrajectoryValidation& proof) {
+    capEmission(e,timeNs(proof.valid_until));capEmission(e,timeNs(proof.check_end)+durationNs(.25));
+    capEmission(e,timeNs(proof.source_stamp)+durationNs(.25));capEmission(e,timeNs(proof.body_source_stamp)+durationNs(.4));
+    capEmission(e,timeNs(proof.front_ray_source_stamp)+durationNs(.5));capEmission(e,timeNs(proof.rear_ray_source_stamp)+durationNs(.5));
+  }
+  void capPermitEmissions(const wire::ExecutionPermit& p) {
+    for(auto& e:emissions_)if(sameAuthority(e.authority,p)) {
+      capEmission(e,timeNs(p.valid_until));capEmission(e,timeNs(p.source_stamp)+durationNs(.75));
+      if(last_emission_&&last_emission_->demand.sequence==e.demand.sequence) {
+        capEmission(*last_emission_,timeNs(p.valid_until));
+        capEmission(*last_emission_,timeNs(p.source_stamp)+durationNs(.75));
+      }
+    }
+  }
+  void recordEmission(const wire::MotionDemand& d,double receipt,
+      const wire::TrajectoryValidation* proof,bool prepared,const wire::ExecutionPermit* authority=nullptr) {
+    const auto bound=authority?*authority:(permit_?*permit_:wire::ExecutionPermit{});
+    ControlEmission e{d,bound,receipt,receipt,timeNs(d.source_stamp),core_.outputControlRevision()};
+    e.steady_until=receipt+sourceDeltaSeconds(timeNs(d.valid_until),timeNs(d.source_stamp));
+    if(proof)capTrajectory(e,*proof);
+    if(!prepared&&permit_) {
+      capEmission(e,timeNs(permit_->valid_until));
+      capEmission(e,timeNs(permit_->source_stamp)+durationNs(.75));
+    }
+    emissions_.push_back(e);while(emissions_.size()>32)emissions_.pop_front();
+    if(!prepared) {if(d.hold)last_emission_.reset();else last_emission_=e;}
+  }
+  void observeMotionExpiry(const wire::MotionValidation& v,SourceTime now) {
+    // A positive native observation adds only an expiry cap, never authority.
+    if(!v.valid||!v.handoff_id.empty()||!versionValid(v.version,config_)||v.transport_mode!=mode_||
+       v.frame_id!=config_.planning_frame||v.map_snapshot_revision==0||v.sequence==0||
+       braking_model_sha256_.size()!=64||v.braking_model_sha256!=braking_model_sha256_)return;
+    auto e=std::find_if(emissions_.rbegin(),emissions_.rend(),[&](const auto& x){
+      const auto& d=x.demand;
+      return !d.hold&&d.sequence==v.demand_sequence&&d.version==v.version&&
+        d.execution_id==v.execution_id&&d.control_epoch==v.control_epoch&&d.sdk_session==v.sdk_session&&
+        d.sdk_arm_generation==v.sdk_arm_generation&&d.trajectory_id==v.trajectory_id&&
+        d.permit_sequence==v.permit_sequence&&v.trajectory_validation_sequence>=d.validation_sequence&&
+        d.source_stamp==v.demand_source_stamp&&d.body_source_stamp==v.demand_body_source_stamp&&
+        d.valid_until==v.demand_valid_until&&d.velocity==v.velocity;
+    });
+    if(e==emissions_.rend())return;
+    const auto begin=timeNs(v.check_begin),end=timeNs(v.check_end),until=timeNs(v.valid_until);
+    if(!validSourceTime(v.check_begin)||!validSourceTime(v.check_end)||!validSourceTime(v.valid_until)||
+       begin<timeNs(e->demand.source_stamp)||end<begin||!sourceFresh(now,end,.1,.02)||
+       until<=end||until>timeNs(e->demand.valid_until)||
+       !freshStamp(now,e->demand.body_source_stamp,.1)||!freshStamp(now,v.body_source_stamp,.1)||
+       !freshStamp(now,v.front_ray_source_stamp,.5)||!freshStamp(now,v.rear_ray_source_stamp,.5))return;
+    for(const auto deadline:{until,end+durationNs(.1),timeNs(v.body_source_stamp)+durationNs(.1),
+        timeNs(e->demand.body_source_stamp)+durationNs(.1),
+        timeNs(v.front_ray_source_stamp)+durationNs(.5),timeNs(v.rear_ray_source_stamp)+durationNs(.5)}) {
+      capEmission(*e,deadline);
+      if(last_emission_&&last_emission_->demand.sequence==e->demand.sequence)
+        capEmission(*last_emission_,deadline);
+    }
+  }
+  const char* ordinaryBlockReason(SourceTime now,const wire::TrajectoryValidation*& proof)const {
+    if(!permit_)return "waiting_execution_permission";
+    const auto& p=*permit_;
+    if(writer_handoff_&&handoff_&&!handoff_->applied&&
+       handoff_->grant.transition_mode==wire::ExecutionHandoffGrant::STATIONARY_REENTRY)
+      return "stationary_reentry_waiting_writer";
+    if(writer_handoff_&&handoff_&&handoff_->retired&&(!handoff_->applied||
+       (p.version==handoff_->grant.candidate.version&&p.trajectory_id==handoff_->grant.candidate.trajectory_id)))
+      return "handoff_retired_or_applied_uncertain";
+    if(writer_handoff_&&handoff_&&!handoff_->applied&&timeNs(handoff_->grant.transition_deadline)<=now.nanoseconds())
+      return "handoff_ack_timeout";
+    if(!p.allowed&&!p.revoked)return "geometry_only_no_motion_permission";
+    proof=proofFor(p,now);
+    if(!p.allowed||p.revoked||!timed(now,p.source_stamp,p.valid_until,.75)||
+       core_.trajectoryId()!=p.trajectory_id||core_.generation()!=p.version.reference_generation||
+       !(core_.task().identity==identity(p.version))||!proof||!proofFresh(*proof,now)||
+       !active_support_||!supportMatches(*proof,*active_support_)||
+       (active_validation_&&!active_validation_->valid&&active_validation_->sequence>=p.validation_sequence))
+      return "permission_or_native_proof_expired";
+    if(p.phase=="holding"||p.phase=="stopping"||p.phase=="terminal")return p.phase.c_str();
+    if(p.phase=="aligning"&&(!p.has_goal_yaw||!proof->goal_yaw_checked||
+       std::abs(angle(proof->checked_goal_yaw-p.goal_yaw))>1e-6))return "goal_yaw_sweep_not_verified";
+    return nullptr;
+  }
   struct Installation {wire::TrackerGeometryReceipt fact;Task task;};
   void recordInstallation(const wire::ExecutionPermit& p,const wire::TrajectoryAdmission& a,
       const wire::TrajectoryValidation& v,const Task& task,const builtin_interfaces::msg::Time& at) {
@@ -598,7 +740,7 @@ private:
     installation_=Installation{r,task};installations_.push_back(*installation_);
     while(installations_.size()>8)installations_.pop_front();
   }
-  bool handoffModeValid(const wire::ExecutionHandoffGrant& g,double now)const {
+  bool handoffModeValid(const wire::ExecutionHandoffGrant& g,SourceTime now)const {
     if(g.transition_mode==wire::ExecutionHandoffGrant::CONTINUOUS_REPLACE)
       return g.incumbent.allowed&&!g.incumbent.revoked&&g.incumbent.geometry_committed&&
         (g.incumbent.phase=="tracking"||g.incumbent.phase=="aligning");
@@ -617,19 +759,20 @@ private:
       std::isfinite(e.measured_linear_mps)&&std::isfinite(e.measured_angular_radps)&&
       std::abs(e.measured_linear_mps)<=config_.stationary_linear_threshold_mps&&
       std::abs(e.measured_angular_radps)<=config_.stationary_angular_threshold_radps&&
-      seconds(e.zero_ack_at)>0.&&seconds(e.capture_lower_bound)>seconds(e.zero_ack_at)&&
-      seconds(e.capture_upper_bound)>=seconds(e.capture_lower_bound)&&
-      timed(now,seconds(e.source_stamp),seconds(e.valid_until),.250001)&&
-      seconds(g.source_stamp)>=seconds(e.source_stamp)&&g.retain_incumbent_until==g.source_stamp&&
-      seconds(g.valid_until)<=seconds(e.valid_until)&&seconds(g.candidate.valid_until)<=seconds(e.valid_until)&&
-      seconds(g.valid_until)-seconds(g.source_stamp)<=.250001;
+      validSourceTime(e.zero_ack_at)&&validSourceTime(e.capture_lower_bound)&&validSourceTime(e.capture_upper_bound)&&
+      timeNs(e.capture_lower_bound)>timeNs(e.zero_ack_at)&&timeNs(e.capture_upper_bound)>=timeNs(e.capture_lower_bound)&&
+      timed(now,e.source_stamp,e.valid_until,.250001)&&
+      timeNs(g.source_stamp)>=timeNs(e.source_stamp)&&g.retain_incumbent_until==g.source_stamp&&
+      timeNs(g.valid_until)<=timeNs(e.valid_until)&&timeNs(g.candidate.valid_until)<=timeNs(e.valid_until)&&
+      timeNs(g.valid_until)-timeNs(g.source_stamp)<=250001000LL;
   }
   struct PendingHandoff {wire::ExecutionHandoffGrant grant;Trajectory trajectory;wire::SupportReference support;
     Task task;TrackerCore controller;bool retired,applied;std::deque<wire::PreparedMotionDemand> demands;};
   bool sdkAppliedEntry(const Trajectory& t,const wire::PreparedMotionDemand& entry,const wire::ExecutionCommitAck& a)const {
     if(a.measured_pose.header.frame_id!=config_.planning_frame||a.measured_pose.header.stamp!=a.body_source_stamp||
-       seconds(a.body_source_stamp)<seconds(a.entry_source_stamp)||
-       seconds(a.applied_at)-seconds(a.body_source_stamp)<-.02||seconds(a.applied_at)-seconds(a.body_source_stamp)>.1||
+       !validSourceTime(a.body_source_stamp)||!validSourceTime(a.entry_source_stamp)||!validSourceTime(a.applied_at)||
+       timeNs(a.body_source_stamp)<timeNs(a.entry_source_stamp)||
+       !sourceFresh(sourceTime(a.applied_at),timeNs(a.body_source_stamp),.1,.02)||
        t.points.size()<4||t.knots.size()!=t.points.size()+4)return false;
     Eigen::MatrixXd points(3,t.points.size());Eigen::VectorXd knots(t.knots.size());
     for(std::size_t i=0;i<t.points.size();++i)points.col(i)=t.points[i];
@@ -637,7 +780,7 @@ private:
     scan_planner::UniformBspline curve(points,3,.1);curve.setKnot(knots);const auto velocity=curve.getDerivative();
     const Eigen::Vector3d measured{a.measured_pose.pose.position.x,a.measured_pose.pose.position.y,a.measured_pose.pose.position.z};
     const Eigen::Vector3d actual_velocity{a.measured_twist.linear.x,a.measured_twist.linear.y,a.measured_twist.linear.z};
-    const double travel=config_.max_speed*std::max(0.,seconds(a.body_source_stamp)-seconds(a.entry_source_stamp))+config_.join_limit;
+    const double travel=config_.max_speed*std::max(0.,sourceDeltaSeconds(timeNs(a.body_source_stamp),timeNs(a.entry_source_stamp)))+config_.join_limit;
     // Bounded projection around the certified original entry. Neither another
     // branch nor a same-XY floor can be selected by this ACK fact check.
     double best=std::numeric_limits<double>::infinity(),time=entry.curve_time;
@@ -647,7 +790,7 @@ private:
     return measured.allFinite()&&actual_velocity.allFinite()&&best<=config_.join_limit&&
       (velocity.evaluateDeBoorT(time)-actual_velocity).norm()<=.05;
   }
-  const wire::TrajectoryValidation* proofFor(const wire::ExecutionPermit& p,double now,bool exact_commit=false) const {
+  const wire::TrajectoryValidation* proofFor(const wire::ExecutionPermit& p,SourceTime now,bool exact_commit=false) const {
     const wire::TrajectoryValidation* exact=nullptr;const wire::TrajectoryValidation* latest=nullptr;
     for(const auto& v:proofs_)if(v.version==p.version&&v.trajectory_id==p.trajectory_id) {
       if(!latest||v.sequence>latest->sequence)latest=&v;
@@ -663,12 +806,12 @@ private:
     for(const auto& p:proposals_)if(p.version==v&&p.proposal_id==id)return &p;
     return nullptr;
   }
-  Task taskFor(const wire::ExecutionVersion& v,const geometry_msgs::msg::Point& goal,double source) const {
+  Task taskFor(const wire::ExecutionVersion& v,const geometry_msgs::msg::Point& goal,SourceTime source) const {
     Task t;t.session_id=v.session_id;t.frame_id=config_.planning_frame;t.generation=v.reference_generation;
-    t.identity=identity(v);t.active=true;t.goal={goal.x,goal.y,goal.z};t.issued_at=source;return t;
+    t.identity=identity(v);t.active=true;t.goal={goal.x,goal.y,goal.z};t.issued_at=source;t.issued_at_ns=source.nanoseconds();return t;
   }
-  bool proofFresh(const wire::TrajectoryValidation& v,double now)const {
-    const double end=seconds(v.check_end),begin=seconds(v.check_begin);
+  bool proofFresh(const wire::TrajectoryValidation& v,SourceTime now)const {
+    const auto end=timeNs(v.check_end),begin=timeNs(v.check_begin);
     const bool domain=finite(v.checked_from_time)&&finite(v.checked_to_time)&&finite(v.curve_duration)&&
       finite(v.valid_start_time)&&finite(v.valid_start_arc_length)&&v.checked_from_time>=0.&&
       v.checked_from_time<=v.valid_start_time&&v.valid_start_time<=v.checked_to_time&&
@@ -678,21 +821,19 @@ private:
       identity(v.version)==core_.task().identity&&core_.remainingProofCovers(v.checked_from_time,
         v.valid_start_time,v.valid_start_arc_length,v.checked_to_time,v.curve_duration,v.reverse_margin_m)));
     return v.valid&&v.frame_id==config_.planning_frame&&v.collision_policy=="observed_free"&&covered&&
-      v.map_snapshot_revision>0&&v.sequence>0&&v.transport_mode==mode_&&begin>0.&&end>=begin&&
-      end<=now+.02&&now-end<=.25&&seconds(v.valid_until)>now&&
-      // One microsecond only covers seconds/nanoseconds conversion rounding;
-      // the original absolute expiry above remains strict, never extended.
-      seconds(v.valid_until)-end<=.250001&&seconds(v.source_stamp)<=now+.02&&
-      seconds(v.source_stamp)>=end&&now-seconds(v.source_stamp)<=.25&&
-      now-seconds(v.body_source_stamp)>=-.02&&now-seconds(v.body_source_stamp)<=.4&&
-      now-seconds(v.front_ray_source_stamp)>=-.02&&now-seconds(v.front_ray_source_stamp)<=.5&&
-      now-seconds(v.rear_ray_source_stamp)>=-.02&&now-seconds(v.rear_ray_source_stamp)<=.5;
+      v.map_snapshot_revision>0&&v.sequence>0&&v.transport_mode==mode_&&
+      validSourceTime(v.check_begin)&&validSourceTime(v.check_end)&&end>=begin&&
+      sourceFresh(now,end,.25,.02)&&validSourceTime(v.valid_until)&&timeNs(v.valid_until)>now.nanoseconds()&&
+      // Retain the existing lease-length bound; absolute expiry is exact.
+      timeNs(v.valid_until)-end<=250001000LL&&freshStamp(now,v.source_stamp,.25)&&
+      timeNs(v.source_stamp)>=end&&freshStamp(now,v.body_source_stamp,.4)&&
+      freshStamp(now,v.front_ray_source_stamp,.5)&&freshStamp(now,v.rear_ray_source_stamp,.5);
   }
   bool supportMatches(const wire::TrajectoryValidation& v,const wire::SupportReference& s)const {
     return s.version==v.version&&s.verified&&s.support_reference_id==v.support_reference_id&&s.support_hash==v.support_hash;
   }
   std::optional<Trajectory> observeCandidateEntry(const wire::TrajectoryValidation& proof,
-      double now,std::string& reason) {
+      SourceTime now,std::string& reason) {
     // This is a NEW observation of the SAME immutable geometry. A latest
     // whole-curve native query is mandatory; remaining-old-curve or stale
     // certificates cannot justify a new entry. All certificate times stay
@@ -710,7 +851,7 @@ private:
       core_.recordJoinDiagnostic(*candidate_,now,candidate_entry_curve_->duration,reason);return {};
     }
     auto observed=candidate_entry_curve_->observe(*candidate_,core_.odometry(),config_,now,
-      seconds(proof.body_source_stamp),proof.valid_start_time,proof.valid_start_arc_length,reason);
+      sourceTime(proof.body_source_stamp),proof.valid_start_time,proof.valid_start_arc_length,reason);
     if(!observed)core_.recordJoinDiagnostic(*candidate_,now,candidate_entry_curve_->duration,reason);
     return observed;
   }
@@ -778,6 +919,9 @@ private:
   std::deque<wire::TrajectoryValidation> proofs_;
   std::deque<wire::TrajectoryAdmission> admissions_;
   std::deque<wire::MotionDemand> demands_;
+  std::deque<ControlEmission> emissions_;
+  std::optional<ControlEmission> last_emission_;
+  std::int64_t paused_source_ns_{0};
   std::optional<wire::MotionValidation> blocked_entry_;
   std::optional<std::string> retired_task_;
   std::string last_prepare_reason_,last_permit_reject_;

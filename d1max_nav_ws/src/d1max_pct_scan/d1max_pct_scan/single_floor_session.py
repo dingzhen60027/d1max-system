@@ -339,6 +339,25 @@ def validate_planning_only_parameters(directory,session):
         raise ValueError('planning_only_forbids_motion_pipeline_configuration')
 
 
+def simulation_clock_enabled(session):
+    clock_contract=session.get('simulation_clock')
+    if clock_contract is not None:
+        if clock_contract!='isaac_fixed_anchor_v1' or session.get('transport_mode')!='isolated_mock':
+            raise ValueError('simulation_clock_requires_explicit_isolated_isaac_contract')
+        return True
+    return False
+
+
+def apply_simulation_clock(commands,session):
+    if simulation_clock_enabled(session):
+        # ROS acquisition time, command validity and safety evidence must share
+        # Isaac's source clock. Wall/steady watchdogs remain wall/steady timers;
+        # --session Python publishers have no generated params file to edit.
+        for command in commands.values():
+            command.extend(['--ros-args','-p','use_sim_time:=true'])
+    return commands
+
+
 def runtime_commands(directory, session):
     from ament_index_python.packages import get_package_prefix
     from .bt_configuration import worker_arguments
@@ -384,18 +403,22 @@ def runtime_commands(directory, session):
             'config:='+str(directory/'localization.yaml'),'session_dir:='+str(directory),
             'map_pcd:='+session['map_pcd'],
             'relocalization_config:='+session['localization_config']],**commands}
-    return commands
+    return apply_simulation_clock(commands,session)
 
 
-def view_commands(directory,layout,*,include_publishers=True):
+def view_commands(directory,layout,*,include_publishers=True,session=None):
     if layout not in ('global','local'):raise ValueError('unknown_view_layout')
     publishers={name:[sys.executable,'-m','d1max_pct_scan.'+module,'--session',str(directory)]
         for name,module in (('view','live_view'),('map_layers','live_map_layers'),('execution_view','execution_view'))}
     # One tree retains the map-framed initial/goal tools. Local mode is a
     # display/camera selection, not a second process or a different task.
-    return {**(publishers if include_publishers else {}),
+    commands={**(publishers if include_publishers else {}),
         'rviz':['rviz2','-d',str(directory/'global_planning.rviz'),'--ros-args','-r',
                 '__node:=d1max_navigation_rviz']}
+    if session is None:
+        saved=Path(directory)/'session.json'
+        session=json.loads(saved.read_text()) if saved.is_file() else {}
+    return apply_simulation_clock(commands,session)
 
 
 @contextmanager
@@ -457,7 +480,7 @@ def view(directory,layout):
             stopping=True
         previous={sig:signal.signal(sig,stop) for sig in (signal.SIGINT,signal.SIGTERM)}
         try:
-            for name,cmd in view_commands(directory,layout,include_publishers=False).items():
+            for name,cmd in view_commands(directory,layout,include_publishers=False,session=s).items():
                 log=(directory/(name+'-single.log')).open('a');logs.append(log)
                 children.append(subprocess.Popen(cmd,stdout=log,stderr=subprocess.STDOUT,start_new_session=True,
                     env=view_env,pass_fds=(window_fd,)))
@@ -465,7 +488,7 @@ def view(directory,layout):
                 if display_lease is None:
                     display_lease=_try_display_lease(directory)
                     if display_lease is not None:
-                        for name,cmd in view_commands(directory,layout).items():
+                        for name,cmd in view_commands(directory,layout,session=s).items():
                             if name=='rviz':continue
                             log=(directory/(name+'.log')).open('a');logs.append(log)
                             children.append(subprocess.Popen(cmd,stdout=log,stderr=subprocess.STDOUT,start_new_session=True,
@@ -720,7 +743,7 @@ def _run_locked(directory,core_fd=None):
             time.sleep(.1)
     finally:
         from .lifecycle_shutdown import drain_task_owner
-        try: drain=drain_task_owner(s['id'])
+        try: drain=drain_task_owner(s['id'],use_sim_time=simulation_clock_enabled(s))
         except Exception as error: drain={'reason':str(error),'physical_stop_confirmed':False}
         drain.update(session_id=s['id'],recorded_at_unix=time.time())
         (directory/'shutdown.json').write_text(json.dumps(drain,indent=2)+'\n')

@@ -521,10 +521,11 @@ TEST(TrackerEntryReobservation, FreshWholeProofUsesActualNewBoundaryNotAnExpired
     proof.front_ray_source_stamp=proof.rear_ray_source_stamp=stamp(100.55);
   proof.valid_until=stamp(100.8);proof.valid_start_time=.5;proof.valid_start_arc_length=.125;
   gate.validation(proof,100.55);
-  const auto admission=gate.prepare(100.55,10.55);ASSERT_TRUE(admission&&admission->accepted);
+  const auto exact_now=SourceTime::fromNanoseconds(body.source_stamp_ns);
+  const auto admission=gate.prepare(exact_now,10.55);ASSERT_TRUE(admission&&admission->accepted);
   EXPECT_EQ(admission->validation_sequence,2u);EXPECT_EQ(timeNs(admission->body_source_stamp),body.source_stamp_ns);
   auto p=permitWire();p.validation_sequence=2;p.source_stamp=stamp(100.55);p.valid_until=stamp(100.75);
-  ASSERT_TRUE(gate.permit(p,100.55,10.55));
+  ASSERT_TRUE(gate.permit(p,exact_now,10.55));
   const auto& diagnostic=gate.core().joinDiagnostic();
   EXPECT_TRUE(diagnostic.entry_reobserved);EXPECT_EQ(diagnostic.original_join_source_stamp_ns,100000000017LL);
   EXPECT_EQ(diagnostic.join_source_stamp_ns,body.source_stamp_ns);
@@ -542,6 +543,7 @@ TEST(TrackerEntryReobservation, CurrentMeasurementAndFiniteNativeDomainRemainStr
     EXPECT_FALSE(cache->observe(original,o,config(),100.55,proof_body,time,arc,reason));EXPECT_EQ(reason,expected);
   };
   auto stale=body;stale.stamp=stale.posterior_stamp=stale.imu_stamp=100.4;
+  stale.source_stamp_ns=100400000000LL;
   fail(stale,100.4,.5,.125,"entry_body_not_fresh");
   auto wrong_epoch=body;wrong_epoch.localization_epoch=2;
   fail(wrong_epoch,100.55,.5,.125,"entry_body_identity_mismatch");
@@ -622,16 +624,18 @@ TEST(TrackerGeometryReceipt, MotionFencePreservesActualInstallationAndCannotBorr
 }
 TEST(TrackerGeometryReceipt, UnixOriginalBodyFactsAreExactAtInstallationAndDoNotRenewWithTimer) {
   const auto ns=1791004686079466628LL;const double base=seconds(stampNs(ns));
+  const auto now=SourceTime::fromNanoseconds(ns);
   ExecutionContract gate(executionConfig(),"isolated_mock",{},true);
-  auto body=odom(base);body.source_stamp_ns=ns;ASSERT_TRUE(gate.core().receiveOdom(body,base,10.));
+  auto body=odom(base);body.source_stamp_ns=body.posterior_stamp_ns=body.imu_stamp_ns=ns;
+  ASSERT_TRUE(gate.core().receiveOdom(body,now,10.));
   auto proposal=proposalWire();proposal.source_stamp=stampNs(ns);proposal.valid_until=stampNs(ns+900000000LL);
   gate.proposal(proposal,base);auto t=curve(1,base);t.join_source_stamp_ns=ns;gate.candidate(t);
   auto s=supportWire();s.source_stamp=stampNs(ns);gate.support(s);
   auto v=proofWire();v.source_stamp=v.check_begin=v.check_end=v.body_source_stamp=
     v.front_ray_source_stamp=v.rear_ray_source_stamp=stampNs(ns);v.valid_until=stampNs(ns+250000000LL);gate.validation(v,base);
-  const auto a=gate.prepare(base,10.);ASSERT_TRUE(a&&a->accepted);
+  const auto a=gate.prepare(now,10.);ASSERT_TRUE(a&&a->accepted);
   auto p=permitWire();p.source_stamp=stampNs(ns);p.valid_until=stampNs(ns+500000000LL);
-  ASSERT_TRUE(gate.permit(p,base+.001,10.001));const auto installed=gate.geometryReceipt();ASSERT_TRUE(installed&&installed->installed);
+  ASSERT_TRUE(gate.permit(p,SourceTime::fromNanoseconds(ns+1000000LL),10.001));const auto installed=gate.geometryReceipt();ASSERT_TRUE(installed&&installed->installed);
   EXPECT_EQ(timeNs(installed->body_source_stamp),ns);EXPECT_EQ(installed->admission_sequence,a->sequence);
   const auto again=gate.geometryReceipt();ASSERT_TRUE(again);EXPECT_EQ(again->body_source_stamp,installed->body_source_stamp);
   EXPECT_EQ(again->installed_at,installed->installed_at);
@@ -739,12 +743,111 @@ TEST(TrackerTimeContract, RealUnixLeaseFactsRemainExactAndCanOnlyCapFreshDeadlin
     const auto generated_source=stamp(seconds(original));
     EXPECT_EQ(timeNs(stampNs(timeNs(generated_source)+100000000LL))-timeNs(generated_source),100000000LL);
     ExecutionContract gate(executionConfig(),"isolated_mock");
-    auto measured=odom(seconds(original));measured.source_stamp_ns=original_ns;
+    auto measured=odom(seconds(original));measured.source_stamp_ns=measured.posterior_stamp_ns=measured.imu_stamp_ns=original_ns;
     ASSERT_TRUE(gate.core().receiveOdom(measured,seconds(original),10.));
     const auto demand=gate.step(seconds(original)+.02,10.02);
     EXPECT_EQ(timeNs(demand.body_source_stamp),original_ns);
     EXPECT_EQ(timeNs(demand.valid_until)-timeNs(demand.source_stamp),100000000LL);
   }
+}
+TEST(TrackerTimeContract, V10EqualUnixSourceIsAdmittedAndTrueFutureNanosecondIsRejected) {
+  constexpr std::int64_t ns=1791124691902856036LL;
+  const auto now=SourceTime::fromNanoseconds(ns);
+  auto body=odom(seconds(stampNs(ns)));
+  body.source_stamp_ns=body.posterior_stamp_ns=body.imu_stamp_ns=ns;
+  auto t=curve(1,seconds(stampNs(ns)));t.start_time_ns=t.join_source_stamp_ns=ns;
+  EXPECT_EQ(joinEvidenceFailure(t,true,body,now,4.,config()),nullptr);
+  // These adjacent integer sources have the same Unix-scale double value.
+  ++t.join_source_stamp_ns;
+  EXPECT_STREQ(joinEvidenceFailure(t,true,body,now,4.,config()),"join_source_in_future");
+  t.join_source_stamp_ns=ns;
+  ++body.posterior_stamp_ns;
+  EXPECT_STREQ(sourceEvidenceFailure(body,now,config()),"body_posterior_after_state");
+  body.posterior_stamp_ns=ns;++body.imu_stamp_ns;
+  EXPECT_STREQ(sourceEvidenceFailure(body,now,config()),"body_imu_after_state");
+}
+TEST(TrackerTimeContract, IntegerFreshnessUsesOriginalLimitsAtNanosecondBoundary) {
+  constexpr std::int64_t ns=1791124691902856036LL;
+  auto body=odom(seconds(stampNs(ns)));body.source_stamp_ns=body.posterior_stamp_ns=body.imu_stamp_ns=ns;
+  EXPECT_EQ(sourceEvidenceFailure(body,SourceTime::fromNanoseconds(ns+100000000LL),config()),nullptr);
+  EXPECT_STREQ(sourceEvidenceFailure(body,SourceTime::fromNanoseconds(ns+100000001LL),config()),"body_imu_not_fresh");
+  const auto now=SourceTime::fromNanoseconds(ns);
+  EXPECT_TRUE(freshStamp(now,stampNs(ns),.1,0.));
+  EXPECT_FALSE(freshStamp(now,stampNs(ns+1),.1,0.));
+  EXPECT_TRUE(freshStamp(now,stampNs(ns+20000000LL),.1));
+  EXPECT_FALSE(freshStamp(now,stampNs(ns+20000001LL),.1));
+  EXPECT_TRUE(timed(now,stampNs(ns),stampNs(ns+1),.25));
+  EXPECT_FALSE(timed(SourceTime::fromNanoseconds(ns+1),stampNs(ns),stampNs(ns+1),.25));
+}
+TEST(TrackerTimeContract, OriginalNanosecondOrderingDoesNotCollapseAdjacentBodySources) {
+  constexpr std::int64_t ns=1791124691902856036LL;
+  TrackerCore core(config());auto body=odom(seconds(stampNs(ns)));
+  body.source_stamp_ns=body.posterior_stamp_ns=body.imu_stamp_ns=ns;
+  ASSERT_TRUE(core.receiveOdom(body,SourceTime::fromNanoseconds(ns),10.));
+  ++body.source_stamp_ns;++body.posterior_stamp_ns;++body.imu_stamp_ns;
+  ASSERT_TRUE(core.receiveOdom(body,SourceTime::fromNanoseconds(ns+1),10.01));
+  EXPECT_EQ(core.odometry().source_stamp_ns,ns+1);
+  auto reordered=body;reordered.source_stamp_ns=ns;reordered.localization_seed_id="foreign-old-seed";
+  EXPECT_FALSE(core.receiveOdom(reordered,SourceTime::fromNanoseconds(ns+2),10.02));
+  EXPECT_EQ(core.odometry().source_stamp_ns,ns+1);
+}
+TEST(TrackerTimeContract, ExactUnixClockFlowsThroughPrepareCommitDemandAndInstallation) {
+  constexpr std::int64_t ns=1791124691902856036LL;
+  const auto now=SourceTime::fromNanoseconds(ns);
+  ExecutionContract gate(executionConfig(),"isolated_mock");
+  auto body=odom(seconds(stampNs(ns)));body.source_stamp_ns=body.posterior_stamp_ns=body.imu_stamp_ns=ns;
+  ASSERT_TRUE(gate.receiveOdom(body,now,10.));
+  auto proposal=proposalWire();proposal.source_stamp=stampNs(ns);proposal.valid_until=stampNs(ns+900000000LL);
+  gate.proposal(proposal,now);
+  auto t=curve(1,seconds(stampNs(ns)));t.start_time_ns=t.join_source_stamp_ns=ns;gate.candidate(t);
+  auto support=supportWire();support.source_stamp=stampNs(ns);gate.support(support);
+  auto proof=proofWire();proof.source_stamp=proof.check_begin=proof.check_end=proof.body_source_stamp=
+    proof.front_ray_source_stamp=proof.rear_ray_source_stamp=stampNs(ns);
+  proof.valid_until=stampNs(ns+250000000LL);gate.validation(proof,now);
+  const auto admission=gate.prepare(now,10.);ASSERT_TRUE(admission&&admission->accepted);
+  EXPECT_EQ(timeNs(admission->checked_at),ns);EXPECT_EQ(timeNs(admission->body_source_stamp),ns);
+  auto permit=permitWire();permit.source_stamp=stampNs(ns);permit.valid_until=stampNs(ns+500000000LL);
+  ASSERT_TRUE(gate.permit(permit,now,10.));
+  const auto installed=gate.geometryReceipt();ASSERT_TRUE(installed&&installed->installed);
+  EXPECT_EQ(timeNs(installed->installed_at),ns);EXPECT_EQ(timeNs(installed->body_source_stamp),ns);
+  const auto demand=gate.step(SourceTime::fromNanoseconds(ns+20000001LL),10.02);
+  EXPECT_EQ(timeNs(demand.source_stamp),ns+20000001LL);
+  EXPECT_EQ(timeNs(demand.body_source_stamp),ns);
+  EXPECT_EQ(timeNs(demand.valid_until),ns+120000001LL);
+  const auto& diagnostic=gate.core().joinDiagnostic();
+  EXPECT_EQ(diagnostic.checked_now_ns,ns);
+  EXPECT_EQ(sourceDeltaSeconds(diagnostic.checked_now_ns,diagnostic.join_source_stamp_ns),0.);
+  EXPECT_EQ(sourceDeltaSeconds(diagnostic.checked_now_ns,diagnostic.body_source_stamp_ns),0.);
+}
+TEST(TrackerTimeContract, WholeCurveProofAbsoluteExpiryDoesNotGainOneNanosecond) {
+  constexpr std::int64_t ns=1791124691902856036LL;
+  ExecutionContract gate(executionConfig(),"isolated_mock");const auto now=SourceTime::fromNanoseconds(ns);
+  auto body=odom(seconds(stampNs(ns)));body.source_stamp_ns=body.posterior_stamp_ns=body.imu_stamp_ns=ns;
+  ASSERT_TRUE(gate.receiveOdom(body,now,10.));
+  auto proposal=proposalWire();proposal.source_stamp=stampNs(ns);proposal.valid_until=stampNs(ns+900000000LL);gate.proposal(proposal,now);
+  auto t=curve(1,seconds(stampNs(ns)));t.start_time_ns=t.join_source_stamp_ns=ns;gate.candidate(t);
+  auto support=supportWire();support.source_stamp=stampNs(ns);gate.support(support);
+  auto proof=proofWire();proof.source_stamp=proof.check_begin=proof.check_end=proof.body_source_stamp=
+    proof.front_ray_source_stamp=proof.rear_ray_source_stamp=stampNs(ns);proof.valid_until=stampNs(ns+1);
+  gate.validation(proof,now);
+  const auto valid=gate.prepare(now,10.);ASSERT_TRUE(valid&&valid->accepted);
+  EXPECT_EQ(timeNs(valid->valid_until),ns+1);
+  const auto expired=gate.prepare(SourceTime::fromNanoseconds(ns+1),10.01);
+  ASSERT_TRUE(expired);EXPECT_FALSE(expired->accepted);EXPECT_EQ(expired->reason,"validation_not_fresh");
+}
+TEST(TrackerTimeContract, PreparedDemandAndAdmissionKeepActualClockNanoseconds) {
+  ExecutionContract gate(executionConfig(),"isolated_mock",std::string(64,'f'),true);
+  const auto grant=stageWriterHandoff(gate);ASSERT_TRUE(gate.handoff(grant,100.02,10.02));
+  constexpr std::int64_t ns=100040000017LL;
+  auto body=odom(100.04);body.source_stamp_ns=body.posterior_stamp_ns=body.imu_stamp_ns=ns;
+  ASSERT_TRUE(gate.receiveOdom(body,SourceTime::fromNanoseconds(ns),10.04));
+  const auto prepared=gate.preparedStep(SourceTime::fromNanoseconds(ns),10.04);ASSERT_TRUE(prepared);
+  EXPECT_EQ(timeNs(prepared->demand.source_stamp),ns);
+  EXPECT_EQ(timeNs(prepared->demand.body_source_stamp),ns);
+  EXPECT_EQ(timeNs(prepared->demand.valid_until),ns+100000000LL);
+  EXPECT_EQ(timeNs(prepared->entry_source_stamp),ns);EXPECT_EQ(timeNs(prepared->measured_pose.header.stamp),ns);
+  EXPECT_EQ(timeNs(prepared->entry_admission.checked_at),ns);
+  EXPECT_EQ(timeNs(prepared->entry_admission.body_source_stamp),ns);
 }
 TEST(TrackerWriterCAS, LateAppliedFactMovesIdentityForwardAndHoldsWithoutRollback) {
   ExecutionContract gate(executionConfig(),"isolated_mock",std::string(64,'f'),true);
@@ -1629,4 +1732,140 @@ TEST(TrackerExecution, FailedCommitStillFollowsOwnerLeaseForSuccessorProposal) {
   auto f=curve(4);f.generation=3;gate.candidate(f);gate.support(supportWire(version(3)));
   auto fv=proofWire(version(3));fv.proposal_id="proposal3";fv.trajectory_id=4;gate.validation(fv,100.05);
   EXPECT_FALSE(gate.prepare(100.05,10.05));
+}
+
+namespace {
+wire::MotionDemand beginDuplicateTickTest(ExecutionContract& gate) {
+  stage(gate);EXPECT_TRUE(gate.prepare(100.,10.)->accepted);
+  EXPECT_TRUE(gate.permit(permitWire(),100.,10.));
+  const auto d=gate.step(SourceTime::fromNanoseconds(100020000019LL),10.02);
+  EXPECT_FALSE(d.hold);return d;
+}
+wire::MotionValidation finiteSweepFor(const wire::MotionDemand& d,std::int64_t until) {
+  auto v=occupiedFor(d);v.valid=true;v.reason="motion_sweep_observed_free";
+  v.check_begin=v.check_end=d.source_stamp;v.valid_until=stampNs(until);return v;
+}
+}
+TEST(TrackerDuplicateTick, Skips20msTimersWithoutNewDemandOrLimiterResetAndResumesContinuously) {
+  ExecutionContract gate(executionConfig(),"isolated_mock"),control(executionConfig(),"isolated_mock");
+  const auto first=beginDuplicateTickTest(gate);beginDuplicateTickTest(control);
+  const auto now=sourceTime(first.source_stamp);
+  for(double receipt:{10.04,10.06,10.08,10.10}) {
+    EXPECT_FALSE(gate.controlTickRequired(now,receipt));
+    EXPECT_EQ(gate.core().lastControlSourceNs(),timeNs(first.source_stamp));
+  }
+  const auto next=SourceTime::fromNanoseconds(timeNs(first.source_stamp)+20000000LL);
+  ASSERT_TRUE(gate.controlTickRequired(next,10.10));
+  const auto resumed=gate.step(next,10.10),expected=control.step(next,10.10);
+  EXPECT_EQ(resumed.sequence,first.sequence+1);EXPECT_FALSE(resumed.hold);
+  EXPECT_GT(resumed.velocity.linear.x,first.velocity.linear.x);
+  EXPECT_DOUBLE_EQ(resumed.velocity.linear.x,expected.velocity.linear.x);
+  EXPECT_DOUBLE_EQ(resumed.velocity.angular.z,expected.velocity.angular.z);
+  EXPECT_EQ(timeNs(first.valid_until)-timeNs(first.source_stamp),100000000LL);
+}
+TEST(TrackerDuplicateTick, OriginalDemandExpiresBySteadyReceiptAndSameSourceCannotRenewIt) {
+  ExecutionContract gate(executionConfig(),"isolated_mock");const auto first=beginDuplicateTickTest(gate);
+  const auto now=sourceTime(first.source_stamp);
+  EXPECT_FALSE(gate.controlTickRequired(now,10.119));EXPECT_TRUE(gate.controlTickRequired(now,10.121));
+  const auto stopped=gate.step(now,10.121);
+  EXPECT_TRUE(stopped.hold);EXPECT_EQ(stopped.reason,"source_clock_paused_command_expired");
+  auto newer=proofWire();newer.sequence=2;gate.validation(newer,now);
+  EXPECT_TRUE(gate.controlTickRequired(now,10.122));
+  EXPECT_EQ(gate.step(now,10.122).reason,"source_clock_paused_command_expired");
+}
+TEST(TrackerDuplicateTick, OriginalTwoMicrosecondCurveProofIsNotRenewedByLongerNewProof) {
+  ExecutionContract gate(executionConfig(),"isolated_mock");stage(gate);
+  auto proof=proofWire();proof.sequence=2;proof.valid_until=stampNs(100020002019LL);
+  gate.validation(proof,100.);ASSERT_TRUE(gate.prepare(100.,10.)->accepted);
+  auto permit=permitWire();permit.validation_sequence=2;ASSERT_TRUE(gate.permit(permit,100.,10.));
+  const auto now=SourceTime::fromNanoseconds(100020000019LL);const auto d=gate.step(now,10.02);
+  ASSERT_FALSE(d.hold);EXPECT_FALSE(gate.controlTickRequired(now,10.020001));
+  auto longer=proofWire();longer.sequence=3;gate.validation(longer,now);
+  EXPECT_TRUE(gate.controlTickRequired(now,10.020003));
+  EXPECT_EQ(gate.step(now,10.020003).reason,"source_clock_paused_command_expired");
+}
+TEST(TrackerDuplicateTick, NewMatchingShorterProofAndPermitPermanentlyShortenOriginalLease) {
+  for(bool shorten_permit:{false,true}) {
+    SCOPED_TRACE(shorten_permit);ExecutionContract gate(executionConfig(),"isolated_mock");
+    const auto first=beginDuplicateTickTest(gate);const auto now=sourceTime(first.source_stamp);
+    if(shorten_permit) {
+      auto shorter=permitWire();shorter.sequence=2;shorter.valid_until=stampNs(timeNs(first.source_stamp)+2000);
+      ASSERT_TRUE(gate.permit(shorter,now,10.0200001));
+      auto longer=permitWire();longer.sequence=3;ASSERT_TRUE(gate.permit(longer,now,10.0200002));
+    } else {
+      auto shorter=proofWire();shorter.sequence=2;shorter.valid_until=stampNs(timeNs(first.source_stamp)+2000);
+      gate.validation(shorter,now);auto longer=proofWire();longer.sequence=3;gate.validation(longer,now);
+    }
+    EXPECT_FALSE(gate.controlTickRequired(now,10.020001));
+    EXPECT_TRUE(gate.controlTickRequired(now,10.020003));
+    EXPECT_EQ(gate.step(now,10.020003).reason,"source_clock_paused_command_expired");
+  }
+}
+TEST(TrackerDuplicateTick, ExactOwnMotionProofOnlyShortensAndNeverRefreshesEmissionReceipt) {
+  ExecutionContract gate(executionConfig(),"isolated_mock",std::string(64,'f'));
+  const auto first=beginDuplicateTickTest(gate);const auto now=sourceTime(first.source_stamp);
+  auto foreign=finiteSweepFor(first,timeNs(first.source_stamp)+1);foreign.velocity.linear.x+=.001;
+  EXPECT_FALSE(gate.motionValidation(foreign,now));EXPECT_FALSE(gate.controlTickRequired(now,10.04));
+  auto own=finiteSweepFor(first,timeNs(first.source_stamp)+2000);
+  EXPECT_FALSE(gate.motionValidation(own,now)); // observation is never permission
+  EXPECT_FALSE(gate.controlTickRequired(now,10.020001));
+  auto longer=finiteSweepFor(first,timeNs(first.valid_until));longer.sequence=2;
+  EXPECT_FALSE(gate.motionValidation(longer,now));
+  EXPECT_TRUE(gate.controlTickRequired(now,10.020003));
+  EXPECT_EQ(gate.step(now,10.020003).reason,"source_clock_paused_command_expired");
+}
+TEST(TrackerDuplicateTick, RevocationInvalidProofHoldingAndNewBodyFaultCannotBeSkipped) {
+  for(int fault=0;fault<5;++fault) {
+    SCOPED_TRACE(fault);ExecutionContract gate(executionConfig(),"isolated_mock");
+    const auto first=beginDuplicateTickTest(gate);const auto now=sourceTime(first.source_stamp);
+    if(fault==0) {auto p=permitWire();p.sequence=2;p.revoked=true;ASSERT_TRUE(gate.permit(p,now,10.03));}
+    if(fault==1) {auto p=proofWire();p.sequence=2;p.valid=false;gate.validation(p,now);}
+    if(fault==2)gate.core().hold("source_context_fault",10.03);
+    if(fault>=3) {auto o=odom(100.02,fault==3?1.:2.);o.source_stamp_ns=timeNs(first.source_stamp)+1;
+      ASSERT_TRUE(gate.receiveOdom(o,now,10.03));}
+    EXPECT_TRUE(gate.controlTickRequired(now,10.04));EXPECT_TRUE(gate.step(now,10.04).hold);
+  }
+}
+TEST(TrackerDuplicateTick, ChangedAuthorityAndControlPhaseRequireOrdinaryControlPath) {
+  for(int field=0;field<6;++field) {
+    SCOPED_TRACE(field);ExecutionContract gate(executionConfig(),"isolated_mock");
+    const auto first=beginDuplicateTickTest(gate);const auto now=sourceTime(first.source_stamp);
+    auto p=permitWire();p.sequence=2;
+    if(field==0)p.execution_id="new_exec";if(field==1)++p.control_epoch;
+    if(field==2)p.sdk_session="new_sdk";if(field==3)++p.sdk_arm_generation;
+    if(field==4)p.goal_yaw_tolerance_rad=.2;
+    if(field==5) {auto proof=proofWire();proof.sequence=2;proof.goal_yaw_checked=true;
+      proof.checked_goal_yaw=.2;gate.validation(proof,now);p.phase="aligning";p.has_goal_yaw=true;p.goal_yaw=.2;}
+    ASSERT_TRUE(gate.permit(p,now,10.03));EXPECT_TRUE(gate.controlTickRequired(now,10.04));
+  }
+}
+TEST(TrackerDuplicateTick, AppliedAckSameNowUsesOriginalPreparedCommandDeadline) {
+  ExecutionContract gate(executionConfig(),"isolated_mock",{},true);
+  const auto g=stageWriterHandoff(gate);ASSERT_TRUE(gate.handoff(g,100.02,10.02));
+  EXPECT_FALSE(gate.controlTickRequired(100.02,10.03)); // no prepared demand on duplicate either
+  ASSERT_TRUE(gate.receiveOdom(odom(100.04),100.04,10.04));
+  const auto prepared=gate.preparedStep(100.04,10.04);ASSERT_TRUE(prepared);ASSERT_FALSE(prepared->demand.hold);
+  gate.step(100.04,10.04);auto ack=preparedWriterAck(g,*prepared);
+  ack.valid_until=stampNs(100070000002LL);ASSERT_TRUE(gate.commitAck(ack,100.06,10.06));
+  EXPECT_EQ(gate.core().lastControlSourceNs(),100060000000LL);
+  EXPECT_FALSE(gate.controlTickRequired(100.06,10.069));
+  EXPECT_TRUE(gate.controlTickRequired(100.06,10.070000003));
+  EXPECT_EQ(gate.step(100.06,10.070000003).reason,"source_clock_paused_command_expired");
+}
+TEST(TrackerDuplicateTick, OneNanosecondRegressionAtUnixScaleStopsEvenWhenDoubleCannotDistinguishIt) {
+  constexpr std::int64_t base=1791124691902856036LL;
+  const auto now=SourceTime::fromNanoseconds(base);TrackerCore core(config());
+  auto t=task();t.issued_at=now;t.issued_at_ns=base;
+  auto o=odom(now);o.source_stamp_ns=o.posterior_stamp_ns=o.imu_stamp_ns=base;
+  auto c=curve(1,now);c.start_time_ns=c.join_source_stamp_ns=base;
+  ASSERT_TRUE(core.receiveTask(t,now,10.));ASSERT_TRUE(core.receiveOdom(o,now,10.));
+  ASSERT_TRUE(core.receiveTrajectory(c,now,10.));
+  const auto tick=SourceTime::fromNanoseconds(base+20000000LL);
+  ASSERT_GT(core.step(tick,10.02).forward,0.);
+  EXPECT_TRUE(core.duplicateControlStateSafe(tick,10.04));
+  const auto regression=SourceTime::fromNanoseconds(tick.nanoseconds()-1);
+  EXPECT_DOUBLE_EQ(double(regression),double(tick));
+  EXPECT_FALSE(core.duplicateControlStateSafe(regression,10.04));
+  const auto stopped=core.step(regression,10.04);
+  EXPECT_EQ(stopped.forward,0.);EXPECT_EQ(stopped.reason,"clock_or_executor_discontinuity");EXPECT_TRUE(core.holding());
 }

@@ -87,39 +87,40 @@ public:
     blocked_entry_pub_=create_publisher<wire::MotionValidation>(
       topic("blocked_entry_topic","/d1max/live_planning/execution/blocked_entry"),rclcpp::QoS(4));
     proposal_sub_=create_subscription<wire::ReferenceProposal>(topic("proposal_topic","/d1max/live_planning/execution/reference_proposal"),rclcpp::QoS(1),
-      [this](wire::ReferenceProposal::ConstSharedPtr m){execution_->proposal(*m,now().seconds());});
+      [this](wire::ReferenceProposal::ConstSharedPtr m){execution_->proposal(*m,sourceNow());});
     support_sub_=create_subscription<wire::SupportReference>(topic("support_topic","/d1max/live_planning/execution/support"),rclcpp::QoS(1),
       [this](wire::SupportReference::ConstSharedPtr m){execution_->support(*m);});
     validation_sub_=create_subscription<wire::TrajectoryValidation>(topic("validation_topic","/d1max/live_planning/execution/validation"),rclcpp::QoS(2),
       [this](wire::TrajectoryValidation::ConstSharedPtr m){
-        execution_->validation(*m,now().seconds());
+        execution_->validation(*m,sourceNow());
         // Prepare on the fresh proof itself: the join evidence has a 0.4 s
         // lease from its body sample, and waiting for the timer phase (up to
         // 0.2 s) plus the owner tick routinely expired it before commit.
-        prepareAndPublish(now().seconds(),monotonicNow());
+        prepareAndPublish(sourceNow(),monotonicNow());
       });
     motion_validation_sub_=create_subscription<wire::MotionValidation>(
       topic("motion_validation_topic","/d1max/live_planning/execution/motion_validation"),rclcpp::QoS(8),
       [this](wire::MotionValidation::ConstSharedPtr m){
-        if(execution_->motionValidation(*m,now().seconds()))
+        if(execution_->motionValidation(*m,sourceNow()))
           if(const auto blocked=execution_->takeBlockedEntry())blocked_entry_pub_->publish(*blocked);
       });
     permit_sub_=create_subscription<wire::ExecutionPermit>(topic("permit_topic","/d1max/live_planning/execution/permit"),rclcpp::QoS(1),
       [this](wire::ExecutionPermit::ConstSharedPtr m){
-        if(execution_->permit(*m,now().seconds(),monotonicNow()))
+        if(execution_->permit(*m,sourceNow(),monotonicNow()))
           if(const auto installed=execution_->geometryReceipt())geometry_receipt_pub_->publish(*installed);
       });
     handoff_sub_=create_subscription<wire::ExecutionHandoffGrant>(topic("handoff_grant_topic","/d1max/live_planning/execution/handoff_grant"),rclcpp::QoS(2),
-      [this](wire::ExecutionHandoffGrant::ConstSharedPtr m){execution_->handoff(*m,now().seconds(),monotonicNow());});
+      [this](wire::ExecutionHandoffGrant::ConstSharedPtr m){execution_->handoff(*m,sourceNow(),monotonicNow());});
     commit_ack_sub_=create_subscription<wire::ExecutionCommitAck>(topic("commit_ack_topic","/d1max/live_planning/execution/commit_ack"),rclcpp::QoS(8),
       [this](wire::ExecutionCommitAck::ConstSharedPtr m){
-        if(execution_->commitAck(*m,now().seconds(),monotonicNow()))
+        if(execution_->commitAck(*m,sourceNow(),monotonicNow()))
           if(const auto installed=execution_->geometryReceipt())geometry_receipt_pub_->publish(*installed);
       });
     spline_sub_ = create_subscription<d1max_planning_interfaces::msg::TaggedBspline>(
         topic("trajectory_topic", "/d1max/pct_scan/planning/tagged_bspline"), rclcpp::QoS(1),
         [this](const d1max_planning_interfaces::msg::TaggedBspline::ConstSharedPtr msg) {
           const auto &spline = msg->trajectory;
+          if(!validSourceTime(spline.start_time)||!validSourceTime(msg->join_source_stamp))return;
           Trajectory input;
           input.session_id = msg->session_id;
           input.generation = msg->generation;
@@ -127,6 +128,7 @@ public:
           input.point_reference = msg->point_reference;
           input.id = spline.traj_id;
           input.start_time = stampSeconds(spline.start_time);
+          input.start_time_ns=timeNs(spline.start_time);
           input.order = spline.order;
           input.identity.schema_version = msg->schema_version;
           input.identity.task_id = msg->task_id;
@@ -159,12 +161,12 @@ public:
       local_state_sub_=create_subscription<d1max_planning_interfaces::msg::LocalNavigationState>(
         topic("local_navigation_state_topic","/d1max/localization/navigation/local_state"),rclcpp::QoS(1),
         [this](const d1max_planning_interfaces::msg::LocalNavigationState::ConstSharedPtr msg) {
-          if(!state_ingress_.inspect(*msg,config_,now().seconds(),core_->task().identity.localization_epoch))return;
+          if(!state_ingress_.inspect(*msg,config_,sourceNow(),core_->task().identity.localization_epoch))return;
           Odom input;std::string reason;
           if(!decodeLocalNavigationState(*msg,config_,input,reason)) {
             rejectedState(*msg,reason);return;
           }
-          if(execution_->receiveOdom(input,now().seconds(),monotonicNow()))odom_source_stamp_=msg->source_stamp;
+          if(execution_->receiveOdom(input,sourceNow(),monotonicNow()))odom_source_stamp_=msg->source_stamp;
         });
     } else {
       // Legacy isolated fixtures supply an atomic pair. Formal local transport
@@ -173,13 +175,13 @@ public:
       state_sub_=create_subscription<d1max_planning_interfaces::msg::NavigationState>(
         topic("navigation_state_topic","/d1max/localization/navigation/state"),rclcpp::QoS(1),
         [this](const d1max_planning_interfaces::msg::NavigationState::ConstSharedPtr msg) {
-          if(!state_ingress_.inspect(*msg,config_,now().seconds(),core_->task().identity.localization_epoch))return;
+          if(!state_ingress_.inspect(*msg,config_,sourceNow(),core_->task().identity.localization_epoch))return;
           Odom input;
           std::string reason;
           if (!decodeNavigationState(*msg,config_,input,reason)) {
             rejectedState(*msg,reason);return;
           }
-          if(execution_->receiveOdom(input, now().seconds(), monotonicNow())) odom_source_stamp_=msg->source_stamp;
+          if(execution_->receiveOdom(input, sourceNow(), monotonicNow())) odom_source_stamp_=msg->source_stamp;
         });
     }
     stop_service_ = create_service<std_srvs::srv::Trigger>(
@@ -187,15 +189,16 @@ public:
         [this](const std_srvs::srv::Trigger::Request::SharedPtr,
                std_srvs::srv::Trigger::Response::SharedPtr response) {
           execution_->cancel("operator_stopped");
-          publish(core_->step(now().seconds(), monotonicNow()));
+          publish(core_->step(sourceNow(), monotonicNow()));
           response->success = true;
           response->message = "Stopped. A new task generation is required.";
         });
     timer_ = create_wall_timer(std::chrono::milliseconds(20), [this]() {
-      const double ros_now=now().seconds(),receipt=monotonicNow();
+      const auto ros_now=sourceNow();const double receipt=monotonicNow();
       const bool preparation_ready=execution_->pollPreparation();
       // Fallback refresh only; a new validation prepares immediately.
       if(preparation_ready||receipt-last_prepare_>=.2) prepareAndPublish(ros_now,receipt);
+      if(!execution_->controlTickRequired(ros_now,receipt))return;
       // Both controllers see the prior applied limiter history. Computing the
       // incumbent first would advance its clock to this tick and give the
       // prepared controller a zero dt, manufacturing a HOLD every 50 Hz tick.
@@ -209,13 +212,14 @@ public:
   }
 
 private:
+  SourceTime sourceNow() const {return SourceTime::fromNanoseconds(now().nanoseconds());}
   template<class State> void rejectedState(const State& state,const std::string& reason) {
     const auto& expected=core_->task().identity;
-    if(core_->active()&&navigationContextReset(state,config_,expected,now().seconds()))
+    if(core_->active()&&navigationContextReset(state,config_,expected,sourceNow()))
       execution_->cancel("odometry_context_changed");
     else core_->hold(reason,monotonicNow());
   }
-  void prepareAndPublish(double ros_now,double receipt)
+  void prepareAndPublish(SourceTime ros_now,double receipt)
   {
     last_prepare_=receipt;
     if(const auto admission=execution_->prepare(ros_now,receipt)) {
@@ -252,10 +256,10 @@ private:
         if (!xyz.is_array() || xyz.size() != 3) throw std::invalid_argument("target_xyz must have three entries");
         task.goal = Eigen::Vector3d(xyz[0].get<double>(), xyz[1].get<double>(), xyz[2].get<double>());
       }
-      core_->receiveTask(task, now().seconds(), monotonicNow());
+      core_->receiveTask(task, sourceNow(), monotonicNow());
     } catch (const std::exception &) {
       core_->cancel("malformed_task");
-      publish(core_->step(now().seconds(), monotonicNow()));
+      publish(core_->step(sourceNow(), monotonicNow()));
     }
   }
 
@@ -268,7 +272,7 @@ private:
     std_msgs::msg::Bool frozen;
     frozen.data = output.frozen;
     frozen_pub_->publish(frozen);
-    const auto measured = core_->progress(now().seconds());
+    const auto measured = core_->progress(sourceNow());
     d1max_planning_interfaces::msg::TrackingProgress progress;
     progress.header.stamp = odom_source_stamp_;
     progress.header.frame_id = config_.planning_frame;
@@ -323,17 +327,20 @@ private:
       {"initial_writer_ack_reason",execution_->initialAckReason()},
       {"installation_sequence",installed?installed->installation_sequence:0},
       {"join_diagnostic",{{"reason",join.reason},{"trajectory_id",join.trajectory_id},
-        {"body_present",join.body_present},{"checked_now",join.now},
+        {"body_present",join.body_present},{"checked_now",join.now},{"checked_now_ns",join.checked_now_ns},
         {"body_source_stamp_ns",join.body_source_stamp_ns},{"join_source_stamp_ns",join.join_source_stamp_ns},
         {"entry_reobserved",join.entry_reobserved},{"original_join_source_stamp_ns",join.original_join_source_stamp_ns},
-        {"body_source_age_sec",join.now-join.body_stamp},{"join_source_age_sec",join.now-join.join_stamp},
-        {"posterior_source_age_sec",join.now-join.posterior_stamp},{"imu_source_age_sec",join.now-join.imu_stamp},
-        {"extrapolation_sec",join.extrapolation_sec},{"join_minus_body_sec",join.join_stamp-join.body_stamp},
+        {"body_source_age_sec",sourceDeltaSeconds(join.checked_now_ns,originalSourceNs(join.body_source_stamp_ns,join.body_stamp))},
+        {"join_source_age_sec",sourceDeltaSeconds(join.checked_now_ns,originalSourceNs(join.join_source_stamp_ns,join.join_stamp))},
+        {"posterior_source_age_sec",sourceDeltaSeconds(join.checked_now_ns,join.posterior_stamp_ns)},
+        {"imu_source_age_sec",sourceDeltaSeconds(join.checked_now_ns,join.imu_stamp_ns)},
+        {"extrapolation_sec",join.extrapolation_sec},
+        {"join_minus_body_sec",sourceDeltaSeconds(originalSourceNs(join.join_source_stamp_ns,join.join_stamp),originalSourceNs(join.body_source_stamp_ns,join.body_stamp))},
         {"curve_time",join.curve_time},{"curve_duration",join.curve_duration},{"arc",join.arc}}},
       {"command", {{"x", output.forward}, {"y", 0.0}, {"yaw", output.yaw_rate}}},
       {"execution_frozen", output.frozen}, {"max_speed", config_.max_speed},
       {"maneuver_phase", core_->maneuverPhase()},
-      {"hard_planar_limit", HARD_PLANAR_SPEED}, {"stamp", now().seconds()}
+      {"hard_planar_limit", HARD_PLANAR_SPEED}, {"stamp", double(sourceNow())}
     };
     std_msgs::msg::String message;
     message.data = status.dump();

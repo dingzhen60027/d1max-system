@@ -1,0 +1,901 @@
+#usda 1.0
+(
+    doc = """Generated from Composed Stage of root layer
+"""
+    endTimeCode = 1000000
+    metersPerUnit = 1
+    startTimeCode = 0
+    timeCodesPerSecond = 60
+    upAxis = "Z"
+)
+
+over "Flattened_Prototype_1"
+{
+    def Shader "PreviewSurface"
+    {
+        uniform token info:id = "UsdPreviewSurface"
+        color3f inputs:diffuseColor.connect = </Flattened_Prototype_1.inputs:diffuseColor>
+        float inputs:metallic.connect = </Flattened_Prototype_1.inputs:metallic>
+        float inputs:opacity.connect = </Flattened_Prototype_1.inputs:opacity>
+        float inputs:roughness.connect = </Flattened_Prototype_1.inputs:roughness>
+        token outputs:displacement
+        token outputs:surface
+    }
+}
+
+over "Flattened_Prototype_2"
+{
+    def Shader "PreviewSurface"
+    {
+        uniform token info:id = "UsdPreviewSurface"
+        color3f inputs:diffuseColor.connect = </Flattened_Prototype_2.inputs:diffuseColor>
+        float inputs:metallic.connect = </Flattened_Prototype_2.inputs:metallic>
+        float inputs:opacity.connect = </Flattened_Prototype_2.inputs:opacity>
+        float inputs:roughness.connect = </Flattened_Prototype_2.inputs:roughness>
+        token outputs:displacement
+        token outputs:surface
+    }
+}
+
+def "Render" (
+    hide_in_stage_window = true
+    no_delete = true
+)
+{
+    def "OmniverseKit"
+    {
+        def "HydraTextures" (
+            hide_in_stage_window = true
+            no_delete = true
+        )
+        {
+            def RenderProduct "omni_kit_widget_viewport_ViewportTexture_0" (
+                apiSchemas = ["OmniRtxSettingsCommonAdvancedAPI_1", "OmniRtxSettingsRtAdvancedAPI_1", "OmniRtxSettingsPtAdvancedAPI_1", "OmniRtxPostColorGradingAPI_1", "OmniRtxPostChromaticAberrationAPI_1", "OmniRtxPostBloomPhysicalAPI_1", "OmniRtxPostMatteObjectAPI_1", "OmniRtxPostCompositingAPI_1", "OmniRtxPostDofAPI_1", "OmniRtxPostMotionBlurAPI_1", "OmniRtxPostTvNoiseAPI_1", "OmniRtxPostTonemapIrayReinhardAPI_1", "OmniRtxPostDebugSettingsAPI_1", "OmniRtxDebugSettingsAPI_1"]
+                hide_in_stage_window = true
+                no_delete = true
+            )
+            {
+                rel camera = </World/OverviewCamera>
+                token omni:rtx:ambientOcclusion:denoiserMode = "none"
+                token omni:rtx:background:source:texture:textureMode = "repeatMirrored"
+                token omni:rtx:background:source:type = "domeLight"
+                bool omni:rtx:debug:view:pixelDebug:enableFixedTextPos = 1
+                token omni:rtx:directLighting:sampledLighting:denoisingTechnique = "None"
+                bool omni:rtx:dlss:frameGeneration = 0
+                float3 omni:rtx:domeLight:rotationAxis = (0, 0, 1)
+                bool omni:rtx:indirectDiffuse:denoiser:enabled = 0
+                bool omni:rtx:material:db:syncLoads = 1
+                token omni:rtx:post:dlss:execMode = "performance"
+                bool omni:rtx:post:registeredCompositing:invertColorCorrection = 1
+                bool omni:rtx:post:registeredCompositing:invertToneMap = 1
+                bool omni:rtx:pt:adaptiveSampling:filterError = 0
+                uint omni:rtx:pt:adaptiveSampling:fixedSppIterations = 2
+                int omni:rtx:pt:clampSpp = 64
+                uint omni:rtx:pt:limits:maxBounces = 3
+                uint omni:rtx:pt:limits:maxGlossyBounces = 3
+                uint omni:rtx:pt:maxSamplesPerLaunch = 2073600
+                uint omni:rtx:pt:mgpu:maxPixelsPerRegionExponent = 12
+                int omni:rtx:pt:samplesPerIteration = 64
+                uint omni:rtx:pt:samplesPerPixel = 64
+                bool omni:rtx:reflections:denoiser:enabled = 0
+                token omni:rtx:rendermode = "RealTimePathTracing"
+                color3f omni:rtx:rt:ambientLight:color = (0.1, 0.1, 0.1)
+                bool omni:rtx:rt:demoire = 0
+                bool omni:rtx:rt:ecoMode:enabled = 0
+                bool omni:rtx:rt:lightcache:spatialCache:dontResolveConflicts = 1
+                int omni:rtx:rt:sss:samples = 1
+                uint omni:rtx:rtpt:maxVolumeBounces = 15
+                float omni:rtx:rtpt:modulatingRoughnessThreshold = 0.08
+                bool omni:rtx:scene:hydra:materialSyncLoads = 1
+                bool omni:rtx:scene:hydra:mdlMaterialWarmup = 1
+                rel orderedVars = </Render/Vars/LdrColor>
+                custom bool overrideClipRange = 0
+                uniform int2 resolution = (1280, 900)
+                custom uint64 viewPickingId = 13014121556990243901
+                custom int viewportHandle = 0
+            }
+        }
+    }
+
+    def RenderSettings "OmniverseGlobalRenderSettings" (
+        apiSchemas = ["OmniRtxSettingsGlobalRtAdvancedAPI_1", "OmniRtxSettingsGlobalPtAdvancedAPI_1"]
+        no_delete = true
+    )
+    {
+        rel products = </Render/OmniverseKit/HydraTextures/omni_kit_widget_viewport_ViewportTexture_0>
+    }
+
+    def "Vars"
+    {
+        def RenderVar "LdrColor" (
+            hide_in_stage_window = true
+            no_delete = true
+        )
+        {
+            uniform string sourceName = "LdrColor"
+            uniform token sourceType = "raw"
+        }
+    }
+}
+
+def Camera "OmniverseKit_Persp" (
+    apiSchemas = ["OmniRtxCameraAutoExposureAPI_1", "OmniRtxCameraExposureAPI_1"]
+    customData = {
+        dictionary omni = {
+            dictionary kit = {
+                bool hide_in_stage_window = 1
+                bool no_delete = 1
+            }
+        }
+    }
+    hide_in_stage_window = true
+    kind = "component"
+    no_delete = true
+)
+{
+    float2 clippingRange = (0.01, 10000000)
+    float exposure:fStop = 5
+    float exposure:responsivity = 1.1026709
+    float exposure:time = 0.02
+    float focalLength = 18.147562
+    float focusDistance = 400
+    custom uniform vector3d omni:kit:centerOfInterest = (0, 0, -8.660254037844386)
+    float3 xformOp:rotateXYZ = (54.73561, -6.3611094e-15, 135)
+    float3 xformOp:scale = (1, 1, 1)
+    double3 xformOp:translate = (5, 5, 5)
+    uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:rotateXYZ", "xformOp:scale"]
+}
+
+def "World"
+{
+    def Xform "GroundPlane"
+    {
+        quatf xformOp:orient = (1, 0, 0, 0)
+        float3 xformOp:scale = (1, 1, 1)
+        float3 xformOp:translate = (0, 0, 0)
+        uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+
+        def Mesh "geom"
+        {
+            uniform bool doubleSided = 1
+            int[] faceVertexCounts = [4]
+            int[] faceVertexIndices = [0, 1, 2, 3]
+            normal3f[] normals = [(0, 0, 1), (0, 0, 1), (0, 0, 1), (0, 0, 1)]
+            point3f[] points = [(-7, -7, 0), (7, -7, 0), (7, 7, 0), (-7, 7, 0)]
+            color3f[] primvars:displayColor = [(0.34, 0.38, 0.43)]
+            quatd xformOp:orient = (1, 0, 0, 0)
+            double3 xformOp:scale = (1, 1, 1)
+            double3 xformOp:translate = (0, 0, 0)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+        }
+
+        def Plane "collisionPlane" (
+            apiSchemas = ["PhysicsCollisionAPI"]
+        )
+        {
+            uniform token axis = "Z"
+            color3f[] primvars:displayColor = [(0.34, 0.38, 0.43)]
+            uniform token purpose = "guide"
+            quatd xformOp:orient = (1, 0, 0, 0)
+            double3 xformOp:scale = (1, 1, 1)
+            double3 xformOp:translate = (0, 0, 0)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+        }
+    }
+
+    def "Indoor"
+    {
+        def Cube "south_wall" (
+            apiSchemas = ["PhysicsCollisionAPI", "PhysicsMeshCollisionAPI", "PhysxCollisionAPI"]
+        )
+        {
+            color3f[] primvars:displayColor = [(0.68, 0.74, 0.83)]
+            quatd xformOp:orient = (1, 0, 0, 0)
+            double3 xformOp:scale = (6.16, 0.08, 1.25)
+            double3 xformOp:translate = (0, -5.08, 1.25)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+        }
+
+        def Cube "north_wall" (
+            apiSchemas = ["PhysicsCollisionAPI", "PhysicsMeshCollisionAPI", "PhysxCollisionAPI"]
+        )
+        {
+            color3f[] primvars:displayColor = [(0.68, 0.74, 0.83)]
+            quatd xformOp:orient = (1, 0, 0, 0)
+            double3 xformOp:scale = (6.16, 0.08, 1.25)
+            double3 xformOp:translate = (0, 5.08, 1.25)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+        }
+
+        def Cube "west_wall" (
+            apiSchemas = ["PhysicsCollisionAPI", "PhysicsMeshCollisionAPI", "PhysxCollisionAPI"]
+        )
+        {
+            color3f[] primvars:displayColor = [(0.68, 0.74, 0.83)]
+            quatd xformOp:orient = (1, 0, 0, 0)
+            double3 xformOp:scale = (0.08, 5, 1.25)
+            double3 xformOp:translate = (-6.08, 0, 1.25)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+        }
+
+        def Cube "east_wall" (
+            apiSchemas = ["PhysicsCollisionAPI", "PhysicsMeshCollisionAPI", "PhysxCollisionAPI"]
+        )
+        {
+            color3f[] primvars:displayColor = [(0.68, 0.74, 0.83)]
+            quatd xformOp:orient = (1, 0, 0, 0)
+            double3 xformOp:scale = (0.08, 5, 1.25)
+            double3 xformOp:translate = (6.08, 0, 1.25)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+        }
+
+        def Cube "divider_south" (
+            apiSchemas = ["PhysicsCollisionAPI", "PhysicsMeshCollisionAPI", "PhysxCollisionAPI"]
+        )
+        {
+            color3f[] primvars:displayColor = [(0.68, 0.74, 0.83)]
+            quatd xformOp:orient = (1, 0, 0, 0)
+            double3 xformOp:scale = (0.08, 1.5, 1.25)
+            double3 xformOp:translate = (-1, -3.5, 1.25)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+        }
+
+        def Cube "divider_north" (
+            apiSchemas = ["PhysicsCollisionAPI", "PhysicsMeshCollisionAPI", "PhysxCollisionAPI"]
+        )
+        {
+            color3f[] primvars:displayColor = [(0.68, 0.74, 0.83)]
+            quatd xformOp:orient = (1, 0, 0, 0)
+            double3 xformOp:scale = (0.08, 2.7, 1.25)
+            double3 xformOp:translate = (-1, 2.3, 1.25)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+        }
+
+        def Cube "room_wall_west" (
+            apiSchemas = ["PhysicsCollisionAPI", "PhysicsMeshCollisionAPI", "PhysxCollisionAPI"]
+        )
+        {
+            color3f[] primvars:displayColor = [(0.68, 0.74, 0.83)]
+            quatd xformOp:orient = (1, 0, 0, 0)
+            double3 xformOp:scale = (1.5, 0.08, 1.25)
+            double3 xformOp:translate = (0.5, 1.7, 1.25)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+        }
+
+        def Cube "room_wall_east" (
+            apiSchemas = ["PhysicsCollisionAPI", "PhysicsMeshCollisionAPI", "PhysxCollisionAPI"]
+        )
+        {
+            color3f[] primvars:displayColor = [(0.68, 0.74, 0.83)]
+            quatd xformOp:orient = (1, 0, 0, 0)
+            double3 xformOp:scale = (1.2, 0.08, 1.25)
+            double3 xformOp:translate = (4.8, 1.7, 1.25)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+        }
+
+        def Cube "west_cabinet" (
+            apiSchemas = ["PhysicsCollisionAPI", "PhysicsMeshCollisionAPI", "PhysxCollisionAPI"]
+        )
+        {
+            color3f[] primvars:displayColor = [(0.82, 0.48, 0.2)]
+            quatd xformOp:orient = (1, 0, 0, 0)
+            double3 xformOp:scale = (0.5, 0.9, 0.55)
+            double3 xformOp:translate = (-3.3, 0.7, 0.55)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+        }
+
+        def Cube "south_cabinet" (
+            apiSchemas = ["PhysicsCollisionAPI", "PhysicsMeshCollisionAPI", "PhysxCollisionAPI"]
+        )
+        {
+            color3f[] primvars:displayColor = [(0.82, 0.48, 0.2)]
+            quatd xformOp:orient = (1, 0, 0, 0)
+            double3 xformOp:scale = (0.5, 0.8, 0.45)
+            double3 xformOp:translate = (0.8, -3.2, 0.45)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+        }
+
+        def Cube "east_box" (
+            apiSchemas = ["PhysicsCollisionAPI", "PhysicsMeshCollisionAPI", "PhysxCollisionAPI"]
+        )
+        {
+            color3f[] primvars:displayColor = [(0.82, 0.48, 0.2)]
+            quatd xformOp:orient = (1, 0, 0, 0)
+            double3 xformOp:scale = (0.35, 0.35, 0.25)
+            double3 xformOp:translate = (3.4, -0.6, 0.25)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+        }
+
+        def Cube "north_pillar" (
+            apiSchemas = ["PhysicsCollisionAPI", "PhysicsMeshCollisionAPI", "PhysxCollisionAPI"]
+        )
+        {
+            color3f[] primvars:displayColor = [(0.82, 0.48, 0.2)]
+            quatd xformOp:orient = (1, 0, 0, 0)
+            double3 xformOp:scale = (0.275, 0.275, 1.25)
+            double3 xformOp:translate = (4.6, 3.5, 1.25)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+        }
+
+        def Cube "low_block" (
+            apiSchemas = ["PhysicsCollisionAPI", "PhysicsMeshCollisionAPI", "PhysxCollisionAPI"]
+        )
+        {
+            color3f[] primvars:displayColor = [(0.82, 0.48, 0.2)]
+            quatd xformOp:orient = (1, 0, 0, 0)
+            double3 xformOp:scale = (0.3, 0.3, 0.12)
+            double3 xformOp:translate = (-3.8, 3.2, 0.12)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+        }
+
+        def Cube "ceiling" (
+            apiSchemas = ["PhysicsCollisionAPI", "PhysicsMeshCollisionAPI", "PhysxCollisionAPI"]
+        )
+        {
+            color3f[] primvars:displayColor = [(0.8, 0.8, 0.8)]
+            token visibility = "invisible"
+            quatd xformOp:orient = (1, 0, 0, 0)
+            double3 xformOp:scale = (6, 5, 0.06)
+            double3 xformOp:translate = (0, 0, 2.56)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+        }
+    }
+
+    def DomeLight "DomeLight"
+    {
+        float inputs:intensity = 850
+        quatd xformOp:orient = (1, 0, 0, 0)
+        double3 xformOp:scale = (1, 1, 1)
+        double3 xformOp:translate = (0, 0, 0)
+        uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+    }
+
+    def Camera "OverviewCamera" (
+        apiSchemas = ["OmniRtxCameraAutoExposureAPI_1", "OmniRtxCameraExposureAPI_1"]
+    )
+    {
+        float exposure:fStop = 5
+        float exposure:responsivity = 1.1026709
+        float exposure:time = 0.02
+        float horizontalAperture = 152
+        token projection = "orthographic"
+        float verticalAperture = 112
+        double3 xformOp:translate = (0, 0, 14)
+        uniform token[] xformOpOrder = ["xformOp:translate"]
+    }
+
+    def Xform "WheelFixture" (
+        apiSchemas = ["GeomModelAPI", "IsaacRobotAPI"]
+        assetInfo = {
+            string name = "wheel_fixture"
+        }
+        kind = "component"
+    )
+    {
+        float3[] extentsHint = [(-0.38, -0.3, -0.35), (0.38, 0.3, 0.16999999), (3.4028235e38, 3.4028235e38, 3.4028235e38), (-3.4028235e38, -3.4028235e38, -3.4028235e38), (3.4028235e38, 3.4028235e38, 3.4028235e38), (-3.4028235e38, -3.4028235e38, -3.4028235e38), (-0.38, -0.3, -0.35), (0.38, 0.3, 0.16999999)]
+        rel isaac:physics:robotJoints = [
+            </World/WheelFixture/Physics/left_wheel_joint>,
+            </World/WheelFixture/Physics/right_wheel_joint>,
+            </World/WheelFixture/Physics/front_caster_joint>,
+            </World/WheelFixture/Physics/rear_caster_joint>,
+        ]
+        rel isaac:physics:robotLinks = [
+            </World/WheelFixture/Geometry/base_link>,
+            </World/WheelFixture/Geometry/base_link/left_wheel_link>,
+            </World/WheelFixture/Geometry/base_link/right_wheel_link>,
+            </World/WheelFixture/Geometry/base_link/front_caster_link>,
+            </World/WheelFixture/Geometry/base_link/rear_caster_link>,
+        ]
+        token isaac:robotType = "Default"
+
+        def Scope "Materials"
+        {
+            def Material "body_blue" (
+                instanceable = true
+                add references = </Flattened_Prototype_1>
+            )
+            {
+                color3f inputs:diffuseColor = (0.0071944077, 0.07323897, 0.5225216)
+                float inputs:metallic = 0
+                float inputs:opacity = 1
+                float inputs:roughness = 0.5
+                token inputs:wrapMode = "repeat"
+                token outputs:displacement.connect = </World/WheelFixture/Materials/body_blue/PreviewSurface.outputs:displacement>
+                token outputs:surface.connect = </World/WheelFixture/Materials/body_blue/PreviewSurface.outputs:surface>
+            }
+
+            def Material "wheel_black" (
+                instanceable = true
+                add references = </Flattened_Prototype_2>
+            )
+            {
+                color3f inputs:diffuseColor = (0.0030959751, 0.0030959751, 0.0030959751)
+                float inputs:metallic = 0
+                float inputs:opacity = 1
+                float inputs:roughness = 0.5
+                token inputs:wrapMode = "repeat"
+                token outputs:displacement.connect = </World/WheelFixture/Materials/wheel_black/PreviewSurface.outputs:displacement>
+                token outputs:surface.connect = </World/WheelFixture/Materials/wheel_black/PreviewSurface.outputs:surface>
+            }
+        }
+
+        def Scope "Geometry"
+        {
+            def Xform "base_link" (
+                apiSchemas = ["PhysicsRigidBodyAPI", "PhysicsArticulationRootAPI", "NewtonArticulationRootAPI", "PhysicsMassAPI", "IsaacLinkAPI"]
+            )
+            {
+                bool newton:selfCollisionEnabled = 0
+                vector3f physics:angularVelocity = (0.0005980355, -0.001131043, 0.011302084)
+                float3 physics:diagonalInertia = (0.3504, 0.9264, 1.1568)
+                float physics:mass = 18
+                quatf physics:principalAxes = (1, 0, 0, 0)
+                vector3f physics:velocity = (0.00002731293, 0.000048547176, -0.0000355241)
+                quatd xformOp:orient = (0.9999999999998805, 7.377627273828568e-9, 3.377469958090401e-9, 4.887270794746389e-7)
+                double3 xformOp:scale = (1, 1, 1)
+                double3 xformOp:translate = (-4, -3.000000238418579, 0.3500004708766937)
+                uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+
+                def Cube "box" (
+                    apiSchemas = ["MaterialBindingAPI"]
+                )
+                {
+                    float3[] extent = [(-0.5, -0.5, -0.5), (0.5, 0.5, 0.5)]
+                    rel material:binding = </World/WheelFixture/Materials/body_blue>
+                    double size = 1
+                    quatf xformOp:orient = (1, 0, 0, 0)
+                    float3 xformOp:scale = (0.76, 0.44, 0.2)
+                    double3 xformOp:translate = (0, 0, 0)
+                    uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                }
+
+                def Xform "left_wheel_link" (
+                    apiSchemas = ["PhysicsRigidBodyAPI", "PhysicsMassAPI", "IsaacLinkAPI"]
+                )
+                {
+                    vector3f physics:angularVelocity = (0.0005980938, -0.07994203, 0.011302093)
+                    float3 physics:diagonalInertia = (0.0344, 0.0344, 0.0676)
+                    float physics:mass = 2
+                    quatf physics:principalAxes = (0.70710677, 0.70710677, 0, 0)
+                    vector3f physics:velocity = (-0.000024170242, 0.000049486476, -0.000032705935)
+                    quatf xformOp:orient = (1, -7.379068e-9, -8.154564e-7, -2.6411864e-11)
+                    float3 xformOp:scale = (1, 1, 1)
+                    double3 xformOp:translate = (-2.1231660962683918e-7, 0.269999979598877, -0.09000003736252188)
+                    uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+
+                    def Cylinder "cylinder" (
+                        apiSchemas = ["MaterialBindingAPI"]
+                    )
+                    {
+                        uniform token axis = "Z"
+                        float3[] extent = [(-0.26, -0.26, -0.03), (0.26, 0.26, 0.03)]
+                        double height = 0.06
+                        rel material:binding = </World/WheelFixture/Materials/wheel_black>
+                        double radius = 0.26
+                        quatf xformOp:orient = (0.70710677, 0.70710677, 0, 0)
+                        float3 xformOp:scale = (1, 1, 1)
+                        double3 xformOp:translate = (0, 0, 0)
+                        uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                    }
+
+                    def Cylinder "cylinder_1" (
+                        apiSchemas = ["MaterialBindingAPI", "PhysxCollisionAPI", "PhysicsCollisionAPI", "NewtonCollisionAPI"]
+                        displayName = "cylinder"
+                    )
+                    {
+                        uniform token axis = "Z"
+                        float3[] extent = [(-0.26, -0.26, -0.03), (0.26, 0.26, 0.03)]
+                        double height = 0.06
+                        rel material:binding:physics = </World/Materials/Tire> (
+                            bindMaterialAs = "strongerThanDescendants"
+                        )
+                        float physxCollision:contactOffset = 0.002
+                        float physxCollision:restOffset = 0
+                        uniform token purpose = "guide"
+                        double radius = 0.26
+                        quatf xformOp:orient = (0.70710677, 0.70710677, 0, 0)
+                        float3 xformOp:scale = (1, 1, 1)
+                        double3 xformOp:translate = (0, 0, 0)
+                        uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                    }
+                }
+
+                def Xform "right_wheel_link" (
+                    apiSchemas = ["PhysicsRigidBodyAPI", "PhysicsMassAPI", "IsaacLinkAPI"]
+                )
+                {
+                    vector3f physics:angularVelocity = (0.00059803366, 0.0014093007, 0.011302084)
+                    float3 physics:diagonalInertia = (0.0344, 0.0344, 0.0676)
+                    float physics:mass = 2
+                    quatf physics:principalAxes = (0.70710677, 0.70710677, 0, 0)
+                    vector3f physics:velocity = (0.00008234938, 0.000049486614, -0.000038342267)
+                    quatf xformOp:orient = (1, -7.377023e-9, 7.4844115e-7, -2.6475657e-11)
+                    float3 xformOp:scale = (1, 1, 1)
+                    double3 xformOp:translate = (-2.4886081639863278e-8, -0.2699999822545909, -0.09000002939468194)
+                    uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+
+                    def Cylinder "cylinder" (
+                        apiSchemas = ["MaterialBindingAPI"]
+                    )
+                    {
+                        uniform token axis = "Z"
+                        float3[] extent = [(-0.26, -0.26, -0.03), (0.26, 0.26, 0.03)]
+                        double height = 0.06
+                        rel material:binding = </World/WheelFixture/Materials/wheel_black>
+                        double radius = 0.26
+                        quatf xformOp:orient = (0.70710677, 0.70710677, 0, 0)
+                        float3 xformOp:scale = (1, 1, 1)
+                        double3 xformOp:translate = (0, 0, 0)
+                        uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                    }
+
+                    def Cylinder "cylinder_1" (
+                        apiSchemas = ["MaterialBindingAPI", "PhysxCollisionAPI", "PhysicsCollisionAPI", "NewtonCollisionAPI"]
+                        displayName = "cylinder"
+                    )
+                    {
+                        uniform token axis = "Z"
+                        float3[] extent = [(-0.26, -0.26, -0.03), (0.26, 0.26, 0.03)]
+                        double height = 0.06
+                        rel material:binding:physics = </World/Materials/Tire> (
+                            bindMaterialAs = "strongerThanDescendants"
+                        )
+                        float physxCollision:contactOffset = 0.002
+                        float physxCollision:restOffset = 0
+                        uniform token purpose = "guide"
+                        double radius = 0.26
+                        quatf xformOp:orient = (0.70710677, 0.70710677, 0, 0)
+                        float3 xformOp:scale = (1, 1, 1)
+                        double3 xformOp:translate = (0, 0, 0)
+                        uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                    }
+                }
+
+                def Xform "front_caster_link" (
+                    apiSchemas = ["PhysicsRigidBodyAPI", "PhysicsMassAPI", "IsaacLinkAPI"]
+                )
+                {
+                    vector3f physics:angularVelocity = (0.0005980355, -0.001131043, 0.011302084)
+                    float3 physics:diagonalInertia = (0.0001, 0.0001, 0.0001)
+                    float physics:mass = 0.1
+                    quatf physics:principalAxes = (1, 0, 0, 0)
+                    vector3f physics:velocity = (0.00003323501, 0.00011480122, -0.000029207162)
+                    quatf xformOp:orient = (1, -0, -0, 0)
+                    float3 xformOp:scale = (1, 1, 1)
+                    double3 xformOp:translate = (0.31999993526935766, -7.879326346937887e-8, -0.3000000097593498)
+                    uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+
+                    def Sphere "sphere" (
+                        apiSchemas = ["MaterialBindingAPI"]
+                    )
+                    {
+                        float3[] extent = [(-0.05, -0.05, -0.05), (0.05, 0.05, 0.05)]
+                        rel material:binding = </World/WheelFixture/Materials/wheel_black>
+                        double radius = 0.05
+                        quatf xformOp:orient = (1, 0, 0, 0)
+                        float3 xformOp:scale = (1, 1, 1)
+                        double3 xformOp:translate = (0, 0, 0)
+                        uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                    }
+
+                    def Sphere "sphere_1" (
+                        apiSchemas = ["MaterialBindingAPI", "PhysxCollisionAPI", "PhysicsCollisionAPI", "NewtonCollisionAPI"]
+                        displayName = "sphere"
+                    )
+                    {
+                        float3[] extent = [(-0.05, -0.05, -0.05), (0.05, 0.05, 0.05)]
+                        rel material:binding:physics = </World/Materials/Caster> (
+                            bindMaterialAs = "strongerThanDescendants"
+                        )
+                        float physxCollision:contactOffset = 0.002
+                        float physxCollision:restOffset = 0
+                        uniform token purpose = "guide"
+                        double radius = 0.05
+                        quatf xformOp:orient = (1, 0, 0, 0)
+                        float3 xformOp:scale = (1, 1, 1)
+                        double3 xformOp:translate = (0, 0, 0)
+                        uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                    }
+                }
+
+                def Xform "rear_caster_link" (
+                    apiSchemas = ["PhysicsRigidBodyAPI", "PhysicsMassAPI", "IsaacLinkAPI"]
+                )
+                {
+                    vector3f physics:angularVelocity = (0.0005980355, -0.001131043, 0.011302084)
+                    float3 physics:diagonalInertia = (0.0001, 0.0001, 0.0001)
+                    float physics:mass = 0.1
+                    quatf physics:principalAxes = (1, 0, 0, 0)
+                    vector3f physics:velocity = (0.0000332351, -0.000011444296, -0.000041841042)
+                    quatf xformOp:orient = (1, -0, -0, 0)
+                    float3 xformOp:scale = (1, 1, 1)
+                    double3 xformOp:translate = (-0.3200001696349766, 6.994034240648261e-8, -0.30000001408250965)
+                    uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+
+                    def Sphere "sphere" (
+                        apiSchemas = ["MaterialBindingAPI"]
+                    )
+                    {
+                        float3[] extent = [(-0.05, -0.05, -0.05), (0.05, 0.05, 0.05)]
+                        rel material:binding = </World/WheelFixture/Materials/wheel_black>
+                        double radius = 0.05
+                        quatf xformOp:orient = (1, 0, 0, 0)
+                        float3 xformOp:scale = (1, 1, 1)
+                        double3 xformOp:translate = (0, 0, 0)
+                        uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                    }
+
+                    def Sphere "sphere_1" (
+                        apiSchemas = ["MaterialBindingAPI", "PhysxCollisionAPI", "PhysicsCollisionAPI", "NewtonCollisionAPI"]
+                        displayName = "sphere"
+                    )
+                    {
+                        float3[] extent = [(-0.05, -0.05, -0.05), (0.05, 0.05, 0.05)]
+                        rel material:binding:physics = </World/Materials/Caster> (
+                            bindMaterialAs = "strongerThanDescendants"
+                        )
+                        float physxCollision:contactOffset = 0.002
+                        float physxCollision:restOffset = 0
+                        uniform token purpose = "guide"
+                        double radius = 0.05
+                        quatf xformOp:orient = (1, 0, 0, 0)
+                        float3 xformOp:scale = (1, 1, 1)
+                        double3 xformOp:translate = (0, 0, 0)
+                        uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                    }
+                }
+
+                def Cube "box_1" (
+                    apiSchemas = ["PhysicsCollisionAPI", "NewtonCollisionAPI"]
+                    displayName = "box"
+                )
+                {
+                    float3[] extent = [(-0.5, -0.5, -0.5), (0.5, 0.5, 0.5)]
+                    uniform token purpose = "guide"
+                    double size = 1
+                    quatf xformOp:orient = (1, 0, 0, 0)
+                    float3 xformOp:scale = (0.76, 0.44, 0.2)
+                    double3 xformOp:translate = (0, 0, 0)
+                    uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                }
+
+                def Lidar "Lidar_0"
+                {
+                    float horizontalFov = 360
+                    float horizontalResolution = 1
+                    float maxRange = 15
+                    float minRange = 0.06
+                    float rotationRate = 0
+                    float verticalFov = 160
+                    float verticalResolution = 5
+                    quatd xformOp:orient = (1, 0, 0, 0)
+                    double3 xformOp:scale = (1, 1, 1)
+                    double3 xformOp:translate = (0.41999998688697815, 0, 0.15000000596046448)
+                    uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                }
+
+                def Lidar "Lidar_1"
+                {
+                    float horizontalFov = 360
+                    float horizontalResolution = 1
+                    float maxRange = 15
+                    float minRange = 0.06
+                    float rotationRate = 0
+                    float verticalFov = 160
+                    float verticalResolution = 5
+                    quatd xformOp:orient = (1, 0, 0, 0)
+                    double3 xformOp:scale = (1, 1, 1)
+                    double3 xformOp:translate = (-0.41999998688697815, 0, 0.15000000596046448)
+                    uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                }
+
+                def IsaacImuSensor "BodyImu"
+                {
+                    int angularVelocityFilterWidth = 1
+                    bool enabled = 1
+                    int linearAccelerationFilterWidth = 1
+                    int orientationFilterWidth = 1
+                    quatd xformOp:orient = (1, 0, 0, 0)
+                    double3 xformOp:scale = (1, 1, 1)
+                    double3 xformOp:translate = (0, 0, 0)
+                    uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                }
+            }
+        }
+
+        def Scope "Physics"
+        {
+            def PhysicsRevoluteJoint "left_wheel_joint" (
+                apiSchemas = ["PhysxJointAPI", "PhysicsDriveAPI:angular", "PhysicsJointStateAPI:angular", "IsaacJointAPI"]
+            )
+            {
+                float drive:angular:physics:damping = 30
+                float drive:angular:physics:stiffness = 0
+                uniform token drive:angular:physics:type = "acceleration"
+                uniform token physics:axis = "Y"
+                rel physics:body0 = </World/WheelFixture/Geometry/base_link>
+                rel physics:body1 = </World/WheelFixture/Geometry/base_link/left_wheel_link>
+                point3f physics:localPos0 = (0, 0.27, -0.09)
+                point3f physics:localPos1 = (0, 0, 0)
+                quatf physics:localRot0 = (1, 0, 0, 0)
+                quatf physics:localRot1 = (1, 0, 0, 0)
+                float state:angular:physics:position = -0.00009343118
+                float state:angular:physics:velocity = -0.07881098
+                custom float urdf:dynamics:damping = 30
+                custom float urdf:dynamics:friction = 0
+            }
+
+            def PhysicsRevoluteJoint "right_wheel_joint" (
+                apiSchemas = ["PhysxJointAPI", "PhysicsDriveAPI:angular", "PhysicsJointStateAPI:angular", "IsaacJointAPI"]
+            )
+            {
+                float drive:angular:physics:damping = 30
+                float drive:angular:physics:stiffness = 0
+                uniform token drive:angular:physics:type = "acceleration"
+                uniform token physics:axis = "Y"
+                rel physics:body0 = </World/WheelFixture/Geometry/base_link>
+                rel physics:body1 = </World/WheelFixture/Geometry/base_link/right_wheel_link>
+                point3f physics:localPos0 = (0, -0.27, -0.09)
+                point3f physics:localPos1 = (0, 0, 0)
+                quatf physics:localRot0 = (1, 0, 0, 0)
+                quatf physics:localRot1 = (1, 0, 0, 0)
+                float state:angular:physics:position = 0.0000857678
+                float state:angular:physics:velocity = 0.0025403434
+                custom float urdf:dynamics:damping = 30
+                custom float urdf:dynamics:friction = 0
+            }
+
+            def PhysicsFixedJoint "front_caster_joint" (
+                apiSchemas = ["IsaacJointAPI"]
+            )
+            {
+                rel physics:body0 = </World/WheelFixture/Geometry/base_link>
+                rel physics:body1 = </World/WheelFixture/Geometry/base_link/front_caster_link>
+                point3f physics:localPos0 = (0.32, 0, -0.3)
+                point3f physics:localPos1 = (0, 0, 0)
+                quatf physics:localRot0 = (1, 0, 0, 0)
+                quatf physics:localRot1 = (1, 0, 0, 0)
+            }
+
+            def PhysicsFixedJoint "rear_caster_joint" (
+                apiSchemas = ["IsaacJointAPI"]
+            )
+            {
+                rel physics:body0 = </World/WheelFixture/Geometry/base_link>
+                rel physics:body1 = </World/WheelFixture/Geometry/base_link/rear_caster_link>
+                point3f physics:localPos0 = (-0.32, 0, -0.3)
+                point3f physics:localPos1 = (0, 0, 0)
+                quatf physics:localRot0 = (1, 0, 0, 0)
+                quatf physics:localRot1 = (1, 0, 0, 0)
+            }
+
+            def MjcActuator "left_wheel_joint_actuator"
+            {
+                uniform double[] mjc:biasPrm = [0, 0, -30, 0, 0, 0, 0, 0, 0, 0]
+                uniform token mjc:biasType = "affine"
+                uniform double mjc:forceRange:max = inf
+                uniform double mjc:forceRange:min = -inf
+                uniform double[] mjc:gainPrm = [30, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+                uniform token mjc:gainType = "fixed"
+                rel mjc:target = </World/WheelFixture/Physics/left_wheel_joint>
+            }
+
+            def MjcActuator "right_wheel_joint_actuator"
+            {
+                uniform double[] mjc:biasPrm = [0, 0, -30, 0, 0, 0, 0, 0, 0, 0]
+                uniform token mjc:biasType = "affine"
+                uniform double mjc:forceRange:max = inf
+                uniform double mjc:forceRange:min = -inf
+                uniform double[] mjc:gainPrm = [30, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+                uniform token mjc:gainType = "fixed"
+                rel mjc:target = </World/WheelFixture/Physics/right_wheel_joint>
+            }
+        }
+    }
+
+    def "Materials"
+    {
+        def Material "Tire" (
+            apiSchemas = ["PhysicsMaterialAPI", "PhysxMaterialAPI"]
+        )
+        {
+            float physics:dynamicFriction = 0.9
+            float physics:restitution = 0
+            float physics:staticFriction = 1
+        }
+
+        def Material "Caster" (
+            apiSchemas = ["PhysicsMaterialAPI", "PhysxMaterialAPI"]
+        )
+        {
+            float physics:dynamicFriction = 0
+            float physics:restitution = 0
+            float physics:staticFriction = 0
+            uniform token physxMaterial:frictionCombineMode = "min"
+        }
+    }
+}
+
+def PhysicsScene "PhysicsScene" (
+    apiSchemas = ["NewtonSceneAPI", "PhysxSceneAPI"]
+)
+{
+    uniform token physxScene:broadphaseType = "MBP"
+    bool physxScene:enableGPUDynamics = 0
+    uint physxScene:timeStepsPerSecond = 120
+}
+
+def Camera "OmniverseKit_Front" (
+    customData = {
+        dictionary omni = {
+            dictionary kit = {
+                bool hide_in_stage_window = 1
+                bool no_delete = 1
+            }
+        }
+    }
+    hide_in_stage_window = true
+    kind = "component"
+    no_delete = true
+)
+{
+    float2 clippingRange = (1, 10000000)
+    float horizontalAperture = 50
+    custom uniform vector3d omni:kit:centerOfInterest = (0, 0, -5)
+    token projection = "orthographic"
+    float verticalAperture = 50
+    float3 xformOp:rotateXYZ = (90, -1.2722219e-14, 90)
+    float3 xformOp:scale = (1, 1, 1)
+    double3 xformOp:translate = (5, 0, 0)
+    uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:rotateXYZ", "xformOp:scale"]
+}
+
+def Camera "OmniverseKit_Top" (
+    customData = {
+        dictionary omni = {
+            dictionary kit = {
+                bool hide_in_stage_window = 1
+                bool no_delete = 1
+            }
+        }
+    }
+    hide_in_stage_window = true
+    kind = "component"
+    no_delete = true
+)
+{
+    float2 clippingRange = (1, 10000000)
+    float horizontalAperture = 50
+    custom uniform vector3d omni:kit:centerOfInterest = (0, 0, -5)
+    token projection = "orthographic"
+    float verticalAperture = 50
+    float3 xformOp:rotateXYZ = (-1.2722219e-14, -7.016709e-15, -90)
+    float3 xformOp:scale = (1, 1, 1)
+    double3 xformOp:translate = (0, 0, 5)
+    uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:rotateXYZ", "xformOp:scale"]
+}
+
+def Camera "OmniverseKit_Right" (
+    customData = {
+        dictionary omni = {
+            dictionary kit = {
+                bool hide_in_stage_window = 1
+                bool no_delete = 1
+            }
+        }
+    }
+    hide_in_stage_window = true
+    kind = "component"
+    no_delete = true
+)
+{
+    float2 clippingRange = (1, 10000000)
+    float horizontalAperture = 50
+    custom uniform vector3d omni:kit:centerOfInterest = (0, 0, -5)
+    token projection = "orthographic"
+    float verticalAperture = 50
+    float3 xformOp:rotateXYZ = (90, -1.41245e-30, 1.2722219e-14)
+    float3 xformOp:scale = (1, 1, 1)
+    double3 xformOp:translate = (0, -5, 0)
+    uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:rotateXYZ", "xformOp:scale"]
+}

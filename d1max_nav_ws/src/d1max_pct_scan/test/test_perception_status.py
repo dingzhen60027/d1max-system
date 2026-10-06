@@ -14,6 +14,15 @@ def test_integrated_receipt_uses_measurement_not_arrival():
     assert integrated_ray_stamp(receipt(), CONTEXT, now=100., timeout=.5, barrier=99.) == pytest.approx(99.9)
 
 
+def test_simulated_ros_clock_receipt_keeps_wall_time_only_as_diagnostics():
+    value=receipt()
+    value['callback_wall_time']=1791080000.
+    assert integrated_ray_stamp(value,CONTEXT,now=100.,timeout=.5,barrier=99.)==pytest.approx(99.9)
+    value['received_at_unix']=value['callback_wall_time']
+    with pytest.raises(ValueError,match='ray_receipt_stale'):
+        integrated_ray_stamp(value,CONTEXT,now=100.,timeout=.5,barrier=99.)
+
+
 @pytest.mark.parametrize('key,value', [('session_id','old'), ('epoch',2), ('epoch',True),
     ('seed_id','new'), ('sequence',1), ('barrier_ns',0), ('valid',False),
     ('valid',1), ('schema',True), ('source_stamp_ns',99400000000),

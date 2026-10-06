@@ -791,6 +791,40 @@ TEST(NavigationDiagnostics, RejectsReplayWrongSessionAndStaleSource)
   EXPECT_TRUE(panel.findChild<QLabel *>("local")->text().contains("轨迹有效"));
 }
 
+class SourceClockDiagnosticsProbe : public NavigationDiagnosticsPanel
+{
+public:
+  double now{20.};
+protected:
+  double statusNow() const override {return now;}
+};
+
+TEST(NavigationDiagnostics, UsesRosSourceClockWithoutRenewingPausedReceiptLease)
+{
+  SourceClockDiagnosticsProbe panel;
+  configureDiagnostics(panel);
+  panel.acceptStatus(liveDiagnostics(panel.now));
+  panel.refresh();
+  auto * stage = panel.findChild<QLabel *>("local");
+  ASSERT_TRUE(stage->text().contains("轨迹有效"));  // ROS time is far behind Unix time.
+  panel.acceptStatus(liveDiagnostics(panel.now).replace("轨迹有效", "错误重放"));
+  panel.acceptStatus(liveDiagnostics(panel.now - 1.1).replace("轨迹有效", "旧源"));
+  panel.acceptStatus(liveDiagnostics(panel.now + .11).replace("轨迹有效", "未来源"));
+  EXPECT_TRUE(stage->text().contains("轨迹有效"));
+
+  panel.now += 1.01;
+  panel.refresh();
+  EXPECT_TRUE(stage->text().contains("等待"));  // Original one-second source TTL.
+  panel.acceptStatus(liveDiagnostics(panel.now));
+  ASSERT_TRUE(stage->text().contains("轨迹有效"));
+  QEventLoop wait;
+  QTimer::singleShot(1100, &wait, &QEventLoop::quit);
+  wait.exec();
+  panel.refresh();
+  EXPECT_TRUE(stage->text().contains("等待"));  // Paused source cannot renew steady receipt TTL.
+  EXPECT_FALSE(panel.findChild<QLabel *>("target")->text().contains("1.25"));
+}
+
 TEST(NavigationDiagnostics, ShowsActualTreeNodeWithoutGrantingMotion)
 {
   NavigationDiagnosticsPanel panel;
@@ -953,9 +987,10 @@ TEST(NavigationLayouts, TwoExclusivePresetsPersistAndDoNotDependOnStatus)
   restored.load(saved);
   QApplication::processEvents();
   EXPECT_TRUE(restored.findChild<QPushButton *>("layout_local")->isChecked());
-  ASSERT_FALSE(restored.layouts.empty()); EXPECT_EQ(restored.layouts.back(), "local");
+  EXPECT_TRUE(restored.layouts.empty());  // Loading keeps the configured Current camera/tool.
   global->click();
   EXPECT_TRUE(global->isChecked()); EXPECT_FALSE(local->isChecked());
+  ASSERT_FALSE(panel.layouts.empty()); EXPECT_EQ(panel.layouts.back(), "global");
   visible_legends = 0;
   for (auto * row : panel.findChildren<QWidget *>("legend_row")) {
     visible_legends += !row->isHidden();
@@ -971,7 +1006,7 @@ TEST(NavigationLayouts, InvalidSavedLayoutUsesGlobalWithoutEnablingNavigation)
   panel.load(config);
   QApplication::processEvents();
   EXPECT_TRUE(panel.findChild<QPushButton *>("layout_global")->isChecked());
-  ASSERT_FALSE(panel.layouts.empty()); EXPECT_EQ(panel.layouts.back(), "global");
+  EXPECT_TRUE(panel.layouts.empty());  // Startup never selects a saved camera or tool.
   EXPECT_TRUE(panel.findChild<QLabel *>("mode")->text().contains("运动关闭"));
 }
 

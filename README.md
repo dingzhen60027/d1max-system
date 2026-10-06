@@ -1,8 +1,12 @@
-# D1 Max 导航系统
+# D1 Max 导航系统 · Isaac Sim 仿真分支
 
 定位、建图、地图处理和室内外多楼层导航的统一源码仓库。只有一条 BehaviorTree.CPP 导航主线；PCT、SCAN 是当前算法后端，单楼层是当前验收范围。
 
-当前更新包含 2026-10-04 的连续性整改和内存、计算、通信阻塞优化。源码与隔离组件测试已核对，尚未成套部署到生产环境；实机运动、跨层执行、NUC 实时性及 Isaac Sim 接入不能视为已完成。
+本分支为 `isaacsim-simulation`，基于最初克隆的 `5dfaf8cddec952b3453a02e3a231de5228bd6017`，保存原导航框架的 Isaac Sim 三维导航测试版本。分支新增实体轮式机器人、双三维雷达、原生 IMU、认证静态三维体积融合，以及时间、位姿证据、弯道进度和显示修复。原有 BT/PCT/SCAN 主线继续使用。
+
+**当前状态（2026-10-06）：跨参考窗口换轨仍存在未解决问题。** 10-05 的同版近距离到达、跨门到达、运动中取消及录屏运行通过；10-06 复跑在行驶 8.001 m 后停在局部轨迹终点，候选未成功接管，原 Action 返回失败并确认实测停稳。历史通过不能代表连续运行已稳定。见 [仿真说明](simulation/isaacsim/README.md)、[最新失败证据](simulation/isaacsim/verification/20261006/live_view_failure.json) 和 [当前问题](docs/KNOWN_ISSUES.md)。
+
+近身长期未知阻断的修复依赖认证封闭静态体积与实时障碍融合，仍保留严格未知阻断和证据期限；当前只支持经过验证的固定单位 `map←odom`。定位输入是显式 `groundtruth_fixture`。生产 release、Faster-LIO/ICP 性能、机器狗实机运动、跨层执行与 NUC 实时性均未因此验收。
 
 ## 导航主线
 
@@ -26,10 +30,15 @@ RViz 初值和三维目标
 
 ## 在另一台电脑准备
 
+本机新增的 Isaac Sim 轮式三维导航任务测试见
+[仿真配置与启动](simulation/isaacsim/README.md)。该隔离测试使用实际三维雷达、
+原生 IMU 与 PhysX 轮关节，接入同一 BT/PCT/SCAN 主线；定位状态为明确标记的
+仿真真值夹具，测试结果不代替生产 release、LIO 精度或机器狗实机验收。
+
 完整步骤见 [新电脑部署](docs/DEPLOYMENT.md)。先拉源码、设置路径并做只读检查：
 
 ```bash
-git clone https://github.com/dingzhen60027/d1max-system.git
+git clone --branch isaacsim-simulation https://github.com/dingzhen60027/d1max-system.git
 cd d1max-system
 source tools/deployment-env.sh
 python3 tools/deployment_preflight.py --scope source

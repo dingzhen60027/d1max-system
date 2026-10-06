@@ -2,7 +2,7 @@
 import json
 from pathlib import Path
 import time
-from .component_health import FunctionalHealth
+from .component_health import FunctionalHealth, create_functional_heartbeat_timer
 
 PREFIX='/d1max/live_planning/'
 
@@ -28,7 +28,7 @@ def main(args=None):
                 topic=topics['global_' if name=='global' else name]
                 self.create_subscription(String,PREFIX+topic,
                     lambda m,n=name:self.observe(n,m),1)
-            self.create_timer(.2,self.tick)
+            self.heartbeat_timer=create_functional_heartbeat_timer(self,self.tick)
         def observe(self,name,message):
             if len(message.data)>128*1024:return
             try:value=json.loads(message.data)

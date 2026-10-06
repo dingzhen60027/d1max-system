@@ -147,7 +147,6 @@ namespace scan_planner
     std::vector<Eigen::Vector3d> local_debug_selected_reference_;
     ReferenceTargetResult local_target_query_debug_;
     std::chrono::steady_clock::time_point last_target_evidence_diagnostic_{};
-    std::int64_t last_local_debug_stamp_ns_{0};
     uint64_t last_local_debug_generation_{0};
     std::string last_local_debug_phase_;
     std::string last_attempt_failure_phase_;

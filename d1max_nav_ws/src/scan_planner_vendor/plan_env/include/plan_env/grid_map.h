@@ -40,6 +40,7 @@
 
 #include <plan_env/raycast.h>
 #include <plan_env/voxel_collision.hpp>
+#include <plan_env/static_occupancy_prior.hpp>
 
 #define logit(x) (log((x) / (1 - (x))))
 
@@ -105,6 +106,8 @@ struct MappingParameters {
   bool exact_cloud_pose_sync_{false};
   bool require_observed_free_{false};
   bool use_projected_rays_{false};
+  bool simulation_collision_clock_{false};
+  bool validated_static_prior_{false};
   bool preview_only_{false};  // Diagnostic lease only, never execution authority.
   double cloud_pose_pair_wait_{0.25};
   double cloud_pose_max_age_{0.5};
@@ -194,6 +197,7 @@ public:
   inline int getOccupancy(Eigen::Vector3i id);
   inline int getInflateOccupancy(Eigen::Vector3d pos, double yaw);
   std::string describeInflateOccupancy(const Eigen::Vector3d &position,double yaw);
+  std::string describeCollisionLease() const;
   scan_planner::CollisionEvidence inspectInflateOccupancy(const Eigen::Vector3d &position,double yaw,bool detailed=false);
   // Offline diagnostic enablement only; no live config or permission changed.
   scan_planner::NearFieldDiagnostics &nearFieldDiagnostics() {return near_field_diagnostics_;}
@@ -270,12 +274,15 @@ public:
     if(collision_cache_clock_ns_==0)beginCollisionQuery();
     return rawCollisionStatus(cell);
   }
-  std::int64_t observedProofDeadlineNs() const {return collision_cache_deadline_ns_;}
+  std::int64_t observedProofDeadlineNs() const;
   // Each trajectory proof owns its queried evidence set. An earlier curve's
   // cached expiry must not become this curve's apparent minimum source time.
   void beginObservedProof() {
     if(!collision_snapshot_ || node_)throw std::logic_error("proof scope requires private snapshot");
     observed_cylinder_cache_.clear();collision_cache_deadline_ns_=collision_cache_clock_ns_=0;
+    collision_cache_receipt_deadline_ns_=collision_cache_receipt_ns_=0;
+    static_prior_query_lease_valid_=false;
+    prepareRawCollisionCache();
   }
   std::uint64_t localizationContextSequence() const { return localization_context_sequence_; }
   // Consumers must use the map's validated source-age contract, not an
@@ -289,6 +296,7 @@ public:
   std::uint64_t occupancyRevision() const { return occupancy_revision_+free_evidence_revision_; }
   bool requiresObservedFree() const { return mp_.require_observed_free_; }
   const char *collisionQueryPolicy() const {
+    if(mp_.validated_static_prior_)return "validated_static_prior_double_cylinder";
     return mp_.require_observed_free_ ? "strict_observed_double_cylinder" :
         "official_inflated_double_cylinder";
   }
@@ -309,7 +317,9 @@ public:
         md_.occupancy_buffer_inflate_.size()*sizeof(md_.occupancy_buffer_inflate_[0])+
         md_.occupancy_buffer_inflate_cnt_.size()*sizeof(md_.occupancy_buffer_inflate_cnt_[0])+
         md_.inflate_offsets_.size()*sizeof(Eigen::Vector3i)+
-        free_observation_stamps_.size()*sizeof(std::int64_t);
+        (free_observation_stamps_.size()+free_observation_receipts_ns_.size())*sizeof(std::int64_t)+
+        (mp_.validated_static_prior_?md_.occupancy_buffer_.size()*sizeof(std::int8_t):0)+
+        static_prior_live_hits_.size()*(sizeof(decltype(static_prior_live_hits_)::value_type)+4*sizeof(void*));
   }
 
   EIGEN_MAKE_ALIGNED_OPERATOR_NEW
@@ -384,10 +394,14 @@ private:
   // Fixed-size ring sidecar, not diagnostic witnesses. Only real traversals
   // renew it. Scan BEGIN is a conservative source-time bound for every ray.
   std::vector<std::int64_t> free_observation_stamps_, projected_ray_stamps_;
+  // Isolated simulation only: actual callback receipts accompany each real
+  // traversal, independently of its unchanged acquisition source stamp.
+  std::vector<std::int64_t> free_observation_receipts_ns_, projected_ray_receipts_ns_;
   std::int64_t ray_query_clock_ns_{0}, ray_tick_clock_ns_{0};
   std::int64_t ray_tick_effective_ns_{0};
   PairReceipt ray_tick_receipt_{};
   std::int64_t collision_cache_deadline_ns_{0}, collision_cache_clock_ns_{0};
+  std::int64_t collision_cache_receipt_ns_{0}, collision_cache_receipt_deadline_ns_{0};
   // Memory-only probe may disable for legacy comparison; no ROS opt-out.
   bool enforce_free_freshness_{true};
   bool ray_clock_fault_{false};
@@ -398,13 +412,33 @@ private:
   bool free_evidence_recovered_{false};
   std::int64_t collisionQueryClock();
   std::int64_t collisionQueryClockAt(std::int64_t source,PairReceipt now) const;
+  std::int64_t collisionQueryReceiptNs() const;
   void advanceRayEvidenceClock(std::int64_t source,PairReceipt now,bool age_by_steady);
   void beginCollisionQuery();
   int rawCollisionStatus(const Eigen::Vector3i &cell);
+  int uncachedRawCollisionStatus(const Eigen::Vector3i &cell);
+  void prepareRawCollisionCache();
   std::uint64_t unknown_collision_queries_{0};
   int observedCylinderStatus(const Eigen::Vector3d &center);
   std::string localization_context_payload_, localization_seed_;
   std::uint64_t localization_context_sequence_{0}, localization_epoch_{0};
+  std::shared_ptr<const scan_planner::StaticOccupancyPrior> static_prior_;
+  bool static_prior_context_valid_{false};
+  bool static_prior_query_lease_valid_{false}; // Rechecked once per query, never a renewed lease.
+  static constexpr std::int8_t uncached_raw_status_{std::numeric_limits<std::int8_t>::min()};
+  std::vector<std::int8_t> raw_collision_cache_;
+  std::uint64_t raw_collision_cache_generation_{0};
+  std::uint64_t static_prior_revoked_sequence_{0};
+  // A measured endpoint contradicts certified static FREE immediately, even
+  // before native log odds cross the occupied threshold. Global identity is
+  // deliberate: sliding/reusing a ring slot cannot erase that contradiction.
+  // Only a newer real miss batch reaching strict FREE may clear it; TTL cannot.
+  std::map<std::array<int,3>,std::int64_t> static_prior_live_hits_;
+  bool staticPriorLiveLeaseValid();
+  void revokeStaticPriorContext(std::uint64_t sequence);
+  void recordStaticPriorHit(const Eigen::Vector3i &cell,std::int64_t stamp);
+  void clearStaticPriorHitAfterMiss(const Eigen::Vector3i &cell,int address);
+  const char *collisionEvidenceSource(const Eigen::Vector3i &cell,int state);
   std::array<sensor_msgs::msg::PointCloud2, 2> visualization_cache_;
   std::array<std::uint64_t, 2> visualization_revision_{{
       std::numeric_limits<std::uint64_t>::max(), std::numeric_limits<std::uint64_t>::max()}};
@@ -604,7 +638,9 @@ inline int GridMap::getInflateOccupancy(Eigen::Vector3d pos, double yaw) {
     const auto now=collisionQueryClock();
     // Do not return a cached free certificate that expired during this query.
     if(ray_clock_fault_ || now<=0 || now<collision_cache_clock_ns_ ||
-        now>=collision_cache_deadline_ns_) return 2;
+        now>=collision_cache_deadline_ns_ ||
+        ((mp_.simulation_collision_clock_||mp_.validated_static_prior_) && (collisionQueryReceiptNs()<collision_cache_receipt_ns_ ||
+         collisionQueryReceiptNs()>=collision_cache_receipt_deadline_ns_))) return 2;
   }
   return state;
 }

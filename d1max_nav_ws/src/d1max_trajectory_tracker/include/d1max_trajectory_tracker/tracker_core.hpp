@@ -16,6 +16,7 @@
 #include <Eigen/Geometry>
 #include <bspline_opt/uniform_bspline.h>
 #include "d1max_trajectory_tracker/curve_admission.hpp"
+#include "d1max_trajectory_tracker/source_time.hpp"
 #include "d1max_trajectory_tracker/fixed_bspline_sampler.hpp"
 
 namespace d1max_trajectory_tracker
@@ -207,6 +208,7 @@ struct Task
   std::uint64_t generation{0};
   bool active{false};
   double issued_at{0.0};
+  std::int64_t issued_at_ns{0};
   Eigen::Vector3d goal{Eigen::Vector3d::Zero()};
   ControlIdentity identity;
 };
@@ -218,6 +220,7 @@ struct Trajectory
   std::uint64_t generation{0};
   std::int64_t id{0};
   double start_time{0.0};
+  std::int64_t start_time_ns{0};
   int order{3};
   std::vector<Eigen::Vector3d> points;
   std::vector<double> knots;
@@ -225,7 +228,7 @@ struct Trajectory
   // Certified join into the original (untrimmed) curve. This is measured
   // evidence, not elapsed wall time and not a shifted trajectory start clock.
   double valid_start_time{0.}, valid_start_arc_length{0.}, join_source_stamp{0.};
-  std::int64_t join_source_stamp_ns{0}; // Original wire time, diagnostics only.
+  std::int64_t join_source_stamp_ns{0}; // Original wire time, authoritative for admission.
   // A fresh entry observation is separate from the worker's immutable source.
   // It is made only under a matching fresh whole-curve proof, never by copying
   // the old sample and changing its timestamp.
@@ -245,7 +248,7 @@ struct Odom
   std::string frame_id, child_frame_id;
   double stamp{0.0}, yaw{0.0};
   // Preserve the original transport source for exact evidence cloning. The
-  // controller still uses seconds for arithmetic, never to re-date this stamp.
+  // controller uses integer source times for evidence and seconds for control.
   std::int64_t source_stamp_ns{0};
   Eigen::Vector3d position{Eigen::Vector3d::Zero()};
   double planar_speed{0.0};
@@ -256,28 +259,33 @@ struct Odom
   std::uint32_t schema_version{0};
   std::string session_id, map_version_id;
   double posterior_stamp{0.}, imu_stamp{0.}, extrapolation_sec{0.};
+  std::int64_t posterior_stamp_ns{0},imu_stamp_ns{0};
 };
 
 // Exact admission predicates with separate diagnostic names. These helpers
 // neither enlarge source leases nor alter curve/collision admission policy.
-inline const char* sourceEvidenceFailure(const Odom& o,double now,const Config& c) {
+inline const char* sourceEvidenceFailure(const Odom& o,SourceTime now,const Config& c) {
+  const auto body=originalSourceNs(o.source_stamp_ns,o.stamp);
+  const auto posterior=originalSourceNs(o.posterior_stamp_ns,o.posterior_stamp);
+  const auto imu=originalSourceNs(o.imu_stamp_ns,o.imu_stamp);
   if(!(o.posterior_stamp>0.))return "body_posterior_source_missing";
   if(!(o.imu_stamp>0.))return "body_imu_source_missing";
   if(!finite(o.extrapolation_sec))return "body_extrapolation_nonfinite";
   if(o.extrapolation_sec<0.)return "body_extrapolation_negative";
   if(o.extrapolation_sec>c.max_extrapolation)return "body_extrapolation_limit";
-  if(!(o.posterior_stamp<=o.stamp))return "body_posterior_after_state";
-  if(!(o.imu_stamp<=o.stamp))return "body_imu_after_state";
-  if(!(std::abs(o.stamp-o.imu_stamp-o.extrapolation_sec)<1e-5))return "body_extrapolation_source_mismatch";
-  if(!finite(now)||!finite(o.posterior_stamp)||now-o.posterior_stamp<-.02||now-o.posterior_stamp>c.posterior_timeout)
+  if(posterior>body)return "body_posterior_after_state";
+  if(imu>body)return "body_imu_after_state";
+  if(!(std::abs(sourceDeltaSeconds(body,imu)-o.extrapolation_sec)<1e-5))return "body_extrapolation_source_mismatch";
+  if(!finite(now)||!finite(o.posterior_stamp)||!sourceFresh(now,posterior,c.posterior_timeout,.02))
     return "body_posterior_not_fresh";
-  if(!finite(o.imu_stamp)||now-o.imu_stamp<-.02||now-o.imu_stamp>c.imu_timeout)return "body_imu_not_fresh";
+  if(!finite(o.imu_stamp)||!sourceFresh(now,imu,c.imu_timeout,.02))return "body_imu_not_fresh";
   return nullptr;
 }
 inline const char* joinEvidenceFailure(const Trajectory& t,bool have_body,const Odom& o,
-                                      double now,double duration,const Config& c) {
+                                      SourceTime now,double duration,const Config& c) {
   if(!have_body)return "join_body_missing";
-  if(!finite(now)||!finite(o.stamp)||now-o.stamp<-.02||now-o.stamp>c.odom_timeout)return "join_body_not_fresh";
+  const auto body=originalSourceNs(o.source_stamp_ns,o.stamp);
+  if(!finite(now)||!finite(o.stamp)||!sourceFresh(now,body,c.odom_timeout,.02))return "join_body_not_fresh";
   if(const auto why=sourceEvidenceFailure(o,now,c))return why;
   if(!finite(t.valid_start_time))return "join_curve_time_nonfinite";
   if(t.valid_start_time<0.||t.valid_start_time>duration)return "join_curve_time_out_of_range";
@@ -285,9 +293,10 @@ inline const char* joinEvidenceFailure(const Trajectory& t,bool have_body,const 
   if(t.valid_start_arc_length<0.)return "join_arc_negative";
   if(!finite(t.join_source_stamp))return "join_source_nonfinite";
   if(t.join_source_stamp<=0.)return "join_source_missing";
-  if(now-t.join_source_stamp<0.)return "join_source_in_future";
-  if(now-t.join_source_stamp>c.odom_timeout)return "join_source_expired";
-  if(t.join_source_stamp>o.stamp+1e-6)return "join_source_after_body";
+  const auto join=originalSourceNs(t.join_source_stamp_ns,t.join_source_stamp);
+  if(join>now.nanoseconds())return "join_source_in_future";
+  if(now.nanoseconds()-join>durationNs(c.odom_timeout))return "join_source_expired";
+  if(join-body>1000LL)return "join_source_after_body";
   if(!t.join_position.allFinite())return "join_position_nonfinite";
   if(!t.join_velocity.allFinite())return "join_velocity_nonfinite";
   if(!t.join_orientation.coeffs().allFinite())return "join_orientation_nonfinite";
@@ -302,6 +311,7 @@ struct JoinDiagnostic {
   double now{0.},body_stamp{0.},posterior_stamp{0.},imu_stamp{0.},extrapolation_sec{0.},
     join_stamp{0.},curve_time{0.},curve_duration{0.},arc{0.};
   std::string reason;
+  std::int64_t checked_now_ns{0},posterior_stamp_ns{0},imu_stamp_ns{0};
 };
 
 struct EntryCurveCache {
@@ -346,21 +356,23 @@ struct EntryCurveCache {
     return c;
   }
   std::optional<Trajectory> observe(const Trajectory& original,const Odom& body,const Config& config,
-      double now,double proof_body_stamp,double seed_time,double seed_arc,std::string& reason)const {
+      SourceTime now,SourceTime proof_body_stamp,double seed_time,double seed_arc,std::string& reason)const {
     const auto reject=[&](const char* why)->std::optional<Trajectory>{reason=why;return {};};
-    if(!finite(now)||!finite(body.stamp)||now-body.stamp<-.02||now-body.stamp>.1)
+    const auto body_ns=originalSourceNs(body.source_stamp_ns,body.stamp);
+    const auto proof_ns=proof_body_stamp.nanoseconds();
+    if(!finite(now)||!finite(body.stamp)||!sourceFresh(now,body_ns,.1,.02))
       return reject("entry_body_not_fresh");
     if(const auto why=sourceEvidenceFailure(body,now,config))return reject(why);
     if(body.localization_epoch!=original.identity.localization_epoch||
        body.localization_seed_id!=original.identity.localization_seed_id||
        body.session_id!=original.session_id||body.map_version_id!=original.identity.map_version_id||
        body.frame_id!=original.frame_id)return reject("entry_body_identity_mismatch");
-    if(!finite(proof_body_stamp)||proof_body_stamp<=0.||proof_body_stamp>body.stamp+1e-6||
-       now-proof_body_stamp>.4)return reject("entry_body_precedes_or_exceeds_proof");
+    if(!finite(proof_body_stamp)||proof_ns<=0||proof_ns-body_ns>1000LL||
+       now.nanoseconds()-proof_ns>400000000LL)return reject("entry_body_precedes_or_exceeds_proof");
     if(!finite(seed_time)||seed_time<0.||seed_time>duration||!finite(seed_arc)||seed_arc<0.||
        std::abs(curveArcAt(times,arcs,seed_time)-seed_arc)>.01)return reject("entry_proof_curve_domain_invalid");
     const double travel=std::min(config.projection_max_forward_m,
-      config.max_speed*std::max(0.,body.stamp-proof_body_stamp)+config.join_limit);
+      config.max_speed*std::max(0.,sourceDeltaSeconds(body_ns,proof_ns))+config.join_limit);
     const auto p=projectCurveAdmission(*curve_sampler,times,arcs,points,body.position,seed_time,seed_arc,
       std::min(config.projection_backtrack_m,travel),travel,config.join_limit);
     if(!p)return reject("entry_measured_body_not_on_candidate");
@@ -506,7 +518,7 @@ class TrackerCore
 public:
   explicit TrackerCore(Config config) : config_(std::move(config)) { config_.validate(); }
 
-  bool receiveTask(const Task &task, double ros_now, double received)
+  bool receiveTask(const Task &task, SourceTime ros_now, double received)
   {
     if (task.session_id != config_.session_id || task.generation < task_.generation ||
         task.generation == 0 || !finite(received) || !finite(ros_now)) return false;
@@ -518,7 +530,7 @@ public:
       return true;
     }
     if (task.frame_id != config_.planning_frame || !finite(task.issued_at) ||
-        task.issued_at <= 0.0 || task.issued_at > ros_now + 0.2 || !task.goal.allFinite() ||
+        task.issued_at <= 0.0 || originalSourceNs(task.issued_at_ns,task.issued_at)-ros_now.nanoseconds()>200000000LL || !task.goal.allFinite() ||
         (config_.require_versioned_identity && (!task.identity.valid() ||
          task.identity.map_version_id != config_.map_version_id))) {
       cancel("invalid_task");
@@ -527,13 +539,13 @@ public:
     if (task.generation == task_.generation) {
       // A terminal generation can never be revived by a delayed heartbeat.
       if (!active_) return false;
-      if (task.issued_at != task_.issued_at || task.frame_id != task_.frame_id ||
+      if (originalSourceNs(task.issued_at_ns,task.issued_at)!=originalSourceNs(task_.issued_at_ns,task_.issued_at) || task.frame_id != task_.frame_id ||
           (task.goal - task_.goal).norm() > 1e-9 || !(task.identity == task_.identity)) {
         cancel("task_context_changed_without_generation");
         return false;
       }
     } else {
-      if (ros_now - task.issued_at > config_.task_timeout) return false;
+      if (ros_now.nanoseconds()-originalSourceNs(task.issued_at_ns,task.issued_at)>durationNs(config_.task_timeout)) return false;
       task_ = task;
       trajectory_.reset();
       last_trajectory_id_ = -1;
@@ -550,7 +562,7 @@ public:
           odom_.localization_seed_id != task.identity.localization_seed_id)) have_odom_ = false;
       last_output_ = Output{};
       turn_phase_=TurnPhase::Following;turn_first_engaged_=false;
-      resetTurnStationaryWindow();turn_sample_stamp_=last_turn_feedback_stamp_=0.;
+      resetTurnStationaryWindow();turn_sample_stamp_=last_turn_feedback_stamp_=0.;last_turn_feedback_ns_=0;
       aligned_entry_curve_id_=-1;aligned_entry_stamp_=0.;
       last_step_ = received;
     }
@@ -558,7 +570,7 @@ public:
     return true;
   }
 
-  bool receiveOdom(const Odom &odom, double ros_now, double received)
+  bool receiveOdom(const Odom &odom, SourceTime ros_now, double received)
   {
     if(config_.require_versioned_identity&&(odom.schema_version!=2||
        odom.session_id!=config_.session_id||odom.map_version_id!=config_.map_version_id))return false;
@@ -574,17 +586,15 @@ public:
        odom.map_version_id==config_.map_version_id&&odom.localization_epoch>0&&!odom.localization_seed_id.empty());
     const bool new_epoch=config_.require_versioned_identity&&expected_stream&&
       odom.localization_epoch>source_order_epoch_;
-    const auto source_ns=odom.source_stamp_ns>0?odom.source_stamp_ns:
-      (finite(odom.stamp)&&odom.stamp>0.&&odom.stamp<1e10?
-        static_cast<std::int64_t>(std::llround(odom.stamp*1e9)):std::int64_t{0});
+    const auto source_ns=originalSourceNs(odom.source_stamp_ns,odom.stamp);
     if(!new_epoch&&source_ns>0&&source_ns<=last_odom_source_ns_)return false;
     // Fresh in-range faults establish a barrier too. A delayed valid sample
     // cannot undo a later fault merely because that fault was not installed.
-    if(source_ns>0&&finite(ros_now)&&odom.stamp<=ros_now+.02) {
-      if(new_epoch) {last_odom_source_ns_=0;last_odom_source_stamp_=0.;source_order_epoch_=odom.localization_epoch;}
+    if(source_ns>0&&finite(ros_now)&&source_ns-ros_now.nanoseconds()<=20000000LL) {
+      if(new_epoch) {last_odom_source_ns_=accepted_odom_source_ns_=0;last_odom_source_stamp_=0.;source_order_epoch_=odom.localization_epoch;}
       last_odom_source_ns_=source_ns;
     }
-    if(config_.require_versioned_identity&&finite(odom.stamp)&&finite(ros_now)&&odom.stamp>ros_now+.02) {
+    if(config_.require_versioned_identity&&finite(odom.stamp)&&finite(ros_now)&&source_ns-ros_now.nanoseconds()>20000000LL) {
       have_odom_=false;hold("odometry_source_evidence_invalid",received);return false;
     }
     if(config_.require_versioned_identity&&(odom.localization_epoch==0||odom.localization_seed_id.empty())) {
@@ -598,7 +608,7 @@ public:
       return false;
     }
     if (config_.require_versioned_identity && (!sourceEvidenceFresh(odom,ros_now) ||
-        odom.stamp > ros_now+.02)) {
+        source_ns-ros_now.nanoseconds()>20000000LL)) {
       have_odom_ = false;
       hold("odometry_source_evidence_invalid",received);
       return false;
@@ -609,22 +619,24 @@ public:
         !odom.velocity_in_frame.allFinite() || !odom.angular_velocity_in_frame.allFinite() ||
         !odom.orientation.coeffs().allFinite() || std::abs(odom.orientation.norm()-1.)>.001 ||
         odom.planar_speed > HARD_PLANAR_SPEED || odom.planar_speed < 0.0 ||
-        ros_now - odom.stamp > config_.odom_timeout || odom.stamp > ros_now + 0.1) {
+        !sourceFresh(ros_now,source_ns,config_.odom_timeout,.1)) {
       have_odom_ = false;
       hold("invalid_odometry",received);
       return false;
     }
     // A delayed sample within the TTL is not a new physical observation. It
     // must neither rewind the control pose nor renew its receipt-time lease.
-    if (odom.stamp <= last_odom_source_stamp_) return false;
+    if (source_ns <= accepted_odom_source_ns_) return false;
     if (config_.require_versioned_identity && have_odom_ &&
-        (odom.posterior_stamp < odom_.posterior_stamp || odom.imu_stamp < odom_.imu_stamp)) {
+        (originalSourceNs(odom.posterior_stamp_ns,odom.posterior_stamp)<originalSourceNs(odom_.posterior_stamp_ns,odom_.posterior_stamp)||
+         originalSourceNs(odom.imu_stamp_ns,odom.imu_stamp)<originalSourceNs(odom_.imu_stamp_ns,odom_.imu_stamp))) {
       have_odom_ = false;
       hold("odometry_evidence_reordered",received);
       return false;
     }
     odom_ = odom;
     last_odom_source_stamp_ = odom.stamp;
+    accepted_odom_source_ns_=source_ns;
     odom_received_ = received;
     have_odom_ = true;
     if(holding_) {
@@ -637,7 +649,7 @@ public:
     return true;
   }
 
-  bool receiveTrajectory(const Trajectory &trajectory, double ros_now, double received)
+  bool receiveTrajectory(const Trajectory &trajectory, SourceTime ros_now, double received)
   {
     recordJoinDiagnostic(trajectory,ros_now,0.,{});
     // Unrelated or obsolete context is not allowed to replace a current plan.
@@ -649,7 +661,8 @@ public:
     if (config_.require_versioned_identity &&
         (!trajectory.identity.valid() || !(trajectory.identity == task_.identity) ||
          trajectory.point_reference != "body_center")) return candidateReject("identity_mismatch");
-    if (trajectory_ && trajectory.start_time < trajectory_start_) return candidateReject("older_start_time");
+    const auto start_ns=originalSourceNs(trajectory.start_time_ns,trajectory.start_time);
+    if (trajectory_ && start_ns<trajectory_start_ns_) return candidateReject("older_start_time");
     // A rejected candidate is not a withdrawal of the independently validated
     // incumbent. Explicit cancellation/proof expiry are separate channels.
     // Distinguish input format, source age and evaluator failures without
@@ -658,9 +671,9 @@ public:
     if (!finite(ros_now) || !finite(received) || !finite(trajectory.start_time))
       return candidateReject("trajectory_clock_nonfinite");
     if (trajectory.frame_id != config_.planning_frame) return candidateReject("trajectory_frame_mismatch");
-    if (trajectory.start_time + 1e-6 < task_.issued_at) return candidateReject("trajectory_predates_task");
-    if (trajectory.start_time > ros_now + 0.2) return candidateReject("trajectory_start_in_future");
-    if (ros_now - trajectory.start_time > config_.trajectory_timeout) return candidateReject("trajectory_start_expired");
+    if (originalSourceNs(task_.issued_at_ns,task_.issued_at)-start_ns>1000LL) return candidateReject("trajectory_predates_task");
+    if (start_ns-ros_now.nanoseconds()>200000000LL) return candidateReject("trajectory_start_in_future");
+    if (ros_now.nanoseconds()-start_ns>durationNs(config_.trajectory_timeout)) return candidateReject("trajectory_start_expired");
     if (trajectory.order != 3) return candidateReject("trajectory_order_unsupported");
     if (trajectory.points.size() < 4 || trajectory.points.size() > 10000)
       return candidateReject("trajectory_control_point_count");
@@ -693,7 +706,7 @@ public:
                             trajectory.knots[trajectory.order];
     if (!finite(duration)) return candidateReject("trajectory_duration_nonfinite");
     if (duration <= 0.01 || duration > 120.0) return candidateReject("trajectory_duration_out_of_range");
-    if (ros_now - trajectory.start_time > duration) return candidateReject("trajectory_duration_elapsed");
+    if (ros_now.nanoseconds()-start_ns>durationNs(duration)) return candidateReject("trajectory_duration_elapsed");
     auto prepared=trajectory.prepared;
     if(prepared&&!prepared->matches(config_,trajectory))return candidateReject("prepared_geometry_identity_mismatch");
     if(!prepared)prepared=PreparedGeometry::build(config_,trajectory,support_?*support_:SupportEvidence{});
@@ -722,7 +735,8 @@ public:
       // Both ends integrate the same original curve; discretization error is
       // bounded, not an opportunity to skip to an unrelated branch.
       if (std::abs(seed_arc-trajectory.valid_start_arc_length)>.01) return candidateReject("join_arc_mismatch");
-      const double source_dt=std::max(0.,odom_.stamp-trajectory.join_source_stamp);
+      const double source_dt=std::max(0.,sourceDeltaSeconds(originalSourceNs(odom_.source_stamp_ns,odom_.stamp),
+        originalSourceNs(trajectory.join_source_stamp_ns,trajectory.join_source_stamp)));
       const double travel=std::min(config_.projection_max_forward_m,
           config_.max_speed*source_dt+config_.join_limit);
       const auto projected=projectCurveAdmission(*curve,times,arc,samples,odom_.position,
@@ -744,6 +758,7 @@ public:
     curve_identity_ = trajectory.identity;
     trajectory_received_ = received;
     trajectory_start_ = trajectory.start_time;
+    trajectory_start_ns_=start_ns;
     duration_ = duration;
     trajectory_min_z_ = min_z;
     trajectory_max_z_ = max_z;
@@ -777,14 +792,16 @@ public:
   // The typed execution wrapper must first match this to one of OUR exact
   // nonzero demands and a fresh native occupied (not unknown/stale) proof.
   // This requests a control maneuver only; it grants no collision authority.
-  bool notifyBlockedForwardTurn(std::int64_t trajectory_id,double demand_source_stamp,
-      double now,double forward,double yaw_rate) {
+  bool notifyBlockedForwardTurn(std::int64_t trajectory_id,SourceTime demand_source_stamp,
+      SourceTime now,double forward,double yaw_rate) {
     const bool in_place=turn_phase_==TurnPhase::Aligning;
     if(!active_||!trajectory_||!have_odom_||trajectory_id!=last_trajectory_id_||
        !finite(forward)||forward<0.||(forward<=1e-6&&!in_place)||!finite(yaw_rate)||std::abs(yaw_rate)<=1e-6||
-       !fresh(now,demand_source_stamp,.1)||demand_source_stamp<=last_turn_feedback_stamp_||
-       !fresh(now,odom_.stamp,.1,.02)||turn_phase_==TurnPhase::WaitingEntry)return false;
+       !sourceFresh(now,demand_source_stamp.nanoseconds(),.1)||demand_source_stamp.nanoseconds()<=last_turn_feedback_ns_||
+       !sourceFresh(now,originalSourceNs(odom_.source_stamp_ns,odom_.stamp),.1,.02)||turn_phase_==TurnPhase::WaitingEntry)return false;
+    ++output_control_revision_;
     last_turn_feedback_stamp_=demand_source_stamp;
+    last_turn_feedback_ns_=demand_source_stamp.nanoseconds();
     turn_first_engaged_=true;
     if(in_place&&forward<=1e-6) {
       // The in-place turn toward this curve itself collides. Re-aligning would
@@ -813,10 +830,41 @@ public:
       turn_phase_==TurnPhase::WaitingEntry?"waiting_executable_entry":"following";
   }
 
+  std::int64_t lastControlSourceNs()const {return last_ros_time_.nanoseconds();}
+  std::uint64_t outputControlRevision()const {return output_control_revision_;}
+  // The duplicate gate and the ordinary controller share these guards. No
+  // clocks, limiter history, progress or stationary samples change here.
+  bool duplicateControlStateSafe(SourceTime now,double receipt,bool aligning=false,
+      double desired_yaw=0.,double tolerance=.1)const {
+    if(stepBlockReason(now,receipt,true,true,aligning))return false;
+    if(aligning&&(!finite(desired_yaw)||!finite(tolerance)||tolerance<.01||tolerance>.5||
+       receipt-last_step_>.1||!sourceFresh(now,originalSourceNs(odom_.source_stamp_ns,odom_.stamp),
+         config_.odom_timeout,.02)||!sourceEvidenceFresh(odom_,now)))return false;
+    // A newly received body may reveal a projection/tracking fault even while
+    // the source clock is unchanged. Exercise the ordinary projection on a
+    // private copy; its shared immutable geometry is not rebuilt.
+    TrackerCore observed=*this;
+    if(last_projected_stamp_<=0.||(odom_.position-last_projected_position_).norm()>1e-6) {
+      const double source_dt=last_projected_stamp_>0.?odom_.stamp-last_projected_stamp_:0.;
+      if(!observed.projectMeasured(std::min(config_.projection_max_forward_m,
+          config_.projection_forward_m+odom_.planar_speed*std::max(0.,source_dt))))return false;
+    }
+    const auto pos=observed.positionAt(observed.execution_time_);
+    const double look=std::min(duration_,observed.execution_time_+config_.lookahead);
+    const auto desired=observed.positionAt(look),velocity=observed.velocityAt(look);
+    const Eigen::Vector2d world=config_.kp_position*(desired.head<2>()-odom_.position.head<2>())+
+      (look<duration_?Eigen::Vector2d(velocity.head<2>()):Eigen::Vector2d::Zero());
+    const double speed_cap=std::min(config_.max_speed*planar_scale_,brakingEnvelopeAt(
+      arcTable(),speedEnvelope(),observed.measured_arc_,config_.max_acceleration*planar_scale_,planar_scale_));
+    return !braking_reentry_required_&&pos.allFinite()&&desired.allFinite()&&world.allFinite()&&
+      normalForwardStep(0.,last_output_.forward,speed_cap,config_.max_acceleration*planar_scale_,receipt-last_step_)&&
+      (pos.head<2>()-odom_.position.head<2>()).norm()<=2.&&std::abs(pos.z()-odom_.position.z())<=.5;
+  }
+
   // The formal execution gate may supply a fresh, exact-curve collision lease.
   // This changes no curve timestamp/progress and never relaxes body freshness.
   // Legacy callers have no external proof and retain publication-age timeout.
-  Output step(double ros_now, double received, bool fresh_external_curve_lease=false)
+  Output step(SourceTime ros_now, double received, bool fresh_external_curve_lease=false)
   {
     // Idle has no execution clock to guard. Establish a baseline instead of
     // reporting a huge "clock jump" on the first timer after process startup.
@@ -826,63 +874,19 @@ public:
       return stop();
     }
     const double dt = received - last_step_;
-    const double trajectory_dt = last_ros_time_ > 0.0 ? ros_now - last_ros_time_ : dt;
-    last_step_ = received;
-    if (!finite(received) || !finite(ros_now) || !finite(dt) || dt < 0.0 || dt > 0.25 ||
-        !finite(trajectory_dt) || trajectory_dt < 0.0 || trajectory_dt > 0.25) {
-      last_ros_time_ = ros_now;
-      hold("clock_or_executor_discontinuity",received);
+    const char* blocked=stepBlockReason(ros_now,received,fresh_external_curve_lease,false,false);
+    last_step_=received;last_ros_time_=ros_now;
+    if(blocked) {
+      const std::string why=blocked;
+      if(why=="clock_or_executor_discontinuity"||why=="odometry_stale")hold(why,received);
+      else if(why=="task_heartbeat_stale"||why=="task_outside_single_floor_envelope")cancel(why);
+      else if(why=="goal_reached") {finished_=true;cancel(why);}
+      else if(why=="trajectory_stale")invalidateTrajectory(why);
+      else reason_=why;
       return stop();
     }
-    last_ros_time_ = ros_now;
-    if (!active_) return stop();
-    if (!fresh(received, task_received_, config_.task_timeout)) {
-      cancel("task_heartbeat_stale");
-      return stop();
-    }
-    if (!have_odom_ || !fresh(received, odom_received_, config_.odom_timeout) ||
-        !fresh(ros_now, odom_.stamp, config_.odom_timeout, 0.1) ||
-        (config_.require_versioned_identity && !sourceEvidenceFresh(odom_,ros_now))) {
-      hold("odometry_stale",received);
-      return stop();
-    }
-    if(holding_) return stop();
-    if(config_.require_support_reference &&
-       (!supportValid(task_.identity,task_.generation) || !supported(odom_.position))) {
-      reason_="support_evidence_missing_or_body_outside_support"; return stop();
-    }
-    if (!config_.require_support_reference && !floor_anchor_valid_) {
-      floor_anchor_z_ = odom_.position.z();
-      floor_anchor_valid_ = true;
-    }
-    // Pin height to this generation's first fresh measured body pose. Replans
-    // cannot walk this anchor up a staircase one small local segment at a time.
-    if (!config_.require_support_reference && (std::abs(task_.goal.z() - floor_anchor_z_) > config_.single_floor_max_height_change ||
-        std::abs(odom_.position.z() - floor_anchor_z_) > config_.single_floor_max_height_change ||
-        (trajectory_ && (trajectory_min_z_ < floor_anchor_z_ - config_.single_floor_max_height_change ||
-                         trajectory_max_z_ > floor_anchor_z_ + config_.single_floor_max_height_change)))) {
-      cancel("task_outside_single_floor_envelope");
-      return stop();
-    }
-    if ((task_.goal.head<2>() - odom_.position.head<2>()).norm() <= config_.goal_tolerance &&
-        std::abs(task_.goal.z() - odom_.position.z()) <= config_.goal_height_tolerance) {
-      if(config_.external_goal_completion) { reason_="goal_position_reached"; return stop(); }
-      finished_ = true;
-      cancel("goal_reached");
-      return stop();
-    }
-    if (!trajectory_) return stop();
-    if(turn_phase_==TurnPhase::WaitingEntry) {
-      reason_="waiting_executable_entry";return stop();
-    }
-    if (trajectory_dt == 0.0 || ros_now < trajectory_start_) {
-      reason_ = "waiting_trajectory_clock";
-      return stop();
-    }
-    if (!fresh_external_curve_lease&&(!fresh(received, trajectory_received_, config_.trajectory_timeout) ||
-        ros_now - trajectory_start_ > duration_ + config_.trajectory_timeout)) {
-      invalidateTrajectory("trajectory_stale");
-      return stop();
+    if(!config_.require_support_reference&&!floor_anchor_valid_) {
+      floor_anchor_z_=odom_.position.z();floor_anchor_valid_=true;
     }
     // Only a new measured body sample updates progress. XYZ bounded projection
     // stays within the admitted segment and permits small physical backtracking;
@@ -1022,13 +1026,13 @@ public:
     last_output_=Output{};
   }
   bool holding() const { return holding_; }
-  Output align(double desired_yaw,double tolerance,double now,double receipt,bool fresh_external_curve_lease=false) {
+  Output align(double desired_yaw,double tolerance,SourceTime now,double receipt,bool fresh_external_curve_lease=false) {
     const double dt=receipt-last_step_;
-    const double source_dt=now-last_ros_time_;
+    const double source_dt=sourceDeltaSeconds(now.nanoseconds(),last_ros_time_.nanoseconds());
     const double previous_yaw_command=last_output_.yaw_rate;
     const auto guarded=step(now,receipt,fresh_external_curve_lease);
     if(!active_ || holding_ || !have_odom_ || !trajectory_ || dt<=0. || dt>.1 ||source_dt<=0.||source_dt>.1||
-       !fresh(now,odom_.stamp,config_.odom_timeout,.02) || !sourceEvidenceFresh(odom_,now) ||
+       !sourceFresh(now,originalSourceNs(odom_.source_stamp_ns,odom_.stamp),config_.odom_timeout,.02) || !sourceEvidenceFresh(odom_,now) ||
        (config_.require_support_reference && (!supportValid(task_.identity,task_.generation) || !supported(odom_.position))) ||
        !finite(desired_yaw) || !finite(tolerance) || tolerance<.01 || tolerance>.5) return stop();
     (void)guarded;
@@ -1041,11 +1045,11 @@ public:
     last_output_=out; reason_=out.reason; return out;
   }
   void refreshTaskLease(double receipt) { if(active_ && finite(receipt)) task_received_=receipt; }
-  void suspendOutput(double now,double receipt,const std::string& reason,bool recovery) {
+  void suspendOutput(SourceTime now,double receipt,const std::string& reason,bool recovery) {
     resetTurnStationaryWindow();
     if(recovery)hold(reason,receipt);
     if(!recovery&&active_&&trajectory_&&have_odom_&&!holding_&&
-       fresh(now,odom_.stamp,config_.odom_timeout,.02)&&sourceEvidenceFresh(odom_,now)&&
+       sourceFresh(now,originalSourceNs(odom_.source_stamp_ns,odom_.stamp),config_.odom_timeout,.02)&&sourceEvidenceFresh(odom_,now)&&
        (!config_.require_support_reference||(supportValid(task_.identity,task_.generation)&&supported(odom_.position)))&&
        odom_.stamp>last_projected_stamp_) {
       const double dt=last_projected_stamp_>0.?odom_.stamp-last_projected_stamp_:0.;
@@ -1064,7 +1068,7 @@ public:
   // Preparation is pure with respect to the current controller. At commit we
   // repeat admission against the latest body and retain the limiter history.
   bool admitRevision(const Task& task,const Trajectory& trajectory,const SupportEvidence& support,
-                     double now,double receipt,bool commit) {
+                     SourceTime now,double receipt,bool commit) {
     if(active_ && !task.identity.sameTask(task_.identity)) return candidateReject("foreign_task");
     if(task.session_id!=config_.session_id || !task.active || !task.identity.valid() ||
        task.frame_id!=config_.planning_frame || !task.goal.allFinite() ||
@@ -1094,9 +1098,9 @@ public:
   // Keep prepared geometry private, but refresh its boundary from the SAME
   // measured state and limiter history as the incumbent. No elapsed-wall-clock
   // position prediction and no spline rebuild on the 50 Hz control lane.
-  std::optional<EntryBoundary> refreshPreparedState(const TrackerCore& current,double now,double receipt) {
+  std::optional<EntryBoundary> refreshPreparedState(const TrackerCore& current,SourceTime now,double receipt) {
     if(!trajectory_||!velocity_||!current.have_odom_||current.holding_||
-       !fresh(now,current.odom_.stamp,.1,.02)||!sourceEvidenceFresh(current.odom_,now))return {};
+       !sourceFresh(now,originalSourceNs(current.odom_.source_stamp_ns,current.odom_.stamp),.1,.02)||!sourceEvidenceFresh(current.odom_,now))return {};
     const double dt=std::max(0.,current.odom_.stamp-last_projected_stamp_);
     const double travel=std::min(config_.projection_max_forward_m,config_.max_speed*dt+config_.join_limit);
     const auto p=projectCurveAdmission(*prepared_geometry_->entry.curve_sampler,timeTable(),arcTable(),pointTable(),current.odom_.position,
@@ -1107,13 +1111,15 @@ public:
     if(pe>config_.join_limit||ve>.05)return {};
     odom_=current.odom_;have_odom_=current.have_odom_;odom_received_=current.odom_received_;
     last_odom_source_stamp_=current.last_odom_source_stamp_;last_output_=current.last_output_;
+    accepted_odom_source_ns_=current.accepted_odom_source_ns_;
+    last_odom_source_ns_=current.last_odom_source_ns_;source_order_epoch_=current.source_order_epoch_;
     last_step_=current.last_step_;last_ros_time_=current.last_ros_time_;
     holding_=current.holding_;recovery_samples_=current.recovery_samples_;recovery_first_source_=current.recovery_first_source_;
     execution_time_=p->time;measured_arc_=p->arc;committed_arc_=std::max(committed_arc_,p->arc);
     last_projected_stamp_=odom_.stamp;last_projected_position_=odom_.position;task_received_=receipt;
     return EntryBoundary{position,velocity,p->time,pe,ve};
   }
-  void recordAppliedOutput(double forward,double yaw,double now,double receipt) {
+  void recordAppliedOutput(double forward,double yaw,SourceTime now,double receipt) {
     last_output_.forward=forward;last_output_.yaw_rate=yaw;last_step_=receipt;last_ros_time_=now;
   }
   // A writer-applied identity is a fact even if its ACK arrives late. Retire
@@ -1145,7 +1151,7 @@ public:
     const double measured_arc=arcAt(measured),from_arc=arcAt(from);
     return std::abs(arc-measured_arc)<=.01&&from_arc<=std::max(0.,measured_arc-reverse)+.001;
   }
-  Progress progress(double ros_now) const {
+  Progress progress(SourceTime ros_now) const {
     Progress p;
     p.identity=curve_identity_; p.source_stamp=odom_.stamp; p.curve_time=execution_time_;
     p.arc_length=progressArc(); p.s_committed=committed_arc_;
@@ -1153,7 +1159,7 @@ public:
     p.velocity_in_frame=odom_.velocity_in_frame; p.angular_velocity_in_frame=odom_.angular_velocity_in_frame;
     p.orientation=odom_.orientation;
     p.valid=active_ && !holding_ && trajectory_ && have_odom_ && curve_identity_.valid() &&
-      fresh(ros_now,odom_.stamp,config_.odom_timeout,.1) &&
+      sourceFresh(ros_now,originalSourceNs(odom_.source_stamp_ns,odom_.stamp),config_.odom_timeout,.1) &&
       (!config_.require_versioned_identity || sourceEvidenceFresh(odom_,ros_now));
     p.holding=last_output_.frozen;
     return p;
@@ -1162,11 +1168,12 @@ public:
   // Diagnostic only: why the most recent candidate admission failed.
   const std::string &candidateReason() const { return candidate_reason_; }
   const JoinDiagnostic& joinDiagnostic()const {return join_diagnostic_;}
-  void recordJoinDiagnostic(const Trajectory& t,double now,double duration,const std::string& reason) {
+  void recordJoinDiagnostic(const Trajectory& t,SourceTime now,double duration,const std::string& reason) {
     join_diagnostic_={have_odom_,t.id,odom_.source_stamp_ns,t.join_source_stamp_ns,
       t.entry_reobserved,t.original_join_source_stamp_ns,now,odom_.stamp,odom_.posterior_stamp,
       odom_.imu_stamp,odom_.extrapolation_sec,t.join_source_stamp,t.valid_start_time,duration,
-      t.valid_start_arc_length,reason};
+      t.valid_start_arc_length,reason,now.nanoseconds(),
+      originalSourceNs(odom_.posterior_stamp_ns,odom_.posterior_stamp),originalSourceNs(odom_.imu_stamp_ns,odom_.imu_stamp)};
   }
 
 private:
@@ -1183,7 +1190,7 @@ private:
   bool supported(const Eigen::Vector3d& body) const {
     return support_&&support_index_&&pointSupported(*support_,*support_index_,body,config_.goal_height_tolerance);
   }
-  bool sourceEvidenceFresh(const Odom& odom, double now) const {
+  bool sourceEvidenceFresh(const Odom& odom, SourceTime now) const {
     return sourceEvidenceFailure(odom,now,config_)==nullptr;
   }
   bool projectMeasured(double forward_window) {
@@ -1214,6 +1221,41 @@ private:
     measured_arc_=best_arc; execution_time_=best_time;
     committed_arc_=std::max(committed_arc_,measured_arc_);
     return true;
+  }
+  const char* stepBlockReason(SourceTime now,double receipt,bool external,
+      bool ignore_duplicate,bool aligning)const {
+    const double dt=receipt-last_step_;
+    const double source_dt=last_ros_time_.nanoseconds()>0?
+      sourceDeltaSeconds(now.nanoseconds(),last_ros_time_.nanoseconds()):dt;
+    if(!finite(receipt)||!finite(now)||now.nanoseconds()<=0||!finite(dt)||dt<0.||dt>.25||
+       !finite(source_dt)||source_dt<0.||source_dt>.25)return "clock_or_executor_discontinuity";
+    if(!active_)return reason_.c_str();
+    if(!fresh(receipt,task_received_,config_.task_timeout))return "task_heartbeat_stale";
+    if(!have_odom_||!fresh(receipt,odom_received_,config_.odom_timeout)||
+       !sourceFresh(now,originalSourceNs(odom_.source_stamp_ns,odom_.stamp),config_.odom_timeout,.1)||
+       (config_.require_versioned_identity&&!sourceEvidenceFresh(odom_,now)))return "odometry_stale";
+    if(holding_)return reason_.c_str();
+    if(config_.require_support_reference&&
+       (!supportValid(task_.identity,task_.generation)||!supported(odom_.position)))
+      return "support_evidence_missing_or_body_outside_support";
+    const double anchor=floor_anchor_valid_?floor_anchor_z_:odom_.position.z();
+    if(!config_.require_support_reference&&
+       (std::abs(task_.goal.z()-anchor)>config_.single_floor_max_height_change||
+        std::abs(odom_.position.z()-anchor)>config_.single_floor_max_height_change||
+        (trajectory_&&(trajectory_min_z_<anchor-config_.single_floor_max_height_change||
+                       trajectory_max_z_>anchor+config_.single_floor_max_height_change))))
+      return "task_outside_single_floor_envelope";
+    if((task_.goal.head<2>()-odom_.position.head<2>()).norm()<=config_.goal_tolerance&&
+       std::abs(task_.goal.z()-odom_.position.z())<=config_.goal_height_tolerance&&
+       !(aligning&&config_.external_goal_completion))
+      return config_.external_goal_completion?"goal_position_reached":"goal_reached";
+    if(!trajectory_||!prepared_geometry_)return reason_.c_str();
+    if(turn_phase_==TurnPhase::WaitingEntry)return "waiting_executable_entry";
+    if((source_dt==0.&&!ignore_duplicate)||now.nanoseconds()<trajectory_start_ns_)
+      return "waiting_trajectory_clock";
+    if(!external&&(!fresh(receipt,trajectory_received_,config_.trajectory_timeout)||
+       now.nanoseconds()-trajectory_start_ns_>durationNs(duration_+config_.trajectory_timeout)))return "trajectory_stale";
+    return nullptr;
   }
   static bool fresh(double now, double then, double limit, double future = 0.0) {
     return finite(now) && finite(then) && now - then >= -future && now - then <= limit;
@@ -1270,8 +1312,10 @@ private:
   double task_received_{-1e10}, odom_received_{-1e10}, trajectory_received_{-1e10};
   double last_odom_source_stamp_{0.0};
   std::int64_t last_odom_source_ns_{0};
+  std::int64_t accepted_odom_source_ns_{0};
   std::uint64_t source_order_epoch_{0};
   double trajectory_start_{0.0}, duration_{0.0}, execution_time_{0.0};
+  std::int64_t trajectory_start_ns_{0},last_turn_feedback_ns_{0};
   double planar_scale_{1.};
 
   enum class TurnPhase {Following,Decelerating,Aligning,WaitingEntry};
@@ -1290,7 +1334,9 @@ private:
   const std::vector<Eigen::Vector3d>& pointTable() const {return prepared_geometry_->entry.points;}
   const std::vector<double>& speedEnvelope() const {return prepared_geometry_->speed_envelope;}
   ControlIdentity curve_identity_;
-  double last_step_{0.0}, last_ros_time_{0.0};
+  double last_step_{0.0};
+  SourceTime last_ros_time_{0.0};
+  std::uint64_t output_control_revision_{0};
   std::int64_t last_trajectory_id_{-1};
   std::string reason_{"idle"};
   std::shared_ptr<const scan_planner::UniformBspline> trajectory_, velocity_;

@@ -184,28 +184,28 @@ public:
     execution_pub_=rclcpp::create_publisher<exec3::Permit>(*this,std::string(prefix)+"execution/permit",rclcpp::QoS(1).reliable());
     handoff_pub_=rclcpp::create_publisher<exec3::Handoff>(*this,std::string(prefix)+"execution/handoff_grant",rclcpp::QoS(1).reliable());
     commit_ack_sub_=create_subscription<exec3::CommitAck>(std::string(prefix)+"execution/commit_ack",10,
-      [this](exec3::CommitAck::SharedPtr m){if(current_&&current_->execution)current_->execution->observe(*m,now().seconds());});
+      [this](exec3::CommitAck::SharedPtr m){if(current_&&current_->execution)current_->execution->observe(*m,sourceNow());});
     stationary_sub_=create_subscription<exec3::Stationary>(std::string(prefix)+"execution/stationary_evidence",10,
-      [this](exec3::Stationary::SharedPtr m){if(current_&&current_->execution&&current_->execution->observe(*m,now().seconds()))tryPrepareReadyHandoff();});
+      [this](exec3::Stationary::SharedPtr m){if(current_&&current_->execution&&current_->execution->observe(*m,sourceNow()))tryPrepareReadyHandoff();});
     geometry_receipt_sub_=create_subscription<exec3::GeometryReceipt>(std::string(prefix)+"execution/tracker_geometry_receipt",10,
-      [this](exec3::GeometryReceipt::SharedPtr m){if(current_&&current_->execution)current_->execution->observe(*m,now().seconds());});
+      [this](exec3::GeometryReceipt::SharedPtr m){if(current_&&current_->execution)current_->execution->observe(*m,sourceNow());});
     route_progress_sub_=create_subscription<exec3::RouteProgress>(std::string(prefix)+"execution/route_progress",10,
-      [this](exec3::RouteProgress::SharedPtr m){if(current_&&current_->execution)current_->execution->observe(*m,now().seconds());});
+      [this](exec3::RouteProgress::SharedPtr m){if(current_&&current_->execution)current_->execution->observe(*m,sourceNow());});
     validation_sub_=create_subscription<exec3::Validation>(std::string(prefix)+"execution/validation",10,
-      [this](exec3::Validation::SharedPtr m){if(current_&&current_->execution&&current_->execution->observe(*m,now().seconds()))tryPrepareReadyHandoff();});
+      [this](exec3::Validation::SharedPtr m){if(current_&&current_->execution&&current_->execution->observe(*m,sourceNow()))tryPrepareReadyHandoff();});
     admission_sub_=create_subscription<exec3::Admission>(std::string(prefix)+"execution/admission",10,
-      [this](exec3::Admission::SharedPtr m){if(current_&&current_->execution&&current_->execution->observe(*m,now().seconds()))tryPrepareReadyHandoff();});
+      [this](exec3::Admission::SharedPtr m){if(current_&&current_->execution&&current_->execution->observe(*m,sourceNow()))tryPrepareReadyHandoff();});
     safe_demand_sub_=create_subscription<exec3::MotionDemand>(std::string(prefix)+"execution/safe_demand",10,
-      [this](exec3::MotionDemand::SharedPtr m){if(current_&&current_->execution)current_->execution->observe(*m,now().seconds());});
+      [this](exec3::MotionDemand::SharedPtr m){if(current_&&current_->execution)current_->execution->observe(*m,sourceNow());});
     motion_validation_sub_=create_subscription<exec3::MotionValidation>(std::string(prefix)+"execution/motion_validation",10,
-      [this](exec3::MotionValidation::SharedPtr m){if(current_&&current_->execution)current_->execution->observe(*m,now().seconds());});
+      [this](exec3::MotionValidation::SharedPtr m){if(current_&&current_->execution)current_->execution->observe(*m,sourceNow());});
     receipt_sub_=create_subscription<exec3::Receipt>(std::string(prefix)+"execution/reference_receipt",10,
-      [this](exec3::Receipt::SharedPtr m){if(current_&&current_->execution&&current_->execution->observe(*m,now().seconds()))tryPrepareReadyHandoff();});
+      [this](exec3::Receipt::SharedPtr m){if(current_&&current_->execution&&current_->execution->observe(*m,sourceNow()))tryPrepareReadyHandoff();});
     sdk_state_sub_=create_subscription<exec3::SDKState>(std::string(prefix)+"execution/sdk_state",10,
       [this](exec3::SDKState::SharedPtr m){if(m->sdk_session!=expected_sdk_session_)return;
-        for(auto&t:tasks_)if(t.second->execution)t.second->execution->observe(*m,now().seconds());});
+        for(auto&t:tasks_)if(t.second->execution)t.second->execution->observe(*m,sourceNow());});
     stop_report_sub_=create_subscription<exec3::Stop>(std::string(prefix)+"execution/stop_report",10,
-      [this](exec3::Stop::SharedPtr m){for(auto&t:tasks_)if(t.second->execution)t.second->execution->observe(*m,now().seconds());});
+      [this](exec3::Stop::SharedPtr m){for(auto&t:tasks_)if(t.second->execution)t.second->execution->observe(*m,sourceNow());});
     navigation_state_sub_=create_subscription<d1max_planning_interfaces::msg::NavigationState>(
       "/d1max/localization/navigation/state",5,[this](d1max_planning_interfaces::msg::NavigationState::SharedPtr m){
         if(acceptBodyPair(*m,body_state_,session_,health_.map_version_id,now().seconds()))body_state_=*m;});
@@ -221,7 +221,7 @@ public:
           const bool hard=!m->usable&&(m->reason=="hard_localization_lost"||m->reason=="lio_reset"||m->reason=="localization_reset");
           if(changed||hard) {
             t->transport_fault=changed?"localization_context_replaced":"hard_localization_lost";
-            t->confirmation.revoke();if(t->execution)t->execution->stop(t->transport_fault,now().seconds());
+            t->confirmation.revoke();if(t->execution)t->execution->stop(t->transport_fault,sourceNow());
           }
         }});
     startup_status_sub_=create_subscription<std_msgs::msg::String>(
@@ -755,7 +755,7 @@ private:
     const auto& snapshot = current_->route.snapshot;
     const RouteBinding binding{session_, current_->identity.task_id, snapshot.route_id, snapshot.route_hash};
     if(!preview_only_&&(!current_->execution||
-       (!current_->execution->confirmed()&&!current_->execution->canConfirm(now().seconds())))) {
+       (!current_->execution->confirmed()&&!current_->execution->canConfirm(sourceNow())))) {
       response.reason="waiting_matching_native_and_tracker_preparation";return;
     }
     if(!preview_only_&&!execution_grant_->service_is_ready()){response.reason="waiting_single_sdk_writer";return;}
@@ -772,17 +772,17 @@ private:
     response.reason = decision.reason;
     if(decision.authorized&&current_->execution&&!current_->execution->confirmed()) {
       auto task=current_;
-      if(!task->execution->begin(task->identity.task_id+":execution",decision.confirmation_id,++execution_epoch_,now().seconds())) {
+      if(!task->execution->begin(task->identity.task_id+":execution",decision.confirmation_id,++execution_epoch_,sourceNow())) {
         task->confirmation.revoke();response.accepted=response.execution_authorized=false;response.reason="execution_prepare_changed";return;
       }
       auto req=std::make_shared<d1max_planning_interfaces::srv::ExecutionGrant::Request>();
-      req->version=task->execution->grantVersion(now().seconds());req->execution_id=task->execution->executionId();
+      req->version=task->execution->grantVersion(sourceNow());req->execution_id=task->execution->executionId();
       req->control_epoch=task->execution->controlEpoch();req->confirmation_id=decision.confirmation_id;
       req->request_id=decision.confirmation_id;req->sdk_session=expected_sdk_session_;req->acceptance_record_sha256=record_sha256_;req->source_stamp=now();req->activate=true;
       req->transport_mode=transport_mode_;
       execution_grant_->async_send_request(req,[this,task](rclcpp::Client<d1max_planning_interfaces::srv::ExecutionGrant>::SharedFuture f){
-        try {const auto reply=f.get();if(!reply->accepted)task->execution->stop("sdk_grant_rejected:"+reply->reason,now().seconds());}
-        catch(const std::exception&){task->execution->stop("sdk_grant_transport_failure",now().seconds());}
+        try {const auto reply=f.get();if(!reply->accepted)task->execution->stop("sdk_grant_rejected:"+reply->reason,sourceNow());}
+        catch(const std::exception&){task->execution->stop("sdk_grant_transport_failure",sourceNow());}
       });
     }
   }
@@ -890,7 +890,7 @@ private:
   }
   void retire(const std::shared_ptr<Task>& task) {
     task->confirmation.revoke();
-    if(task->execution)task->execution->stop("task_retired",now().seconds());
+    if(task->execution)task->execution->stop("task_retired",sourceNow());
     if (!task->retired) {
       task->retired = true;
       task->retired_at = Clock::now();
@@ -1015,7 +1015,7 @@ private:
     const bool inputs=healthFresh()&&validHealthIdentity()&&
       localTaskInputsFresh(local_state_,session_,task->route.snapshot.map_version_id,
         static_cast<uint64_t>(task->epoch),task->seed,now().seconds());
-    const auto evidence=task->execution?task->execution->preparationEvidence(now().seconds()):0;
+    const auto evidence=task->execution?task->execution->preparationEvidence(sourceNow()):0;
     const auto stage=preparationStage(inputs,task->compute.result.status==BT::NodeStatus::SUCCESS,
       task->follow_phase,evidence);
     const auto reason=inputs?task->follow_reason:"waiting_current_localization";
@@ -1035,10 +1035,11 @@ private:
   // less than a 10 Hz BT period left, so prepare immediately once both arrive.
   // This does not tick the tree, reset a budget, renew the incumbent lease or
   // apply geometry; only the sole SDK writer can report that irreversible fact.
+  exec3::SourceClock sourceNow()const{return exec3::SourceClock::fromNanoseconds(now().nanoseconds());}
   void tryPrepareReadyHandoff() {
     if(!permitsMotionAuthority(execution_purpose_,preview_only_)||!current_||current_->retired||
        !current_->execution)return;
-    const double time=now().seconds();auto&task=*current_;
+    const auto time=sourceNow();auto&task=*current_;
     if(!healthFresh()||!health_.local_control_ready||!localExecutionInputsFresh(task,time))return;
     const auto*version=task.execution->pendingVersion(time);
     const auto*incumbent=task.execution->publishedHandoffIncumbent(time);
@@ -1052,7 +1053,7 @@ private:
   void executionTick() {
     for(auto& entry:tasks_) {
       auto& task=entry.second;if(!task->execution)continue;
-      const double time=now().seconds();
+      const auto time=sourceNow();
       const bool body_fresh=localExecutionInputsFresh(*task,time);
       const auto evidence=rclcpp::Time(local_state_.source_stamp).nanoseconds();
       const auto identity=session_+":"+std::to_string(local_state_.localization_epoch)+":"+local_state_.localization_seed_id;
@@ -1157,7 +1158,7 @@ private:
       out["execution_id"]=current_->execution?current_->execution->executionId():"";
       out["control_epoch"]=current_->execution?current_->execution->controlEpoch():0;
       out["execution_progress_reason"]=current_->execution?current_->execution->progressReason():"";
-      out["execution_blocked_age_s"]=current_->execution?current_->execution->blockedAge(now().seconds()):0.;
+      out["execution_blocked_age_s"]=current_->execution?current_->execution->blockedAge(sourceNow()):0.;
       out["writer_commit_sequence"]=current_->execution?current_->execution->appliedCommitSequence():0;
       out["handoff_reason"]=current_->execution?current_->execution->handoffReason():"";
       out["handoff_ready_window_s"]=current_->execution?current_->execution->handoffReadyWindow():-1.;

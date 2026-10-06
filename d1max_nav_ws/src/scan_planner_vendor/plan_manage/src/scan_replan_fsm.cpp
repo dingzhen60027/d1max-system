@@ -147,9 +147,9 @@ namespace scan_planner
         [this](nav_msgs::msg::Odometry::ConstSharedPtr m) {
           const auto& p=m->pose.pose.position;const auto& q=m->pose.pose.orientation;
           MeasuredBodyPose body{{p.x,p.y,p.z},Eigen::Quaterniond(q.w,q.x,q.y,q.z),
-            rclcpp::Time(m->header.stamp).seconds(),m->header.frame_id};
+            rclcpp::Time(m->header.stamp).seconds(),m->header.frame_id,rclcpp::Time(m->header.stamp).nanoseconds()};
           double yaw=0.;
-          if(measuredBodyYaw(body,self_inflation_frame_id_,node_->now().seconds(),odom_timeout_,yaw))
+          if(measuredBodyYaw(body,self_inflation_frame_id_,node_->now().seconds(),odom_timeout_,yaw,node_->now().nanoseconds()))
             execution_validator_->body(body);
         },control_options);
       execution_permit_sub_=node_->create_subscription<ew::ExecutionPermit>(
@@ -620,7 +620,7 @@ namespace scan_planner
         tagged.valid_start_time=join->curve_time;
         tagged.valid_start_arc_length=join->arc_length;
         tagged.join_source_stamp=rclcpp::Time(
-            static_cast<std::int64_t>(std::llround(join->measured.source_stamp*1e9)),
+            measuredBodySourceNs(join->measured),
             node_->get_clock()->get_clock_type());
         tagged.join_pose.position.x=join->measured.position.x();
         tagged.join_pose.position.y=join->measured.position.y();
@@ -646,10 +646,9 @@ namespace scan_planner
   std_msgs::msg::Header SCANReplanFSM::localPlanDebugHeader()
   {
     std_msgs::msg::Header header;
-    const auto clock_type = node_->get_clock()->get_clock_type();
-    const auto stamp_ns = std::max(node_->now().nanoseconds(), last_local_debug_stamp_ns_ + 1);
-    last_local_debug_stamp_ns_ = stamp_ns;
-    header.stamp = rclcpp::Time(stamp_ns, clock_type);
+    // A publication stamp is the actual source clock, not an event sequence.
+    // Generation and receipt order distinguish same-tick cancellation events.
+    header.stamp = node_->now();
     header.frame_id = self_inflation_frame_id_;
     return header;
   }
@@ -970,11 +969,11 @@ namespace scan_planner
 
     odom_orient_ = orientation;
     planner_manager_->setMeasuredBodyPose(
-        MeasuredBodyPose{position,orientation,source_time.seconds(),msg->header.frame_id},
+        MeasuredBodyPose{position,orientation,source_time.seconds(),msg->header.frame_id,source_time.nanoseconds()},
         self_inflation_frame_id_,odom_timeout_);
     planner_manager_->setMeasuredBodyVelocity(velocity);
     if(execution_validator_) execution_validator_->body(
-      MeasuredBodyPose{position,orientation,source_time.seconds(),msg->header.frame_id});
+      MeasuredBodyPose{position,orientation,source_time.seconds(),msg->header.frame_id,source_time.nanoseconds()});
 
     have_odom_ = true;
     publishSelfInflationMarker();
@@ -1592,7 +1591,7 @@ namespace scan_planner
     if (go2_execution_frozen_ || have_new_target_) return;
 
     if(execution_validator_) {
-      if(const auto boundary=execution_validator_->committedBoundary(odom_pos_,node_->now().seconds())) {
+      if(const auto boundary=execution_validator_->committedBoundary(odom_pos_,node_->now().seconds(),node_->now().nanoseconds())) {
         start_vel_=boundary->velocity;start_acc_=boundary->acceleration;
       }
       return;
@@ -2161,8 +2160,8 @@ namespace scan_planner
         const auto support=execution_validator_->planningSupport(executionVersion(reference_metadata_));
         const auto braking=execution_validator_->brakingModel();
         double measured_yaw=0.;
-        const MeasuredBodyPose measured{start_pt_,odom_orient_,last_odom_time_.seconds(),self_inflation_frame_id_};
-        if(support&&braking&&measuredBodyYaw(measured,self_inflation_frame_id_,node_->now().seconds(),odom_timeout_,measured_yaw)) {
+        const MeasuredBodyPose measured{start_pt_,odom_orient_,last_odom_time_.seconds(),self_inflation_frame_id_,last_odom_time_.nanoseconds()};
+        if(support&&braking&&measuredBodyYaw(measured,self_inflation_frame_id_,node_->now().seconds(),odom_timeout_,measured_yaw,node_->now().nanoseconds())) {
           auto snapshot=snapshot_pool_.acquireSolver(*planner_manager_->grid_map_,
               node_->now().nanoseconds(),budget->deadline());
           if(!snapshot){selection.reason="waiting_snapshot_slot";local_target_query_debug_=selection;return false;}

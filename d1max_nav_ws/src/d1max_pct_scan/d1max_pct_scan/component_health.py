@@ -6,6 +6,13 @@ motion, repairs stale sensor data, restarts nodes, or owns a navigation task.
 import math
 
 
+def create_functional_heartbeat_timer(node, callback):
+    from rclpy.clock import Clock, ClockType
+    # Executor liveness uses wall/steady time. ROS time may advance slowly or
+    # pause, without stopping the function that reports its own availability.
+    return node.create_timer(.2, callback, clock=Clock(clock_type=ClockType.STEADY_TIME))
+
+
 class FunctionalHealth:
     def __init__(self, session_id, components, *, started, timeout_s=1.5, startup_s=30.):
         if (not session_id or not components or len(set(components))!=len(components)

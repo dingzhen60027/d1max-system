@@ -15,6 +15,7 @@ struct ExecutionValidatorTestAccess {
   static auto writerSequence(const ExecutionValidator& v){return v.writer_commit_sequence_;}
   static bool activeProof(const ExecutionValidator& v){return v.active_&&v.active_->proof.has_value();}
   static bool activeProgress(const ExecutionValidator& v){return v.active_&&v.active_->progress.has_value();}
+  static auto bodySource(const ExecutionValidator& v){return measuredBodySourceNs(v.body_);}
   static bool entry(const ew::PreparedMotionDemand& x,const ew::ExecutionHandoffGrant& g,std::int64_t now){
     return ExecutionValidator::preparedEntryMatches(x,g,"odom",now);}
 };
@@ -384,6 +385,26 @@ TEST(ExecutionLedger,HoldingFreshMeasuredProgressIsNotMissingOrVirtualMotion) {
   EXPECT_DOUBLE_EQ(active->progress->curve_time,0.);
   p.trajectory_id=2;p.curve_time=2.;p.arc_length=p.s_committed=.5;f.ledger.progressAt(p,10.02);
   EXPECT_DOUBLE_EQ(f.ledger.committedView()->progress->curve_time,0.);
+}
+
+TEST(ExecutionLedger, UnixBodyAndProgressKeepOriginalNanosecondOrdering) {
+  constexpr std::int64_t ns=1791124691902856036LL;
+  Fixture f;f.ledger.candidate(f.spline,f.proposal);ASSERT_TRUE(f.ledger.commit(f.permit()));
+  auto p=f.progress();p.header.stamp=rclcpp::Time(ns);
+  f.ledger.progressAt(p,static_cast<double>(ns)*1e-9,ns);
+  ASSERT_EQ(scan_planner::ExecutionValidatorTestAccess::bodySource(f.ledger),ns);
+  p.header.stamp=rclcpp::Time(ns+1);
+  f.ledger.progressAt(p,static_cast<double>(ns+1)*1e-9,ns+1);
+  EXPECT_EQ(scan_planner::ExecutionValidatorTestAccess::bodySource(f.ledger),ns+1);
+  auto old=p;old.header.stamp=rclcpp::Time(ns);old.pose.position.x=99.;
+  f.ledger.progressAt(old,static_cast<double>(ns+2)*1e-9,ns+2);
+  EXPECT_EQ(scan_planner::ExecutionValidatorTestAccess::bodySource(f.ledger),ns+1);
+  scan_planner::MeasuredBodyPose measured{{0.,0.,.55},Eigen::Quaterniond::Identity(),static_cast<double>(ns)*1e-9,"odom",ns+2};
+  f.ledger.body(measured);
+  EXPECT_EQ(scan_planner::ExecutionValidatorTestAccess::bodySource(f.ledger),ns+2);
+  measured.source_stamp_ns=ns;f.ledger.body(measured);
+  EXPECT_EQ(scan_planner::ExecutionValidatorTestAccess::bodySource(f.ledger),ns+2);
+  EXPECT_EQ(rclcpp::Time(scan_planner::ExecutionValidatorTestAccess::bodySource(f.ledger)).nanoseconds(),ns+2);
 }
 TEST(ExecutionLedger,ExactFreshCandidateEntryRejectionIsOneBoundedReseedNotGeometryRetirement) {
   using A=scan_planner::ExecutionValidatorTestAccess;

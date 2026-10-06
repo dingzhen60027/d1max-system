@@ -119,10 +119,17 @@ public:
        p->measured_arc_m>old.measured_arc_m+std::min(1.,1.5*dt+.05)+1e-5||
        p->confirmed_arc_m<old.confirmed_arc_m-1e-5||
        p->confirmed_arc_m>std::max(old.confirmed_arc_m,p->measured_arc_m)+1e-5)return false;
-    local_travel_+=travel;previous_=*p;last_source_=source;
+    previous_=*p;last_source_=source;
     const double gain=p->confirmed_arc_m-progress_arc_;
-    if(gain<.03||local_travel_+1e-5<gain)return false;
-    progress_arc_=p->confirmed_arc_m;local_travel_=0.;return true;
+    // A robot beside a curved centerline can advance its route projection
+    // farther than it physically travels. Require independent route and
+    // measured forward movement, rather than equating their two distances.
+    // Net movement from the last credit discards old lateral/oscillatory work.
+    // The current projection must advance too; an old confirmed peak is not
+    // evidence of current forward correspondence.
+    if(gain<.03||!physical_witness_||p->measured_arc_m-physical_witness_->measured_arc_m<.03||
+       forwardDisplacement(*physical_witness_,*p)<.03)return false;
+    progress_arc_=p->confirmed_arc_m;physical_witness_=*p;return true;
   }
 private:
   static int64_t ns(const builtin_interfaces::msg::Time&t){return int64_t(t.sec)*1000000000LL+t.nanosec;}
@@ -137,6 +144,32 @@ private:
     geometry_msgs::msg::Point o;o.x=t.position.x+p.x+q.w*tx+q.y*tz-q.z*ty;
     o.y=t.position.y+p.y+q.w*ty+q.z*tx-q.x*tz;o.z=t.position.z+p.z+q.w*tz+q.x*ty-q.y*tx;return o;
   }
+  geometry_msgs::msg::Point routePoint(const Progress&p)const {
+    const auto&a=route_->path.poses[p.edge_index].pose.position;
+    const auto&b=route_->path.poses[p.edge_index+1].pose.position;
+    const double t=std::clamp((p.measured_arc_m-arc_[p.edge_index])/
+      (arc_[p.edge_index+1]-arc_[p.edge_index]),0.,1.);
+    geometry_msgs::msg::Point out;out.x=a.x+(b.x-a.x)*t;out.y=a.y+(b.y-a.y)*t;out.z=a.z+(b.z-a.z)*t;
+    return out;
+  }
+  double forwardDisplacement(const Progress&witness,const Progress&current)const {
+    const double ds=current.measured_arc_m-witness.measured_arc_m;if(ds==0.)return 0.;
+    const auto from=routePoint(witness),to=routePoint(current);
+    const double chord=distance(from,to);if(!std::isfinite(chord)||chord<=0.)return 0.;
+    const double sign=ds>0.?1.:-1.;
+    const double x=sign*(to.x-from.x)/chord,y=sign*(to.y-from.y)/chord,z=sign*(to.z-from.z)/chord;
+    // Only the direction is converted to odom. Displacement comes from the
+    // literal measured poses, never the claimed source-map body positions.
+    const auto&q=current.map_from_odom.orientation;
+    const double scale=1./std::sqrt(q.x*q.x+q.y*q.y+q.z*q.z+q.w*q.w);
+    const double a=-q.x*scale,b=-q.y*scale,c=-q.z*scale,w=q.w*scale;
+    const double tx=2*(b*z-c*y),ty=2*(c*x-a*z),tz=2*(a*y-b*x);
+    const double ux=x+w*tx+b*tz-c*ty,uy=y+w*ty+c*tx-a*tz,uz=z+w*tz+a*ty-b*tx;
+    const auto&start=witness.odom_body_pose.pose.position;const auto&end=current.odom_body_pose.pose.position;
+    const double net=distance(start,end),support=(end.x-start.x)*ux+(end.y-start.y)*uy+(end.z-start.z)*uz;
+    if(!std::isfinite(net)||!std::isfinite(support))return 0.;
+    return std::clamp(support,-net,net); // Bound floating round-off by actual net movement; keep its sign.
+  }
   bool adjacent(const Progress&a,const Progress&b,double observed_travel)const {
     for(size_t i=0;i+1<route_->segments.size();++i) {
       const auto&old=route_->segments[i];const auto&next=route_->segments[i+1];
@@ -147,9 +180,9 @@ private:
       return distance(ground,route_->path.poses[old.end_index].pose.position)<=.12;
     }return false;
   }
-  void baseline(const Progress&p){previous_=p;last_source_=ns(p.body_source_stamp);progress_arc_=p.confirmed_arc_m;local_travel_=0.;}
+  void baseline(const Progress&p){previous_=physical_witness_=p;last_source_=ns(p.body_source_stamp);progress_arc_=p.confirmed_arc_m;}
   Version task_;std::string transport_;std::optional<Snapshot>route_;std::vector<double>arc_;
-  std::vector<Body>bodies_;std::vector<Progress>pending_;std::optional<Progress>previous_;
-  uint64_t sequence_=0;int64_t last_source_=0;double progress_arc_=0.,local_travel_=0.;
+  std::vector<Body>bodies_;std::vector<Progress>pending_;std::optional<Progress>previous_,physical_witness_;
+  uint64_t sequence_=0;int64_t last_source_=0;double progress_arc_=0.;
 };
 } // namespace d1max_navigation_bt::exec3

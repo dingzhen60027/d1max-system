@@ -6,6 +6,7 @@
 #include <stdexcept>
 #include <string>
 #include <sstream>
+#include <cstdlib>
 #include <geometry_msgs/msg/transform_stamped.hpp>
 #include <nlohmann/json.hpp>
 #include <rcl/timer.h>
@@ -81,6 +82,20 @@ void GridMap::initMap(rclcpp::Node *node)
   // identity, complete per-ray integration and scan freshness are independent.
   load_parameter(node_, "grid_map.require_observed_free", mp_.require_observed_free_, false);
   load_parameter(node_, "grid_map.use_projected_rays", mp_.use_projected_rays_, false);
+  std::string simulation_clock_contract,transport_mode;
+  load_parameter(node_, "grid_map.simulation_clock_contract", simulation_clock_contract,std::string{});
+  load_parameter(node_, "grid_map.transport_mode", transport_mode,std::string{"live"});
+  if(!simulation_clock_contract.empty()) {
+    const auto env_equals=[](const char *key,const char *value) {
+      const auto actual=std::getenv(key);return actual&&std::string(actual)==value;
+    };
+    if(simulation_clock_contract!="isaac_fixed_anchor_v1" || transport_mode!="isolated_mock" ||
+        !node_->get_parameter("use_sim_time").as_bool() ||
+        !env_equals("D1MAX_NAV_ISOLATED","1") || !env_equals("D1MAX_NAV_TRANSPORT","isolated_mock") ||
+        !env_equals("RMW_IMPLEMENTATION","rmw_zenoh_cpp") || !mp_.use_projected_rays_)
+      throw std::invalid_argument("simulation collision clock requires isolated Isaac projected rays and ROS simulation time");
+    mp_.simulation_collision_clock_=true;
+  }
   load_parameter(node_, "grid_map.preview_only", mp_.preview_only_, false);
   std::vector<std::int64_t> expected_ray_sensors;
   load_parameter(node_, "grid_map.expected_ray_sensor_ids", expected_ray_sensors, std::vector<std::int64_t>{0,1});
@@ -98,6 +113,28 @@ void GridMap::initMap(rclcpp::Node *node)
     throw std::invalid_argument("projected rays require context-tagged map-frame input without another extrinsic");
   scan_planner::validateCloudPoseTiming(mp_.cloud_pose_pair_wait_,mp_.cloud_pose_max_age_,
       mp_.preview_only_,mp_.require_observed_free_,mp_.use_projected_rays_);
+
+  std::string collision_evidence_mode;
+  load_parameter(node_,"grid_map.collision_evidence_mode",collision_evidence_mode,std::string{});
+  if(!collision_evidence_mode.empty()) {
+    if(collision_evidence_mode!="validated_static_prior"||!mp_.require_observed_free_||
+        !mp_.use_projected_rays_||!mp_.require_localization_context_)
+      throw std::invalid_argument("validated static prior requires strict context-tagged projected rays");
+    scan_planner::StaticOccupancyPrior::Expected expected;
+    std::string path;
+    load_parameter(node_,"grid_map.static_prior_manifest_path",path,std::string{});
+    load_parameter(node_,"grid_map.static_prior_manifest_sha256",expected.manifest_sha256,std::string{});
+    load_parameter(node_,"grid_map.static_prior_geometry_sha256",expected.geometry_sha256,std::string{});
+    load_parameter(node_,"grid_map.static_prior_map_version_id",expected.map_version,std::string{});
+    load_parameter(node_,"grid_map.static_prior_map_frame",expected.frame_id,std::string{});
+    load_parameter(node_,"grid_map.static_prior_transform_contract",expected.transform_contract,std::string{});
+    expected.odom_frame_id=mp_.frame_id_;expected.resolution=mp_.resolution_;
+    static_prior_=scan_planner::StaticOccupancyPrior::load(path,expected);
+    mp_.validated_static_prior_=true;
+    // Loading geometry is insufficient authority. A new localization context
+    // with the same certified identity must be ACKed before any FREE is used.
+    static_prior_context_valid_=false;
+  }
 
   mp_.lidar_extrinsic_ <<
       1.0, 0.0, 0.0, -0.01100,
@@ -334,6 +371,7 @@ void GridMap::copyCollisionSnapshotTo(GridMap &out,std::int64_t source_now_ns,
     std::vector<int>().swap(out.md_.occupancy_buffer_inflate_cnt_);
   out.md_.inflate_offsets_=md_.inflate_offsets_;
   out.free_observation_stamps_=free_observation_stamps_;
+  out.free_observation_receipts_ns_=free_observation_receipts_ns_;
   out.integrated_cloud_stamp_ns_=integrated_cloud_stamp_ns_;
   out.ray_integrated_stamps_=ray_integrated_stamps_;
   out.fusion_timing_=fusion_timing_;
@@ -343,6 +381,11 @@ void GridMap::copyCollisionSnapshotTo(GridMap &out,std::int64_t source_now_ns,
   out.localization_seed_=localization_seed_;
   out.localization_context_barrier_ns_=localization_context_barrier_ns_;
   out.localization_context_payload_=localization_context_payload_;
+  out.static_prior_=static_prior_; // One immutable checked volume across all readers.
+  out.static_prior_context_valid_=static_prior_context_valid_;
+  out.static_prior_query_lease_valid_=false; // Reader clock/receipt must revalidate its own scope.
+  out.static_prior_revoked_sequence_=static_prior_revoked_sequence_;
+  out.static_prior_live_hits_=static_prior_live_hits_;
   out.occupancy_revision_=occupancy_revision_;
   out.free_evidence_revision_=free_evidence_revision_;
   out.enforce_free_freshness_=enforce_free_freshness_;
@@ -350,8 +393,11 @@ void GridMap::copyCollisionSnapshotTo(GridMap &out,std::int64_t source_now_ns,
   out.collision_snapshot_=true;
   out.snapshot_clock_ns_=mp_.use_projected_rays_ ? collisionQueryClockAt(source_now_ns,captured) : source_now_ns;
   out.snapshot_captured_=captured;
+  out.ray_tick_receipt_=captured;
   out.observed_cylinder_cache_.clear();
+  out.prepareRawCollisionCache(); // Retain destination capacity, never copy the writer's decisions.
   out.collision_cache_deadline_ns_=out.collision_cache_clock_ns_=0;
+  out.collision_cache_receipt_deadline_ns_=out.collision_cache_receipt_ns_=0;
   out.unknown_collision_queries_=0;
   // No copied callback, ROS clock owner, pending acquisition, visualization or
   // shared mutable cache. Source acquisition stamps above remain unchanged.
@@ -360,6 +406,7 @@ void GridMap::copyCollisionSnapshotTo(GridMap &out,std::int64_t source_now_ns,
 std::int64_t GridMap::collisionQueryClockAt(std::int64_t source,PairReceipt now) const
 {
   if (source<=0 || ray_tick_clock_ns_<=0 || source<ray_tick_clock_ns_) return 0;
+  if(mp_.simulation_collision_clock_) return source;
   const auto elapsed=std::chrono::duration_cast<std::chrono::nanoseconds>(
       now-ray_tick_receipt_).count();
   if (elapsed<0 || elapsed>std::numeric_limits<std::int64_t>::max()-ray_tick_effective_ns_) return 0;
@@ -369,7 +416,7 @@ std::int64_t GridMap::collisionQueryClockAt(std::int64_t source,PairReceipt now)
 
 void GridMap::advanceRayEvidenceClock(std::int64_t source,PairReceipt now,bool age_by_steady)
 {
-  const auto prior_effective=age_by_steady?collisionQueryClockAt(source,now):source;
+  const auto prior_effective=age_by_steady&&!mp_.simulation_collision_clock_?collisionQueryClockAt(source,now):source;
   if(ray_tick_clock_ns_>0 && source<ray_tick_clock_ns_) {
     ray_clock_fault_=true;observed_cylinder_cache_.clear();
   }
@@ -377,20 +424,147 @@ void GridMap::advanceRayEvidenceClock(std::int64_t source,PairReceipt now,bool a
   ray_tick_clock_ns_=source;ray_tick_receipt_=now;ray_query_clock_ns_=source;
 }
 
+std::int64_t GridMap::collisionQueryReceiptNs() const
+{
+  const auto now=(node_||collision_snapshot_)?std::chrono::steady_clock::now():ray_tick_receipt_;
+  return std::chrono::duration_cast<std::chrono::nanoseconds>(now.time_since_epoch()).count();
+}
+
+std::int64_t GridMap::observedProofDeadlineNs() const
+{
+  if(!mp_.simulation_collision_clock_&&!mp_.validated_static_prior_) return collision_cache_deadline_ns_;
+  const auto now=collisionQueryReceiptNs();
+  if(now<=0 || now<collision_cache_receipt_ns_ || collision_cache_receipt_deadline_ns_<=now)
+    return 1; // Positive, already expired; never an absent/unbounded proof.
+  const auto remaining=collision_cache_receipt_deadline_ns_-now;
+  if(collision_cache_clock_ns_<=0 || remaining>std::numeric_limits<std::int64_t>::max()-collision_cache_clock_ns_)
+    return 1;
+  return std::min(collision_cache_deadline_ns_,collision_cache_clock_ns_+remaining);
+}
+
 void GridMap::beginCollisionQuery()
 {
   if (!mp_.require_observed_free_ || !mp_.use_projected_rays_ || !enforce_free_freshness_) return;
   const auto now=collisionQueryClock();
+  const bool dual_clock=mp_.simulation_collision_clock_||mp_.validated_static_prior_;
+  const auto receipt=dual_clock?collisionQueryReceiptNs():0;
   if (collision_cache_clock_ns_>0 && (now<=0 || (!node_ && now<collision_cache_clock_ns_)))
     ray_clock_fault_=true;
-  if (now<=0 || now<collision_cache_clock_ns_ || now>=collision_cache_deadline_ns_) {
+  if(dual_clock && (receipt<=0 || receipt<collision_cache_receipt_ns_))
+    ray_clock_fault_=true;
+  if (now<=0 || now<collision_cache_clock_ns_ || now>=collision_cache_deadline_ns_ ||
+      (dual_clock && (receipt<=0 || receipt<collision_cache_receipt_ns_ ||
+       receipt>=collision_cache_receipt_deadline_ns_))) {
     observed_cylinder_cache_.clear();
     collision_cache_deadline_ns_=std::numeric_limits<std::int64_t>::max();
+    collision_cache_receipt_deadline_ns_=std::numeric_limits<std::int64_t>::max();
   }
   collision_cache_clock_ns_=now>0?std::max(now,collision_cache_clock_ns_):now;
+  collision_cache_receipt_ns_=receipt;
+  if(mp_.validated_static_prior_) {
+    static_prior_query_lease_valid_=staticPriorLiveLeaseValid();
+    if(!static_prior_query_lease_valid_) {
+      observed_cylinder_cache_.clear();
+      collision_cache_deadline_ns_=collision_cache_receipt_deadline_ns_=1;
+    }
+    prepareRawCollisionCache();
+  }
+}
+
+bool GridMap::staticPriorLiveLeaseValid()
+{
+  if(!static_prior_||!static_prior_context_valid_||!localization_context_sequence_||
+      !localization_epoch_||localization_seed_.empty()||ray_clock_fault_||
+      collision_cache_clock_ns_<=0||collision_cache_receipt_ns_<=0||
+      !std::isfinite(mp_.cloud_pose_max_age_)||mp_.cloud_pose_max_age_<=0.||mp_.cloud_pose_max_age_>.5)return false;
+  const auto limit=static_cast<std::int64_t>(mp_.cloud_pose_max_age_*1e9);
+  for(std::size_t sensor=0;sensor<2;++sensor) {
+    const auto source=ray_integrated_stamps_[sensor];
+    const auto receipt=std::chrono::duration_cast<std::chrono::nanoseconds>(ray_integrated_receipts_[sensor].time_since_epoch()).count();
+    if(source<=0||collision_cache_clock_ns_<source||collision_cache_clock_ns_-source>=limit||
+        receipt<=0||collision_cache_receipt_ns_<receipt||collision_cache_receipt_ns_-receipt>=limit)return false;
+    collision_cache_deadline_ns_=std::min(collision_cache_deadline_ns_,source+limit);
+    collision_cache_receipt_deadline_ns_=std::min(collision_cache_receipt_deadline_ns_,receipt+limit);
+  }
+  return true;
+}
+
+void GridMap::revokeStaticPriorContext(std::uint64_t sequence)
+{
+  if(!mp_.validated_static_prior_)return;
+  static_prior_revoked_sequence_=std::max({static_prior_revoked_sequence_,sequence,localization_context_sequence_});
+  static_prior_context_valid_=false;
+  invalidateCloudPosePairs(static_cast<std::int64_t>(localization_context_barrier_ns_));
+  resetAllMapData(); // No old cloud/context can continue to authorize motion.
+}
+
+void GridMap::recordStaticPriorHit(const Eigen::Vector3i &cell,std::int64_t stamp)
+{
+  if(!mp_.validated_static_prior_||!static_prior_||stamp<=0)return;
+  const std::array<int,3> key{{cell.x(),cell.y(),cell.z()}};
+  if(static_prior_->state(key)!=0)return; // Only contradicts certified FREE.
+  auto found=static_prior_live_hits_.find(key);
+  if(found==static_prior_live_hits_.end()) {
+    static_prior_live_hits_.emplace(key,stamp);observed_cylinder_cache_.clear();++occupancy_revision_;
+  } else if(stamp>found->second)found->second=stamp;
+}
+
+void GridMap::clearStaticPriorHitAfterMiss(const Eigen::Vector3i &cell,int address)
+{
+  if(!mp_.validated_static_prior_||ray_clock_fault_||
+      scan_planner::strictRawVoxelStatus(md_.occupancy_buffer_[address],mp_.clamp_min_log_,mp_.min_occupancy_log_)!=0)return;
+  const std::array<int,3> key{{cell.x(),cell.y(),cell.z()}};
+  auto found=static_prior_live_hits_.find(key);if(found==static_prior_live_hits_.end())return;
+  const auto source=free_observation_stamps_[address];
+  const auto source_now=node_?collisionQueryClock():collision_cache_clock_ns_;
+  const auto receipt_now=node_?collisionQueryReceiptNs():collision_cache_receipt_ns_;
+  if(source<=found->second||source_now<source||
+      (source_now-source)*1e-9>=mp_.cloud_pose_max_age_)return;
+  if(mp_.simulation_collision_clock_||mp_.validated_static_prior_) {
+    const auto receipt=free_observation_receipts_ns_[address];
+    if(receipt<=0||receipt_now<receipt||
+        (receipt_now-receipt)*1e-9>=mp_.cloud_pose_max_age_)return;
+  }
+  static_prior_live_hits_.erase(found);observed_cylinder_cache_.clear();++occupancy_revision_;
 }
 
 int GridMap::rawCollisionStatus(const Eigen::Vector3i &cell)
+{
+  if(!isInMap(cell))return -1;
+  if(!mp_.validated_static_prior_)return uncachedRawCollisionStatus(cell);
+  // All cells of the exact cylinder/swept volume are still visited. Reuse only
+  // their raw evidence decision in this map/proof scope. A direct-address
+  // int8 cache avoids hashing cylinder position/height for every raw cell.
+  // Every original cache clear changes its independent 64-bit identifier,
+  // including the 32-bit slot-generation wrap and automatic capacity flush.
+  // The first evaluation binds the original source/receipt proof deadlines;
+  // neither a hit nor a later lookup can extend that minimum lease.
+  const int address=toAddress(cell);
+  if(address<0||static_cast<std::size_t>(address)>=md_.occupancy_buffer_.size())return -1;
+  if(raw_collision_cache_generation_!=observed_cylinder_cache_.generationIdentifier()||
+      raw_collision_cache_.size()!=md_.occupancy_buffer_.size())prepareRawCollisionCache();
+  if(!observed_cylinder_cache_.generationReusable()||raw_collision_cache_.empty())
+    return uncachedRawCollisionStatus(cell);
+  auto &cached=raw_collision_cache_[address];
+  if(cached==uncached_raw_status_)cached=static_cast<std::int8_t>(uncachedRawCollisionStatus(cell));
+  return cached;
+}
+
+void GridMap::prepareRawCollisionCache()
+{
+  if(!mp_.validated_static_prior_||!observed_cylinder_cache_.generationReusable()||
+      md_.occupancy_buffer_.size()>static_cast<std::size_t>(std::numeric_limits<int>::max())) {
+    raw_collision_cache_.clear();raw_collision_cache_generation_=0;return;
+  }
+  const auto generation=observed_cylinder_cache_.generationIdentifier();
+  if(raw_collision_cache_.size()!=md_.occupancy_buffer_.size())
+    raw_collision_cache_.assign(md_.occupancy_buffer_.size(),uncached_raw_status_);
+  else if(raw_collision_cache_generation_!=generation)
+    std::fill(raw_collision_cache_.begin(),raw_collision_cache_.end(),uncached_raw_status_);
+  raw_collision_cache_generation_=generation;
+}
+
+int GridMap::uncachedRawCollisionStatus(const Eigen::Vector3i &cell)
 {
   if (!isInMap(cell)) return -1;
   const auto address=toAddress(cell);
@@ -399,6 +573,18 @@ int GridMap::rawCollisionStatus(const Eigen::Vector3i &cell)
   // Official collision queries read inflation directly and never use this
   // status to turn unobserved map contents into measured free cells.
   const int raw=scan_planner::strictRawVoxelStatus(odds,mp_.clamp_min_log_,mp_.min_occupancy_log_);
+  const std::array<int,3> key{{cell.x(),cell.y(),cell.z()}};
+  const int prior=mp_.validated_static_prior_&&static_prior_&&static_prior_context_valid_?
+      static_prior_->state(key):2;
+  if(prior==1||raw==1)return 1; // Static occupied cannot be cleared by live misses.
+  if(mp_.validated_static_prior_) {
+    if(!static_prior_query_lease_valid_)return 2;
+    if(static_prior_live_hits_.count(key))return 2;
+    if(raw==2) {
+      const auto category=scan_planner::diagnoseRawVoxel(odds,mp_.clamp_min_log_,mp_.min_occupancy_log_,mp_.unknown_flag_);
+      return prior==0&&category==scan_planner::RawVoxelDiagnostic::NeverObserved?0:2;
+    }
+  }
   if (raw!=0 || !mp_.require_observed_free_ || !mp_.use_projected_rays_ || !enforce_free_freshness_) return raw;
   if (ray_clock_fault_) return 2;
   const auto stamp=static_cast<std::size_t>(address)<free_observation_stamps_.size()?
@@ -408,7 +594,38 @@ int GridMap::rawCollisionStatus(const Eigen::Vector3i &cell)
   if (stamp<=0 || now<stamp || !std::isfinite(mp_.cloud_pose_max_age_) ||
       mp_.cloud_pose_max_age_<=0. || mp_.cloud_pose_max_age_>.5) return 2;
   const auto age_limit=static_cast<std::int64_t>(mp_.cloud_pose_max_age_*1e9);
-  if (now-stamp>=age_limit) return 2;
+  // A zero/future/malformed witness is not expired evidence. The certified
+  // prior may replace only real past evidence whose live lease has elapsed.
+  const bool source_expired=now-stamp>=age_limit;
+  bool receipt_expired=false;
+  std::int64_t voxel_receipt_ns=0;
+  if(mp_.simulation_collision_clock_||mp_.validated_static_prior_) {
+    const auto receipt=static_cast<std::size_t>(address)<free_observation_receipts_ns_.size()?
+        free_observation_receipts_ns_[address]:0;
+    const auto receipt_now=collision_cache_receipt_ns_;
+    if(receipt<=0 || receipt_now<receipt) return 2;
+    voxel_receipt_ns=receipt;
+    receipt_expired=receipt_now-receipt>=age_limit;
+  }
+  // A valid independent static FREE certificate already has its own finite
+  // both-sensor source/receipt lease. Prefer it to a redundant, shorter live
+  // FREE lease even just before that old observation expires. Invalid live
+  // witnesses above, weak evidence and true-hit vetoes still fail closed.
+  // No voxel observation or certificate deadline is rewritten or renewed.
+  if(prior==0)return 0;
+  if(!source_expired&&!receipt_expired&&voxel_receipt_ns>0&&
+      voxel_receipt_ns<=std::numeric_limits<std::int64_t>::max()-age_limit)
+    collision_cache_receipt_deadline_ns_=std::min(collision_cache_receipt_deadline_ns_,voxel_receipt_ns+age_limit);
+  if(source_expired||receipt_expired) {
+    // A rejected live certificate still leaves an explicitly expired proof
+    // deadline. Preserve the default dual-clock contract instead of turning
+    // UNKNOWN into an apparent unlimited/absent evidence deadline.
+    if(stamp<=std::numeric_limits<std::int64_t>::max()-age_limit)
+      collision_cache_deadline_ns_=std::min(collision_cache_deadline_ns_,stamp+age_limit);
+    if(voxel_receipt_ns>0&&voxel_receipt_ns<=std::numeric_limits<std::int64_t>::max()-age_limit)
+      collision_cache_receipt_deadline_ns_=std::min(collision_cache_receipt_deadline_ns_,voxel_receipt_ns+age_limit);
+    return 2;
+  }
   if (stamp<=std::numeric_limits<std::int64_t>::max()-age_limit)
     collision_cache_deadline_ns_=std::min(collision_cache_deadline_ns_,stamp+age_limit);
   return 0;
@@ -510,6 +727,17 @@ std::string GridMap::describeInflateOccupancy(const Eigen::Vector3d &position,do
      <<" front_source_ns="<<integratedRaySourceStamp(0)<<" rear_source_ns="<<integratedRaySourceStamp(1)
      <<" front_age_ms="<<(collision_cache_clock_ns_-integratedRaySourceStamp(0))*1e-6
      <<" rear_age_ms="<<(collision_cache_clock_ns_-integratedRaySourceStamp(1))*1e-6;
+  if(mp_.validated_static_prior_) {
+    std::map<std::string,std::size_t> sources;
+    for(const auto &voxel:evidence.voxels)++sources[collisionEvidenceSource(voxel.index,voxel.native_state)];
+    out<<" prior_context_valid="<<static_prior_context_valid_
+       <<" certified_static_free="<<sources["certified_static_free"]
+       <<" certified_static_occupied="<<sources["certified_static_occupied"]
+       <<" live_observed_free="<<sources["live_observed_free"]
+       <<" live_static_conflict="<<sources["live_static_conflict"]
+       <<" prior_map_version="<<(static_prior_?static_prior_->mapVersion():"unavailable")
+       <<" prior_manifest_sha256="<<(static_prior_?static_prior_->manifestSha256():"unavailable");
+  }
   std::int64_t oldest_free=std::numeric_limits<std::int64_t>::max();
   for(const auto& voxel:evidence.voxels)if(voxel.free_observation_stamp_ns>0)
     oldest_free=std::min(oldest_free,voxel.free_observation_stamp_ns);
@@ -520,6 +748,20 @@ std::string GridMap::describeInflateOccupancy(const Eigen::Vector3d &position,do
     const Eigen::Vector3d point=(evidence.first[i].cast<double>().array()+.5)*mp_.resolution_;
     out<<labels[i]<<"("<<point.x()<<","<<point.y()<<","<<point.z()<<")";
     if(i<2) {
+      const auto &cell=evidence.first[i];
+      const auto address=toAddress(cell);
+      const auto odds=md_.occupancy_buffer_[address];
+      const auto category=scan_planner::diagnoseRawVoxel(odds,mp_.clamp_min_log_,mp_.min_occupancy_log_,mp_.unknown_flag_);
+      const std::array<int,3> key{{cell.x(),cell.y(),cell.z()}};
+      const auto hit=static_prior_live_hits_.find(key);
+      const auto source=static_cast<std::size_t>(address)<free_observation_stamps_.size()?free_observation_stamps_[address]:0;
+      const auto receipt=static_cast<std::size_t>(address)<free_observation_receipts_ns_.size()?free_observation_receipts_ns_[address]:0;
+      out<<" first_cell_evidence={index:["<<cell.x()<<","<<cell.y()<<","<<cell.z()<<"]"
+         <<",raw_log_odds:"<<odds<<",raw_category:"<<scan_planner::diagnosticName(category)
+         <<",raw_state:"<<scan_planner::strictRawVoxelStatus(odds,mp_.clamp_min_log_,mp_.min_occupancy_log_)
+         <<",prior_state:"<<(static_prior_&&static_prior_context_valid_?static_prior_->state(key):2)
+         <<",hit_source_ns:"<<(hit!=static_prior_live_hits_.end()?hit->second:0)
+         <<",free_source_ns:"<<source<<",free_receipt_ns:"<<receipt<<"}";
       if(!near_field_diagnostics_.enabled())out<<" ray_witness=disabled";
       else if(!near_field_diagnostics_.contains(evidence.first[i]))out<<" ray_witness=outside_diagnostic_roi";
       else if(const auto* witnesses=near_field_diagnostics_.find(evidence.first[i])) {
@@ -540,13 +782,59 @@ std::string GridMap::describeInflateOccupancy(const Eigen::Vector3d &position,do
   return out.str();
 }
 
+const char *GridMap::collisionEvidenceSource(const Eigen::Vector3i &cell,int state)
+{
+  if(!isInMap(cell))return "outside";
+  const std::array<int,3> key{{cell.x(),cell.y(),cell.z()}};
+  if(static_prior_&&static_prior_context_valid_&&static_prior_->state(key)==1)return "certified_static_occupied";
+  if(static_prior_live_hits_.count(key))return "live_static_conflict";
+  if(state!=0)return state==1?"live_occupied":"unknown";
+  if(mp_.validated_static_prior_&&static_prior_&&static_prior_context_valid_&&static_prior_->state(key)==0)
+    return "certified_static_free"; // Actual independently selected certificate, including fresh raw FREE.
+  const auto address=toAddress(cell);
+  const auto category=scan_planner::diagnoseRawVoxel(md_.occupancy_buffer_[address],mp_.clamp_min_log_,mp_.min_occupancy_log_,mp_.unknown_flag_);
+  if(category==scan_planner::RawVoxelDiagnostic::NeverObserved)return "certified_static_free";
+  const auto source=free_observation_stamps_[address];
+  if(source>0&&(collision_cache_clock_ns_-source)*1e-9>=mp_.cloud_pose_max_age_)return "certified_static_free";
+  if((mp_.simulation_collision_clock_||mp_.validated_static_prior_)&&static_cast<std::size_t>(address)<free_observation_receipts_ns_.size()&&
+      (collision_cache_receipt_ns_-free_observation_receipts_ns_[address])*1e-9>=mp_.cloud_pose_max_age_)return "certified_static_free";
+  return "live_observed_free";
+}
+
+std::string GridMap::describeCollisionLease() const
+{
+  // Read the failed query's captured lease, before any later diagnostic query.
+  // No live-map access, clock refresh, proof retry or deadline mutation.
+  std::array<std::int64_t,2> receipts;
+  for(std::size_t sensor=0;sensor<2;++sensor)
+    receipts[sensor]=std::chrono::duration_cast<std::chrono::nanoseconds>(
+        ray_integrated_receipts_[sensor].time_since_epoch()).count();
+  return nlohmann::json{{"kind","captured_collision_query_lease"},
+      {"query_source_ns",collision_cache_clock_ns_},{"query_receipt_ns",collision_cache_receipt_ns_},
+      {"source_deadline_ns",collision_cache_deadline_ns_},{"receipt_deadline_ns",collision_cache_receipt_deadline_ns_},
+      {"both_ray_source_ns",ray_integrated_stamps_},{"both_ray_receipt_ns",receipts},
+      {"static_prior_loaded",!!static_prior_},{"static_prior_context_valid",static_prior_context_valid_},
+      {"static_prior_manifest_sha256",static_prior_?static_prior_->manifestSha256():""},
+      {"static_prior_geometry_sha256",static_prior_?static_prior_->geometrySha256():""},
+      {"static_prior_map_version",static_prior_?static_prior_->mapVersion():""},
+      {"cached_prior_lease_valid",static_prior_query_lease_valid_},{"ray_clock_fault",ray_clock_fault_},
+      {"session_id",mp_.localization_session_id_},{"epoch",localization_epoch_},
+      {"context_sequence",localization_context_sequence_},{"seed_id",localization_seed_},
+      {"barrier_ns",localization_context_barrier_ns_},{"policy",collisionQueryPolicy()}}.dump();
+}
+
 void GridMap::resetAllMapData()
 {
+  static_prior_query_lease_valid_=false;
   near_field_diagnostics_.clear();
   observed_cylinder_cache_.clear();
+  prepareRawCollisionCache();
   collision_cache_deadline_ns_=collision_cache_clock_ns_=0;
+  collision_cache_receipt_deadline_ns_=collision_cache_receipt_ns_=0;
   if(mp_.use_projected_rays_) free_observation_stamps_.assign(md_.occupancy_buffer_.size(),0);
   else free_observation_stamps_.clear();
+  if(mp_.simulation_collision_clock_||mp_.validated_static_prior_) free_observation_receipts_ns_.assign(md_.occupancy_buffer_.size(),0);
+  else free_observation_receipts_ns_.clear();
   ++occupancy_revision_;
   // A reset map has no current measurement support until raycastProcess()
   // actually integrates the replacement cloud; an old fresh stamp is not
@@ -568,26 +856,44 @@ bool GridMap::applyLocalizationContext(const std::string &payload)
 {
   // Acknowledgement is sent only after clearing actual evidence. The bridge
   // waits for it before publishing any pair in the replacement coordinates.
-  if (payload.empty() || payload.size() > 4096) return false;
+  auto received_sequence=localization_context_sequence_;
+  const auto reject=[this,&received_sequence]() {revokeStaticPriorContext(received_sequence);return false;};
+  if (payload.empty() || payload.size() > 4096) return reject();
   try {
     const auto value = nlohmann::json::parse(payload);
+    // A malformed new attestation for this session still establishes a revoke
+    // barrier. Replaying an earlier reliable/latched ACK cannot re-arm it.
+    if(mp_.validated_static_prior_&&value.value("schema",0)==1&&
+        value.value("session_id",std::string{})==mp_.localization_session_id_&&
+        value.contains("sequence")&&value.at("sequence").is_number_unsigned())
+      received_sequence=value.at("sequence").get<std::uint64_t>();
     if (value.at("schema") != 1 ||
         value.at("session_id").get<std::string>() != mp_.localization_session_id_ ||
         !value.at("epoch").is_number_unsigned() || !value.at("sequence").is_number_unsigned() ||
-        !value.at("barrier_ns").is_number_unsigned()) return false;
+        !value.at("barrier_ns").is_number_unsigned()) return reject();
+    if(mp_.validated_static_prior_&&(!static_prior_||!static_prior_->matchesContext(value)))return reject();
     const auto epoch = value.at("epoch").get<std::uint64_t>();
     const auto sequence = value.at("sequence").get<std::uint64_t>();
     const auto barrier = value.at("barrier_ns").get<std::uint64_t>();
     const auto seed = value.at("seed_id").get<std::string>();
+    if(mp_.validated_static_prior_&&static_prior_revoked_sequence_&&sequence<=static_prior_revoked_sequence_)
+      return reject();
     if (!epoch || !sequence || seed.empty() || seed.size() > 256 || !barrier ||
         barrier > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max()) ||
-        epoch < localization_epoch_ || sequence < localization_context_sequence_) return false;
-    if (sequence == localization_context_sequence_)
-      return payload == localization_context_payload_; // Reliable retry, never reset twice.
+        epoch < localization_epoch_ || sequence < localization_context_sequence_) return reject();
+    if (sequence == localization_context_sequence_) {
+      if(payload!=localization_context_payload_)return reject();
+      if(mp_.validated_static_prior_)static_prior_context_valid_=true;
+      return true; // Reliable retry, never reset twice or renew a live lease.
+    }
     invalidateCloudPosePairs(static_cast<std::int64_t>(barrier));
     // A new map-context sequence is an explicit evidence rebuild, separate
     // from goal/reference generation. ACK must never preserve the old grid.
     resetAllMapData();
+    // The checked transform is fixed identity for this immutable map version.
+    // Neither seed/epoch nor sequence changes the world indices; a context
+    // rebuild therefore cannot erase an actual obstacle contradiction.
+    static_prior_context_valid_=mp_.validated_static_prior_;
     ray_clock_fault_=false;ray_query_clock_ns_=ray_tick_clock_ns_=ray_tick_effective_ns_=0;
     localization_epoch_ = epoch;
     localization_seed_ = seed;
@@ -597,7 +903,7 @@ bool GridMap::applyLocalizationContext(const std::string &payload)
     localization_context_payload_ = payload;
     return true;
   } catch (const nlohmann::json::exception &) {
-    return false;
+    return reject();
   }
 }
 
@@ -693,6 +999,7 @@ void GridMap::resetCellByAddress(int addr)
 {
   observed_cylinder_cache_.clear();
   if(static_cast<std::size_t>(addr)<free_observation_stamps_.size()) free_observation_stamps_[addr]=0;
+  if(static_cast<std::size_t>(addr)<free_observation_receipts_ns_.size()) free_observation_receipts_ns_[addr]=0;
   if (md_.occupancy_buffer_[addr]>=mp_.clamp_min_log_) ++occupancy_revision_;
   Eigen::Vector3i id_g;
   hashIdToGlobalIndex(addr, id_g);
@@ -714,6 +1021,7 @@ void GridMap::resetCellByAddressForSliding(int addr, const std::vector<char>& cl
 {
   observed_cylinder_cache_.clear();
   if(static_cast<std::size_t>(addr)<free_observation_stamps_.size()) free_observation_stamps_[addr]=0;
+  if(static_cast<std::size_t>(addr)<free_observation_receipts_ns_.size()) free_observation_receipts_ns_[addr]=0;
   if (md_.occupancy_buffer_[addr]>=mp_.clamp_min_log_) ++occupancy_revision_;
   Eigen::Vector3i id_g;
   hashIdToGlobalIndex(addr, id_g);
@@ -946,6 +1254,18 @@ bool GridMap::raycastProcess()
 
   updateSlidingMap(md_.ray_pos_);
   const scan_planner::ObservedRayMapIndex ray_index(mp_.map_bound_min_idx_,mp_.map_voxel_num_);
+  // A later asynchronous miss must not borrow a newer witness from an earlier
+  // hit/miss conflict. Only an actual source-stamp increase in THIS completed
+  // batch is eligible to clear an existing contradiction. This sparse copy is
+  // bounded by real conflicts, not by the number of rays or map voxels.
+  std::map<int,std::int64_t> prior_free_before_batch;
+  if(mp_.validated_static_prior_)for(const auto &hit:static_prior_live_hits_) {
+    const Eigen::Vector3i cell(hit.first[0],hit.first[1],hit.first[2]);
+    if(isInMap(cell)) {
+      const auto address=ray_index.address(cell);
+      prior_free_before_batch.emplace(address,free_observation_stamps_[address]);
+    }
+  }
   if(near_field_diagnostics_.enabled()) near_field_diagnostics_.beginIntegration();
 
   md_.raycast_num_ += 1;
@@ -982,6 +1302,8 @@ bool GridMap::raycastProcess()
     const bool has_ray_stamp=mp_.use_projected_rays_ &&
         static_cast<std::size_t>(i)<projected_ray_stamps_.size();
     const auto ray_source_stamp=has_ray_stamp ? projected_ray_stamps_[i] : std::int64_t{0};
+    const auto ray_receipt_ns=(mp_.simulation_collision_clock_||mp_.validated_static_prior_) &&
+        static_cast<std::size_t>(i)<projected_ray_receipts_ns_.size()?projected_ray_receipts_ns_[i]:0;
     const bool record_ray_diagnostics=near_field_diagnostics_.enabled() &&
         static_cast<std::size_t>(i)<projected_diagnostics_.size();
     const Eigen::Vector3d &origin=mp_.use_projected_rays_ ? md_.proj_origins_[i] : md_.ray_pos_;
@@ -1019,6 +1341,7 @@ bool GridMap::raycastProcess()
       {
         if (mp_.use_projected_rays_ && endpoint_is_hit) {
           Eigen::Vector3i cell;posToIndex(pt_w,cell);vox_idx=ray_index.address(cell);
+          recordStaticPriorHit(cell,ray_source_stamp);
           if(record_ray_diagnostics) {
             scan_planner::RayWitness witness;
             witness.metadata=projected_diagnostics_[i];witness.origin=origin;
@@ -1053,7 +1376,7 @@ bool GridMap::raycastProcess()
       // coincide. Complete real rays, but give each free cell only one vote.
       complete=scan_planner::visitObservedRayIndexed(origin,pt_w,mp_.resolution_,
           !endpoint_is_hit,observed_ray_budget,mp_.map_voxel_num_,
-          [this,i,&origin,&pt_w,has_ray_stamp,ray_source_stamp,record_ray_diagnostics](const Eigen::Vector3i &cell,int address) {
+          [this,i,&origin,&pt_w,has_ray_stamp,ray_source_stamp,ray_receipt_ns,record_ray_diagnostics](const Eigen::Vector3i &cell,int address) {
             if (!isInMap(cell)) return;
             if(has_ray_stamp &&
                 static_cast<std::size_t>(address)<free_observation_stamps_.size()) {
@@ -1063,15 +1386,23 @@ bool GridMap::raycastProcess()
               // Avoid repeated floating-point checks and writes for them, but
               // retain a genuinely newer traversal from the other sensor.
               if(incoming>old) {
-                const auto fresh=[this](std::int64_t stamp) {
-                  return stamp>0 && collision_cache_clock_ns_>=stamp &&
+                const auto fresh=[this](std::int64_t stamp,std::int64_t receipt) {
+                  const bool source_fresh=stamp>0 && collision_cache_clock_ns_>=stamp &&
                       (collision_cache_clock_ns_-stamp)*1e-9<mp_.cloud_pose_max_age_;
+                  return source_fresh && (!(mp_.simulation_collision_clock_||mp_.validated_static_prior_) ||
+                      (receipt>0 && collision_cache_receipt_ns_>=receipt &&
+                       (collision_cache_receipt_ns_-receipt)*1e-9<mp_.cloud_pose_max_age_));
                 };
-                if(mp_.require_observed_free_ && enforce_free_freshness_ && !ray_clock_fault_ && !fresh(old) && fresh(incoming) &&
+                const auto old_receipt=static_cast<std::size_t>(address)<free_observation_receipts_ns_.size()?
+                    free_observation_receipts_ns_[address]:0;
+                if(mp_.require_observed_free_ && enforce_free_freshness_ && !ray_clock_fault_ &&
+                    !fresh(old,old_receipt) && fresh(incoming,ray_receipt_ns) &&
                     scan_planner::strictRawVoxelStatus(md_.occupancy_buffer_[address],
                         mp_.clamp_min_log_,mp_.min_occupancy_log_)==0)
                   free_evidence_recovered_=true;
                 old=incoming;
+                if(static_cast<std::size_t>(address)<free_observation_receipts_ns_.size())
+                  free_observation_receipts_ns_[address]=ray_receipt_ns;
               }
             }
             if(record_ray_diagnostics) {
@@ -1152,6 +1483,8 @@ bool GridMap::raycastProcess()
 
   // std::cout << "cache all: " << md_.cache_voxel_.size() << std::endl;
 
+  std::vector<std::pair<Eigen::Vector3i,int>> prior_clear_candidates;
+
   while (!md_.cache_voxel_.empty())
   {
 
@@ -1159,8 +1492,10 @@ bool GridMap::raycastProcess()
     const int idx_ctns = ray_index.address(idx);
     md_.cache_voxel_.pop();
 
+    const bool batch_has_hit=md_.count_hit_[idx_ctns]>0;
     double log_odds_update =
         md_.count_hit_[idx_ctns] >= md_.count_hit_and_miss_[idx_ctns] - md_.count_hit_[idx_ctns] ? mp_.prob_hit_log_ : mp_.prob_miss_log_;
+    if(mp_.validated_static_prior_&&!batch_has_hit)prior_clear_candidates.emplace_back(idx,idx_ctns);
 
     md_.count_hit_[idx_ctns] = md_.count_hit_and_miss_[idx_ctns] = 0;
 
@@ -1187,6 +1522,13 @@ bool GridMap::raycastProcess()
         std::min(std::max(md_.occupancy_buffer_[idx_ctns] + log_odds_update, mp_.clamp_min_log_),
                  mp_.clamp_max_log_);
     applyOccupancyUpdateAtIndex(idx, idx_ctns, new_log_odds);
+  }
+  // A partial ray traversal must not clear any contradiction. This collection
+  // is formed only by actual miss votes from the present acquisition batch.
+  if(complete)for(const auto &candidate:prior_clear_candidates) {
+    const auto old=prior_free_before_batch.find(candidate.second);
+    if(old!=prior_free_before_batch.end()&&free_observation_stamps_[candidate.second]>old->second)
+      clearStaticPriorHitAfterMiss(candidate.first,candidate.second);
   }
   if (!complete && node_)
     RCLCPP_WARN_THROTTLE(node_->get_logger(), *node_->get_clock(), 1000,
@@ -1548,6 +1890,7 @@ void GridMap::processProjectedRays(std::int64_t now_ns,std::chrono::steady_clock
   beginCollisionQuery();
   md_.proj_points_.clear();md_.proj_origins_.clear();md_.proj_points_cnt=0;
   projected_ray_stamps_.clear();
+  projected_ray_receipts_ns_.clear();
   projected_diagnostics_.clear();
   std::array<std::int64_t,2> included{{0,0}};
   std::array<PairReceipt,2> receipts;
@@ -1572,6 +1915,10 @@ void GridMap::processProjectedRays(std::int64_t now_ns,std::chrono::steady_clock
     md_.proj_points_.insert(md_.proj_points_.end(),batch.endpoints.begin(),batch.endpoints.end());
     md_.proj_origins_.insert(md_.proj_origins_.end(),batch.origins.begin(),batch.origins.end());
     projected_ray_stamps_.insert(projected_ray_stamps_.end(),batch.endpoints.size(),batch.stamp_ns);
+    if(mp_.simulation_collision_clock_||mp_.validated_static_prior_) {
+      const auto receipt_ns=std::chrono::duration_cast<std::chrono::nanoseconds>(pending->received.time_since_epoch()).count();
+      projected_ray_receipts_ns_.insert(projected_ray_receipts_ns_.end(),batch.endpoints.size(),receipt_ns);
+    }
     if(near_field_diagnostics_.enabled()) {
       for(auto meta:batch.diagnostics) {meta.integration_ns=now_ns;projected_diagnostics_.push_back(meta);}
     }
@@ -1586,6 +1933,7 @@ void GridMap::processProjectedRays(std::int64_t now_ns,std::chrono::steady_clock
       // successful remote batch. Keep obstacle odds; revoke free certificates
       // until genuine reobservation. Rare failure path, O(N).
       std::fill(free_observation_stamps_.begin(),free_observation_stamps_.end(),0);
+      std::fill(free_observation_receipts_ns_.begin(),free_observation_receipts_ns_.end(),0);
       observed_cylinder_cache_.clear();
     } else if(free_evidence_recovered_) ++free_evidence_revision_;
     for (std::size_t sensor=0;sensor<2;++sensor) if (included[sensor]) {
@@ -1636,9 +1984,12 @@ void GridMap::publishProjectedRaysStatus(std::int64_t now_ns,std::chrono::steady
       {"integrated_source_age_s",source_age(now_ns,ray_integrated_stamps_[sensor])}});
   const double wall_time=std::chrono::duration<double>(std::chrono::system_clock::now().time_since_epoch()).count();
   std_msgs::msg::String result;
+  // Receipt freshness and measured source stamps use the node's ROS clock.
+  // Keep wall time separately for diagnostics when use_sim_time is enabled.
   result.data=nlohmann::json{{"schema",1},{"session_id",mp_.localization_session_id_},
     {"epoch",localization_epoch_},{"seed_id",localization_seed_},{"sequence",localization_context_sequence_},
-    {"barrier_ns",localization_context_barrier_ns_},{"received_at_unix",wall_time},{"valid",valid},
+    {"barrier_ns",localization_context_barrier_ns_},{"received_at_unix",now_ns*1e-9},
+    {"callback_wall_time",wall_time},{"valid",valid},
     {"collision_query_policy",collisionQueryPolicy()},
     {"reason",valid?"integrated_both_sources":"waiting_fresh_integrated_rays"},
     {"source_stamp_ns",integrated_cloud_stamp_ns_},{"sources",sources},

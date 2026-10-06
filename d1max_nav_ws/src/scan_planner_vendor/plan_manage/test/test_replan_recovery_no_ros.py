@@ -42,9 +42,61 @@ struct Map {
   double latestCloudStamp() const {return source;}
   double getResolution() const {return .08;}
 };
+// Complete the named stub types before std::optional instantiates its type
+// traits. GCC 9 rejects the former nested anonymous types with initializers.
+struct ManagerParameters {
+  double max_vel_;
+  ManagerParameters():max_vel_(.3){}
+};
+struct ManagerLocalData {
+  double duration_;std::int64_t traj_id_;Eigen::Vector3d start_pos_;
+  ManagerLocalData():duration_(4.),traj_id_(1),start_pos_(0,0,.55){}
+};
+struct RecoveryTrajectory {
+  std::int64_t traj_id;
+  RecoveryTrajectory():traj_id(1){}
+};
+struct RecoverySpline {
+  std::uint64_t generation;RecoveryTrajectory trajectory;
+  RecoverySpline():generation(1){}
+};
+struct RecoveryProof {
+  bool valid;ClockValue valid_until;
+  RecoveryProof():valid(true),valid_until{500200000000LL}{}
+};
+struct RecoveryHeader {
+  ClockValue stamp;
+  RecoveryHeader():stamp{499900000000LL}{}
+};
+struct RecoveryLinear {
+  double x,y,z;
+  RecoveryLinear():x(0.),y(0.),z(0.){}
+};
+struct RecoveryTwist {RecoveryLinear linear;};
+struct RecoveryProgress {
+  bool valid,holding;RecoveryHeader header;RecoveryTwist twist;
+  RecoveryProgress():valid(true),holding(false){}
+};
+struct RecoveryView {
+  RecoverySpline spline;
+  std::optional<RecoveryProof> proof;
+  std::optional<RecoveryProgress> progress;
+  RecoveryView():proof(RecoveryProof{}),progress(RecoveryProgress{}){}
+};
+struct RecoveryValidator {
+  using View=RecoveryView;
+  std::optional<View> value;
+  RecoveryValidator():value(View{}){}
+  std::optional<View> committedView()const{return value;}
+};
+struct SnapshotPoolStub {
+  int cancellations;
+  SnapshotPoolStub():cancellations(0){}
+  void cancelSolverRequest(){++cancellations;}
+};
 struct Manager {
-  struct {double max_vel_=.3;} pp_;
-  struct {double duration_=4.;std::int64_t traj_id_=1;Eigen::Vector3d start_pos_{0,0,.55};} local_data_;
+  ManagerParameters pp_;
+  ManagerLocalData local_data_;
   bool preview=true;double progress=0.;
   bool hasPreviewHeadingContract() const {return preview;}
   double previewCurveProgressTime() const {return progress;}
@@ -56,22 +108,12 @@ public:
   enum class PreviewRecheck {Unavailable,Stale,Safe,Unsafe,Uncertified};
   enum State {EXEC_TRAJ,WAIT_ENVIRONMENT,REPLAN_TRAJ};
   Node clock; Node *node_=&clock;
-  struct Validator {
-    struct View {
-      struct {std::uint64_t generation=1;struct{std::int64_t traj_id=1;}trajectory;} spline;
-      struct Proof {bool valid=true;ClockValue valid_until{500200000000LL};};
-      struct Progress {bool valid=true,holding=false;struct{ClockValue stamp{499900000000LL};}header;
-        struct{struct{double x=0.,y=0.,z=0.;}linear;}twist;};
-      std::optional<Proof> proof{Proof{}};std::optional<Progress>progress{Progress{}};
-    };
-    std::optional<View> value{View{}};
-    std::optional<View> committedView()const{return value;}
-  };
+  using Validator=RecoveryValidator;
   std::shared_ptr<Validator> execution_validator_;
   std::uint64_t reference_generation_=1;
   std::future<int> solve_future_;
   PendingSnapshotRequest pending_snapshot_request_;
-  struct Pool {int cancellations=0;void cancelSolverRequest(){++cancellations;}}snapshot_pool_;
+  SnapshotPoolStub snapshot_pool_;
   std::shared_ptr<Manager> planner_manager_=std::make_shared<Manager>();
   bool have_odom_=true;
   bool go2_execution_frozen_=true,reference_path_guidance_=true,have_target_=true;

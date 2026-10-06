@@ -12,7 +12,7 @@ namespace d1max_trajectory_tracker {
 // restamped and ignored packets do not renew any receipt or recovery lease.
 class NavigationStateIngress {
 public:
-  template<class State> bool inspect(const State& state,const Config& config,double now,std::uint64_t epoch_floor=0) {
+  template<class State> bool inspect(const State& state,const Config& config,SourceTime now,std::uint64_t epoch_floor=0) {
     constexpr std::uint32_t expected_schema=std::is_same_v<State,
       d1max_planning_interfaces::msg::LocalNavigationState>?1:2;
     // Foreign sessions/maps/interface versions are not this estimator's
@@ -26,10 +26,9 @@ public:
     const bool identity_present=state.localization_epoch>0&&!state.localization_seed_id.empty();
     const bool new_epoch=identity_present&&state.localization_epoch>epoch_;
     if(!new_epoch&&ns<=source_ns_)return false;
-    const double source=double(t.sec)+double(t.nanosec)*1e-9;
     // Invalid future stamps fail closed, but cannot poison the ordering
     // watermark so that every later genuine measurement is silently ignored.
-    if(finite(now)&&source<=now+.02) {
+    if(finite(now)&&now.nanoseconds()>0&&ns-now.nanoseconds()<=20000000LL) {
       if(new_epoch)source_ns_=0;
       source_ns_=ns;
       if(identity_present)epoch_=std::max(epoch_,state.localization_epoch);
@@ -44,13 +43,14 @@ private:
 // reset. Foreign identity or obviously future source time is a hold, not a
 // trustworthy reset event. Use this only AFTER ingress ordering.
 template<class State> bool navigationContextReset(const State& state,const Config& config,
-    const ControlIdentity& expected,double now) {
+    const ControlIdentity& expected,SourceTime now) {
   constexpr std::uint32_t schema=std::is_same_v<State,
     d1max_planning_interfaces::msg::LocalNavigationState>?1:2;
   const auto& t=state.source_stamp;
   if(state.schema_version!=schema||state.session_id!=config.session_id||state.map_version_id!=config.map_version_id||
      state.localization_epoch==0||state.localization_seed_id.empty()||t.sec<0||t.nanosec>=1000000000U||
-     (t.sec==0&&t.nanosec==0)||!finite(now)||double(t.sec)+double(t.nanosec)*1e-9>now+.02)return false;
+     (t.sec==0&&t.nanosec==0)||!finite(now)||now.nanoseconds()<=0||
+     std::int64_t(t.sec)*1000000000LL+t.nanosec-now.nanoseconds()>20000000LL)return false;
   return state.localization_epoch!=expected.localization_epoch||state.localization_seed_id!=expected.localization_seed_id;
 }
 
@@ -86,6 +86,8 @@ inline bool decodeLocalNavigationState(const d1max_planning_interfaces::msg::Loc
   out.stamp=seconds(state.source_stamp);
   out.source_stamp_ns=std::int64_t(state.source_stamp.sec)*1000000000LL+state.source_stamp.nanosec;
   out.posterior_stamp=seconds(state.posterior_stamp);
+  out.posterior_stamp_ns=std::int64_t(state.posterior_stamp.sec)*1000000000LL+state.posterior_stamp.nanosec;
+  out.imu_stamp_ns=std::int64_t(state.imu_stamp.sec)*1000000000LL+state.imu_stamp.nanosec;
   out.imu_stamp=seconds(state.imu_stamp);out.extrapolation_sec=state.extrapolation_sec;
   out.position={p.x,p.y,p.z};out.orientation={q.w,q.x,q.y,q.z};
   out.yaw=std::atan2(2.*(q.w*q.z+q.x*q.y),1.-2.*(q.y*q.y+q.z*q.z));
@@ -134,6 +136,8 @@ inline bool decodeNavigationState(const d1max_planning_interfaces::msg::Navigati
   out.stamp=seconds(state.source_stamp);
   out.source_stamp_ns=std::int64_t(state.source_stamp.sec)*1000000000LL+state.source_stamp.nanosec;
   out.posterior_stamp=seconds(state.posterior_stamp);
+  out.posterior_stamp_ns=std::int64_t(state.posterior_stamp.sec)*1000000000LL+state.posterior_stamp.nanosec;
+  out.imu_stamp_ns=std::int64_t(state.imu_stamp.sec)*1000000000LL+state.imu_stamp.nanosec;
   out.imu_stamp=seconds(state.imu_stamp); out.extrapolation_sec=state.extrapolation_sec;
   out.position={p.x,p.y,p.z}; out.orientation={q.w,q.x,q.y,q.z};
   out.yaw=std::atan2(2.*(q.w*q.z+q.x*q.y),1.-2.*(q.y*q.y+q.z*q.z));

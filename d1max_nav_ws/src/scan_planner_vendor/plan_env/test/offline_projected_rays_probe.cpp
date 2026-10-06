@@ -59,6 +59,20 @@ struct GridMapTestAccess {
     p.obstacles_inflation_z_up=number("obstacles_inflation_z_up");p.obstacles_inflation_z_down=number("obstacles_inflation_z_down");
     p.cloud_pose_max_age_=v.value("grid_map.cloud_pose_max_age",.5);
     p.cloud_pose_pair_wait_=v.value("grid_map.cloud_pose_pair_wait",.25);p.vis_height_=number("vis_height");
+    p.simulation_collision_clock_=v.value("grid_map.simulation_clock_contract",std::string{})=="isaac_fixed_anchor_v1";
+    if(v.value("grid_map.collision_evidence_mode",std::string{})=="validated_static_prior") {
+      if(!p.require_observed_free_||!p.use_projected_rays_)throw std::runtime_error("prior probe requires strict projected rays");
+      scan_planner::StaticOccupancyPrior::Expected expected;
+      expected.manifest_sha256=v.at("grid_map.static_prior_manifest_sha256").get<std::string>();
+      expected.geometry_sha256=v.at("grid_map.static_prior_geometry_sha256").get<std::string>();
+      expected.map_version=v.at("grid_map.static_prior_map_version_id").get<std::string>();
+      expected.frame_id=v.at("grid_map.static_prior_map_frame").get<std::string>();
+      expected.transform_contract=v.at("grid_map.static_prior_transform_contract").get<std::string>();
+      expected.odom_frame_id=p.frame_id_;expected.resolution=p.resolution_;
+      map.static_prior_=scan_planner::StaticOccupancyPrior::load(
+          v.at("grid_map.static_prior_manifest_path").get<std::string>(),expected);
+      p.validated_static_prior_=true;
+    }
     scan_planner::validateCloudPoseTiming(p.cloud_pose_pair_wait_,p.cloud_pose_max_age_,
         p.preview_only_,p.require_observed_free_,p.use_projected_rays_);
     d.has_ray_pose_=d.has_cloud_=d.occ_need_update_=d.use_cloud_update_=false;
@@ -77,6 +91,35 @@ struct GridMapTestAccess {
   static void integrate(GridMap &map,std::int64_t ns) {map.processProjectedRays(ns,clock(ns));}
   static void slide(GridMap &map,const Json &p) {
     map.updateSlidingMap({p.at(0).get<double>(),p.at(1).get<double>(),p.at(2).get<double>()});
+  }
+  static Json performance(GridMap &map,const Json &request) {
+    const auto start=request.at("start").get<std::array<double,3>>();
+    const auto finish=request.at("finish").get<std::array<double,3>>();
+    const auto count=request.value("query_count",493U),rounds=request.value("rounds",15U);
+    if(count<2||count>2000||rounds<1||rounds>30)throw std::runtime_error("bounded performance query count required");
+    const Eigen::Vector3d from(start[0],start[1],start[2]),to(finish[0],finish[1],finish[2]);
+    if(!from.allFinite()||!to.allFinite()||(to-from).norm()>4.)throw std::runtime_error("bounded finite performance segment required");
+    const auto first=map.inspectInflateOccupancy(from,0.,true);
+    std::vector<double> timings;std::array<std::size_t,4> states{};
+    // No ROS context or time manipulation in production. This replay measures
+    // a fixed, injected capture clock; separate expiry tests certify leases.
+    for(unsigned round=0;round<rounds;++round) {
+      map.observed_cylinder_cache_.clear();map.collision_cache_clock_ns_=map.collision_cache_deadline_ns_=0;
+      map.collision_cache_receipt_ns_=map.collision_cache_receipt_deadline_ns_=0;
+      const auto begin=std::chrono::steady_clock::now();
+      for(unsigned i=0;i<count;++i) {
+        const auto point=from+(to-from)*(static_cast<double>(i)/(count-1));
+        const int result=map.getInflateOccupancy(point,0.);++states[result<0?3:result];
+      }
+      timings.push_back(std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-begin).count());
+    }
+    std::sort(timings.begin(),timings.end());
+    return {{"no_ros_initialized",true},{"query_policy",map.collisionQueryPolicy()},
+      {"fixture","same_native_3D_rays_volume_resolution_and_shape; uniform_straight_segment_not_recorded_v10_spline"},
+      {"clock","fixed_injected_capture_clock_for_CPU_measurement_only"},{"query_count",count},{"rounds",rounds},
+      {"first_unique_counts",first.unique_counts},{"states_free_occupied_unknown_outside",states},
+      {"round_min_ms",timings.front()},{"round_p50_ms",timings[(rounds-1)/2]},
+      {"round_p95_ms",timings[static_cast<std::size_t>((rounds-1)*.95)]},{"round_max_ms",timings.back()}};
   }
   static Json voxel(GridMap &map,const Eigen::Vector3i &cell) {
     const bool inside=map.isInMap(cell);
@@ -292,6 +335,9 @@ int main() {
         if(request.at("cells").size()>4096) throw std::runtime_error("bounded raw query exceeded");
         for(const auto &cell:request.at("cells")) result["voxels"].push_back(GridMapTestAccess::voxel(map,
             {cell.at(0).get<int>(),cell.at(1).get<int>(),cell.at(2).get<int>()}));
+      } else if(type=="performance") {
+        GridMapTestAccess::queryClock(map,request.at("now_ns").get<std::int64_t>());
+        result=GridMapTestAccess::performance(map,request);
       } else throw std::runtime_error("unknown request type");
       result["processing_ms"]=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-started).count();
       std::cout<<result.dump()<<std::endl;

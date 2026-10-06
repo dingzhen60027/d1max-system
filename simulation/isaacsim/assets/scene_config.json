@@ -1,0 +1,68 @@
+{
+  "schema": 1,
+  "name": "indoor_wheel_navigation",
+  "units": "m",
+  "physics": {"frequency_hz": 120.0},
+  "room": {"x_min": -6.0, "x_max": 6.0, "y_min": -5.0, "y_max": 5.0, "width": 12.0, "depth": 10.0, "height": 2.5, "wall_thickness": 0.16},
+  "floor": {"z": 0.0, "bounds": [-6.0, 6.0, -5.0, 5.0]},
+  "ceiling": {"z": 2.5, "thickness": 0.12, "visible": false},
+  "static_boxes": [
+    {"name": "south_wall", "kind": "wall", "center": [0.0, -5.08, 1.25], "size": [12.32, 0.16, 2.5]},
+    {"name": "north_wall", "kind": "wall", "center": [0.0, 5.08, 1.25], "size": [12.32, 0.16, 2.5]},
+    {"name": "west_wall", "kind": "wall", "center": [-6.08, 0.0, 1.25], "size": [0.16, 10.0, 2.5]},
+    {"name": "east_wall", "kind": "wall", "center": [6.08, 0.0, 1.25], "size": [0.16, 10.0, 2.5]},
+    {"name": "divider_south", "kind": "wall", "center": [-1.0, -3.5, 1.25], "size": [0.16, 3.0, 2.5]},
+    {"name": "divider_north", "kind": "wall", "center": [-1.0, 2.3, 1.25], "size": [0.16, 5.4, 2.5]},
+    {"name": "room_wall_west", "kind": "wall", "center": [0.5, 1.7, 1.25], "size": [3.0, 0.16, 2.5]},
+    {"name": "room_wall_east", "kind": "wall", "center": [4.8, 1.7, 1.25], "size": [2.4, 0.16, 2.5]},
+    {"name": "west_cabinet", "kind": "obstacle", "center": [-3.3, 0.7, 0.55], "size": [1.0, 1.8, 1.1]},
+    {"name": "south_cabinet", "kind": "obstacle", "center": [0.8, -3.2, 0.45], "size": [1.0, 1.6, 0.9]},
+    {"name": "east_box", "kind": "obstacle", "center": [3.4, -0.6, 0.25], "size": [0.7, 0.7, 0.5]},
+    {"name": "north_pillar", "kind": "obstacle", "center": [4.6, 3.5, 1.25], "size": [0.55, 0.55, 2.5]},
+    {"name": "low_block", "kind": "obstacle", "center": [-3.8, 3.2, 0.12], "size": [0.6, 0.6, 0.24]}
+  ],
+  "doorways": [
+    {"name": "west_to_hall", "center": [-1.0, -1.2], "width": 1.6},
+    {"name": "hall_to_north", "center": [2.8, 1.7], "width": 1.6}
+  ],
+  "robot": {
+    "name": "wheel_fixture",
+    "body_size": [0.76, 0.44, 0.20],
+    "body_reference_height": 0.35,
+    "wheel_radius": 0.26,
+    "wheel_width": 0.06,
+    "wheel_base": 0.54,
+    "wheel_axle_z": -0.09,
+    "caster_radius": 0.05,
+    "caster_origins": [[0.32, 0.0, -0.30], [-0.32, 0.0, -0.30]],
+    "initial_pose": [-4.0, -3.0, 0.37, 0.0],
+    "goal": [4.0, -3.0, 0.35],
+    "max_linear_speed": 0.50,
+    "max_angular_speed": 1.0
+  },
+  "lidar": {
+    "origins": [[0.42, 0.0, 0.15], [-0.42, 0.0, 0.15]],
+    "horizontal_fov_deg": 360.0,
+    "vertical_fov_deg": 160.0,
+    "horizontal_resolution_deg": 1.0,
+    "vertical_resolution_deg": 5.0,
+    "range_min": 0.06,
+    "range_max": 15.0,
+    "frequency_hz": 10.0,
+    "self_hit_filter": "exact fixture box, wheel cylinders and caster spheres; no behind-body ray synthesis"
+  },
+  "imu": {
+    "model": "Isaac 6 PhysX experimental IMUSensor",
+    "native_frequency_hz": 120,
+    "output_sampling": "select real native physics-step readings at 100 Hz target; retain source timestamps",
+    "frequency_hz": 100,
+    "origin": [0.0, 0.0, 0.0],
+    "orientation_wxyz": [1.0, 0.0, 0.0, 0.0],
+    "include_gravity": true,
+    "linear_acceleration_filter_size": 1,
+    "angular_velocity_filter_size": 1,
+    "orientation_filter_size": 1,
+    "gravity_convention": "specific force; stationary upright sensor reads approximately +9.81 m/s^2 on z",
+    "measurement_source": "native sensor reading.time; do not repeat or restamp measurements"
+  }
+}

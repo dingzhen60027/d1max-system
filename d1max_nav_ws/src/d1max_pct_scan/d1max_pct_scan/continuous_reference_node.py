@@ -7,12 +7,14 @@ from copy import deepcopy
 import hashlib
 import json
 import math
+import re
 import time
 import numpy as np
 
 from .atomic_projection_state import validate as validate_state
 from .atomic_navigation_inbox import navigation_event_is_new
 from .continuous_reference_transport import ContinuousReferenceTransport, ReferenceReceipt, nanoseconds, set_stamp
+from .ray_projection import checked_pose
 from .source_route import canonical
 
 PREFIX='/d1max/live_planning/'
@@ -54,10 +56,20 @@ class ReferenceCallbacks:
         self.context_last_sent=-math.inf
         self.last_proposal_monotonic=-math.inf
         self.error=''; self.cancel_generation=0
+        self.prior_fault_identity=None
+        self.prior_enabled=params.get('collision_evidence_mode','')=='validated_static_prior'
+        if params.get('collision_evidence_mode','') not in ('','validated_static_prior'):
+            raise ValueError('unsupported_collision_evidence_mode')
+        if self.prior_enabled and (any(not re.fullmatch('[0-9a-f]{64}',params.get(k,''))
+                for k in ('static_prior_manifest_sha256','static_prior_geometry_sha256'))
+                or params.get('static_prior_map_frame')!='d1max_loc_map'
+                or params.get('static_prior_transform_contract')!='fixed_identity_map_from_odom_v1'):
+            raise ValueError('invalid_static_prior_reference_contract')
         self.native_retirement=None
         self.support_map=None
         self.route_progress_sequence=0
         self.route_progress_key=None
+        self.route_progress_body_observation=None
         if params.get('planning_manifest'):
             from .source_identity import SourceIdentityBridge
             self.support_map=SourceIdentityBridge.from_artifacts(params['planning_manifest'])
@@ -75,10 +87,41 @@ class ReferenceCallbacks:
         if self.preparation is not None:
             self.preparation.invalidate()
 
+    def revoke_prior_context(self,state,reason):
+        self.prior_fault_identity=state.identity
+        self.invalidate_preparation();self.transport.quarantined=True
+        self.transport.discard_pending();self.proposal=self.receipt=self.permit=None
+        self.context=dict(schema=1,session_id=state.identity[0],epoch=state.identity[1],
+            seed_id=state.identity[2],sequence=1 if self.context is None else self.context['sequence']+1,
+            barrier_ns=state.source_ns,map_version=self.p['map_version_id'],
+            static_prior_manifest_sha256='revoked',map_from_odom_contract='revoked')
+        self.context_ready=False;self.map_report=None;self.context_last_sent=-math.inf
+        self.transport.context_sequence=self.context['sequence'];self.state=state
+        self.error=reason;self.sync_context()
+
     def on_navigation(self,message):
-        state=validate_state(message,session_id=self.p['session_id'],map_version_id=self.p['map_version_id'],now_ns=self.now_ns())
+        try:
+            state=validate_state(message,session_id=self.p['session_id'],map_version_id=self.p['map_version_id'],now_ns=self.now_ns())
+        except ValueError:
+            # A current producer's unusable/malformed pair must also revoke
+            # the previously valid static coordinate evidence. The barrier
+            # retains an actual measured source stamp, never the callback time.
+            if (self.prior_enabled and self.state is not None
+                    and getattr(message,'session_id',None)==self.p['session_id']
+                    and getattr(message,'localization_epoch',0)>=self.state.identity[1]):
+                self.revoke_prior_context(self.state,'static_prior_navigation_evidence_revoked')
+            raise
         if not navigation_event_is_new(state.identity,state.source_ns,self.state):
             return False  # old epoch/seed callbacks cannot replace the current atomic frame context
+        if self.prior_enabled:
+            a,b=state.local_body,state.global_body
+            identity_pose=(np.allclose(a.position,b.position,rtol=0.,atol=1e-9)
+                and abs(float(np.dot(a.orientation,b.orientation)))>=1.-1e-12)
+            if not identity_pose or state.identity==self.prior_fault_identity:
+                # Revoke the previous authorization in native too. Merely
+                # rejecting this pair would leave a previously valid prior live.
+                self.revoke_prior_context(state,'static_prior_map_from_odom_identity_revoked')
+                return False
         if self.context is None or state.identity!=(self.context['session_id'],self.context['epoch'],self.context['seed_id']):
             if self.context is not None:
                 self.invalidate_preparation()
@@ -86,6 +129,11 @@ class ReferenceCallbacks:
                 self.debug=None; self.native_retirement=None
             self.context=dict(schema=1,session_id=state.identity[0],epoch=state.identity[1],seed_id=state.identity[2],
                 sequence=1 if self.context is None else self.context['sequence']+1,barrier_ns=state.source_ns)
+            if self.prior_enabled:
+                self.context.update(map_version=self.p['map_version_id'],
+                    static_prior_manifest_sha256=self.p['static_prior_manifest_sha256'],
+                    map_from_odom_contract=self.p['static_prior_transform_contract'],
+                    map_from_odom_translation=[0.,0.,0.],map_from_odom_rotation_xyzw=[0.,0.,0.,1.])
             self.context_ready=False; self.map_report=None; self.context_last_sent=-math.inf
             self.transport.context_sequence=self.context['sequence']
         self.state=state
@@ -100,6 +148,9 @@ class ReferenceCallbacks:
             self.error=str(error)
             self.try_recover_context()
             return False
+        if not self.p.get('local_state_enabled'):
+            self.route_progress_body_observation=(state.identity,state.source_ns,
+                deepcopy(message.local_odometry),'global')
         core=self.transport.core
         self.publish_route_progress()
         # Re-issue on look-ahead actually left in the accepted window, not on
@@ -123,6 +174,7 @@ class ReferenceCallbacks:
             map_version_id=self.p['map_version_id'],now_ns=self.now_ns(),monotonic=self.mono())
         if event is None: return False
         if event.hard_failure:
+            self.route_progress_body_observation=None
             self.invalidate_preparation()
             self.transport.quarantined=True
             self.transport.discard_pending()
@@ -138,6 +190,11 @@ class ReferenceCallbacks:
         except ValueError as error:
             self.error=str(error)
             return False
+        # Projection uses a normalized quaternion. The task owner requires
+        # the literal pose from this independently admitted source instead.
+        # Copy it so later caller mutation cannot change the source witness.
+        self.route_progress_body_observation=(event.state.identity,event.state.source_ns,
+            deepcopy(message.local_odometry),'local')
         self.publish_route_progress()
         self.refresh_window()
         return True
@@ -147,6 +204,19 @@ class ReferenceCallbacks:
         if facts is None:
             return False
         reference,progress,body,anchor,height=facts
+        original=self.route_progress_body_observation
+        origin='local' if self.p.get('local_state_enabled') else 'global'
+        if (original is None
+                or original[:2]!=((body.context.session,body.context.epoch,body.context.seed),progress.source_ns)
+                or original[3]!=origin or original[2].header.frame_id!=body.frame
+                or nanoseconds(original[2].header.stamp)!=progress.source_ns):
+            return False
+        projected=checked_pose(body.pose.xyz,body.pose.xyzw)
+        p,q=original[2].pose.pose.position,original[2].pose.pose.orientation
+        literal=checked_pose((p.x,p.y,p.z),(q.x,q.y,q.z,q.w))
+        if (not np.allclose(projected.position,literal.position,rtol=0.,atol=1e-12)
+                or not np.allclose(projected.orientation,literal.orientation,rtol=0.,atol=1e-12)):
+            return False
         if self.p.get('local_state_enabled'):
             # An exact global pair can arrive ahead of its independent local
             # topic. It establishes an anchor, not a new task-progress source.
@@ -159,8 +229,8 @@ class ReferenceCallbacks:
                         monotonic=self.mono(),receipt_timeout_s=self.transport.freshness)
                     or state.source_ns!=progress.source_ns
                     or state.identity!=(body.context.session,body.context.epoch,body.context.seed)
-                    or not np.allclose(body.pose.xyz,state.local_body.position,rtol=0.,atol=1e-12)
-                    or not np.allclose(body.pose.xyzw,state.local_body.orientation,rtol=0.,atol=1e-12)):
+                    or not np.allclose(projected.position,state.local_body.position,rtol=0.,atol=1e-12)
+                    or not np.allclose(projected.orientation,state.local_body.orientation,rtol=0.,atol=1e-12)):
                 return False
         key=(reference.task_id,reference.route_hash,reference.generation,anchor.anchor_id,progress.source_ns)
         if key==self.route_progress_key:
@@ -174,10 +244,8 @@ class ReferenceCallbacks:
         self.route_progress_sequence+=1
         message.sequence=self.route_progress_sequence
         set_stamp(message.body_source_stamp,progress.source_ns)
-        message.odom_body_pose.header.frame_id=body.frame
-        message.odom_body_pose.header.stamp=deepcopy(message.body_source_stamp)
-        p,q=message.odom_body_pose.pose.position,message.odom_body_pose.pose.orientation
-        p.x,p.y,p.z=body.pose.xyz;q.x,q.y,q.z,q.w=body.pose.xyzw
+        message.odom_body_pose.header=deepcopy(original[2].header)
+        message.odom_body_pose.pose=deepcopy(original[2].pose.pose)
         set_stamp(message.anchor_source_stamp,anchor.source_ns)
         p,q=message.map_from_odom.position,message.map_from_odom.orientation
         p.x,p.y,p.z=anchor.map_from_odom.xyz;q.x,q.y,q.z,q.w=anchor.map_from_odom.xyzw
@@ -500,6 +568,8 @@ def main(args=None):
                 expected_tomogram_sha256='',expected_conditioning_sha256='',body_height_m=.55,
                 body_height_calibration_id='',freshness_s=.4,map_evidence_max_age_s=.4,transport_mode='live',planning_manifest='',
                 reference_horizon_m=2.,floor_id='',local_state_enabled=False,async_support_preparation=True)
+            defaults.update(collision_evidence_mode='',static_prior_manifest_sha256='',
+                static_prior_geometry_sha256='',static_prior_map_frame='',static_prior_transform_contract='')
             p={k:self.declare_parameter(k,v).value for k,v in defaults.items()}
             durable=QoSProfile(depth=1,reliability=ReliabilityPolicy.RELIABLE,durability=DurabilityPolicy.TRANSIENT_LOCAL)
             pubs={key:self.create_publisher(kind,PREFIX+topic,durable if key in ('context','support') else 5)

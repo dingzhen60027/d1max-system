@@ -167,6 +167,8 @@ TEST(NavigationStateContract, UnixSourceNanosecondsArePreservedIndependentlyOfDo
   Odom out;std::string reason;
   ASSERT_TRUE(decodeNavigationState(pair,configuration(),out,reason));
   EXPECT_EQ(out.source_stamp_ns,1791002417245872020LL);
+  EXPECT_EQ(out.posterior_stamp_ns,1791002417245872020LL);
+  EXPECT_EQ(out.imu_stamp_ns,1791002417245872020LL);
   d1max_planning_interfaces::msg::LocalNavigationState local;
   local.schema_version=1;local.session_id=pair.session_id;local.map_version_id=pair.map_version_id;
   local.localization_epoch=pair.localization_epoch;local.localization_seed_id=pair.localization_seed_id;
@@ -174,4 +176,22 @@ TEST(NavigationStateContract, UnixSourceNanosecondsArePreservedIndependentlyOfDo
   local.posterior_stamp=pair.posterior_stamp;local.imu_stamp=pair.imu_stamp;local.usable=true;
   ASSERT_TRUE(decodeLocalNavigationState(local,configuration(),out,reason));
   EXPECT_EQ(out.source_stamp_ns,1791002417245872020LL);
+  EXPECT_EQ(out.posterior_stamp_ns,1791002417245872020LL);
+  EXPECT_EQ(out.imu_stamp_ns,1791002417245872020LL);
+}
+
+TEST(NavigationStateContract, ExactUnixFutureBoundaryCannotPoisonIngressOrAuthorizeContextReset) {
+  constexpr std::int64_t ns=1791124691902856036LL;
+  const auto now=SourceTime::fromNanoseconds(ns);
+  auto current=state();current.source_stamp.sec=1791124691;current.source_stamp.nanosec=902856036U;
+  NavigationStateIngress ingress;ASSERT_TRUE(ingress.inspect(current,configuration(),now));
+  auto future=current;future.source_stamp.nanosec+=20000001U;
+  future.localization_epoch=4;future.localization_seed_id="new-seed";
+  EXPECT_TRUE(ingress.inspect(future,configuration(),now)); // delivered as fault, no watermark/reset lease
+  ControlIdentity expected;expected.localization_epoch=current.localization_epoch;expected.localization_seed_id=current.localization_seed_id;
+  EXPECT_FALSE(navigationContextReset(future,configuration(),expected,now));
+  auto fresh=current;++fresh.source_stamp.nanosec;
+  EXPECT_TRUE(ingress.inspect(fresh,configuration(),SourceTime::fromNanoseconds(ns+1)));
+  future.source_stamp.nanosec=current.source_stamp.nanosec+20000000U;
+  EXPECT_TRUE(navigationContextReset(future,configuration(),expected,now));
 }

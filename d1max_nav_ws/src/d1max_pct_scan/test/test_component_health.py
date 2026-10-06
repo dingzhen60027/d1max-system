@@ -36,6 +36,30 @@ def test_functional_liveness_clock_is_independent_of_recorded_sensor_ros_time():
     assert not health.snapshot(wall_now=100.,monotonic=.1)['motion_authorized']
 
 
+def test_heartbeat_schedule_advances_when_ros_clock_is_paused():
+    import time
+    from rclpy.clock import ROSClock, ClockType
+    from d1max_pct_scan.component_health import create_functional_heartbeat_timer
+
+    class PausedNode:
+        clock=ROSClock()
+
+        def create_timer(self, period, callback, *, clock=None):
+            return period, callback, clock or self.clock
+
+    node=PausedNode()
+    # Activate a paused ROS source without creating a node or ROS participant.
+    node.clock._set_ros_time_is_active(True)
+    paused=node.clock.now().nanoseconds
+    period, callback, clock=create_functional_heartbeat_timer(node, lambda:None)
+    assert period == .2 and callable(callback)
+    assert clock.clock_type == ClockType.STEADY_TIME
+    before=clock.now().nanoseconds
+    time.sleep(.02)
+    assert clock.now().nanoseconds-before >= 10_000_000
+    assert node.clock.now().nanoseconds == paused
+
+
 def test_dead_monitor_file_does_not_keep_supervisor_alive():
     supervisor=SupervisorHealth('s',started=0.)
     value=dict(schema=1,session_id='s',sequence=1,ready=True,fatal=False)

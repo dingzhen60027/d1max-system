@@ -277,14 +277,21 @@ class NavigationBTAdapters(Node):
             self.compute_tick()
 
     def on_native_debug(self, message):
-        stamp = stamp_seconds(message.header.stamp)
+        source = message.header.stamp
+        stamp_ns = source.sec*1_000_000_000+source.nanosec
+        now_ns = self.get_clock().now().nanoseconds
         if (message.session_id != self.p['session_id'] or message.phase != 'cancelled'
-                or message.valid or message.header.frame_id != ('d1max_loc_odom' if uses_atomic_navigation(self.p) else self.p['map_frame'])
-                or not fresh(stamp, self.now_s(), self.p['freshness_s'])):
+                or message.valid or message.generation <= 0
+                or message.header.frame_id != ('d1max_loc_odom' if uses_atomic_navigation(self.p) else self.p['map_frame'])
+                or not 0 <= source.nanosec < 1_000_000_000 or stamp_ns <= 0
+                or not 0 <= now_ns-stamp_ns <= int(self.p['freshness_s']*1e9)):
             return
-        if self.native_cancel_ack is not None and stamp <= self.native_cancel_ack['stamp']:
+        old = self.native_cancel_ack
+        if old is not None and (stamp_ns < old['stamp_ns'] or message.generation < old['generation']
+                or stamp_ns == old['stamp_ns'] and message.generation == old['generation']):
             return
-        self.native_cancel_ack = dict(stamp=stamp, received=time.monotonic(), generation=message.generation)
+        self.native_cancel_ack = dict(stamp=stamp_seconds(source), stamp_ns=stamp_ns,
+            received=time.monotonic(), generation=message.generation)
 
     def identity(self):
         if uses_atomic_navigation(self.p):
@@ -508,8 +515,9 @@ class NavigationBTAdapters(Node):
     def begin_cancel(self, slot, reason, *, compute):
         if slot['cancel'] is not None:
             return
-        slot['cancel'] = dict(reason=reason, wall=self.now_s(), mono=time.monotonic(),
-                              generation=self.scan.get('generation', 0))
+        source_ns = self.get_clock().now().nanoseconds
+        slot['cancel'] = dict(reason=reason, wall=source_ns*1e-9, source_ns=source_ns,
+                              mono=time.monotonic(), generation=self.scan.get('generation', 0))
         if compute:
             # Nothing was sent while waiting for heavy worker startup. The
             # active slot itself proves there can be no old worker request to
@@ -536,6 +544,61 @@ class NavigationBTAdapters(Node):
             and status.get('pending_worker_start') is False
             and status.get('retired_native_workers') == 0
             and status.get('active_goal') is None and status.get('active_reference') is False)
+
+    def log_cancel_timeout(self, slot, *, compute, fresh_ack):
+        cancel = slot['cancel']
+        if cancel.get('timeout_logged'):
+            return
+        cancel['timeout_logged'] = True
+        source_now, mono_now = self.now_s(), time.monotonic()
+
+        def finite(value):
+            return value if type(value) in (int, float) and math.isfinite(value) else None
+
+        def times(source, received):
+            source, received = finite(source), finite(received)
+            return dict(source_stamp=source, source_age_s=None if source is None else source_now-source,
+                received_mono=received, received_age_s=None if received is None else mono_now-received,
+                source_after_cancel=source is not None and source>cancel['wall'],
+                receipt_after_cancel=received is not None and received>cancel['mono'])
+
+        scan, worker, native = self.scan, self.worker, self.native_cancel_ack
+        scan_evidence = times(scan.get('received_at_unix'), self.received['scan'])
+        scan_evidence.update(fresh_status=self.fresh_status('scan'), generation=scan.get('generation'),
+            active_reference=scan.get('active_reference'))
+        worker_evidence = times(worker.get('received_at_unix'), self.received['worker'])
+        worker_evidence.update(fresh_status=self.fresh_status('worker'),
+            planning=worker.get('planning'), pending_worker_start=worker.get('pending_worker_start'),
+            retired_native_workers=worker.get('retired_native_workers'),
+            active_goal_present=worker.get('active_goal') is not None,
+            active_reference=worker.get('active_reference'),
+            retired_conditions=dict(planning_false=worker.get('planning') is False,
+                pending_worker_start_false=worker.get('pending_worker_start') is False,
+                retired_native_workers_zero=worker.get('retired_native_workers')==0,
+                active_goal_absent=worker.get('active_goal') is None,
+                active_reference_false=worker.get('active_reference') is False),
+            retirement_ack=self.worker_retired(cancel))
+        native_evidence = times(native.get('stamp') if native else None,
+            native.get('received') if native else None)
+        native_evidence.update(present=native is not None,
+            source_stamp_ns=native.get('stamp_ns') if native else None,
+            source_not_before_cancel=bool(native and native.get('stamp_ns',-1)>=cancel['source_ns']),
+            generation=native.get('generation') if native else None,
+            generation_matches_scan=bool(native and native.get('generation')==scan.get('generation')))
+        record = dict(schema=1, event='cancel_ack_timeout', session_id=self.p['session_id'],
+            task_id=getattr(slot['handle'].request,'task_id',''), worker_kind='compute' if compute else 'follow',
+            cancel_reason=cancel['reason'], cancel_source_stamp=cancel['wall'],
+            cancel_source_stamp_ns=cancel['source_ns'], cancel_mono=cancel['mono'],
+            elapsed_s=mono_now-cancel['mono'], timeout_s=self.p['cancel_timeout_s'],
+            deadline_mono=cancel['mono']+self.p['cancel_timeout_s'],
+            source_now=source_now, received_mono_now=mono_now,
+            cancel_generation=cancel['generation'], reference_committed=slot.get('committed',False),
+            fresh_ack=fresh_ack, scan=scan_evidence, native=native_evidence, worker=worker_evidence)
+        # Diagnostic I/O must not delay or change the terminal retirement result.
+        try:
+            self.get_logger().warning('cancel_ack_timeout_diagnostic '+json.dumps(record,allow_nan=False,sort_keys=True))
+        except (AttributeError, RuntimeError, TypeError, ValueError):
+            pass
 
     def finish(self, slot, result, *, compute, canceled=False):
         if slot['future'].done():
@@ -578,9 +641,13 @@ class NavigationBTAdapters(Node):
             native = self.native_cancel_ack
             acknowledged = (fresh_ack and status.get('active_reference') is False
                 and type(status.get('generation')) is int
-                and status['generation'] >= cancel['generation']
+                and status['generation'] > cancel['generation']
                 and native is not None and native['generation'] == status['generation']
-                and native['received'] > cancel['mono'] and native['stamp'] > cancel['wall']
+                and native['received'] > cancel['mono'] and native['stamp_ns'] >= cancel['source_ns']
+                # The native cancellation can finish in the same real source
+                # clock tick as its request. Its new generation and actual
+                # later receipt establish causality; a source before the
+                # request remains invalid, even by one nanosecond.
                 # This one-shot ACK was source-age checked by its callback.
                 # Keep the proven cancellation event while waiting for the
                 # slower worker retirement ACK within the fixed fence budget.
@@ -591,6 +658,7 @@ class NavigationBTAdapters(Node):
             success = acknowledged and cancel['reason'] == 'goal_reached'
             if expired and not acknowledged:
                 self.quarantine = 'cancel_ack_timeout_requires_session_restart'
+                self.log_cancel_timeout(slot,compute=compute,fresh_ack=fresh_ack)
             reason = cancel['reason'] if acknowledged else self.quarantine
             result = cls.Result(schema_version=2, success=success, reason=reason, retirement_confirmed=acknowledged)
             if not compute and success:

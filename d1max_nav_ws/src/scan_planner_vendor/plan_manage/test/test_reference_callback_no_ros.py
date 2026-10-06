@@ -2,8 +2,9 @@
 """Compile the real reference callbacks against passive transport/test doubles.
 
 No rclcpp initialization, ROS graph, map substitute, optimizer or robot commands.
-Only clock/messages/publication sinks are doubled. Both callback bodies and the
-generation/waypoint helpers are production source, including for baseline runs.
+Only clock/messages/publication sinks are doubled. Both callback bodies, their
+publication-header helper and generation/waypoint helpers are production source,
+including for baseline runs.
 The scope is reference admission and refusal notification, not path feasibility.
 """
 import argparse
@@ -25,11 +26,16 @@ HARNESS = r'''
 #include <string>
 #include <vector>
 #include <optional>
+#include <cmath>
 #define RCLCPP_WARN(...) ((void)0)
 #define RCLCPP_WARN_THROTTLE(...) ((void)0)
 #define RCLCPP_ERROR(...) ((void)0)
 #define RCLCPP_INFO(...) ((void)0)
-struct Header { std::string frame_id; };
+namespace builtin_interfaces { namespace msg {
+struct Time {std::int32_t sec=0;std::uint32_t nanosec=0;};
+}}
+struct Header {builtin_interfaces::msg::Time stamp;std::string frame_id;};
+namespace std_msgs { namespace msg {using Header=::Header;}}
 struct Position { double x=0., y=0., z=0.; };
 struct PoseStamped { Header header; struct { Position position; } pose; };
 namespace nav_msgs { namespace msg {
@@ -44,10 +50,24 @@ struct ReferencePath { using ConstSharedPtr=std::shared_ptr<const ReferencePath>
   std::vector<std::string> point_segment_ids,point_segment_kinds,point_required_modes;
 };
 }}
-namespace builtin_interfaces { namespace msg { struct Time {}; }}
 struct ClockValue { double value=0.; double seconds() const {return value;}
+  std::int64_t source_ns=0;
+  std::int64_t nanoseconds()const {return source_ns?source_ns:std::llround(value*1e9);}
+  operator builtin_interfaces::msg::Time()const {
+    return {static_cast<std::int32_t>(nanoseconds()/1000000000LL),
+      static_cast<std::uint32_t>(nanoseconds()%1000000000LL)};
+  }
   ClockValue operator-(ClockValue b) const {return {value-b.value};} };
-struct PassiveNode { double clock=100.; ClockValue now() const {return {clock};} };
+struct PassiveClock {int get_clock_type()const{return 0;}};
+struct PassiveNode {double clock=100.;std::int64_t clock_ns=0;PassiveClock clock_type;
+  ClockValue now() const {return {clock,clock_ns};}
+  PassiveClock* get_clock(){return &clock_type;}
+};
+namespace rclcpp {struct Time {
+  std::int64_t source_ns;
+  Time(std::int64_t ns,int):source_ns(ns){}
+  operator builtin_interfaces::msg::Time()const {return ClockValue{0.,source_ns};}
+};}
 namespace scan_planner {
 struct ReferenceTargetResult {};
 inline int executionVersion(const d1max_planning_interfaces::msg::ReferencePath& m){return m.generation;}
@@ -81,7 +101,9 @@ public:
   struct Event {std::string phase,session; std::uint64_t generation; bool valid;};
   std::vector<Event> emitted;
   int accepted_calls=0, emergency_stop_calls=0;
-  Header localPlanDebugHeader() {return {};}
+  // Retain this passive field so the regression also compiles the old source.
+  std::int64_t last_local_debug_stamp_ns_=0;
+  std_msgs::msg::Header localPlanDebugHeader();
   void publishAttemptDebug(Header,bool) {}
   void publishInvalidLocalPlanDebug(const std::string &phase,bool=false) {
     emitted.push_back({phase,navigation_session_id_,reference_generation_,false});
@@ -115,6 +137,21 @@ int main() {
       !f.emitted.back().valid && f.emitted.back().session=="session" &&
       f.emitted.back().generation==f.reference_generation_;
   };
+  {
+    SCANReplanFSM f;constexpr std::int64_t source=1791124691902856036LL;
+    const auto ns=[](const Header& h) {
+      return static_cast<std::int64_t>(h.stamp.sec)*1000000000LL+h.stamp.nanosec;
+    };
+    f.clock.clock_ns=source;
+    const auto attempt=f.localPlanDebugHeader(),cancel_ack=f.localPlanDebugHeader();
+    check(ns(attempt)==source&&ns(cancel_ack)==source,
+          "same_tick_attempt_and_cancel_ack_keep_real_source_no_future_stamp");
+    f.clock.clock_ns=source+1;
+    check(ns(f.localPlanDebugHeader())==source+1,"real_one_nanosecond_advance_is_preserved");
+    f.clock.clock_ns=source-1;
+    check(ns(f.localPlanDebugHeader())==source-1,"real_clock_rollback_is_not_hidden_by_monotonic_stamp");
+    check(ns(f.localPlanDebugHeader())==source-1,"repeated_rollback_tick_stays_at_real_source");
+  }
   {
     SCANReplanFSM f;f.typedPathCallback(path(1));
     check(phase(f,"reference_rejected_odometry"),"no_odometry_explicit_generation_bound_rejection");
@@ -210,6 +247,9 @@ def main():
     source = args.source.read_text()
     extracted = callback(source, 'typedPathCallback', 'publishTrajectory')
     extracted += callback(source, 'pathCallback', 'odometryCallback')
+    begin=source.index('  std_msgs::msg::Header SCANReplanFSM::localPlanDebugHeader()')
+    end=source.index('  void SCANReplanFSM::publishInvalidLocalPlanDebug(',begin)
+    extracted += source[begin:end]
     with tempfile.TemporaryDirectory(prefix='reference-callback-') as temporary:
         root = args.build_dir or Path(temporary)
         root.mkdir(parents=True, exist_ok=True)
@@ -231,7 +271,7 @@ def main():
                           callback_source=str(cpp), compile_command=command,
                           returncode=result.returncode, stdout=result.stdout, stderr=result.stderr,
                           ros_initialized=False, robot_connected=False,
-                          scope='actual extracted reference callbacks; clock, transport, publication and planning sink doubled; no map or optimizer validation')
+                          scope='actual extracted reference callbacks and publication-header helper; clock, transport, publication and planning sink doubled; no map or optimizer validation')
             args.report.write_text(json.dumps(report, indent=2) + '\n')
         return result.returncode
 

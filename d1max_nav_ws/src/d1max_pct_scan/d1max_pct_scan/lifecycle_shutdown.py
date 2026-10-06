@@ -18,17 +18,18 @@ def drained_status(value, *, session_id, requested_at, now):
             and value.get('lifecycle_quarantined') is False)
 
 
-def drain_task_owner(session_id, *, budget_s=6.):
+def drain_task_owner(session_id, *, budget_s=6., use_sim_time=False):
     """Bounded shutdown client, called ONLY by the already-running supervisor.
 
     It shares that supervisor's domain/router and cannot restart any component.
     Failure is recorded as unconfirmed, never converted into physical success.
     """
-    if not session_id or not 0 < budget_s <= 10.:
+    if not session_id or not 0 < budget_s <= 10. or type(use_sim_time) is not bool:
         raise ValueError('invalid_shutdown_contract')
     import rclpy
     from rclpy.context import Context
     from rclpy.executors import SingleThreadedExecutor
+    from rclpy.parameter import Parameter
     from rclpy.qos import QoSProfile, DurabilityPolicy
     from std_msgs.msg import String
     from d1max_navigation_bt_interfaces.srv import PrepareTransition
@@ -38,14 +39,16 @@ def drain_task_owner(session_id, *, budget_s=6.):
     started = time.monotonic()
     try:
         rclpy.init(context=context)
-        node = rclpy.create_node('d1max_shutdown_observer', context=context)
+        node = rclpy.create_node('d1max_shutdown_observer', context=context,
+            use_global_arguments=False,
+            parameter_overrides=[Parameter('use_sim_time', value=use_sim_time)])
         executor = SingleThreadedExecutor(context=context)
         executor.add_node(node)
-        requested_at = node.get_clock().now().nanoseconds*1e-9
+        requested_at = None
         def observe(message):
             try:
                 value = json.loads(message.data)
-                if result['request_accepted'] and drained_status(value,
+                if result['request_accepted'] and requested_at is not None and drained_status(value,
                         session_id=session_id, requested_at=requested_at,
                         now=node.get_clock().now().nanoseconds*1e-9):
                     result.update(software_retired=True,
@@ -60,7 +63,13 @@ def drain_task_owner(session_id, *, budget_s=6.):
         client = node.create_client(PrepareTransition, '/d1max/live_planning/bt/prepare_transition')
         future = None
         while time.monotonic()-started < budget_s:
-            if future is None and client.service_is_ready():
+            source_now = node.get_clock().now().nanoseconds*1e-9
+            if future is None and source_now > 0. and client.service_is_ready():
+                # A new simulation clock starts at zero until its first /clock
+                # callback. Never turn that zero into a barrier which would
+                # admit an inactive latched status from before this request.
+                # The total budget remains the original steady wall deadline.
+                requested_at = source_now
                 request = PrepareTransition.Request()
                 request.schema_version, request.reason = 2, 'owned_supervisor_shutdown'
                 request.session_id = session_id

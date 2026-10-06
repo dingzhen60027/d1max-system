@@ -61,7 +61,8 @@ def main(args=None):
                 lambda m:self.core.on_rays(m,self.get_clock().now().nanoseconds),qos_profile_sensor_data)
             self.create_subscription(MotionDemand,'/d1max/live_planning/execution/demand',self.on_demand,1)
             self.create_subscription(MotionValidation,'/d1max/live_planning/execution/motion_validation',self.on_motion_proof,5)
-            self.create_timer(.2,self.on_status)
+            from .component_health import create_functional_heartbeat_timer
+            self.status_timer=create_functional_heartbeat_timer(self,self.on_status)
         def on_demand(self,message):
             now=self.get_clock().now().nanoseconds
             self.output(self.admission.demand(message,now))

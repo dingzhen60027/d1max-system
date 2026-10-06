@@ -53,7 +53,8 @@ def create_node(settings):
             from .local_navigation_state import LocalNavigationInbox
             self.local_inbox = LocalNavigationInbox()
             self.core = RayProjectorCore(settings['limits'], settings.get('preview_exclusion'),
-                projection_frame=settings.get('projection_frame', 'map'))
+                projection_frame=settings.get('projection_frame', 'map'),
+                allow_simulation_snapshot=settings.get('allow_simulation_snapshot', False))
             self.exclusion_counts = {'matched': [0, 0], 'dropped': [0, 0]}
             self.request = self.ack = None
             self.highest_context_sequence = 0

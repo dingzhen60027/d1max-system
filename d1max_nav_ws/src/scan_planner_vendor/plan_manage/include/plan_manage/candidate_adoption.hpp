@@ -28,9 +28,10 @@ inline std::optional<CandidateJoinEvidence> measuredCandidateJoin(
       solve_body.frame!=current_body.frame || current_body.frame.empty() ||
       !std::isfinite(resolution) || resolution<=0. || !std::isfinite(max_speed) ||
       max_speed<=0. || !std::isfinite(max_acceleration) || max_acceleration<=0.) return {};
-  const double elapsed=current_body.source_stamp-solve_body.source_stamp;
-  if (!std::isfinite(elapsed) || solve_body.source_stamp<=0. || elapsed<0. || elapsed>.4)
+  const auto solve_ns=measuredBodySourceNs(solve_body),current_ns=measuredBodySourceNs(current_body);
+  if (solve_ns<=0||current_ns<solve_ns||current_ns-solve_ns>400000000LL)
     return {};
+  const double elapsed=static_cast<double>(current_ns-solve_ns)*1e-9;
   const auto controls=curve.getControlPoint();
   const auto knots=curve.getKnot();
   if (curve.getOrder()!=3 || controls.rows()!=3 || controls.cols()<4 ||
@@ -88,6 +89,7 @@ struct CandidateSourceLease {
   std::int64_t map_source_ns{0};
   std::uint64_t context{0},revision{0};
   double body_source{0.};
+  std::int64_t body_source_ns{0};
 };
 
 // Called both before and immediately after the full real-map collision check.
@@ -95,10 +97,12 @@ struct CandidateSourceLease {
 inline bool candidateLeaseStillCurrent(const CandidateSourceLease &before,
     const CandidateSourceLease &after, bool map_fresh, bool body_fresh,
     const SolveBudget::Ptr &budget) {
+  const auto before_body=before.body_source_ns>0?before.body_source_ns:poseSecondsNs(before.body_source);
+  const auto after_body=after.body_source_ns>0?after.body_source_ns:poseSecondsNs(after.body_source);
   return budget && budget->allowed() && map_fresh && body_fresh &&
-      before.map_source_ns>0 && before.body_source>0. &&
+      before.map_source_ns>0 && before_body>0 &&
       before.map_source_ns==after.map_source_ns && before.context==after.context &&
-      before.revision==after.revision && before.body_source==after.body_source;
+      before.revision==after.revision && before_body==after_body;
 }
 
 // The production adoption transaction. Injection is only for its clock/source

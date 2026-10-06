@@ -169,7 +169,7 @@ namespace scan_planner
     const auto current_lease=[&]() {
       return CandidateSourceLease{grid_map_->latestCloudStampNs(),
           grid_map_->localizationContextSequence(),grid_map_->occupancyRevision(),
-          measured_body_pose_.source_stamp};
+          measured_body_pose_.source_stamp,measuredBodySourceNs(measured_body_pose_)};
     };
     const auto sources_fresh=[&]() {
       const auto now=node_->now();
@@ -177,7 +177,7 @@ namespace scan_planner
       return std::make_pair(
           grid_map_->integratedCloudFreshAt(now.nanoseconds()),
           measuredBodyYaw(measured_body_pose_,measured_body_frame_,now.seconds(),
-                          measured_body_maximum_age_,yaw));
+                          measured_body_maximum_age_,yaw,now.nanoseconds()));
     };
     std::atomic_store(&solve_budget_,budget);
     const auto join=certifyCandidateAdoption(candidate.curve,candidate.solve_body,
@@ -234,7 +234,7 @@ namespace scan_planner
     attempt_detour_seed_.clear();
     double measured_yaw=0.;
     if (!measuredBodyYaw(measured_body_pose_,measured_body_frame_,node_->now().seconds(),
-                         measured_body_maximum_age_,measured_yaw) ||
+                         measured_body_maximum_age_,measured_yaw,node_->now().nanoseconds()) ||
         (start_pt-measured_body_pose_.position).norm()>grid_map_->getResolution()*.25) {
       last_failure_phase_="waiting_body_pose";
       return false;
@@ -845,10 +845,11 @@ namespace scan_planner
           collision,p.x(),p.y(),p.z(),yaw);
       return collision;
     }, measured_body_pose_, measured_body_frame_, node_->now().seconds(), measured_body_maximum_age_,
-       query_budget, wall_budget_seconds, measured_curve_time,heading_contract);
+       query_budget, wall_budget_seconds, measured_curve_time,heading_contract,0.,
+       MeasuredConnectionPolicy::CandidateAdmission,node_->now().nanoseconds());
     double yaw=0.;
     const bool pose_fresh=measuredBodyYaw(measured_body_pose_,measured_body_frame_,node_->now().seconds(),
-                                         measured_body_maximum_age_,yaw);
+                                         measured_body_maximum_age_,yaw,node_->now().nanoseconds());
     if (evidence) *evidence=pose_fresh ? curveCheckEvidence(safe,occupied_witness) :
         CurveCheckEvidence::Uncertified;
     return safe && pose_fresh;
@@ -862,7 +863,7 @@ namespace scan_planner
     const bool fresh=grid_map_->integratedCloudFreshAt(node_->now().nanoseconds()) &&
         candidate.context_sequence==grid_map_->localizationContextSequence() &&
         measuredBodyYaw(measured_body_pose_,measured_body_frame_,node_->now().seconds(),
-                        measured_body_maximum_age_,yaw);
+                        measured_body_maximum_age_,yaw,node_->now().nanoseconds());
     if (!fresh) { pending_preview_candidate_.reset(); return false; }
     updateTrajInfo(candidate.curve,candidate.solved_at);
     accepted_heading_contract_=candidate.heading;

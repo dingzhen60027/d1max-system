@@ -19,6 +19,7 @@
 #include <set>
 #include <string>
 #include <stdexcept>
+#include <cstdint>
 #include "execution_policy.hpp"
 
 namespace d1monitor::execution3 {
@@ -36,12 +37,70 @@ using Stationary=d1max_planning_interfaces::msg::SDKStationaryEvidence;
 using Local=d1max_planning_interfaces::msg::LocalNavigationState;
 using CurveProof=d1max_planning_interfaces::msg::TrajectoryValidation;
 using Progress=d1max_planning_interfaces::msg::TrackingProgress;
-inline double secs(const builtin_interfaces::msg::Time&t){return t.sec+t.nanosec*1e-9;}
-inline builtin_interfaces::msg::Time stamp(double t){builtin_interfaces::msg::Time s;s.sec=static_cast<int32_t>(std::floor(t));s.nanosec=static_cast<uint32_t>((t-s.sec)*1e9);return s;}
-inline builtin_interfaces::msg::Time earlier(const builtin_interfaces::msg::Time&a,const builtin_interfaces::msg::Time&b){
-  return a.sec<b.sec||(a.sec==b.sec&&a.nanosec<=b.nanosec)?a:b;
+// Keep the ROS source clock in integer nanoseconds at real callbacks.  Double
+// seconds remain supported for approximate SDK clocks and small-time tests.
+// Converting sec + nanosec separately is not equivalent to ROS ns / 1e9 at
+// Unix epochs: the same exact source can otherwise look 238 ns in the future.
+struct SourceClock {
+  double seconds_value=0.;
+  std::optional<std::int64_t> exact_ns;
+  SourceClock(double value=0.):seconds_value(value){}
+  static SourceClock fromNanoseconds(std::int64_t value) {
+    SourceClock out(static_cast<double>(value)/1e9);out.exact_ns=value;return out;
+  }
+  operator double()const{return seconds_value;}
+};
+inline std::int64_t nanoseconds(const builtin_interfaces::msg::Time&t){
+  return static_cast<std::int64_t>(t.sec)*1000000000LL+t.nanosec;
 }
-inline bool fresh(double t,double now,double age){return std::isfinite(t)&&std::isfinite(now)&&t>0&&now>=t&&now-t<=age;}
+inline double secs(const builtin_interfaces::msg::Time&t){return static_cast<double>(nanoseconds(t))/1e9;}
+inline builtin_interfaces::msg::Time stamp(double t){
+  builtin_interfaces::msg::Time out;out.sec=static_cast<int32_t>(std::floor(t));
+  out.nanosec=static_cast<uint32_t>(std::max(0.,(t-out.sec)*1e9));return out;
+}
+inline builtin_interfaces::msg::Time stamp(SourceClock t){
+  if(!t.exact_ns)return stamp(t.seconds_value);
+  builtin_interfaces::msg::Time out;out.sec=static_cast<int32_t>(*t.exact_ns/1000000000LL);
+  const auto remainder=*t.exact_ns%1000000000LL;
+  if(remainder<0){--out.sec;out.nanosec=static_cast<uint32_t>(remainder+1000000000LL);}
+  else out.nanosec=static_cast<uint32_t>(remainder);
+  return out;
+}
+inline SourceClock after(SourceClock t,double duration){
+  if(!t.exact_ns)return SourceClock(t.seconds_value+duration);
+  return SourceClock::fromNanoseconds(*t.exact_ns+static_cast<std::int64_t>(duration*1e9));
+}
+inline int compare(const builtin_interfaces::msg::Time&t,SourceClock now){
+  if(now.exact_ns){const auto value=nanoseconds(t);return value<*now.exact_ns?-1:value>*now.exact_ns?1:0;}
+  const double value=secs(t);return value<now.seconds_value?-1:value>now.seconds_value?1:0;
+}
+inline double elapsed(const builtin_interfaces::msg::Time&end,const builtin_interfaces::msg::Time&begin){
+  return static_cast<double>(nanoseconds(end)-nanoseconds(begin))/1e9;
+}
+inline bool fresh(double source,double now,double age){
+  return std::isfinite(source)&&std::isfinite(now)&&source>0&&now>=source&&now-source<=age;
+}
+inline bool fresh(double source,SourceClock now,double age){return fresh(source,now.seconds_value,age);}
+inline bool fresh(SourceClock source,double now,double age){return fresh(source.seconds_value,now,age);}
+inline bool fresh(SourceClock source,SourceClock now,double age){
+  if(source.exact_ns&&now.exact_ns){
+    return *source.exact_ns>0&&*now.exact_ns>=*source.exact_ns&&std::isfinite(age)&&age>=0.&&
+      *now.exact_ns-*source.exact_ns<=static_cast<std::int64_t>(age*1e9);
+  }
+  return fresh(source.seconds_value,now.seconds_value,age);
+}
+inline bool fresh(const builtin_interfaces::msg::Time&source,SourceClock now,double age){
+  if(source.nanosec>=1000000000U)return false;
+  return fresh(SourceClock::fromNanoseconds(nanoseconds(source)),now,age);
+}
+inline bool fresh(const builtin_interfaces::msg::Time&source,const builtin_interfaces::msg::Time&now,double age){
+  if(now.nanosec>=1000000000U)return false;
+  return fresh(source,SourceClock::fromNanoseconds(nanoseconds(now)),age);
+}
+
+inline builtin_interfaces::msg::Time earlier(const builtin_interfaces::msg::Time&a,const builtin_interfaces::msg::Time&b){
+  return nanoseconds(a)<=nanoseconds(b)?a:b;
+}
 inline bool task(const Version&a,const Version&b){return a.schema_version==3&&b.schema_version==3&&a.session_id==b.session_id&&
  a.task_id==b.task_id&&a.route_id==b.route_id&&a.route_hash==b.route_hash&&a.map_version_id==b.map_version_id&&
  a.localization_epoch==b.localization_epoch&&a.localization_seed_id==b.localization_seed_id;}
@@ -80,11 +139,11 @@ public:
       throw std::invalid_argument("explicit_mc_capture_time_bound_required");
     mc_delay_bound_=delay;mc_bound_configured_=true;
   }
-  Grant::Response grant(const Grant::Request&r,double now,const Health&h) {
+  Grant::Response grant(const Grant::Request&r,SourceClock now,const Health&h) {
     Grant::Response out;out.sdk_session=session_;out.sdk_arm_generation=generation_;
     if(closing_&&r.activate){out.reason="writer_shutting_down";return out;}
     if(!complete(r.version)||r.sdk_session!=session_||r.transport_mode!=mode_||
-       !fresh(secs(r.source_stamp),now,.5)||r.request_id.empty()||r.execution_id.empty()||r.control_epoch==0){out.reason="grant_binding_or_time_invalid";return out;}
+       !fresh(r.source_stamp,now,.5)||r.request_id.empty()||r.execution_id.empty()||r.control_epoch==0){out.reason="grant_binding_or_time_invalid";return out;}
     if(!r.activate){
       if(r.execution_id!=execution_||r.control_epoch!=epoch_){out.reason="stale_revoke";return out;}
       stop("owner_revoked",now);out.accepted=true;out.reason="stopping_not_yet_measured";return out;
@@ -109,21 +168,21 @@ public:
     retained_incumbent_until_=0.;curve_proofs_.clear();progress_.reset();
     clearNonterminalStationary();write_sequence_=last_nonzero_write_sequence_=stationary_sequence_=0;
     mc_order_hold_=false;mc_order_new_samples_=0;mc_order_first_source_=mc_order_barrier_source_=0.;
-    takeover_=!h.owned;takeover_taken_=false;ready_=h.owned;ready_at_=ready_?now:0.;phase_=ready_?"ready":"taking_control";reason_.clear();
+    takeover_=!h.owned;takeover_taken_=false;ready_=h.owned;ready_at_=ready_?static_cast<double>(now):0.;phase_=ready_?"ready":"taking_control";reason_.clear();
     out.accepted=true;out.sdk_arm_generation=generation_;out.reason="grant_queued";return out;
   }
   bool takeControlOnce(){if(!takeover_||takeover_taken_||stopping_||closing_)return false;takeover_taken_=true;return true;}
-  void submissionFailed(double now){fault_=true;stop("sdk_write_outcome_unknown",now);}
-  void fault(const std::string&why,double now){fault_=true;stop(why,now);}
-  void telemetryRestartBeforeFirstMotion(double now) {
+  void submissionFailed(SourceClock now){fault_=true;stop("sdk_write_outcome_unknown",now);}
+  void fault(const std::string&why,SourceClock now){fault_=true;stop(why,now);}
+  void telemetryRestartBeforeFirstMotion(SourceClock now) {
     if(ever_nonzero_){fault("mc_reconfigured_after_motion",now);return;}
     clock_epoch_.clear();last_raw_=0;last_source_=last_received_=0;ready_=false;ready_at_=0;
   }
-  bool permit(const Permit&p,double now) {
+  bool permit(const Permit&p,SourceClock now) {
     if(execution_.empty()||p.execution_id!=execution_||p.control_epoch!=epoch_||!task(binding_,p.version)||
        p.transport_mode!=mode_||p.sdk_session!=session_||p.sdk_arm_generation!=generation_||
-       p.sequence<=permit_seq_||!fresh(secs(p.source_stamp),now,.35)||
-       secs(p.valid_until)<now||secs(p.valid_until)-secs(p.source_stamp)>.35||
+       p.sequence<=permit_seq_||!fresh(p.source_stamp,now,.35)||
+       compare(p.valid_until,now)<0||elapsed(p.valid_until,p.source_stamp)>.35||
        (p.allowed&&!p.geometry_committed))return false;
     // A pre-gap permission must not revive a pre-gap command. Revocations
     // and HOLD heartbeats still reach the owner even while MC is unavailable.
@@ -154,37 +213,37 @@ public:
     else {permits_.push_back(p);if(permits_.size()>8)permits_.pop_front();}
     return true;
   }
-  bool localState(const Local&m,double now) {
+  bool localState(const Local&m,SourceClock now) {
     if(m.schema_version!=1||m.session_id.empty()||m.map_version_id.empty()||m.localization_epoch==0||m.localization_seed_id.empty())return false;
     if(!execution_.empty()&&(m.session_id!=binding_.session_id||m.map_version_id!=binding_.map_version_id||
        m.localization_epoch!=binding_.localization_epoch||m.localization_seed_id!=binding_.localization_seed_id))return false;
     if(!m.usable){local_.reset();return false;}
     const auto&o=m.local_odometry;
-    if(!fresh(secs(m.source_stamp),now,.1)||!fresh(secs(m.posterior_stamp),now,.25)||!fresh(secs(m.imu_stamp),now,.25)||
-       secs(m.posterior_stamp)>secs(m.source_stamp)||secs(m.imu_stamp)>secs(m.source_stamp)||
+    if(!fresh(m.source_stamp,now,.1)||!fresh(m.posterior_stamp,now,.25)||!fresh(m.imu_stamp,now,.25)||
+       nanoseconds(m.posterior_stamp)>nanoseconds(m.source_stamp)||nanoseconds(m.imu_stamp)>nanoseconds(m.source_stamp)||
        !std::isfinite(m.extrapolation_sec)||m.extrapolation_sec<0||m.extrapolation_sec>.1||
-       std::abs(secs(m.source_stamp)-secs(m.imu_stamp)-m.extrapolation_sec)>1e-5||o.header.stamp!=m.source_stamp||
+       std::abs(elapsed(m.source_stamp,m.imu_stamp)-m.extrapolation_sec)>1e-5||o.header.stamp!=m.source_stamp||
        o.header.frame_id!="d1max_loc_odom"||o.child_frame_id!="d1max_loc_base_link"||!poseFinite(o.pose.pose)||!twistFinite(o.twist.twist))return false;
-    if(local_&&secs(m.source_stamp)<=secs(local_->source_stamp))return false;
+    if(local_&&nanoseconds(m.source_stamp)<=nanoseconds(local_->source_stamp))return false;
     local_=m;return true;
   }
-  bool trajectoryValidation(const CurveProof&p,double now) {
+  bool trajectoryValidation(const CurveProof&p,SourceClock now) {
     if(!complete(p.version)||!task(binding_,p.version)||p.transport_mode!=mode_||p.sequence==0||
-       !fresh(secs(p.check_end),now,.25)||secs(p.check_begin)>secs(p.check_end))return false;
+       !fresh(p.check_end,now,.25)||nanoseconds(p.check_begin)>nanoseconds(p.check_end))return false;
     for(const auto&old:curve_proofs_)if(version(old.version,p.version)&&old.trajectory_id==p.trajectory_id&&
         p.sequence<=old.sequence&&(p.valid||p.sequence==old.sequence))return false;
     curve_proofs_.push_back(p);if(curve_proofs_.size()>32)curve_proofs_.pop_front();return true;
   }
-  bool trackingProgress(const Progress&p,double now) {
-    if(p.schema_version!=2||!p.valid||p.header.frame_id!="d1max_loc_odom"||!fresh(secs(p.header.stamp),now,.1)||
+  bool trackingProgress(const Progress&p,SourceClock now) {
+    if(p.schema_version!=2||!p.valid||p.header.frame_id!="d1max_loc_odom"||!fresh(p.header.stamp,now,.1)||
        p.session_id!=binding_.session_id||p.task_id!=binding_.task_id||p.route_id!=binding_.route_id||
        p.route_hash!=binding_.route_hash||p.map_version_id!=binding_.map_version_id||p.localization_epoch!=binding_.localization_epoch||
        p.localization_seed_id!=binding_.localization_seed_id||!poseFinite(p.pose)||!twistFinite(p.twist)||
        !std::isfinite(p.curve_time)||p.curve_time<0||!std::isfinite(p.arc_length)||p.arc_length<0)return false;
-    if(progress_&&secs(p.header.stamp)<=secs(progress_->header.stamp))return false;
+    if(progress_&&nanoseconds(p.header.stamp)<=nanoseconds(progress_->header.stamp))return false;
     progress_=p;return true;
   }
-  bool handoff(const Handoff&g,double now) {
+  bool handoff(const Handoff&g,SourceClock now) {
     if(g.revoked&&last_handoff_&&g.handoff_id==last_handoff_->handoff_id) {
       auto original=g;original.revoked=last_handoff_->revoked;original.reason=last_handoff_->reason;
       if(original!=*last_handoff_)return false;
@@ -209,16 +268,16 @@ public:
        g.incumbent.trajectory_id!=permit_.trajectory_id||permit_.revoked||g.incumbent.revoked||
        (continuous&&(!permit_.allowed||permit_.phase!="tracking"||!g.incumbent.allowed||g.incumbent.phase!="tracking"))||
        (reentry&&(permit_.allowed||permit_.phase!="holding"||g.incumbent.allowed||g.incumbent.phase!="holding"||
-          g.retain_incumbent_until!=g.source_stamp||secs(g.valid_until)>secs(g.stationary_evidence.valid_until)||
-          secs(g.candidate.valid_until)>secs(g.stationary_evidence.valid_until)||!stationaryProof(g.stationary_evidence,now)))||
+          g.retain_incumbent_until!=g.source_stamp||nanoseconds(g.valid_until)>nanoseconds(g.stationary_evidence.valid_until)||
+          nanoseconds(g.candidate.valid_until)>nanoseconds(g.stationary_evidence.valid_until)||!stationaryProof(g.stationary_evidence,now)))||
        !g.candidate.allowed||g.candidate.revoked||g.candidate.phase!="tracking"||
        g.candidate.sequence<=g.incumbent.sequence||g.candidate.validation_sequence==0||
-       !fresh(secs(g.source_stamp),now,.25)||secs(g.valid_until)<=now||secs(g.valid_until)-secs(g.source_stamp)>.250001||
-       secs(g.transition_deadline)>secs(g.valid_until)||secs(g.transition_deadline)<=now||
-       (continuous&&(secs(g.retain_incumbent_until)>secs(g.incumbent.valid_until)||
-         secs(g.retain_incumbent_until)>secs(permit_.valid_until)||secs(g.retain_incumbent_until)<=secs(g.source_stamp)))||
-       !fresh(secs(g.candidate.source_stamp),now,.35)||secs(g.candidate.valid_until)<=now||
-       secs(g.candidate.valid_until)-secs(g.candidate.source_stamp)>.35)return false;
+       !fresh(g.source_stamp,now,.25)||compare(g.valid_until,now)<=0||elapsed(g.valid_until,g.source_stamp)>.250001||
+       nanoseconds(g.transition_deadline)>nanoseconds(g.valid_until)||compare(g.transition_deadline,now)<=0||
+       (continuous&&(nanoseconds(g.retain_incumbent_until)>nanoseconds(g.incumbent.valid_until)||
+         nanoseconds(g.retain_incumbent_until)>nanoseconds(permit_.valid_until)||nanoseconds(g.retain_incumbent_until)<=nanoseconds(g.source_stamp)))||
+       !fresh(g.candidate.source_stamp,now,.35)||compare(g.candidate.valid_until,now)<=0||
+       elapsed(g.candidate.valid_until,g.candidate.source_stamp)>.35)return false;
     if(g.revoked){rejectHandoff("handoff_revoked",now);return false;}
     if(handoff_)return false; // fixed active + one prepared slot, no queue
     handoff_sequence_=g.sequence;last_handoff_=g;handoff_=g;prepared_.reset();selected_prepared_=false;
@@ -230,14 +289,14 @@ public:
     retained_incumbent_until_=continuous?secs(g.retain_incumbent_until):0.;
     return true;
   }
-  bool preparedDemand(const Prepared&p,double now) {
+  bool preparedDemand(const Prepared&p,SourceClock now) {
     if(!handoff_||p.schema_version!=1||p.handoff_id!=handoff_->handoff_id||p.grant_sequence!=handoff_->sequence||
        p.expected_commit_sequence!=commit_sequence_||p.expected_commit_sequence!=handoff_->expected_commit_sequence||
-       secs(handoff_->transition_deadline)<=now||!sameGrantIdentity(handoff_->candidate)||
+       compare(handoff_->transition_deadline,now)<=0||!sameGrantIdentity(handoff_->candidate)||
        !version(p.demand.version,handoff_->candidate.version)||p.demand.trajectory_id!=handoff_->candidate.trajectory_id||
        p.demand.permit_sequence!=handoff_->candidate.sequence||p.demand.sequence<=prepared_sequence_floor_||!demandBinding(p.demand)||
-       !fresh(secs(p.demand.source_stamp),now,.1)||!fresh(secs(p.demand.body_source_stamp),now,.1)||
-       secs(p.demand.valid_until)<=now||secs(p.demand.valid_until)>secs(p.demand.source_stamp)+.100001||
+       !fresh(p.demand.source_stamp,now,.1)||!fresh(p.demand.body_source_stamp,now,.1)||
+       compare(p.demand.valid_until,now)<=0||elapsed(p.demand.valid_until,p.demand.source_stamp)>.100001||
        !preparedEntry(p,now))return false;
     if(prepared_&&p.demand.sequence<prepared_->demand.sequence)return false;
     if(prepared_&&p.demand.sequence==prepared_->demand.sequence&&
@@ -247,13 +306,13 @@ public:
         p.curve_entry_twist!=prepared_->curve_entry_twist||p.curve_time!=prepared_->curve_time))return false;
     prepared_=p;return true;
   }
-  bool demand(const Demand&d,double now) {
+  bool demand(const Demand&d,SourceClock now) {
     if(closing_||!ready_||stopping_||mc_hold_||!last_health_.mc_fresh||!permit_.allowed||
        secs(d.source_stamp)<=mc_resume_floor_||secs(d.body_source_stamp)<=mc_resume_floor_||
        !version(permit_.version,d.version)||d.execution_id!=execution_||
        d.control_epoch!=epoch_||d.sdk_session!=session_||d.sdk_arm_generation!=generation_||d.transport_mode!=mode_||
-       d.sequence<demand_seq_||d.trajectory_id!=permit_.trajectory_id||!fresh(secs(d.source_stamp),now,.25)||
-       !fresh(secs(d.body_source_stamp),now,.4)||secs(d.valid_until)<now||secs(d.valid_until)-secs(d.source_stamp)>.3)return false;
+       d.sequence<demand_seq_||d.trajectory_id!=permit_.trajectory_id||!fresh(d.source_stamp,now,.25)||
+       !fresh(d.body_source_stamp,now,.4)||compare(d.valid_until,now)<0||elapsed(d.valid_until,d.source_stamp)>.3)return false;
     const bool evidence_upgrade=demand_seq_>0&&d.sequence==demand_seq_;
     // A second independent sweep may improve only the evidence binding of
     // this exact original command. It is not a new motion request: source,
@@ -275,13 +334,13 @@ public:
        // collision snapshot. The exact newer proof is still required by the
        // actual-demand MotionValidation below; this never renews its deadline.
        d.validation_sequence<original->validation_sequence||
-       !fresh(secs(original->source_stamp),now,.35)||secs(original->valid_until)<now)return false;
+       !fresh(original->source_stamp,now,.35)||compare(original->valid_until,now)<0)return false;
     const auto&v=d.velocity;
     if(!std::isfinite(v.linear.x)||!std::isfinite(v.angular.z)||v.linear.x<0||v.linear.x>max_speed_||std::abs(v.angular.z)>max_yaw_||
        v.linear.y!=0||v.linear.z!=0||v.angular.x!=0||v.angular.y!=0)return false;
     const bool nonzero=v.linear.x!=0||v.angular.z!=0;
     const auto* motion=motionProof(d,now);
-    if(nonzero&&(d.hold||!d.safety_checked||!fresh(secs(d.safety_source_stamp),now,rayAgeBound())))return false;
+    if(nonzero&&(d.hold||!d.safety_checked||!fresh(d.safety_source_stamp,now,rayAgeBound())))return false;
     if(nonzero&&!motion) {
       // Proof and the safety gate are distinct publishers. Buffer only one
       // already-bound demand; late proof rechecks every original lease below.
@@ -297,10 +356,10 @@ public:
     demand_lease_until_=secs(demand_lease_until_stamp_);
     have_demand_=true;pending_demand_.reset();return true;
   }
-  bool motionValidation(const MotionProof&p,double now) {
+  bool motionValidation(const MotionProof&p,SourceClock now) {
     if(execution_.empty()||!task(binding_,p.version)||!complete(p.version)||p.execution_id!=execution_||
        p.control_epoch!=epoch_||p.sdk_session!=session_||p.sdk_arm_generation!=generation_||p.transport_mode!=mode_||
-       p.sequence==0||p.demand_sequence==0||!fresh(secs(p.check_end),now,.15)||secs(p.check_begin)>secs(p.check_end)||
+       p.sequence==0||p.demand_sequence==0||!fresh(p.check_end,now,.15)||nanoseconds(p.check_begin)>nanoseconds(p.check_end)||
        p.braking_model_sha256!=braking_model_sha_||braking_model_sha_.size()!=64)return false;
     for(const auto&old:motion_proofs_)if(version(old.version,p.version)&&old.demand_sequence==p.demand_sequence&&p.sequence<=old.sequence)return false;
     if(!p.valid&&version(p.version,demand_.version)&&p.demand_sequence==demand_.sequence){
@@ -310,7 +369,7 @@ public:
     motion_proofs_.push_back(p);if(motion_proofs_.size()>32)motion_proofs_.pop_front();
     if(p.valid&&pending_demand_){const auto waiting=*pending_demand_;demand(waiting,now);}return true;
   }
-  std::optional<geometry_msgs::msg::Twist> tick(double now,const Health&h) {
+  std::optional<geometry_msgs::msg::Twist> tick(SourceClock now,const Health&h) {
     selected_active_=selected_prepared_=false;
     selected_curve_until_=selected_motion_until_={};
     last_health_=h;
@@ -326,7 +385,7 @@ public:
     }
     // A missing owner heartbeat remains terminal even during a sensor gap;
     // MC unavailability is not permission to keep an abandoned writer armed.
-    if(ready_&&(permit_at_==0?now-ready_at_>.8:!fresh(secs(permit_.source_stamp),now,.35))) {
+    if(ready_&&(permit_at_==0?now-ready_at_>.8:!fresh(permit_.source_stamp,now,.35))) {
       stop("permission_expired",now);return geometry_msgs::msg::Twist{};
     }
     if(!h.mc_fresh){
@@ -341,7 +400,7 @@ public:
       // owner's independent 0.6 s / 3-new-state window governs task recovery.
       clearMcGapCommands();mc_hold_=false;mc_resume_floor_=now;reason_.clear();phase_="holding";
     }
-    if(handoff_&&secs(handoff_->transition_deadline)<=now)rejectHandoff("handoff_deadline_expired",now);
+    if(handoff_&&compare(handoff_->transition_deadline,now)<=0)rejectHandoff("handoff_deadline_expired",now);
     // Only the fully joined candidate may be selected. A call to the unique
     // writer is the subsequent irreversible software commit, never proof of
     // physical execution. Missing/expired candidate evidence leaves old
@@ -354,16 +413,16 @@ public:
     }
     if(handoff_&&handoff_->transition_mode==Handoff::STATIONARY_REENTRY){phase_="holding";return geometry_msgs::msg::Twist{};}
     if(retained_incumbent_until_>0&&retained_incumbent_until_<=now){phase_="holding";return geometry_msgs::msg::Twist{};}
-    if(!commit_sequence_&&(!local_||!fresh(secs(local_->source_stamp),now,.1)||
+    if(!commit_sequence_&&(!local_||!fresh(local_->source_stamp,now,.1)||
         !curveProofFresh(permit_,now,false,&selected_curve_until_))){
       phase_="holding";return geometry_msgs::msg::Twist{};
     }
     // A short collision proof lease expiring is a local zero-speed HOLD, not
     // loss of the independently live BT owner. Never reuse an old demand.
-    if(secs(permit_.valid_until)<now){have_demand_=false;phase_="holding";return geometry_msgs::msg::Twist{};}
+    if(compare(permit_.valid_until,now)<0){have_demand_=false;phase_="holding";return geometry_msgs::msg::Twist{};}
     if(!permit_.allowed||!have_demand_){phase_="holding";return geometry_msgs::msg::Twist{};}
     if(!version(permit_.version,demand_.version)||permit_.trajectory_id!=demand_.trajectory_id||
-       !fresh(secs(demand_.source_stamp),now,.25)||demand_lease_until_<now||
+       !fresh(demand_.source_stamp,now,.25)||compare(demand_lease_until_stamp_,now)<0||
        ((demand_.velocity.linear.x!=0||demand_.velocity.angular.z!=0)&&!motionProof(demand_,now))){
       have_demand_=false;phase_="holding";return geometry_msgs::msg::Twist{};
     }
@@ -376,7 +435,7 @@ public:
   }
   uint64_t selectedCommitSequence()const{return selected_prepared_||(!commit_sequence_&&selected_active_)?commit_sequence_+1:commit_sequence_;}
   uint64_t nextWriteSequence()const{return write_sequence_+1;}
-  void writeCalled(double now,bool submitted) {
+  void writeCalled(SourceClock now,bool submitted) {
     ++write_sequence_;
     const auto&selected=selected_prepared_&&prepared_?prepared_->demand:demand_;
     const bool nonzero=(selected_prepared_||selected_active_)&&(selected.velocity.linear.x!=0||selected.velocity.angular.z!=0);
@@ -397,8 +456,8 @@ public:
       ever_nonzero_=ever_nonzero_||demand_.velocity.linear.x!=0||demand_.velocity.angular.z!=0;
       makeCommitAck(g,prepared,previous,now,submitted);handoff_.reset();prepared_.reset();
       retained_incumbent_until_=0.;
-    } else if(selected_active_&&!commit_sequence_&&local_&&fresh(secs(demand_.source_stamp),now,.1)&&
-        fresh(secs(demand_.body_source_stamp),now,.1)&&fresh(secs(local_->source_stamp),now,.1)&&curveProofFresh(permit_,now,false)) {
+    } else if(selected_active_&&!commit_sequence_&&local_&&fresh(demand_.source_stamp,now,.1)&&
+        fresh(demand_.body_source_stamp,now,.1)&&fresh(local_->source_stamp,now,.1)&&curveProofFresh(permit_,now,false)) {
       applied_version_=permit_.version;applied_trajectory_id_=permit_.trajectory_id;++commit_sequence_;
       Handoff g;g.incumbent.version=binding_;g.candidate=permit_;Prepared prepared;prepared.demand=demand_;
       if(local_){prepared.measured_pose.header=local_->local_odometry.header;prepared.measured_pose.pose=local_->local_odometry.pose.pose;
@@ -408,13 +467,13 @@ public:
     selected_active_=selected_prepared_=false;
     if(!submitted)submissionFailed(now);
   }
-  void writeAcknowledged(uint64_t commit,double now) {
+  void writeAcknowledged(uint64_t commit,SourceClock now) {
     (void)now;
     if(last_ack_&&last_ack_->applied&&last_ack_->commit_sequence==commit&&!last_ack_->write_acknowledged){
       last_ack_->write_acknowledged=true;last_ack_->sequence=++ack_sequence_;ack_dirty_=true;
     }
   }
-  void zeroAcknowledged(uint64_t write,double at,double now) {
+  void zeroAcknowledged(uint64_t write,SourceClock at,SourceClock now) {
     // This is the actual vendor ACK of an actual zero call, not a BT-local
     // velocity guess or a terminal StopReport. Earlier ACKs cannot cross a
     // subsequent nonzero call or restore retired SDK/control identities.
@@ -424,7 +483,7 @@ public:
     if(nonterminal_zero_ack_>0)return; // repeated zero writes do not move the barrier
     nonterminal_zero_ack_=at;nonterminal_zero_write_=write;nonterminal_cutoff_=last_raw_;
   }
-  Stationary stationaryEvidence(double now) {
+  Stationary stationaryEvidence(SourceClock now) {
     Stationary s;s.schema_version=1;s.version=applied_version_;s.execution_id=execution_;s.control_epoch=epoch_;
     s.sdk_session=session_;s.sdk_arm_generation=generation_;s.transport_mode=mode_;s.sequence=++stationary_sequence_;
     s.writer_commit_sequence=commit_sequence_;s.applied_trajectory_id=applied_trajectory_id_;
@@ -432,7 +491,7 @@ public:
     s.mc_raw_stamp_ns=last_raw_;s.mc_clock_epoch=clock_epoch_;s.time_basis=mode_=="live"?"source_delta_host_anchor_approximate":"isolated_simulated_source_clock";
     s.source_stamp=stamp(last_source_);s.received_stamp=stamp(last_received_);s.capture_lower_bound=stamp(last_capture_lower_);
     s.capture_upper_bound=stamp(last_received_);s.mc_capture_delay_bound_sec=mc_delay_bound_;
-    s.valid_until=stamp(std::min(last_source_,last_received_)+.25);s.stationary_samples=nonterminal_stationary_samples_;
+    s.valid_until=stamp(after(nanoseconds(stamp(last_source_))<=nanoseconds(stamp(last_received_))?last_source_:last_received_,.25));s.stationary_samples=nonterminal_stationary_samples_;
     s.stationary_duration_sec=nonterminal_first_stationary_>0?std::max(0.,last_capture_lower_-nonterminal_first_stationary_):0.;
     s.measured_linear_mps=linear_;s.measured_angular_radps=angular_;s.physical_acceptance_verified=mode_=="live"&&accepted_;
     s.nonzero_blocked=!permit_.allowed&&permit_.phase=="holding";
@@ -441,11 +500,11 @@ public:
     return s;
   }
   std::optional<CommitAck> takeCommitAck(){if(!ack_dirty_||!last_ack_)return {};ack_dirty_=false;return last_ack_;}
-  void stopWritten(double now) {
+  void stopWritten(SourceClock now) {
     if(!stopping_||stop_submitted_)return;
     stop_submitted_=true;submitted_=now;cutoff_=last_raw_;resetStationary();
   }
-  void mc(uint64_t raw,double source,double received,double linear,double angular,double now,std::string clock_epoch) {
+  void mc(uint64_t raw,SourceClock source,SourceClock received,double linear,double angular,SourceClock now,std::string clock_epoch) {
     if(!clock_epoch_.empty()&&clock_epoch_!=clock_epoch){fault_=true;stop("mc_clock_epoch_changed",now);resetStationary();return;}
     if(raw>0&&last_raw_>0&&raw<last_raw_){mcSourceRegressed(now,clock_epoch);return;}
     if(raw==0||raw==last_raw_||!fresh(source,now,.25)||!fresh(received,now,.25)||
@@ -464,7 +523,7 @@ public:
     // The physical capture time is bounded, not made exact by relabelling the
     // SDK's undocumented uint64 epoch. Host receipt is the interval upper
     // bound; subtract the measured uncertainty from the earlier host estimate.
-    last_capture_lower_=std::min(source,received)-mc_delay_bound_;
+    last_capture_lower_=after(nanoseconds(stamp(source))<=nanoseconds(stamp(received))?source:received,-mc_delay_bound_);
     if(linear>policy_.linear_threshold_mps||angular>policy_.angular_threshold_radps)clearNonterminalStationary();
     else if(nonterminal_zero_ack_>0&&raw>nonterminal_cutoff_&&last_capture_lower_>nonterminal_zero_ack_){
       if(nonterminal_first_stationary_==0)nonterminal_first_stationary_=received;
@@ -477,11 +536,11 @@ public:
     ++stationary_samples_;stopped_=stationary_samples_>=policy_.minimum_new_samples&&stationaryDuration()>=policy_.stationary_duration_s;
     if(stopped_)phase_="stopped";
   }
-  State state(double now){State s;s.version=commit_sequence_?applied_version_:binding_;s.execution_id=execution_;s.control_epoch=epoch_;s.sdk_session=session_;
+  State state(SourceClock now){State s;s.version=commit_sequence_?applied_version_:binding_;s.execution_id=execution_;s.control_epoch=epoch_;s.sdk_session=session_;
     s.sdk_arm_generation=generation_;s.sequence=++state_seq_;s.source_stamp=stamp(now);s.grant_ready=ready_&&last_health_.mc_fresh&&!stopping_&&!fault_;
     s.control_owned=last_health_.owned;s.general_low_speed_confirmed=last_health_.general;s.fault_latched=fault_;
     s.transport_mode=mode_;s.phase=phase_;s.reason=reason_;s.writer_commit_sequence=commit_sequence_;s.applied_trajectory_id=applied_trajectory_id_;return s;}
-  Stop report(double now){Stop s;s.version=binding_;s.execution_id=execution_;s.control_epoch=epoch_;s.sdk_session=session_;
+  Stop report(SourceClock now){Stop s;s.version=binding_;s.execution_id=execution_;s.control_epoch=epoch_;s.sdk_session=session_;
     s.sdk_arm_generation=generation_;s.stop_request_id=request_;s.sequence=++stop_seq_;s.source_stamp=stamp(last_source_>0?last_source_:now);
     s.nonzero_blocked=stopping_||mc_hold_;s.stop_submitted=stop_submitted_;s.measured_stop_confirmed=measuredStopped(now);
     s.physical_acceptance_verified=mode_=="live"&&accepted_;s.mc_clock_epoch=clock_epoch_;s.mc_raw_stamp_ns=last_raw_;
@@ -493,25 +552,25 @@ public:
   const Version& binding()const{return binding_;}
   uint64_t armGeneration()const{return generation_;}
   uint64_t epoch()const{return epoch_;}bool stopping()const{return stopping_;}
-  bool beginShutdown(double now){closing_=true;takeover_=false;stop("writer_shutdown",now);return !execution_.empty();}
+  bool beginShutdown(SourceClock now){closing_=true;takeover_=false;stop("writer_shutdown",now);return !execution_.empty();}
   double mcCaptureLowerBound()const{return last_capture_lower_;}
   double mcCaptureUpperBound()const{return last_received_;}
   double mcCaptureDelayBound()const{return mc_delay_bound_;}
-  bool mcSourceFresh(double now,const std::string&expected_clock_epoch)const {
+  bool mcSourceFresh(SourceClock now,const std::string&expected_clock_epoch)const {
     // Arrival frequency alone is not usable MC. Bind health to the exact raw
     // sample admitted by this transport, the active SDK telemetry generation,
     // and both original mapped source time and receipt time. No restamping.
     return !mc_order_hold_&&mc_bound_configured_&&last_raw_>0&&!expected_clock_epoch.empty()&&
       clock_epoch_==expected_clock_epoch&&fresh(last_source_,now,.25)&&fresh(last_received_,now,.25);
   }
-  void mcSourceRegressed(double now,const std::string&clock_epoch) {
+  void mcSourceRegressed(SourceClock now,const std::string&clock_epoch) {
     if(!clock_epoch_.empty()&&clock_epoch_!=clock_epoch){fault("mc_clock_epoch_changed",now);return;}
     clearMcGapCommands();resetStationary();mc_hold_=mc_order_hold_=true;mc_resume_floor_=now;
     mc_order_new_samples_=0;mc_order_first_source_=0.;mc_order_barrier_source_=now;phase_="holding";reason_="mc_stale";
     // Preserve last_raw_/source/receipt. Neither rejection nor recovery may
     // re-anchor the clock, refresh old telemetry or erase the anti-replay floor.
   }
-  void stop(std::string why,double now){if(execution_.empty()||stopping_)return;rejectHandoff(why,now);clearNonterminalStationary();stopping_=true;stop_at_=now;ready_=false;have_demand_=false;permits_.clear();pending_demand_.reset();phase_="stopping";reason_=std::move(why);}
+  void stop(std::string why,SourceClock now){if(execution_.empty()||stopping_)return;rejectHandoff(why,now);clearNonterminalStationary();stopping_=true;stop_at_=now;ready_=false;have_demand_=false;permits_.clear();pending_demand_.reset();phase_="stopping";reason_=std::move(why);}
 private:
   double rayAgeBound()const {
     // The final writer uses the SAME original sensor-age ceiling as native
@@ -557,22 +616,22 @@ private:
       twistFinite(v)&&v.linear.x>=0&&v.linear.x<=max_speed_&&std::abs(v.angular.z)<=max_yaw_&&
       v.linear.y==0&&v.linear.z==0&&v.angular.x==0&&v.angular.y==0;
   }
-  bool preparedEntry(const Prepared&p,double now)const {
-    if(!handoff_||!local_||!fresh(secs(local_->source_stamp),now,.1)||!last_health_.mc_fresh||
+  bool preparedEntry(const Prepared&p,SourceClock now)const {
+    if(!handoff_||!local_||!fresh(local_->source_stamp,now,.1)||!last_health_.mc_fresh||
        stopping_||closing_||mc_hold_||!ready_||!last_health_.owned||!last_health_.general||last_health_.estop||
-       p.expected_commit_sequence!=commit_sequence_||secs(handoff_->transition_deadline)<=now||
+       p.expected_commit_sequence!=commit_sequence_||compare(handoff_->transition_deadline,now)<=0||
        permit_.revoked||
        (handoff_->transition_mode==Handoff::CONTINUOUS_REPLACE&&(!permit_.allowed||permit_.phase!="tracking"))||
        (handoff_->transition_mode==Handoff::STATIONARY_REENTRY&&
           (permit_.allowed||permit_.phase!="holding"||!stationaryProof(handoff_->stationary_evidence,now)))||
-       !sameGrantIdentity(handoff_->candidate)||secs(handoff_->candidate.valid_until)<=now||!curveProofFresh(handoff_->candidate,now,true)||
-       !fresh(secs(p.demand.source_stamp),now,.1)||!fresh(secs(p.demand.body_source_stamp),now,.1)||
-       secs(p.demand.valid_until)<=now||p.demand.validation_sequence<handoff_->candidate.validation_sequence||
+       !sameGrantIdentity(handoff_->candidate)||compare(handoff_->candidate.valid_until,now)<=0||!curveProofFresh(handoff_->candidate,now,true)||
+       !fresh(p.demand.source_stamp,now,.1)||!fresh(p.demand.body_source_stamp,now,.1)||
+       compare(p.demand.valid_until,now)<=0||p.demand.validation_sequence<handoff_->candidate.validation_sequence||
        p.demand.braking_model_sha256!=braking_model_sha_||!p.demand.safety_checked||
-       !fresh(secs(p.demand.safety_source_stamp),now,rayAgeBound())||!demandBinding(p.demand)||
+       !fresh(p.demand.safety_source_stamp,now,rayAgeBound())||!demandBinding(p.demand)||
        !poseFinite(p.measured_pose.pose)||!poseFinite(p.curve_entry_pose)||!twistFinite(p.measured_twist)||!twistFinite(p.curve_entry_twist)||
        p.measured_pose.header.frame_id!="d1max_loc_odom"||p.measured_pose.header.stamp!=p.entry_source_stamp||
-       p.entry_source_stamp!=p.demand.body_source_stamp||!fresh(secs(p.entry_source_stamp),now,.1)||
+       p.entry_source_stamp!=p.demand.body_source_stamp||!fresh(p.entry_source_stamp,now,.1)||
        !std::isfinite(p.curve_time)||p.curve_time<0||p.curve_time>120||
        !std::isfinite(p.position_error_m)||!std::isfinite(p.velocity_error_mps)||p.position_error_m<0||p.velocity_error_mps<0||
        std::abs(distance(p.measured_pose.pose.position,p.curve_entry_pose.position)-p.position_error_m)>1e-6||
@@ -581,15 +640,15 @@ private:
     const auto&a=p.entry_admission;
     if(a.sequence==0||!a.accepted||a.version!=p.demand.version||a.trajectory_id!=p.demand.trajectory_id||
        a.validation_sequence!=p.demand.validation_sequence||a.body_source_stamp!=p.entry_source_stamp||
-       a.transport_mode!=mode_||!fresh(secs(a.checked_at),now,.15)||secs(a.checked_at)<secs(a.body_source_stamp)||
-       secs(a.valid_until)<=now||secs(a.valid_until)-secs(a.checked_at)>.250001)return false;
+       a.transport_mode!=mode_||!fresh(a.checked_at,now,.15)||nanoseconds(a.checked_at)<nanoseconds(a.body_source_stamp)||
+       compare(a.valid_until,now)<=0||elapsed(a.valid_until,a.checked_at)>.250001)return false;
     // Local odometry twist is in child frame. Rotate the actual measured
     // twist into odom, then compare to the production-spline entry boundary.
     // Source age alone cannot certify a 1.25 cm moving handoff.
     return distance(local_->local_odometry.pose.pose.position,p.curve_entry_pose.position)<=.0125&&
       velocityDistance(localTwist(),p.curve_entry_twist)<=.05;
   }
-  bool curveProofFresh(const Permit&p,double now,bool whole,builtin_interfaces::msg::Time* actual_until=nullptr)const {
+  bool curveProofFresh(const Permit&p,SourceClock now,bool whole,builtin_interfaces::msg::Time* actual_until=nullptr)const {
     const CurveProof* latest=nullptr;
     for(const auto&v:curve_proofs_)if(version(v.version,p.version)&&v.trajectory_id==p.trajectory_id&&
         (!latest||v.sequence>latest->sequence))latest=&v;
@@ -604,7 +663,7 @@ private:
     bool remaining=false;
     if(!whole&&v.remaining_curve&&!v.whole_curve&&progress_&&local_) {
       const auto&t=*progress_;const auto&x=p.version;
-      remaining=domain&&fresh(secs(t.header.stamp),now,.1)&&t.generation==x.reference_generation&&t.trajectory_id==p.trajectory_id&&
+      remaining=domain&&fresh(t.header.stamp,now,.1)&&t.generation==x.reference_generation&&t.trajectory_id==p.trajectory_id&&
         t.session_id==x.session_id&&t.task_id==x.task_id&&t.route_id==x.route_id&&t.route_hash==x.route_hash&&
         t.map_version_id==x.map_version_id&&t.localization_epoch==x.localization_epoch&&t.localization_seed_id==x.localization_seed_id&&
         t.segment_id==x.segment_id&&t.anchor_id==x.anchor_id&&t.anchor_revision==x.anchor_revision&&t.context_sequence==x.context_sequence&&
@@ -616,9 +675,9 @@ private:
     }
     const bool valid=(complete||remaining)&&v.valid&&v.sequence>=p.validation_sequence&&v.frame_id=="d1max_loc_odom"&&v.collision_policy=="observed_free"&&
       v.map_snapshot_revision>0&&!v.support_reference_id.empty()&&v.support_hash.size()==64&&
-      fresh(secs(v.check_end),now,.25)&&fresh(secs(v.body_source_stamp),now,.4)&&
-      fresh(secs(v.front_ray_source_stamp),now,rayAgeBound())&&fresh(secs(v.rear_ray_source_stamp),now,rayAgeBound())&&
-      secs(v.valid_until)>now&&secs(v.valid_until)-secs(v.check_end)<=.250001;
+      fresh(v.check_end,now,.25)&&fresh(v.body_source_stamp,now,.4)&&
+      fresh(v.front_ray_source_stamp,now,rayAgeBound())&&fresh(v.rear_ray_source_stamp,now,rayAgeBound())&&
+      compare(v.valid_until,now)>0&&elapsed(v.valid_until,v.check_end)<=.250001;
     if(valid&&actual_until)*actual_until=v.valid_until;
     return valid;
   }
@@ -627,7 +686,7 @@ private:
       return version(p.version,v)&&p.trajectory_id==trajectory&&!p.valid&&p.sequence>floor;
     });
   }
-  void makeCommitAck(const Handoff&g,const Prepared&p,uint64_t previous,double now,bool submitted) {
+  void makeCommitAck(const Handoff&g,const Prepared&p,uint64_t previous,SourceClock now,bool submitted) {
     CommitAck a;a.schema_version=1;a.handoff_id=g.handoff_id;a.grant_sequence=g.sequence;a.sequence=++ack_sequence_;
     a.previous_commit_sequence=previous;a.commit_sequence=commit_sequence_;a.incumbent_version=g.incumbent.version;
     a.candidate_version=g.candidate.version;a.incumbent_trajectory_id=g.incumbent.trajectory_id;a.candidate_trajectory_id=g.candidate.trajectory_id;
@@ -651,7 +710,7 @@ private:
     a.reason=submitted?"writer_software_commit_not_physical_confirmation":"writer_call_outcome_failed_identity_not_rolled_back";
     last_ack_=a;ack_dirty_=true;
   }
-  void rejectHandoff(const std::string&why,double now) {
+  void rejectHandoff(const std::string&why,SourceClock now) {
     if(!handoff_)return;
     const auto&g=*handoff_;CommitAck a;a.schema_version=1;a.handoff_id=g.handoff_id;a.grant_sequence=g.sequence;
     a.sequence=++ack_sequence_;a.previous_commit_sequence=a.commit_sequence=commit_sequence_;
@@ -667,33 +726,33 @@ private:
     normalized.motion_validation_sequence=b.motion_validation_sequence;
     normalized.safety_source_stamp=b.safety_source_stamp;
     normalized.reason=b.reason;
-    return normalized==b&&secs(a.safety_source_stamp)>=secs(b.safety_source_stamp);
+    return normalized==b&&nanoseconds(a.safety_source_stamp)>=nanoseconds(b.safety_source_stamp);
   }
   void clearMcGapCommands(){rejectHandoff("mc_stale",last_tick_);clearNonterminalStationary();have_demand_=false;permits_.clear();motion_proofs_.clear();pending_demand_.reset();active_entry_.reset();}
   void clearNonterminalStationary(){nonterminal_zero_ack_=nonterminal_first_stationary_=0.;
     nonterminal_zero_write_=nonterminal_cutoff_=0;nonterminal_stationary_samples_=0;stationary_history_.clear();}
-  bool nonterminalStationary(double now)const {
+  bool nonterminalStationary(SourceClock now)const {
     return !closing_&&!stopping_&&!mc_hold_&&!fault_&&ready_&&last_health_.connected&&last_health_.owned&&last_health_.general&&
       !last_health_.estop&&last_health_.mc_fresh&&mcSourceFresh(now,clock_epoch_)&&nonterminal_zero_ack_>0&&
       policy_configured_&&nonterminal_zero_write_>last_nonzero_write_sequence_&&nonterminal_stationary_samples_>=policy_.minimum_new_samples&&nonterminal_first_stationary_>0&&
       last_capture_lower_-nonterminal_first_stationary_>=policy_.reentry_duration_s&&linear_<=policy_.linear_threshold_mps&&angular_<=policy_.angular_threshold_radps;
   }
-  bool stationaryProof(const Stationary&s,double now)const {
+  bool stationaryProof(const Stationary&s,SourceClock now)const {
     if(s.schema_version!=1||!s.usable||!s.nonzero_blocked||s.writer_commit_sequence!=commit_sequence_||
        s.applied_trajectory_id!=applied_trajectory_id_||!version(s.version,applied_version_)||s.execution_id!=execution_||
        s.control_epoch!=epoch_||s.sdk_session!=session_||s.sdk_arm_generation!=generation_||s.transport_mode!=mode_||
        s.zero_write_sequence!=nonterminal_zero_write_||s.zero_ack_at!=stamp(nonterminal_zero_ack_)||
        s.mc_clock_epoch!=clock_epoch_||s.time_basis!=(mode_=="live"?"source_delta_host_anchor_approximate":"isolated_simulated_source_clock")||
-       !fresh(secs(s.source_stamp),now,.25)||!fresh(secs(s.received_stamp),now,.25)||secs(s.valid_until)<=now||
+       !fresh(s.source_stamp,now,.25)||!fresh(s.received_stamp,now,.25)||compare(s.valid_until,now)<=0||
        (mode_=="live"&&!s.physical_acceptance_verified)||!nonterminalStationary(now))return false;
     return std::any_of(stationary_history_.begin(),stationary_history_.end(),[&](const auto&old){return old==s;});
   }
   double stationaryDuration()const{return first_stationary_>0?std::max(0.,last_capture_lower_-first_stationary_):0.;}
-  bool measuredStopped(double now)const{return stopped_&&policy_configured_&&linear_<=policy_.linear_threshold_mps&&angular_<=policy_.angular_threshold_radps&&
+  bool measuredStopped(SourceClock now)const{return stopped_&&policy_configured_&&linear_<=policy_.linear_threshold_mps&&angular_<=policy_.angular_threshold_radps&&
     mc_bound_configured_&&stationary_samples_>=policy_.minimum_new_samples&&first_stationary_>0&&stationaryDuration()>=policy_.stationary_duration_s&&
     mcSourceFresh(now,clock_epoch_);}
   void resetStationary(){stopped_=false;first_stationary_=0;stationary_samples_=0;if(stopping_)phase_="stopping";}
-  const MotionProof* motionProof(const Demand&d,double now,const Prepared*witness=nullptr)const {
+  const MotionProof* motionProof(const Demand&d,SourceClock now,const Prepared*witness=nullptr)const {
     if(curveInvalidated(d.version,d.trajectory_id,d.validation_sequence))return nullptr;
     if(!witness&&active_entry_&&d.sequence==active_entry_->demand.sequence&&version(d.version,active_entry_->demand.version))witness=&*active_entry_;
     const MotionProof* bound=nullptr;
@@ -721,12 +780,12 @@ private:
        // independent gate also checks its intervening invalid-evidence fence.
        p.trajectory_id!=d.trajectory_id||p.permit_sequence!=d.permit_sequence||p.trajectory_validation_sequence<d.validation_sequence||
        p.demand_source_stamp!=d.source_stamp||p.demand_body_source_stamp!=d.body_source_stamp||p.velocity!=d.velocity||
-       p.frame_id!="d1max_loc_odom"||secs(d.valid_until)>secs(p.demand_valid_until)||
-       !fresh(secs(d.source_stamp),now,.1)||!fresh(secs(d.body_source_stamp),now,.1)||
-       !fresh(secs(p.body_source_stamp),now,.1)||!fresh(secs(p.check_end),now,.1)||
-       !fresh(secs(p.front_ray_source_stamp),now,rayAgeBound())||!fresh(secs(p.rear_ray_source_stamp),now,rayAgeBound())||
-       secs(p.valid_until)<now||secs(p.valid_until)>secs(p.demand_valid_until)||
-       secs(p.valid_until)-secs(p.check_end)>.25)return nullptr;
+       p.frame_id!="d1max_loc_odom"||nanoseconds(d.valid_until)>nanoseconds(p.demand_valid_until)||
+       !fresh(d.source_stamp,now,.1)||!fresh(d.body_source_stamp,now,.1)||
+       !fresh(p.body_source_stamp,now,.1)||!fresh(p.check_end,now,.1)||
+       !fresh(p.front_ray_source_stamp,now,rayAgeBound())||!fresh(p.rear_ray_source_stamp,now,rayAgeBound())||
+       compare(p.valid_until,now)<0||nanoseconds(p.valid_until)>nanoseconds(p.demand_valid_until)||
+       elapsed(p.valid_until,p.check_end)>.25)return nullptr;
     return &p;
   }
   std::string session_,mode_,execution_,request_,phase_="idle",reason_,clock_epoch_;bool accepted_=false;
@@ -739,7 +798,7 @@ private:
   uint64_t commit_sequence_=0,handoff_sequence_=0,ack_sequence_=0,prepared_sequence_floor_=0;
   uint64_t write_sequence_=0,last_nonzero_write_sequence_=0,stationary_sequence_=0,nonterminal_zero_write_=0,nonterminal_cutoff_=0;
   uint32_t nonterminal_stationary_samples_=0;
-  double nonterminal_zero_ack_=0.,nonterminal_first_stationary_=0.;std::deque<Stationary>stationary_history_;
+  SourceClock nonterminal_zero_ack_;double nonterminal_first_stationary_=0.;std::deque<Stationary>stationary_history_;
   bool mc_order_hold_=false;uint32_t mc_order_new_samples_=0;double mc_order_first_source_=0.,mc_order_barrier_source_=0.;
   bool selected_prepared_=false,selected_active_=false,ack_dirty_=false;double retained_incumbent_until_=0;
   builtin_interfaces::msg::Time selected_curve_until_,selected_motion_until_,demand_lease_until_stamp_;
@@ -747,7 +806,8 @@ private:
   bool ready_=false,fault_=false,stopping_=false,stopped_=false,stop_submitted_=false,have_demand_=false,takeover_=false,takeover_taken_=false,ever_nonzero_=false,closing_=false,mc_bound_configured_=false,mc_hold_=false,invalidated_accepted_demand_=false;
   uint64_t epoch_=0,generation_=0,permit_seq_=0,demand_seq_=0,state_seq_=0,stop_seq_=0,last_raw_=0,cutoff_=0;
   uint32_t stationary_samples_=0;
-  double started_=0,ready_at_=0,stop_at_=0,submitted_=0,last_tick_=0,permit_at_=0,demand_at_=0,demand_lease_until_=0,last_source_=0,last_received_=0,first_stationary_=0,linear_=0,angular_=0;
-  double max_speed_=.3,max_yaw_=.5,mc_delay_bound_=0.,last_capture_lower_=0.,mc_resume_floor_=0.;
+  double started_=0,ready_at_=0,stop_at_=0,submitted_=0,last_tick_=0,permit_at_=0,demand_at_=0,demand_lease_until_=0,first_stationary_=0,linear_=0,angular_=0;
+  SourceClock last_source_,last_received_,last_capture_lower_;
+  double max_speed_=.3,max_yaw_=.5,mc_delay_bound_=0.,mc_resume_floor_=0.;
 };
 }

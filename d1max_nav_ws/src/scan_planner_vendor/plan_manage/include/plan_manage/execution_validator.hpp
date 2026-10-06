@@ -21,6 +21,7 @@
 #include <nlohmann/json.hpp>
 #include <atomic>
 #include <condition_variable>
+#include <exception>
 #include <thread>
 #include <deque>
 
@@ -76,7 +77,7 @@ public:
   bool slowSnapshotWanted() const {std::lock_guard<std::mutex> l(mutex_);return active_.has_value()||candidate_.has_value()||prepared_.has_value();}
   void admissionSnapshotPublished(){{std::lock_guard<std::mutex> l(admission_wait_mutex_);admission_ready_=true;}
     admission_wake_.notify_all();}
-  void body(const MeasuredBodyPose& p){std::lock_guard<std::mutex> l(mutex_);if(p.source_stamp>body_.source_stamp)body_=p;}
+  void body(const MeasuredBodyPose& p){std::lock_guard<std::mutex> l(mutex_);if(measuredBodySourceNs(p)>measuredBodySourceNs(body_))body_=p;}
   void candidate(const ew::TaggedBspline& spline,const ew::ReferenceProposal& proposal) {
     std::lock_guard<std::mutex> l(mutex_);
     if(retired_&&sameExecutionTask(*retired_,proposal.version)&&
@@ -213,19 +214,21 @@ public:
     if(!result.velocity.allFinite()||!result.acceleration.allFinite())return {};
     return result;
   }
-  std::optional<Boundary> committedBoundary(const Eigen::Vector3d& body,double now)const {
+  std::optional<Boundary> committedBoundary(const Eigen::Vector3d& body,double now,std::int64_t now_ns=0)const {
+    const auto clock_ns=now_ns>0?now_ns:poseSecondsNs(now);
     const auto view=committedView();
     if(!view||!view->proof||!view->proof->valid||!view->progress||!view->progress->valid||
-       view->progress->holding||rclcpp::Time(view->proof->valid_until).seconds()<=now||
-       now-rclcpp::Time(view->progress->header.stamp).seconds()>.4)return {};
+       view->progress->holding||ns(view->proof->valid_until)<=clock_ns||
+       clock_ns-ns(view->progress->header.stamp)>400000000LL)return {};
     // Tracking progress identifies the curve, but its derivative is not a
     // measured boundary. Speed limiting may intentionally slow the robot.
     return measuredBoundary(*view->progress,body);
   }
   void progress(const ew::TrackingProgress& p) {
-    progressAt(p,node_->now().seconds());
+    const auto now=node_->now();progressAt(p,now.seconds(),now.nanoseconds());
   }
-  void progressAt(const ew::TrackingProgress& p,double now) {
+  void progressAt(const ew::TrackingProgress& p,double now,std::int64_t now_ns=0) {
+    const auto clock_ns=now_ns>0?now_ns:poseSecondsNs(now);
     std::lock_guard<std::mutex> l(mutex_);if(!active_)return;
     const auto& v=active_->version;
     if(!p.valid||p.schema_version!=2||p.header.frame_id!=frame_||p.session_id!=v.session_id||
@@ -236,15 +239,14 @@ public:
        p.segment_id!=v.segment_id||p.trajectory_id!=active_->spline.trajectory.traj_id||
        !std::isfinite(p.curve_time)||p.curve_time<0.||!std::isfinite(p.arc_length)||p.arc_length<0.||
        !std::isfinite(p.s_committed)||p.s_committed<p.arc_length||p.arc_length<p.s_committed-.15)return;
-    const double age=now-rclcpp::Time(p.header.stamp).seconds();
-    if(age<-.02||age>.4)return;
+    if(clock_ns<=0||ns(p.header.stamp)-clock_ns>20000000LL||clock_ns-ns(p.header.stamp)>400000000LL)return;
     if(active_->progress&&(rclcpp::Time(p.header.stamp)<=rclcpp::Time(active_->progress->header.stamp)||
        p.s_committed<active_->progress->s_committed))return;
     MeasuredBodyPose measured{{p.pose.position.x,p.pose.position.y,p.pose.position.z},
       Eigen::Quaterniond(p.pose.orientation.w,p.pose.orientation.x,p.pose.orientation.y,p.pose.orientation.z),
-      rclcpp::Time(p.header.stamp).seconds(),p.header.frame_id};
-    double yaw=0.;if(!measuredBodyYaw(measured,frame_,now,.4,yaw))return;
-    if(measured.source_stamp>body_.source_stamp)body_=measured;
+      rclcpp::Time(p.header.stamp).seconds(),p.header.frame_id,ns(p.header.stamp)};
+    double yaw=0.;if(!measuredBodyYaw(measured,frame_,now,.4,yaw,clock_ns))return;
+    if(measuredBodySourceNs(measured)>measuredBodySourceNs(body_))body_=measured;
     active_->progress=p;
   }
   bool commit(const ew::ExecutionPermit& p) {
@@ -612,11 +614,11 @@ private:
        (velocity.evaluateDeBoorT(x.curve_time)-entry_velocity).norm()>1e-6||
        pe>x.position_tolerance_m||ve>x.velocity_tolerance_mps||
        std::abs(pe-x.position_error_m)>1e-6||std::abs(ve-x.velocity_error_mps)>1e-6||
-       current.source_stamp<ns(x.entry_source_stamp)*1e-9||now*1e-9-current.source_stamp>.1||
+       measuredBodySourceNs(current)<ns(x.entry_source_stamp)||now-measuredBodySourceNs(current)>100000000LL||
        (current.position-position).norm()>.0125)return;
     MeasuredBodyPose body{position,Eigen::Quaterniond(x.measured_pose.pose.orientation.w,x.measured_pose.pose.orientation.x,
-      x.measured_pose.pose.orientation.y,x.measured_pose.pose.orientation.z),ns(x.entry_source_stamp)*1e-9,frame_};
-    double yaw=0.;if(!measuredBodyYaw(body,frame_,now*1e-9,.1,yaw)||
+      x.measured_pose.pose.orientation.y,x.measured_pose.pose.orientation.z),ns(x.entry_source_stamp)*1e-9,frame_,ns(x.entry_source_stamp)};
+    double yaw=0.;if(!measuredBodyYaw(body,frame_,now*1e-9,.1,yaw,now)||
        !measuredConnectionSupported(*job->support,position,entry,frame_,map.getResolution()))return;
     const double remaining=std::min(budget_s,std::chrono::duration<double>(round_deadline-ValidationCycle::Clock::now()).count());
     if(remaining<=0.)return;
@@ -690,8 +692,8 @@ private:
       const auto& p=*active->progress;out.body_source_stamp=p.header.stamp;
       const Eigen::Vector3d position{p.pose.position.x,p.pose.position.y,p.pose.position.z};
       MeasuredBodyPose body{position,Eigen::Quaterniond(p.pose.orientation.w,p.pose.orientation.x,p.pose.orientation.y,p.pose.orientation.z),
-        ns(p.header.stamp)*1e-9,frame_};double yaw=0.;
-      if(measuredBodyYaw(body,frame_,now*1e-9,.1,yaw)) {
+        ns(p.header.stamp)*1e-9,frame_,ns(p.header.stamp)};double yaw=0.;
+      if(measuredBodyYaw(body,frame_,now*1e-9,.1,yaw,now)) {
         const double remaining=std::min(budget_s,
           std::chrono::duration<double>(round_deadline-ValidationCycle::Clock::now()).count());
         if(remaining<=0.)return; // CPU expiry is no new free or occupied evidence.
@@ -741,12 +743,14 @@ private:
     map.beginObservedProof();
     ew::TrajectoryValidation result;result.version=job.version;result.proposal_id=job.proposal;
     result.trajectory_id=job.spline.trajectory.traj_id;result.sequence=++sequence_;
-    result.check_begin=node_->now();result.body_source_stamp=rclcpp::Time(static_cast<std::int64_t>(body.source_stamp*1e9));
+    result.check_begin=node_->now();result.body_source_stamp=rclcpp::Time(measuredBodySourceNs(body));
     result.front_ray_source_stamp=rclcpp::Time(map.integratedRaySourceStamp(0));
     result.rear_ray_source_stamp=rclcpp::Time(map.integratedRaySourceStamp(1));
     result.map_snapshot_revision=map.occupancyRevision();result.frame_id=frame_;
     result.collision_policy="observed_free";result.transport_mode=mode_;result.whole_curve=true;
     result.reason="missing_fresh_raw_ray_support_or_body_evidence";
+    CurveCheckTrace query_trace;
+    bool emit_unknown_diagnostic=false;
     if(job.support) {result.support_reference_id=job.support->support_reference_id;result.support_hash=job.support->support_hash;}
     const auto& s=job.spline.trajectory;
     if(job.support&&job.support->verified&&job.support->version==job.version&&map.isRawRaySnapshot()&&
@@ -760,11 +764,11 @@ private:
       if(points.allFinite()&&ordered) {
         UniformBspline curve(points,3,.1);curve.setKnot(knots);
         const bool measured_progress=job.progress&&job.progress->valid&&
-          (node_->now()-rclcpp::Time(job.progress->header.stamp)).seconds()<=.4;
+          node_->now().nanoseconds()-ns(job.progress->header.stamp)<=400000000LL;
         std::optional<MeasuredCurveDomain> domain;
         double join_residual=std::numeric_limits<double>::quiet_NaN();
         if(measured_progress)domain=measuredRemainingCurveDomain(curve,body.position,job.progress->curve_time,
-          body.source_stamp-rclcpp::Time(job.progress->header.stamp).seconds(),job.progress->s_committed,.3,.15,
+          static_cast<double>(measuredBodySourceNs(body)-ns(job.progress->header.stamp))*1e-9,job.progress->s_committed,.3,.15,
           MeasuredConnectionPolicy::CommittedSweptConnection,&join_residual);
         const auto join=measured_progress?(domain?std::optional<double>(domain->measured_time):std::nullopt):
           measuredPreviewCurveTime(curve,body.position,job.measured_time,map.getResolution());
@@ -785,11 +789,11 @@ private:
             [&](const Eigen::Vector3d& p,double yaw){++queries;const int state=map.getInflateOccupancy(p,yaw);
               occupied=occupied||state==1;unknown=unknown||state==2||state<0;return state;},
             body,frame_,node_->now().seconds(),.4,200000,remaining,*join,{},result.checked_from_time,
-            domain?MeasuredConnectionPolicy::CommittedSweptConnection:MeasuredConnectionPolicy::CandidateAdmission);
+            domain?MeasuredConnectionPolicy::CommittedSweptConnection:MeasuredConnectionPolicy::CandidateAdmission,node_->now().nanoseconds(),&query_trace);
           if(result.valid&&job.has_goal_yaw&&std::isfinite(job.goal_yaw)&&
              (body.position-job.goal).norm()<=.25) {
             double measured_yaw=0.;
-            if(measuredBodyYaw(body,frame_,node_->now().seconds(),.4,measured_yaw)) {
+            if(measuredBodyYaw(body,frame_,node_->now().seconds(),.4,measured_yaw,node_->now().nanoseconds())) {
               result.goal_yaw_checked=headingTransitionFree(body.position,body.position,measured_yaw,job.goal_yaw,
                 map.getResolution(),extent_,[&](const Eigen::Vector3d& p,double yaw){
                   return ValidationCycle::Clock::now()<round_deadline&&
@@ -812,9 +816,12 @@ private:
           std::chrono::steady_clock::now().time_since_epoch()).count();
         auto prior_log=proof_log_steady_ns_.load();
         if(!result.valid&&log_now-prior_log>=250000000LL&&
-           proof_log_steady_ns_.compare_exchange_strong(prior_log,log_now))RCLCPP_WARN(node_->get_logger(),
-          "Execution proof curve=%ld measured_progress=%d residual=%.6f queries=%zu check_ms=%.3f reason=%s",
-          result.trajectory_id,measured_progress,join_residual,queries,query_seconds*1000.,result.reason.c_str());
+           proof_log_steady_ns_.compare_exchange_strong(prior_log,log_now)) {
+          RCLCPP_WARN(node_->get_logger(),
+            "Execution proof curve=%ld measured_progress=%d residual=%.6f queries=%zu check_ms=%.3f reason=%s",
+            result.trajectory_id,measured_progress,join_residual,queries,query_seconds*1000.,result.reason.c_str());
+          emit_unknown_diagnostic=unknown && query_trace.first_non_free.has_value();
+        }
       }
     }
     if(result.valid&&ValidationCycle::Clock::now()>=round_deadline) {
@@ -848,10 +855,10 @@ private:
     const auto min_deadline=std::min<std::int64_t>({node_->now().nanoseconds()+250000000LL,
       map.observedProofDeadlineNs(),map.integratedRaySourceStamp(0)+sensor_age,
       map.integratedRaySourceStamp(1)+sensor_age,
-      static_cast<std::int64_t>(body.source_stamp*1e9)+400000000LL});
+      measuredBodySourceNs(body)+400000000LL});
     result.valid_until=rclcpp::Time(std::max<std::int64_t>(0,min_deadline));
     // Do not renew a source lease with computation completion.
-    if(!map.integratedCloudFreshAt(node_->now().nanoseconds())||node_->now().seconds()-body.source_stamp>.4||
+    if(!map.integratedCloudFreshAt(node_->now().nanoseconds())||node_->now().nanoseconds()-measuredBodySourceNs(body)>400000000LL||
        (map.observedProofDeadlineNs()>0&&min_deadline<=node_->now().nanoseconds())) {
       result.valid=false;result.reason="source_expired_during_check";
     }
@@ -875,6 +882,30 @@ private:
       }
     }
     pub_->publish(result);
+    // The negative proof and its original deadlines are already stored and
+    // published. Inspect ONLY its still-exclusively-held private snapshot.
+    // Read cached lease evidence first: detailed inspection may advance the
+    // diagnostic query clock, but cannot change the published safety result.
+    if(emit_unknown_diagnostic && !result.valid) {
+      try {
+        const auto& witness=*query_trace.first_non_free;
+        const auto lease=map.describeCollisionLease();
+        const auto detail=map.describeInflateOccupancy(witness.position,witness.yaw);
+        RCLCPP_WARN(node_->get_logger(),
+          "Execution unknown diagnostic_after_failure curve=%ld snapshot=%lu query_index=%zu state=%d query_xyz=[%.9f,%.9f,%.9f] query_yaw=%.9f final_reason=%s check_end_ns=%ld valid_until_ns=%ld lease=%s evidence=%s",
+          result.trajectory_id,result.map_snapshot_revision,witness.query_index,witness.state,
+          witness.position.x(),witness.position.y(),witness.position.z(),witness.yaw,
+          result.reason.c_str(),ns(result.check_end),ns(result.valid_until),lease.c_str(),detail.c_str());
+      } catch(const std::exception& error) {
+        RCLCPP_WARN(node_->get_logger(),
+          "Execution unknown diagnostic_after_failure unavailable curve=%ld snapshot=%lu reason=%s",
+          result.trajectory_id,result.map_snapshot_revision,error.what());
+      } catch(...) {
+        RCLCPP_WARN(node_->get_logger(),
+          "Execution unknown diagnostic_after_failure unavailable curve=%ld snapshot=%lu reason=unrecognized_exception",
+          result.trajectory_id,result.map_snapshot_revision);
+      }
+    }
     return result.valid;
   }
   rclcpp::Node*node_;CollisionSnapshotPool&pool_;std::string frame_,mode_;double extent_;

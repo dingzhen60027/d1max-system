@@ -17,6 +17,8 @@ usage() {
     '  --sdk-vendor-root PATH      or D1MAX_SDK_VENDOR_ROOT; default: <app>/sdk_bridge_ws/src/d1max_sdk_bridge/vendor/robot_sdk' \
     '  --jobs N                    default: 2; sequential ROS packages' \
     '  --python PATH               default: /usr/bin/python3 (must be Python 3.10)' \
+    '  --c-compiler PATH           default: /usr/bin/gcc' \
+    '  --cxx-compiler PATH         default: /usr/bin/g++' \
     'Fresh output is required even after a failed build; use another directory.' \
     'No apt/rosdep install, services, ROS nodes, SDK connection or release sealing.' \
     'Web/all use npm ci --ignore-scripts from the copied lockfile, then npm run build.'
@@ -33,6 +35,8 @@ rmw_prefix=${D1MAX_RMW_PREFIX:-}
 livox_prefix=${LIVOX_SDK2_PREFIX:-}
 sdk_vendor_root=${D1MAX_SDK_VENDOR_ROOT:-}
 python_bin=/usr/bin/python3
+c_compiler=/usr/bin/gcc
+cxx_compiler=/usr/bin/g++
 output=''
 scope=nav
 jobs=2
@@ -42,7 +46,7 @@ while (($#)); do
   case "$1" in
     --apply) apply=true; shift ;;
     --help|-h) usage; exit 0 ;;
-    --output|--scope|--nav-root|--app-root|--pct-root|--ros-prefix|--rmw-prefix|--dependency-prefix|--livox-prefix|--sdk-vendor-root|--jobs|--python)
+    --output|--scope|--nav-root|--app-root|--pct-root|--ros-prefix|--rmw-prefix|--dependency-prefix|--livox-prefix|--sdk-vendor-root|--jobs|--python|--c-compiler|--cxx-compiler)
       (($# >= 2)) || fail "Missing value for $1"
       case "$1" in
         --output) output=$2 ;; --scope) scope=$2 ;;
@@ -51,6 +55,7 @@ while (($#)); do
         --rmw-prefix) rmw_prefix=$2 ;; --livox-prefix) livox_prefix=$2 ;;
         --sdk-vendor-root) sdk_vendor_root=$2 ;; --jobs) jobs=$2 ;;
         --python) python_bin=$2 ;; --dependency-prefix) dependency_prefixes+=("$2") ;;
+        --c-compiler) c_compiler=$2 ;; --cxx-compiler) cxx_compiler=$2 ;;
       esac
       shift 2 ;;
     *) fail "Unknown option: $1" ;;
@@ -117,6 +122,8 @@ if "$want_ros" || "$want_pct"; then
   need_command cmake
   need_command gcc; need_command g++; need_command make
   [[ -x "$python_bin" ]] || missing+=("Python executable: $python_bin")
+  [[ -x "$c_compiler" ]] || missing+=("C compiler executable: $c_compiler")
+  [[ -x "$cxx_compiler" ]] || missing+=("C++ compiler executable: $cxx_compiler")
 fi
 if "$want_ros"; then
   need_command readelf
@@ -211,7 +218,7 @@ clean_environment() {
   if "$want_web" && [[ -n "$node_bin" && -n "$npm_bin" ]]; then
     export PATH="$(dirname -- "$node_bin"):$(dirname -- "$npm_bin"):$PATH"
   fi
-  export CC=/usr/bin/gcc CXX=/usr/bin/g++
+  export CC="$c_compiler" CXX="$cxx_compiler"
   export CMAKE_BUILD_PARALLEL_LEVEL="$jobs" MAKEFLAGS="-j$jobs"
 }
 prepare_ros_environment() {
@@ -286,6 +293,9 @@ if "$want_ros"; then
   run mkdir -- "$nav_source"
   if "$want_nav"; then
     copy_source --exclude=/pct_planner_vendor/ "$nav_root/src/" "$nav_source/src/"
+    # setup.py installs these audited helpers from ../../tools. Preserve that
+    # source-relative layout in the isolated copy as well.
+    copy_source "$nav_root/tools/pointcloud_preprocessing/" "$nav_source/tools/pointcloud_preprocessing/"
     nav_targets=(d1max_pct_scan)
   else
     # The SDK needs typed interfaces, not a second navigator or a SLAM build.

@@ -1,0 +1,678 @@
+{
+  "schema": 1,
+  "kind": "public_summary_of_historical_closed_fixture_verification",
+  "date": "2026-10-05",
+  "physical_acceptance": false,
+  "production_release": false,
+  "artifact_root_semantics": "artifact fields are paths relative to the local build artifact root; raw logs, reports, builds and videos are not committed",
+  "source_records": [
+    {
+      "artifact": "unknown_research/verification_prior_20261005.json",
+      "sha256": "2662ba3df62ea1618ab97b8408afd7afb959a7a38ff9db33cce967645b4d9375",
+      "snapshot_size_bytes": 24119,
+      "hash_scope": "complete_file"
+    },
+    {
+      "artifact": "videos/navigation_v22_20261005/navigation_evidence.json",
+      "sha256": "617ea41d8c2d2ca193d790c468877b8d84086f3e6de55479a081dc3e60a24440",
+      "snapshot_size_bytes": 3266,
+      "hash_scope": "complete_file"
+    }
+  ],
+  "historical_artifact_hash_readback": {
+    "distinct_recorded_artifacts_checked": 76,
+    "all_match": true
+  },
+  "v19_closed_navigation_verification": {
+    "kind": "closed_original_navigation_fixture_verification",
+    "verified_date": "2026-10-05",
+    "candidate": "isaac-candidate-v19",
+    "candidate_integrity": {
+      "path": "isaac-candidate-v19/isaac_candidate_integrity.json",
+      "sha256": "49c969180b0fa7b96dea83f6d5af8a063c299b68bcfc5fef61935eaf34291a1e"
+    },
+    "all_three_tasks_same_candidate_passed": true,
+    "original_navigation": "BehaviorTree.CPP -> PCT -> continuous reference -> SCAN -> tracker -> safety -> SDK-free writer -> actual PhysX wheel joints",
+    "localization": "groundtruth_fixture; not LIO validation",
+    "physical_acceptance": false,
+    "production_release": false,
+    "collision_evidence_mode": "validated_static_prior",
+    "native_gtest": {
+      "plan_env": {
+        "cases": 178,
+        "failed": 0,
+        "skipped": 0,
+        "results": [
+          {
+            "path": "nav/build/plan_env/test_results/plan_env/test_map_context.gtest.xml",
+            "sha256": "5a0a92e853c2fd98f4ca1acab8263a93182038a0be51211511e5694c7f538052"
+          },
+          {
+            "path": "nav/build/plan_env/test_results/plan_env/test_near_field_diagnostics.gtest.xml",
+            "sha256": "8904a305cb26199bcbba66cd30a04bdd0e70f2a6b2effa6d56b230a08bdd420d"
+          },
+          {
+            "path": "nav/build/plan_env/test_results/plan_env/test_official_resolution.gtest.xml",
+            "sha256": "6917b39b3f292c99f1e81b2160648ab79633177f90e011aa15ddf32a30878221"
+          },
+          {
+            "path": "nav/build/plan_env/test_results/plan_env/test_projected_rays.gtest.xml",
+            "sha256": "ed117cf899b96c39820511138470ab73afc42d2449ee9f3c3ccf508c09e55b5e"
+          },
+          {
+            "path": "nav/build/plan_env/test_results/plan_env/test_solve_budget.gtest.xml",
+            "sha256": "cd81655433eb8f836e872f9498487ed2fcf683db88d03aba504e202795e9e52d"
+          },
+          {
+            "path": "nav/build/plan_env/test_results/plan_env/test_static_occupancy_prior.gtest.xml",
+            "sha256": "965d448e729b3e59cd8f0a31b5bc18b9eee097aa0f5605c2e69f26e2ba05d70c"
+          },
+          {
+            "path": "nav/build/plan_env/test_results/plan_env/test_voxel_collision.gtest.xml",
+            "sha256": "caeb7f6415c0a55cb0312ba83ba239e1689d1cc27ed1de12556f7c12b31ea895"
+          }
+        ]
+      },
+      "path_searching": {
+        "cases": 28,
+        "failed": 0,
+        "skipped": 0,
+        "results": [
+          {
+            "path": "nav/build/path_searching/test_results/path_searching/test_internal_search_anchor.gtest.xml",
+            "sha256": "8b92d6d1b8ddb9d62869013f0ad88fc9da450f15040f5408d50568b9a4263331"
+          },
+          {
+            "path": "nav/build/path_searching/test_results/path_searching/test_reference_lattice_connector.gtest.xml",
+            "sha256": "6d52bfe7823f60b8edcbab3b05763d956c11b2ef1602e0ea3eabd4bd4254735d"
+          },
+          {
+            "path": "nav/build/path_searching/test_results/path_searching/test_search_endpoint.gtest.xml",
+            "sha256": "6c1e6f03f804e7bc0377ddff73c6294f128ff8813d18c84595337d147939e1f7"
+          },
+          {
+            "path": "nav/build/path_searching/test_results/path_searching/test_search_lattice.gtest.xml",
+            "sha256": "3e5a12b1d1dec948922d1653d9b1b74295c7b1110689005a600938e8679506ba"
+          }
+        ]
+      },
+      "bspline_opt": {
+        "cases": 33,
+        "failed": 0,
+        "skipped": 0,
+        "results": [
+          {
+            "path": "nav/build/bspline_opt/test_results/bspline_opt/test_optimizer_budget.gtest.xml",
+            "sha256": "7749289986e556e16e156c481e4d86a89747f32de917800de5b6853659e7b3ee"
+          },
+          {
+            "path": "nav/build/bspline_opt/test_results/bspline_opt/test_reference_path.gtest.xml",
+            "sha256": "dfa7a5eba91582ea5deee3e689771da88053adab282e1ebf46acc5fef89d3d7a"
+          },
+          {
+            "path": "nav/build/bspline_opt/test_results/bspline_opt/test_uniform_bspline.gtest.xml",
+            "sha256": "1af6c520eb0b373bf6061db0a4f3258d41ef81969b1d5dd81a6257a353b961db"
+          },
+          {
+            "path": "nav/build/bspline_opt/test_results/bspline_opt/test_whole_spline_collision.gtest.xml",
+            "sha256": "df44d913e9d37ae155698ce173d7a5c6062ccecca89c0e6c4554560977b93a7d"
+          }
+        ]
+      },
+      "scan_planner": {
+        "cases": 147,
+        "failed": 0,
+        "skipped": 0,
+        "results": [
+          {
+            "path": "nav/build/scan_planner/test_results/scan_planner/test_candidate_adoption.gtest.xml",
+            "sha256": "7737edfa0ded154ae4dc1b9246dc43c242c94713af845542e9aaf4a447d822a4"
+          },
+          {
+            "path": "nav/build/scan_planner/test_results/scan_planner/test_collision_reference.gtest.xml",
+            "sha256": "6efdcaa0a158b5c42f4c6d2e7a40bffdd9dbe1ac4b48251e27ef18e94ae862c1"
+          },
+          {
+            "path": "nav/build/scan_planner/test_results/scan_planner/test_execution_ledger.gtest.xml",
+            "sha256": "747a81935b94a7b78f3a1308b0e29b241408eca39661b96365fe051145a11fde"
+          },
+          {
+            "path": "nav/build/scan_planner/test_results/scan_planner/test_initial_yaw_native.gtest.xml",
+            "sha256": "05b44e1e5627fc7cd8507bb1799b236162691fe5b56276f725b4009ae0e109f9"
+          },
+          {
+            "path": "nav/build/scan_planner/test_results/scan_planner/test_input_contract.gtest.xml",
+            "sha256": "0dcd04da3bd06d4a71b7efc5307fdb263bb0064875fefcc3537e1a5636030dfc"
+          },
+          {
+            "path": "nav/build/scan_planner/test_results/scan_planner/test_local_plan_debug.gtest.xml",
+            "sha256": "bb434fdf1680eaabf4d72e8f1e84f501ec9221f282ebab810d8155610cc689a2"
+          },
+          {
+            "path": "nav/build/scan_planner/test_results/scan_planner/test_motion_sweep.gtest.xml",
+            "sha256": "0c6c904a21a097862a5ef3bfdaa877abb18afeae181cceee02324ac99d97d39c"
+          },
+          {
+            "path": "nav/build/scan_planner/test_results/scan_planner/test_reference_target.gtest.xml",
+            "sha256": "d46fb20c256efc9a176425cab6cf5664d31d353fb00c0a0d7d4252bfb9a0e5ad"
+          },
+          {
+            "path": "nav/build/scan_planner/test_results/scan_planner/test_trajectory_collision.gtest.xml",
+            "sha256": "cff826bb28d6eb9785495b239cf4d76c3a8b39a953d41fddf75807a5e88e82db"
+          },
+          {
+            "path": "nav/build/scan_planner/test_results/scan_planner/test_visible_reference_target.gtest.xml",
+            "sha256": "1864d23662f1559d3df409115ded4159bbc5c0a239485accc74c5cc25c77f427"
+          }
+        ]
+      },
+      "d1max_trajectory_tracker": {
+        "cases": 176,
+        "failed": 0,
+        "skipped": 0,
+        "results": [
+          {
+            "path": "nav/build/d1max_trajectory_tracker/test_results/d1max_trajectory_tracker/test_fixed_bspline_sampler.gtest.xml",
+            "sha256": "cc344efa575238087ec2d67f6fc89ba9c9effa82bd6793f84c656da6cf4ed96b"
+          },
+          {
+            "path": "nav/build/d1max_trajectory_tracker/test_results/d1max_trajectory_tracker/test_navigation_state_contract.gtest.xml",
+            "sha256": "28f3fdeed08e101535b1bd77eeabee3dbeb3592b404e7259574f0af9ffe8325c"
+          },
+          {
+            "path": "nav/build/d1max_trajectory_tracker/test_results/d1max_trajectory_tracker/test_tracker_core.gtest.xml",
+            "sha256": "1dc011fabb5729f2c02b71b75508af5f0ff5fd1aae4751e7c1fb6fccc9bd9151"
+          },
+          {
+            "path": "nav/build/d1max_trajectory_tracker/test_results/d1max_trajectory_tracker/test_tracker_v2.gtest.xml",
+            "sha256": "b7afb2be7445ee48195563eb91db34092c36079fe70fb33d4b13e69b2009439d"
+          }
+        ]
+      },
+      "d1max_navigation_bt": {
+        "cases": 247,
+        "failed": 0,
+        "skipped": 0,
+        "results": [
+          {
+            "path": "nav/build/d1max_navigation_bt/test_results/d1max_navigation_bt/test_execution_owner.gtest.xml",
+            "sha256": "88ef390590d289ad686ab9506a43df9c468557918626eec2fe31a06d2cf68447"
+          },
+          {
+            "path": "nav/build/d1max_navigation_bt/test_results/d1max_navigation_bt/test_initial_pose_transaction.gtest.xml",
+            "sha256": "46555dad6235a653f1d8b7120a04ee1b15c5607ea2d004b7794535faf2cfa5d6"
+          },
+          {
+            "path": "nav/build/d1max_navigation_bt/test_results/d1max_navigation_bt/test_navigation_bt.gtest.xml",
+            "sha256": "e95af9681c8318a67210afa1ee56d43ab5c4ab5d285fcab4566fa25ff1a3576e"
+          },
+          {
+            "path": "nav/build/d1max_navigation_bt/test_results/d1max_navigation_bt/test_navigation_bt_runtime.gtest.xml",
+            "sha256": "a10aa29233c868179c4fa973763127a50558872d14d66c172bfdb5db3a9200c8"
+          },
+          {
+            "path": "nav/build/d1max_navigation_bt/test_results/d1max_navigation_bt/test_navigation_task_contract.gtest.xml",
+            "sha256": "71322aa23108b42661fa284f35778f9578e568246e285a85b219cc30cdbbf758"
+          }
+        ]
+      }
+    },
+    "native_gtest_cases": 809,
+    "python_runtime_module_closure_count": 171,
+    "python_tests": {
+      "source_modified_pct_scan_passed": 281,
+      "source_modified_pct_scan_skipped": 2,
+      "reference_math_adapters_passed": 143,
+      "fixture_passed": 68,
+      "note": "143 is a subset of source tests; do not add counts as independent cases",
+      "logs": [
+        {
+          "path": "unknown_research/v18_source_python_tests.log",
+          "sha256": "88c3a9e63046b856ccae7f7e15546cdce61d319275d97b8bce484fcdc99d54ae"
+        },
+        {
+          "path": "unknown_research/v18_reference_math_adapters_tests.log",
+          "sha256": "07b23884b4a07f0812e55d69cf68d2c4b97fabfd2e3580ca6e2a697ad060785c"
+        },
+        {
+          "path": "unknown_research/v18_fixture_tests.log",
+          "sha256": "b4c6d8dbcd725593d4d180f4e52126a30c73aea9841b927224203aa38e37eed9"
+        }
+      ]
+    },
+    "original_scan_callback_harness": {
+      "preview": 28,
+      "reference": 24,
+      "handoff": 24,
+      "recovery": 80,
+      "total": 156,
+      "failures": 0,
+      "log": {
+        "path": "unknown_research/v18_source_python_tests.log",
+        "sha256": "88c3a9e63046b856ccae7f7e15546cdce61d319275d97b8bce484fcdc99d54ae"
+      }
+    },
+    "sdk_tests": {
+      "ctest_targets": 14,
+      "failures": 0,
+      "log": {
+        "path": "unknown_research/v19_sdk_tests.log",
+        "sha256": "87df90ca94f8ad0e7199587a5c15525c50da18e9bad1170b66433efbb24f3021"
+      },
+      "exact_source_clock_log": {
+        "path": "unknown_research/exact_epoch_sdk_tests.log",
+        "sha256": "770ee2d1597f2e3b4e0dcb560f49a1fcdf8f581f744e5cb0efb68064c6784490"
+      }
+    },
+    "native_bt_tests": {
+      "ctest_targets": 5,
+      "failures": 0,
+      "log": {
+        "path": "unknown_research/v19_bt_tests.log",
+        "sha256": "36f266a96419955c7b69daa6925ef08295748a907a946aba00027add1a8029f6"
+      }
+    },
+    "validation_budgets_unchanged_ms": {
+      "independent_motion": 25,
+      "slow_curve": 120,
+      "optional_incumbent_continuity": 30
+    },
+    "sessions": {
+      "cross_room": {
+        "session": "runs/task_cross_room_v19_001",
+        "passed": true,
+        "action_status": 4,
+        "reason": "measured_goal_reached",
+        "retirement_confirmed": true,
+        "clean_shutdown": true,
+        "writer_measured_stop": true,
+        "physx_measured_stationary": true,
+        "measured_distance_m": 8.811828937181762,
+        "measured_final_position": [
+          3.858808994293213,
+          -2.8667805194854736,
+          0.3499998152256012
+        ],
+        "measured_max_speed_mps": 0.2973828760953522,
+        "nonzero_applied_count": 1079,
+        "sampled_collision_pose_count": 4233,
+        "sampled_penetrations": 0,
+        "source_sample_gap_ns": 16666667,
+        "imu_evidence": {
+          "matched": true,
+          "state_count": 3934,
+          "captured_state_count": 3934,
+          "fence_source_stamp_ns": 1791136234715415969,
+          "missing_imu_source_stamps_ns": [],
+          "receipt_wait_budget_s": 1.0,
+          "receipt_wait_elapsed_s": 0.0019192129839211702,
+          "fence_elapsed_s": 65.59807329194155
+        },
+        "runtime_timing": {
+          "measured_state_samples": 4233,
+          "measured_state_wall_seconds": 70.52673852001317,
+          "measured_state_sim_seconds": 70.533333333,
+          "wall_seconds_per_sim_second": 0.9999065007610558,
+          "realtime_factor": 1.0000935079818694,
+          "state_wall_hz": 60.00561047919574,
+          "longest_state_wall_gap_s": 0.02290832798462361,
+          "longest_rays_wall_gap_s": [
+            0.10630054399371147,
+            0.10724810999818146
+          ]
+        },
+        "sources": [
+          {
+            "path": "runs/task_cross_room_v19_001/isaac_smoke_report.json",
+            "sha256": "1fd3060f4a00a45be3cfe2390eb007c5efc7bc894b280c0349a632de6dedb7ea"
+          },
+          {
+            "path": "runs/task_cross_room_v19_001/run_summary.json",
+            "sha256": "f20c7885c3644d9ebf7e4fb333efc8ac777e477c3b33625a9d0edb01602c675d"
+          },
+          {
+            "path": "runs/task_cross_room_v19_001/physics/trajectory_audit.json",
+            "sha256": "42eb1088b000a6823ff692dd32708cff0f4a7dc305d6ff7e86a8153b0e10117d"
+          },
+          {
+            "path": "runs/task_cross_room_v19_001/physics/trajectory.jsonl",
+            "sha256": "df4254bd32c19640a83d6042ca3e35040c9bb19ee841726c0cd1ac1252659693"
+          },
+          {
+            "path": "runs/task_cross_room_v19_001/physics/summary.json",
+            "sha256": "b7ca6fd8bfe6acdfabbe47bc27a1fe6e7e22fa7a752061e688d18887842da3c8"
+          },
+          {
+            "path": "runs/task_cross_room_v19_001/control_trace.jsonl",
+            "sha256": "ef5b050b51897bfa26d32912f69d23740adfb8fcaea3b87c72f8f06e5e5f5a7e"
+          }
+        ],
+        "literal_route_progress": {
+          "count": 3443,
+          "all_source_pose_values_equal": true,
+          "observed_anchor_revision": 1,
+          "source": {
+            "path": "unknown_research/v19_route_progress_audit.json",
+            "sha256": "4164892e5a2d7374292dff93fee16aa334c1e2fe3b2fcda3faeb65805d872f25"
+          }
+        },
+        "independent_closed_session_evidence": {
+          "path": "unknown_research/v19_cross_room_evidence.json",
+          "sha256": "658d880157508db745150c8e567d5c142271ce7dd62d6e0f5e9068c0377c5065"
+        }
+      },
+      "near_goal": {
+        "session": "runs/task_goal_v19_001",
+        "passed": true,
+        "action_status": 4,
+        "reason": "measured_goal_reached",
+        "retirement_confirmed": true,
+        "clean_shutdown": true,
+        "writer_measured_stop": true,
+        "physx_measured_stationary": true,
+        "measured_distance_m": 1.024493513856594,
+        "measured_final_position": [
+          -2.9760332107543945,
+          -2.999499559402466,
+          0.3500003218650818
+        ],
+        "measured_max_speed_mps": 0.29658807346449817,
+        "nonzero_applied_count": 88,
+        "sampled_collision_pose_count": 1127,
+        "sampled_penetrations": 0,
+        "source_sample_gap_ns": 16666667,
+        "imu_evidence": {
+          "matched": true,
+          "state_count": 839,
+          "captured_state_count": 841,
+          "fence_source_stamp_ns": 1791136318046376002,
+          "missing_imu_source_stamps_ns": [],
+          "receipt_wait_budget_s": 1.0,
+          "receipt_wait_elapsed_s": 0.00028897402808070183,
+          "fence_elapsed_s": 14.05494425597135
+        },
+        "runtime_timing": {
+          "measured_state_samples": 1127,
+          "measured_state_wall_seconds": 18.763445095042698,
+          "measured_state_sim_seconds": 18.766666666000003,
+          "wall_seconds_per_sim_second": 0.9998283354729617,
+          "realtime_factor": 1.0001716940008079,
+          "state_wall_hz": 60.01030164218026,
+          "longest_state_wall_gap_s": 0.022071714978665113,
+          "longest_rays_wall_gap_s": [
+            0.10702140303328633,
+            0.10792623099405318
+          ]
+        },
+        "sources": [
+          {
+            "path": "runs/task_goal_v19_001/isaac_smoke_report.json",
+            "sha256": "0ac2cdf5d3ba95f84256293141ac261fde787d6423047a94d68636cb15ce0e91"
+          },
+          {
+            "path": "runs/task_goal_v19_001/run_summary.json",
+            "sha256": "661804bc8e18b0b33a5b5ba077b84b5c48e82ea57fde3e4d87c061e022ee4d69"
+          },
+          {
+            "path": "runs/task_goal_v19_001/physics/trajectory_audit.json",
+            "sha256": "04ba78ed5bf9bf78451b6e7a8861a789a40d61c6ff5597715889e8c18d9ab3d9"
+          },
+          {
+            "path": "runs/task_goal_v19_001/physics/trajectory.jsonl",
+            "sha256": "42b314a13424399495b6aed1a3e2b89339e0953f77e2bf0dec90516bcac63676"
+          },
+          {
+            "path": "runs/task_goal_v19_001/physics/summary.json",
+            "sha256": "ead0cda68675f1024171f1c714e1f36a15af894517d00537302f1ba1751a0298"
+          },
+          {
+            "path": "runs/task_goal_v19_001/control_trace.jsonl",
+            "sha256": "b956ea7ff9e5d0b8362c6e629407576007b86e68e99ded63230c0bed9f889b41"
+          }
+        ],
+        "literal_route_progress": {
+          "count": 344,
+          "all_source_pose_values_equal": true,
+          "observed_anchor_revision": 1,
+          "source": {
+            "path": "unknown_research/v19_goal_route_progress_audit.json",
+            "sha256": "80d96b0f4298e8e7c339d4472c84769ed26afb3b4a965019d286030163762a41"
+          }
+        },
+        "independent_closed_session_evidence": {
+          "path": "unknown_research/v19_goal_evidence.json",
+          "sha256": "ff8b8d1d26c71fc3611d93c73be4d3b5016e86cf1e2e4f8981f22750e3b91d88"
+        }
+      },
+      "motion_cancel": {
+        "session": "runs/task_motion_cancel_v19_001",
+        "passed": true,
+        "action_status": 5,
+        "reason": "action_cancelled",
+        "retirement_confirmed": true,
+        "clean_shutdown": true,
+        "writer_measured_stop": true,
+        "physx_measured_stationary": true,
+        "measured_distance_m": 0.28255917679495424,
+        "measured_final_position": [
+          -3.7179996967315674,
+          -2.9998514652252197,
+          0.35000067949295044
+        ],
+        "measured_max_speed_mps": 0.2965521552920373,
+        "nonzero_applied_count": 71,
+        "sampled_collision_pose_count": 1027,
+        "sampled_penetrations": 0,
+        "source_sample_gap_ns": 16666667,
+        "imu_evidence": {
+          "matched": true,
+          "state_count": 765,
+          "captured_state_count": 765,
+          "fence_source_stamp_ns": 1791136448897665549,
+          "missing_imu_source_stamps_ns": [],
+          "receipt_wait_budget_s": 1.0,
+          "receipt_wait_elapsed_s": 0.0002971920184791088,
+          "fence_elapsed_s": 12.779664039961062
+        },
+        "runtime_timing": {
+          "measured_state_samples": 1027,
+          "measured_state_wall_seconds": 17.099205445032567,
+          "measured_state_sim_seconds": 17.1,
+          "wall_seconds_per_sim_second": 0.999953534797226,
+          "realtime_factor": 1.0000464673618894,
+          "state_wall_hz": 60.00278804171336,
+          "longest_state_wall_gap_s": 0.022236563032492995,
+          "longest_rays_wall_gap_s": [
+            0.10614970198366791,
+            0.10711745894514024
+          ]
+        },
+        "sources": [
+          {
+            "path": "runs/task_motion_cancel_v19_001/isaac_smoke_report.json",
+            "sha256": "227eba19b3124e3d8cf912438c73955afdf142069283a54b1aca8c25a9cd174e"
+          },
+          {
+            "path": "runs/task_motion_cancel_v19_001/run_summary.json",
+            "sha256": "2fa6949ec7878d786c98ec0841313406b142bf03fba8d12e195ac7444bb7ffba"
+          },
+          {
+            "path": "runs/task_motion_cancel_v19_001/physics/trajectory_audit.json",
+            "sha256": "d5a9d4507abeb94b804463af16ae0f9795c04f55ba0fc206432cd603c64bed4e"
+          },
+          {
+            "path": "runs/task_motion_cancel_v19_001/physics/trajectory.jsonl",
+            "sha256": "6a1ab9223ee724efbb05dc4994a5cc0443dcd3977be8bcd73c2e9969319720ae"
+          },
+          {
+            "path": "runs/task_motion_cancel_v19_001/physics/summary.json",
+            "sha256": "cda4f75c83a2dbd36cdbd2b5263322c8c1cd5eca72523189a5c838d153a48a6b"
+          },
+          {
+            "path": "runs/task_motion_cancel_v19_001/control_trace.jsonl",
+            "sha256": "6f4446ae63d0978ace38eb54fdd6ba91f8802e6bd7789596c9bff6b159662760"
+          }
+        ],
+        "literal_route_progress": {
+          "count": 223,
+          "all_source_pose_values_equal": true,
+          "observed_anchor_revision": 1,
+          "source": {
+            "path": "unknown_research/v19_motion_cancel_route_progress_audit.json",
+            "sha256": "22027614a36ec669e8e6bb942d0680a0ff52c369c09bbf96991dee8af32c565a"
+          }
+        },
+        "independent_closed_session_evidence": {
+          "path": "unknown_research/v19_motion_cancel_evidence.json",
+          "sha256": "7dd81a2f6aa1d00f7e24cae4203f8319c36e7063c8ccdaf390640f5ed32cc2d0"
+        }
+      }
+    },
+    "limits": [
+      "Certified unchanged closed static USD geometry in fixed identity map/odom/world; no production default mode change",
+      "Flat wheel fixture, body height .35m +/- .005m and tilt <= .01rad; non-floor solids top below .15m reject certification",
+      "3D ray/voxel/swept collision checks with measured sensors; no support for stairs/cross-floor execution or general wheel-ground contact",
+      "Truth audit covers discrete measured poses, not continuous inter-sample collision or actual contact events",
+      "physical_stop_confirmed false remains distinct from mock writer measured stop and PhysX stationary"
+    ],
+    "sampled_truth_pose_total": 6387,
+    "collector": {
+      "path": "unknown_research/collect_final_verification.py",
+      "sha256": "f5bd2de743c6e6b1d830bee8533b83f0bf4425b03ec33804dbe8d8a3bc2c777a"
+    }
+  },
+  "test_count_semantics": {
+    "grand_total": null,
+    "native_gtest": "809 is the sum of six package case counts; native_bt_tests describes five ctest targets already represented by the 247 BT cases.",
+    "python": "The 143 reference/math adapter tests are a subset of the 281 passed source tests. The 68 fixture tests are reported separately; no cross-scope sum is claimed.",
+    "original_scan_callback_harness": "156 callback checks are a different test metric in the source test log; do not add them to pytest cases.",
+    "sdk": "14 ctest targets are not 14 individual unit test cases.",
+    "rviz": "70 display-plugin cases are recorded separately from navigation control tests.",
+    "truth_samples": "6387 v19 sampled poses and 24440 v22 sampled poses are distinct historical runs, not unit test counts."
+  },
+  "v22_closed_gui_navigation_verification": {
+    "schema": 1,
+    "session": "runs/task_video_v22_001",
+    "session_id": "4ea7b83db91c4427aa18f79cf7145fc7",
+    "candidate": "isaac-candidate-v22",
+    "integrity_sha256": "64fdd4e62dbd8ee226825399e2de699baac292bac52c0b5e6b88c1a2bfccec48",
+    "verified_sealed_file_count": 2889,
+    "same_install_file_count": 1999,
+    "changed_install_files": [
+      "application/install/d1max_pct_rviz_tools/include/d1max_pct_rviz_tools/navigation_diagnostics_panel.hpp",
+      "application/install/d1max_pct_rviz_tools/lib/libd1max_pct_rviz_tools.so",
+      "application/install/d1max_pct_rviz_tools/share/ament_index/resource_index/parent_prefix_path/d1max_pct_rviz_tools"
+    ],
+    "goal": [
+      4.0,
+      -3.0,
+      0.0
+    ],
+    "passed": true,
+    "result": {
+      "success": true,
+      "reason": "measured_goal_reached",
+      "retirement_confirmed": true,
+      "physical_stop_confirmed": false
+    },
+    "measured_distance_m": 8.81646704489259,
+    "measured_final_position": [
+      3.8677008152008057,
+      -2.879753589630127,
+      0.34999942779541016
+    ],
+    "measured_stationary": true,
+    "clean_shutdown": true,
+    "physical_robot_acceptance": false,
+    "recording_render": {
+      "enabled": true,
+      "requested_fps": 15.0,
+      "cadence": "playing: real source clock; paused: wall clock; render calls are not completed GPU-frame counts",
+      "render_calls": 6109,
+      "max_render_wall_s": 0.08469423092901707,
+      "render_failed": false,
+      "render_advanced_physics_frames": 0,
+      "transform_sync": "native PhysX to USD"
+    },
+    "normal_wall_speed": true,
+    "recording": "videos/navigation_v22_20261005/recording.json",
+    "video_duration_s": 161.534,
+    "hashes": {
+      "runs/task_video_v22_001/isaac_smoke_report.json": "bdab4efdc86bfd399b22a40e6b4da2d728003cde88a453585fabbafc27a4b316",
+      "runs/task_video_v22_001/run_summary.json": "a7019981a9e9fbfc096ea877c3776d02bd1cb41b23b9db453cd16758de911c40",
+      "runs/task_video_v22_001/physics/summary.json": "fdd28a184bb5ff3dc17b51abd110d1fafd069f0c476db35d0c4d73e754b71969",
+      "videos/navigation_v22_20261005/trajectory_audit.json": "03e3c9deec37c70574e88cffddc1ca7938c077214f4bda765b7a6eac120c0476",
+      "videos/navigation_v22_20261005/recording.json": "f3214ef366bd0169b4f9f2296c4c7b5932952f7d09f49a58866fbb834e56a9d7",
+      "videos/navigation_v22_20261005/rviz.mp4": "573508216e9be98c672e4584b310d6794acf3e563a6279420de775557273f4b0",
+      "videos/navigation_v22_20261005/isaacsim.mp4": "789d2fb136b431f9e20d543dd04faa9fb44420ca5d735e7280a1dedfe100b5b3",
+      "videos/navigation_v22_20261005/overview.mp4": "870b67179e0d1b1b53d1429fbb56f0c59d29854fbbbe48d340907b5c404a3113",
+      "videos/rviz_clock_tests.xml": "a1cc0b855ed87dcd7be3c642928aa401fab4a32a3a1ff7145cf6f95ce44a0c67"
+    },
+    "navigation_control_install_unchanged_from_v19": true,
+    "independent_video_qa": "videos/navigation_v22_20261005/qa_writer/qa_summary.json"
+  },
+  "v22_additional_derived_evidence": {
+    "report": {
+      "artifact": "runs/task_video_v22_001/isaac_smoke_report.json",
+      "sha256": "bdab4efdc86bfd399b22a40e6b4da2d728003cde88a453585fabbafc27a4b316",
+      "snapshot_size_bytes": 4949464,
+      "hash_scope": "complete_file"
+    },
+    "control_trace": {
+      "artifact": "runs/task_video_v22_001/control_trace.jsonl",
+      "sha256": "13a1a2e570ed35527a405e8d6a6bf0a40ad2f90ed7af96cd7a4ba14bd10a9613",
+      "snapshot_size_bytes": 9746123,
+      "hash_scope": "complete_file"
+    },
+    "action_result_status": 4,
+    "imu_source_matching": true,
+    "body_height_consistent": true,
+    "route_progress_generation_message_counts": {
+      "1": 727,
+      "2": 517,
+      "3": 193,
+      "4": 457,
+      "5": 397,
+      "6": 361,
+      "7": 379,
+      "8": 376
+    },
+    "rviz_display_tests": {
+      "source": {
+        "artifact": "videos/rviz_clock_tests.xml",
+        "sha256": "a1cc0b855ed87dcd7be3c642928aa401fab4a32a3a1ff7145cf6f95ce44a0c67",
+        "snapshot_size_bytes": 13463,
+        "hash_scope": "complete_file"
+      },
+      "cases": 70,
+      "failures": 0,
+      "errors": 0,
+      "disabled": 0
+    },
+    "sampled_collision_audit": {
+      "source": {
+        "artifact": "videos/navigation_v22_20261005/trajectory_audit.json",
+        "sha256": "03e3c9deec37c70574e88cffddc1ca7938c077214f4bda765b7a6eac120c0476",
+        "snapshot_size_bytes": 4774,
+        "hash_scope": "complete_file"
+      },
+      "kind": "independent_sampled_static_collision_audit",
+      "completed": true,
+      "sample_count": 24440,
+      "sampled_chassis_and_casters_clear": true,
+      "sampled_wheel_enclosures_clear": true,
+      "sampled_exact_penetration_samples": 0,
+      "sampled_wheel_enclosure_penetration_samples": 0,
+      "longest_source_sample_gap_ns": 16666667,
+      "trajectory_sha256": "97b1480e10f90fc5d8f862f9ea6072fad66a934d792f60f65dc1a66447887d04",
+      "collider_sha256": "5e0d5df2f45bacebe3dd6b70cb8330b42d0d8b934dc06e2b23e74b37a7592cd0",
+      "robot_urdf_sha256": "ad549a5a06657b2b7d8b8005471416bcf38782f31c814445330c7bc2ee12b564",
+      "limitation": "discrete measured pose audit; no continuous inter-sample collision certificate or actual PhysX contact-event measurement"
+    }
+  },
+  "interpretation_limits": [
+    "Historical success does not establish repeatable current success; the 2026-10-06 same-candidate live rerun failed.",
+    "These records do not establish real-hardware acceptance, real LIO localization performance, stair traversal, or dynamic obstacle performance.",
+    "Hashes bind local artifact contents; videos and original large records remain local and are not embedded in this public summary."
+  ]
+}

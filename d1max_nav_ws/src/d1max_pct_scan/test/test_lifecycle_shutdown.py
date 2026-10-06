@@ -1,5 +1,9 @@
 from copy import deepcopy
+import json
+import sys
+from types import SimpleNamespace
 import pytest
+from d1max_pct_scan import lifecycle_shutdown as module
 from d1max_pct_scan.lifecycle_shutdown import drained_status
 
 
@@ -27,3 +31,132 @@ def test_stale_foreign_active_or_quarantined_is_not_drained(key, value):
     data = deepcopy(status())
     data[key] = value
     assert not check(data)
+
+
+def fake_shutdown_ros(monkeypatch, *, initial_source=0., steps=()):
+    """Run the real shutdown loop with fake imports and independent clocks."""
+    clock=SimpleNamespace(mono=0.,source=initial_source)
+    events=SimpleNamespace(node_options=None,requests=[],observations=[],spins=0,
+        context_shutdown=False,node_destroyed=False,executor_shutdown=False)
+    callback=None
+
+    class FakeContext:
+        live=False
+        def ok(self): return self.live
+        def shutdown(self): self.live=False;events.context_shutdown=True
+
+    class FakeParameter:
+        def __init__(self,name,*,value): self.name,self.value=name,value
+
+    class FakeFuture:
+        def done(self): return True
+        def result(self): return SimpleNamespace(schema_version=2,accepted=True)
+
+    class FakeClient:
+        def service_is_ready(self): return True
+        def call_async(self,request):
+            events.requests.append(dict(source=clock.source,mono=clock.mono,
+                schema=request.schema_version,reason=request.reason,session_id=request.session_id))
+            return FakeFuture()
+
+    class FakeNode:
+        def get_clock(self):
+            return SimpleNamespace(now=lambda:SimpleNamespace(nanoseconds=round(clock.source*1e9)))
+        def create_subscription(self,message_type,topic,observe,qos):
+            nonlocal callback
+            callback=observe
+            return SimpleNamespace()
+        def create_client(self,service_type,topic): return FakeClient()
+        def destroy_node(self): events.node_destroyed=True
+
+    class FakeExecutor:
+        def __init__(self,*,context): pass
+        def add_node(self,node): pass
+        def spin_once(self,*,timeout_sec):
+            clock.mono+=timeout_sec
+            step=steps[events.spins] if events.spins<len(steps) else {}
+            events.spins+=1
+            if 'source' in step: clock.source=step['source']
+            if 'status_stamp' in step:
+                value=status();value.update(session_id='s',stamp=step['status_stamp'])
+                callback(SimpleNamespace(data=json.dumps(value)))
+        def shutdown(self,*,timeout_sec): events.executor_shutdown=True
+
+    def init(*,context,**kwargs): context.live=True
+    def create_node(name,**kwargs): events.node_options=kwargs;return FakeNode()
+    fake_rclpy=SimpleNamespace(init=init,create_node=create_node,Parameter=FakeParameter)
+    imports={'rclpy':fake_rclpy,'rclpy.context':SimpleNamespace(Context=FakeContext),
+        'rclpy.parameter':SimpleNamespace(Parameter=FakeParameter),
+        'rclpy.executors':SimpleNamespace(SingleThreadedExecutor=FakeExecutor),
+        'rclpy.qos':SimpleNamespace(QoSProfile=lambda **kwargs:kwargs,
+            DurabilityPolicy=SimpleNamespace(TRANSIENT_LOCAL='durable')),
+        'std_msgs.msg':SimpleNamespace(String=SimpleNamespace),
+        'd1max_navigation_bt_interfaces.srv':SimpleNamespace(
+            PrepareTransition=SimpleNamespace(Request=SimpleNamespace))}
+    for name,value in imports.items(): monkeypatch.setitem(sys.modules,name,value)
+    monkeypatch.setattr(module,'time',SimpleNamespace(monotonic=lambda:clock.mono))
+    def observe_gate(value,**kwargs):
+        accepted=drained_status(value,**kwargs)
+        events.observations.append(dict(stamp=value['stamp'],accepted=accepted,**kwargs))
+        return accepted
+    monkeypatch.setattr(module,'drained_status',observe_gate)
+    return clock,events
+
+
+def assert_fake_shutdown_cleaned_up(events):
+    assert events.context_shutdown and events.node_destroyed and events.executor_shutdown
+
+
+def test_shutdown_defaults_to_explicit_system_clock_and_ignores_global_ros_arguments(monkeypatch):
+    _,events=fake_shutdown_ros(monkeypatch,initial_source=20.,steps=(
+        {'source':20.1,'status_stamp':20.1},{'source':20.2,'status_stamp':20.2}))
+    result=module.drain_task_owner('s')
+    assert result['request_accepted'] and result['software_retired']
+    assert not result['physical_stop_confirmed']
+    assert events.node_options['use_global_arguments'] is False
+    parameters=events.node_options['parameter_overrides']
+    assert [(p.name,p.value) for p in parameters]==[('use_sim_time',False)]
+    assert type(parameters[0].value) is bool
+    assert events.requests[0]['source']==20.
+    assert events.requests[0]['schema']==2 and events.requests[0]['session_id']=='s'
+    assert_fake_shutdown_cleaned_up(events)
+
+
+def test_simulated_shutdown_waits_for_clock_then_fences_old_inactive_status(monkeypatch):
+    _,events=fake_shutdown_ros(monkeypatch,steps=(
+        {'source':0.,'status_stamp':0.},
+        {'source':20.,'status_stamp':0.},
+        {'source':20.1,'status_stamp':19.9},
+        {'source':20.2,'status_stamp':19.9},
+        {'source':20.3,'status_stamp':20.3}))
+    result=module.drain_task_owner('s',use_sim_time=True)
+    assert result['request_accepted'] and result['software_retired']
+    assert not result['physical_stop_confirmed']
+    assert [(p.name,p.value) for p in events.node_options['parameter_overrides']]==[('use_sim_time',True)]
+    assert events.node_options['use_global_arguments'] is False
+    assert len(events.requests)==1
+    assert events.requests[0]['source']==20. and events.requests[0]['mono']==pytest.approx(.1)
+    # The 19.9 s status is within the .6 s source freshness window, but older
+    # than the barrier captured immediately before the service call at 20 s.
+    assert [(o['stamp'],o['accepted']) for o in events.observations]==[(19.9,False),(20.3,True)]
+    assert all(o['requested_at']==20. for o in events.observations)
+    assert result['elapsed_s']==pytest.approx(.25)
+    assert_fake_shutdown_cleaned_up(events)
+
+
+def test_simulated_shutdown_clock_stays_zero_consumes_original_wall_budget(monkeypatch):
+    clock,events=fake_shutdown_ros(monkeypatch,steps=({'source':0.,'status_stamp':0.},)*140)
+    result=module.drain_task_owner('s',use_sim_time=True)
+    assert not result['request_accepted'] and not result['software_retired']
+    assert not result['physical_stop_confirmed'] and not events.requests
+    assert not events.observations
+    assert result['reason']=='task_owner_drain_timeout'
+    assert clock.source==0.
+    assert 6.<=result['elapsed_s']<6.051
+    assert_fake_shutdown_cleaned_up(events)
+
+
+@pytest.mark.parametrize('session_id,budget',[('',6.),('s',0.),('s',10.01)])
+def test_shutdown_contract_rejects_empty_identity_or_unbounded_wall_budget(session_id,budget):
+    with pytest.raises(ValueError,match='invalid_shutdown_contract'):
+        module.drain_task_owner(session_id,budget_s=budget)

@@ -111,6 +111,25 @@ def test_fresh_new_epoch_with_earlier_source_is_not_hidden_by_old_epoch_watermar
     assert inbox.latest is event
 
 
+def test_terminal_revocation_epoch_retains_last_actual_measurement_timestamps():
+    inbox = LocalNavigationInbox()
+    measured = packet()
+    assert accept(inbox, measured)
+    revoked = deepcopy(measured)
+    revoked.usable, revoked.reason = False, 'isaac_simulation_paused'
+    # Same epoch/source is only a duplicate; a terminal fixture generation is
+    # explicit revocation without making an old pose or IMU freshly measured.
+    assert accept(inbox, revoked) is None
+    revoked.localization_epoch += 1
+    event = accept(inbox, revoked, mono=100.01)
+    assert event.state is None and event.source_ns == 10_000_000_000
+    assert revoked.source_stamp == measured.source_stamp
+    assert revoked.imu_stamp == measured.imu_stamp
+    assert revoked.posterior_stamp == measured.posterior_stamp
+    assert not inbox.usable(now_ns=event.source_ns, monotonic=100.01, receipt_timeout_s=.4)
+    assert accept(inbox, measured, mono=100.02) is None
+
+
 @pytest.mark.parametrize('source', [10_000_000_000, 9_990_000_000, 10_010_000_000])
 def test_duplicate_or_reordered_source_cannot_restore_soft_unavailable(source):
     inbox = LocalNavigationInbox()

@@ -82,6 +82,7 @@ class SourceBuildTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertFalse(output.exists())
         self.assertIn('--packages-up-to d1max_pct_scan', result.stdout)
+        self.assertIn('nav-source/tools/pointcloud_preprocessing/', result.stdout)
         self.assertIn('--executor sequential', result.stdout)
         self.assertIn('gtsam-4.1.1', result.stdout)
         self.assertIn('--parallel 2', result.stdout)
@@ -139,17 +140,20 @@ import json, os, pathlib, sys
 with open(os.environ['D1MAX_BUILD_TEST_LOG'], 'a') as stream:
     stream.write(json.dumps({'argv': sys.argv[1:], 'env': {
         k: os.environ.get(k) for k in ('ROS_DOMAIN_ID', 'ZENOH_SESSION_CONFIG_URI',
-        'ROS_DISTRO', 'RMW_IMPLEMENTATION', 'CMAKE_BUILD_PARALLEL_LEVEL')}}) + '\\n')
+        'ROS_DISTRO', 'RMW_IMPLEMENTATION', 'CMAKE_BUILD_PARALLEL_LEVEL', 'CC', 'CXX')}}) + '\\n')
 prefix = pathlib.Path(sys.argv[sys.argv.index('--install-base') + 1])
 prefix.mkdir(parents=True)
 (prefix / 'local_setup.bash').write_text('export D1MAX_FIXTURE_OVERLAY=1\\n')
 ''')
         python = self.make_program('python310', '#!/bin/sh\nprintf "3.10\\n"\n')
+        c_compiler = self.make_program('fixture-cc', '#!/bin/sh\nexit 0\n')
+        cxx_compiler = self.make_program('fixture-cxx', '#!/bin/sh\nexit 0\n')
         self.environment.update(ROS_DOMAIN_ID='24', ZENOH_SESSION_CONFIG_URI='/production/router.json5',
                                 AMENT_PREFIX_PATH='/old/release', PYTHONPATH='/old/python')
         output = self.root / 'sdk-output'
         result = self.invoke('--scope', 'sdk', '--output', output, '--rmw-prefix', self.rmw,
-                             '--sdk-vendor-root', self.vendor, '--python', python, '--apply')
+                             '--sdk-vendor-root', self.vendor, '--python', python,
+                             '--c-compiler', c_compiler, '--cxx-compiler', cxx_compiler, '--apply')
         self.assertEqual(result.returncode, 0, result.stderr)
         calls = [json.loads(line) for line in self.log.read_text().splitlines()]
         self.assertEqual(len(calls), 2)
@@ -161,6 +165,8 @@ prefix.mkdir(parents=True)
             self.assertEqual(call['env']['RMW_IMPLEMENTATION'], 'rmw_zenoh_cpp')
             self.assertEqual(call['env']['ROS_DISTRO'], 'humble')
             self.assertEqual(call['env']['CMAKE_BUILD_PARALLEL_LEVEL'], '2')
+            self.assertEqual(call['env']['CC'], str(c_compiler))
+            self.assertEqual(call['env']['CXX'], str(cxx_compiler))
             base = call['argv'][call['argv'].index('--base-paths') + 1]
             self.assertTrue(Path(base).is_relative_to(output))
         copied = output / 'sdk-source/src/d1max_sdk_bridge/vendor/robot_sdk' / library.relative_to(self.vendor)

@@ -16,6 +16,18 @@ namespace scan_planner {
 
 enum class CurveCheckEvidence { Clear, Occupied, Uncertified };
 
+struct CurveQueryWitness {
+  Eigen::Vector3d position;
+  double yaw;
+  int state;
+  std::size_t query_index;
+};
+// Passive evidence from the original query, with no second collision lookup.
+// A budget/source/geometry rejection without a query leaves this empty.
+struct CurveCheckTrace {
+  std::optional<CurveQueryWitness> first_non_free;
+};
+
 // Distinguish a witnessed occupied query from absence of a complete proof.
 // The latter includes budgets, disconnected measured pose and invalid sources;
 // both deny validity, but only an actual witness says the curve is occupied.
@@ -31,24 +43,33 @@ struct MeasuredBodyPose {
   Eigen::Quaterniond orientation{Eigen::Quaterniond::Identity()};
   double source_stamp{0.};
   std::string frame;
+  std::int64_t source_stamp_ns{0}; // Original ROS source; seconds are only control arithmetic.
 };
+
+inline std::int64_t poseSecondsNs(double seconds) {
+  const long double ns=static_cast<long double>(seconds)*1000000000.L;
+  if(!std::isfinite(seconds)||ns<=0.||ns>=std::numeric_limits<std::int64_t>::max())return 0;
+  return static_cast<std::int64_t>(std::llround(ns));
+}
+inline std::int64_t measuredBodySourceNs(const MeasuredBodyPose& pose) {
+  return pose.source_stamp_ns>0?pose.source_stamp_ns:poseSecondsNs(pose.source_stamp);
+}
 
 inline bool measuredPoseSourceAccepted(std::int64_t stamp_ns, std::int64_t now_ns,
     double maximum_age, std::int64_t previous_stamp_ns=0) {
-  if (stamp_ns<=0 || stamp_ns<=previous_stamp_ns || !std::isfinite(maximum_age) || maximum_age<=0.)
+  if (stamp_ns<=0 || now_ns<=0 || stamp_ns<=previous_stamp_ns || !std::isfinite(maximum_age) || maximum_age<=0.)
     return false;
-  const long double age=(static_cast<long double>(now_ns)-stamp_ns)*1e-9L;
-  return age>=-.1L && age<=maximum_age;
+  return stamp_ns-now_ns<=100000000LL && now_ns-stamp_ns<=poseSecondsNs(maximum_age);
 }
 
 inline bool measuredBodyYaw(const MeasuredBodyPose &pose, const std::string &frame,
-    double now, double maximum_age, double &yaw) {
+    double now, double maximum_age, double &yaw,std::int64_t now_ns=0) {
   if (frame.empty() || pose.frame!=frame || !pose.position.allFinite() ||
       !pose.orientation.coeffs().allFinite() || !std::isfinite(pose.orientation.norm()) ||
       pose.orientation.norm()<1e-8 ||
       !std::isfinite(pose.source_stamp) || pose.source_stamp<=0. ||
       !std::isfinite(now) || !std::isfinite(maximum_age) || maximum_age<=0. ||
-      now-pose.source_stamp<-.1 || now-pose.source_stamp>maximum_age) return false;
+      !measuredPoseSourceAccepted(measuredBodySourceNs(pose),now_ns>0?now_ns:poseSecondsNs(now),maximum_age)) return false;
   const Eigen::Vector3d heading=pose.orientation.normalized().toRotationMatrix().col(0);
   // No invented yaw for a body X axis perpendicular to the horizontal plane.
   if (heading.head<2>().squaredNorm()<1e-8) return false;
@@ -179,7 +200,9 @@ bool wholeCurveCollisionFree(UniformBspline &curve, double resolution, double bo
     double now, double maximum_pose_age, std::size_t query_budget=200000,
     double wall_budget_seconds=0., double measured_curve_time=0.,
     const SplineHeadingContract &preview_heading={},double checked_from_time=0.,
-    MeasuredConnectionPolicy connection=MeasuredConnectionPolicy::CandidateAdmission) {
+    MeasuredConnectionPolicy connection=MeasuredConnectionPolicy::CandidateAdmission,std::int64_t now_ns=0,
+    CurveCheckTrace* trace=nullptr) {
+  if(trace)trace->first_non_free.reset();
   const auto started=std::chrono::steady_clock::now();
   const auto expired=[&]() {
     return wall_budget_seconds>0. &&
@@ -189,7 +212,7 @@ bool wholeCurveCollisionFree(UniformBspline &curve, double resolution, double bo
       !std::isfinite(wall_budget_seconds) || wall_budget_seconds<0. || !query_budget) return false;
   const double duration=curve.getTimeSum();
   double measured_yaw=0.;
-  if (!measuredBodyYaw(measured,frame,now,maximum_pose_age,measured_yaw) ||
+  if (!measuredBodyYaw(measured,frame,now,maximum_pose_age,measured_yaw,now_ns) ||
       !std::isfinite(measured_curve_time) || measured_curve_time<0. ||
       measured_curve_time>duration||!std::isfinite(checked_from_time)||checked_from_time<0.||
       checked_from_time>measured_curve_time||(preview_heading.preview_only_enabled&&checked_from_time>0.)) return false;
@@ -208,7 +231,11 @@ bool wholeCurveCollisionFree(UniformBspline &curve, double resolution, double bo
   double previous_yaw=0.;
   std::size_t queries=0;
   const auto query=[&](const Eigen::Vector3d &p,double yaw) {
-    return !expired() && ++queries<=query_budget && occupied(p,yaw)==0;
+    if(expired() || ++queries>query_budget)return false;
+    const int state=occupied(p,yaw);
+    if(trace && state!=0 && !trace->first_non_free)
+      trace->first_non_free=CurveQueryWitness{p,yaw,state,queries};
+    return state==0;
   };
   const auto tangentAt=[&](double t) -> Eigen::Vector3d {
     Eigen::Vector3d tangent=velocity.evaluateDeBoorT(t);

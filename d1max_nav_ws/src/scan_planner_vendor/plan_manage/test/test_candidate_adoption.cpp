@@ -85,6 +85,28 @@ TEST(CandidateAdoption, MovingNineCentimetersJoinsOriginalCurveInsteadOfTZero) {
   EXPECT_TRUE(f.curve.getControlPoint().isApprox(controls));EXPECT_TRUE(f.curve.getKnot().isApprox(knots));
 }
 
+TEST(CandidateAdoption, UnixSourceOrderAndElapsedBoundUseOriginalNanoseconds) {
+  constexpr std::int64_t ns=1791124691902856036LL;
+  Fixture f;f.original.source_stamp=f.measured.source_stamp=static_cast<double>(ns)*1e-9;
+  f.original.source_stamp_ns=f.measured.source_stamp_ns=ns;
+  f.measured.position=f.original.position;
+  const auto join=[&] {return measuredCandidateJoin(f.curve,f.original,f.measured,f.velocity,.08,.3,.6,true,f.budget);};
+  const auto equal=join();ASSERT_TRUE(equal);EXPECT_EQ(equal->measured.source_stamp_ns,ns);
+  f.measured.source_stamp_ns=ns-1;EXPECT_FALSE(join()); // the doubles still compare equal
+  f.measured.source_stamp_ns=ns+400000000LL;EXPECT_TRUE(join());
+  f.measured.source_stamp_ns=ns+400000001LL;EXPECT_FALSE(join());
+}
+
+TEST(CandidateAdoption, NanosecondBodyChangeInvalidatesSourceLeaseAcrossFullCheck) {
+  constexpr std::int64_t ns=1791124691902856036LL;
+  Fixture f;
+  CandidateSourceLease before{10300000000LL,7,2,static_cast<double>(ns)*1e-9,ns};
+  auto after=before;EXPECT_TRUE(candidateLeaseStillCurrent(before,after,true,true,f.budget));
+  ++after.body_source_ns;
+  EXPECT_FALSE(candidateLeaseStillCurrent(before,after,true,true,f.budget));
+  EXPECT_EQ(before.body_source,after.body_source);
+}
+
 TEST(CandidateAdoption, StationaryInputCannotAdvanceWithClock) {
   Fixture f;f.curve=line(0.);f.velocity.setZero();f.measured.position=f.original.position;
   for(int i=0;i<10;++i) {

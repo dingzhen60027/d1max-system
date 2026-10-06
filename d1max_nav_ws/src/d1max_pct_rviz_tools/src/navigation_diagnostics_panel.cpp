@@ -239,9 +239,14 @@ void NavigationDiagnosticsPanel::load(const rviz_common::Config & config)
   config.mapGetString("Layout", &requested_layout);
   layout_ = requested_layout == "local" ? "local" : "global";
   updateLayoutWidgets();
-  // RViz may load panels before displays and saved cameras. Apply only after
-  // that synchronous configuration load has finished, not from a status tick.
-  QTimer::singleShot(0, this, [this] {applyLayoutPresentation(layout_);});
+  // RViz can dispatch posted events during initialization. Keep its configured
+  // Current camera and tool: replacing them here can delete properties still
+  // referenced by queued notifications. Only restore display visibility.
+  QTimer::singleShot(0, this, [this] {
+    if (getDisplayContext()) {
+      applyLayoutVisibility(getDisplayContext()->getRootDisplayGroup(), layout_);
+    }
+  });
   mode_->setText(motion_capable_ ? "定位与规划监视" : "仅预览 · 运动关闭");
   source_stamp_ = 0; valid_ = false; unavailable();
 }
@@ -268,16 +273,27 @@ void NavigationDiagnosticsPanel::onInitialize()
     });
 }
 
+double NavigationDiagnosticsPanel::statusNow() const
+{
+  if (auto * context = getDisplayContext()) {
+    if (auto abstraction = context->getRosNodeAbstraction().lock()) {
+      if (auto node = abstraction->get_raw_node()) {return node->now().seconds();}
+    }
+  }
+  return wallNow();
+}
+
 void NavigationDiagnosticsPanel::acceptStatus(const QString & json)
 {
   if (json.size() > 16384) {return;}
   const auto document = QJsonDocument::fromJson(json.toUtf8());
   const auto data = document.object();
   const auto stamp = data["stamp"];
+  const auto source_age = statusNow() - stamp.toDouble();
   if (!document.isObject() || data["schema"].toInt() != 1 || session_.isEmpty() ||
     data["session_id"].toString() != session_ || !finite(stamp) ||
-    stamp.toDouble() <= source_stamp_ || wallNow()-stamp.toDouble() > 1.0 ||
-    wallNow()-stamp.toDouble() < -.1 || data["motion_enabled"] != QJsonValue(false) ||
+    stamp.toDouble() <= source_stamp_ || source_age > 1.0 ||
+    source_age < -.1 || data["motion_enabled"] != QJsonValue(false) ||
     data["mode"].toString() != "LIVE_VISUALIZATION_NO_MOTION" ||
     data["frame_id"].toString() != "d1max_loc_map") {return;}
   const auto stages = data["stages"].toObject();
@@ -370,7 +386,8 @@ void NavigationDiagnosticsPanel::refresh()
     if (inbox_->sequence != consumed_) {consumed_ = inbox_->sequence; value = inbox_->value;}
   }
   if (!value.isEmpty()) {acceptStatus(value);}
-  if (valid_ && (wallNow()-source_stamp_ > 1.0 || wallNow()-source_stamp_ < -.1 ||
+  const auto source_age = statusNow() - source_stamp_;
+  if (valid_ && (source_age > 1.0 || source_age < -.1 ||
     std::chrono::steady_clock::now()-receipt_ > std::chrono::seconds(1)))
   {valid_ = false; unavailable();}
 }

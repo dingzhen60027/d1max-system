@@ -2,8 +2,13 @@
 #include <nlohmann/json.hpp>
 #include "plan_env/grid_map.h"
 #include "plan_env/observed_ray.hpp"
+#include "voxel_cache_test_access.hpp"
 #include <numeric>
 #include <set>
+#include <filesystem>
+#include <fstream>
+#include <algorithm>
+#include <unistd.h>
 
 // Actual map integration, memory only: no ROS context/node/executor/transport.
 struct GridMapTestAccess {
@@ -90,6 +95,10 @@ struct GridMapTestAccess {
   static auto freeStamp(GridMap &map,const Eigen::Vector3i &cell) {
     return map.free_observation_stamps_.at(map.toAddress(cell));
   }
+  static void simulationCollisionClock(GridMap &map) {map.mp_.simulation_collision_clock_=true;}
+  static auto freeReceipt(GridMap &map,const Eigen::Vector3i &cell) {
+    return map.free_observation_receipts_ns_.at(map.toAddress(cell));
+  }
   static void queryTime(GridMap &map,std::int64_t stamp) {map.ray_query_clock_ns_=stamp;}
   static auto steadyClockAdvance(GridMap &map,std::int64_t source,std::int64_t receipt) {
     const auto at=std::chrono::steady_clock::time_point(std::chrono::nanoseconds(receipt));
@@ -158,6 +167,77 @@ struct GridMapTestAccess {
     map.updateSlidingMap(center);
     map.mp_.map_sliding_en_=false; // Further packet integration holds this test window.
   }
+  static std::string attachStaticPrior(GridMap &map,
+      const std::vector<std::pair<Eigen::Vector3i,std::uint8_t>> &overrides={}) {
+    static unsigned sequence=0;
+    const auto directory=std::filesystem::temp_directory_path()/
+        ("d1max-grid-prior-"+std::to_string(getpid())+"-"+std::to_string(++sequence));
+    std::filesystem::create_directory(directory);
+    const std::array<int,3> origin{{-20,-20,-20}},shape{{80,40,40}};
+    std::vector<std::uint8_t> data(80*40*40,0);
+    for(const auto &item:overrides) {
+      const auto &cell=item.first;
+      data.at(((cell.x()-origin[0])*shape[1]+cell.y()-origin[1])*shape[2]+cell.z()-origin[2])=item.second;
+    }
+    const auto hash=scan_planner::StaticOccupancyPrior::sha256(data.data(),data.size());
+    const std::string geometry(64,'b');
+    nlohmann::json manifest{{"schema",1},{"kind","certified_static_occupancy_prior"},
+      {"provenance","isaac_closed_collision_geometry_v1"},{"frame_id","map"},{"map_version","map-version"},
+      {"voxel_resolution",.1},{"origin_index",origin},{"shape",shape},{"storage_order","C_xyz_z_fastest"},
+      {"state_codes",{{"free",0},{"occupied",1},{"unknown",2}}},{"dtype","uint8"},{"meters_per_unit",1.},{"up_axis","Z"},
+      {"data_file","volume.bin"},{"data_sha256",hash},{"data_size_bytes",data.size()},
+      {"collider_sha256",geometry},{"scene_sha256",std::string(64,'a')},{"spec_sha256",std::string(64,'c')},
+      {"geometry_margin_m",0.},{"closed_world_bounds",{{"min",{-5.,-5.,-5.}},{"max",{10.,5.,5.}},
+        {"semantics","whole_closed_cell_strictly_inside"}}},
+      {"map_from_odom",{{"transform_contract","fixed_identity_map_from_odom_v1"},{"from_frame","map"},{"to_frame","map"},
+        {"translation",{0.,0.,0.}},{"rotation_xyzw",{0.,0.,0.,1.}}}}};
+    const auto text=manifest.dump();const auto manifest_hash=scan_planner::StaticOccupancyPrior::sha256(text.data(),text.size());
+    {std::ofstream file(directory/"volume.bin",std::ios::binary);file.write(reinterpret_cast<const char*>(data.data()),data.size());}
+    {std::ofstream file(directory/"volume.json");file<<text;}
+    scan_planner::StaticOccupancyPrior::Expected expected;
+    expected.manifest_sha256=manifest_hash;expected.geometry_sha256=geometry;expected.map_version="map-version";
+    expected.frame_id=expected.odom_frame_id="map";expected.resolution=.1;
+    map.static_prior_=scan_planner::StaticOccupancyPrior::load((directory/"volume.json").string(),expected);
+    map.mp_.validated_static_prior_=true;map.mp_.simulation_collision_clock_=true;
+    std::filesystem::remove_all(directory);
+    return manifest_hash;
+  }
+  static int status(GridMap &map,const Eigen::Vector3i &cell) {
+    map.beginCollisionQuery();return map.rawCollisionStatus(cell);
+  }
+  static int uncachedStatus(GridMap &map,const Eigen::Vector3i &cell) {
+    map.beginCollisionQuery();return map.uncachedRawCollisionStatus(cell);
+  }
+  static std::size_t collisionCacheSize(const GridMap &map) {
+    return map.observed_cylinder_cache_.size()+
+        (map.raw_collision_cache_generation_==map.observed_cylinder_cache_.generationIdentifier()&&
+         map.observed_cylinder_cache_.generationReusable()?std::count_if(map.raw_collision_cache_.begin(),map.raw_collision_cache_.end(),
+           [](std::int8_t state){return state!=GridMap::uncached_raw_status_;}):0);
+  }
+  static std::size_t rawCacheStorage(const GridMap &map) {return map.raw_collision_cache_.size();}
+  static std::size_t rawCacheCapacity(const GridMap &map) {return map.raw_collision_cache_.capacity();}
+  static const void *rawCacheData(const GridMap &map) {return map.raw_collision_cache_.data();}
+  static auto &cylinderCache(GridMap &map) {return map.observed_cylinder_cache_;}
+  static std::size_t snapshotBytesWithoutRawCache(GridMap &map) {
+    const auto prior=map.mp_.validated_static_prior_;map.mp_.validated_static_prior_=false;
+    const auto bytes=map.collisionSnapshotBytes();map.mp_.validated_static_prior_=prior;return bytes;
+  }
+  static void beginIndependentMemoryProof(GridMap &map) {
+    // The memory-only fixture is exclusively owned and has no ROS node. Use
+    // the production proof-scope reset without replacing deterministic clocks
+    // with wall time or duplicating its cache/deadline reset implementation.
+    const auto snapshot=map.collision_snapshot_;map.collision_snapshot_=true;
+    map.beginObservedProof();map.collision_snapshot_=snapshot;
+  }
+  static bool conflict(GridMap &map,const Eigen::Vector3i &cell) {
+    return map.static_prior_live_hits_.count({cell.x(),cell.y(),cell.z()});
+  }
+  static bool priorContextValid(const GridMap &map) {return map.static_prior_context_valid_;}
+  static bool cachedPriorLease(const GridMap &map) {return map.static_prior_query_lease_valid_;}
+  static void freeWitness(GridMap &map,const Eigen::Vector3i &cell,std::int64_t source,std::int64_t receipt) {
+    const auto address=map.toAddress(cell);map.free_observation_stamps_.at(address)=source;
+    map.free_observation_receipts_ns_.at(address)=receipt;map.observed_cylinder_cache_.clear();
+  }
 };
 static builtin_interfaces::msg::Time timeAt(std::int64_t ns) {
   builtin_interfaces::msg::Time out;out.sec=ns/1000000000LL;out.nanosec=ns%1000000000LL;return out;
@@ -165,6 +245,13 @@ static builtin_interfaces::msg::Time timeAt(std::int64_t ns) {
 static std::string context(unsigned epoch=1,unsigned sequence=1,const std::string &seed="seed") {
   return nlohmann::json{{"schema",1},{"session_id","session"},{"epoch",epoch},{"sequence",sequence},
     {"seed_id",seed},{"barrier_ns",100000000000ULL+sequence}}.dump();
+}
+static std::string priorContext(const std::string &hash,unsigned epoch=1,unsigned sequence=1) {
+  auto value=nlohmann::json::parse(context(epoch,sequence));
+  value["map_version"]="map-version";value["static_prior_manifest_sha256"]=hash;
+  value["map_from_odom_contract"]="fixed_identity_map_from_odom_v1";
+  value["map_from_odom_translation"]={0.,0.,0.};value["map_from_odom_rotation_xyzw"]={0.,0.,0.,1.};
+  return value.dump();
 }
 static d1max_planning_interfaces::msg::ProjectedRays packet(std::uint16_t sensor=0,
     std::int64_t stamp=101900000000LL,std::uint64_t sequence=1,unsigned count=1,
@@ -189,6 +276,461 @@ static d1max_planning_interfaces::msg::ProjectedRays packet(std::uint16_t sensor
     std::memcpy(bytes+28,&sensor,2);
   }
   return out;
+}
+
+TEST(StaticPriorIntegration, OptInFillsOnlyCertifiedNeverObservedWithoutManufacturingSourceStamp) {
+  GridMap legacy,map;GridMapTestAccess::configure(legacy);GridMapTestAccess::configure(map);
+  const auto hash=GridMapTestAccess::attachStaticPrior(map,{{{2,0,0},2}});
+  ASSERT_TRUE(legacy.applyLocalizationContext(context()));ASSERT_TRUE(map.applyLocalizationContext(priorContext(hash)));
+  for(unsigned sensor=0;sensor<2;++sensor) {
+    ASSERT_TRUE(GridMapTestAccess::accept(legacy,packet(sensor)));ASSERT_TRUE(GridMapTestAccess::accept(map,packet(sensor)));
+  }
+  GridMapTestAccess::integrate(legacy);GridMapTestAccess::integrate(map);
+  EXPECT_EQ(GridMapTestAccess::status(legacy,{0,0,0}),2);
+  EXPECT_EQ(GridMapTestAccess::status(map,{0,0,0}),0);
+  EXPECT_EQ(GridMapTestAccess::freeStamp(map,{0,0,0}),0);
+  EXPECT_EQ(GridMapTestAccess::freeReceipt(map,{0,0,0}),0);
+  EXPECT_EQ(GridMapTestAccess::status(map,{2,0,0}),2);
+  GridMapTestAccess::indexedUpdate(map,{1,0,0},-.5); // Measured-but-insufficient is not certified away.
+  EXPECT_EQ(GridMapTestAccess::status(map,{1,0,0}),2);
+  const auto diagnostic=map.describeInflateOccupancy({.05,.05,.05},0.);
+  EXPECT_NE(diagnostic.find("certified_static_free="),std::string::npos);
+}
+
+TEST(StaticPriorIntegration, StaticThinWallOccupiedWinsEvenOverActualFreshFreeRay) {
+  GridMap map;GridMapTestAccess::configure(map);
+  const auto hash=GridMapTestAccess::attachStaticPrior(map,{{{10,0,0},1}});
+  ASSERT_TRUE(map.applyLocalizationContext(priorContext(hash)));
+  for(unsigned sensor=0;sensor<2;++sensor)ASSERT_TRUE(GridMapTestAccess::accept(map,packet(sensor)));
+  GridMapTestAccess::integrate(map);
+  EXPECT_EQ(GridMapTestAccess::category(map,{10,0,0}),scan_planner::RawVoxelDiagnostic::Free);
+  EXPECT_GT(GridMapTestAccess::freeStamp(map,{10,0,0}),0);
+  EXPECT_EQ(GridMapTestAccess::status(map,{10,0,0}),1);
+  GridMapTestAccess::integrate(map,102600000000LL,102.6);
+  EXPECT_EQ(GridMapTestAccess::status(map,{10,0,0}),1); // No occupied-to-free TTL conversion.
+}
+
+TEST(StaticPriorIntegration, ExpiredRealFreeMayUsePriorWithoutRenewalButInvalidWitnessCannot) {
+  GridMap map;GridMapTestAccess::configure(map);const auto hash=GridMapTestAccess::attachStaticPrior(map);
+  ASSERT_TRUE(map.applyLocalizationContext(priorContext(hash)));
+  for(unsigned sensor=0;sensor<2;++sensor)ASSERT_TRUE(GridMapTestAccess::accept(map,
+      packet(sensor,101900000000LL,1,1,{-.55,.05,.05},{.35,.05,.05})));
+  GridMapTestAccess::integrate(map);
+  const auto original_source=GridMapTestAccess::freeStamp(map,{0,0,0});
+  const auto original_receipt=GridMapTestAccess::freeReceipt(map,{0,0,0});
+  ASSERT_GT(original_source,0);ASSERT_EQ(GridMapTestAccess::status(map,{0,0,0}),0);
+  for(unsigned sensor=0;sensor<2;++sensor)ASSERT_TRUE(GridMapTestAccess::accept(map,
+      packet(sensor,102500000000LL,2,1,{1.05,.05,.05},{1.55,.05,.05}),102600000000LL,102.6));
+  GridMapTestAccess::integrate(map,102600000000LL,102.6);
+  EXPECT_EQ(GridMapTestAccess::status(map,{0,0,0}),0);
+  EXPECT_EQ(GridMapTestAccess::freeStamp(map,{0,0,0}),original_source);
+  EXPECT_EQ(GridMapTestAccess::freeReceipt(map,{0,0,0}),original_receipt);
+  EXPECT_EQ(map.observedProofDeadlineNs(),103000000000LL); // Bound by fresh both-ray witnesses, never prior infinity.
+  for(const auto bad:std::vector<std::pair<std::int64_t,std::int64_t>>{
+      {0,original_receipt},{103000000000LL,original_receipt},{original_source,0},{original_source,103000000000LL}}) {
+    GridMapTestAccess::freeWitness(map,{0,0,0},bad.first,bad.second);
+    EXPECT_EQ(GridMapTestAccess::status(map,{0,0,0}),2); // Zero/future is invalid, not expired FREE.
+  }
+}
+
+TEST(StaticPriorIntegration, FirstDynamicHitAndSameBatchHitMissConflictImmediatelyBlockPriorFree) {
+  GridMap map;GridMapTestAccess::configure(map);GridMapTestAccess::productionProbabilities(map);
+  const auto hash=GridMapTestAccess::attachStaticPrior(map);ASSERT_TRUE(map.applyLocalizationContext(priorContext(hash)));
+  ASSERT_TRUE(GridMapTestAccess::accept(map,packet(0,101900000000LL,1,1,{.05,.05,.05},{.15,.05,.05})));
+  ASSERT_TRUE(GridMapTestAccess::accept(map,packet(1,101900000000LL,1,1,{.05,.05,.05},{.35,.05,.05})));
+  GridMapTestAccess::integrate(map);
+  EXPECT_EQ(GridMapTestAccess::category(map,{1,0,0}),scan_planner::RawVoxelDiagnostic::Insufficient);
+  EXPECT_TRUE(GridMapTestAccess::conflict(map,{1,0,0}));
+  EXPECT_EQ(GridMapTestAccess::status(map,{1,0,0}),2);
+  // An unrelated fresh acquisition and elapsed TTL do not clear a real hit.
+  for(unsigned sensor=0;sensor<2;++sensor)ASSERT_TRUE(GridMapTestAccess::accept(map,
+      packet(sensor,102500000000LL,2,1,{1.05,.05,.05},{1.55,.05,.05}),102600000000LL,102.6));
+  GridMapTestAccess::integrate(map,102600000000LL,102.6);
+  EXPECT_EQ(GridMapTestAccess::status(map,{1,0,0}),2);
+}
+
+TEST(StaticPriorIntegration, ConflictClearsOnlyAfterNewCompleteRealMissReachesStrictFree) {
+  GridMap map;GridMapTestAccess::configure(map);GridMapTestAccess::productionProbabilities(map);
+  const auto hash=GridMapTestAccess::attachStaticPrior(map);ASSERT_TRUE(map.applyLocalizationContext(priorContext(hash)));
+  for(unsigned sensor=0;sensor<2;++sensor)ASSERT_TRUE(GridMapTestAccess::accept(map,
+      packet(sensor,101900000000LL,1,1,{.05,.05,.05},{.15,.05,.05})));
+  GridMapTestAccess::integrate(map);
+  for(unsigned round=0;round<3;++round) {
+    const auto source=102000000000LL+round*100000000LL;const double now=102.1+round*.1;
+    for(unsigned sensor=0;sensor<2;++sensor)ASSERT_TRUE(GridMapTestAccess::accept(map,
+        packet(sensor,source,round+2,1,{.05,.05,.05},{.35,.05,.05}),source+100000000LL,now));
+    GridMapTestAccess::integrate(map,source+100000000LL,now);
+    if(round<2) {
+      EXPECT_TRUE(GridMapTestAccess::conflict(map,{1,0,0}));EXPECT_EQ(GridMapTestAccess::status(map,{1,0,0}),2);
+    }
+  }
+  EXPECT_FALSE(GridMapTestAccess::conflict(map,{1,0,0}));EXPECT_EQ(GridMapTestAccess::status(map,{1,0,0}),0);
+  EXPECT_GT(GridMapTestAccess::freeStamp(map,{1,0,0}),101900000000LL);
+}
+
+TEST(StaticPriorIntegration, AsynchronousMissCannotBorrowOldCrossSensorFreeWitnessToClearConflict) {
+  GridMap map;GridMapTestAccess::configure(map);GridMapTestAccess::productionProbabilities(map);
+  const auto hash=GridMapTestAccess::attachStaticPrior(map);ASSERT_TRUE(map.applyLocalizationContext(priorContext(hash)));
+  ASSERT_TRUE(GridMapTestAccess::accept(map,packet(0,101900000000LL,1,1,{.05,.05,.05},{.35,.05,.05})));
+  ASSERT_TRUE(GridMapTestAccess::accept(map,packet(1,101800000000LL,1,1,{.05,.05,.05},{.15,.05,.05})));
+  GridMapTestAccess::integrate(map);ASSERT_TRUE(GridMapTestAccess::conflict(map,{1,0,0}));
+  const auto conflicted_free_stamp=GridMapTestAccess::freeStamp(map,{1,0,0});
+  ASSERT_EQ(conflicted_free_stamp,101900000000LL);
+  for(unsigned round=0;round<3;++round) {
+    // Monotonic at the rear source, but still older than the front witness in
+    // the original conflicted batch. Actual new rear misses lower native odds.
+    ASSERT_TRUE(GridMapTestAccess::accept(map,packet(1,101850000000LL+round*10000000LL,
+        round+2,1,{.05,.05,.05},{.35,.05,.05}),102000000000LL,102.+round*.01));
+    GridMapTestAccess::integrate(map,102000000000LL,102.+round*.01);
+    EXPECT_EQ(GridMapTestAccess::freeStamp(map,{1,0,0}),conflicted_free_stamp);
+    EXPECT_TRUE(GridMapTestAccess::conflict(map,{1,0,0}));
+    EXPECT_EQ(GridMapTestAccess::status(map,{1,0,0}),2);
+  }
+  EXPECT_EQ(GridMapTestAccess::category(map,{1,0,0}),scan_planner::RawVoxelDiagnostic::Free);
+  // A newer actual front miss may now clear the conflict using its OWN source
+  // and original callback receipt, after the complete native batch commits.
+  ASSERT_TRUE(GridMapTestAccess::accept(map,packet(0,102000000000LL,2,1,{.05,.05,.05},{.35,.05,.05}),
+      102100000000LL,102.1));
+  GridMapTestAccess::integrate(map,102100000000LL,102.1);
+  EXPECT_FALSE(GridMapTestAccess::conflict(map,{1,0,0}));EXPECT_EQ(GridMapTestAccess::status(map,{1,0,0}),0);
+}
+
+TEST(StaticPriorIntegration, HitContradictionSurvivesFullWindowSlideAndRingSlotReuse) {
+  GridMap map;GridMapTestAccess::configure(map);
+  const auto hash=GridMapTestAccess::attachStaticPrior(map);ASSERT_TRUE(map.applyLocalizationContext(priorContext(hash)));
+  for(unsigned sensor=0;sensor<2;++sensor)ASSERT_TRUE(GridMapTestAccess::accept(map,
+      packet(sensor,101900000000LL,1,1,{.05,.05,.05},{.15,.05,.05})));
+  GridMapTestAccess::integrate(map);ASSERT_TRUE(GridMapTestAccess::conflict(map,{1,0,0}));
+  GridMapTestAccess::slide(map,{4.,0.,0.});
+  for(unsigned sensor=0;sensor<2;++sensor)ASSERT_TRUE(GridMapTestAccess::accept(map,
+      packet(sensor,102000000000LL,2,1,{5.05,.05,.05},{5.55,.05,.05}),102100000000LL,102.1));
+  GridMapTestAccess::integrate(map,102100000000LL,102.1);
+  EXPECT_EQ(GridMapTestAccess::status(map,{41,0,0}),0); // Different world cell in old ring slot.
+  GridMapTestAccess::slide(map,{0.,0.,0.});
+  for(unsigned sensor=0;sensor<2;++sensor)ASSERT_TRUE(GridMapTestAccess::accept(map,
+      packet(sensor,102100000000LL,3,1,{1.05,.05,.05},{1.55,.05,.05}),102200000000LL,102.2));
+  GridMapTestAccess::integrate(map,102200000000LL,102.2);
+  EXPECT_EQ(GridMapTestAccess::category(map,{1,0,0}),scan_planner::RawVoxelDiagnostic::NeverObserved);
+  EXPECT_TRUE(GridMapTestAccess::conflict(map,{1,0,0}));EXPECT_EQ(GridMapTestAccess::status(map,{1,0,0}),2);
+}
+
+TEST(StaticPriorIntegration, MismatchedContextRevokesPreviousPriorAndAllIntegratedEvidence) {
+  GridMap map;GridMapTestAccess::configure(map);const auto hash=GridMapTestAccess::attachStaticPrior(map);
+  ASSERT_TRUE(map.applyLocalizationContext(priorContext(hash)));
+  for(unsigned sensor=0;sensor<2;++sensor)ASSERT_TRUE(GridMapTestAccess::accept(map,packet(sensor)));
+  GridMapTestAccess::integrate(map);ASSERT_EQ(GridMapTestAccess::status(map,{0,0,0}),0);
+  auto bad=nlohmann::json::parse(priorContext(hash,2,2));bad["map_version"]="different-map";
+  EXPECT_FALSE(map.applyLocalizationContext(bad.dump()));EXPECT_FALSE(GridMapTestAccess::priorContextValid(map));
+  EXPECT_EQ(map.latestCloudStampNs(),0);EXPECT_EQ(map.integratedRaySourceStamp(0),0);
+  EXPECT_EQ(GridMapTestAccess::status(map,{0,0,0}),2);
+  bad=nlohmann::json::parse(priorContext(hash,2,2));bad["map_from_odom_translation"]={.001,0.,0.};
+  EXPECT_FALSE(map.applyLocalizationContext(bad.dump()));
+  EXPECT_FALSE(map.applyLocalizationContext(priorContext(hash))); // Old latched context cannot resurrect prior.
+  EXPECT_FALSE(map.applyLocalizationContext(priorContext(hash,2,2))); // Failed attestation's high-water barrier.
+  EXPECT_EQ(GridMapTestAccess::status(map,{0,0,0}),2);
+  ASSERT_TRUE(map.applyLocalizationContext(priorContext(hash,2,3))); // Explicit fresh context transaction.
+  EXPECT_EQ(GridMapTestAccess::status(map,{0,0,0}),2); // Valid identity alone is not a measurement lease.
+  for(unsigned sensor=0;sensor<2;++sensor) {
+    auto p=packet(sensor);p.epoch=2;p.context_sequence=3;p.barrier_ns=100000000003ULL;
+    ASSERT_TRUE(GridMapTestAccess::accept(map,p));
+  }
+  GridMapTestAccess::integrate(map);EXPECT_EQ(GridMapTestAccess::status(map,{0,0,0}),0);
+  EXPECT_FALSE(map.applyLocalizationContext(priorContext(hash,1,1))); // Rollback deauthorizes, never keeps old FREE.
+  EXPECT_EQ(GridMapTestAccess::status(map,{0,0,0}),2);
+}
+
+TEST(StaticPriorIntegration, EntirelyPriorProofStillExpiresWithBothRaysAndCannotRenewByTimerOrPause) {
+  GridMap map;GridMapTestAccess::configure(map);const auto hash=GridMapTestAccess::attachStaticPrior(map);
+  ASSERT_TRUE(map.applyLocalizationContext(priorContext(hash)));
+  for(unsigned sensor=0;sensor<2;++sensor)ASSERT_TRUE(GridMapTestAccess::accept(map,packet(sensor)));
+  GridMapTestAccess::integrate(map);ASSERT_EQ(GridMapTestAccess::status(map,{0,0,0}),0);
+  const auto deadline=map.observedProofDeadlineNs();EXPECT_EQ(deadline,102400000000LL);
+  GridMapTestAccess::integrate(map,102200000000LL,102.2);
+  EXPECT_EQ(GridMapTestAccess::status(map,{0,0,0}),0);EXPECT_LE(map.observedProofDeadlineNs(),deadline);
+  GridMapTestAccess::steadyClockAdvance(map,102200000000LL,102600000000LL);
+  EXPECT_EQ(GridMapTestAccess::status(map,{0,0,0}),2); // Source paused, actual callback receipt expired.
+  EXPECT_EQ(map.observedProofDeadlineNs(),1);
+  EXPECT_FALSE(GridMapTestAccess::accept(map,packet(0),102200000000LL,102.6));
+  EXPECT_EQ(GridMapTestAccess::status(map,{0,0,0}),2);
+}
+
+TEST(StaticPriorIntegration, CachedLeaseRechecksExactDeadlineAndRevocationInsteadOfReusingPreviousFree) {
+  GridMap map;GridMapTestAccess::configure(map);GridMapTestAccess::pointQueryGeometry(map);
+  const auto hash=GridMapTestAccess::attachStaticPrior(map);ASSERT_TRUE(map.applyLocalizationContext(priorContext(hash)));
+  for(unsigned sensor=0;sensor<2;++sensor)ASSERT_TRUE(GridMapTestAccess::accept(map,packet(sensor)));
+  GridMapTestAccess::integrate(map);
+  EXPECT_EQ(map.getInflateOccupancy({.05,.05,.05},0.),0);EXPECT_TRUE(GridMapTestAccess::cachedPriorLease(map));
+  GridMapTestAccess::steadyClockAdvance(map,102399999999LL,102399999999LL);
+  EXPECT_EQ(map.getInflateOccupancy({.05,.05,.05},0.),0); // One ns before acquisition lease end.
+  GridMapTestAccess::steadyClockAdvance(map,102400000000LL,102400000000LL);
+  EXPECT_EQ(map.getInflateOccupancy({.05,.05,.05},0.),2);EXPECT_FALSE(GridMapTestAccess::cachedPriorLease(map));
+  EXPECT_EQ(map.observedProofDeadlineNs(),1);
+  auto invalid=nlohmann::json::parse(priorContext(hash,2,2));invalid["map_from_odom_translation"]={.01,0.,0.};
+  EXPECT_FALSE(map.applyLocalizationContext(invalid.dump()));EXPECT_FALSE(GridMapTestAccess::cachedPriorLease(map));
+  EXPECT_EQ(GridMapTestAccess::status(map,{0,0,0}),2);
+}
+
+TEST(StaticPriorIntegration, SnapshotAndNewProofScopeNeverInheritWritersCachedLease) {
+  GridMap writer,snapshot;GridMapTestAccess::configure(writer);const auto hash=GridMapTestAccess::attachStaticPrior(writer);
+  ASSERT_TRUE(writer.applyLocalizationContext(priorContext(hash)));
+  const auto now=std::chrono::steady_clock::now();
+  const double receipt=std::chrono::duration<double>(now.time_since_epoch()).count();
+  for(unsigned sensor=0;sensor<2;++sensor)ASSERT_TRUE(GridMapTestAccess::accept(writer,packet(sensor),102000000000LL,receipt));
+  GridMapTestAccess::integrate(writer,102000000000LL,receipt);
+  EXPECT_EQ(GridMapTestAccess::status(writer,{0,0,0}),0);ASSERT_TRUE(GridMapTestAccess::cachedPriorLease(writer));
+  writer.copyCollisionSnapshotTo(snapshot,102000000000LL,now);
+  EXPECT_FALSE(GridMapTestAccess::cachedPriorLease(snapshot));
+  snapshot.beginObservedProof();EXPECT_EQ(snapshot.observedRawSnapshotStatus({0,0,0}),0);
+  EXPECT_TRUE(GridMapTestAccess::cachedPriorLease(snapshot));
+  snapshot.beginObservedProof();EXPECT_FALSE(GridMapTestAccess::cachedPriorLease(snapshot));
+  EXPECT_EQ(snapshot.observedRawSnapshotStatus({0,0,0}),0);
+  // Source at exact expiry is rejected on the first read of the new scope,
+  // including a snapshot whose writer most recently checked a valid lease.
+  writer.copyCollisionSnapshotTo(snapshot,102400000000LL,std::chrono::steady_clock::now());
+  snapshot.beginObservedProof();EXPECT_EQ(snapshot.observedRawSnapshotStatus({0,0,0}),2);
+  EXPECT_FALSE(GridMapTestAccess::cachedPriorLease(snapshot));EXPECT_EQ(snapshot.observedProofDeadlineNs(),1);
+}
+
+TEST(StaticPriorIntegration, RawCellCacheMatchesActualEvidenceAndCannotAliasCylinderCenter) {
+  GridMap map;GridMapTestAccess::configure(map);GridMapTestAccess::pointQueryGeometry(map);
+  const auto hash=GridMapTestAccess::attachStaticPrior(map,{{{1,0,0},1},{{2,0,0},2}});
+  ASSERT_TRUE(map.applyLocalizationContext(priorContext(hash)));
+  for(unsigned sensor=0;sensor<2;++sensor)ASSERT_TRUE(GridMapTestAccess::accept(map,packet(sensor)));
+  GridMapTestAccess::integrate(map);
+  const std::vector<Eigen::Vector3i> cells{{0,0,0},{1,0,0},{2,0,0},{9,0,0},{15,0,0},{30,0,0}};
+  for(const auto &cell:cells) {
+    EXPECT_EQ(GridMapTestAccess::status(map,cell),GridMapTestAccess::uncachedStatus(map,cell));
+    const auto size=GridMapTestAccess::collisionCacheSize(map);
+    for(unsigned repeat=0;repeat<5;++repeat)
+      EXPECT_EQ(GridMapTestAccess::status(map,cell),GridMapTestAccess::uncachedStatus(map,cell));
+    EXPECT_EQ(GridMapTestAccess::collisionCacheSize(map),size);
+  }
+  // Prime raw FREE in the front center cell; the exact cylinder includes a
+  // distinct thin occupied neighbor. A shared positive key would hide it.
+  GridMap cylinder;GridMapTestAccess::configure(cylinder);
+  const auto second_hash=GridMapTestAccess::attachStaticPrior(cylinder,{{{1,0,0},1}});
+  ASSERT_TRUE(cylinder.applyLocalizationContext(priorContext(second_hash)));
+  for(unsigned sensor=0;sensor<2;++sensor)ASSERT_TRUE(GridMapTestAccess::accept(cylinder,packet(sensor)));
+  GridMapTestAccess::integrate(cylinder);
+  EXPECT_EQ(GridMapTestAccess::status(cylinder,{2,0,0}),0);
+  EXPECT_EQ(cylinder.getInflateOccupancy({.05,.05,.05},0.),1);
+}
+
+TEST(StaticPriorIntegration, CachedRawFreeDoesNotHideNewWeakEvidenceOrActualHit) {
+  GridMap map;GridMapTestAccess::configure(map);GridMapTestAccess::pointQueryGeometry(map);
+  const auto hash=GridMapTestAccess::attachStaticPrior(map);ASSERT_TRUE(map.applyLocalizationContext(priorContext(hash)));
+  for(unsigned sensor=0;sensor<2;++sensor)ASSERT_TRUE(GridMapTestAccess::accept(map,packet(sensor)));
+  GridMapTestAccess::integrate(map);
+  ASSERT_EQ(GridMapTestAccess::status(map,{0,0,0}),0);
+  ASSERT_GT(GridMapTestAccess::collisionCacheSize(map),0U);
+  GridMapTestAccess::indexedUpdate(map,{0,0,0},-.5);
+  EXPECT_EQ(GridMapTestAccess::collisionCacheSize(map),0U);
+  EXPECT_EQ(GridMapTestAccess::status(map,{0,0,0}),2); // No semantic change for weak evidence.
+  for(unsigned sensor=0;sensor<2;++sensor)ASSERT_TRUE(GridMapTestAccess::accept(map,
+      packet(sensor,102000000000LL,2,1,{-.05,.05,.05},{.05,.05,.05}),102100000000LL,102.1));
+  GridMapTestAccess::integrate(map,102100000000LL,102.1);
+  EXPECT_TRUE(GridMapTestAccess::conflict(map,{0,0,0}));
+  EXPECT_NE(GridMapTestAccess::status(map,{0,0,0}),0);
+}
+
+TEST(StaticPriorIntegration, CachedRawLeaseCannotOutliveExactSourceOrReceiptDeadlineOrRevokedContext) {
+  for(bool receipt_expires:{false,true}) {
+    SCOPED_TRACE(receipt_expires);
+    GridMap map;GridMapTestAccess::configure(map);GridMapTestAccess::pointQueryGeometry(map);
+    const auto hash=GridMapTestAccess::attachStaticPrior(map);ASSERT_TRUE(map.applyLocalizationContext(priorContext(hash)));
+    for(unsigned sensor=0;sensor<2;++sensor)ASSERT_TRUE(GridMapTestAccess::accept(map,packet(sensor)));
+    GridMapTestAccess::integrate(map);
+    ASSERT_EQ(GridMapTestAccess::status(map,{0,0,0}),0);
+    const auto deadline=map.observedProofDeadlineNs();ASSERT_EQ(deadline,102400000000LL);
+    GridMapTestAccess::steadyClockAdvance(map,102100000000LL,102100000000LL);
+    EXPECT_EQ(GridMapTestAccess::status(map,{0,0,0}),0);
+    EXPECT_EQ(map.observedProofDeadlineNs(),deadline);
+    GridMapTestAccess::steadyClockAdvance(map,receipt_expires?102100000000LL:deadline,
+        receipt_expires?102500000000LL:102100000000LL);
+    EXPECT_EQ(GridMapTestAccess::status(map,{0,0,0}),2);EXPECT_EQ(map.observedProofDeadlineNs(),1);
+    auto invalid=nlohmann::json::parse(priorContext(hash,2,2));invalid["map_from_odom_translation"]={.01,0.,0.};
+    EXPECT_FALSE(map.applyLocalizationContext(invalid.dump()));
+    EXPECT_EQ(GridMapTestAccess::collisionCacheSize(map),0U);
+    EXPECT_EQ(GridMapTestAccess::status(map,{0,0,0}),2);
+  }
+}
+
+TEST(StaticPriorIntegration, IndependentStaticFreeDoesNotInheritRedundantOldVoxelDeadline) {
+  for(bool certified:{false,true}) {
+    SCOPED_TRACE(certified);
+    GridMap map;GridMapTestAccess::configure(map);GridMapTestAccess::pointQueryGeometry(map);
+    const auto hash=GridMapTestAccess::attachStaticPrior(map,{{{0,0,0},std::uint8_t(certified?0:2)}});
+    ASSERT_TRUE(map.applyLocalizationContext(priorContext(hash)));
+    for(unsigned sensor=0;sensor<2;++sensor)ASSERT_TRUE(GridMapTestAccess::accept(map,
+        packet(sensor,101900000000LL,1,1,{-.55,.05,.05},{.35,.05,.05})));
+    GridMapTestAccess::integrate(map);
+    const auto source=GridMapTestAccess::freeStamp(map,{0,0,0});
+    const auto receipt=GridMapTestAccess::freeReceipt(map,{0,0,0});
+    ASSERT_EQ(source,101900000000LL);ASSERT_EQ(receipt,102000000000LL);
+    // Fresh remote real observations authorize the independent static map;
+    // they never revisit or rewrite this voxel's original live observation.
+    for(unsigned sensor=0;sensor<2;++sensor)ASSERT_TRUE(GridMapTestAccess::accept(map,
+        packet(sensor,102200000000LL,2,1,{1.05,.05,.05},{1.55,.05,.05}),102300000000LL,102.3));
+    GridMapTestAccess::integrate(map,102300000000LL,102.3);
+    EXPECT_EQ(map.observedProofDeadlineNs(),102400000000LL); // Old proof cannot be renewed by the new scan.
+    // A new observation must not extend the preceding proof. The real reader
+    // starts an independent scope before selecting the new both-ray evidence.
+    GridMapTestAccess::beginIndependentMemoryProof(map);
+    GridMapTestAccess::steadyClockAdvance(map,102399999999LL,102399999999LL);
+    EXPECT_EQ(GridMapTestAccess::status(map,{0,0,0}),0);
+    EXPECT_EQ(map.observedProofDeadlineNs(),certified?102700000000LL:102400000000LL);
+    GridMapTestAccess::steadyClockAdvance(map,102400000000LL,102400000000LL);
+    EXPECT_EQ(GridMapTestAccess::status(map,{0,0,0}),certified?0:2);
+    EXPECT_EQ(map.observedProofDeadlineNs(),certified?102700000000LL:102400000000LL);
+    EXPECT_EQ(GridMapTestAccess::freeStamp(map,{0,0,0}),source);
+    EXPECT_EQ(GridMapTestAccess::freeReceipt(map,{0,0,0}),receipt);
+    GridMapTestAccess::steadyClockAdvance(map,102700000000LL,102700000000LL);
+    EXPECT_EQ(GridMapTestAccess::status(map,{0,0,0}),2); // Independent both-ray certificate also expires exactly.
+    EXPECT_EQ(map.observedProofDeadlineNs(),1);
+  }
+}
+
+TEST(StaticPriorIntegration, IndependentStaticFreeStillRejectsInvalidLiveWitnessAndHitVeto) {
+  GridMap map;GridMapTestAccess::configure(map);GridMapTestAccess::pointQueryGeometry(map);
+  const auto hash=GridMapTestAccess::attachStaticPrior(map);ASSERT_TRUE(map.applyLocalizationContext(priorContext(hash)));
+  for(unsigned sensor=0;sensor<2;++sensor)ASSERT_TRUE(GridMapTestAccess::accept(map,
+      packet(sensor,101900000000LL,1,1,{-.55,.05,.05},{.35,.05,.05})));
+  GridMapTestAccess::integrate(map);ASSERT_EQ(GridMapTestAccess::status(map,{0,0,0}),0);
+  const auto source=GridMapTestAccess::freeStamp(map,{0,0,0});
+  const auto receipt=GridMapTestAccess::freeReceipt(map,{0,0,0});
+  for(const auto witness:std::vector<std::pair<std::int64_t,std::int64_t>>{
+      {0,receipt},{102000000001LL,receipt},{source,0},{source,102000000001LL}}) {
+    GridMapTestAccess::freeWitness(map,{0,0,0},witness.first,witness.second);
+    EXPECT_EQ(GridMapTestAccess::status(map,{0,0,0}),2);
+  }
+  GridMapTestAccess::freeWitness(map,{0,0,0},source,receipt);
+  ASSERT_EQ(GridMapTestAccess::status(map,{0,0,0}),0);
+  for(unsigned sensor=0;sensor<2;++sensor)ASSERT_TRUE(GridMapTestAccess::accept(map,
+      packet(sensor,102000000000LL,2,1,{-.05,.05,.05},{.05,.05,.05}),102100000000LL,102.1));
+  GridMapTestAccess::integrate(map,102100000000LL,102.1);
+  ASSERT_TRUE(GridMapTestAccess::conflict(map,{0,0,0}));
+  // A saturated log-odds FREE buffer by itself cannot erase the real hit.
+  GridMapTestAccess::indexedUpdate(map,{0,0,0},-1.);
+  GridMapTestAccess::freeWitness(map,{0,0,0},102000000000LL,102100000000LL);
+  EXPECT_EQ(GridMapTestAccess::status(map,{0,0,0}),2);
+}
+
+TEST(StaticPriorIntegration, CapturedQueryLeaseDiagnosticCannotMutateEvidenceCacheOrDeadline) {
+  GridMap map;GridMapTestAccess::configure(map);GridMapTestAccess::pointQueryGeometry(map);
+  const auto hash=GridMapTestAccess::attachStaticPrior(map);ASSERT_TRUE(map.applyLocalizationContext(priorContext(hash)));
+  for(unsigned sensor=0;sensor<2;++sensor)ASSERT_TRUE(GridMapTestAccess::accept(map,packet(sensor)));
+  GridMapTestAccess::integrate(map);ASSERT_EQ(GridMapTestAccess::status(map,{0,0,0}),0);
+  const auto odds=GridMapTestAccess::buffers(map);
+  const auto sources=GridMapTestAccess::counts(map);
+  const auto cache_size=GridMapTestAccess::collisionCacheSize(map);
+  const auto deadline=map.observedProofDeadlineNs();
+  const auto description=nlohmann::json::parse(map.describeCollisionLease());
+  EXPECT_EQ(description.at("query_source_ns"),102000000000LL);
+  EXPECT_EQ(description.at("query_receipt_ns"),102000000000LL);
+  EXPECT_EQ(description.at("source_deadline_ns"),102400000000LL);
+  EXPECT_EQ(description.at("receipt_deadline_ns"),102500000000LL);
+  EXPECT_EQ(description.at("both_ray_source_ns"),nlohmann::json({101900000000LL,101900000000LL}));
+  EXPECT_EQ(description.at("both_ray_receipt_ns"),nlohmann::json({102000000000LL,102000000000LL}));
+  EXPECT_EQ(GridMapTestAccess::buffers(map),odds);EXPECT_EQ(GridMapTestAccess::counts(map),sources);
+  EXPECT_EQ(GridMapTestAccess::collisionCacheSize(map),cache_size);EXPECT_EQ(map.observedProofDeadlineNs(),deadline);
+  EXPECT_EQ(map.describeCollisionLease(),description.dump());
+}
+
+TEST(StaticPriorIntegration, DirectRawCacheIsOptInAndItsReadSlotMemoryIsBudgeted) {
+  GridMap map;GridMapTestAccess::configure(map);ASSERT_TRUE(map.applyLocalizationContext(context()));
+  for(unsigned sensor=0;sensor<2;++sensor)ASSERT_TRUE(GridMapTestAccess::accept(map,packet(sensor)));
+  GridMapTestAccess::integrate(map);EXPECT_EQ(GridMapTestAccess::status(map,{0,0,0}),2);
+  EXPECT_EQ(GridMapTestAccess::rawCacheStorage(map),0U);EXPECT_EQ(GridMapTestAccess::rawCacheCapacity(map),0U);
+  GridMap prior;GridMapTestAccess::configure(prior);const auto hash=GridMapTestAccess::attachStaticPrior(prior);
+  ASSERT_TRUE(prior.applyLocalizationContext(priorContext(hash)));
+  for(unsigned sensor=0;sensor<2;++sensor)ASSERT_TRUE(GridMapTestAccess::accept(prior,packet(sensor)));
+  GridMapTestAccess::integrate(prior);ASSERT_EQ(GridMapTestAccess::status(prior,{0,0,0}),0);
+  EXPECT_EQ(GridMapTestAccess::rawCacheStorage(prior),GridMapTestAccess::buffers(prior).size());
+  EXPECT_EQ(prior.collisionSnapshotBytes()-GridMapTestAccess::snapshotBytesWithoutRawCache(prior),
+      GridMapTestAccess::buffers(prior).size()*sizeof(std::int8_t));
+}
+
+TEST(StaticPriorIntegration, SnapshotKeepsDestinationStorageButNeverCopiesCachedWriterFree) {
+  GridMap writer,reader;GridMapTestAccess::configure(writer);const auto hash=GridMapTestAccess::attachStaticPrior(writer);
+  ASSERT_TRUE(writer.applyLocalizationContext(priorContext(hash)));
+  const auto captured=std::chrono::steady_clock::now();
+  const double receipt=std::chrono::duration<double>(captured.time_since_epoch()).count();
+  for(unsigned sensor=0;sensor<2;++sensor)ASSERT_TRUE(GridMapTestAccess::accept(writer,packet(sensor),102000000000LL,receipt));
+  GridMapTestAccess::integrate(writer,102000000000LL,receipt);ASSERT_EQ(GridMapTestAccess::status(writer,{0,0,0}),0);
+  writer.copyCollisionSnapshotTo(reader,102000000000LL,captured);
+  EXPECT_EQ(GridMapTestAccess::collisionCacheSize(reader),0U);
+  EXPECT_NE(GridMapTestAccess::rawCacheData(reader),GridMapTestAccess::rawCacheData(writer));
+  reader.beginObservedProof();ASSERT_EQ(reader.observedRawSnapshotStatus({0,0,0}),0);
+  const auto storage=GridMapTestAccess::rawCacheData(reader);
+  const auto capacity=GridMapTestAccess::rawCacheCapacity(reader);
+  GridMapTestAccess::indexedUpdate(writer,{0,0,0},-.5); // Actual weak evidence veto still applies.
+  writer.copyCollisionSnapshotTo(reader,102000000000LL,std::chrono::steady_clock::now());
+  EXPECT_EQ(GridMapTestAccess::rawCacheData(reader),storage);EXPECT_EQ(GridMapTestAccess::rawCacheCapacity(reader),capacity);
+  EXPECT_EQ(GridMapTestAccess::collisionCacheSize(reader),0U);
+  reader.beginObservedProof();EXPECT_EQ(reader.observedRawSnapshotStatus({0,0,0}),2);
+}
+
+TEST(StaticPriorIntegration, DenseFreeCannotSurviveSlotGenerationWrapOrExhaustedClearSerial) {
+  for(bool serial_saturates:{false,true}) {
+    SCOPED_TRACE(serial_saturates);
+    GridMap map;GridMapTestAccess::configure(map);GridMapTestAccess::pointQueryGeometry(map);
+    const auto hash=GridMapTestAccess::attachStaticPrior(map);ASSERT_TRUE(map.applyLocalizationContext(priorContext(hash)));
+    for(unsigned sensor=0;sensor<2;++sensor)ASSERT_TRUE(GridMapTestAccess::accept(map,packet(sensor)));
+    GridMapTestAccess::integrate(map);ASSERT_EQ(GridMapTestAccess::status(map,{0,0,0}),0);
+    auto &cache=GridMapTestAccess::cylinderCache(map);
+    if(serial_saturates)scan_planner::VoxelStatusCacheTestAccess::forceNextSerialSaturation(cache);
+    else scan_planner::VoxelStatusCacheTestAccess::forceNextSlotGenerationWrap(cache);
+    cache.clear(); // The real invalidation path must be observed by the dense cache.
+    GridMapTestAccess::indexedUpdate(map,{0,0,0},-.5);
+    EXPECT_EQ(GridMapTestAccess::status(map,{0,0,0}),2);
+    EXPECT_EQ(cache.generationReusable(),!serial_saturates);
+    if(serial_saturates)EXPECT_EQ(GridMapTestAccess::rawCacheStorage(map),0U);
+    GridMapTestAccess::indexedUpdate(map,{0,0,0},2.);
+    EXPECT_EQ(GridMapTestAccess::status(map,{0,0,0}),1);
+  }
+}
+
+TEST(StaticPriorIntegration, ImmutableSnapshotCopiesContradictionsAndContextWithoutMutatingWriterOrPrior) {
+  GridMap map,before,after;GridMapTestAccess::configure(map);
+  const auto hash=GridMapTestAccess::attachStaticPrior(map);ASSERT_TRUE(map.applyLocalizationContext(priorContext(hash)));
+  const auto captured=std::chrono::steady_clock::now();
+  const double receipt=std::chrono::duration<double>(captured.time_since_epoch()).count();
+  for(unsigned sensor=0;sensor<2;++sensor)ASSERT_TRUE(GridMapTestAccess::accept(map,packet(sensor),102000000000LL,receipt));
+  GridMapTestAccess::integrate(map,102000000000LL,receipt);
+  map.copyCollisionSnapshotTo(before,102000000000LL,captured);before.beginObservedProof();
+  EXPECT_EQ(before.observedRawSnapshotStatus({0,0,0}),0);EXPECT_EQ(GridMapTestAccess::freeStamp(before,{0,0,0}),0);
+  const double second_receipt=std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count();
+  for(unsigned sensor=0;sensor<2;++sensor)ASSERT_TRUE(GridMapTestAccess::accept(map,
+      packet(sensor,102000000000LL,2,1,{-.05,.05,.05},{.05,.05,.05}),102100000000LL,second_receipt));
+  GridMapTestAccess::integrate(map,102100000000LL,second_receipt);
+  map.copyCollisionSnapshotTo(after,102100000000LL,std::chrono::steady_clock::now());
+  after.beginObservedProof();EXPECT_NE(after.observedRawSnapshotStatus({0,0,0}),0);
+  before.beginObservedProof();EXPECT_EQ(before.observedRawSnapshotStatus({0,0,0}),0);
+  EXPECT_TRUE(GridMapTestAccess::conflict(after,{0,0,0}));EXPECT_FALSE(GridMapTestAccess::conflict(before,{0,0,0}));
+}
+
+TEST(StaticPriorIntegration, FixedWorldHitCannotBeForgottenByContextSequenceEpochOrSeedRebuild) {
+  GridMap map;GridMapTestAccess::configure(map);const auto hash=GridMapTestAccess::attachStaticPrior(map);
+  ASSERT_TRUE(map.applyLocalizationContext(priorContext(hash)));
+  for(unsigned sensor=0;sensor<2;++sensor)ASSERT_TRUE(GridMapTestAccess::accept(map,
+      packet(sensor,101900000000LL,1,1,{.05,.05,.05},{.15,.05,.05})));
+  GridMapTestAccess::integrate(map);ASSERT_TRUE(GridMapTestAccess::conflict(map,{1,0,0}));
+  for(unsigned sequence=2;sequence<=3;++sequence) {
+    const unsigned epoch=sequence==2?1:2;
+    auto value=nlohmann::json::parse(priorContext(hash,epoch,sequence));
+    if(sequence==3)value["seed_id"]="new-seed";
+    ASSERT_TRUE(map.applyLocalizationContext(value.dump()));
+    EXPECT_TRUE(GridMapTestAccess::conflict(map,{1,0,0}));
+    for(unsigned sensor=0;sensor<2;++sensor) {
+      auto p=packet(sensor,102000000000LL+sequence*100000000LL,sequence,1,{1.05,.05,.05},{1.55,.05,.05});
+      p.epoch=epoch;p.context_sequence=sequence;p.barrier_ns=100000000000ULL+sequence;
+      p.seed_id=sequence==3?"new-seed":"seed";
+      ASSERT_TRUE(GridMapTestAccess::accept(map,p,102100000000LL+sequence*100000000LL,102.1+sequence*.1));
+    }
+    GridMapTestAccess::integrate(map,102100000000LL+sequence*100000000LL,102.1+sequence*.1);
+    EXPECT_EQ(GridMapTestAccess::category(map,{1,0,0}),scan_planner::RawVoxelDiagnostic::NeverObserved);
+    EXPECT_EQ(GridMapTestAccess::status(map,{1,0,0}),2);
+  }
 }
 
 TEST(ProjectedRayIntegration, CachedAddressLogOddsUpdateExactlyMatchesLegacyTransitions) {
@@ -658,6 +1200,157 @@ TEST(ProjectedRaysFreshness, PausedAndSlowSourceClockCannotRenewLeaseViaRepeated
     }
     EXPECT_GE(effective,102800000000LL);
     EXPECT_EQ(map.getInflateOccupancy({.95,.05,.05},0.),2);
+  }
+}
+
+TEST(ProjectedRaysSimulationFreshness, ThreeTimesSlowerRosClockKeepsActualNewTraversalFree) {
+  GridMap map;GridMapTestAccess::configure(map);GridMapTestAccess::pointQueryGeometry(map);
+  GridMapTestAccess::simulationCollisionClock(map);
+  ASSERT_TRUE(map.applyLocalizationContext(context()));
+  for(unsigned sequence=1;sequence<=10;++sequence) {
+    SCOPED_TRACE(sequence);
+    const std::int64_t source=102000000000LL+(sequence-1)*100000000LL;
+    const double integration_receipt=400.+(sequence-1)*.3;
+    const double callback_receipt=integration_receipt-.06;
+    for(unsigned sensor=0;sensor<2;++sensor) ASSERT_TRUE(GridMapTestAccess::accept(map,
+        packet(sensor,source-100000000LL,sequence),source,callback_receipt));
+    GridMapTestAccess::integrate(map,source,integration_receipt);
+    EXPECT_EQ(GridMapTestAccess::freeStamp(map,{9,0,0}),source-100000000LL);
+    EXPECT_EQ(GridMapTestAccess::freeReceipt(map,{9,0,0}),
+        static_cast<std::int64_t>(callback_receipt*1e9));
+    // Source advances 50 ms while steady time advances 150 ms. Both actual
+    // observation ages are fresh; wall elapsed must not become a ROS stamp.
+    EXPECT_EQ(GridMapTestAccess::steadyClockAdvance(map,source+50000000LL,
+        static_cast<std::int64_t>((integration_receipt+.15)*1e9)),source+50000000LL);
+    EXPECT_EQ(map.getInflateOccupancy({.95,.05,.05},0.),0);
+    EXPECT_EQ(map.getInflateOccupancy({1.55,.05,.05},0.),1);
+    EXPECT_EQ(map.getInflateOccupancy({1.85,.05,.05},0.),2);
+  }
+  EXPECT_EQ(GridMapTestAccess::counts(map)[0],10U);
+  EXPECT_EQ(GridMapTestAccess::counts(map)[1],10U);
+}
+
+TEST(ProjectedRaysSimulationFreshness, ReplayedSourceAndNoTraversalTicksCannotRenewReceipt) {
+  GridMap map;GridMapTestAccess::configure(map);GridMapTestAccess::pointQueryGeometry(map);
+  GridMapTestAccess::simulationCollisionClock(map);
+  ASSERT_TRUE(map.applyLocalizationContext(context()));
+  ASSERT_TRUE(GridMapTestAccess::accept(map,packet(),102000000000LL,400.));
+  GridMapTestAccess::integrate(map,102000000000LL,400.);
+  ASSERT_EQ(map.getInflateOccupancy({.95,.05,.05},0.),0);
+  const auto raw=GridMapTestAccess::buffers(map);
+  // A higher projection sequence does not turn the same acquisition into a
+  // new observation, even though its original ROS stamp is still fresh.
+  EXPECT_FALSE(GridMapTestAccess::accept(map,packet(0,101900000000LL,2),102100000000LL,400.4));
+  GridMapTestAccess::integrate(map,102100000000LL,400.4);
+  EXPECT_EQ(map.getInflateOccupancy({.95,.05,.05},0.),0);
+  GridMapTestAccess::integrate(map,102110000000LL,400.5);
+  EXPECT_EQ(map.getInflateOccupancy({.95,.05,.05},0.),2);
+  EXPECT_EQ(GridMapTestAccess::freeStamp(map,{9,0,0}),101900000000LL);
+  EXPECT_EQ(GridMapTestAccess::freeReceipt(map,{9,0,0}),400000000000LL);
+  EXPECT_EQ(GridMapTestAccess::counts(map)[0],1U);
+  EXPECT_EQ(GridMapTestAccess::buffers(map),raw);
+}
+
+TEST(ProjectedRaysSimulationFreshness, PausedQueryExpiresAtOriginalCallbackReceiptDeadline) {
+  GridMap map;GridMapTestAccess::configure(map);GridMapTestAccess::pointQueryGeometry(map);
+  GridMapTestAccess::simulationCollisionClock(map);
+  ASSERT_TRUE(map.applyLocalizationContext(context()));
+  ASSERT_TRUE(GridMapTestAccess::accept(map,packet(),102000000000LL,400.));
+  GridMapTestAccess::integrate(map,102020000000LL,400.2);
+  ASSERT_EQ(map.getInflateOccupancy({.95,.05,.05},0.),0);
+  const auto raw=GridMapTestAccess::buffers(map);
+  EXPECT_EQ(GridMapTestAccess::freeReceipt(map,{9,0,0}),400000000000LL);
+  GridMapTestAccess::steadyClockAdvance(map,102040000000LL,400499999999LL);
+  EXPECT_EQ(map.getInflateOccupancy({.95,.05,.05},0.),0);
+  // No fusion or new packet: the positive cache must expire at receipt +.5 s,
+  // rather than at the later integration +.5 s or only when ROS advances.
+  GridMapTestAccess::steadyClockAdvance(map,102040000000LL,400500000000LL);
+  EXPECT_EQ(map.getInflateOccupancy({.95,.05,.05},0.),2);
+  EXPECT_EQ(map.getInflateOccupancy({1.55,.05,.05},0.),1);
+  EXPECT_EQ(GridMapTestAccess::buffers(map),raw);
+}
+
+TEST(ProjectedRaysSimulationFreshness, SourceDeadlineExpiresEvenWhenReceiptRemainsFresh) {
+  GridMap map;GridMapTestAccess::configure(map);GridMapTestAccess::pointQueryGeometry(map);
+  GridMapTestAccess::simulationCollisionClock(map);
+  ASSERT_TRUE(map.applyLocalizationContext(context()));
+  ASSERT_TRUE(GridMapTestAccess::accept(map,packet(),102000000000LL,400.));
+  GridMapTestAccess::integrate(map,102000000000LL,400.);
+  ASSERT_EQ(map.getInflateOccupancy({.95,.05,.05},0.),0);
+  GridMapTestAccess::steadyClockAdvance(map,102399999999LL,400199999999LL);
+  EXPECT_EQ(map.getInflateOccupancy({.95,.05,.05},0.),0);
+  GridMapTestAccess::steadyClockAdvance(map,102400000000LL,400200000000LL);
+  EXPECT_EQ(map.getInflateOccupancy({.95,.05,.05},0.),2);
+  EXPECT_EQ(GridMapTestAccess::freeReceipt(map,{9,0,0}),400000000000LL);
+}
+
+TEST(ProjectedRaysSimulationFreshness, RosRollbackCannotReviveReceiptExpiredFree) {
+  GridMap map;GridMapTestAccess::configure(map);GridMapTestAccess::pointQueryGeometry(map);
+  GridMapTestAccess::simulationCollisionClock(map);
+  ASSERT_TRUE(map.applyLocalizationContext(context()));
+  ASSERT_TRUE(GridMapTestAccess::accept(map,packet(),102000000000LL,400.));
+  GridMapTestAccess::integrate(map,102000000000LL,400.);
+  GridMapTestAccess::integrate(map,102100000000LL,400.6);
+  ASSERT_EQ(map.getInflateOccupancy({.95,.05,.05},0.),2);
+  GridMapTestAccess::integrate(map,102000000000LL,400.7);
+  EXPECT_EQ(map.getInflateOccupancy({.95,.05,.05},0.),2);
+  ASSERT_TRUE(GridMapTestAccess::accept(map,packet(0,102100000000LL,2),102200000000LL,400.8));
+  GridMapTestAccess::integrate(map,102200000000LL,400.8);
+  EXPECT_EQ(GridMapTestAccess::freeStamp(map,{9,0,0}),102100000000LL);
+  EXPECT_EQ(GridMapTestAccess::freeReceipt(map,{9,0,0}),400800000000LL);
+  EXPECT_EQ(map.getInflateOccupancy({.95,.05,.05},0.),2); // New context is still required.
+}
+
+TEST(ProjectedRaysSimulationFreshness, FreshRemoteTraversalCannotReviveOldCellReceipt) {
+  GridMap map;GridMapTestAccess::configure(map);GridMapTestAccess::pointQueryGeometry(map);
+  GridMapTestAccess::simulationCollisionClock(map);
+  ASSERT_TRUE(map.applyLocalizationContext(context()));
+  for(unsigned sensor=0;sensor<2;++sensor)
+    ASSERT_TRUE(GridMapTestAccess::accept(map,packet(sensor),102000000000LL,400.));
+  GridMapTestAccess::integrate(map,102000000000LL,400.);
+  ASSERT_EQ(map.getInflateOccupancy({.95,.05,.05},0.),0);
+  for(unsigned sensor=0;sensor<2;++sensor) ASSERT_TRUE(GridMapTestAccess::accept(map,
+      packet(sensor,102100000000LL,2,1,{.55,.75,.05},{1.55,.75,.05}),102200000000LL,400.6));
+  GridMapTestAccess::integrate(map,102200000000LL,400.6);
+  EXPECT_GT(map.latestCloudStamp(),0.);
+  EXPECT_EQ(map.getInflateOccupancy({.95,.75,.05},0.),0);
+  EXPECT_EQ(map.getInflateOccupancy({.95,.05,.05},0.),2);
+  EXPECT_EQ(GridMapTestAccess::freeStamp(map,{9,0,0}),101900000000LL);
+  EXPECT_EQ(GridMapTestAccess::freeReceipt(map,{9,0,0}),400000000000LL);
+  ASSERT_TRUE(GridMapTestAccess::accept(map,packet(0,102200000000LL,3),102300000000LL,400.7));
+  GridMapTestAccess::integrate(map,102300000000LL,400.7);
+  EXPECT_EQ(map.getInflateOccupancy({.95,.05,.05},0.),0);
+  EXPECT_EQ(GridMapTestAccess::freeStamp(map,{9,0,0}),102200000000LL);
+  EXPECT_EQ(GridMapTestAccess::freeReceipt(map,{9,0,0}),400700000000LL);
+  EXPECT_EQ(map.getInflateOccupancy({1.85,.05,.05},0.),2);
+}
+
+TEST(ProjectedRaysSimulationFreshness, SnapshotCopiesReceiptAndExpiresWithoutFreshFusion) {
+  // Captures in the past exercise snapshot ageing immediately, without sleeps
+  // or a ROS node. The expired case still has a fresh .45 s ROS acquisition age,
+  // while its original callback receipt is .55 s old.
+  for(bool expired:{false,true}) {
+    SCOPED_TRACE(expired);
+    GridMap map,snapshot;GridMapTestAccess::configure(map);GridMapTestAccess::pointQueryGeometry(map);
+    GridMapTestAccess::simulationCollisionClock(map);
+    ASSERT_TRUE(map.applyLocalizationContext(context()));
+    const auto captured=std::chrono::steady_clock::now()-
+        std::chrono::milliseconds(expired?350:100);
+    const double capture_s=std::chrono::duration<double>(captured.time_since_epoch()).count();
+    const double callback_receipt=capture_s-(expired?.20:.05);
+    ASSERT_TRUE(GridMapTestAccess::accept(map,packet(),102000000000LL,callback_receipt));
+    GridMapTestAccess::integrate(map,102000000000LL,capture_s);
+    map.copyCollisionSnapshotTo(snapshot,102000000000LL,captured);
+    EXPECT_EQ(GridMapTestAccess::freeStamp(snapshot,{9,0,0}),101900000000LL);
+    EXPECT_EQ(GridMapTestAccess::freeReceipt(snapshot,{9,0,0}),
+        GridMapTestAccess::freeReceipt(map,{9,0,0}));
+    EXPECT_EQ(snapshot.getInflateOccupancy({.95,.05,.05},0.),expired?2:0);
+    if(expired) EXPECT_EQ(snapshot.observedProofDeadlineNs(),1);
+    else {
+      EXPECT_GT(snapshot.observedProofDeadlineNs(),102100000000LL);
+      EXPECT_LE(snapshot.observedProofDeadlineNs(),102400000000LL);
+    }
+    EXPECT_EQ(snapshot.getInflateOccupancy({1.55,.05,.05},0.),1);
   }
 }
 

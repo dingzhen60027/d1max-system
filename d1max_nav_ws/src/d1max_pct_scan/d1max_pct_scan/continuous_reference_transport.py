@@ -13,6 +13,7 @@ import math
 from .control_frame_contract import BodySample, Context, Rigid, create_anchor
 from .continuous_reference import ContinuousReference, Observation
 from .route_ingress import RouteIngress
+from .ray_projection import checked_pose
 from .source_route_ros import from_message
 
 STAGING_REFERENCE_TOPIC = '/d1max/live_planning/bt/staging/reference_path'
@@ -112,8 +113,14 @@ class ContinuousReferenceTransport:
             p, q, t = odom.pose.pose.position, odom.pose.pose.orientation, odom.twist.twist
             if any(not math.isfinite(getattr(v, axis)) for v in (t.linear, t.angular) for axis in 'xyz'):
                 raise ValueError('staging_navigation_twist_nonfinite')
+            # Preserve the original Rigid admission bound, then normalize
+            # the accepted quaternion for SE(3) inverse/composition. Literal
+            # odometry remains in ReferenceCallbacks' separate wire witness.
+            raw = Rigid((p.x, p.y, p.z), (q.x, q.y, q.z, q.w))
+            pose = checked_pose(raw.xyz, raw.xyzw)
             samples.append(Observation(BodySample(context, frame, odom.child_frame_id, source,
-                Rigid((p.x, p.y, p.z), (q.x, q.y, q.z, q.w))), received_monotonic))
+                Rigid(tuple(float(v) for v in pose.position),
+                      tuple(float(v) for v in pose.orientation))), received_monotonic))
         return tuple(samples)
 
     def on_route(self, message, *, current_source_ns, now_monotonic):

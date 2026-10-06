@@ -44,7 +44,7 @@ struct Manager {
 struct Publisher {int count=0; void publish(const Debug &) {++count;}};
 namespace scan_planner {
 struct CurveCheckEvidence {static constexpr int Clear=0,Occupied=1,Uncertified=2;};
-bool measuredBodyYaw(bool fresh,const std::string &,double,double,double &) {return fresh;}
+bool measuredBodyYaw(bool fresh,const std::string &,double,double,double &,std::int64_t) {return fresh;}
 class SCANPlannerManager {
 public:
   Node clock;Node *node_=&clock;

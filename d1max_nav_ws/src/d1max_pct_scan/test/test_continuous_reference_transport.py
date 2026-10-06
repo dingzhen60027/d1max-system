@@ -132,6 +132,26 @@ def test_navigation_first_and_soft_delivery_refresh_do_not_duplicate_native_refe
     assert value.core.candidate_anchor is None  # ordinary body motion, same map <- odom
 
 
+@pytest.mark.parametrize('invalid_half',['global_odometry','local_odometry'])
+def test_pair_normalization_cannot_relax_original_raw_quaternion_admission(invalid_half):
+    value,output=transport();on_route(value)
+    original=on_state(value)
+    assert acknowledge(value,original)
+    pair,core,accepted,generation=value.latest_pair,value.core,value.accepted,value.generation
+    published=len(output)
+    invalid=state(t=.1,x=.05)
+    # checked_pose would accept this small norm error, but the original
+    # Rigid squared-norm admission limit is 1e-6 and must still reject it.
+    getattr(invalid,invalid_half).pose.pose.orientation.w=1.0000006
+    with pytest.raises(ValueError,match='unit quaternion required'):
+        value.on_navigation(invalid,received_monotonic=100.1,
+            current_source_ns=BASE_NS+100_000_000,now_monotonic=100.1)
+    assert value.latest_pair is pair and value.core is core
+    assert value.accepted is accepted and value.generation==generation
+    assert value.pending is None and core.candidate_anchor is None
+    assert len(output)==published
+
+
 def test_map_corrections_and_motion_update_progress_not_reference_or_anchor():
     value, output = transport()
     on_route(value)

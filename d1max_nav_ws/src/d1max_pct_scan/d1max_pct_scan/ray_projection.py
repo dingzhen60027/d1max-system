@@ -118,6 +118,14 @@ class Projected:
 
 def session_settings(session, localization):
     """Explicit session opt-in only; do not modify the shared LIO profile."""
+    snapshot_contract = session.get('perception_acquisition')
+    if snapshot_contract is not None and (
+            snapshot_contract != 'isaac_physx_snapshot_v1'
+            or session.get('transport_mode') != 'isolated_mock'
+            or session.get('simulation_backend') != 'isaacsim_physx'
+            or session.get('simulation_clock') != 'isaac_fixed_anchor_v1'
+            or session.get('perception_backend') != 'per_sensor_rays'):
+        raise ProjectionError('snapshot_acquisition_requires_isolated_isaac_session')
     if 'preview_ray_exclusion' in session and session.get('perception_backend') != 'per_sensor_rays':
         raise ProjectionError('preview_exclusion_requires_per_sensor_rays')
     if session.get('perception_backend', 'deskewed_cloud') != 'per_sensor_rays':
@@ -162,6 +170,7 @@ def session_settings(session, localization):
     if not isinstance(options, dict) or set(options) - {f.name for f in dataclass_fields(Limits)}:
         raise ProjectionError('unknown_projector_limit')
     result['limits'] = Limits(**options)
+    result['allow_simulation_snapshot'] = snapshot_contract == 'isaac_physx_snapshot_v1'
     result['acquisition_contract'] = acquisition_budget(adapter, result['limits'].max_input_points)
     mode = adapter.get('lidar_mode', 'dual')
     if mode not in ('dual', 'front', 'rear'):
@@ -312,12 +321,16 @@ def interpolate_many(history, times_ns, max_gap_ns):
 
 
 class RayProjectorCore:
-    def __init__(self, limits=Limits(), preview_exclusion=None, *, projection_frame='map'):
+    def __init__(self, limits=Limits(), preview_exclusion=None, *, projection_frame='map',
+                 allow_simulation_snapshot=False):
         if projection_frame not in ('map', 'odom'):
             raise ValueError('projection_frame must explicitly be map or odom')
         self.limits = limits
         self.projection_frame = projection_frame
         self.preview_exclusion = preview_exclusion
+        if type(allow_simulation_snapshot) is not bool:
+            raise ValueError('simulation_snapshot_flag_must_be_boolean')
+        self.allow_simulation_snapshot = allow_simulation_snapshot
         self.context = None
         self.local = deque(maxlen=limits.max_history_samples)
         self.global_pending = {}
@@ -360,7 +373,8 @@ class RayProjectorCore:
     def projection_snapshot(self):
         """Small immutable-value history copy; geometry may run off the ROS thread."""
         snapshot = RayProjectorCore(self.limits, self.preview_exclusion,
-                                    projection_frame=self.projection_frame)
+                                    projection_frame=self.projection_frame,
+                                    allow_simulation_snapshot=self.allow_simulation_snapshot)
         snapshot.context = self.context
         snapshot.local = deque(self.local, maxlen=self.limits.max_history_samples)
         snapshot.alignments = deque(self.alignments, maxlen=self.limits.max_history_samples)
@@ -455,8 +469,15 @@ class RayProjectorCore:
                 or type(authorized_pose_ns) is not int or raw.points.dtype != RAY_DTYPE
                 or raw.points.ndim != 1 or not 1 <= len(raw.points) <= self.limits.max_input_points):
             raise ProjectionError('invalid_projection_input')
+        duration_ns = raw.end_ns - raw.start_ns
+        # PhysX LiDAR returns one simultaneous measured snapshot. It has no
+        # measured per-beam sweep offsets; never fabricate a rotating scan's
+        # duration. This exception is opt-in for a sealed isolated fixture.
+        valid_duration = (1000000 <= duration_ns <= round(self.limits.max_scan_duration_sec * 1e9)
+            or self.allow_simulation_snapshot and duration_ns == 0
+                and np.all(raw.points['offset_time'] == 0))
         if (raw.start_ns <= context.barrier_ns or raw.start_ns <= self.last_input[raw.sensor_id]
-                or not 1000000 <= raw.end_ns - raw.start_ns <= round(self.limits.max_scan_duration_sec * 1e9)
+                or not valid_duration
                 or not -10000000 <= now_ns - raw.start_ns <= round(self.limits.input_timeout_sec * 1e9)
                 or raw.end_ns > now_ns + 10000000):
             raise ProjectionError('ray_stale_duplicate_future_or_before_context')

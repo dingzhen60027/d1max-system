@@ -14,6 +14,21 @@ template<class Message> static Message sample(double time) {
   m.local_odometry.twist.twist.linear.x=.12;m.local_odometry.twist.twist.angular.z=.23;return m;
 }
 int main() {
+  // Epoch-sized doubles cannot renew or corrupt the actual simulated MC
+  // stamp. Keep the exact source, reject one-nanosecond future/expiry.
+  {constexpr std::int64_t ns=1791124691902856036LL;
+   const auto now=SourceClock::fromNanoseconds(ns);auto measured=sample<Local>(10.);
+   measured.source_stamp=measured.posterior_stamp=measured.imu_stamp=stamp(now);
+   measured.local_odometry.header.stamp=measured.source_stamp;
+   MockTelemetry telemetry("session","map",true);const auto m=telemetry.local(measured,now);
+   assert(m&&m->raw_ns==static_cast<uint64_t>(ns)&&m->source.exact_ns==ns);
+   assert(stamp(m->source)==measured.source_stamp);
+   assert(telemetry.local(measured,SourceClock::fromNanoseconds(ns+250000000)));
+   assert(!telemetry.local(measured,SourceClock::fromNanoseconds(ns+250000001)));
+   ++measured.source_stamp.nanosec;
+   measured.posterior_stamp=measured.imu_stamp=measured.local_odometry.header.stamp=measured.source_stamp;
+   assert(!telemetry.local(measured,now));
+  }
   MockTelemetry isolated("session","map",true);
   auto decoded=isolated.local(sample<Local>(10.),10.01);
   assert(decoded&&decoded->raw_ns==10000000000ULL&&decoded->epoch==1&&decoded->seed=="seed");

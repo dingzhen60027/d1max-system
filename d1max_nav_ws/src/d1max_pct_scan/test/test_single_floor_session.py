@@ -246,6 +246,73 @@ def test_global_route_display_cache_is_core_owned_not_destroyed_by_closing_ui(tm
         assert not any('committed_route_view' in str(command) for command in view_commands(tmp_path,layout).values())
 
 
+def test_isaac_clock_covers_every_node_including_session_only_publishers(tmp_path,monkeypatch):
+    monkeypatch.setattr('ament_index_python.packages.get_package_prefix',lambda name:'/isolated/'+name)
+    runtime=runtime_commands(tmp_path,dict(transport_mode='isolated_mock',
+        simulation_clock='isaac_fixed_anchor_v1'))
+    assert {'perception','route_display_cache','mock_sdk','navigator','tracker','scan'}<=runtime.keys()
+    for command in runtime.values():
+        assert command[-3:]==['--ros-args','-p','use_sim_time:=true']
+
+
+def test_isaac_viewers_read_saved_clock_contract_and_keep_one_rviz(tmp_path):
+    (tmp_path/'session.json').write_text(json.dumps(dict(transport_mode='isolated_mock',
+        simulation_clock='isaac_fixed_anchor_v1')))
+    commands=view_commands(tmp_path,'local')
+    assert list(commands).count('rviz')==1
+    assert set(commands)=={'view','map_layers','execution_view','rviz'}
+    for command in commands.values():
+        assert command[-3:]==['--ros-args','-p','use_sim_time:=true']
+    assert set(view_commands(tmp_path,'global',include_publishers=False))=={'rviz'}
+
+
+def test_live_view_cannot_use_isaac_clock(tmp_path):
+    with pytest.raises(ValueError,match='simulation_clock_requires_explicit_isolated_isaac_contract'):
+        view_commands(tmp_path,'global',session=dict(transport_mode='live',
+            simulation_clock='isaac_fixed_anchor_v1'))
+
+
+@pytest.mark.parametrize('transport,clock',[('live','isaac_fixed_anchor_v1'),
+    ('isolated_mock','unknown_clock')])
+def test_simulation_clock_cannot_bind_live_transport_or_unknown_contract(tmp_path,monkeypatch,transport,clock):
+    monkeypatch.setattr('ament_index_python.packages.get_package_prefix',lambda name:'/isolated/'+name)
+    with pytest.raises(ValueError,match='simulation_clock_requires_explicit_isolated_isaac_contract'):
+        runtime_commands(tmp_path,dict(transport_mode=transport,simulation_clock=clock,
+            localization_config='/isolated/localization.yaml',map_pcd='/isolated/source.pcd'))
+
+
+@pytest.mark.parametrize('transport,clock,expected',[
+    ('isolated_mock',None,False),('live',None,False),
+    ('isolated_mock','isaac_fixed_anchor_v1',True)])
+def test_supervisor_shutdown_observer_uses_only_valid_session_clock(tmp_path,monkeypatch,transport,clock,expected):
+    from types import SimpleNamespace
+    from d1max_pct_scan import single_floor_session as supervisor
+    from d1max_pct_scan import isolated_zenoh,lifecycle_shutdown
+    session=dict(id='shutdown-session',transport_mode=transport)
+    if clock is not None:session['simulation_clock']=clock
+    if transport=='live':
+        session.update(purpose='planning_only',execution_purpose='planning_only',
+            mode='SINGLE_FLOOR_PLANNING_ONLY',motion_control_enabled=False)
+    monkeypatch.setenv('RMW_IMPLEMENTATION','rmw_zenoh_cpp')
+    monkeypatch.delenv('D1MAX_NAV_TRANSPORT',raising=False)
+    monkeypatch.setattr(supervisor,'verify',lambda _: (session,{'navigator':['fake-node']}))
+    monkeypatch.setattr(isolated_zenoh,'validate_environment',lambda: None)
+    child=SimpleNamespace(returncode=1,poll=lambda: 1)
+    monkeypatch.setattr(supervisor.subprocess,'Popen',lambda *a,**k: child)
+    monkeypatch.setattr(supervisor.signal,'signal',lambda *a: None)
+    monkeypatch.setattr(isolated_zenoh,'stop_owned',lambda _: None)
+    calls=[]
+    def drain(session_id,*,use_sim_time=False):
+        calls.append((session_id,use_sim_time))
+        return dict(request_accepted=True,software_retired=True,physical_stop_confirmed=False)
+    monkeypatch.setattr(lifecycle_shutdown,'drain_task_owner',drain)
+    with pytest.raises(RuntimeError,match='critical_component_exited'):
+        supervisor._run_locked(tmp_path)
+    assert calls==[('shutdown-session',expected)]
+    saved=json.loads((tmp_path/'shutdown.json').read_text())
+    assert saved['software_retired'] is True and saved['physical_stop_confirmed'] is False
+
+
 def test_optional_display_fault_never_takes_ownership_of_navigation_stop():
     from d1max_pct_scan.single_floor_session import component_is_critical
     assert not component_is_critical('route_display_cache')

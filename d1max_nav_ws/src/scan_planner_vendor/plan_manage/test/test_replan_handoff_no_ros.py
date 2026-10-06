@@ -15,12 +15,15 @@ import tempfile
 HARNESS = r'''
 #include <plan_manage/input_contract.hpp>
 #include <algorithm>
+#include <cmath>
+#include <cstdint>
 #include <iostream>
 #include <memory>
 #include <limits>
 #include <optional>
 #define RCLCPP_ERROR(...) ((void)0)
 struct TimeValue { double value=100.; double seconds() const {return value;}
+  std::int64_t nanoseconds() const {return std::llround(value*1e9);}
   TimeValue operator-(TimeValue b) const {return {value-b.value};} };
 namespace rclcpp {using Time=TimeValue;}
 struct Node { TimeValue stamp; TimeValue now() const {return stamp;} };
@@ -49,7 +52,7 @@ class SCANReplanFSM {
   struct Validator {
     struct Boundary {Eigen::Vector3d velocity,acceleration;};
     std::optional<Boundary> value;
-    std::optional<Boundary> committedBoundary(const Eigen::Vector3d&,double)const {return value;}
+    std::optional<Boundary> committedBoundary(const Eigen::Vector3d&,double,std::int64_t)const {return value;}
   };
   std::shared_ptr<Validator> execution_validator_;
   std::shared_ptr<Manager> planner_manager_=std::make_shared<Manager>();
