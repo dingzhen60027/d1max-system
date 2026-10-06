@@ -1,0 +1,347 @@
+{
+  "schema": 1,
+  "candidate": "v28",
+  "created_utc": "2026-10-06T15:10:53.573560+00:00",
+  "scope": "Offline native immutable snapshot full-volume query optimization; parent actual navigation run remains separate.",
+  "baseline_failure": {
+    "run_path": "/home/eric/wjg/d1max-build-isaac/runs/campus_spot_near_v27_001",
+    "status": "failed and retired; candidate unchanged",
+    "motion_budget_failures": 915,
+    "motion_checks": 1453,
+    "curve_source_expiries": 3394,
+    "curve_checks": 5347,
+    "actual_successful_sweep_approx_voxels": 162672,
+    "ray_max_wall_gap_s": 0.538869
+  },
+  "established_cause": "Per-cell motion budget clocks and repeated native lookups across every Z; overlapping raw queries repeated XY/dynamic/immutable-prior checks; support nearest scanned distant bins after finding a closer real point. Original source/steady clocks correctly expired under CPU load.",
+  "changes": [
+    "Validated read-only Z-fast static-prior column pointer; XY/map/ring bounds checked once and every original Z cell retains its decision and first-nonfree order.",
+    "Exact closed-XY dynamic region disjointness screening; possible overlap retains original per-Z veto and invalid oracle fails closed.",
+    "Column cache reused only in existing budgeted flat-contact domain; noncontact raw batches allocate no new cache.",
+    "Motion sweep batches full vertical columns, counts every visited cell, checks original 40 ms CPU budget per XY column and at completion.",
+    "Support bin distance bound skips only bins beyond actual current best, retaining original ordered last-wins ties.",
+    "Original source/steady deadlines checked at proof completion; acquisition, receipt, lease, generation and deadline never renewed."
+  ],
+  "preserved_contract": {
+    "cpu_budget_s": 0.04,
+    "full_3d_geometry": true,
+    "floor_lower_world_z_m": -0.02,
+    "body_radius_m": 0.608,
+    "body_offset_m": 0.3125,
+    "above_m": 0.55,
+    "isotropic_reaction_length_m": 0.902,
+    "yaw_bound_rad": 1.036,
+    "resolution_m": 0.05,
+    "dynamic_source_and_steady_lease_s": 0.2,
+    "ray_source_and_receipt_lease_s": 0.5,
+    "endpoints_unmodified": true,
+    "unknown_to_free_bypass": false,
+    "production_opt_in_defaults_unchanged": true,
+    "physical_model_fields_unchanged": true
+  },
+  "source_freeze": [
+    {
+      "repository_path": "d1max_nav_ws/src/scan_planner_vendor/plan_env/include/plan_env/static_occupancy_prior.hpp",
+      "sha256": "66a164b0fb77a7a212d6090445abfe91c5a8ac828c6603121a6c2d2f4f870bdc",
+      "isolated_source_path": "/home/eric/wjg/d1max-build-isaac/nav-source/src/scan_planner_vendor/plan_env/include/plan_env/static_occupancy_prior.hpp",
+      "isolated_bytes_identical": true,
+      "installed_header_path": "/home/eric/wjg/d1max-build-isaac/nav/install/plan_env/include/plan_env/static_occupancy_prior.hpp",
+      "installed_bytes_identical": true,
+      "installed_sha256": "66a164b0fb77a7a212d6090445abfe91c5a8ac828c6603121a6c2d2f4f870bdc"
+    },
+    {
+      "repository_path": "d1max_nav_ws/src/scan_planner_vendor/plan_env/src/static_occupancy_prior.cpp",
+      "sha256": "621616678e080bfe460d053e0bf8696c08c9c590865cf8545574e1895f93fc8c",
+      "isolated_source_path": "/home/eric/wjg/d1max-build-isaac/nav-source/src/scan_planner_vendor/plan_env/src/static_occupancy_prior.cpp",
+      "isolated_bytes_identical": true
+    },
+    {
+      "repository_path": "d1max_nav_ws/src/scan_planner_vendor/plan_env/include/plan_env/dynamic_occupancy_oracle.hpp",
+      "sha256": "81d695e5ec004afa4bdbc0750a1a57df37b7fe7e1087691cede7644c9aa24a4e",
+      "isolated_source_path": "/home/eric/wjg/d1max-build-isaac/nav-source/src/scan_planner_vendor/plan_env/include/plan_env/dynamic_occupancy_oracle.hpp",
+      "isolated_bytes_identical": true,
+      "installed_header_path": "/home/eric/wjg/d1max-build-isaac/nav/install/plan_env/include/plan_env/dynamic_occupancy_oracle.hpp",
+      "installed_bytes_identical": true,
+      "installed_sha256": "81d695e5ec004afa4bdbc0750a1a57df37b7fe7e1087691cede7644c9aa24a4e"
+    },
+    {
+      "repository_path": "d1max_nav_ws/src/scan_planner_vendor/plan_env/include/plan_env/grid_map.h",
+      "sha256": "e3c4310e399810676dc9f384e47cf1a4d5ba197dca6c7329fcc28d3c91e82b41",
+      "isolated_source_path": "/home/eric/wjg/d1max-build-isaac/nav-source/src/scan_planner_vendor/plan_env/include/plan_env/grid_map.h",
+      "isolated_bytes_identical": true,
+      "installed_header_path": "/home/eric/wjg/d1max-build-isaac/nav/install/plan_env/include/plan_env/grid_map.h",
+      "installed_bytes_identical": true,
+      "installed_sha256": "e3c4310e399810676dc9f384e47cf1a4d5ba197dca6c7329fcc28d3c91e82b41"
+    },
+    {
+      "repository_path": "d1max_nav_ws/src/scan_planner_vendor/plan_env/src/grid_map.cpp",
+      "sha256": "0270a8a926f60ccd7ca8d3872bae82d18801282dc7ad0476f2ecd5def4ee54cb",
+      "isolated_source_path": "/home/eric/wjg/d1max-build-isaac/nav-source/src/scan_planner_vendor/plan_env/src/grid_map.cpp",
+      "isolated_bytes_identical": true
+    },
+    {
+      "repository_path": "d1max_nav_ws/src/scan_planner_vendor/plan_manage/include/plan_manage/motion_sweep.hpp",
+      "sha256": "6bf64f1ad44560b4d821e6a7fea76c374a28dec9b809a058ddbdc712f941fffa",
+      "isolated_source_path": "/home/eric/wjg/d1max-build-isaac/nav-source/src/scan_planner_vendor/plan_manage/include/plan_manage/motion_sweep.hpp",
+      "isolated_bytes_identical": true,
+      "installed_header_path": "/home/eric/wjg/d1max-build-isaac/nav/install/scan_planner/include/plan_manage/motion_sweep.hpp",
+      "installed_bytes_identical": true,
+      "installed_sha256": "6bf64f1ad44560b4d821e6a7fea76c374a28dec9b809a058ddbdc712f941fffa"
+    },
+    {
+      "repository_path": "d1max_nav_ws/src/scan_planner_vendor/plan_manage/test/test_motion_sweep.cpp",
+      "sha256": "bed9ef947d5cb65baf7a60c075a3f6ac67827e56d5fd608794be3e6cb49e66eb",
+      "isolated_source_path": "/home/eric/wjg/d1max-build-isaac/nav-source/src/scan_planner_vendor/plan_manage/test/test_motion_sweep.cpp",
+      "isolated_bytes_identical": true
+    }
+  ],
+  "abi_build": {
+    "packages": [
+      "plan_env",
+      "path_searching",
+      "bspline_opt",
+      "scan_planner"
+    ],
+    "exit_code": 0,
+    "duration_s": 148.712112,
+    "log_directory": "/home/eric/wjg/d1max-build-isaac/nav/log/build_2026-10-06_22-56-58",
+    "events_sha256": "4979d93ee85ffce634cde36220c485529d944a77928be4c68e941272cbfaa09d",
+    "offline_only": true,
+    "cmake_args": [
+      "-DCMAKE_BUILD_TYPE=Release",
+      "-DBUILD_TESTING=ON",
+      "-DCMAKE_C_COMPILER=/usr/bin/gcc-11",
+      "-DCMAKE_CXX_COMPILER=/usr/bin/g++-11",
+      "-DPython3_EXECUTABLE=/usr/bin/python3"
+    ],
+    "final_test_rebuild": "Final test copied after full build; isolated test mtime touched to force actual test_motion_sweep compile/link because preserved rsync mtime was older than object. Repository bytes unchanged. Final XML has 31 cases.",
+    "artifacts": [
+      {
+        "package": "plan_env",
+        "build": "/home/eric/wjg/d1max-build-isaac/nav/build/plan_env/libplan_env.a",
+        "install": "/home/eric/wjg/d1max-build-isaac/nav/install/plan_env/lib/libplan_env.a",
+        "build_sha256": "6e6ca54a5bc15489c65c9d7f20d11c218b05aad8de37c503c633a5288d03a8ba",
+        "install_sha256": "6e6ca54a5bc15489c65c9d7f20d11c218b05aad8de37c503c633a5288d03a8ba",
+        "byte_identical": true
+      },
+      {
+        "package": "path_searching",
+        "build": "/home/eric/wjg/d1max-build-isaac/nav/build/path_searching/libpath_searching.a",
+        "install": "/home/eric/wjg/d1max-build-isaac/nav/install/path_searching/lib/libpath_searching.a",
+        "build_sha256": "cfb7548559b174616b96403ef6921da4534e4a4452c329685893b04e87111605",
+        "install_sha256": "cfb7548559b174616b96403ef6921da4534e4a4452c329685893b04e87111605",
+        "byte_identical": true
+      },
+      {
+        "package": "bspline_opt",
+        "build": "/home/eric/wjg/d1max-build-isaac/nav/build/bspline_opt/libbspline_opt.a",
+        "install": "/home/eric/wjg/d1max-build-isaac/nav/install/bspline_opt/lib/libbspline_opt.a",
+        "build_sha256": "553306dc5039eb766c69d41af85d989ce3ff4e982c2e246cd19f26d6de058cce",
+        "install_sha256": "553306dc5039eb766c69d41af85d989ce3ff4e982c2e246cd19f26d6de058cce",
+        "byte_identical": true
+      },
+      {
+        "package": "scan_planner",
+        "build": "/home/eric/wjg/d1max-build-isaac/nav/build/scan_planner/scan_planner_node",
+        "install": "/home/eric/wjg/d1max-build-isaac/nav/install/scan_planner/lib/scan_planner/scan_planner_node",
+        "build_sha256": "8e3b238b6509526ce01f4de931458378966a77d5db8611866029fad0eda9ed36",
+        "install_sha256": "179e6ce4b04decfb17dfdf0aeff40136740a7c443aaf9b774b5aee146074215b",
+        "byte_identical": false,
+        "differing_sections": [
+          ".dynstr",
+          ".dynamic"
+        ],
+        "text_bytes_identical": true,
+        "install_difference_reason": "CMake install RPATH_CHANGE clears build RUNPATH to empty; install and build ELF hashes therefore differ."
+      },
+      {
+        "package": "scan_planner",
+        "build": "/home/eric/wjg/d1max-build-isaac/nav/build/scan_planner/closed_loop_controller",
+        "install": "/home/eric/wjg/d1max-build-isaac/nav/install/scan_planner/lib/scan_planner/closed_loop_controller",
+        "build_sha256": "373f94e0a22916355583b6eb3eae5f90a880dc88ed48bf5ceaeaa6da0d2f8e37",
+        "install_sha256": "ee0f6a9a21a434e608a7f9f0f9f74c0aa6efeedfbc3a6323eb2b6e31060c42a4",
+        "byte_identical": false,
+        "differing_sections": [
+          ".dynstr",
+          ".dynamic"
+        ],
+        "text_bytes_identical": true,
+        "install_difference_reason": "CMake install RPATH_CHANGE clears build RUNPATH to empty; install and build ELF hashes therefore differ."
+      }
+    ]
+  },
+  "tests": {
+    "ctest_targets_passed": 31,
+    "ctest_targets_failed": 0,
+    "packages": [
+      {
+        "package": "plan_env",
+        "passed_targets": 8,
+        "failed_targets": 0,
+        "log_path": "/home/eric/wjg/d1max-build-isaac/nav/build/plan_env/Testing/Temporary/LastTest.log",
+        "sha256": "d599c810cb29442fbc68f4162eea0b06ab8069cef7ea22cdc029e36adabcf9af"
+      },
+      {
+        "package": "path_searching",
+        "passed_targets": 4,
+        "failed_targets": 0,
+        "log_path": "/home/eric/wjg/d1max-build-isaac/nav/build/path_searching/Testing/Temporary/LastTest.log",
+        "sha256": "3ccedb1d0b2cd6759bede0fe70f964e681f06ecf5fac17b35698b1ee330feec0"
+      },
+      {
+        "package": "bspline_opt",
+        "passed_targets": 4,
+        "failed_targets": 0,
+        "log_path": "/home/eric/wjg/d1max-build-isaac/nav/build/bspline_opt/Testing/Temporary/LastTest.log",
+        "sha256": "affcc929dc5776fb10f9fcac55acfe9ba1b010977fe5cf86bc95eeef93680be2"
+      },
+      {
+        "package": "scan_planner",
+        "passed_targets": 15,
+        "failed_targets": 0,
+        "log_path": "/home/eric/wjg/d1max-build-isaac/nav/build/scan_planner/Testing/Temporary/LastTest.log",
+        "sha256": "4636707c83be5d2d00cb6c4713eb34db97c8f33d7e39fe6baa0ecd13339d6de8"
+      }
+    ],
+    "gtest_xml": [
+      {
+        "target": "test_projected_rays",
+        "tests": "96",
+        "failures": "0",
+        "disabled": "0",
+        "errors": "0",
+        "time": "0.336",
+        "timestamp": "2026-10-06T23:01:13",
+        "name": "AllTests",
+        "path": "/home/eric/wjg/d1max-build-isaac/nav/build/plan_env/test_results/plan_env/test_projected_rays.gtest.xml",
+        "sha256": "5f6466039293a8a0cfd80389601696c8b46949040a34b09a88cb8b8d45cf7542"
+      },
+      {
+        "target": "test_static_occupancy_prior",
+        "tests": "26",
+        "failures": "0",
+        "disabled": "0",
+        "errors": "0",
+        "time": "0.007",
+        "timestamp": "2026-10-06T23:01:13",
+        "name": "AllTests",
+        "path": "/home/eric/wjg/d1max-build-isaac/nav/build/plan_env/test_results/plan_env/test_static_occupancy_prior.gtest.xml",
+        "sha256": "5596a5ce7b8104214c4d2e0ef17ae30d5c8eedb30687a289680d09e1aab10ff1"
+      },
+      {
+        "target": "test_motion_sweep",
+        "tests": "31",
+        "failures": "0",
+        "disabled": "0",
+        "errors": "0",
+        "time": "0.354",
+        "timestamp": "2026-10-06T23:02:17",
+        "name": "AllTests",
+        "path": "/home/eric/wjg/d1max-build-isaac/nav/build/scan_planner/test_results/scan_planner/test_motion_sweep.gtest.xml",
+        "sha256": "373951aa14f0d9f8c1b9d7bad9730129a4214243e7ef0e99231d2308b7b4b352"
+      }
+    ],
+    "new_focused_cases": 8,
+    "ros_launch_tests_excluded": [
+      "test_planner_startup",
+      "test_waypoint_parameters"
+    ],
+    "coverage": [
+      "exact per-cell/column status and visited count including foot/top weak/live hits",
+      "private observed snapshot guard",
+      "closed-XY dynamic actor veto and bottom-first Z ordering",
+      "outside/invalid/ring wrap cannot borrow another column",
+      "original source and steady deadline expiry without renewal",
+      "support random queries/exact ties/world-scale bounds",
+      "complete physical Spot isotropic reaction footprint, foot/top occupancy and unchanged budget veto"
+    ],
+    "ctest_cold_benchmark": {
+      "above": 0.55,
+      "body_offset": 0.3125,
+      "body_radius": 0.608,
+      "clock": "steady_clock",
+      "floor_lower": -0.02,
+      "iterations": 25,
+      "map_shape": [
+        160,
+        160,
+        60
+      ],
+      "performance_assertion": false,
+      "probe": "physical_spot_cold_motion_columns",
+      "reaction_length": 0.902,
+      "resolution": 0.05,
+      "setup_excluded": true,
+      "unique_voxels": 161856,
+      "wall_ms_p50": 3.442255,
+      "wall_ms_p95": 3.486872,
+      "yaw_bound": 1.036
+    }
+  },
+  "legacy_cold_hot_full_proof_benchmark": {
+    "result": {
+      "cells": 161856,
+      "cold_columns": {
+        "max_ms": 3.70688,
+        "p50_ms": 3.490219,
+        "p95_ms": 3.576541
+      },
+      "columns": 6744,
+      "fresh_original_deadlines": true,
+      "geometry_status_and_visited_identical": true,
+      "hot_sameproof_full_columns": {
+        "max_ms": 0.107415,
+        "p50_ms": 0.099735,
+        "p95_ms": 0.10572
+      },
+      "iterations": 25,
+      "legacy_cells_original_unordered_support": {
+        "max_ms": 28.802696,
+        "p50_ms": 28.459878,
+        "p95_ms": 28.658236
+      },
+      "length": 0.902,
+      "max_z": 1.1337783804514574,
+      "min_z": -0.02,
+      "new_budget_s": 0.04,
+      "probe": "physical_spot_legacy_cell_vs_cold_column_and_hot_sameproof",
+      "reference_scope": "frozen v27 support/voxel loops; both run against the newly optimized native GridMap to isolate loop/batch difference",
+      "yaw_bound": 1.036,
+      "z_cells": 24
+    },
+    "result_path": "/tmp/d1max_motion_column_probe.json",
+    "result_sha256": "2eb481f2031cb68b80e1372aaee68f4bfeec6d455c7b556fef43908af32f3742",
+    "inputs": [
+      {
+        "path": "/tmp/d1max_motion_column_probe.cpp",
+        "sha256": "5dd2ad92d007087886db27700f07018fafa518a339598cdbb1817bc13a8b0623"
+      },
+      {
+        "path": "/tmp/d1max_motion_sweep_v27_reference.hpp",
+        "sha256": "172164c3884f2698115b6fe599a97c0d6556b8fc6c0f4ef7265a0cf5982e87ce"
+      },
+      {
+        "path": "/tmp/d1max_motion_column_probe_build.log",
+        "sha256": "6ebe91d6f4618aec094a414efa2bd37a2cbf482810c40d067a90c5bc350e2e65"
+      }
+    ],
+    "fixture_pose": {
+      "position_m": [
+        0,
+        0,
+        0.48
+      ],
+      "yaw_rad": 0
+    },
+    "setup_excluded": true,
+    "cold_scope": "Fresh independently initialized native immutable snapshot for each complete timed sweep; original source/receipt/oracle checks retained.",
+    "hot_scope": "One immutable proof reused without any source/receipt renewal; original final freshness check passed each full repetition.",
+    "legacy_scope": "Frozen v27 support and per-cell motion loop runs against current optimized GridMap to isolate loop/batch differences; not a full original v27 binary replay.",
+    "cell_count_difference": "161856 fixture cells vs approximately162672 actual v27 cells is pose/yaw grid alignment. Frozen legacy and optimized loops in this fixture prove identical cells, status, min/max Z and reaction/yaw envelopes."
+  },
+  "acceptance_limits": [
+    "Cold complete native offline query is below unchanged 40 ms on this host. This does not prove IsaacSim real-time factor, runtime ray wall gap or Action arrival.",
+    "Parent assembles fresh immutable v28 and runs actual navigation; v27 remains failed.",
+    "No ROS/Kit/GUI/SDK/Git/deployment process started by this offline work."
+  ]
+}

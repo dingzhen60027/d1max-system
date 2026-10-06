@@ -15,6 +15,7 @@
 namespace scan_planner {
 
 enum class CurveCheckEvidence { Clear, Occupied, Uncertified };
+enum class MeasuredSpeedProfile { D1FirstAcceptance, IsolatedOfficialSpot };
 
 struct CurveQueryWitness {
   Eigen::Vector3d position;
@@ -139,7 +140,8 @@ inline std::optional<MeasuredCurveDomain> measuredRemainingCurveDomain(UniformBs
     const Eigen::Vector3d& body,double previous_measured_time,double source_dt,
     double committed_arc,double max_speed=.3,double reverse_margin=.15,
     MeasuredConnectionPolicy connection=MeasuredConnectionPolicy::CandidateAdmission,
-    double* measured_residual=nullptr) {
+    double* measured_residual=nullptr,
+    MeasuredSpeedProfile speed_profile=MeasuredSpeedProfile::D1FirstAcceptance) {
   if(measured_residual)*measured_residual=std::numeric_limits<double>::quiet_NaN();
   const auto controls=curve.getControlPoint();const auto knots=curve.getKnot();
   const double duration=curve.getTimeSum();
@@ -148,7 +150,8 @@ inline std::optional<MeasuredCurveDomain> measuredRemainingCurveDomain(UniformBs
      !std::isfinite(duration)||duration<=0.||duration>120.||
      !std::isfinite(previous_measured_time)||previous_measured_time<0.||previous_measured_time>duration||
      !std::isfinite(source_dt)||source_dt<-.02||source_dt>.4||
-     !std::isfinite(committed_arc)||committed_arc<0.||max_speed<=0.||max_speed>.3||
+     !std::isfinite(committed_arc)||committed_arc<0.||!std::isfinite(max_speed)||max_speed<=0.||
+     max_speed>(speed_profile==MeasuredSpeedProfile::IsolatedOfficialSpot?.6:.3)||
      !std::isfinite(reverse_margin)||reverse_margin<.15||reverse_margin>.15+1e-9)return {};
   for(int i=1;i<knots.size();++i)if(knots[i]<=knots[i-1])return {};
   const int n=std::max(1,static_cast<int>(std::ceil(duration/.02)));

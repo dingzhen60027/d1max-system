@@ -1,0 +1,67 @@
+{
+  "schema": 1,
+  "source": "official_isaac_6_physx_spot",
+  "files": [
+    {
+      "path": "Isaac/Robots/BostonDynamics/spot/configuration/spot_robot_schema.usd",
+      "source_url": "https://omniverse-content-production.s3-us-west-2.amazonaws.com/Assets/Isaac/6.0/Isaac/Robots/BostonDynamics/spot/configuration/spot_robot_schema.usd",
+      "size_bytes": 4415,
+      "sha256": "25551cbe48b44c3bada13d8bd7b514fef6b0693f8d01fbdd26894ef33d8e731d"
+    },
+    {
+      "path": "Isaac/Robots/BostonDynamics/spot/materials/black_leg.png",
+      "source_url": "https://omniverse-content-production.s3-us-west-2.amazonaws.com/Assets/Isaac/6.0/Isaac/Robots/BostonDynamics/spot/materials/black_leg.png",
+      "size_bytes": 101692,
+      "sha256": "8a06ec422c8a1951b41a6985aa634cba8e5b85ad4d14ebf917b01bbfd4c7b751"
+    },
+    {
+      "path": "Isaac/Robots/BostonDynamics/spot/materials/body_others.png",
+      "source_url": "https://omniverse-content-production.s3-us-west-2.amazonaws.com/Assets/Isaac/6.0/Isaac/Robots/BostonDynamics/spot/materials/body_others.png",
+      "size_bytes": 348237,
+      "sha256": "9f735c2993f4f72e574d8c899eddb96632c37d7609402a52485442e26e5165bf"
+    },
+    {
+      "path": "Isaac/Robots/BostonDynamics/spot/materials/hip.png",
+      "source_url": "https://omniverse-content-production.s3-us-west-2.amazonaws.com/Assets/Isaac/6.0/Isaac/Robots/BostonDynamics/spot/materials/hip.png",
+      "size_bytes": 240453,
+      "sha256": "41951a0c519f192cedbe700848c6c901e3a39ebca30557d573fe8abb5c1ff329"
+    },
+    {
+      "path": "Isaac/Robots/BostonDynamics/spot/materials/lleg.png",
+      "source_url": "https://omniverse-content-production.s3-us-west-2.amazonaws.com/Assets/Isaac/6.0/Isaac/Robots/BostonDynamics/spot/materials/lleg.png",
+      "size_bytes": 120738,
+      "sha256": "6941033f6ae5687c1f10add8fb6b38bbc30a913192736a86f112702a3d4ef6b5"
+    },
+    {
+      "path": "Isaac/Robots/BostonDynamics/spot/materials/yellow_leg.png",
+      "source_url": "https://omniverse-content-production.s3-us-west-2.amazonaws.com/Assets/Isaac/6.0/Isaac/Robots/BostonDynamics/spot/materials/yellow_leg.png",
+      "size_bytes": 90658,
+      "sha256": "e0282ab9ec181e9ea7be953c3d8b5167241f0350574667b4c4a071e459080205"
+    },
+    {
+      "path": "Isaac/Robots/BostonDynamics/spot/materials/yellow_parts.png",
+      "source_url": "https://omniverse-content-production.s3-us-west-2.amazonaws.com/Assets/Isaac/6.0/Isaac/Robots/BostonDynamics/spot/materials/yellow_parts.png",
+      "size_bytes": 389806,
+      "sha256": "0a2f72a5c1f6fb169cbfd048f1efe29a6bb4a5383fdb509523d1bb0e5e950273"
+    },
+    {
+      "path": "Isaac/Robots/BostonDynamics/spot/spot.usd",
+      "source_url": "https://omniverse-content-production.s3-us-west-2.amazonaws.com/Assets/Isaac/6.0/Isaac/Robots/BostonDynamics/spot/spot.usd",
+      "size_bytes": 3425071,
+      "sha256": "dbe17178d8507aa31a82e8f8582606c2da5694ea8d2e24c77e50f1ff149689cb"
+    },
+    {
+      "path": "Isaac/Samples/Policies/Spot_Policies/spot_env.yaml",
+      "source_url": "https://omniverse-content-production.s3-us-west-2.amazonaws.com/Assets/Isaac/6.0/Isaac/Samples/Policies/Spot_Policies/spot_env.yaml",
+      "size_bytes": 31228,
+      "sha256": "397440818604ca7cf0cb79c6012325f2bba292029ad0c2d5df5fd64b531d2dbc"
+    },
+    {
+      "path": "Isaac/Samples/Policies/Spot_Policies/spot_policy.pt",
+      "source_url": "https://omniverse-content-production.s3-us-west-2.amazonaws.com/Assets/Isaac/6.0/Isaac/Samples/Policies/Spot_Policies/spot_policy.pt",
+      "size_bytes": 775760,
+      "sha256": "d95d675e8b080d5c84a2a2779d165ff7ecd3e34d24b233c083242e615a3d589a"
+    }
+  ],
+  "total_bytes": 5528058
+}

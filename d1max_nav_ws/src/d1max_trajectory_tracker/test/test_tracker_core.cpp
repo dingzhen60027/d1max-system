@@ -86,6 +86,41 @@ TEST(Tracker, UsesVendorCurveAndOutputsBoundedSI) {
   EXPECT_NEAR(out.yaw_rate, 0, 1e-9);
   EXPECT_FALSE(out.frozen);
 }
+TEST(Tracker, ControlDiagnosticsDistinguishClockBranchesAndDoNotAdvanceTheController) {
+  TrackerCore core(config());prepare(core);
+  const auto initial=core.controlDiagnostic();
+  EXPECT_FALSE(initial.step_seen);ASSERT_TRUE(initial.geometry_available);
+  const auto output=core.step(100.05,10.05);
+  const auto before=core.progress(100.05);
+  TrackerCore untouched=core;
+  for(int i=0;i<8;++i) {
+    const auto d=core.controlDiagnostic();
+    EXPECT_TRUE(d.step_seen);EXPECT_FALSE(d.duplicate_source);EXPECT_FALSE(d.before_trajectory_start);
+    EXPECT_EQ(d.step_source_ns,100050000000LL);
+    EXPECT_NEAR(d.projected_curve_time,before.curve_time,1e-12);
+    EXPECT_NEAR(d.lookahead_curve_time,std::min(d.curve_duration,before.curve_time+config().lookahead),1e-12);
+    EXPECT_TRUE(d.lookahead_velocity.allFinite());EXPECT_GT(d.planar_speed_limit_mps,0.);
+    EXPECT_DOUBLE_EQ(core.progress(100.05).curve_time,before.curve_time);
+  }
+  const auto next=core.step(100.1,10.1),plain=untouched.step(100.1,10.1);
+  EXPECT_DOUBLE_EQ(next.forward,plain.forward);EXPECT_DOUBLE_EQ(next.yaw_rate,plain.yaw_rate);
+  EXPECT_GT(output.forward,0.);
+  EXPECT_EQ(core.step(100.1,10.12).reason,"waiting_trajectory_clock");
+  EXPECT_TRUE(core.controlDiagnostic().duplicate_source);
+  EXPECT_FALSE(core.controlDiagnostic().before_trajectory_start);
+
+  TrackerCore future(config());
+  ASSERT_TRUE(future.receiveTask(task(),100.,10.));
+  auto body=odom();body.velocity_in_frame={.03,.04,.6};
+  ASSERT_TRUE(future.receiveOdom(body,100.,10.));
+  auto curve=trajectory();curve.start_time=100.1;
+  ASSERT_TRUE(future.receiveTrajectory(curve,100.,10.));
+  EXPECT_EQ(future.step(100.05,10.05).reason,"waiting_trajectory_clock");
+  const auto d=future.controlDiagnostic();
+  EXPECT_FALSE(d.duplicate_source);EXPECT_TRUE(d.before_trajectory_start);
+  EXPECT_EQ(d.step_trajectory_start_ns,100100000000LL);
+  EXPECT_NEAR(d.measured_xy_speed_mps,.05,1e-12); // Z vibration does not become planar progress.
+}
 TEST(Tracker,AcceptedRouteYawToleranceRangeIsNotSilentlyRejectedAtAlignment) {
   for(double tolerance:{.01,.15,.3,.5}) {
     TrackerCore core(config());prepare(core);core.step(100.02,10.02);
@@ -497,6 +532,68 @@ TEST(Tracker, FutureBendIsReachedThroughBrakingEnvelopeNotWholeCurveMinimum) {
   EXPECT_LT(brakingEnvelopeAt(arc,envelope,1.19,.35,1.),.30);
   for(std::size_t i=1;i<envelope.size();++i)
     EXPECT_LE(envelope[i-1]*envelope[i-1],envelope[i]*envelope[i]+2.*.35*(arc[i]-arc[i-1])+1e-12);
+}
+
+TEST(Tracker, SpatialPlanarProfileRequiresSupportAndDefaultsToLegacy) {
+  auto c=config();EXPECT_FALSE(c.spatial_planar_braking_envelope);
+  c.spatial_planar_braking_envelope=true;
+  EXPECT_THROW(c.validate(),std::invalid_argument);
+  c.require_support_reference=true;EXPECT_NO_THROW(c.validate());
+}
+
+TEST(Tracker, QuadraticPlanarDirectionBoundCoversInteriorAndZeroSpeedEnds) {
+  const std::array<Eigen::Vector3d,3> controls{{{0.,0.,0.},{.05,0.,.01},{.10,.03,-.01}}};
+  const double scale=quadraticPlanarScale(controls);ASSERT_GT(scale,.9);
+  for(int i=0;i<=1000;++i) {
+    const double t=i/1000.;const Eigen::Vector3d v=(1.-t)*(1.-t)*controls[0]+
+      2.*t*(1.-t)*controls[1]+t*t*controls[2];
+    if(v.norm()>1e-12){EXPECT_LE(scale,spatialToPlanarScale(v)+1e-12);}
+  }
+  EXPECT_DOUBLE_EQ(quadraticPlanarScale({Eigen::Vector3d(0.,0.,.1),
+    Eigen::Vector3d(0.,0.,.2),Eigen::Vector3d(0.,0.,.3)}),0.);
+  EXPECT_DOUBLE_EQ(quadraticPlanarScale({Eigen::Vector3d(.1,0.,0.),
+    Eigen::Vector3d(-.1,0.,0.),Eigen::Vector3d(.1,0.,0.)}),0.);
+}
+
+TEST(Tracker, SpatialPlanarBrakingUsesLocalHorizontalTravelAndPreservesVerticalZeros) {
+  const std::vector<double> times{0.,1.,2.,3.,4.};
+  const std::vector<Eigen::Vector3d> points{{0.,0.,.48},{.0001,0.,.49},
+    {.1,0.,.50},{.3,0.,.50},{.5,0.,.50}};
+  const std::vector<Eigen::Vector3d> velocity{{.0001,0.,.01},{.0001,0.,.01},
+    {.15,0.,0.},{.15,0.,0.},{.15,0.,0.}};
+  const std::vector<Eigen::Vector3d> acceleration(points.size(),Eigen::Vector3d::Zero());
+  const auto profile=SpatialPlanarBrakingEnvelope::build(times,points,velocity,acceleration,.3,.35,.5,1.);
+  ASSERT_TRUE(profile.valid());EXPECT_LT(profile.speedAt(0.,points[0]),.0031);
+  EXPECT_GT(profile.speedAt(3.,points[3]),.29);
+  EXPECT_NEAR(profile.horizontal_arcs.back(),.5,1e-12);
+  for(std::size_t i=1;i<points.size();++i)
+    EXPECT_LE(profile.limits[i-1]*profile.limits[i-1],profile.limits[i]*profile.limits[i]+
+      2.*profile.acceleration[i-1]*(profile.horizontal_arcs[i]-profile.horizontal_arcs[i-1])+1e-12);
+  auto vertical=points;for(auto& p:vertical)p.x()=0.;
+  const std::vector<Eigen::Vector3d> vertical_velocity(points.size(),Eigen::Vector3d(0.,0.,.01));
+  const auto zero=SpatialPlanarBrakingEnvelope::build(times,vertical,vertical_velocity,acceleration,.3,.35,.5,1.);
+  ASSERT_TRUE(zero.valid());
+  for(std::size_t i=0;i<times.size();++i)EXPECT_DOUBLE_EQ(zero.speedAt(times[i],vertical[i]),0.);
+  EXPECT_DOUBLE_EQ(zero.accelerationAt(1.5),0.);
+}
+
+TEST(Tracker, SlopedCurvedSpatialProfileKeepsLocalSpeedYawAndBrakingBounds) {
+  std::vector<double> times;std::vector<Eigen::Vector3d> points,velocity,acceleration;
+  for(int i=0;i<=20;++i) {
+    const double t=i*.1;times.push_back(t);points.emplace_back(.1*t,.04*t*t,.55+.02*t);
+    velocity.emplace_back(.1,.08*t,.02);acceleration.emplace_back(0.,.08,0.);
+  }
+  const auto profile=SpatialPlanarBrakingEnvelope::build(times,points,velocity,acceleration,.3,.35,.1,.98);
+  ASSERT_TRUE(profile.valid());
+  for(std::size_t i=0;i<times.size();++i) {
+    const double limit=profile.speedAt(times[i],points[i]);EXPECT_TRUE(std::isfinite(limit));EXPECT_GE(limit,0.);
+    EXPECT_LE(limit,.3*spatialToPlanarScale(velocity[i])+1e-12);
+    EXPECT_LE(limit,curvatureForwardLimit(velocity[i],acceleration[i],.1,.3)+1e-12);
+  }
+  const Eigen::Vector3d current(.1*1.95,.04*1.95*1.95,.55+.02*1.95);
+  const double limit=profile.speedAt(1.95,current);
+  EXPECT_LE(limit*limit,profile.limits.back()*profile.limits.back()+
+    2.*profile.acceleration.back()*(points.back()-current).head<2>().norm()+1e-12);
 }
 TEST(Tracker, BrakingEnvelopeCannotBorrowVerticalDistanceOrIgnoreCloseTurn) {
   const std::vector<double> arc{0.,.02};const std::vector<double> cap{.30,.05};

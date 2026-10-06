@@ -1,0 +1,133 @@
+{
+  "schema": 1,
+  "kind": "isolated_spot_platform_model_offline_verification_v1",
+  "generated_at_utc": "2026-10-06T14:35:43.727605+00:00",
+  "implementation_files_frozen": true,
+  "whole_scene_candidate_frozen": false,
+  "physical_acceptance": false,
+  "real_robot_acceptance_claim": false,
+  "runtime_navigation_acceptance_claim": false,
+  "record_discriminator": {
+    "isolated_platform_model": {
+      "schema": 1,
+      "kind": "official_spot_physx",
+      "command_max_speed_mps": 0.15,
+      "command_max_yaw_radps": 0.3,
+      "reachable_max_speed_mps": 0.6,
+      "reachable_max_yaw_radps": 0.8,
+      "source_scope": "isolated_simulation_physx_measured_model"
+    }
+  },
+  "contract": [
+    "New discriminator requires exact official-Spot identity, seven fields, positive finite bounded numbers, exact match to braking measurement limits, isolated_mock and fixture_only=true.",
+    "Legacy/default and all live records retain D1 first-acceptance reachable caps 0.30 m/s and 0.50 rad/s. Any isolated_platform_model is rejected by live load and physical acceptance, even if the fixture flag is removed.",
+    "The native sweep checks commands against separate command caps and measured XY/yaw against reachable caps. The final mock writer is configured from command caps, never reachable caps.",
+    "Reaction<=1 s, stop latency<=3 s, stopping distance<=1 m, stopping yaw<=1 rad, error bounds and all evidence deadlines/leases are unchanged; the prepared Spot record uses stopping distance 0.50 m.",
+    "Remaining-curve progress search propagates the validated isolated actual-speed bound while preserving source windows, the 0.15 m reverse margin and complete original collision/support checks. Default helper behavior remains strict.",
+    "Tracker does not consume the changed plan_manage headers; its earlier diagnostic ELF is byte-identical and no rebuild is required.",
+    "For explicitly isolated Spot only, future reaction XY speed/yaw use the loaded reachable caps even at near-zero actual/demand. A symmetric center-displacement rectangle encloses all XY directions through reaction and stopping, with the original double-cylinder rotation expansion and full voxel query. Legacy D1 formula, budgets, deadlines and command caps are unchanged."
+  ],
+  "builds": {
+    "nav_packages": [
+      "scan_planner",
+      "d1max_pct_scan"
+    ],
+    "sdk_packages": [
+      "d1max_sdk_bridge"
+    ],
+    "sdk_configuration": "D1MAX_BUILD_ISOLATED_EXECUTION_ONLY=ON",
+    "result": "passed",
+    "installed_python_and_native_headers_match_source": true,
+    "selected_source_copy_matches": 13
+  },
+  "tests": {
+    "python_model_safety_handoff": {
+      "passed": 114,
+      "failed": 0
+    },
+    "native_standalone": {
+      "groups_passed": 10,
+      "individual_tests_passed": 153,
+      "failed": 0
+    },
+    "sdk_standalone": {
+      "groups_passed": 14,
+      "failed": 0
+    }
+  },
+  "files": {
+    "d1max_nav_ws/src/d1max_pct_scan/d1max_pct_scan/braking_model.py": {
+      "sha256": "c5dbb14f2c5675f9605c1267f81489800b8247da3ca3bd4df8627a47b35080e5",
+      "build_source": "/home/eric/wjg/d1max-build-isaac/nav-source/src/d1max_pct_scan/d1max_pct_scan/braking_model.py"
+    },
+    "d1max_nav_ws/src/d1max_pct_scan/test/test_braking_model.py": {
+      "sha256": "79cf4060af84448c8278fbd4842894b231ccdefd4feb33c21211987313543c7a",
+      "build_source": "/home/eric/wjg/d1max-build-isaac/nav-source/src/d1max_pct_scan/test/test_braking_model.py"
+    },
+    "d1max_nav_ws/src/scan_planner_vendor/plan_manage/include/plan_manage/motion_sweep.hpp": {
+      "sha256": "65c53cd83469c31492d9bd60df241447fe6e255b322b29beb4522540361bafc9",
+      "build_source": "/home/eric/wjg/d1max-build-isaac/nav-source/src/scan_planner_vendor/plan_manage/include/plan_manage/motion_sweep.hpp"
+    },
+    "d1max_nav_ws/src/scan_planner_vendor/plan_manage/src/motion_sweep.cpp": {
+      "sha256": "64ebe88ade0dbdecbf6b00afffe98d8d97a710d9ab85e580b71e60a957b0bccc",
+      "build_source": "/home/eric/wjg/d1max-build-isaac/nav-source/src/scan_planner_vendor/plan_manage/src/motion_sweep.cpp"
+    },
+    "d1max_nav_ws/src/scan_planner_vendor/plan_manage/include/plan_manage/trajectory_collision.hpp": {
+      "sha256": "69539f37c7d22557d4861655ecfdebc1d414ff998758f502d218b07cf1fb6d15",
+      "build_source": "/home/eric/wjg/d1max-build-isaac/nav-source/src/scan_planner_vendor/plan_manage/include/plan_manage/trajectory_collision.hpp"
+    },
+    "d1max_nav_ws/src/scan_planner_vendor/plan_manage/include/plan_manage/execution_validator.hpp": {
+      "sha256": "b373d4122889da9169988dbc94b3db38b7ff94b74171161547160a623a14a954",
+      "build_source": "/home/eric/wjg/d1max-build-isaac/nav-source/src/scan_planner_vendor/plan_manage/include/plan_manage/execution_validator.hpp"
+    },
+    "d1max_nav_ws/src/scan_planner_vendor/plan_manage/test/test_motion_sweep.cpp": {
+      "sha256": "ed689bd2cd8826913732e1e3df957a2bda554f53715517d8350b3ce46705892c",
+      "build_source": "/home/eric/wjg/d1max-build-isaac/nav-source/src/scan_planner_vendor/plan_manage/test/test_motion_sweep.cpp"
+    },
+    "d1max_nav_ws/src/scan_planner_vendor/plan_manage/test/test_trajectory_collision.cpp": {
+      "sha256": "eac0d90c605ed04fb3fb866afdf73b84806091988e34e1275da498dc6b657f26",
+      "build_source": "/home/eric/wjg/d1max-build-isaac/nav-source/src/scan_planner_vendor/plan_manage/test/test_trajectory_collision.cpp"
+    },
+    "d1max_ros2/sdk_bridge_ws/src/d1max_sdk_bridge/src/execution_acceptance.hpp": {
+      "sha256": "5734cc255f5f7b8b36c0466aca93ae89fbb72f0764430a99cf54c70573e35b17",
+      "build_source": "/home/eric/wjg/d1max-build-isaac/sdk-source/src/d1max_sdk_bridge/src/execution_acceptance.hpp"
+    },
+    "d1max_ros2/sdk_bridge_ws/src/d1max_sdk_bridge/src/sdk_execution_mock.cpp": {
+      "sha256": "a5be1fdb045a52a51900f118b2d0eba258efd326f2f6517759307a79f9edfca4",
+      "build_source": "/home/eric/wjg/d1max-build-isaac/sdk-source/src/d1max_sdk_bridge/src/sdk_execution_mock.cpp"
+    },
+    "d1max_ros2/sdk_bridge_ws/src/d1max_sdk_bridge/src/execution_transport_core.hpp": {
+      "sha256": "99764aa5b980d73b440d8dbe049f151fca80cc69e9c2245db326b7d9ff1eb6d6",
+      "build_source": "/home/eric/wjg/d1max-build-isaac/sdk-source/src/d1max_sdk_bridge/src/execution_transport_core.hpp"
+    },
+    "d1max_ros2/sdk_bridge_ws/src/d1max_sdk_bridge/src/test_execution_acceptance.cpp": {
+      "sha256": "2018b5d600e1aa697218e9644b721af3e0f4456faa1ab5bb08075fea407a100d",
+      "build_source": "/home/eric/wjg/d1max-build-isaac/sdk-source/src/d1max_sdk_bridge/src/test_execution_acceptance.cpp"
+    },
+    "d1max_ros2/sdk_bridge_ws/src/d1max_sdk_bridge/src/test_execution_transport.cpp": {
+      "sha256": "421f3dcdf441c420aca345080d90f7015456435595d5e3f821fb3121fe701bc9",
+      "build_source": "/home/eric/wjg/d1max-build-isaac/sdk-source/src/d1max_sdk_bridge/src/test_execution_transport.cpp"
+    }
+  },
+  "binaries": {
+    "/home/eric/wjg/d1max-build-isaac/nav/install/scan_planner/lib/scan_planner/scan_planner_node": "64934d49491e8d0bdcbb18df8c0c610370da31c14deec9cb301e1456846bbe51",
+    "/home/eric/wjg/d1max-build-isaac/sdk/install/d1max_sdk_bridge/lib/d1max_sdk_bridge/sdk_execution_mock": "d66e6319a3dd742dfb97824661255610066b48c8ea16272542180ef8767ceada",
+    "/home/eric/wjg/d1max-build-isaac/sdk/install/d1max_sdk_bridge/lib/d1max_sdk_bridge/execution_acceptance_check": "1794364a96bd67a544caf1dfba8c87cc78ecfd78bfc8fd940b2e6f54c2bbcf14",
+    "/home/eric/wjg/d1max-build-isaac/nav/install/d1max_trajectory_tracker/lib/d1max_trajectory_tracker/trajectory_tracker": "f735df09d82d40dfa3b8d8be9a80050c7434f54e6f2b7205f1fa991bfda9ce45"
+  },
+  "previous_verification_sha256": "09b8284d3960e2f18f29a3bfc463b238c24ef9caaa2bcc04e0c2634221ecafdf",
+  "future_reaction_regression": {
+    "result": "passed",
+    "initial_command_speed_mps": 0.01,
+    "initial_measured_speed_mps": 0.001,
+    "reachable_speed_bound_mps": 0.6,
+    "reachable_yaw_bound_radps": 0.8,
+    "covered_directions": [
+      "forward",
+      "reverse",
+      "left",
+      "right"
+    ],
+    "result_semantics": "Occupancy outside the legacy near-zero envelope but inside the future Spot footprint is rejected using unchanged original GridMap occupancy; default legacy tests remain unchanged."
+  }
+}

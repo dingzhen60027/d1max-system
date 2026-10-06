@@ -3,6 +3,7 @@
 // ROS-independent admission/control core. Curves and derivatives are built and
 // admitted by SCAN; the immutable fixed-3D evaluator preserves its exact math.
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdint>
 #include <memory>
@@ -93,6 +94,103 @@ inline std::optional<double> normalForwardStep(double desired,double previous,do
   return std::clamp(std::clamp(desired,0.,speed_cap),lower,previous+acceleration*dt);
 }
 
+// A quadratic velocity is inside its Bezier-control convex cone. Normalize
+// nonzero 3D controls: the distance from zero to their XY convex hull bounds
+// |v_XY|/|v_XYZ| for every point of the interval, including zero-speed ends.
+// Opposing/vertical directions give zero rather than an invented direction.
+inline double quadraticPlanarScale(const std::array<Eigen::Vector3d,3>& controls) {
+  std::vector<Eigen::Vector2d> xy;
+  for(const auto& p:controls) {
+    if(!p.allFinite())return 0.;
+    const double norm=p.stableNorm();if(norm>0.)xy.push_back(p.head<2>()/norm);
+  }
+  if(xy.empty())return 0.;
+  const auto edge=[](const Eigen::Vector2d& a,const Eigen::Vector2d& b) {
+    const Eigen::Vector2d d=b-a;const double square=d.squaredNorm();
+    return (a+(square>1e-24?std::clamp(-a.dot(d)/square,0.,1.):0.)*d).norm();
+  };
+  double result=xy.front().norm();
+  for(std::size_t i=0;i<xy.size();++i)for(std::size_t j=i+1;j<xy.size();++j)
+    result=std::min(result,edge(xy[i],xy[j]));
+  if(xy.size()==3) {
+    const auto cross=[](const Eigen::Vector2d& a,const Eigen::Vector2d& b){return a.x()*b.y()-a.y()*b.x();};
+    const double area=cross(xy[1]-xy[0],xy[2]-xy[0]);
+    const double a=cross(xy[1]-xy[0],-xy[0]),b=cross(xy[2]-xy[1],-xy[1]),c=cross(xy[0]-xy[2],-xy[2]);
+    if(area!=0.&&((a>=-1e-14&&b>=-1e-14&&c>=-1e-14)||
+        (a<=1e-14&&b<=1e-14&&c<=1e-14)))result=0.;
+  }
+  return result>1e-12?std::nextafter(std::clamp(result-1e-12,0.,1.),0.):0.;
+}
+
+// Support-following planar execution still admits the complete XYZ spline.
+// These distances are horizontal chord lengths, a conservative lower bound
+// on travel available for braking. Each interval keeps its own conversion;
+// a near-vertical correction cannot suppress an unrelated horizontal span.
+struct SpatialPlanarBrakingEnvelope {
+  std::vector<double> times, horizontal_arcs, acceleration, limits;
+  std::vector<Eigen::Vector3d> points;
+  bool valid()const {
+    return times.size()>=2&&horizontal_arcs.size()==times.size()&&
+      points.size()==times.size()&&limits.size()==times.size()&&acceleration.size()+1==times.size();
+  }
+  static SpatialPlanarBrakingEnvelope build(const std::vector<double>& times,
+      const std::vector<Eigen::Vector3d>& points,const std::vector<Eigen::Vector3d>& velocity,
+      const std::vector<Eigen::Vector3d>& curve_acceleration,double max_speed,double max_acceleration,
+      double max_yaw,double support_scale,const std::vector<double>& interval_scales={}) {
+    SpatialPlanarBrakingEnvelope out;
+    const auto n=times.size();
+    if(n<2||points.size()!=n||velocity.size()!=n||curve_acceleration.size()!=n||
+        !finite(max_speed)||max_speed<=0.||!finite(max_acceleration)||max_acceleration<=0.||
+        !finite(max_yaw)||max_yaw<=0.||!finite(support_scale)||support_scale<=0.||support_scale>1.||
+        (!interval_scales.empty()&&interval_scales.size()+1!=n))return out;
+    out.times=times;out.points=points;out.horizontal_arcs.assign(n,0.);out.acceleration.resize(n-1);
+    std::vector<double> scales(n-1);
+    for(std::size_t i=0;i<n;++i)if(!finite(times[i])||!points[i].allFinite()||
+        !velocity[i].allFinite()||!curve_acceleration[i].allFinite()||(i&&times[i]<=times[i-1]))return {};
+    for(std::size_t i=0;i+1<n;++i) {
+      const Eigen::Vector3d chord=points[i+1]-points[i];
+      out.horizontal_arcs[i+1]=out.horizontal_arcs[i]+chord.head<2>().norm();
+      double scale=std::min(support_scale,spatialToPlanarScale(chord));
+      if(!interval_scales.empty()) {
+        if(!finite(interval_scales[i])||interval_scales[i]<0.||interval_scales[i]>1.)return {};
+        scale=std::min(scale,interval_scales[i]);
+      }
+      // A zero derivative does not define a direction. The actual adjacent
+      // chord supplies it; a genuine vertical/zero-XY chord remains zero.
+      for(const auto k:{i,i+1})if(velocity[k].norm()>1e-10)
+        scale=std::min(scale,spatialToPlanarScale(velocity[k]));
+      scales[i]=scale;out.acceleration[i]=max_acceleration*scale;
+    }
+    out.limits.resize(n);
+    for(std::size_t i=0;i<n;++i) {
+      const double scale=i==0?scales.front():i+1==n?scales.back():std::min(scales[i-1],scales[i]);
+      out.limits[i]=curvatureForwardLimit(velocity[i],curve_acceleration[i],max_yaw,max_speed*scale);
+    }
+    for(std::size_t i=n-1;i>0;--i)
+      out.limits[i-1]=std::min(out.limits[i-1],std::sqrt(out.limits[i]*out.limits[i]+
+        2.*out.acceleration[i-1]*(out.horizontal_arcs[i]-out.horizontal_arcs[i-1])));
+    return out;
+  }
+  std::size_t interval(double time)const {
+    const auto hi=std::upper_bound(times.begin(),times.end(),time);
+    return hi==times.begin()?0:hi==times.end()?times.size()-2:static_cast<std::size_t>(hi-times.begin()-1);
+  }
+  double accelerationAt(double time)const {
+    return valid()&&finite(time)?acceleration[interval(time)]:0.;
+  }
+  double speedAt(double time,const Eigen::Vector3d& curve_position)const {
+    if(!valid()||!finite(time)||!curve_position.allFinite())return 0.;
+    if(time<=times.front())return limits.front();
+    if(time>=times.back())return limits.back();
+    const auto i=interval(time);
+    // Query the exact current XYZ evaluator, not a time-interpolated distance.
+    // The current-to-next horizontal chord remains a lower bound even when
+    // spline speed varies or this interval bends vertically.
+    const double remaining=(points[i+1]-curve_position).head<2>().norm();
+    return std::min(limits[i],std::sqrt(limits[i+1]*limits[i+1]+2.*acceleration[i]*remaining));
+  }
+};
+
 struct Config
 {
   std::string session_id, planning_frame{"d1max_loc_odom"}, base_frame{"d1max_loc_base_link"};
@@ -105,6 +203,7 @@ struct Config
   double goal_height_tolerance{0.15}, single_floor_max_height_change{0.25};
   bool require_versioned_identity{true};
   bool require_support_reference{false}; // mandatory in schema-3 execution node
+  bool spatial_planar_braking_envelope{false}; // explicit verified-floor opt-in
   bool external_goal_completion{false};
   double join_limit{.0125}, recovery_span{.6};
   // Shared with BT/SDK from the physically accepted stationary record.
@@ -123,7 +222,8 @@ struct Config
     const auto bound = [](double value, double ceiling) {
       return finite(value) && value > 0.0 && value <= ceiling;
     };
-    if (!bound(max_speed, HARD_PLANAR_SPEED) || !bound(max_yaw_rate, 1.0) ||
+    if ((spatial_planar_braking_envelope&&!require_support_reference) ||
+        !bound(max_speed, HARD_PLANAR_SPEED) || !bound(max_yaw_rate, 1.0) ||
         !bound(max_acceleration, 0.8) || !bound(max_yaw_acceleration, 1.5) ||
         !bound(task_timeout, 1.0) || !bound(odom_timeout, 0.5) ||
         !bound(trajectory_timeout, 10.0) || !bound(lookahead, 2.0) ||
@@ -314,6 +414,24 @@ struct JoinDiagnostic {
   std::int64_t checked_now_ns{0},posterior_stamp_ns{0},imu_stamp_ns{0};
 };
 
+// Read-only status evidence. Clock fields describe the last actual step BEFORE
+// its clocks changed; geometry fields describe the currently installed curve.
+// These fields never participate in admission, progress or motion permission.
+struct ControlDiagnostic {
+  bool step_seen{false}, duplicate_source{false}, before_trajectory_start{false};
+  std::int64_t step_source_ns{0}, previous_step_source_ns{0}, step_trajectory_start_ns{0};
+  std::int64_t step_trajectory_id{-1};
+  double source_interval_s{0.}, receipt_interval_s{0.};
+  bool geometry_available{false}, body_present{false};
+  double projected_curve_time{0.}, lookahead_curve_time{0.}, curve_duration{0.};
+  double measured_arc_m{0.}, planar_speed_limit_mps{0.}, measured_xy_speed_mps{0.};
+  bool spatial_planar_braking_envelope{false};
+  double planar_acceleration_limit_mps2{0.};
+  std::int64_t body_source_stamp_ns{0}, installed_trajectory_start_ns{0};
+  Eigen::Vector3d lookahead_position{Eigen::Vector3d::Zero()};
+  Eigen::Vector3d lookahead_velocity{Eigen::Vector3d::Zero()};
+};
+
 struct EntryCurveCache {
   std::shared_ptr<const scan_planner::UniformBspline> curve,velocity;
   std::shared_ptr<const FixedBsplineSampler> curve_sampler,velocity_sampler;
@@ -435,20 +553,31 @@ struct PreparedGeometry {
   ControlIdentity identity;
   std::uint64_t generation{0};std::int64_t trajectory_id{-1};
   std::vector<double> speed_envelope;
+  SpatialPlanarBrakingEnvelope spatial_planar_envelope;
   double planar_scale{1.};bool derivatives_valid{false};
   std::string failure;
   std::vector<Eigen::Vector3d> original_controls;
   std::vector<double> original_knots;
   std::string frame,point_reference;
   double max_speed{0.},max_acceleration{0.},max_yaw{0.},height_tolerance{0.};
-  bool requires_support{false};
+  bool requires_support{false},uses_spatial_planar_envelope{false};
   bool matches(const Config& c,const Trajectory& t)const {
     if(!(identity==t.identity)||generation!=t.generation||trajectory_id!=t.id||frame!=t.frame_id||
        point_reference!=t.point_reference||max_speed!=c.max_speed||max_acceleration!=c.max_acceleration||
        max_yaw!=c.max_yaw_rate||height_tolerance!=c.goal_height_tolerance||requires_support!=c.require_support_reference||
+       uses_spatial_planar_envelope!=c.spatial_planar_braking_envelope||
        original_knots!=t.knots||original_controls.size()!=t.points.size())return false;
     for(std::size_t i=0;i<t.points.size();++i)if(!(original_controls[i].array()==t.points[i].array()).all())return false;
     return true;
+  }
+  double planarSpeedLimit(double time,double xyz_arc,const Config& c)const {
+    if(uses_spatial_planar_envelope)
+      return spatial_planar_envelope.speedAt(time,entry.curve_sampler->evaluateDeBoorT(time));
+    return std::min(c.max_speed*planar_scale,brakingEnvelopeAt(entry.arcs,speed_envelope,xyz_arc,
+      c.max_acceleration*planar_scale,planar_scale));
+  }
+  double planarAccelerationLimit(double time,const Config& c)const {
+    return uses_spatial_planar_envelope?spatial_planar_envelope.accelerationAt(time):c.max_acceleration*planar_scale;
   }
   static std::shared_ptr<const PreparedGeometry> build(const Config& config,const Trajectory& t,
       SupportEvidence support,const std::function<bool()>& allowed=[] {return true;}) {
@@ -457,6 +586,10 @@ struct PreparedGeometry {
     out->original_controls=t.points;out->original_knots=t.knots;out->frame=t.frame_id;out->point_reference=t.point_reference;
     out->max_speed=config.max_speed;out->max_acceleration=config.max_acceleration;out->max_yaw=config.max_yaw_rate;
     out->height_tolerance=config.goal_height_tolerance;out->requires_support=config.require_support_reference;
+    out->uses_spatial_planar_envelope=config.spatial_planar_braking_envelope;
+    if(out->uses_spatial_planar_envelope&&!config.require_support_reference) {
+      out->failure="spatial_planar_envelope_requires_verified_floor_support";return out;
+    }
     auto entry=EntryCurveCache::build(t,allowed,&out->failure);
     if(!entry){if(!allowed())out->failure="preparation_cancelled";return out;}
     out->failure.clear();
@@ -482,6 +615,39 @@ struct PreparedGeometry {
     }
     if(config.require_support_reference)out->planar_scale=std::min(out->planar_scale,
       spatialToPlanarScale(Eigen::Vector3d(1.,0.,std::tan(out->support->max_slope))));
+    if(out->uses_spatial_planar_envelope) {
+      std::vector<Eigen::Vector3d> velocities,accelerations;
+      velocities.reserve(out->entry.times.size());accelerations.reserve(out->entry.times.size());
+      for(const auto time:out->entry.times) {
+        if(!allowed()){out->failure="preparation_cancelled";return out;}
+        velocities.push_back(out->entry.velocity->evaluateDeBoorT(time));
+        accelerations.push_back(out->acceleration->evaluateDeBoorT(time));
+      }
+      std::vector<double> interval_scales(out->entry.times.size()-1,1.);
+      const double knot_origin=t.knots[static_cast<std::size_t>(t.order)];
+      for(std::size_t i=0;i<interval_scales.size();++i) {
+        if(!allowed()){out->failure="preparation_cancelled";return out;}
+        const double from=out->entry.times[i],to=out->entry.times[i+1];
+        std::vector<double> cuts{from};
+        // The velocity is quadratic only within an original knot span.
+        auto knot=std::upper_bound(t.knots.begin(),t.knots.end(),from+knot_origin);
+        for(;knot!=t.knots.end()&&*knot-knot_origin<to;++knot)
+          if(*knot-knot_origin>from)cuts.push_back(*knot-knot_origin);
+        cuts.push_back(to);
+        for(std::size_t k=1;k<cuts.size();++k) {
+          const Eigen::Vector3d v0=out->entry.velocity->evaluateDeBoorT(cuts[k-1]);
+          const Eigen::Vector3d v2=out->entry.velocity->evaluateDeBoorT(cuts[k]);
+          const Eigen::Vector3d vm=out->entry.velocity->evaluateDeBoorT((cuts[k-1]+cuts[k])*.5);
+          const Eigen::Vector3d v1=2.*vm-.5*(v0+v2);
+          interval_scales[i]=std::min(interval_scales[i],quadraticPlanarScale({v0,v1,v2}));
+        }
+      }
+      out->spatial_planar_envelope=SpatialPlanarBrakingEnvelope::build(out->entry.times,out->entry.points,
+        velocities,accelerations,config.max_speed,config.max_acceleration,config.max_yaw_rate,
+        spatialToPlanarScale(Eigen::Vector3d(1.,0.,std::tan(out->support->max_slope))),interval_scales);
+      if(!out->spatial_planar_envelope.valid())out->failure="spatial_planar_braking_envelope_invalid";
+      return out;
+    }
     std::vector<double> limits;limits.reserve(out->entry.times.size());
     for(const auto time:out->entry.times) {
       if(!allowed()){out->failure="preparation_cancelled";return out;}
@@ -714,7 +880,6 @@ public:
     const auto& arc=prepared->entry.arcs;
     const auto& times=prepared->entry.times;
     const auto& samples=prepared->entry.points;
-    const auto& speed_envelope=prepared->speed_envelope;
     const auto curve=prepared->entry.curve,velocity=prepared->entry.velocity;
     const double planar_scale=prepared->planar_scale;
     double initial_time=0., initial_arc=0.;
@@ -748,8 +913,7 @@ public:
     }
     // Strictly preserve the limiter history. Only the reachable limit at the
     // actual entry matters, not the minimum over unrelated future geometry.
-    const double entry_limit=brakingEnvelopeAt(arc,speed_envelope,initial_arc,
-      config_.max_acceleration*planar_scale,planar_scale);
+    const double entry_limit=prepared->planarSpeedLimit(initial_time,initial_arc,config_);
     if(last_output_.forward>entry_limit+1e-12)
       return candidateReject("curvature_braking_limit_below_current_command");
     trajectory_ = std::move(curve);
@@ -854,10 +1018,10 @@ public:
     const auto desired=observed.positionAt(look),velocity=observed.velocityAt(look);
     const Eigen::Vector2d world=config_.kp_position*(desired.head<2>()-odom_.position.head<2>())+
       (look<duration_?Eigen::Vector2d(velocity.head<2>()):Eigen::Vector2d::Zero());
-    const double speed_cap=std::min(config_.max_speed*planar_scale_,brakingEnvelopeAt(
-      arcTable(),speedEnvelope(),observed.measured_arc_,config_.max_acceleration*planar_scale_,planar_scale_));
+    const double speed_cap=prepared_geometry_->planarSpeedLimit(observed.execution_time_,observed.measured_arc_,config_);
     return !braking_reentry_required_&&pos.allFinite()&&desired.allFinite()&&world.allFinite()&&
-      normalForwardStep(0.,last_output_.forward,speed_cap,config_.max_acceleration*planar_scale_,receipt-last_step_)&&
+      normalForwardStep(0.,last_output_.forward,speed_cap,
+        prepared_geometry_->planarAccelerationLimit(observed.execution_time_,config_),receipt-last_step_)&&
       (pos.head<2>()-odom_.position.head<2>()).norm()<=2.&&std::abs(pos.z()-odom_.position.z())<=.5;
   }
 
@@ -866,6 +1030,16 @@ public:
   // Legacy callers have no external proof and retain publication-age timeout.
   Output step(SourceTime ros_now, double received, bool fresh_external_curve_lease=false)
   {
+    control_diagnostic_.step_seen=true;
+    control_diagnostic_.step_source_ns=ros_now.nanoseconds();
+    control_diagnostic_.previous_step_source_ns=last_ros_time_.nanoseconds();
+    control_diagnostic_.step_trajectory_start_ns=trajectory_start_ns_;
+    control_diagnostic_.step_trajectory_id=last_trajectory_id_;
+    control_diagnostic_.receipt_interval_s=received-last_step_;
+    control_diagnostic_.source_interval_s=last_ros_time_.nanoseconds()>0?
+      sourceDeltaSeconds(ros_now.nanoseconds(),last_ros_time_.nanoseconds()):received-last_step_;
+    control_diagnostic_.duplicate_source=control_diagnostic_.source_interval_s==0.;
+    control_diagnostic_.before_trajectory_start=ros_now.nanoseconds()<trajectory_start_ns_;
     // Idle has no execution clock to guard. Establish a baseline instead of
     // reporting a huge "clock jump" on the first timer after process startup.
     if (!active_ && finite(ros_now) && finite(received)) {
@@ -932,10 +1106,8 @@ public:
     out.frozen = std::abs(yaw_error) > config_.heading_threshold ||
                  pos_error.norm() > config_.position_freeze_distance;
     double forward = 0.0;
-    const double planar_speed_limit=std::min(config_.max_speed*planar_scale_,
-      brakingEnvelopeAt(arcTable(),speedEnvelope(),measured_arc_,
-        config_.max_acceleration*planar_scale_,planar_scale_));
-    const double planar_acceleration_limit=config_.max_acceleration*planar_scale_;
+    const double planar_speed_limit=prepared_geometry_->planarSpeedLimit(execution_time_,measured_arc_,config_);
+    const double planar_acceleration_limit=prepared_geometry_->planarAccelerationLimit(execution_time_,config_);
     if(braking_reentry_required_) {
       reason_="braking_envelope_reentry_required";return stop();
     }
@@ -1168,6 +1340,26 @@ public:
   // Diagnostic only: why the most recent candidate admission failed.
   const std::string &candidateReason() const { return candidate_reason_; }
   const JoinDiagnostic& joinDiagnostic()const {return join_diagnostic_;}
+  ControlDiagnostic controlDiagnostic()const {
+    auto out=control_diagnostic_;
+    out.body_present=have_odom_;
+    out.body_source_stamp_ns=originalSourceNs(odom_.source_stamp_ns,odom_.stamp);
+    out.measured_xy_speed_mps=odom_.velocity_in_frame.head<2>().norm();
+    out.installed_trajectory_start_ns=trajectory_start_ns_;
+    out.projected_curve_time=execution_time_;out.measured_arc_m=measured_arc_;
+    out.curve_duration=duration_;
+    out.geometry_available=trajectory_&&velocity_&&prepared_geometry_&&
+      prepared_geometry_->entry.curve_sampler&&prepared_geometry_->entry.velocity_sampler;
+    if(out.geometry_available) {
+      out.lookahead_curve_time=std::min(duration_,execution_time_+config_.lookahead);
+      out.lookahead_position=positionAt(out.lookahead_curve_time);
+      out.lookahead_velocity=velocityAt(out.lookahead_curve_time);
+      out.planar_speed_limit_mps=prepared_geometry_->planarSpeedLimit(execution_time_,measured_arc_,config_);
+      out.spatial_planar_braking_envelope=prepared_geometry_->uses_spatial_planar_envelope;
+      out.planar_acceleration_limit_mps2=prepared_geometry_->planarAccelerationLimit(execution_time_,config_);
+    }
+    return out;
+  }
   void recordJoinDiagnostic(const Trajectory& t,SourceTime now,double duration,const std::string& reason) {
     join_diagnostic_={have_odom_,t.id,odom_.source_stamp_ns,t.join_source_stamp_ns,
       t.entry_reobserved,t.original_join_source_stamp_ns,now,odom_.stamp,odom_.posterior_stamp,
@@ -1327,6 +1519,7 @@ private:
   double aligned_entry_stamp_{0.};
   Eigen::Vector3d aligned_entry_position_{Eigen::Vector3d::Zero()};
   double measured_arc_{0.}, committed_arc_{0.}, last_projected_stamp_{0.};
+  ControlDiagnostic control_diagnostic_;
   Eigen::Vector3d last_projected_position_{Eigen::Vector3d::Zero()};
   std::shared_ptr<const PreparedGeometry> prepared_geometry_;
   const std::vector<double>& arcTable() const {return prepared_geometry_->entry.arcs;}

@@ -9,6 +9,7 @@
 #include <map>
 #include <array>
 #include <limits>
+#include <optional>
 #include <functional>
 #include <cv_bridge/cv_bridge.h>
 #include <cmath>
@@ -41,6 +42,7 @@
 #include <plan_env/raycast.h>
 #include <plan_env/voxel_collision.hpp>
 #include <plan_env/static_occupancy_prior.hpp>
+#include <plan_env/dynamic_occupancy_oracle.hpp>
 
 #define logit(x) (log((x) / (1 - (x))))
 
@@ -108,6 +110,7 @@ struct MappingParameters {
   bool use_projected_rays_{false};
   bool simulation_collision_clock_{false};
   bool validated_static_prior_{false};
+  bool projected_ray_exact_pair_{false};  // Opt-in Isaac simultaneous BEGIN acquisitions only.
   bool preview_only_{false};  // Diagnostic lease only, never execution authority.
   double cloud_pose_pair_wait_{0.25};
   double cloud_pose_max_age_{0.5};
@@ -274,6 +277,8 @@ public:
     if(collision_cache_clock_ns_==0)beginCollisionQuery();
     return rawCollisionStatus(cell);
   }
+  int observedRawSnapshotColumnStatus(const Eigen::Vector3i& first,int high_z,std::size_t* visited=nullptr);
+  bool observedProofFresh();
   std::int64_t observedProofDeadlineNs() const;
   // Each trajectory proof owns its queried evidence set. An earlier curve's
   // cached expiry must not become this curve's apparent minimum source time.
@@ -282,20 +287,43 @@ public:
     observed_cylinder_cache_.clear();collision_cache_deadline_ns_=collision_cache_clock_ns_=0;
     collision_cache_receipt_deadline_ns_=collision_cache_receipt_ns_=0;
     static_prior_query_lease_valid_=false;
+    dynamic_oracle_query_valid_=false;
     prepareRawCollisionCache();
   }
   std::uint64_t localizationContextSequence() const { return localization_context_sequence_; }
   // Consumers must use the map's validated source-age contract, not an
   // unrelated odometry timeout. This query never renews an integrated stamp.
   bool integratedCloudFreshAt(std::int64_t now_ns) const {
-    return scan_planner::rayStampFresh(integrated_cloud_stamp_ns_, now_ns,
+    return (!mp_.projected_ray_exact_pair_ || (ray_integrated_stamps_[0]>0 &&
+            ray_integrated_stamps_[0]==ray_integrated_stamps_[1])) &&
+           scan_planner::rayStampFresh(integrated_cloud_stamp_ns_, now_ns,
                                        mp_.cloud_pose_max_age_);
   }
   // Effective collision evidence changes also wake WAIT_ENVIRONMENT without
   // forcing regeneration of unchanged visual occupancy clouds.
   std::uint64_t occupancyRevision() const { return occupancy_revision_+free_evidence_revision_; }
   bool requiresObservedFree() const { return mp_.require_observed_free_; }
+  // The only exceptional body lower bound is the independently certified,
+  // opt-in flat plane contact slab. Used by both curve and raw motion sweeps.
+  std::optional<double> certifiedFloorContactLowerBound() const {
+    if(static_prior_&&static_prior_->floorContactEnabled())
+      return static_prior_->floorZ()-static_prior_->floorPenetrationM();
+    return {};
+  }
+  std::optional<double> certifiedSupportFloorZ() const {
+    if(static_prior_&&static_prior_->floorContactEnabled())return static_prior_->floorZ();
+    return {};
+  }
+  bool dynamicOracleCoversMotionHorizon(double seconds) {
+    if(!dynamic_oracle_.enabled())return true;
+    if(!std::isfinite(seconds)||seconds<=0.||seconds>8.)return false;
+    const auto now=collisionQueryClock(),receipt=collisionQueryReceiptNs();
+    const auto duration=static_cast<std::int64_t>(std::ceil(seconds*1e9));
+    return dynamic_oracle_.live(dynamicOracleContext(),now,receipt)&&now>0&&
+        now<=std::numeric_limits<std::int64_t>::max()-duration&&dynamic_oracle_.reachableUntilNs()>=now+duration;
+  }
   const char *collisionQueryPolicy() const {
+    if(dynamic_oracle_.enabled())return "validated_static_prior_with_dynamic_oracle_double_cylinder";
     if(mp_.validated_static_prior_)return "validated_static_prior_double_cylinder";
     return mp_.require_observed_free_ ? "strict_observed_double_cylinder" :
         "official_inflated_double_cylinder";
@@ -305,6 +333,7 @@ public:
   // Separate from goal/reference generations: only a localization coordinate
   // identity change may invalidate all accumulated world-frame evidence.
   bool applyLocalizationContext(const std::string &payload);
+  bool applyDynamicOccupancyOracle(const std::string &payload,std::int64_t receipt_ns);
 
   typedef std::shared_ptr<GridMap> Ptr;
   // Called only by the map writer, between completed updates. Destination is
@@ -317,9 +346,14 @@ public:
         md_.occupancy_buffer_inflate_.size()*sizeof(md_.occupancy_buffer_inflate_[0])+
         md_.occupancy_buffer_inflate_cnt_.size()*sizeof(md_.occupancy_buffer_inflate_cnt_[0])+
         md_.inflate_offsets_.size()*sizeof(Eigen::Vector3i)+
+        collision_xy_offsets_.size()*sizeof(Eigen::Vector2i)+
         (free_observation_stamps_.size()+free_observation_receipts_ns_.size())*sizeof(std::int64_t)+
         (mp_.validated_static_prior_?md_.occupancy_buffer_.size()*sizeof(std::int8_t):0)+
-        static_prior_live_hits_.size()*(sizeof(decltype(static_prior_live_hits_)::value_type)+4*sizeof(void*));
+        (mp_.validated_static_prior_&&static_prior_&&static_prior_->floorContactEnabled()?
+         observed_column_cache_.maximumStorageBytes():0)+
+        static_prior_live_hits_.size()*(sizeof(decltype(static_prior_live_hits_)::value_type)+4*sizeof(void*))+
+        static_support_floor_witnesses_.size()*(sizeof(decltype(static_support_floor_witnesses_)::value_type)+4*sizeof(void*))+
+        dynamic_oracle_.bytes();
   }
 
   EIGEN_MAKE_ALIGNED_OPERATOR_NEW
@@ -417,9 +451,14 @@ private:
   void beginCollisionQuery();
   int rawCollisionStatus(const Eigen::Vector3i &cell);
   int uncachedRawCollisionStatus(const Eigen::Vector3i &cell);
+  int uncachedRawCollisionStatusAtAddress(const Eigen::Vector3i& cell,int address,int prior,bool dynamic_possible=true);
   void prepareRawCollisionCache();
   std::uint64_t unknown_collision_queries_{0};
   int observedCylinderStatus(const Eigen::Vector3d &center);
+  int observedVerticalColumnStatus(const Eigen::Vector3i &first,int high_z);
+  scan_planner::VoxelStatusCache observed_column_cache_;
+  std::uint64_t observed_column_cache_generation_{0};
+  std::vector<Eigen::Vector2i> collision_xy_offsets_;
   std::string localization_context_payload_, localization_seed_;
   std::uint64_t localization_context_sequence_{0}, localization_epoch_{0};
   std::shared_ptr<const scan_planner::StaticOccupancyPrior> static_prior_;
@@ -429,14 +468,20 @@ private:
   std::vector<std::int8_t> raw_collision_cache_;
   std::uint64_t raw_collision_cache_generation_{0};
   std::uint64_t static_prior_revoked_sequence_{0};
+  scan_planner::DynamicOccupancyOracle dynamic_oracle_;
+  bool dynamic_oracle_query_valid_{false};
+  scan_planner::DynamicOccupancyOracle::Context dynamicOracleContext() const {
+    return {mp_.localization_session_id_,localization_seed_,localization_epoch_,localization_context_sequence_};
+  }
   // A measured endpoint contradicts certified static FREE immediately, even
   // before native log odds cross the occupied threshold. Global identity is
   // deliberate: sliding/reusing a ring slot cannot erase that contradiction.
   // Only a newer real miss batch reaching strict FREE may clear it; TTL cannot.
   std::map<std::array<int,3>,std::int64_t> static_prior_live_hits_;
+  std::map<std::array<int,3>,std::int64_t> static_support_floor_witnesses_;
   bool staticPriorLiveLeaseValid();
   void revokeStaticPriorContext(std::uint64_t sequence);
-  void recordStaticPriorHit(const Eigen::Vector3i &cell,std::int64_t stamp);
+  void recordStaticPriorHit(const Eigen::Vector3i &cell,std::int64_t stamp,double endpoint_z=std::numeric_limits<double>::quiet_NaN());
   void clearStaticPriorHitAfterMiss(const Eigen::Vector3i &cell,int address);
   const char *collisionEvidenceSource(const Eigen::Vector3i &cell,int state);
   std::array<sensor_msgs::msg::PointCloud2, 2> visualization_cache_;
@@ -498,6 +543,7 @@ private:
   rclcpp::Subscription<d1max_planning_interfaces::msg::ProjectedRays>::SharedPtr projected_rays_sub_;
   rclcpp::Publisher<std_msgs::msg::String>::SharedPtr projected_rays_status_pub_;
   rclcpp::Subscription<std_msgs::msg::String>::SharedPtr localization_context_sub_;
+  rclcpp::Subscription<std_msgs::msg::String>::SharedPtr dynamic_oracle_sub_;
   rclcpp::Publisher<std_msgs::msg::String>::SharedPtr localization_context_ack_pub_;
   rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr map_pub_;
   rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr map_inf_pub_;

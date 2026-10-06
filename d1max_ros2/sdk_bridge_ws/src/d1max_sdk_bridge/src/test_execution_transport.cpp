@@ -27,9 +27,9 @@ static MotionProof proof(const Demand&d,double now=10.,uint64_t sequence=1){Moti
  p.demand_sequence=d.sequence;p.demand_source_stamp=d.source_stamp;p.demand_body_source_stamp=d.body_source_stamp;p.demand_valid_until=d.valid_until;
  p.sequence=sequence;p.check_begin=p.check_end=p.body_source_stamp=p.front_ray_source_stamp=p.rear_ray_source_stamp=stamp(now);
  p.valid_until=d.valid_until;p.velocity=d.velocity;p.frame_id="d1max_loc_odom";p.valid=true;p.transport_mode=d.transport_mode;p.braking_model_sha256=d.braking_model_sha256;return p;}
-static Transport ready(const ExecutionPolicy&policy=testExecutionPolicy()){Transport t("sdk","isolated_mock");t.configureMcCaptureBound(.02,"isolated_simulated_source_clock");
+static Transport ready(const ExecutionPolicy&policy=testExecutionPolicy(),double command_speed=.3,double command_yaw=.5){Transport t("sdk","isolated_mock");t.configureMcCaptureBound(.02,"isolated_simulated_source_clock");
  t.configureExecutionPolicy(policy,.8);
- t.configureBrakingModel(std::string(64,'c'));assert(t.grant(g(),10,h()).accepted);
+ t.configureBrakingModel(std::string(64,'c'),command_speed,command_yaw);assert(t.grant(g(),10,h()).accepted);
  t.tick(10,h());assert(t.permit(p(),10));assert(t.motionValidation(proof(d()),10));
  Local local;local.schema_version=1;local.session_id="nav";local.map_version_id="map";local.localization_epoch=1;local.localization_seed_id="seed";
  local.source_stamp=local.posterior_stamp=local.imu_stamp=stamp(10.);local.usable=true;
@@ -52,6 +52,21 @@ static void refreshBody(Transport&t,double now) {
  assert(t.trajectoryValidation(c,now));
 }
 int main(){
+ // A plant's larger measured reachable bound must never reach writer caps.
+ {auto t=ready(testExecutionPolicy(),.15,.3);assert(!t.demand(d(),10.));
+  auto within=d();within.sequence=within.motion_validation_sequence=2;within.velocity.linear.x=.15;
+  assert(t.motionValidation(proof(within,10.,2),10.));assert(t.demand(within,10.));
+  assert(t.tick(10.01,h())->linear.x==.15);
+  auto above=within;above.sequence=above.motion_validation_sequence=3;above.velocity.linear.x=.1501;
+  assert(t.motionValidation(proof(above,10.,3),10.));assert(!t.demand(above,10.));
+  above.velocity.linear.x=.1;above.velocity.angular.z=.3001;above.sequence=above.motion_validation_sequence=4;
+  assert(t.motionValidation(proof(above,10.,4),10.));assert(!t.demand(above,10.));
+  assert(!t.report(10.01).physical_acceptance_verified);
+  for(const auto*mode:{"isolated_mock","live"}) {
+   Transport guarded("sdk",mode);bool rejected=false;
+   try{guarded.configureBrakingModel(std::string(64,'c'),.6,.8);}catch(const std::invalid_argument&){rejected=true;}
+   assert(rejected);
+  }}
  // A real Unix-epoch source equal to ROS time used to fail grant admission:
  // sec + nanosec*1e-9 rounded above ns/1e9. Exact clocks also distinguish a
  // genuinely future or expired sample by one nanosecond, without tolerance.

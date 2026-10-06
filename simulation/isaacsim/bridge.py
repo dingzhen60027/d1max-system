@@ -18,7 +18,8 @@ import time
 import numpy as np
 
 from protocol import (STATE_PORT, COMMAND_PORT, MAX_DATAGRAM, RayAssembler,
-                      decode, finite_vector, command_packet)
+                      decode, finite_vector, command_packet, native_ray_metadata,
+                      NATIVE_RAY_PHASE)
 
 
 def quaternion_matrix(quaternion):
@@ -44,6 +45,67 @@ def validate_static_prior_state(packet, contract, rotation):
         raise ValueError('isaac_static_prior_body_tilt_outside_contract')
     if abs(float(packet['pose'][2])-contract['expected_body_world_z'])>contract['max_body_height_error_m']:
         raise ValueError('isaac_static_prior_body_height_outside_flat_floor_contract')
+    if contract.get('body_envelope_attestation_required'):
+        if (packet.get('body_envelope_valid') is not True
+                or packet.get('body_envelope_checked_sim_time_ns') != packet['sim_time_ns']
+                or packet.get('body_envelope_registry_sha256') != contract['body_envelope_registry_sha256']):
+            raise ValueError('isaac_actual_full_body_envelope_revoked:' + str(packet.get('body_envelope_fault', 'missing')))
+
+
+def dynamic_measurement_payload(packet, registry, context, anchor_ns, horizon_ns=300_000_000):
+    """Bind actual plant observations to the original navigation context."""
+    from dynamic_collision import oracle_payload, registry_digest
+    if packet['registry_sha256'] != registry_digest(registry):
+        raise ValueError('isaac_dynamic_actor_registry_changed')
+    source = anchor_ns + packet['sim_time_ns']
+    samples = {name: dict(value, source_stamp_ns=source)
+               for name, value in packet['samples'].items()}
+    return oracle_payload(registry, samples, session_id=context['session_id'],
+        epoch=context['epoch'], seed_id=context['seed_id'],
+        context_sequence=context['sequence'], sequence=packet['sequence'],
+        source_stamp_ns=source, reachable_horizon_ns=horizon_ns)
+
+
+def native_phase_contract(session):
+    """Explicit quadruped prephysics capture requires a sealed physical dt."""
+    contract = session.get('perception_native_phase_contract')
+    required = session.get('static_collision_prior_contract', {}).get('body_envelope_attestation_required') is True
+    if contract is None:
+        if required:
+            raise ValueError('isaac_native_ray_phase_contract_required')
+        return None
+    if (not isinstance(contract, dict) or type(contract.get('schema')) is not int
+            or contract['schema'] != 1 or contract.get('phase') != NATIVE_RAY_PHASE
+            or type(contract.get('physics_dt_ns')) is not int
+            or not 0 < contract['physics_dt_ns'] <= 100_000_000):
+        raise ValueError('invalid_isaac_native_ray_phase_contract')
+    return contract
+
+
+def ray_source_times(scan, anchor_ns, contract=None):
+    """Use actual BEGIN for navigation; retain wrapper END as native evidence.
+
+    The native sensor's float step accumulation is not an integer restamp.
+    Its rounded END must be one sealed dt after BEGIN within the original
+    dt/10 alignment tolerance. Optional paired physics-step IDs also differ
+    by exactly one. No acquisition-end ROS field or point dtype is changed.
+    """
+    metadata = native_ray_metadata(scan)
+    if contract is None:
+        if metadata:
+            raise ValueError('isaac_native_ray_phase_contract_required')
+        raw_timestamp_s = scan['sim_time_ns'] * 1e-9
+    else:
+        if not metadata or metadata['phase'] != contract['phase']:
+            raise ValueError('isaac_native_ray_phase_metadata_required')
+        delta = metadata['native_frame_time_ns'] - scan['sim_time_ns']
+        dt = contract['physics_dt_ns']
+        if delta <= 0 or abs(delta-dt) * 10 > dt:
+            raise ValueError('isaac_native_ray_phase_end_outside_sealed_physics_step')
+        raw_timestamp_s = metadata['native_frame_time_s']
+    source_ns = anchor_ns + scan['sim_time_ns']
+    return dict(source_stamp_ns=source_ns, source_timestamp_s=source_ns * 1e-9,
+                raw_timestamp_s=raw_timestamp_s, native_frame_metadata=metadata)
 
 
 def run_bridge(node_factory):
@@ -120,6 +182,7 @@ def main():
     from rosgraph_msgs.msg import Clock as ClockMessage
     from sensor_msgs.msg import PointCloud2, PointField, Imu
     from std_msgs.msg import String
+    from visualization_msgs.msg import Marker, MarkerArray
     from tf2_ros import TransformBroadcaster, StaticTransformBroadcaster
 
     directory = args.session.resolve(strict=True)
@@ -127,6 +190,7 @@ def main():
     if session.get('transport_mode') != 'isolated_mock' or session.get('simulation_backend') != 'isaacsim_physx':
         raise ValueError('isaac_isolated_session_required')
     contract = session['isaac_bridge_contract']
+    phase_contract = native_phase_contract(session)
     anchor_ns = int(contract['clock_anchor_ns'])
     frames = session['navigation_contract']['frames']
 
@@ -154,12 +218,32 @@ def main():
             self.last_status = 0.
             self.fault = ''
             self.state_count = 0
+            self.body_envelope_verified_samples = 0
+            self.body_envelope_failures = 0
+            self.body_envelope_registry_sha256 = ''
             self.ray_count = [0, 0]
+            self.latest_native_ray_frames = [None, None]
             self.imu_count = 0
             self.last_imu_sequence = -1
             self.imu_history = deque(maxlen=64)
             self.last_local_state = None
             self.last_global_state = None
+            self.dynamic_context = None
+            self.last_dynamic_sequence = -1
+            self.dynamic_count = 0
+            self.dynamic_registry = []
+            self.dynamic_pub = None
+            dynamic_contract = session.get('dynamic_oracle_contract')
+            if dynamic_contract:
+                from dynamic_collision import actor_registry, registry_digest
+                spec = json.loads(Path(contract['scene_config']).read_text())
+                self.dynamic_registry = actor_registry(spec)
+                if registry_digest(self.dynamic_registry) != dynamic_contract['registry_sha256']:
+                    raise ValueError('isaac_dynamic_actor_registry_changed')
+                self.dynamic_pub = self.create_publisher(String, dynamic_contract['topic'], 10)
+                self.dynamic_markers = self.create_publisher(MarkerArray, '/d1max/isaacsim/dynamic_actors', 1)
+                self.create_subscription(String, '/d1max/live_planning/scan_map_context',
+                    self.on_dynamic_context, QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL))
             self.clock_pub = self.create_publisher(ClockMessage, '/clock', 10)
             self.global_pub = self.create_publisher(NavigationState, '/d1max/localization/navigation/state', 10)
             self.local_pub = self.create_publisher(LocalNavigationState, '/d1max/localization/navigation/local_state', 10)
@@ -233,6 +317,59 @@ def main():
                 return None
             return anchor_ns+packet['sim_time_ns']
 
+        def on_dynamic_context(self, message):
+            value = json.loads(message.data)
+            if (value.get('session_id') != session['id'] or value.get('epoch') != 1
+                    or value.get('seed_id') != 'isaac-'+str(self.epoch)):
+                return
+            if value.get('map_from_odom_contract') != 'fixed_identity_map_from_odom_v1':
+                self.fail('isaac_dynamic_oracle_context_revoked')
+                return
+            if (self.dynamic_context is None
+                    or value['sequence'] >= self.dynamic_context['sequence']):
+                self.dynamic_context = value
+
+        def dynamic(self, packet):
+            if self.fault or self.dynamic_pub is None or self.source(packet) is None:
+                return
+            if (type(packet['sequence']) is not int or packet['sequence'] <= self.last_dynamic_sequence
+                    or packet['sim_time_ns'] != self.last_state_sim_ns):
+                return
+            if self.dynamic_context is None:
+                return
+            value = dynamic_measurement_payload(packet, self.dynamic_registry,
+                self.dynamic_context, anchor_ns,
+                session['dynamic_oracle_contract'].get('reachable_horizon_ns', 300_000_000))
+            self.dynamic_pub.publish(String(data=json.dumps(value, separators=(',', ':'), allow_nan=False)))
+            self.last_dynamic_sequence = packet['sequence']
+            self.dynamic_count += 1
+            markers = MarkerArray()
+            marker_id = 0
+            for actor in self.dynamic_registry:
+                sample = packet['samples'][actor['id']]
+                orientation = np.asarray(finite_vector(sample.get('orientation_xyzw', [0, 0, 0, 1]), 4))
+                if abs(np.linalg.norm(orientation)-1.) > .01:
+                    raise ValueError('invalid_dynamic_actor_orientation')
+                rotation = quaternion_matrix(orientation/np.linalg.norm(orientation))
+                for shape in actor['shapes']:
+                    marker = Marker()
+                    marker.header.frame_id = frames['odom_frame']
+                    stamp(marker.header.stamp, value['source_stamp_ns'])
+                    marker.ns, marker.id = actor['id'], marker_id
+                    marker_id += 1
+                    marker.type = Marker.CUBE if shape['type'] == 'box' else Marker.CYLINDER
+                    marker.action = Marker.ADD
+                    center = np.asarray(sample['position'])+rotation@np.asarray(shape['center'])
+                    marker.pose.position.x, marker.pose.position.y, marker.pose.position.z = center.tolist()
+                    q = marker.pose.orientation
+                    q.x, q.y, q.z, q.w = orientation.tolist()
+                    size = shape.get('size', [2*shape.get('radius', 0), 2*shape.get('radius', 0), shape.get('height', 0)])
+                    marker.scale.x, marker.scale.y, marker.scale.z = size
+                    marker.color.r, marker.color.g, marker.color.b, marker.color.a = .95, .43, .1, .85
+                    marker.lifetime.sec, marker.lifetime.nanosec = 0, 200000000
+                    markers.markers.append(marker)
+            self.dynamic_markers.publish(markers)
+
         def applied(self, message):
             if self.epoch is None or self.fault:
                 self.send_zero()
@@ -258,7 +395,7 @@ def main():
             if (any(abs(x) > 1e-6 for x in values[1:5])
                     or abs(values[0]) > session['max_speed_mps']+1e-6
                     or abs(values[5]) > session['max_yaw_radps']+1e-6):
-                self.fail('unsupported_wheeled_applied_motion')
+                self.fail('unsupported_planar_applied_motion')
                 return
             self.command_sequence += 1
             self.sender.sendto(command_packet(self.epoch, self.command_sequence,
@@ -293,8 +430,13 @@ def main():
             try:
                 validate_static_prior_state(packet,session.get('static_collision_prior_contract'),rotation)
             except ValueError as error:
+                if session.get('static_collision_prior_contract', {}).get('body_envelope_attestation_required'):
+                    self.body_envelope_failures += 1
                 self.fail(str(error))
                 return
+            if session.get('static_collision_prior_contract', {}).get('body_envelope_attestation_required'):
+                self.body_envelope_verified_samples += 1
+                self.body_envelope_registry_sha256 = packet['body_envelope_registry_sha256']
             # nav_msgs twist is body-frame; Isaac articulation velocities are
             # world-frame measurements, never substituted with command values.
             body_linear, body_angular = rotation.T@linear, rotation.T@angular
@@ -383,10 +525,16 @@ def main():
         def rays(self, packet):
             if self.fault or self.source(packet) is None:
                 return
+            try:
+                ray_source_times(packet, anchor_ns, phase_contract)
+            except ValueError as error:
+                self.fail(str(error))
+                return
             scan = self.assembler.add(packet)
             if scan is None:
                 return
-            source_ns = anchor_ns+scan['sim_time_ns']
+            times = ray_source_times(scan, anchor_ns, phase_contract)
+            source_ns = times['source_stamp_ns']
             # Original scan stamps may be slightly older than the latest body
             # sample. The existing projector waits for matching body history.
             if self.last_state_sim_ns-scan['sim_time_ns'] > 500000000:
@@ -404,8 +552,8 @@ def main():
                 points['ring'] = np.asarray(scan['rings'],dtype=np.uint16)
             # Snapshot rays are simultaneous; they do not invent per-point
             # acquisition offsets or Airy96 rings that Isaac did not measure.
-            points['timestamp'] = points['source_timestamp'] = source_ns*1e-9
-            points['raw_timestamp'] = scan['sim_time_ns']*1e-9
+            points['timestamp'] = points['source_timestamp'] = times['source_timestamp_s']
+            points['raw_timestamp'] = times['raw_timestamp_s']
             cloud = PointCloud2(height=1, width=len(xyz),
                 fields=[PointField(name=n, offset=o, datatype=d, count=c) for n,o,d,c in FIELDS],
                 is_bigendian=False, point_step=64, row_step=64*len(xyz),
@@ -434,6 +582,10 @@ def main():
             original.header.frame_id = ('rslidar_head','rslidar_tail')[scan['sensor_id']]
             self.raw_cloud_pub[scan['sensor_id']].publish(original)
             self.ray_count[scan['sensor_id']] += 1
+            if phase_contract:
+                self.latest_native_ray_frames[scan['sensor_id']] = dict(
+                    source_capture_sim_time_ns=scan['sim_time_ns'],
+                    **times['native_frame_metadata'])
 
         def poll(self):
             for _ in range(512):
@@ -451,9 +603,14 @@ def main():
                         self.imu(packet)
                     elif packet['type'] == 'rays':
                         self.rays(packet)
+                    elif packet['type'] == 'dynamic':
+                        self.dynamic(packet)
                     elif packet['type'] == 'status' and packet.get('playing') is False:
                         self.fail('isaac_simulation_paused')
                 except (ValueError, TypeError, KeyError) as error:
+                    if phase_contract and ('native_ray_phase' in str(error)
+                            or str(error) == 'inconsistent_scan_chunks'):
+                        self.fail(str(error))
                     self.get_logger().warning('Dropped invalid Isaac packet: '+str(error))
             now = time.monotonic()
             if self.last_state_wall is not None and now-self.last_state_wall > args.state_timeout:
@@ -466,8 +623,15 @@ def main():
                     ray_scans=self.ray_count, incomplete_scans_dropped=self.assembler.dropped,
                     native_imu_samples=self.imu_count,
                     latest_native_imu_sim_time_ns=self.imu_history[-1] if self.imu_history else None,
+                    body_envelope_verified_samples=self.body_envelope_verified_samples,
+                    body_envelope_failures=self.body_envelope_failures,
+                    body_envelope_registry_sha256=self.body_envelope_registry_sha256,
+                    dynamic_oracle_samples=self.dynamic_count,
                     fault=self.fault, localization='groundtruth_fixture', transport='isolated_mock',
                     clock='simulation_time_with_fixed_session_anchor')
+                if phase_contract:
+                    status['perception_native_phase_contract'] = phase_contract
+                    status['latest_native_ray_frame_metadata'] = self.latest_native_ray_frames
                 message = String(data=json.dumps(status))
                 self.status_pub.publish(message)
                 (directory/'isaac_bridge_status.json').write_text(json.dumps(status, indent=2)+'\n')

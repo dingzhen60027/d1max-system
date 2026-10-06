@@ -120,11 +120,13 @@ public:
     :session_(std::move(session)),mode_(std::move(mode)),accepted_(physically_accepted),braking_model_sha_(std::move(model_sha)),max_speed_(max_speed),max_yaw_(max_yaw){
       if(session_.empty()||(mode_!="live"&&mode_!="isolated_mock")||!std::isfinite(max_speed_)||max_speed_<=0||max_speed_>.3||
          !std::isfinite(max_yaw_)||max_yaw_<=0||max_yaw_>.5)throw std::invalid_argument("invalid_execution_transport_profile");}
-  void configureBrakingModel(std::string hash,double speed=.3,double yaw=.5) {
+  // These are writer COMMAND caps, never measured reachable-velocity bounds.
+  void configureBrakingModel(std::string hash,double command_speed=.3,double command_yaw=.5) {
     if(!execution_.empty()||hash.size()!=64||hash.find_first_not_of("0123456789abcdef")!=std::string::npos||
-       !std::isfinite(speed)||speed<=0||speed>.3||!std::isfinite(yaw)||yaw<=0||yaw>.5)
+       !std::isfinite(command_speed)||command_speed<=0||command_speed>.3||
+       !std::isfinite(command_yaw)||command_yaw<=0||command_yaw>.5)
       throw std::invalid_argument("braking_model_must_be_validated_before_execution");
-    braking_model_sha_=std::move(hash);max_speed_=speed;max_yaw_=yaw;
+    braking_model_sha_=std::move(hash);max_speed_=command_speed;max_yaw_=command_yaw;
   }
   void configureExecutionPolicy(const ExecutionPolicy&policy,double reaction_bound) {
     if(!execution_.empty())throw std::invalid_argument("execution_policy_must_precede_grant");

@@ -1,0 +1,43 @@
+{
+  "source": "Local raw 500 Hz trajectory; SHA256 below, not included in Git",
+  "trajectory_sha256": "6b29ac0c2c964336a38d98d4779f4381e04b20e4a27f1551e4cbc0268d17f291",
+  "first_zero_sample_source_ns": 8002000000,
+  "last_zero_sample_source_ns": 18000000000,
+  "sample_count": 5000,
+  "largest_source_gap_ns": 2000000,
+  "zero_phase_scope": "actual_500Hz_PhysX_samples_after_zero_command",
+  "speed_norm_convention": "full_world_linear_and_full_world_angular_vector_L2",
+  "stop": {
+    "linear_limit_mps": 0.03,
+    "angular_limit_radps": 0.05,
+    "required_continuous_source_window_ns": 1000000000,
+    "window_start_elapsed_s": 1.4180000000000001,
+    "first_completion_elapsed_s": 2.418,
+    "window_begin_source_ns": 9420000000,
+    "window_end_source_ns": 10420000000,
+    "sample_count": 501,
+    "max_linear_norm_within_window": 0.006801752456775422,
+    "max_angular_norm_within_window": 0.04989017080790904
+  },
+  "static": {
+    "linear_limit_mps": 0.01,
+    "angular_limit_radps": 0.02,
+    "required_continuous_source_window_ns": 1000000000,
+    "window_start_elapsed_s": 3.3280000000000003,
+    "first_completion_elapsed_s": 4.328,
+    "window_begin_source_ns": 11330000000,
+    "window_end_source_ns": 12330000000,
+    "sample_count": 501,
+    "max_linear_norm_within_window": 0.007065178826163321,
+    "max_angular_norm_within_window": 0.019983165144198078
+  },
+  "stopping_geometry": {
+    "xy_path_length_entire_zero_phase_m": 0.03127274212822616,
+    "max_xy_displacement_from_first_zero_sample_m": 0.01615511229387761,
+    "max_xyz_displacement_m": 0.04348344706596905,
+    "max_abs_yaw_displacement_rad": 0.1487094231175885,
+    "final_yaw_displacement_rad": -0.1487094231175885
+  },
+  "physical_robot_acceptance": false,
+  "sampled_scope_only": true
+}

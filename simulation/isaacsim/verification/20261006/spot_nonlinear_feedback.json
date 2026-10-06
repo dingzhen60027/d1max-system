@@ -1,0 +1,599 @@
+{
+  "schema": 1,
+  "kind": "actual_official_spot_nonlinear_component_evidence",
+  "navigation_action_passed": false,
+  "physical_robot_acceptance": false,
+  "mode": "spot_nonlinear_measured_v1",
+  "command_limits_mps_radps": [
+    0.15,
+    0.3
+  ],
+  "isolated_reachable_limits_mps_radps": [
+    0.6,
+    0.8
+  ],
+  "policy_input_limits_mps_radps": [
+    0.3,
+    0.5
+  ],
+  "limits_scope": "explicit isolated_mock official_spot_physx only; live transport rejects discriminator; startup settling precedes motion authorization",
+  "experiments": [
+    {
+      "local_evidence_directory": "/home/eric/wjg/d1max-build-isaac/quadruped-research/smooth_ff_v1",
+      "evidence_sha256": "21ca37f2e0a4d61ad052bfa921b09a658cf1b1876c0866e73d70da623aae371c",
+      "evidence": {
+        "scope": "bounded_real_PhysX_component_not_navigation_or_hardware_acceptance",
+        "completed": true,
+        "physics_frames": 30000,
+        "physics_hz": 500,
+        "phases": {
+          "settle": {
+            "actual_samples": 1000,
+            "source_start_ns": 2000000,
+            "source_end_ns": 2000000000,
+            "displacement_xyz_m": [
+              0.06367465574294329,
+              -0.022736771926247457,
+              -0.31075435876846313
+            ],
+            "distance_xy_m": 0.2735600635619902,
+            "mean_world_vx_mps": 0.03206810119538568,
+            "peak_full_linear_norm_mps": 1.8062942347518716,
+            "peak_xy_norm_mps": 0.5718977709079233,
+            "peak_abs_wz_radps": 0.978657066822052,
+            "peak_full_angular_norm_radps": 2.816824649991523,
+            "first_full_norm_original_stop_continuous_1s_completed_elapsed_s": null,
+            "original_stop_thresholds": {
+              "linear_full_norm_mps": 0.03,
+              "angular_full_norm_radps": 0.05,
+              "required_continuous_ns": 1000000000
+            },
+            "foot_contact_below_1N_samples": [
+              94,
+              192,
+              166,
+              119
+            ],
+            "actual_foot_lower_above_floor_plus_1cm_50Hz_samples": {
+              "fl": 10,
+              "fr": 19,
+              "hl": 16,
+              "hr": 8
+            },
+            "max_consecutive_air_50Hz_interval_s": {
+              "fl": 0.18000000000000002,
+              "fr": 0.36000000000000004,
+              "hl": 0.18000000000000002,
+              "hr": 0.060000000000000005
+            },
+            "policy_input_linear_range": [
+              -0.162466898560524,
+              0.156455859541893
+            ]
+          },
+          "slow": {
+            "actual_samples": 10000,
+            "source_start_ns": 2002000000,
+            "source_end_ns": 22000000000,
+            "displacement_xyz_m": [
+              0.2533692196011543,
+              0.058167168870568275,
+              0.0064882636070251465
+            ],
+            "distance_xy_m": 0.31514396541134265,
+            "mean_world_vx_mps": 0.012610132750670527,
+            "peak_full_linear_norm_mps": 0.41944788088744733,
+            "peak_xy_norm_mps": 0.41640559712178393,
+            "peak_abs_wz_radps": 0.12100575119256973,
+            "peak_full_angular_norm_radps": 0.45618920003386537,
+            "first_full_norm_original_stop_continuous_1s_completed_elapsed_s": 1.8,
+            "original_stop_thresholds": {
+              "linear_full_norm_mps": 0.03,
+              "angular_full_norm_radps": 0.05,
+              "required_continuous_ns": 1000000000
+            },
+            "foot_contact_below_1N_samples": [
+              126,
+              148,
+              145,
+              127
+            ],
+            "actual_foot_lower_above_floor_plus_1cm_50Hz_samples": {
+              "fl": 11,
+              "fr": 11,
+              "hl": 10,
+              "hr": 11
+            },
+            "max_consecutive_air_50Hz_interval_s": {
+              "fl": 0.2,
+              "fr": 0.2,
+              "hl": 0.18000000000000002,
+              "hr": 0.2
+            },
+            "policy_input_linear_range": [
+              0.0978493019938469,
+              0.2652839124202728
+            ],
+            "lasting_displacement_through_following_5s_zero_xyz_m": [
+              0.19178158789873123,
+              0.060435639694333076,
+              0.005306154489517212
+            ]
+          },
+          "stop_slow": {
+            "actual_samples": 2500,
+            "source_start_ns": 22002000000,
+            "source_end_ns": 27000000000,
+            "displacement_xyz_m": [
+              -0.061590105295181274,
+              0.002268444746732712,
+              -0.0011825263500213623
+            ],
+            "distance_xy_m": 0.06163625038649191,
+            "mean_world_vx_mps": -0.012342245739299687,
+            "peak_full_linear_norm_mps": 0.08319183301345824,
+            "peak_xy_norm_mps": 0.08289132904502493,
+            "peak_abs_wz_radps": 0.009794527664780617,
+            "peak_full_angular_norm_radps": 0.04532603571775809,
+            "first_full_norm_original_stop_continuous_1s_completed_elapsed_s": 1.812,
+            "original_stop_thresholds": {
+              "linear_full_norm_mps": 0.03,
+              "angular_full_norm_radps": 0.05,
+              "required_continuous_ns": 1000000000
+            },
+            "foot_contact_below_1N_samples": [
+              0,
+              0,
+              0,
+              0
+            ],
+            "actual_foot_lower_above_floor_plus_1cm_50Hz_samples": {
+              "fl": 0,
+              "fr": 0,
+              "hl": 0,
+              "hr": 0
+            },
+            "max_consecutive_air_50Hz_interval_s": {
+              "fl": 0.0,
+              "fr": 0.0,
+              "hl": 0.0,
+              "hr": 0.0
+            },
+            "policy_input_linear_range": [
+              -0.0007601210963912308,
+              0.027716906741261482
+            ],
+            "max_xy_from_first_zero_m": 0.06163186604217412,
+            "max_yaw_from_first_zero_rad": 0.009111309176938198
+          },
+          "pulsed": {
+            "actual_samples": 5000,
+            "source_start_ns": 27002000000,
+            "source_end_ns": 37000000000,
+            "displacement_xyz_m": [
+              0.19538238644599915,
+              0.04463241994380951,
+              0.00976666808128357
+            ],
+            "distance_xy_m": 0.2431974134286467,
+            "mean_world_vx_mps": 0.019478025842349065,
+            "peak_full_linear_norm_mps": 0.2752374399539452,
+            "peak_xy_norm_mps": 0.2630767320057256,
+            "peak_abs_wz_radps": 0.12682458758354187,
+            "peak_full_angular_norm_radps": 0.5669650147392453,
+            "first_full_norm_original_stop_continuous_1s_completed_elapsed_s": 1.7360000000000002,
+            "original_stop_thresholds": {
+              "linear_full_norm_mps": 0.03,
+              "angular_full_norm_radps": 0.05,
+              "required_continuous_ns": 1000000000
+            },
+            "foot_contact_below_1N_samples": [
+              201,
+              168,
+              167,
+              232
+            ],
+            "actual_foot_lower_above_floor_plus_1cm_50Hz_samples": {
+              "fl": 12,
+              "fr": 15,
+              "hl": 15,
+              "hr": 20
+            },
+            "max_consecutive_air_50Hz_interval_s": {
+              "fl": 0.22,
+              "fr": 0.28,
+              "hl": 0.28,
+              "hr": 0.24000000000000002
+            },
+            "policy_input_linear_range": [
+              -0.012721327133476734,
+              0.248540461063385
+            ],
+            "lasting_displacement_through_following_5s_zero_xyz_m": [
+              0.1572365164756775,
+              0.044158920645713806,
+              0.005094736814498901
+            ]
+          },
+          "stop_pulsed": {
+            "actual_samples": 2500,
+            "source_start_ns": 37002000000,
+            "source_end_ns": 42000000000,
+            "displacement_xyz_m": [
+              -0.03817778825759888,
+              -0.0004933252930641174,
+              -0.00466272234916687
+            ],
+            "distance_xy_m": 0.03899507868742136,
+            "mean_world_vx_mps": -0.007668185989768244,
+            "peak_full_linear_norm_mps": 0.0469834266169859,
+            "peak_xy_norm_mps": 0.046977447609746543,
+            "peak_abs_wz_radps": 0.044976070523262024,
+            "peak_full_angular_norm_radps": 0.05468218630217579,
+            "first_full_norm_original_stop_continuous_1s_completed_elapsed_s": 1.5,
+            "original_stop_thresholds": {
+              "linear_full_norm_mps": 0.03,
+              "angular_full_norm_radps": 0.05,
+              "required_continuous_ns": 1000000000
+            },
+            "foot_contact_below_1N_samples": [
+              0,
+              0,
+              0,
+              0
+            ],
+            "actual_foot_lower_above_floor_plus_1cm_50Hz_samples": {
+              "fl": 0,
+              "fr": 0,
+              "hl": 0,
+              "hr": 0
+            },
+            "max_consecutive_air_50Hz_interval_s": {
+              "fl": 0.0,
+              "fr": 0.0,
+              "hl": 0.0,
+              "hr": 0.0
+            },
+            "policy_input_linear_range": [
+              -0.010457398369908333,
+              0.015511449426412582
+            ],
+            "max_xy_from_first_zero_m": 0.03818097544703162,
+            "max_yaw_from_first_zero_rad": 0.08111619322290492
+          },
+          "walk": {
+            "actual_samples": 2500,
+            "source_start_ns": 42002000000,
+            "source_end_ns": 47000000000,
+            "displacement_xyz_m": [
+              0.770661473274231,
+              0.019655950367450714,
+              0.00623437762260437
+            ],
+            "distance_xy_m": 0.7917574968848528,
+            "mean_world_vx_mps": 0.15407301546260715,
+            "peak_full_linear_norm_mps": 0.35329380676771127,
+            "peak_xy_norm_mps": 0.35321367953164096,
+            "peak_abs_wz_radps": 0.12102942913770676,
+            "peak_full_angular_norm_radps": 0.6725017232573812,
+            "first_full_norm_original_stop_continuous_1s_completed_elapsed_s": null,
+            "original_stop_thresholds": {
+              "linear_full_norm_mps": 0.03,
+              "angular_full_norm_radps": 0.05,
+              "required_continuous_ns": 1000000000
+            },
+            "foot_contact_below_1N_samples": [
+              842,
+              935,
+              944,
+              866
+            ],
+            "actual_foot_lower_above_floor_plus_1cm_50Hz_samples": {
+              "fl": 70,
+              "fr": 86,
+              "hl": 87,
+              "hr": 77
+            },
+            "max_consecutive_air_50Hz_interval_s": {
+              "fl": 0.28,
+              "fr": 0.34,
+              "hl": 0.34,
+              "hr": 0.30000000000000004
+            },
+            "policy_input_linear_range": [
+              0.1188909038901329,
+              0.30000001192092896
+            ],
+            "lasting_displacement_through_following_5s_zero_xyz_m": [
+              0.818311333656311,
+              0.05892890691757202,
+              -0.006646066904067993
+            ]
+          },
+          "stop_walk": {
+            "actual_samples": 2500,
+            "source_start_ns": 47002000000,
+            "source_end_ns": 52000000000,
+            "displacement_xyz_m": [
+              0.04756307601928711,
+              0.03925330191850662,
+              -0.012858062982559204
+            ],
+            "distance_xy_m": 0.07693905263471461,
+            "mean_world_vx_mps": 0.009499563727742497,
+            "peak_full_linear_norm_mps": 0.28854713743682897,
+            "peak_xy_norm_mps": 0.27883181995394235,
+            "peak_abs_wz_radps": 0.1060420572757721,
+            "peak_full_angular_norm_radps": 0.44047121576639575,
+            "first_full_norm_original_stop_continuous_1s_completed_elapsed_s": 1.582,
+            "original_stop_thresholds": {
+              "linear_full_norm_mps": 0.03,
+              "angular_full_norm_radps": 0.05,
+              "required_continuous_ns": 1000000000
+            },
+            "foot_contact_below_1N_samples": [
+              117,
+              18,
+              11,
+              119
+            ],
+            "actual_foot_lower_above_floor_plus_1cm_50Hz_samples": {
+              "fl": 12,
+              "fr": 0,
+              "hl": 0,
+              "hr": 12
+            },
+            "max_consecutive_air_50Hz_interval_s": {
+              "fl": 0.22,
+              "fr": 0.0,
+              "hl": 0.0,
+              "hr": 0.22
+            },
+            "policy_input_linear_range": [
+              -0.06624193489551544,
+              0.0044200182892382145
+            ],
+            "max_xy_from_first_zero_m": 0.06423783738042224,
+            "max_yaw_from_first_zero_rad": 0.054980798548445245
+          },
+          "turn": {
+            "actual_samples": 1500,
+            "source_start_ns": 52002000000,
+            "source_end_ns": 55000000000,
+            "displacement_xyz_m": [
+              -0.029241442680358887,
+              0.034136056900024414,
+              0.044256895780563354
+            ],
+            "distance_xy_m": 0.11487903816383968,
+            "mean_world_vx_mps": -0.009772665142347326,
+            "peak_full_linear_norm_mps": 0.26082992990089704,
+            "peak_xy_norm_mps": 0.1355942364689515,
+            "peak_abs_wz_radps": 0.46192672848701477,
+            "peak_full_angular_norm_radps": 0.5946428220537773,
+            "first_full_norm_original_stop_continuous_1s_completed_elapsed_s": null,
+            "original_stop_thresholds": {
+              "linear_full_norm_mps": 0.03,
+              "angular_full_norm_radps": 0.05,
+              "required_continuous_ns": 1000000000
+            },
+            "foot_contact_below_1N_samples": [
+              658,
+              711,
+              712,
+              664
+            ],
+            "actual_foot_lower_above_floor_plus_1cm_50Hz_samples": {
+              "fl": 59,
+              "fr": 67,
+              "hl": 67,
+              "hr": 63
+            },
+            "max_consecutive_air_50Hz_interval_s": {
+              "fl": 0.28,
+              "fr": 0.32,
+              "hl": 0.32,
+              "hr": 0.30000000000000004
+            },
+            "policy_input_linear_range": [
+              -0.027311386540532112,
+              0.015764057636260986
+            ],
+            "lasting_displacement_through_following_5s_zero_xyz_m": [
+              -0.029253840446472168,
+              0.02835288643836975,
+              0.009665250778198242
+            ]
+          },
+          "stop_turn": {
+            "actual_samples": 2500,
+            "source_start_ns": 55002000000,
+            "source_end_ns": 60000000000,
+            "displacement_xyz_m": [
+              9.500980377197266e-05,
+              -0.005801722407341003,
+              -0.034716635942459106
+            ],
+            "distance_xy_m": 0.021150189218190067,
+            "mean_world_vx_mps": -2.5132338586990953e-05,
+            "peak_full_linear_norm_mps": 0.20613146076386776,
+            "peak_xy_norm_mps": 0.05874600082994915,
+            "peak_abs_wz_radps": 0.24149943888187408,
+            "peak_full_angular_norm_radps": 0.31791084168284234,
+            "first_full_norm_original_stop_continuous_1s_completed_elapsed_s": 1.522,
+            "original_stop_thresholds": {
+              "linear_full_norm_mps": 0.03,
+              "angular_full_norm_radps": 0.05,
+              "required_continuous_ns": 1000000000
+            },
+            "foot_contact_below_1N_samples": [
+              39,
+              10,
+              10,
+              64
+            ],
+            "actual_foot_lower_above_floor_plus_1cm_50Hz_samples": {
+              "fl": 0,
+              "fr": 1,
+              "hl": 1,
+              "hr": 6
+            },
+            "max_consecutive_air_50Hz_interval_s": {
+              "fl": 0.0,
+              "fr": 0.0,
+              "hl": 0.0,
+              "hr": 0.1
+            },
+            "policy_input_linear_range": [
+              -0.004124753642827272,
+              0.01098247803747654
+            ],
+            "max_xy_from_first_zero_m": 0.005802500301995294,
+            "max_yaw_from_first_zero_rad": 0.1083203138485459
+          }
+        },
+        "source_trajectory_sha256": "1cfc8c3ab1bddedf7f9e1c835c8c2e36a50e18a0fbb712d506fcb04a1da2dc12",
+        "source_collider_readings_sha256": "ccbdc4a3d6fbf3fbbde212471ef96f691f20d208d06ffbd149ba60b88ee0bfff",
+        "source_probe_sha256": "5cad2b700f126603f14b6f1e3ca13690064c9778985f8eada7704893e421b66e",
+        "source_module_sha256": "5da9f2183f8320fff0e22fe3808e12a19da0c3f599529fec55a5784fb18da049",
+        "parameters": {
+          "ki_linear": 1.0,
+          "integral_limit_linear": 0.25,
+          "feedforward": ".25*tanh(vdes/.005)*exp(-abs(vdes)/.15)",
+          "zero_linear_history_withdrawn_and_decays_tau_s": 0.5,
+          "highlevel_command_unchanged": true
+        },
+        "command_schedule_pulsed": {
+          "desired_vx": 0.00835,
+          "period_physics_steps": 1250,
+          "zero_last_physics_steps_per_period": 10,
+          "duration_physics_steps": 5000,
+          "all_from_probe_callback_command_not_sensor_inference": true
+        },
+        "existing_0p3_full_linear_bound_met_after_settle": false,
+        "existing_0p5_yaw_bound_met_after_settle": true,
+        "all_four_zero_stop_windows_completed_by_3s": true
+      }
+    },
+    {
+      "local_evidence_directory": "/home/eric/wjg/d1max-build-isaac/quadruped-research/nonlinear_source_repeat",
+      "evidence_sha256": "3c5a397b2ffdf4322f1798d6d7079365d21c07ec1a1abcc61def7cd02da81ff0",
+      "evidence": {
+        "scope": "actualsource_config_mode_repeat_component_no_navigation_or_hardware_acceptance",
+        "runtime_algorithm_overrides": false,
+        "completed": true,
+        "source_module_sha256": "5b1e87c3a6b2bb853c6156d378901991eb64bf79da18d7c32c84739fb041cc48",
+        "source_probe_sha256": "ac38c174d2353b02b53aa49e08767dc1feb5eef80b880c228592b800712b98db",
+        "trajectory_sha256": "4028118a51f9665d4c652b16fc58ab0d7d2fe5b793259d0e43b04923232cc898",
+        "collider_readings_sha256": "251e0d32bcc3d645c554ce0cf41877e350d74eef95e2ba117d54a7d0b6c07d81",
+        "physics_frames": 13500,
+        "common_first_6000_samples_literal_equal_to_scratch": 6000,
+        "phases": {
+          "slow": {
+            "actual_samples": 5000,
+            "displacement_xyz_m": [
+              0.07426568120718002,
+              -0.0015681721270084381,
+              0.004452377557754517
+            ],
+            "mean_world_vx_mps": 0.007343696730268857,
+            "max_full_linear_norm_mps": 0.1253070241165607,
+            "max_abs_yaw_rate_radps": 0.049468282610177994,
+            "max_full_angular_norm_radps": 0.058099967089340225,
+            "stop_continuous_1s_completion_elapsed_s": 1.8,
+            "actual_foot_lower_above_floor_plus_1cm_samples_50Hz": {
+              "fl": 0,
+              "fr": 0,
+              "hl": 0,
+              "hr": 0
+            },
+            "lasting_displacement_through_zero_xyz_m": [
+              0.005494624376296997,
+              -0.0018403232097625732,
+              -0.000762939453125
+            ]
+          },
+          "stop_slow": {
+            "actual_samples": 2500,
+            "displacement_xyz_m": [
+              -0.06873824447393417,
+              -0.00029020383954048157,
+              -0.00523337721824646
+            ],
+            "mean_world_vx_mps": -0.013755232430715114,
+            "max_full_linear_norm_mps": 0.1018017178672173,
+            "max_abs_yaw_rate_radps": 0.04612479358911514,
+            "max_full_angular_norm_radps": 0.3207343708571554,
+            "stop_continuous_1s_completion_elapsed_s": 1.82,
+            "actual_foot_lower_above_floor_plus_1cm_samples_50Hz": {
+              "fl": 0,
+              "fr": 0,
+              "hl": 0,
+              "hr": 0
+            },
+            "max_xy_displacement_from_first_zero_m": 0.06873885707245085,
+            "max_yaw_from_first_zero_rad": 0.062496502384487576
+          },
+          "walk": {
+            "actual_samples": 2500,
+            "displacement_xyz_m": [
+              0.7548873201012611,
+              0.013066939078271389,
+              0.016103386878967285
+            ],
+            "mean_world_vx_mps": 0.1509214425258804,
+            "max_full_linear_norm_mps": 0.4054937227946096,
+            "max_abs_yaw_rate_radps": 0.1475052535533905,
+            "max_full_angular_norm_radps": 0.693014985308495,
+            "stop_continuous_1s_completion_elapsed_s": null,
+            "actual_foot_lower_above_floor_plus_1cm_samples_50Hz": {
+              "fl": 57,
+              "fr": 70,
+              "hl": 71,
+              "hr": 63
+            },
+            "lasting_displacement_through_zero_xyz_m": [
+              0.8196398392319679,
+              0.07164906524121761,
+              0.007461041212081909
+            ]
+          },
+          "stop_walk": {
+            "actual_samples": 2500,
+            "displacement_xyz_m": [
+              0.06469446420669556,
+              0.058558893389999866,
+              -0.008576929569244385
+            ],
+            "mean_world_vx_mps": 0.012928117200292945,
+            "max_full_linear_norm_mps": 0.2805027125932058,
+            "max_abs_yaw_rate_radps": 0.07257663458585739,
+            "max_full_angular_norm_radps": 0.5769170106479643,
+            "stop_continuous_1s_completion_elapsed_s": 2.0100000000000002,
+            "actual_foot_lower_above_floor_plus_1cm_samples_50Hz": {
+              "fl": 13,
+              "fr": 9,
+              "hl": 3,
+              "hr": 13
+            },
+            "max_xy_displacement_from_first_zero_m": 0.08945113900615957,
+            "max_yaw_from_first_zero_rad": 0.07754013062453956
+          }
+        },
+        "interpretation": [
+          "6000 actual samples establish exact algorithm/config transfer, not universal velocity controllability",
+          "10s slow interval stayed in stance and mostly recovered displacement at zero; cannot claim persistent slow walking from this shorter interval",
+          "20s original smooth_ff_v1 and 10s pulsed interval have actual footflight and lasting displacement evidence",
+          "0.3 actual full-linear legacy bound exceeded; only explicitly authorized conservative Spot platform envelope can consume mode",
+          "original full-norm zero-stop thresholds preserved"
+        ]
+      }
+    }
+  ],
+  "limitations": [
+    "20s low-speed probe shows real foot-flight and lasting displacement; first10s source-repeat shows stance displacement and nearly no lasting motion",
+    "low-speed response remains history dependent and is not precise velocity tracking",
+    "component real gait/stop evidence does not substitute for original navigation Action completion",
+    "same exact source algorithm migration verified against first6000 real samples; full navigation still required"
+  ]
+}

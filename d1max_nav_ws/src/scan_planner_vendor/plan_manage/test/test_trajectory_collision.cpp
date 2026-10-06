@@ -154,6 +154,23 @@ TEST(TrajectoryCollision, MeasuredSuffixAllowsActualShortRetreatNotFloorOrRemote
   EXPECT_FALSE(scan_planner::measuredRemainingCurveDomain(curve,retreated,2.,.5,.5));
   EXPECT_FALSE(scan_planner::measuredRemainingCurveDomain(curve,retreated,2.,.4,.5,.3,.1));
 }
+TEST(TrajectoryCollision, ExplicitIsolatedPlantBoundDoesNotChangeDefaultOrReverseSweep) {
+  auto curve=line();const auto advanced=curve.evaluateDeBoorT(2.8);
+  using Speed=scan_planner::MeasuredSpeedProfile;
+  using Connection=scan_planner::MeasuredConnectionPolicy;
+  EXPECT_FALSE(scan_planner::measuredRemainingCurveDomain(curve,advanced,2.,.4,.5));
+  EXPECT_FALSE(scan_planner::measuredRemainingCurveDomain(curve,advanced,2.,.4,.5,.6));
+  const auto domain=scan_planner::measuredRemainingCurveDomain(curve,advanced,2.,.4,.5,.6,.15,
+      Connection::CandidateAdmission,nullptr,Speed::IsolatedOfficialSpot);
+  ASSERT_TRUE(domain);EXPECT_NEAR(domain->measured_arc,.7,1e-6);
+  EXPECT_LE(curve.evaluateDeBoorT(domain->checked_from_time).x(),.55+1e-6);
+  EXPECT_FALSE(scan_planner::measuredRemainingCurveDomain(curve,advanced,2.,.4,.5,.6001,.15,
+      Connection::CandidateAdmission,nullptr,Speed::IsolatedOfficialSpot));
+  EXPECT_FALSE(scan_planner::measuredRemainingCurveDomain(curve,advanced,2.,.5,.5,.6,.15,
+      Connection::CandidateAdmission,nullptr,Speed::IsolatedOfficialSpot));
+  EXPECT_FALSE(scan_planner::measuredRemainingCurveDomain(curve,advanced,2.,.4,.5,.6,.1,
+      Connection::CandidateAdmission,nullptr,Speed::IsolatedOfficialSpot));
+}
 TEST(TrajectoryCollision, CommittedTrackingRequiresEveryActualConnectorFootprintNotCandidateTolerance) {
   auto curve=line();auto body=bodyAt(curve);body.position=curve.evaluateDeBoorT(2.);
   body.position.y()=.06;

@@ -1,0 +1,135 @@
+{
+  "schema": 1,
+  "kind": "isaac_simultaneous_begin_exact_pair_offline_verification",
+  "verified_at_utc": "2026-10-06T13:51:05.309605+00:00",
+  "acceptance": "Offline only. v26 formal near navigation outcome is not yet known. No simulator/ROS participant launched by this verifier.",
+  "contract": {
+    "parameter": "grid_map.projected_ray_exact_pair",
+    "default": false,
+    "runtime_guards": [
+      "simulation_collision_clock_ already validated isolated Isaac/use_sim_time/Zenoh/mock",
+      "validated_static_prior_ hash-pinned map identity"
+    ],
+    "normal_pair_ready": "Both pending acquisitions are newer than each own integrated source and their unmodified BEGIN stamps are exactly equal.",
+    "watchdog": "Original missing/mismatched-source integration still adds actual obstacle evidence. Unequal actual integrated source stamps set complete cloud stamp 0 and forbid current body/static-prior FREE/proof lease.",
+    "proof_rejection": "staticPriorLiveLeaseValid=false; integratedCloudFreshAt=false; observedProofDeadlineNs=1",
+    "retained_original_clocks_and_limits": {
+      "cloud_source_max_age_s": 0.5,
+      "cloud_true_receipt_max_age_s": 0.5,
+      "pending_wait_s": 0.25,
+      "integration_start_period_s": 0.2,
+      "watchdog_period_multiplier": 1.5,
+      "dynamic_source_and_true_receipt_age_s": 0.2
+    },
+    "source_receipts_modified": false,
+    "raw_points_modified": false,
+    "proof_or_check_budget_modified": false,
+    "production_async_sources_modified": false
+  },
+  "build": {
+    "packages": [
+      "plan_env",
+      "path_searching",
+      "bspline_opt",
+      "scan_planner"
+    ],
+    "exit_code": 0,
+    "duration_seconds": 146,
+    "log_directory": "/home/eric/wjg/d1max-build-isaac/nav/log/build_2026-10-06_21-45-58",
+    "initial_source_copy_excluded_in_progress_test_file": true,
+    "final_latest_test_file_copied_and_rebuilt": true,
+    "final_test_target_command": [
+      "cmake",
+      "--build",
+      "/home/eric/wjg/d1max-build-isaac/nav/build/plan_env",
+      "--target",
+      "test_projected_rays",
+      "-j2"
+    ],
+    "final_test_target_exit_code": 0,
+    "source_to_isolated_source_identical": {
+      "d1max_nav_ws/src/scan_planner_vendor/plan_env/include/plan_env/grid_map.h": true,
+      "d1max_nav_ws/src/scan_planner_vendor/plan_env/src/grid_map.cpp": true,
+      "d1max_nav_ws/src/scan_planner_vendor/plan_env/test/test_projected_rays.cpp": true
+    },
+    "installed_header_identical": "/home/eric/wjg/d1max-build-isaac/nav/install/plan_env/include/plan_env/grid_map.h",
+    "installed_header_sha256": "ed43c8eea0673ee68e3d151a04adc8ced5e401e0e2f4e34071ce8bb11ea5a428",
+    "installed_static_library_identical": true,
+    "installed_static_library_sha256": "2534c27ce52a1f7bccbdec8f47de436db5178aa960483d5b27694465f52ed58e"
+  },
+  "ctest": {
+    "targets_passed": 31,
+    "targets_failed": 0,
+    "by_package": {
+      "plan_env": 8,
+      "path_searching": 4,
+      "bspline_opt": 4,
+      "scan_planner": 15
+    },
+    "projected_ray_cases_passed": 96,
+    "exact_pair_cases_passed": 5,
+    "exact_pair_cases": [
+      "NewFrontAndOlderRearWaitForActualSameAcquisition",
+      "MismatchedWatchdogAddsActualObstacleWithoutCurrentProofOrPriorFree",
+      "SourceAndTrueReceiptExpireAtOriginalDeadlinesWithoutTimerRenewal",
+      "DueWatchdogRevokesPreviouslyCachedPairedFreeAfterMismatchedIntegration",
+      "DefaultConfigurationPreservesAsynchronousSourceFusion"
+    ],
+    "commands": [
+      [
+        "ctest",
+        "--test-dir",
+        "/home/eric/wjg/d1max-build-isaac/nav/build/plan_env",
+        "--output-on-failure"
+      ],
+      [
+        "ctest",
+        "--test-dir",
+        "/home/eric/wjg/d1max-build-isaac/nav/build/path_searching",
+        "--output-on-failure"
+      ],
+      [
+        "ctest",
+        "--test-dir",
+        "/home/eric/wjg/d1max-build-isaac/nav/build/bspline_opt",
+        "--output-on-failure"
+      ],
+      [
+        "ctest",
+        "--test-dir",
+        "/home/eric/wjg/d1max-build-isaac/nav/build/scan_planner",
+        "--output-on-failure",
+        "-E",
+        "test_planner_startup|test_waypoint_parameters"
+      ]
+    ],
+    "excluded_ros_launch_tests": [
+      "test_planner_startup",
+      "test_waypoint_parameters"
+    ],
+    "log_paths": [
+      "/home/eric/wjg/d1max-build-isaac/nav/build/plan_env/Testing/Temporary/LastTest.log",
+      "/home/eric/wjg/d1max-build-isaac/nav/build/path_searching/Testing/Temporary/LastTest.log",
+      "/home/eric/wjg/d1max-build-isaac/nav/build/bspline_opt/Testing/Temporary/LastTest.log",
+      "/home/eric/wjg/d1max-build-isaac/nav/build/scan_planner/Testing/Temporary/LastTest.log"
+    ]
+  },
+  "read_only_v25_trace_diagnosis": {
+    "local_path": "/home/eric/wjg/d1max-build-isaac/runs/campus_spot_near_v25_001/control_trace.jsonl",
+    "sha256": "bd0ecba6c03b99ee0c122bc9b618bbe4a524ba110bdacfef427e1edafafd818d",
+    "trajectory_validation_records": 4698,
+    "front_rear_asymmetric_records": 2229,
+    "source_skew_ns_counts": {
+      "100000000": 2229
+    },
+    "trajectory_source_expired_during_check": 240,
+    "median_source_pair_change_wall_interval_s": 0.273557167,
+    "other_motion_budget_failures_are_not_claimed_fixed": true
+  },
+  "source_sha256": {
+    "d1max_nav_ws/src/scan_planner_vendor/plan_env/include/plan_env/grid_map.h": "ed43c8eea0673ee68e3d151a04adc8ced5e401e0e2f4e34071ce8bb11ea5a428",
+    "d1max_nav_ws/src/scan_planner_vendor/plan_env/src/grid_map.cpp": "d97e302d28e0f4aa05a68fb6d455c592f871fab71f93c97d41a5cb0d8110ec57",
+    "d1max_nav_ws/src/scan_planner_vendor/plan_env/test/test_projected_rays.cpp": "14128364e0949259043479950c2212b221ae230b1e33983612a2a16f232740c7"
+  },
+  "source_frozen_at_utc": "2026-10-06T13:51:05.325905+00:00"
+}

@@ -13,6 +13,8 @@ namespace d1monitor::execution3 {
 struct BrakingModel {
  bool valid=false;std::string sha256,reason;
  double max_speed=.3,max_yaw=.5,reaction_bound=0,stopping_distance=0,stopping_yaw=0,stop_latency=0,tracking_error=0,heading_error=0;
+ double command_max_speed=.3,command_max_yaw=.5;
+ bool isolated_spot_model=false;
  ExecutionPolicy policy;
 };
 struct Acceptance {bool valid=false;std::string reason;double forward_scale=1.,yaw_scale=1.5,max_speed=.3,max_yaw=.5,mc_delay_bound=0.,reaction_bound=0.;ExecutionPolicy policy;};
@@ -42,12 +44,13 @@ inline std::string fileSha256(const std::filesystem::path&p) {
   unsigned char hash[SHA256_DIGEST_LENGTH];SHA256_Final(hash,&ctx);std::ostringstream out;
   for(auto c:hash)out<<std::hex<<std::setfill('0')<<std::setw(2)<<static_cast<int>(c);return out.str();
 }
-inline BrakingModel brakingMeasurements(const nlohmann::json&m) {
+inline BrakingModel brakingMeasurements(const nlohmann::json&m,double speed_cap=.3,double yaw_cap=.5) {
  BrakingModel r;
  if(m.at("model")!="reaction_braking_reachable_v1")throw std::runtime_error("braking_model_semantics_missing");
  auto number=[&](const char*k,double cap){const double v=m.at(k).get<double>();
    if(!std::isfinite(v)||v<=0||v>cap)throw std::runtime_error(std::string("invalid_braking_measurement:")+k);return v;};
- r.max_speed=number("max_speed_mps",.3);r.max_yaw=number("max_yaw_radps",.5);
+ r.max_speed=number("max_speed_mps",speed_cap);r.max_yaw=number("max_yaw_radps",yaw_cap);
+ r.command_max_speed=r.max_speed;r.command_max_yaw=r.max_yaw;
  r.reaction_bound=number("reaction_bound_s",1.);r.stopping_distance=number("stopping_distance_m",1.);
  r.stopping_yaw=number("stopping_yaw_rad",1.);r.stop_latency=number("stop_latency_bound_s",3.);
  r.tracking_error=number("tracking_error_bound_m",.25);r.heading_error=number("heading_error_bound_rad",.5);
@@ -61,11 +64,32 @@ inline BrakingModel loadBrakingModel(const std::string&path,const std::string&ex
     throw std::runtime_error("braking_record_hash_mismatch");
   std::ifstream f(path);nlohmann::json j;f>>j;
   if(j.at("schema_version")!=3)throw std::runtime_error("braking_record_schema");
+  if(j.contains("isolated_platform_model")&&mode!="isolated_mock")
+    throw std::runtime_error("isolated_platform_cannot_authorize_real_robot");
   if(mode=="isolated_mock") {
    if(j.at("transport_mode")!="isolated_mock"||!j.at("fixture_only").get<bool>())throw std::runtime_error("explicit_mock_braking_fixture_required");
   } else if(mode!="live"||j.value("fixture_only",false)||j.at("profile")!="general_low_speed")
     throw std::runtime_error("live_braking_record_cannot_be_fixture");
-  r=brakingMeasurements(j.at("measurements"));r.policy=executionPolicy(j,r.reaction_bound);r.sha256=expected;r.reason="braking_model_verified";
+  if(j.contains("isolated_platform_model")) {
+   const auto&p=j.at("isolated_platform_model");
+   if(!j.at("fixture_only").is_boolean()||j.at("fixture_only")!=true||!p.is_object()||p.size()!=7||
+      !p.at("schema").is_number_integer()||p.at("schema")!=1||p.at("kind")!="official_spot_physx"||
+      p.at("source_scope")!="isolated_simulation_physx_measured_model")
+     throw std::runtime_error("invalid_isolated_platform_model");
+   auto bounded=[&](const char*name,double cap){const auto&field=p.at(name);
+     if(!field.is_number())throw std::runtime_error("nonnumeric_isolated_platform_bound");
+     const double v=field.get<double>();
+     if(!std::isfinite(v)||v<=0.||v>cap)throw std::runtime_error("invalid_isolated_platform_bound");
+     return v;};
+   r=brakingMeasurements(j.at("measurements"),.6,.8);
+   r.command_max_speed=bounded("command_max_speed_mps",.3);
+   r.command_max_yaw=bounded("command_max_yaw_radps",.5);
+   if(bounded("reachable_max_speed_mps",.6)!=r.max_speed||bounded("reachable_max_yaw_radps",.8)!=r.max_yaw||
+      r.command_max_speed>r.max_speed||r.command_max_yaw>r.max_yaw)
+     throw std::runtime_error("isolated_platform_measurement_mismatch");
+   r.isolated_spot_model=true;
+  } else r=brakingMeasurements(j.at("measurements"));
+  r.policy=executionPolicy(j,r.reaction_bound);r.sha256=expected;r.reason="braking_model_verified";
  }catch(const std::exception&e){r=BrakingModel{};r.reason=e.what();}return r;
 }
 inline Acceptance validateAcceptance(const std::string&path,const std::string&robot,const std::string&sdk,const std::string&calibration,const std::string&profile) {
@@ -74,6 +98,7 @@ inline Acceptance validateAcceptance(const std::string&path,const std::string&ro
     if(path.empty()||robot.empty()||sdk.empty()||!sha(calibration)||!sha(profile)||!std::filesystem::path(path).is_absolute())
       throw std::runtime_error("explicit_acceptance_identity_and_absolute_record_required");
     std::ifstream f(path);nlohmann::json j;f>>j;
+    if(j.contains("isolated_platform_model"))throw std::runtime_error("isolated_platform_is_not_physical_acceptance");
     if(j.at("schema_version")!=3||j.at("robot_id")!=robot||j.at("sdk_version")!=sdk||j.at("profile")!="general_low_speed"||
        j.at("calibration_sha256")!=calibration||j.at("robot_profile_sha256")!=profile||j.at("evidence_id").get<std::string>().empty())throw std::runtime_error("acceptance_identity_mismatch");
     for(const auto*k:{"speed_mapping_verified","stop_timing_verified","body_envelope_verified","raw_ray_safety_verified"})

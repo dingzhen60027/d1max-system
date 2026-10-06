@@ -767,9 +767,11 @@ private:
           node_->now().nanoseconds()-ns(job.progress->header.stamp)<=400000000LL;
         std::optional<MeasuredCurveDomain> domain;
         double join_residual=std::numeric_limits<double>::quiet_NaN();
+        const bool isolated_spot=mode_=="isolated_mock"&&braking_&&braking_->valid()&&braking_->isolated_spot_model;
         if(measured_progress)domain=measuredRemainingCurveDomain(curve,body.position,job.progress->curve_time,
-          static_cast<double>(measuredBodySourceNs(body)-ns(job.progress->header.stamp))*1e-9,job.progress->s_committed,.3,.15,
-          MeasuredConnectionPolicy::CommittedSweptConnection,&join_residual);
+          static_cast<double>(measuredBodySourceNs(body)-ns(job.progress->header.stamp))*1e-9,job.progress->s_committed,
+          isolated_spot?braking_->max_speed:.3,.15,MeasuredConnectionPolicy::CommittedSweptConnection,&join_residual,
+          isolated_spot?MeasuredSpeedProfile::IsolatedOfficialSpot:MeasuredSpeedProfile::D1FirstAcceptance);
         const auto join=measured_progress?(domain?std::optional<double>(domain->measured_time):std::nullopt):
           measuredPreviewCurveTime(curve,body.position,job.measured_time,map.getResolution());
         bool occupied=false,unknown=false,supported=false;std::size_t queries=0;

@@ -2,9 +2,13 @@
 
 定位、建图、地图处理和室内外多楼层导航的统一源码仓库。只有一条 BehaviorTree.CPP 导航主线；PCT、SCAN 是当前算法后端，单楼层是当前验收范围。
 
-本分支为 `isaacsim-simulation`，基于最初克隆的 `5dfaf8cddec952b3453a02e3a231de5228bd6017`，保存原导航框架的 Isaac Sim 三维导航测试版本。分支新增实体轮式机器人、双三维雷达、原生 IMU、认证静态三维体积融合，以及时间、位姿证据、弯道进度和显示修复。原有 BT/PCT/SCAN 主线继续使用。
+本分支为 `isaacsim-simulation`，基于最初克隆的 `5dfaf8cddec952b3453a02e3a231de5228bd6017`，保存原导航框架的 Isaac Sim 三维导航测试版本。当前默认场景为 **100×80 米综合园区＋官方 Spot 机器狗**：真实关节行走、双三维雷达、原生 IMU，以及办公区、仓储区、广场、狭窄通道和动态障碍。原有 BT/PCT/SCAN 主线继续使用，旧轮式场景保留用于历史回归。
 
-**当前状态（2026-10-06）：跨参考窗口换轨仍存在未解决问题。** 10-05 的同版近距离到达、跨门到达、运动中取消及录屏运行通过；10-06 复跑在行驶 8.001 m 后停在局部轨迹终点，候选未成功接管，原 Action 返回失败并确认实测停稳。历史通过不能代表连续运行已稳定。见 [仿真说明](simulation/isaacsim/README.md)、[最新失败证据](simulation/isaacsim/verification/20261006/live_view_failure.json) 和 [当前问题](docs/KNOWN_ISSUES.md)。
+场景定义 6 个确定性动态演员，默认启用 4 个，关卡按封存配置选择演员；六项系统测试覆盖长距离多点、横穿、迎面会车、临时堵门、取消停车与恢复。约 333 米路线已通过离线静态连通性检查，机器狗大场景物理与传感器测试已完成；整套关卡的实际执行结果单独记录，缺证据保持待验证。见 [园区与测试入口](simulation/isaacsim/CAMPUS_SCENARIOS.md)和 [Spot 验证](simulation/isaacsim/QUADRUPED_VALIDATION.md)。
+
+**当前状态（北京时间 2026-10-07）：本机默认候选为 `isaac-candidate-v31-campus`。** 原 Action 近距离到达实测行程 **1.040435 m**，返回 `measured_goal_reached`；v31 `cancel_and_park` 实测 **1.047985 m** 后取消，最终 **2.018 s 源时间**静止窗口与独立评估通过。两次停车、IMU 与全身检查均通过。v31 `crossing_blocker` 实测累计 **0.403687 m** 后因 `waiting_measured_motion_progress` 超时失败；准备证明预算饥饿已修复，候选入口的低速／方向变化与持续进度仍未解决，其余四关未执行。v30 取消关卡 **1.197793 m / 2.02 s 源时间**通过的历史记录单独保留。约 333 m 仍仅是离线路由，不能宣称动态避障或六关全通过，旧轮式换轨失败也未闭环。见 [仿真说明](simulation/isaacsim/README.md)、[v31 实测证据](simulation/isaacsim/verification/20261006/campus_navigation_v31.json) 和 [当前问题](docs/KNOWN_ISSUES.md)。
+
+v30 修正了旋转局部包围盒造成的脚球假穿地；v31 让准备候选证明使用原 50 ms 轮内未用时间，最多沿用原 25 ms motion cap，5 ms 预留和全部证据保护保持。仿真纯 Python 回归 **232 项通过**，v31 原生 ledger **39/39**、非 launch CTest **15/15** 通过；按用户要求不录制视频。证据目录采用 UTC 日期 `20261006`，与上述北京时间日期分别记录。
 
 近身长期未知阻断的修复依赖认证封闭静态体积与实时障碍融合，仍保留严格未知阻断和证据期限；当前只支持经过验证的固定单位 `map←odom`。定位输入是显式 `groundtruth_fixture`。生产 release、Faster-LIO/ICP 性能、机器狗实机运动、跨层执行与 NUC 实时性均未因此验收。
 
@@ -30,9 +34,9 @@ RViz 初值和三维目标
 
 ## 在另一台电脑准备
 
-本机新增的 Isaac Sim 轮式三维导航任务测试见
+本机新增的 Isaac Sim 机器狗三维导航任务测试见
 [仿真配置与启动](simulation/isaacsim/README.md)。该隔离测试使用实际三维雷达、
-原生 IMU 与 PhysX 轮关节，接入同一 BT/PCT/SCAN 主线；定位状态为明确标记的
+原生 IMU 与 PhysX 四足关节，接入同一 BT/PCT/SCAN 主线；定位状态为明确标记的
 仿真真值夹具，测试结果不代替生产 release、LIO 精度或机器狗实机验收。
 
 完整步骤见 [新电脑部署](docs/DEPLOYMENT.md)。先拉源码、设置路径并做只读检查：

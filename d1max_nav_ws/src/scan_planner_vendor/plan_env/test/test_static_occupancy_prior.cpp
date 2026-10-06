@@ -79,6 +79,23 @@ class StaticOccupancyPriorTest : public ::testing::Test {
       {"map_from_odom_translation",{0.,0.,0.}},
       {"map_from_odom_rotation_xyzw",{0.,0.,0.,1.}}};
   }
+  void supportContact() {
+    expected_.allow_floor_contact=true;expected_.support_floor_z=0.;expected_.support_penetration_m=.02;
+    expected_.dynamic_registry_sha256=digest("complete actors");
+    manifest_["state_codes"]["support_contact"]=3;
+    manifest_["closed_world_bounds"]["min"][2]=0.;
+    manifest_["flat_support_contact"]={{"schema",1},{"kind","flat_plane_support_contact_v1"},
+      {"floor_path","/World/GroundPlane/collisionPlane"},{"floor_z",0.},{"penetration_allowance_m",.02},
+      {"semantics","whole_closed_cell_floor_intersection_inside_authorized_xy_and_disjoint_from_nonfloor_static_solids_plus_margin"}};
+    manifest_["dynamic_actor_registry_sha256"]=expected_.dynamic_registry_sha256;
+    manifest_["collision_geometry"]={{"flat_support_contact",manifest_["flat_support_contact"]},
+      {"closed_world_bounds",manifest_["closed_world_bounds"]},
+      {"dynamic_actor_registry_sha256",expected_.dynamic_registry_sha256},
+      {"dynamic_actor_registry",Json::array({{{"id","registered-person"}}})},
+      {"floor",{{"path","/World/GroundPlane/collisionPlane"},{"type","Plane"},{"axis","Z"},{"extent","infinite"},{"z",0.}}},
+      {"boxes",Json::array()}};
+    data_.assign(24,2);data_[1]=3;commit();
+  }
   std::filesystem::path directory_,manifest_path_;
   std::vector<std::uint8_t> data_;
   Json manifest_;
@@ -107,6 +124,69 @@ TEST_F(StaticOccupancyPriorTest, OutsideStoredIndicesAlwaysRemainsUnknown) {
     SCOPED_TRACE(::testing::Message()<<cell[0]<<","<<cell[1]<<","<<cell[2]);
     EXPECT_EQ(prior->state(cell),2);
   }
+}
+TEST_F(StaticOccupancyPriorTest, FloorContactIsOptInIndependentStateAndNeverDefaultFree) {
+  supportContact();const auto prior=load();EXPECT_TRUE(prior->floorContactEnabled());
+  EXPECT_DOUBLE_EQ(prior->floorZ(),0.);EXPECT_EQ(prior->state({-3,2,0}),3);
+  EXPECT_TRUE(prior->dynamicRegistryMatches(expected_.dynamic_registry_sha256,{"registered-person"}));
+  EXPECT_FALSE(prior->dynamicRegistryMatches(expected_.dynamic_registry_sha256,{}));
+  EXPECT_FALSE(prior->dynamicRegistryMatches(expected_.dynamic_registry_sha256,{"registered-person","registered-person"}));
+  expected_.allow_floor_contact=false;EXPECT_THROW(load(),std::invalid_argument);
+}
+TEST_F(StaticOccupancyPriorTest, ExactEmptyDynamicRegistryStillBindsItsDistinctDigest) {
+  supportContact();manifest_["collision_geometry"]["dynamic_actor_registry"]=Json::array();commit();
+  const auto prior=load();EXPECT_TRUE(prior->dynamicRegistryMatches(expected_.dynamic_registry_sha256,{}));
+  EXPECT_FALSE(prior->dynamicRegistryMatches("",{}));
+  EXPECT_FALSE(prior->dynamicRegistryMatches(expected_.dynamic_registry_sha256,{"newborn"}));
+}
+TEST_F(StaticOccupancyPriorTest, SupportCellMustMeetExactFloorAndAuthorizedWholeXY) {
+  supportContact();data_[1]=2;data_[2]=3;commit(); // z=[.05,.10] cannot contact z=0.
+  EXPECT_THROW(load(),std::invalid_argument);
+  supportContact();manifest_["closed_world_bounds"]["min"][0]=-.149;writeManifest();
+  EXPECT_THROW(load(),std::invalid_argument);
+}
+TEST_F(StaticOccupancyPriorTest, FloorContactCannotEraseSharedLowObstacleOrMarginCell) {
+  supportContact();manifest_["collision_geometry"]["boxes"].push_back({{"type","Cube"},
+    {"min",{-.149,.101,0.}},{"max",{-.11,.14,.02}}});writeManifest();
+  EXPECT_THROW(load(),std::invalid_argument);
+  data_[1]=1;commit();const auto prior=load();EXPECT_EQ(prior->state({-3,2,0}),1);
+}
+TEST_F(StaticOccupancyPriorTest, FloorContactRequiresSimulationAndCompleteBoundedRegistry) {
+  supportContact();manifest_["provenance"]="certified_prebuilt_static_volume_v1";writeManifest();
+  EXPECT_THROW(load(),std::invalid_argument);
+  supportContact();manifest_["collision_geometry"]["dynamic_actor_registry"]=nullptr;writeManifest();
+  EXPECT_THROW(load(),std::invalid_argument);
+  supportContact();expected_.support_penetration_m=.021;EXPECT_THROW(load(),std::invalid_argument);
+}
+TEST_F(StaticOccupancyPriorTest, EndpointNumericalBoundIsExplicitExactAndNeverDefaultProduction) {
+  supportContact();EXPECT_DOUBLE_EQ(load()->floorEndpointErrorBoundM(),1e-5);
+  expected_.support_endpoint_error_bound_m=.0002;
+  EXPECT_THROW(load(),std::invalid_argument); // Legacy absence cannot authorize a wider bound.
+  manifest_["flat_support_contact"]["floor_endpoint_error_bound_m"] = .0002;
+  manifest_["collision_geometry"]["flat_support_contact"] = manifest_["flat_support_contact"];commit();
+  EXPECT_DOUBLE_EQ(load()->floorEndpointErrorBoundM(),.0002);
+  expected_.support_endpoint_error_bound_m=1e-5;EXPECT_THROW(load(),std::invalid_argument);
+  expected_.support_endpoint_error_bound_m=.0002;expected_.allow_floor_contact=false;
+  EXPECT_THROW(load(),std::invalid_argument);
+}
+TEST_F(StaticOccupancyPriorTest, EndpointNumericalBoundRejectsOversizeResolutionCapAndGeometryMismatch) {
+  supportContact();expected_.support_endpoint_error_bound_m=.0002;
+  manifest_["flat_support_contact"]["floor_endpoint_error_bound_m"] = .0002;
+  manifest_["collision_geometry"]["flat_support_contact"] = manifest_["flat_support_contact"];commit();
+  manifest_["collision_geometry"]["flat_support_contact"]["floor_endpoint_error_bound_m"] = .0001;commit();
+  EXPECT_THROW(load(),std::invalid_argument);
+  manifest_["collision_geometry"]["flat_support_contact"] = manifest_["flat_support_contact"];
+  for(const auto invalid:{0.,-1e-5,.0010001,std::numeric_limits<double>::infinity()}) {
+    expected_.support_endpoint_error_bound_m=invalid;
+    manifest_["flat_support_contact"]["floor_endpoint_error_bound_m"]=invalid;
+    manifest_["collision_geometry"]["flat_support_contact"]=manifest_["flat_support_contact"];commit();
+    EXPECT_THROW(load(),std::invalid_argument);
+  }
+  expected_.support_endpoint_error_bound_m=.0002;expected_.resolution=.001;
+  manifest_["voxel_resolution"]=.001;
+  manifest_["flat_support_contact"]["floor_endpoint_error_bound_m"]=.0002;
+  manifest_["collision_geometry"]["flat_support_contact"]=manifest_["flat_support_contact"];commit();
+  EXPECT_THROW(load(),std::invalid_argument); // .2mm exceeds this grid's resolution/20.
 }
 
 TEST_F(StaticOccupancyPriorTest, UnsignedWorldOriginCannotWrapIntoNegativeValidIndex) {

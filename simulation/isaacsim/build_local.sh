@@ -77,6 +77,8 @@ source "$D1MAX_SIM_DIR/env.sh"
 if [[ -d "$D1MAX_SIM_BUILD/isaac-candidate" ]]; then
   echo "Build complete. Existing candidate preserved; choose a new output for build_candidate.py."
 else
+  export D1MAX_QUADRUPED_ASSET_ROOT="${D1MAX_QUADRUPED_ASSET_ROOT:-$D1MAX_SIM_BUILD/quadruped-assets-spot}"
+  /usr/bin/python3 "$D1MAX_SIM_DIR/download_quadruped_assets.py" --output "$D1MAX_QUADRUPED_ASSET_ROOT"
   /usr/bin/python3 "$D1MAX_SIM_DIR/build_candidate.py" \
     --output "$D1MAX_SIM_BUILD/isaac-candidate" \
     --select-local "$D1MAX_SIM_BUILD/isaac_fixture.json" \
@@ -84,5 +86,5 @@ else
     --sdk-install "$D1MAX_SIM_BUILD/sdk/install" \
     --localization-install "$D1MAX_SIM_BUILD/localization/install" \
     --pct-vendor "$D1MAX_SIM_BUILD/pct_vendor" \
-    --scene-config "$D1MAX_SIM_DIR/assets/scene_config.json"
+    --scene-config "$D1MAX_SIM_DIR/assets/large_quadruped_scene.json"
 fi

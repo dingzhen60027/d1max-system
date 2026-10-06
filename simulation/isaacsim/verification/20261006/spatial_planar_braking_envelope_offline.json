@@ -1,0 +1,82 @@
+{
+  "schema": 1,
+  "recorded_at_utc": "2026-10-06T14:56:19.198676+00:00",
+  "scope": "offline_tracker_verified_floor_opt_in",
+  "owned_implementation_frozen": true,
+  "whole_candidate_frozen": false,
+  "physical_robot_acceptance": false,
+  "isaac_navigation_goal_pass": false,
+  "configuration": {
+    "parameter": "spatial_planar_braking_envelope",
+    "default": false,
+    "requires_support_reference": true,
+    "accepted_support": [
+      "floor1",
+      "floor",
+      "general"
+    ]
+  },
+  "algorithm": {
+    "original_xyz_curve_and_measured_projection_retained": true,
+    "original_xyz_derivative_admission_retained": true,
+    "conversion": "normalized_quadratic_velocity_control_cone_XY_lower_bound_per_original_knot_span",
+    "braking_distance": "horizontal_chord_lower_bound; exact current curve position to next sample",
+    "pure_vertical_xy_authority": 0,
+    "high_level_caps_and_all_collision_support_join_deadline_checks_unchanged": true
+  },
+  "source_sha256": {
+    "/home/eric/wjg/d1max-system/d1max_nav_ws/src/d1max_trajectory_tracker/include/d1max_trajectory_tracker/tracker_core.hpp": "c334aeb707113b4c6d76ca11e060c674a581e70abd409d1d9217b0ac5f2f68aa",
+    "/home/eric/wjg/d1max-system/d1max_nav_ws/src/d1max_trajectory_tracker/src/trajectory_tracker.cpp": "dee49a5ed160b293eae9ca6a5be7be355357c4de730c053874f64be6f3f439a4",
+    "/home/eric/wjg/d1max-system/d1max_nav_ws/src/d1max_trajectory_tracker/test/test_tracker_core.cpp": "655153ab88bc18b6f70e64b338fe309ed7e7d78431f1047e80ff3e28b83cb20d",
+    "/home/eric/wjg/d1max-system/d1max_nav_ws/src/d1max_trajectory_tracker/test/test_tracker_v2.cpp": "9fb6012d5a011c549b97380e12b323f33684e411711bad2353aeb6da4c8326f9"
+  },
+  "build_source_identical": true,
+  "installed_core_header_identical": true,
+  "tracker_elf": {
+    "path": "/home/eric/wjg/d1max-build-isaac/nav/install/d1max_trajectory_tracker/lib/d1max_trajectory_tracker/trajectory_tracker",
+    "sha256": "1cba4e7ad13ef706957756eaa26078b05bbbf5626f7696feed92901a82e18c78"
+  },
+  "test_groups": [
+    {
+      "file": "/home/eric/wjg/d1max-build-isaac/nav/build/d1max_trajectory_tracker/test_results/d1max_trajectory_tracker/test_fixed_bspline_sampler.gtest.xml",
+      "tests": 8,
+      "failures": 0,
+      "errors": 0,
+      "disabled": 0
+    },
+    {
+      "file": "/home/eric/wjg/d1max-build-isaac/nav/build/d1max_trajectory_tracker/test_results/d1max_trajectory_tracker/test_navigation_state_contract.gtest.xml",
+      "tests": 13,
+      "failures": 0,
+      "errors": 0,
+      "disabled": 0
+    },
+    {
+      "file": "/home/eric/wjg/d1max-build-isaac/nav/build/d1max_trajectory_tracker/test_results/d1max_trajectory_tracker/test_tracker_core.gtest.xml",
+      "tests": 57,
+      "failures": 0,
+      "errors": 0,
+      "disabled": 0
+    },
+    {
+      "file": "/home/eric/wjg/d1max-build-isaac/nav/build/d1max_trajectory_tracker/test_results/d1max_trajectory_tracker/test_tracker_v2.gtest.xml",
+      "tests": 104,
+      "failures": 0,
+      "errors": 0,
+      "disabled": 0
+    }
+  ],
+  "total_test_count": 182,
+  "new_regressions": [
+    "opt_in_requires_support_and_legacy_default",
+    "quadratic_velocity_interior_bound_and_zero_speed_end",
+    "near_vertical_then_horizontal_and_vertical_zero",
+    "sloped_curved_local_yaw_speed_braking_bounds",
+    "full_verified_floor_original_XYZ_geometry_cache_identity_and_unsupported_kind_rejection"
+  ],
+  "limitations": [
+    "This change does not prove a PhysX navigation goal or physical robot acceptance.",
+    "A genuinely vertical or opposing tangent remains zero; local curvature and current proof expiry may still block motion.",
+    "The complete candidate must be assembled and tested with its explicit quadruped-only parameter."
+  ]
+}

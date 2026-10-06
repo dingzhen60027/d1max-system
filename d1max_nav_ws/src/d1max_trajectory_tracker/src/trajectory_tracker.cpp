@@ -63,6 +63,8 @@ public:
       throw std::invalid_argument("bounded_stationary_minimum_samples_required");
     c.stationary_minimum_samples=static_cast<unsigned>(stationary_samples);
     c.require_support_reference=true;
+    c.spatial_planar_braking_envelope=declare_parameter<bool>(
+      "spatial_planar_braking_envelope",c.spatial_planar_braking_envelope);
     c.external_goal_completion=true;
     config_ = c;
     execution_=std::make_unique<ExecutionContract>(c,declare_parameter<std::string>("transport_mode","live"),
@@ -310,6 +312,7 @@ private:
     const auto installed=execution_->geometryReceipt();
     if(installed)geometry_receipt_pub_->publish(*installed);
     const auto& join=core_->joinDiagnostic();
+    const auto control=core_->controlDiagnostic();
     Json status = {
       // Process heartbeat for lifecycle supervision, not sensor provenance.
       {"callback_wall_time",std::chrono::duration<double>(
@@ -326,6 +329,21 @@ private:
       {"permit_reject_reason", execution_->lastPermitReject()},
       {"initial_writer_ack_reason",execution_->initialAckReason()},
       {"installation_sequence",installed?installed->installation_sequence:0},
+      {"control_diagnostic",{{"step_seen",control.step_seen},
+        {"step_source_ns",control.step_source_ns},{"previous_step_source_ns",control.previous_step_source_ns},
+        {"step_trajectory_id",control.step_trajectory_id},{"step_trajectory_start_ns",control.step_trajectory_start_ns},
+        {"source_interval_s",control.source_interval_s},{"receipt_interval_s",control.receipt_interval_s},
+        {"duplicate_source",control.duplicate_source},{"before_trajectory_start",control.before_trajectory_start},
+        {"geometry_available",control.geometry_available},{"installed_trajectory_start_ns",control.installed_trajectory_start_ns},
+        {"projected_curve_time",control.projected_curve_time},{"lookahead_curve_time",control.lookahead_curve_time},
+        {"curve_duration",control.curve_duration},{"measured_arc_m",control.measured_arc_m},
+        {"lookahead_position",{control.lookahead_position.x(),control.lookahead_position.y(),control.lookahead_position.z()}},
+        {"lookahead_velocity",{control.lookahead_velocity.x(),control.lookahead_velocity.y(),control.lookahead_velocity.z()}},
+        {"planar_speed_limit_mps",control.planar_speed_limit_mps},
+        {"spatial_planar_braking_envelope",control.spatial_planar_braking_envelope},
+        {"planar_acceleration_limit_mps2",control.planar_acceleration_limit_mps2},
+        {"body_present",control.body_present},{"body_source_stamp_ns",control.body_source_stamp_ns},
+        {"measured_xy_speed_mps",control.measured_xy_speed_mps}}},
       {"join_diagnostic",{{"reason",join.reason},{"trajectory_id",join.trajectory_id},
         {"body_present",join.body_present},{"checked_now",join.now},{"checked_now_ns",join.checked_now_ns},
         {"body_source_stamp_ns",join.body_source_stamp_ns},{"join_source_stamp_ns",join.join_source_stamp_ns},

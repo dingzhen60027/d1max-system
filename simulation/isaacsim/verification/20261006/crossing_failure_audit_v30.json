@@ -1,0 +1,261 @@
+{
+  "actual_measured_max_speed_mps": 0.41615359781992795,
+  "audit_type": "read_only_source_and_source_clock_trace",
+  "bridge_fault": "",
+  "case_id": "crossing_blocker",
+  "causal_intervals": {
+    "active_tracker_retirement_source_s": 115.74,
+    "actual_motion_first_positive_after_obstruction_source_s": 106.458,
+    "actual_motion_unknown_source_s": [
+      85.24,
+      106.44
+    ],
+    "curve_unknown_source_s": [
+      86.48,
+      104.98
+    ],
+    "last_successful_writer_handoff_id": 22,
+    "last_successful_writer_handoff_source_s": 79.86,
+    "last_successful_writer_install_sequence": 9,
+    "suite_terminal_source_s": 117.6
+  },
+  "cumulative_measured_distance_m": 5.583955070486576,
+  "dynamic_unknown_evidence": {
+    "cached_prior_lease_valid": true,
+    "check_end_ns": 1791301594951023663,
+    "dynamic_oracle_query_valid": true,
+    "first_cell_hit_source_ns": 0,
+    "first_cell_prior_state": 3,
+    "first_cell_raw_category": "never_observed",
+    "first_unknown_cell": [
+      -2.675,
+      -4.325,
+      -0.025
+    ],
+    "interpretation": "Dynamic reachable-region veto precedes certified floor contact. Fresh prior and oracle plus a prior_state=3 cell with no live hit support a dynamic veto, not stale floor-phase evidence. This does not assert actual actor contact.",
+    "ray_clock_fault": false,
+    "scan_log_line": 4242,
+    "source": {
+      "path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v30-campus-crossing/source_snapshot/nav/src/scan_planner_vendor/plan_env/src/grid_map.cpp",
+      "sha256": "0270a8a926f60ccd7ca8d3872bae82d18801282dc7ad0476f2ecd5def4ee54cb"
+    },
+    "source_line": 705,
+    "source_s": 104.92,
+    "static_prior_context_valid": true
+  },
+  "evidence_files": [
+    {
+      "path": "/home/eric/wjg/d1max-build-isaac/runs/campus_crossing_v30_001/scenario_suite/phase_000_report.json",
+      "sha256": "a4b6c9840f4f6bc025a05b37bc7b60e28dcd7dd524270e454b38585a0059b670"
+    },
+    {
+      "path": "/home/eric/wjg/d1max-build-isaac/runs/campus_crossing_v30_001/scenario_suite/phase_000_trace.jsonl",
+      "sha256": "c1c3825778e228018995d67b4c31d0327d860f440f7442430af38b0011049e8e"
+    },
+    {
+      "path": "/home/eric/wjg/d1max-build-isaac/runs/campus_crossing_v30_001/physics/trajectory.jsonl",
+      "sha256": "2f5ae069ce9c3833381dff566bfebb1eaa95d1c7e38d993771891f1c02ac0a3e"
+    },
+    {
+      "path": "/home/eric/wjg/d1max-build-isaac/runs/campus_crossing_v30_001/scan.log",
+      "sha256": "b92c77da424baa633fa671d522e4d00fbd731f4836b473fbffe19f2543ef64ff"
+    }
+  ],
+  "final_position": [
+    -3.026271343231201,
+    -5.005512237548828,
+    0.48765990138053894
+  ],
+  "goal": [
+    8.0,
+    -5.0,
+    0.0
+  ],
+  "original_result": {
+    "physical_stop_confirmed": false,
+    "reason": "execution_blocked_timeout:waiting_measured_motion_progress",
+    "retirement_confirmed": true,
+    "success": false
+  },
+  "physical_robot_acceptance": false,
+  "recovery_window": {
+    "last_tracker": {
+      "control_diagnostic": {
+        "before_trajectory_start": false,
+        "body_present": true,
+        "body_source_stamp_ns": 1791301605771023663,
+        "curve_duration": 13.535425103214678,
+        "duplicate_source": false,
+        "geometry_available": true,
+        "installed_trajectory_start_ns": 1791301569131023663,
+        "lookahead_curve_time": 11.703324407877167,
+        "lookahead_position": [
+          -2.9300358296651314,
+          -5.016624327916846,
+          0.5200994360668451
+        ],
+        "lookahead_velocity": [
+          0.025730681969869544,
+          -0.00020473570108943943,
+          -0.0001628230376716003
+        ],
+        "measured_arc_m": 0.9746169024031002,
+        "measured_xy_speed_mps": 0.02884969602916654,
+        "planar_acceleration_limit_mps2": 0.34606987727761473,
+        "planar_speed_limit_mps": 0.10836834243699742,
+        "previous_step_source_ns": 1791301605751023663,
+        "projected_curve_time": 10.903324407877166,
+        "receipt_interval_s": 0.04000510205514729,
+        "source_interval_s": 0.02,
+        "spatial_planar_braking_envelope": true,
+        "step_seen": true,
+        "step_source_ns": 1791301605771023663,
+        "step_trajectory_id": 38,
+        "step_trajectory_start_ns": 1791301569131023663
+      },
+      "handoff_reason": "prepared_actual_entry_not_admissible",
+      "installation_sequence": 9,
+      "prepare_reason": "candidate:entry_measured_velocity_off_candidate",
+      "reason": "tracking",
+      "source_s": 115.74,
+      "trajectory_id": 38,
+      "writer_commit_sequence": 9
+    },
+    "late_plant_observation_110_to_115_s": {
+      "actual_xy_speed_max_mps": 0.07842744178075085,
+      "actual_xy_speed_median_mps": 0.023967874219127033,
+      "causal_status": "Observed small net progress under intermittent commands; does not independently prove a plant/controller root cause.",
+      "command_nonzero_fraction": 0.7342192691029901,
+      "command_vx_max_mps": 0.056428624660052065,
+      "command_vx_median_mps": 0.0517251251363952,
+      "net_forward_x_m": 0.0015528202056884766,
+      "sample_count": 301
+    },
+    "prepared_handoff_ids": [
+      23,
+      24,
+      25,
+      26,
+      27,
+      28,
+      29,
+      30,
+      31,
+      32,
+      33,
+      34,
+      35,
+      36,
+      37,
+      38,
+      39,
+      40,
+      41,
+      42,
+      43,
+      44,
+      45,
+      46,
+      47,
+      48,
+      49,
+      50,
+      51,
+      52,
+      53
+    ],
+    "proof_counts": {
+      "curve": {
+        "observed_free": 1595
+      },
+      "incumbent_motion": {
+        "observed_free_motion_sweep": 965
+      },
+      "permit": {
+        "False:execution_blocked_timeout:waiting_measured_motion_progress": 1,
+        "False:waiting_writer_handoff_outcome": 4,
+        "True:committed_execution_lease": 244
+      },
+      "prepared_motion": {
+        "motion_check_budget_exhausted": 445
+      }
+    },
+    "route_progress": {
+      "first_measured_arc_m": 4.904238740120035,
+      "first_position": [
+        -3.0164339542388916,
+        -5.006195068359375,
+        0.4878036379814148
+      ],
+      "first_source_s": 106.6,
+      "last_measured_arc_m": 4.959806084059465,
+      "last_position": [
+        -2.960857629776001,
+        -5.012004375457764,
+        0.49561807513237
+      ],
+      "last_source_s": 115.74
+    },
+    "source_s": [
+      106.6,
+      115.74
+    ]
+  },
+  "remaining_limits": [
+    "A new original Action crossing run is required for v31; this v30 failure is preserved.",
+    "Candidate measured velocity and curvature entry rejections remain independently strict; extra available compute time is not a successful admission.",
+    "Late small net plant progress is observed but not independently causally isolated.",
+    "Actor UNKNOWN remains a strict veto; geometry, source lease, motion authority and watchdog limits are unchanged."
+  ],
+  "scheduler_evidence": {
+    "actual_original_cap_s": 0.025,
+    "conclusion": "Prepared sweep starvation prevents successful replacement after current curve and actual motion proofs recover. Per-lane wall duration is not logged, so unused round time is unmeasured.",
+    "handoff_ids": [
+      23,
+      24,
+      25,
+      26,
+      27,
+      28,
+      29,
+      30,
+      31,
+      32,
+      33,
+      34,
+      35,
+      36,
+      37,
+      38,
+      39,
+      40,
+      41,
+      42,
+      43,
+      44,
+      45,
+      46,
+      47,
+      48,
+      49,
+      50,
+      51,
+      52,
+      53
+    ],
+    "prepared_budget_exhaustions": 445,
+    "prepared_original_cap_s": 0.005,
+    "prepared_successes": 0,
+    "round_period_s": 0.05,
+    "source": {
+      "path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v30-campus-crossing/source_snapshot/nav/src/scan_planner_vendor/plan_manage/include/plan_manage/validation_cycle.hpp",
+      "sha256": "b2931e7de2525e998b3553b436d84b5f24d360df54cc1ae307a918e927af9699"
+    },
+    "source_line": 58
+  },
+  "schema": 1,
+  "session_id": "85d385e97a8f485e9cd63d1971e8b682",
+  "source_origin_ns": 1791301490031023663,
+  "source_time_basis": "(original source_clock_ns - phase source_origin_ns) / 1e9",
+  "whole_body_attestation": true
+}

@@ -1,14 +1,20 @@
 # 当前待办与验收边界
 
-当前分支为 `isaacsim-simulation`。以下先记录 2026-10-06 的仿真版本状态，再保留先前实机与发布记录；不同日期和证据范围不可合并为稳定性或物理验收。
+当前分支为 `isaacsim-simulation`。以下先记录北京时间 2026-10-07 的仿真版本状态，再保留先前实机与发布记录；证据目录 `20261006` 保留 UTC 日期，不同版本和证据范围不可合并为稳定性或物理验收。
 
-## Isaac Sim 分支当前问题（2026-10-06）
+## Isaac Sim 分支当前问题（北京时间 2026-10-07）
+
+当前本机默认候选为 `isaac-candidate-v31-campus`，场景为 100×80 米官方 Spot 园区，具备真实行走策略、完整注册关节碰撞体、足部固定地面接触证书、独立动态演员真值否决与六项封存关卡。约 332.84 米仍仅是离线静态路线长度。v31 原 Action 近距实测 **1.040435 m** 后到达，取消停车关卡 **1.047985 m / 2.018 s 源时间**及独立评估通过；停车、IMU 与全身检查均成立。v31 横穿 **0.403687 m** 后失败，其余四关待执行；动态避让和长期稳定性不能由场景扩展或短测推断通过。[v31 实测](../simulation/isaacsim/verification/20261006/campus_navigation_v31.json)
+
+历史大场景 v23–v28 的原 Action 近距离初测均未通过，失败证据保留。v29 完整列查询、逐区间水平制动和实际扫掠资源计数修正后，近距离到达通过，但随后取消会话因旋转局部球体外接盒造成假穿地而失败。v30 改用完整 primitive 的紧致世界 AABB，保持原全身查询体积和接触限制；该版近距 **0.827614 m** 到达、取消 **1.197793 m / 2.02 s** 通过，横穿 **5.583955 m** 后失败，均与 v31 分别保留。仿真纯 Python 回归 232 项通过；v31 调度 ledger 39/39、非 launch CTest 15/15 通过，回归与关卡结果分别记录。[各版失败](../simulation/isaacsim/verification/20261006/campus_initial_failures.json)、[v29 历史实测](../simulation/isaacsim/verification/20261006/campus_navigation_v29.json)、[v30 历史实测](../simulation/isaacsim/verification/20261006/campus_navigation_v30.json)、[几何回归](../simulation/isaacsim/verification/20261006/primitive_world_bounds_offline_v30.json)、[v31 调度回归](../simulation/isaacsim/verification/20261006/prepared_lane_offline_v31.json)
 
 1. **跨参考窗口换轨未闭环。** `live_view_20261006_001` 实测行驶 8.0010308 m，停在机身位置约 `(3.2002,-2.3940,0.35)`，未到达地面目标 `(4,-3,0)`。SCAN 已计算下一参考窗口的候选，跟踪器仍保留 generation 7 的轨迹 41；局部段结束后持续 `local_segment_finished_waiting_replan`，最终因 30 s 无准入非零命令失败。软件退役、writer 实测停止和 PhysX 静止成立。前驱身份与并发提交竞态是调查方向，但原记录缺少完整 proposal/receipt/handoff 事务，尚未确证根因，也未确定是否为本轮改动引入的回归。[机器可读证据](../simulation/isaacsim/verification/20261006/live_view_failure.json)
 2. **静态先验尚不通用于真实定位和动态环境。** 认证静态 FREE 与实时 hit 否决已经接入，长期盲区阻断在封闭场景内得到改善；当前先验仅支持固定单位 `map←odom`。一般 LIO 配准、定位误差、环境变化和动态障碍持续导航仍需验证。普通 PCD 表面与 PCT 地面图不能自动证明完整三维 FREE。[算法说明](../simulation/isaacsim/SCAN_UNKNOWN_ANALYSIS.md)
-3. **完整机器人支撑与碰撞模型不足。** 当前轮式夹具限平地、有限姿态与高度误差；低障碍通过拒绝认证限制适用域。中心线支撑不证明全部轮胎/足端接触、动态腿部、跌落或完整地面支撑。
+3. **完整支撑与制动的通用性不足。** Spot 现在以同源 PhysX 关节变换证明全身在查询包络内，固定平面接触单独认证，低障碍仍参与碰撞否决。该方法限封存的平地场景，尚不证明坡面、楼梯、跌落、接触稳定性或实机制动。采样几何分离只证明那些采样时刻，保守包围盒相交会记为待解决，不能冒充穿透或无碰撞。
 4. **跨层执行和持久堵塞恢复尚未贯通。** 三维路线表达已经存在，正式执行仍限已支持的地面段；原 BT 缺少根据持久障碍更新全局路线并安全换路的同任务策略。
 5. **真实定位、物理制动和长期实时性未验收。** 本分支使用真值定位与 SDK-free writer；没有测试真实 Faster-LIO/ICP 精度、SDK 调用阻塞、断网/主机失效停车、实机制动距离或目标 NUC 长时间性能。部分进度/状态旁支的时间检查仍需收敛为整数纳秒。
+6. **曲率限速仍是采样检查。** 原跟踪器及新的空间水平包络都在曲线采样点计算曲率速度上限；端点足够慢不严格保证采样间的曲率可执行。独立审查构造了符合速度／加速度约束的区间中间反例。实际偏航指令仍受硬上限约束，实际位姿、三维碰撞证明及换轨保护仍检查；不能据此宣称整条曲线的连续跟踪可行性已证明。需要后续对完整 knot 区间建立曲率上界并验证制动前瞻，而不是仅提高采样率。[审查证据](../simulation/isaacsim/verification/20261006/spatial_planar_braking_envelope_review.json)
+7. **横穿动态关卡仍未通过。** v30 动态否决恢复后，445/445 条准备运动证明耗尽 5 ms 通道，行程 **5.583955 m** 后实测进度等待超时。v31 允许 prepared 使用原 50 ms 轮内剩余时间、最多原 25 ms motion cap，保持 5 ms 预留、当前轨迹优先级和全部 source／receipt／grant／proof／deadline 检查。v31 实际有 **14 条准备证明通过、7 次成功换轨、零准备预算耗尽**，确认该饥饿问题已修复；任务却仍在 **0.403687 m** 累计行程后以 `execution_blocked_timeout:waiting_measured_motion_progress` 失败。确认路线弧长最高仅约 `.112 m`，新候选几何入口的低速需求与方向变化影响持续有效跟随，尚未闭环；成功换轨保留输出历史，没有无条件清零 ramp 的证据。原停止、IMU、全身证书成立，bridge fault 为空，指定遭遇 `observed=false`；不能把累计步态移动、调度通过或采样无碰撞解释为动态导航通过，也未确证控制死区或 twist 噪声是唯一原因。其他四关尚未执行，旧轮式换轨失败仍独立保留。[v31 实测](../simulation/isaacsim/verification/20261006/campus_navigation_v31.json)、[横穿分析](../simulation/isaacsim/verification/20261006/crossing_failure_audit_v31.json)
 
 10-05 的 v19 三项同版任务及 v22 录屏通过记录保留于 [历史验证摘要](../simulation/isaacsim/verification/20261005/historical_verification.json)。最新失败不改写历史结果；历史成功也不能覆盖此次失败。默认生产 selector 和所有物理验收标志保持原值。
 

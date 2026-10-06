@@ -1,0 +1,218 @@
+{
+  "schema": 1,
+  "kind": "same_snapshot_complete_foot_vertical_column_cache_offline_verification",
+  "verified_at_utc": "2026-10-06T13:15:30.922491+00:00",
+  "scope": "Memory-only native queries; no ROS participant or physics navigation launched. Wall-time measurements do not prove real-time deadlines under full simulator load.",
+  "build": {
+    "packages": [
+      "plan_env",
+      "path_searching",
+      "bspline_opt",
+      "scan_planner"
+    ],
+    "exit_code": 0,
+    "log_directory": "/home/eric/wjg/d1max-build-isaac/nav/log/build_2026-10-06_21-08-17",
+    "duration_seconds": 118,
+    "final_test_target_rebuild": "cmake --build /home/eric/wjg/d1max-build-isaac/nav/build/plan_env --target test_projected_rays -j2",
+    "test_target_exit_code": 0
+  },
+  "ctest": {
+    "targets_passed": 31,
+    "targets_failed": 0,
+    "by_package": {
+      "plan_env": 8,
+      "path_searching": 4,
+      "bspline_opt": 4,
+      "scan_planner": 15
+    },
+    "projected_ray_cases_passed": 89,
+    "focused_column_cases_passed": 8,
+    "excluded_ros_launch_tests": [
+      "test_planner_startup",
+      "test_waypoint_parameters"
+    ],
+    "log_paths": [
+      "/home/eric/wjg/d1max-build-isaac/nav/build/plan_env/Testing/Temporary/LastTest.log",
+      "/home/eric/wjg/d1max-build-isaac/nav/build/path_searching/Testing/Temporary/LastTest.log",
+      "/home/eric/wjg/d1max-build-isaac/nav/build/bspline_opt/Testing/Temporary/LastTest.log",
+      "/home/eric/wjg/d1max-build-isaac/nav/build/scan_planner/Testing/Temporary/LastTest.log"
+    ]
+  },
+  "performance": {
+    "command": "test_projected_rays --gtest_filter=FullFootColumnCache.SpotSizedContinuousCurveMatchesLegacyAndReusesCompleteColumns --gtest_repeat=5",
+    "runs": [
+      {
+        "probe": "spot_full_foot_column_curve",
+        "queries": 2000,
+        "legacy_cell_visits": 47472644,
+        "unique_raw_plus_cylinders": 35418,
+        "column_ranges": 1366,
+        "legacy_ms": 195.84,
+        "column_ms": 24.1638,
+        "resolution": 0.05,
+        "radius": 0.608,
+        "offset": 0.3125,
+        "above": 0.55,
+        "fixed_floor_lower": -0.02,
+        "statuses_identical": true
+      },
+      {
+        "probe": "spot_full_foot_column_curve",
+        "queries": 2000,
+        "legacy_cell_visits": 47472644,
+        "unique_raw_plus_cylinders": 35418,
+        "column_ranges": 1366,
+        "legacy_ms": 178.823,
+        "column_ms": 24.0697,
+        "resolution": 0.05,
+        "radius": 0.608,
+        "offset": 0.3125,
+        "above": 0.55,
+        "fixed_floor_lower": -0.02,
+        "statuses_identical": true
+      },
+      {
+        "probe": "spot_full_foot_column_curve",
+        "queries": 2000,
+        "legacy_cell_visits": 47472644,
+        "unique_raw_plus_cylinders": 35418,
+        "column_ranges": 1366,
+        "legacy_ms": 178.673,
+        "column_ms": 24.0454,
+        "resolution": 0.05,
+        "radius": 0.608,
+        "offset": 0.3125,
+        "above": 0.55,
+        "fixed_floor_lower": -0.02,
+        "statuses_identical": true
+      },
+      {
+        "probe": "spot_full_foot_column_curve",
+        "queries": 2000,
+        "legacy_cell_visits": 47472644,
+        "unique_raw_plus_cylinders": 35418,
+        "column_ranges": 1366,
+        "legacy_ms": 179.021,
+        "column_ms": 24.1297,
+        "resolution": 0.05,
+        "radius": 0.608,
+        "offset": 0.3125,
+        "above": 0.55,
+        "fixed_floor_lower": -0.02,
+        "statuses_identical": true
+      },
+      {
+        "probe": "spot_full_foot_column_curve",
+        "queries": 2000,
+        "legacy_cell_visits": 47472644,
+        "unique_raw_plus_cylinders": 35418,
+        "column_ranges": 1366,
+        "legacy_ms": 178.666,
+        "column_ms": 24.0762,
+        "resolution": 0.05,
+        "radius": 0.608,
+        "offset": 0.3125,
+        "above": 0.55,
+        "fixed_floor_lower": -0.02,
+        "statuses_identical": true
+      }
+    ],
+    "legacy_median_ms": 178.823,
+    "column_median_ms": 24.0762,
+    "column_max_ms": 24.1638,
+    "assertions": [
+      "all query statuses equal original whole-column loop",
+      "original proof deadline unchanged",
+      "unique evidence count is <1/100 original repeated voxel visits"
+    ],
+    "log_file": "/tmp/d1max_column_cache_native_probe.log"
+  },
+  "resource_contract": {
+    "bounded_column_cache_entries": 32768,
+    "maximum_extra_bytes_per_contact_slot": 1835008,
+    "included_before_snapshot_allocation": true,
+    "default_noncontact_allocation": false,
+    "check_budget_changed": false,
+    "source_or_steady_lease_changed": false
+  },
+  "semantics": {
+    "xy_intersection": "Original continuous cylinder-to-closed-voxel intersection unchanged.",
+    "z_span": "Every bottom-to-top voxel from fixed floor-.02 to actual body z+above still examined on first identical column range.",
+    "reuse_domain": "Original immutable evidence scope identified by independent 64-bit main cache clear serial; window index checked before ring-address key.",
+    "invalidation": [
+      "late laser hit",
+      "dynamic oracle sequence/revocation",
+      "source or actual receipt expiry",
+      "sliding/reset",
+      "new proof/snapshot",
+      "cache capacity flush or serial wrap/saturation"
+    ],
+    "time": "Cache stores status only. It never manufactures or renews any acquisition/receipt/deadline. Existing query begin/end checks retained."
+  },
+  "source_sha256": {
+    "d1max_nav_ws/src/scan_planner_vendor/plan_env/include/plan_env/grid_map.h": "a9e77887353dd7b4432eef65a867f0cedad576c6c4e88c66f46287850f87cb97",
+    "d1max_nav_ws/src/scan_planner_vendor/plan_env/src/grid_map.cpp": "57dc5b42e4915c9ce1c035fa9cde7e344d6ed3ebe1c082686a02d156a218d236",
+    "d1max_nav_ws/src/scan_planner_vendor/plan_env/include/plan_env/voxel_collision.hpp": "c302666a8544f8c6759d5695322410862a746c7b3bd08e8c2023d1b0f4fe92ad",
+    "d1max_nav_ws/src/scan_planner_vendor/plan_env/test/test_projected_rays.cpp": "0076ead7344a6262a67c13d486427997b3bc3281381cb05035a1c2fad61ff50f",
+    "simulation/isaacsim/truth_map.py": "4c90c74467b9d361bee9f44c438bd5a1c14da5ad2a6a55a7bc97c5b55ae5e635",
+    "simulation/isaacsim/test_truth_map.py": "dd68148860e744380b4d98e2ba00c571c73b2208b4c208c47ce0fad7914e5906"
+  },
+  "source_to_isolated_build_identical": true,
+  "installed_headers_identical": [
+    "plan_env/include/plan_env/grid_map.h",
+    "plan_env/include/plan_env/voxel_collision.hpp"
+  ],
+  "python_tests": {
+    "passed": 59,
+    "failed": 0,
+    "focused_real_openusd_measurement_cases_passed": 4,
+    "duration_seconds": 2.51,
+    "scope": [
+      "simulation/isaacsim/test_truth_map.py",
+      "simulation/isaacsim/test_dynamic_collision.py",
+      "simulation/isaacsim/test_world_builder.py"
+    ],
+    "executor": "Independent delegated subagent, memory-only OpenUSD/Python; no SimulationApp/ROS participant.",
+    "command": "/home/eric/anaconda3/bin/python -m pytest -q simulation/isaacsim/test_truth_map.py simulation/isaacsim/test_dynamic_collision.py simulation/isaacsim/test_world_builder.py",
+    "exit_code": 0
+  },
+  "usd_measurement_cache": {
+    "existing_identity_frozen_once": true,
+    "allowed_roles": {
+      "rigid_link": [
+        "physics:velocity",
+        "physics:angularVelocity"
+      ],
+      "existing_joint": [
+        "state:angular:physics:position",
+        "state:angular:physics:velocity"
+      ],
+      "exact_configured_lidar_rigid_child": [
+        "enabled"
+      ]
+    },
+    "types": {
+      "rigid": "original Float3 or Vector3f type frozen, including authored property stack",
+      "joint": "Float",
+      "lidar": "Bool with exact original prim type; native RTX Camera and traditional Lidar supported"
+    },
+    "changed_fields_exactly": [
+      "default"
+    ],
+    "time_samples_allowed": false,
+    "new_attributes_or_prims_enrolled_after_initialization": false,
+    "collision_on_lidar_or_descendants_allowed": false,
+    "still_requires_audit": [
+      "new prim or property",
+      "typeName or authored property stack type change",
+      "composition/resync",
+      "API",
+      "gain/damping",
+      "static geometry",
+      "scale/shear",
+      "material/binding"
+    ],
+    "scope": "Only static collision identity is cached; actual same-source full robot-link and registered actor tensor geometry validation remains required every source step."
+  },
+  "source_frozen_at_utc": "2026-10-06T13:17:09.484529+00:00"
+}

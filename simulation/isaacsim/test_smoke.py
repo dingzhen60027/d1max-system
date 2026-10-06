@@ -1,9 +1,12 @@
 """Validate the real BT client request without starting a ROS participant."""
 from types import SimpleNamespace
+import math
 
 from builtin_interfaces.msg import Time
 from d1max_pct_scan.bt_adapter_contract import valid_compute_request
-from smoke import navigation_goal, expected_task_result, drain_imu_witness
+from smoke import (navigation_goal, expected_task_result, drain_imu_witness,
+    trace_output_path, cancellation_due, terminal_observation_complete,
+    stationarity_window, body_height_evidence, source_observation_expired)
 
 
 def test_navigation_goal_survives_unchanged_compute_action_validation():
@@ -65,3 +68,72 @@ def test_missing_interior_imu_never_passes_when_newer_samples_arrive():
     assert not result['matched']
     assert result['missing_imu_source_stamps_ns']==[190]
     assert result['receipt_wait_elapsed_s']>=.1
+
+
+def test_trace_output_cannot_overwrite_or_cross_session(tmp_path):
+    import pytest
+    session=tmp_path/'session'
+    session.mkdir()
+    (session/'goals').mkdir()
+    trace=trace_output_path(session,'goals/goal_001.jsonl')
+    assert trace==session/'goals/goal_001.jsonl'
+    trace.write_text('owned\n')
+    with pytest.raises(FileExistsError):
+        trace_output_path(session,trace)
+    with pytest.raises(ValueError,match='inside_session'):
+        trace_output_path(session,'../foreign.jsonl')
+    (session/'escape').symlink_to(tmp_path,target_is_directory=True)
+    with pytest.raises(ValueError,match='inside_session'):
+        trace_output_path(session,'escape/foreign.jsonl')
+
+
+def test_source_time_cancel_does_not_advance_during_wall_pause():
+    values=dict(confirmed=True,requested=False,distance=10.,cancel_after=.25,
+        source_origin_ns=1_000_000_000,cancel_source_time_s=12.)
+    assert not cancellation_due(**values,source_clock_ns=12_999_999_999)
+    assert not cancellation_due(**values,source_clock_ns=12_999_999_999)
+    assert cancellation_due(**values,source_clock_ns=13_000_000_000)
+    assert not cancellation_due(**dict(values,requested=True),source_clock_ns=20_000_000_000)
+    assert cancellation_due(**dict(values,cancel_source_time_s=None),source_clock_ns=0)
+
+
+def test_optional_source_budget_uses_source_clock_and_preserves_default():
+    assert not source_observation_expired(100_000_000_000, 1_000_000_000, None)
+    assert not source_observation_expired(100_000_000_000, None, 60.)
+    assert not source_observation_expired(60_999_999_999, 1_000_000_000, 60.)
+    assert not source_observation_expired(60_999_999_999, 1_000_000_000, 60.)
+    assert source_observation_expired(61_000_000_000, 1_000_000_000, 60.)
+
+
+def test_extended_stationarity_uses_complete_source_window_and_no_lease():
+    assert terminal_observation_complete(1.,1.6,0.)  # Original default.
+    assert not terminal_observation_complete(2.,100.,2.49)
+    assert terminal_observation_complete(2.,100.,2.5)
+    samples=[dict(elapsed_s=i*.01,source_stamp_ns=1_000_000_000+i*10_000_000,
+        linear_mps=0.,angular_radps=0.) for i in range(301)]
+    stationary,evidence=stationarity_window(samples,2.,3.)
+    assert stationary and evidence['source_span_s']>=2.
+    assert evidence['source_window_complete']
+    stationary,_=stationarity_window(samples[-100:],2.,3.)
+    assert not stationary
+    broken=samples[:100]+samples[130:]
+    stationary,_=stationarity_window(broken,2.,3.)
+    assert not stationary  # Missing source samples cannot certify parking.
+
+
+def test_model_height_tolerance_needs_independent_whole_body_certificate():
+    import pytest
+    assert body_height_evidence({}, {}, 100)[:2]==(.03,True)
+    session=dict(static_collision_prior_contract=dict(body_envelope_attestation_required=True,
+        full_leg_volume_required=True,max_body_height_error_m=.12,
+        body_envelope_registry_sha256='sealed_actual_registry'))
+    bridge=dict(body_envelope_verified_samples=100,body_envelope_failures=0,
+        body_envelope_registry_sha256='sealed_actual_registry')
+    assert body_height_evidence(session,bridge,100)[:2]==(.12,True)
+    assert not body_height_evidence(session,{},100)[1]
+    assert not body_height_evidence(session,dict(bridge,body_envelope_verified_samples=99),100)[1]
+    assert not body_height_evidence(session,dict(bridge,body_envelope_failures=1),100)[1]
+    assert not body_height_evidence(session,dict(bridge,body_envelope_registry_sha256='foreign'),100)[1]
+    session['static_collision_prior_contract']['max_body_height_error_m']=math.nan
+    with pytest.raises(ValueError):
+        body_height_evidence(session,bridge,100)

@@ -18,6 +18,9 @@ MAX_POINTS = 100000
 POINTS_PER_CHUNK = 1024
 MAX_PENDING_SCANS = 4
 RAY_BINARY_MAGIC = b'D1R1'
+NATIVE_RAY_PHASE = 'physx_prephysics_capture_v1'
+NATIVE_RAY_FIELDS = ('native_frame_time_ns', 'native_frame_time_s', 'phase',
+                     'native_frame_physics_step', 'capture_physics_step')
 
 
 def encode(value):
@@ -43,7 +46,7 @@ def decode(data):
         value = json.loads(data)
     if not isinstance(value, dict) or value.get("schema") != SCHEMA:
         raise ValueError("unsupported_wire_schema")
-    if value.get("type") not in ("state", "imu", "rays", "command", "status"):
+    if value.get("type") not in ("state", "imu", "rays", "command", "status", "dynamic"):
         raise ValueError("unsupported_packet_type")
     epoch = value.get("epoch")
     if not isinstance(epoch, str) or not 1 <= len(epoch) <= 128:
@@ -62,6 +65,8 @@ def decode(data):
             rings = array('H');rings.frombytes(payload[count*12:])
             if sys.byteorder != 'little':rings.byteswap()
             value['rings'] = list(rings)
+    if value['type'] == 'rays':
+        native_ray_metadata(value)
     return value
 
 
@@ -73,6 +78,34 @@ def finite_vector(value, length):
     return tuple(float(x) for x in value)
 
 
+def native_ray_metadata(value):
+    """Retain original wrapper END separately from actual capture BEGIN.
+
+    The native float in seconds is serialized directly, never reconstructed
+    from an integer tick. Optional physics-step identities travel together.
+    The session's sealed physical dt is enforced by the receiving bridge.
+    """
+    metadata = {key: value[key] for key in NATIVE_RAY_FIELDS if key in value}
+    if not metadata:
+        return {}
+    end_ns, end_s = value.get('native_frame_time_ns'), value.get('native_frame_time_s')
+    begin_ns = value.get('sim_time_ns')
+    if (value.get('phase') != NATIVE_RAY_PHASE
+            or type(begin_ns) is not int or not 0 <= begin_ns < 2**62
+            or type(end_ns) is not int or not 0 <= end_ns < 2**62
+            or type(end_s) is not float or not math.isfinite(end_s) or not 0 <= end_s < 2**62 / 1e9
+            or round(end_s * 1e9) != end_ns):
+        raise ValueError('invalid_native_ray_phase_metadata')
+    step_fields = ('native_frame_physics_step', 'capture_physics_step')
+    if any(key in value for key in step_fields):
+        native_step, capture_step = (value.get(key) for key in step_fields)
+        if (type(native_step) is not int or type(capture_step) is not int
+                or not 0 <= capture_step < native_step < 2**62
+                or native_step != capture_step + 1):
+            raise ValueError('invalid_native_ray_phase_metadata')
+    return metadata
+
+
 def state_packet(epoch, sequence, sim_time_ns, pose, linear_velocity_world, angular_velocity_world, metadata=None):
     value = dict(schema=SCHEMA, type="state", epoch=epoch,
         sequence=int(sequence), sim_time_ns=int(sim_time_ns),
@@ -81,7 +114,9 @@ def state_packet(epoch, sequence, sim_time_ns, pose, linear_velocity_world, angu
         angular_velocity_world=finite_vector(angular_velocity_world, 3))
     if metadata is not None:
         allowed = {"static_prior_geometry_sha256", "static_prior_geometry_valid",
-                   "static_prior_geometry_checked_sim_time_ns", "static_prior_geometry_fault"}
+                   "static_prior_geometry_checked_sim_time_ns", "static_prior_geometry_fault",
+                   "body_envelope_valid", "body_envelope_checked_sim_time_ns",
+                   "body_envelope_registry_sha256", "body_envelope_fault"}
         if not isinstance(metadata, dict) or set(metadata) - allowed:
             raise ValueError("invalid_geometry_metadata")
         digest = metadata.get("static_prior_geometry_sha256")
@@ -93,6 +128,15 @@ def state_packet(epoch, sequence, sim_time_ns, pose, linear_velocity_world, angu
                 or (valid and not digest) or type(checked) is not int or not 0 <= checked <= sim_time_ns
                 or not isinstance(fault, str) or len(fault) > 512):
             raise ValueError("invalid_geometry_metadata")
+        if 'body_envelope_valid' in metadata:
+            body_digest = metadata.get('body_envelope_registry_sha256', '')
+            if (type(metadata['body_envelope_valid']) is not bool
+                    or not isinstance(body_digest, str) or len(body_digest) != 64
+                    or any(c not in '0123456789abcdef' for c in body_digest)
+                    or metadata.get('body_envelope_checked_sim_time_ns') != sim_time_ns
+                    or not isinstance(metadata.get('body_envelope_fault', ''), str)
+                    or len(metadata.get('body_envelope_fault', '')) > 512):
+                raise ValueError('invalid_body_envelope_metadata')
         value.update(metadata)
     return encode(value)
 
@@ -106,11 +150,43 @@ def imu_packet(epoch, sequence, sim_time_ns, orientation, angular_velocity, line
         linear_acceleration=finite_vector(linear_acceleration, 3)))
 
 
-def ray_packets(epoch, scan_sequence, sim_time_ns, sensor_id, origin, xyz, rings=None):
-    """Emit only finite actual hit endpoints in the measured base frame."""
+def dynamic_packet(epoch, sequence, sim_time_ns, registry_sha256, samples):
+    """Same-step kinematic actor measurements; never encoded as laser rays."""
+    if (not isinstance(registry_sha256, str) or len(registry_sha256) != 64
+            or any(c not in '0123456789abcdef' for c in registry_sha256)
+            or not isinstance(samples, dict) or not 0 <= len(samples) <= 64):
+        raise ValueError('invalid_dynamic_measurement_registry')
+    checked = {}
+    for actor_id, sample in samples.items():
+        if (not isinstance(actor_id, str) or not 1 <= len(actor_id) <= 128
+                or sample.get('present') is not True):
+            raise ValueError('incomplete_dynamic_measurement')
+        checked[actor_id] = dict(present=True,
+            position=finite_vector(sample['position'], 3),
+            linear_velocity=finite_vector(sample['linear_velocity'], 3),
+            orientation_xyzw=finite_vector(sample.get('orientation_xyzw', [0., 0., 0., 1.]), 4))
+    return encode(dict(schema=SCHEMA, type='dynamic', epoch=epoch,
+        sequence=int(sequence), sim_time_ns=int(sim_time_ns),
+        registry_sha256=registry_sha256, samples=checked))
+
+
+def ray_packets(epoch, scan_sequence, sim_time_ns, sensor_id, origin, xyz, rings=None,
+                *, native_frame_time_ns=None, native_frame_time_s=None, phase=None,
+                native_frame_physics_step=None, capture_physics_step=None):
+    """Emit finite actual hits; optional native wrapper END leaves BEGIN intact.
+
+    With explicit prephysics phase, provide the original native time float and
+    its rounded nanoseconds together. Physics-step identities are an optional
+    pair; native END must be the next step after the actual capture BEGIN.
+    """
     if sensor_id not in (0, 1):
         raise ValueError("invalid_sensor")
     origin = finite_vector(origin, 3)
+    metadata = native_ray_metadata(dict(sim_time_ns=sim_time_ns, **{
+        key: value for key, value in (
+            ('native_frame_time_ns', native_frame_time_ns), ('native_frame_time_s', native_frame_time_s),
+            ('phase', phase), ('native_frame_physics_step', native_frame_physics_step),
+            ('capture_physics_step', capture_physics_step)) if value is not None}))
     array_input = hasattr(xyz,'dtype') and hasattr(xyz,'shape')
     if array_input:
         # The native sensor already provides an ndarray. Validate the complete
@@ -143,6 +219,7 @@ def ray_packets(epoch, scan_sequence, sim_time_ns, sensor_id, origin, xyz, rings
             scan_sequence=int(scan_sequence), sim_time_ns=int(sim_time_ns),
             sensor_id=sensor_id, origin=origin, chunk_index=index, chunk_count=count,
             point_count=len(chunk),rings_present=rings is not None)
+        packet.update(metadata)
         # Match the eventual PointCloud2 XYZ precision without a JSON float
         # burst exceeding the host's capped UDP receive buffer. Acquisition
         # identity, source time and origin remain explicit JSON metadata.
@@ -209,7 +286,15 @@ class RayAssembler:
         if rings is not None and (not isinstance(rings,list) or len(rings)!=len(rows)
                 or any(type(r) is not int or not 0 <= r < 65536 for r in rings)):
             raise ValueError('invalid_native_ring_indices')
-        identity = (count, packet["sim_time_ns"], origin, rings is not None)
+        try:
+            metadata = native_ray_metadata(packet)
+        except ValueError:
+            if key in self.pending:
+                del self.pending[key]
+                self.dropped += 1
+            raise
+        native_identity = tuple((key, metadata[key]) for key in NATIVE_RAY_FIELDS if key in metadata)
+        identity = (count, packet["sim_time_ns"], origin, rings is not None, native_identity)
         scan = self.pending.get(key)
         if scan is None:
             if len(self.pending) >= MAX_PENDING_SCANS:
@@ -239,4 +324,4 @@ class RayAssembler:
         return dict(epoch=key[0], sensor_id=sensor, scan_sequence=sequence,
             sim_time_ns=identity[1], origin=origin, xyz=result,
             rings=[ring for i in range(count) for ring in scan['ring_chunks'][i]]
-                if identity[3] else None)
+                if identity[3] else None, **metadata)

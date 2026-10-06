@@ -24,7 +24,9 @@ public:
     const auto model=ex::loadBrakingModel(declare_parameter<std::string>("execution_braking_model_record",""),
       declare_parameter<std::string>("execution_braking_model_sha256",""),"isolated_mock");
     if(!model.valid)throw std::invalid_argument(model.reason);
-    core_.configureBrakingModel(model.sha256,model.max_speed,model.max_yaw);
+    // Reachable plant velocity can exceed the requested command during gait.
+    // The final writer receives only the separately sealed command authority.
+    core_.configureBrakingModel(model.sha256,model.command_max_speed,model.command_max_yaw);
     core_.configureExecutionPolicy(model.policy,model.reaction_bound);
     const std::string p="/d1max/live_planning/execution/";
     state_=create_publisher<ex::State>(p+"sdk_state",1);stop_=create_publisher<ex::Stop>(p+"stop_report",1);

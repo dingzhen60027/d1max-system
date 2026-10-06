@@ -33,6 +33,97 @@ def expected_task_result(case, result, cancellation_requested, action_status):
         and result.get('reason') in ('action_cancelled', 'user_cancelled'))
 
 
+def trace_output_path(session_dir, requested=None):
+    """Every observer owns a new trace inside its existing sealed session."""
+    session_dir = Path(session_dir).resolve(strict=True)
+    path = Path(requested) if requested is not None else Path('control_trace.jsonl')
+    if not path.is_absolute():
+        path = session_dir / path
+    path = path.resolve()
+    if not path.is_relative_to(session_dir) or path == session_dir:
+        raise ValueError('trace_output_must_be_inside_session')
+    if path.exists() or path.is_symlink():
+        raise FileExistsError('trace_output_already_exists:' + str(path))
+    if not path.parent.is_dir():
+        raise ValueError('trace_output_parent_missing')
+    return path
+
+
+def cancellation_due(*, confirmed, requested, distance, cancel_after,
+                     source_clock_ns, source_origin_ns, cancel_source_time_s=None):
+    if not confirmed or requested:
+        return False
+    if cancel_source_time_s is None:
+        return distance >= cancel_after
+    return (source_origin_ns is not None and source_clock_ns >= source_origin_ns
+        and (source_clock_ns-source_origin_ns)*1e-9 >= cancel_source_time_s)
+
+
+def terminal_observation_complete(window_s, wall_elapsed_s, source_elapsed_s):
+    # Preserve the existing one-second observer's default behavior. Extended
+    # evidence windows use real source time and never issue/renew motion leases.
+    if window_s == 1.:
+        return wall_elapsed_s > 1.5
+    return source_elapsed_s >= window_s + .5
+
+
+def source_observation_expired(source_clock_ns, source_origin_ns, duration_s):
+    # Optional system-test budget. It never changes Action schemas, execution
+    # blocked timeouts, input freshness or the duration of a motion permit.
+    return (duration_s is not None and source_origin_ns is not None
+        and source_clock_ns >= source_origin_ns
+        and source_clock_ns-source_origin_ns >= round(duration_s * 1e9))
+
+
+def stationarity_window(samples, window_s, fence_elapsed_s):
+    if window_s == 1.:
+        selected = [s for s in samples if fence_elapsed_s-s['elapsed_s'] <= 1.]
+    elif samples:
+        cutoff = samples[-1]['source_stamp_ns'] - round(window_s*1e9)
+        before = [s for s in samples if s['source_stamp_ns'] < cutoff]
+        selected = ([before[-1]] if before else []) + [s for s in samples if s['source_stamp_ns'] >= cutoff]
+    else:
+        selected = []
+    stamps = [s['source_stamp_ns'] for s in selected]
+    source_span = (stamps[-1]-stamps[0])*1e-9 if stamps else 0.
+    monotonic = all(b > a for a,b in zip(stamps, stamps[1:]))
+    maximum_gap = max((b-a for a,b in zip(stamps, stamps[1:])), default=0)
+    complete = (window_s == 1. or (monotonic and source_span >= window_s and maximum_gap <= 100_000_000))
+    stationary = (len(selected) >= 3 and complete
+        and all(s['linear_mps'] <= .03 and s['angular_radps'] <= .05 for s in selected))
+    return stationary, dict(fence_elapsed_s=fence_elapsed_s, window_s=window_s,
+        sample_count=len(selected), source_begin_ns=stamps[0] if stamps else None,
+        source_end_ns=stamps[-1] if stamps else None, source_span_s=source_span,
+        longest_source_sample_gap_ns=maximum_gap, source_window_complete=bool(complete))
+
+
+def body_height_evidence(session, bridge, measured_state_count):
+    """Model-specific height tolerance needs independent full-body attestation.
+
+    Height alone never certifies feet, swept links, static collision or contacts.
+    The wheel observer's original .03m tolerance remains unchanged.
+    """
+    contract = session.get('static_collision_prior_contract') or {}
+    if contract.get('body_envelope_attestation_required') is not True:
+        return .03, True, dict(required=False, scope='legacy_height_check_only')
+    tolerance = contract.get('max_body_height_error_m')
+    if (isinstance(tolerance, bool) or not isinstance(tolerance, (int,float))
+            or not math.isfinite(tolerance) or not 0 < tolerance <= .20):
+        raise ValueError('invalid_sealed_model_height_tolerance')
+    count = bridge.get('body_envelope_verified_samples')
+    failures = bridge.get('body_envelope_failures')
+    registry = contract.get('body_envelope_registry_sha256')
+    verified = (contract.get('full_leg_volume_required') is True and bool(registry)
+        and bridge.get('body_envelope_registry_sha256') == registry
+        and type(count) is int and count >= measured_state_count > 0
+        and type(failures) is int and failures == 0)
+    return float(tolerance), bool(verified), dict(required=True, verified=bool(verified),
+        body_envelope_verified_samples=count, body_envelope_failures=failures,
+        body_envelope_registry_sha256=bridge.get('body_envelope_registry_sha256'),
+        observed_measured_state_count=measured_state_count,
+        scope='same_source_actual_whole_body_envelope_attestation; not_complete_contact_or_collision_acceptance')
+
+
 def drain_imu_witness(observer, spin_once, *, budget=1., monotonic=time.monotonic):
     """Fence measured states, then read their exact independent IMU witnesses.
 
@@ -64,11 +155,28 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--session', type=Path, required=True)
     parser.add_argument('--duration', type=float, default=90.)
+    parser.add_argument('--source-duration-s', type=float,
+        help='Optional test source-time budget; default only uses existing wall budget')
     parser.add_argument('--goal', type=float, nargs=3)
     parser.add_argument('--case', choices=('goal', 'cancel', 'preview_cancel'), default='goal')
     parser.add_argument('--cancel-after', type=float, default=.25, help='measured travel in metres before cancelling')
     parser.add_argument('--output', type=Path)
+    parser.add_argument('--trace-output', type=Path, help='New trace path strictly inside this session')
+    parser.add_argument('--cancel-source-time-s', type=float,
+        help='Cancel after real ROS source seconds since the first measured state; default uses measured travel')
+    parser.add_argument('--stationary-window-s', type=float, default=1.,
+        help='Stationary evidence window; extended windows use original source stamps')
     args = parser.parse_args()
+    if args.source_duration_s is not None and (not math.isfinite(args.source_duration_s) or args.source_duration_s <= 0):
+        parser.error('source-duration-s must be finite and positive')
+    if (not math.isfinite(args.stationary_window_s) or args.stationary_window_s < 1.
+            or args.stationary_window_s > 30.):
+        parser.error('stationary-window-s must be finite and between 1 and 30')
+    if args.cancel_source_time_s is not None:
+        if not math.isfinite(args.cancel_source_time_s) or args.cancel_source_time_s < 0:
+            parser.error('cancel-source-time-s must be finite and nonnegative')
+        if args.case != 'cancel':
+            parser.error('cancel-source-time-s requires --case cancel')
     from d1max_pct_scan.isolated_zenoh import validate_environment
     validate_environment()
     import rclpy
@@ -84,6 +192,7 @@ def main():
     from std_msgs.msg import String
     from sensor_msgs.msg import Imu
     session_dir = args.session.resolve(strict=True)
+    owned_trace_path = trace_output_path(session_dir, args.trace_output)
     session = json.loads((session_dir/'session.json').read_text())
     if session.get('simulation_backend') != 'isaacsim_physx' or session.get('transport_mode') != 'isolated_mock':
         raise ValueError('isaac_isolated_session_required')
@@ -105,6 +214,7 @@ def main():
             self.max_measured_speed = 0.
             self.position = None
             self.start_position = None
+            self.source_begin_ns = None
             self.distance = 0.
             self.samples = deque(maxlen=18000)
             self.events = deque(maxlen=2000)
@@ -129,7 +239,7 @@ def main():
             self.action_result_status = None
             # Read-only causal trace: preserve exact received wire times and
             # identities. This cannot publish or refresh a control/proof lease.
-            self.control_trace_path = session_dir/'control_trace.jsonl'
+            self.control_trace_path = owned_trace_path
             self.control_trace = self.control_trace_path.open('x')
             self.last_component_trace = {}
             self.create_subscription(LocalNavigationState, '/d1max/localization/navigation/local_state', self.state, 10)
@@ -159,7 +269,8 @@ def main():
                 self.create_subscription(String, prefix+topic, lambda m,n=name:self.component(n,m), 10)
 
         def event(self, key, **data):
-            self.events.append(dict(elapsed_s=time.monotonic()-begin, key=key, **data))
+            self.events.append(dict(elapsed_s=time.monotonic()-begin,
+                source_stamp_ns=self.get_clock().now().nanoseconds, key=key, **data))
 
         def trace(self, kind, data):
             self.control_trace.write(json.dumps(dict(kind=kind,
@@ -216,6 +327,8 @@ def main():
             p = message.local_odometry.pose.pose.position
             q = message.local_odometry.pose.pose.orientation
             position = [p.x, p.y, p.z]
+            if self.source_begin_ns is None:
+                self.source_begin_ns = message.source_stamp.sec*10**9+message.source_stamp.nanosec
             if self.start_position is None:
                 self.start_position = position
             if self.position is not None:
@@ -289,7 +402,8 @@ def main():
                     fields = ('reason', 'permit_reject_reason', 'prepare_reason',
                         'handoff_reason', 'maneuver_phase', 'trajectory_id',
                         'installation_sequence', 'writer_commit_sequence',
-                        'finished', 'preparation_pending', 'execution_frozen', 'active')
+                        'finished', 'preparation_pending', 'execution_frozen', 'active',
+                        'control_diagnostic')
                     data = {key:self.component_status[name].get(key) for key in fields
                         if key in self.component_status[name]}
                     if data != self.last_component_trace.get(name):
@@ -342,8 +456,13 @@ def main():
                     request_id='isaac-smoke-'+session['id'])
                 self.confirm_future = self.confirm.call_async(request)
                 self.event('route_confirmation_requested', route_hash=request.route_hash)
-            if (args.case == 'cancel' and self.confirmed and not self.cancellation_requested
-                    and self.distance >= args.cancel_after and self.goal_handle is not None):
+            if (args.case == 'cancel' and self.goal_handle is not None
+                    and cancellation_due(confirmed=self.confirmed,
+                        requested=self.cancellation_requested, distance=self.distance,
+                        cancel_after=args.cancel_after,
+                        source_clock_ns=self.get_clock().now().nanoseconds,
+                        source_origin_ns=self.source_begin_ns,
+                        cancel_source_time_s=args.cancel_source_time_s)):
                 self.cancel_future = self.goal_handle.cancel_goal_async()
                 self.cancellation_requested = True
                 self.event('cancel_requested', measured_distance_m=self.distance)
@@ -373,14 +492,27 @@ def main():
     rclpy.init()
     observer = Observer()
     end_state_at = None
+    end_source_ns = None
     try:
         while time.monotonic()-begin < args.duration:
             rclpy.spin_once(observer, timeout_sec=.02)
+            if (observer.result is None and not observer.error
+                    and source_observation_expired(observer.get_clock().now().nanoseconds,
+                        observer.source_begin_ns, args.source_duration_s)):
+                observer.error = 'smoke_source_timeout'
+                observer.event('source_observation_budget_exceeded', source_duration_s=args.source_duration_s,
+                    source_origin_ns=observer.source_begin_ns)
+                if observer.goal_handle is not None:
+                    observer.cancel_future = observer.goal_handle.cancel_goal_async()
+                    observer.event('source_budget_action_cancel_requested')
             observer.tick()
             if observer.result is not None or observer.error:
                 if end_state_at is None:
                     end_state_at = time.monotonic()
-                if time.monotonic()-end_state_at > 1.5:
+                    end_source_ns = observer.get_clock().now().nanoseconds
+                if terminal_observation_complete(args.stationary_window_s,
+                        time.monotonic()-end_state_at,
+                        (observer.get_clock().now().nanoseconds-end_source_ns)*1e-9):
                     break
         if observer.result is None and not observer.error:
             observer.error = 'smoke_wall_timeout'
@@ -396,10 +528,8 @@ def main():
         imu_evidence = drain_imu_witness(observer, rclpy.spin_once)
         imu_evidence['fence_elapsed_s'] = evidence_fence_elapsed
         result, stop = observer.result or {}, observer.stop or {}
-        stopped_samples = [sample for sample in evidence_samples if
-            evidence_fence_elapsed-sample['elapsed_s'] <= 1.]
-        measured_stationary = (len(stopped_samples) >= 3 and
-            all(sample['linear_mps'] <= .03 and sample['angular_radps'] <= .05 for sample in stopped_samples))
+        measured_stationary, stationary_evidence = stationarity_window(
+            evidence_samples, args.stationary_window_s, evidence_fence_elapsed)
         writer_stop = (stop.get('measured_stop_confirmed') is True
             and stop.get('physical_acceptance_verified') is False
             and stop.get('execution_id') == observer.motion_execution_id
@@ -407,7 +537,9 @@ def main():
         imu_source_matching = imu_evidence['matched']
         heights = [sample['position'][2] for sample in observer.samples]
         expected_height = float(session['body_height'])+float(session['simulation_goal'][2])
-        body_height_consistent = bool(heights) and max(abs(height-expected_height) for height in heights) <= .03
+        height_tolerance, whole_body_attestation, body_evidence = body_height_evidence(
+            session, observer.bridge, observer.counts['measured_state'])
+        body_height_consistent = bool(heights) and max(abs(height-expected_height) for height in heights) <= height_tolerance
         expected_result = expected_task_result(args.case, result, observer.cancellation_requested,
             observer.action_result_status)
         execution_evidence = (writer_stop and observer.motion_nonzero > 0 and observer.distance > .05)
@@ -417,11 +549,11 @@ def main():
         passed = (not observer.error and expected_result and result.get('retirement_confirmed') is True
             and result.get('physical_stop_confirmed') is False and execution_evidence and measured_stationary
             and imu_source_matching
-            and body_height_consistent)
+            and body_height_consistent and whole_body_attestation)
         report = dict(schema=1, passed=bool(passed), case=args.case, session_id=session['id'],
             test_scope=('original_BT_PCT_route_preview_cancellation_PhysX_sensor_fixture'
                 if args.case == 'preview_cancel' else
-                'original_BT_PCT_SCAN_tracker_safety_mock_writer_PhysX_wheel_fixture'),
+                'original_BT_PCT_SCAN_tracker_safety_mock_writer_PhysX_robot_fixture'),
             physical_acceptance=False, localization='groundtruth_fixture_not_LIO_localization_validation',
             goal=goal, result=observer.result, error=observer.error, counts=dict(observer.counts),
             action_result_status=observer.action_result_status, preview_proof=observer.preview_proof,
@@ -434,9 +566,15 @@ def main():
             control_trace=str(observer.control_trace_path),
             imu_source_matching=imu_source_matching,
             imu_evidence=imu_evidence,
-            stationarity_evidence=dict(fence_elapsed_s=evidence_fence_elapsed,
-                window_s=1., sample_count=len(stopped_samples)),
+            stationarity_evidence=stationary_evidence,
+            source_origin_ns=observer.source_begin_ns,
+            source_duration_s=args.source_duration_s,
+            source_budget_scope='test_observation_only; original_BT_watchdogs_and_motion_leases_unchanged',
+            cancel_source_time_s=args.cancel_source_time_s,
             body_height_consistent=body_height_consistent,
+            body_height_tolerance_m=height_tolerance,
+            whole_body_attestation=whole_body_attestation,
+            body_envelope_attestation_evidence=body_evidence,
             expected_body_reference_z=expected_height,
             measured_body_z_range=[min(heights),max(heights)] if heights else None,
             native_imu_samples=list(observer.imu_samples),

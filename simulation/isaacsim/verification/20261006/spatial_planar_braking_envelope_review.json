@@ -1,0 +1,129 @@
+{
+  "schema": 1,
+  "kind": "spatial_planar_braking_envelope_independent_review_v1",
+  "generated_at_utc": "2026-10-06T15:01:23.540751+00:00",
+  "review_scope": "Source inspection and independent mathematical/numerical review; this review does not modify navigation code, rebuild packages, launch Kit/ROS, record media or mutate Git state.",
+  "source_repository": "/home/eric/wjg/d1max-system",
+  "physical_acceptance": false,
+  "runtime_navigation_acceptance_claim": false,
+  "continuous_curvature_feasibility_proven": false,
+  "source_boundary": {
+    "spatial_flag_default": false,
+    "support_reference_required_when_spatial_flag_true": true,
+    "execution_node_support_reference_mandatory": true,
+    "simulation_nav_prepare_spatial_flag_scope": "quadruped only",
+    "full_xyz_curve_derivatives_projection_and_collision_geometry_preserved": true,
+    "body_height_deadlines_query_budget_modified_by_review": false
+  },
+  "findings": [
+    {
+      "contract": "quadratic_interval_planar_direction_lower_bound",
+      "result": "conservative for every nonzero velocity on a quadratic Bezier span",
+      "reason": "Write velocity as sum of nonnegative Bernstein weights times controls. After dividing by the weighted sum of control norms, it is a convex combination of normalized 3D controls, with norm no greater than one. Its XY norm is no smaller than the distance from zero to their XY convex hull; hence the hull distance is a lower bound for |vXY|/|vXYZ|. Zero controls contribute no direction and may be omitted; a zero or opposing XY convex combination returns zero conservatively. Knot cuts keep this construction inside each original quadratic velocity span."
+    },
+    {
+      "contract": "horizontal_braking_distance_and_local_conversion",
+      "result": "no borrowing of vertical travel or whole-curve conversion minimum found",
+      "reason": "Both sampled adjacent XY chords and the exact current-to-next XY chord are lower bounds on the corresponding XY path length. Backward braking uses the applicable interval acceleration times that horizontal distance once. Runtime limits are queried at measured XYZ curve projection time. The cone conversion bounds each whole interval, and the sampled speed cap uses adjacent interval minima."
+    },
+    {
+      "contract": "zero_or_opposing_direction",
+      "result": "zero XY authority retained",
+      "limitation": "A sampled node with a zero local cap can suppress the following entire sampling interval through min(limits[i], right braking cone). A genuinely vertical or opposing segment can remain a measured-progress barrier for a planar robot until a feasible trajectory is supplied. This is local conservatism, not a recurrence of the unrelated whole-curve minimum."
+    },
+    {
+      "contract": "continuous_curvature_speed_cap",
+      "status": "existing_algorithm_limit_not_new_direction_conversion_regression",
+      "result": "sampled endpoint curvature caps do not prove continuous interval curvature feasibility",
+      "source_locations": {
+        "curvature_formula": "tracker_core.hpp:43",
+        "spatial_sample_caps": "tracker_core.hpp:165",
+        "spatial_current_speed": "tracker_core.hpp:181",
+        "legacy_sample_caps": "tracker_core.hpp:654",
+        "executed_yaw_hard_cap": "tracker_core.hpp:1137"
+      },
+      "counterexample": {
+        "sample_interval_s": 0.02,
+        "max_yaw_radps": 0.3,
+        "max_planar_speed_mps": 0.15,
+        "max_spatial_acceleration_mps2": 0.35,
+        "position_xyz": "p(t)=(0.001*t, 0.175*(t-0.01)^2-0.0000175, 0.52), 0<=t<=0.02",
+        "velocity_xyz": "v(t)=(0.001, 0.35*(t-0.01), 0)",
+        "acceleration_xyz": [
+          0.0,
+          0.35,
+          0.0
+        ],
+        "quadratic_velocity_bezier_controls_xyz": [
+          [
+            0.001,
+            -0.0034999999999999996,
+            0.0
+          ],
+          [
+            0.001,
+            0.0,
+            0.0
+          ],
+          [
+            0.001,
+            0.0034999999999999996,
+            0.0
+          ]
+        ],
+        "interval_direction_scale_lower_bound": 0.27472112789637804,
+        "sampled_endpoint_curvature_speed_cap_mps": 4.1340624014128646e-05,
+        "true_midpoint_curvature_speed_cap_mps": 8.571428571428571e-07,
+        "profile_allowed_midpoint_speed_mps": 4.1340624014128646e-05,
+        "allowed_to_true_cap_ratio": 48.23072801648342,
+        "yaw_required_to_follow_curve_at_profile_cap_radps": 14.469218404945027,
+        "actual_emitted_yaw_still_hard_limited_radps": 0.3,
+        "interpretation": "This is a mathematical profile counterexample, not a measured execution or collision. An emitted yaw remains capped at 0.30 rad/s in this fixture. The retained sampled profile can nevertheless admit a forward cap above what is feasible for an interior curvature spike. Legacy sampled curvature envelopes have the same gap."
+      },
+      "follow_up": "Keep this limitation in validation claims. Strict continuous curvature feasibility would require a conservative bound over every knot subinterval (or equivalent certified subdivision); merely increasing sample density is not a proof. Any added exact-current cap also needs braking continuity handling."
+    }
+  ],
+  "independent_numerical_checks": {
+    "quadratic_direction_random_seed": 620026,
+    "quadratic_control_cases": 2000,
+    "velocity_samples_evaluated": 121777,
+    "observed_direction_bound_violations": 0,
+    "violation_tolerance": 1e-12,
+    "result": "passed",
+    "scope": "Numerical supplement to the convex-cone argument, not a formal verification of all floating-point inputs."
+  },
+  "implementation_tests": {
+    "standalone_test_count_reported_by_implementation_agent": 182,
+    "rerun_in_this_review": false
+  },
+  "files": {
+    "d1max_nav_ws/src/d1max_trajectory_tracker/include/d1max_trajectory_tracker/tracker_core.hpp": {
+      "sha256": "c334aeb707113b4c6d76ca11e060c674a581e70abd409d1d9217b0ac5f2f68aa",
+      "size_bytes": 89758
+    },
+    "d1max_nav_ws/src/d1max_trajectory_tracker/include/d1max_trajectory_tracker/fixed_bspline_sampler.hpp": {
+      "sha256": "fa293ecf25f24f9cb39573feacc482c34d592cdbfd26447353bc984217bc0d12",
+      "size_bytes": 2543
+    },
+    "d1max_nav_ws/src/d1max_trajectory_tracker/include/d1max_trajectory_tracker/curve_admission.hpp": {
+      "sha256": "f77e83d6bdb955417d73645aae98c6f7460862ce7ebc7b254e362a5b8385a245",
+      "size_bytes": 3145
+    },
+    "d1max_nav_ws/src/d1max_trajectory_tracker/src/trajectory_tracker.cpp": {
+      "sha256": "dee49a5ed160b293eae9ca6a5be7be355357c4de730c053874f64be6f3f439a4",
+      "size_bytes": 26218
+    },
+    "d1max_nav_ws/src/d1max_trajectory_tracker/test/test_tracker_core.cpp": {
+      "sha256": "655153ab88bc18b6f70e64b338fe309ed7e7d78431f1047e80ff3e28b83cb20d",
+      "size_bytes": 45931
+    },
+    "d1max_nav_ws/src/d1max_trajectory_tracker/test/test_tracker_v2.cpp": {
+      "sha256": "9fb6012d5a011c549b97380e12b323f33684e411711bad2353aeb6da4c8326f9",
+      "size_bytes": 119650
+    },
+    "simulation/isaacsim/nav_prepare.py": {
+      "sha256": "923eaab022e6b3b0b2486c7176ed4d191ccd1ea50dccd6f80ab42ff78432735c",
+      "size_bytes": 20492
+    }
+  }
+}

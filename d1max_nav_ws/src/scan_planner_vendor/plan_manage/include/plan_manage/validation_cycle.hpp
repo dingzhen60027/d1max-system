@@ -54,8 +54,11 @@ struct ValidationCycle {
     // A prepared command never blocks the incumbent's actual collision check
     // or same-curve renewal/reproof. This is part of the original 50 ms round,
     // not a fresh admission budget or another reader of the mutable map.
+    // The 5 ms reserve above is a reservation, not a cap: unused time from
+    // this same round can complete a cold prepared sweep, bounded by the
+    // existing actual-motion cap and the original round deadline.
     const double remaining=activeBudget(begin,now());
-    if(remaining>0.)prepared(std::min(prepared_motion_reserve_s,remaining));
+    if(remaining>0.)prepared(std::min(motion_budget_s,remaining));
   }
 };
 } // namespace scan_planner

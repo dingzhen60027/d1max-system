@@ -1,0 +1,784 @@
+{
+  "actual_physics_peak_xy_speed_mps": 0.1578439547195094,
+  "audit_type": "read_only_post_run_source_clock_trace",
+  "bridge_fault": "",
+  "case_id": "crossing_blocker",
+  "causal_intervals": {
+    "actual_motion_unknown_source_s": [
+      5.0,
+      26.34
+    ],
+    "curve_unknown_source_s": [
+      6.58,
+      25.08
+    ],
+    "first_revoked_stopping_permit": {
+      "phase": "stopping",
+      "reason": "execution_blocked_timeout:waiting_measured_motion_progress",
+      "source_s": 33.42
+    },
+    "suite_terminal_source_s": 35.38
+  },
+  "command_near_successful_installs": [
+    {
+      "installation_source_s": 26.7,
+      "windows": [
+        {
+          "hold_fraction": 0.0,
+          "lookahead_vx_median_mps": 0.04667130100139336,
+          "reason_counts": {
+            "tracking": 12
+          },
+          "relative_source_s": [
+            -0.2,
+            0
+          ],
+          "vx_max_mps": 0.0693895185496712,
+          "vx_median_mps": 0.06387157451351942,
+          "wz_median_radps": -0.02592424135697953
+        },
+        {
+          "hold_fraction": 0.07692307692307693,
+          "lookahead_vx_median_mps": 0.052274676440371225,
+          "reason_counts": {
+            "source_clock_paused_command_expired": 1,
+            "tracking": 12
+          },
+          "relative_source_s": [
+            0,
+            0.2
+          ],
+          "vx_max_mps": 0.09085930872782365,
+          "vx_median_mps": 0.06944116952857365,
+          "wz_median_radps": -0.13230676188581397
+        },
+        {
+          "hold_fraction": 0.0,
+          "lookahead_vx_median_mps": 0.05338180511934468,
+          "reason_counts": {
+            "tracking": 24
+          },
+          "relative_source_s": [
+            0.2,
+            0.6
+          ],
+          "vx_max_mps": 0.0918219872376344,
+          "vx_median_mps": 0.09140785081999991,
+          "wz_median_radps": -0.06367971912989792
+        }
+      ]
+    },
+    {
+      "installation_source_s": 27.78,
+      "windows": [
+        {
+          "hold_fraction": 0.0,
+          "lookahead_vx_median_mps": 0.05484501133082967,
+          "reason_counts": {
+            "tracking": 10
+          },
+          "relative_source_s": [
+            -0.2,
+            0
+          ],
+          "vx_max_mps": 0.09269650540544727,
+          "vx_median_mps": 0.09255411304451444,
+          "wz_median_radps": 0.00946302065108337
+        },
+        {
+          "hold_fraction": 0.0,
+          "lookahead_vx_median_mps": 0.019152215576105795,
+          "reason_counts": {
+            "tracking": 12
+          },
+          "relative_source_s": [
+            0,
+            0.2
+          ],
+          "vx_max_mps": 0.07214852672901498,
+          "vx_median_mps": 0.032752032675505395,
+          "wz_median_radps": 0.05544763292289282
+        },
+        {
+          "hold_fraction": 0.0,
+          "lookahead_vx_median_mps": 0.019309826717767178,
+          "reason_counts": {
+            "tracking": 25
+          },
+          "relative_source_s": [
+            0.2,
+            0.6
+          ],
+          "vx_max_mps": 0.03454636090575471,
+          "vx_median_mps": 0.033863167905988124,
+          "wz_median_radps": -0.04690335123092976
+        }
+      ]
+    },
+    {
+      "installation_source_s": 28.8,
+      "windows": [
+        {
+          "hold_fraction": 0.0,
+          "lookahead_vx_median_mps": 0.018670552882871668,
+          "reason_counts": {
+            "tracking": 12
+          },
+          "relative_source_s": [
+            -0.2,
+            0
+          ],
+          "vx_max_mps": 0.03576508177984525,
+          "vx_median_mps": 0.035385579966867364,
+          "wz_median_radps": -0.07640218825416986
+        },
+        {
+          "hold_fraction": 0.0,
+          "lookahead_vx_median_mps": -0.007184196490829858,
+          "reason_counts": {
+            "tracking": 12
+          },
+          "relative_source_s": [
+            0,
+            0.2
+          ],
+          "vx_max_mps": 0.007966255005089743,
+          "vx_median_mps": 0.0,
+          "wz_median_radps": -0.2857742962907447
+        },
+        {
+          "hold_fraction": 0.0,
+          "lookahead_vx_median_mps": 0.002788260310486698,
+          "reason_counts": {
+            "tracking": 25
+          },
+          "relative_source_s": [
+            0.2,
+            0.6
+          ],
+          "vx_max_mps": 0.00784916289436838,
+          "vx_median_mps": 0.00594303731948327,
+          "wz_median_radps": 0.15189714605342855
+        }
+      ]
+    },
+    {
+      "installation_source_s": 29.998,
+      "windows": [
+        {
+          "hold_fraction": 0.08333333333333333,
+          "lookahead_vx_median_mps": 0.0038104299769992677,
+          "reason_counts": {
+            "source_clock_paused_command_expired": 1,
+            "tracking": 11
+          },
+          "relative_source_s": [
+            -0.2,
+            0
+          ],
+          "vx_max_mps": 0.00753115004023357,
+          "vx_median_mps": 0.004146906676548915,
+          "wz_median_radps": 0.10503828744844237
+        },
+        {
+          "hold_fraction": 0.0,
+          "lookahead_vx_median_mps": 0.02600518583156394,
+          "reason_counts": {
+            "tracking": 12
+          },
+          "relative_source_s": [
+            0,
+            0.2
+          ],
+          "vx_max_mps": 0.043626506989738814,
+          "vx_median_mps": 0.04284203474693929,
+          "wz_median_radps": 0.034796658936037214
+        },
+        {
+          "hold_fraction": 0.0,
+          "lookahead_vx_median_mps": 0.029118913848456635,
+          "reason_counts": {
+            "tracking": 25
+          },
+          "relative_source_s": [
+            0.2,
+            0.6
+          ],
+          "vx_max_mps": 0.047070344720061275,
+          "vx_median_mps": 0.04586823370664223,
+          "wz_median_radps": 0.07196019944992679
+        }
+      ]
+    },
+    {
+      "installation_source_s": 31.26,
+      "windows": [
+        {
+          "hold_fraction": 0.0,
+          "lookahead_vx_median_mps": 0.03631437978361572,
+          "reason_counts": {
+            "tracking": 11
+          },
+          "relative_source_s": [
+            -0.2,
+            0
+          ],
+          "vx_max_mps": 0.0630718318025151,
+          "vx_median_mps": 0.05997586855172467,
+          "wz_median_radps": 0.15931079285937677
+        },
+        {
+          "hold_fraction": 0.0,
+          "lookahead_vx_median_mps": 0.04667426590826425,
+          "reason_counts": {
+            "tracking": 12
+          },
+          "relative_source_s": [
+            0,
+            0.2
+          ],
+          "vx_max_mps": 0.07818880570793264,
+          "vx_median_mps": 0.07735035319818326,
+          "wz_median_radps": -0.06371502280516411
+        },
+        {
+          "hold_fraction": 0.0,
+          "lookahead_vx_median_mps": 0.04669098225683821,
+          "reason_counts": {
+            "tracking": 25
+          },
+          "relative_source_s": [
+            0.2,
+            0.6
+          ],
+          "vx_max_mps": 0.07458155706624313,
+          "vx_median_mps": 0.07441623837951078,
+          "wz_median_radps": -0.0532714159266332
+        }
+      ]
+    },
+    {
+      "installation_source_s": 33.28,
+      "windows": [
+        {
+          "hold_fraction": 0.0,
+          "lookahead_vx_median_mps": 0.046429433357768224,
+          "reason_counts": {
+            "tracking": 12
+          },
+          "relative_source_s": [
+            -0.2,
+            0
+          ],
+          "vx_max_mps": 0.07985432426580029,
+          "vx_median_mps": 0.07753264741815569,
+          "wz_median_radps": 0.00857593787078513
+        },
+        {
+          "hold_fraction": 0.55,
+          "lookahead_vx_median_mps": 0.027484278460213292,
+          "reason_counts": {
+            "handoff_retired_or_applied_uncertain": 11,
+            "tracking": 9
+          },
+          "relative_source_s": [
+            0,
+            0.2
+          ],
+          "vx_max_mps": 0.04620427964075211,
+          "vx_median_mps": 0.0,
+          "wz_median_radps": 0.0
+        },
+        {
+          "hold_fraction": 1.0,
+          "lookahead_vx_median_mps": 0.0,
+          "reason_counts": {
+            "handoff_retired_or_applied_uncertain": 52
+          },
+          "relative_source_s": [
+            0.2,
+            0.6
+          ],
+          "vx_max_mps": 0.0,
+          "vx_median_mps": 0.0,
+          "wz_median_radps": 0.0
+        }
+      ]
+    }
+  ],
+  "cumulative_measured_distance_m": 0.40368652373768477,
+  "evidence_files": [
+    {
+      "path": "/home/eric/wjg/d1max-build-isaac/runs/campus_crossing_v31_001/scenario_suite/execution.json",
+      "sha256": "a52e332e558b3eb4c07e23965a2aa4026f48b61ff93e4e31bce2cc4498112022"
+    },
+    {
+      "path": "/home/eric/wjg/d1max-build-isaac/runs/campus_crossing_v31_001/scenario_suite/phase_000_report.json",
+      "sha256": "8b9687f12585615439a8e3af978d5a53b7db325a13788dc1f0b41e12a05e6fe2"
+    },
+    {
+      "path": "/home/eric/wjg/d1max-build-isaac/runs/campus_crossing_v31_001/scenario_suite/phase_000_trace.jsonl",
+      "sha256": "fb55697694ebcf1309c25e1f82f4e01bff779f665a1f246aea68834fb112c271"
+    },
+    {
+      "path": "/home/eric/wjg/d1max-build-isaac/runs/campus_crossing_v31_001/physics/trajectory.jsonl",
+      "sha256": "61801257b0162d85a46307826674147c6ca47c52f543709000f8269d567c3d8f"
+    },
+    {
+      "path": "/home/eric/wjg/d1max-build-isaac/runs/campus_crossing_v31_001/scan.log",
+      "sha256": "0cdff371f2984bb04d670c75e0e75df2cceb5ca773c53b9ab761cbb0bb8fb17f"
+    }
+  ],
+  "final_position": [
+    -7.884727478027344,
+    -5.010884761810303,
+    0.48994699120521545
+  ],
+  "frozen": true,
+  "installation_and_geometry_timeline": [
+    {
+      "geometry_available": false,
+      "handoff_reason": "",
+      "installation_sequence": 0,
+      "lookahead_velocity_xyz": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "measured_xy_speed_mps": 0.0,
+      "planar_speed_limit_mps": 0.0,
+      "projected_curve_time": 0.0,
+      "reason": "waiting_execution_permission",
+      "source_s": 1.9,
+      "trajectory_id": -1,
+      "writer_commit_sequence": 0
+    },
+    {
+      "geometry_available": true,
+      "handoff_reason": "",
+      "installation_sequence": 1,
+      "lookahead_velocity_xyz": [
+        0.0012538801162675077,
+        -0.00011489768013046587,
+        0.007794344250086552
+      ],
+      "measured_xy_speed_mps": 0.00042627067844228935,
+      "planar_speed_limit_mps": 0.001202691567033674,
+      "projected_curve_time": 0.0,
+      "reason": "geometry_only_no_motion_permission",
+      "source_s": 3.4,
+      "trajectory_id": 1,
+      "writer_commit_sequence": 0
+    },
+    {
+      "geometry_available": true,
+      "handoff_reason": "writer_applied",
+      "installation_sequence": 2,
+      "lookahead_velocity_xyz": [
+        -0.002571442614048433,
+        -0.0006877702450155315,
+        -0.006534524504676114
+      ],
+      "measured_xy_speed_mps": 0.002421825304967725,
+      "planar_speed_limit_mps": 0.026639013517220773,
+      "projected_curve_time": 0.08799984525936344,
+      "reason": "tracking",
+      "source_s": 4.4,
+      "trajectory_id": 2,
+      "writer_commit_sequence": 2
+    },
+    {
+      "geometry_available": true,
+      "handoff_reason": "writer_applied",
+      "installation_sequence": 3,
+      "lookahead_velocity_xyz": [
+        0.05175471047245311,
+        -0.02084192498964443,
+        0.00698748281141731
+      ],
+      "measured_xy_speed_mps": 0.10140728471578624,
+      "planar_speed_limit_mps": 0.1483156616904063,
+      "projected_curve_time": 0.4663076552689553,
+      "reason": "source_clock_paused_command_expired",
+      "source_s": 26.7,
+      "trajectory_id": 8,
+      "writer_commit_sequence": 3
+    },
+    {
+      "geometry_available": true,
+      "handoff_reason": "writer_applied",
+      "installation_sequence": 4,
+      "lookahead_velocity_xyz": [
+        0.01884487613213031,
+        -0.005186825027506646,
+        0.015351762274406884
+      ],
+      "measured_xy_speed_mps": 0.014030096332843044,
+      "planar_speed_limit_mps": 0.109218863253167,
+      "projected_curve_time": 0.0620039856621042,
+      "reason": "tracking",
+      "source_s": 27.78,
+      "trajectory_id": 10,
+      "writer_commit_sequence": 4
+    },
+    {
+      "geometry_available": true,
+      "handoff_reason": "writer_applied",
+      "installation_sequence": 5,
+      "lookahead_velocity_xyz": [
+        -0.008493826167731323,
+        0.0016062717153237016,
+        0.005967712427217628
+      ],
+      "measured_xy_speed_mps": 0.00842116499298892,
+      "planar_speed_limit_mps": 0.07541547665917625,
+      "projected_curve_time": 0.061321978129598394,
+      "reason": "tracking",
+      "source_s": 28.8,
+      "trajectory_id": 11,
+      "writer_commit_sequence": 5
+    },
+    {
+      "geometry_available": true,
+      "handoff_reason": "writer_applied",
+      "installation_sequence": 6,
+      "lookahead_velocity_xyz": [
+        0.025351310525446237,
+        -0.0077278027005941476,
+        -0.005162291265918362
+      ],
+      "measured_xy_speed_mps": 0.045297662638647276,
+      "planar_speed_limit_mps": 0.1414339078415927,
+      "projected_curve_time": 0.12736290456065716,
+      "reason": "tracking",
+      "source_s": 29.998,
+      "trajectory_id": 13,
+      "writer_commit_sequence": 6
+    },
+    {
+      "geometry_available": true,
+      "handoff_reason": "writer_applied",
+      "installation_sequence": 7,
+      "lookahead_velocity_xyz": [
+        0.0466550356886203,
+        -0.01051029105451903,
+        0.05278212175116942
+      ],
+      "measured_xy_speed_mps": 0.022199845031031885,
+      "planar_speed_limit_mps": 0.08936869519341592,
+      "projected_curve_time": 0.08723749251615283,
+      "reason": "tracking",
+      "source_s": 31.26,
+      "trajectory_id": 15,
+      "writer_commit_sequence": 7
+    },
+    {
+      "geometry_available": true,
+      "handoff_reason": "writer_applied",
+      "installation_sequence": 8,
+      "lookahead_velocity_xyz": [
+        0.027359675138123405,
+        -0.00899171185036632,
+        0.010188630223074265
+      ],
+      "measured_xy_speed_mps": 0.03917043527919267,
+      "planar_speed_limit_mps": 0.1381909356587726,
+      "projected_curve_time": 0.24274955895786393,
+      "reason": "tracking",
+      "source_s": 33.28,
+      "trajectory_id": 18,
+      "writer_commit_sequence": 8
+    },
+    {
+      "geometry_available": false,
+      "handoff_reason": "writer_applied",
+      "installation_sequence": 8,
+      "lookahead_velocity_xyz": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "measured_xy_speed_mps": 0.022349131274305375,
+      "planar_speed_limit_mps": 0.0,
+      "projected_curve_time": 0.34719362694749195,
+      "reason": "handoff_retired_or_applied_uncertain",
+      "source_s": 33.42,
+      "trajectory_id": 18,
+      "writer_commit_sequence": 8
+    }
+  ],
+  "original_report_measured_max_speed_mps": 0.29980960030938103,
+  "physical_robot_acceptance": false,
+  "physics_intervals": [
+    {
+      "actual_xy_speed_max_mps": 0.1578439547195094,
+      "actual_xy_speed_median_mps": 0.0007128234601438738,
+      "command_nonzero_fraction": 0.17333333333333334,
+      "command_vx_max_mps": 0.0529111817720523,
+      "command_vx_median_mps": 0.0,
+      "first_x_m": -7.922665119171143,
+      "last_x_m": -7.915363788604736,
+      "net_x_m": 0.00730133056640625,
+      "source_s": [
+        0,
+        5
+      ]
+    },
+    {
+      "actual_xy_speed_max_mps": 0.11916218011032227,
+      "actual_xy_speed_median_mps": 0.0011781251483922693,
+      "command_nonzero_fraction": 0.006666666666666667,
+      "command_vx_max_mps": 0.07975352467125671,
+      "command_vx_median_mps": 0.0,
+      "first_x_m": -7.915148735046387,
+      "last_x_m": -7.895926475524902,
+      "net_x_m": 0.019222259521484375,
+      "source_s": [
+        5,
+        10
+      ]
+    },
+    {
+      "actual_xy_speed_max_mps": 0.0007184791503976855,
+      "actual_xy_speed_median_mps": 0.0001641185260377773,
+      "command_nonzero_fraction": 0.0,
+      "command_vx_max_mps": 0.0,
+      "command_vx_median_mps": 0.0,
+      "first_x_m": -7.895927906036377,
+      "last_x_m": -7.897441387176514,
+      "net_x_m": -0.0015134811401367188,
+      "source_s": [
+        10,
+        25
+      ]
+    },
+    {
+      "actual_xy_speed_max_mps": 0.15304016875829338,
+      "actual_xy_speed_median_mps": 0.012624621809502742,
+      "command_nonzero_fraction": 0.6666666666666666,
+      "command_vx_max_mps": 0.09265575987840952,
+      "command_vx_median_mps": 0.00784916289436838,
+      "first_x_m": -7.897441387176514,
+      "last_x_m": -7.859114170074463,
+      "net_x_m": 0.03832721710205078,
+      "source_s": [
+        25,
+        30
+      ]
+    },
+    {
+      "actual_xy_speed_max_mps": 0.10329493829715253,
+      "actual_xy_speed_median_mps": 0.014656263012524437,
+      "command_nonzero_fraction": 0.9609756097560975,
+      "command_vx_max_mps": 0.08018671617008064,
+      "command_vx_median_mps": 0.07279534611661556,
+      "first_x_m": -7.8590240478515625,
+      "last_x_m": -7.811100482940674,
+      "net_x_m": 0.04792356491088867,
+      "source_s": [
+        30,
+        33.42
+      ]
+    }
+  ],
+  "prepared_scheduler_result": {
+    "conclusion": "The v30 prepared-lane budget starvation is no longer observed and prepared proofs now complete. This is not navigation success.",
+    "existing_motion_cap_s": 0.025,
+    "initial_install_count": 1,
+    "original_round_s": 0.05,
+    "prepared_budget_exhausted": 0,
+    "prepared_positive": 14,
+    "prepared_reserved_s": 0.005,
+    "prepared_unknown": 36,
+    "proof_counts": {
+      "actual:motion_sweep_unknown_or_expired": 333,
+      "actual:observed_free_motion_sweep": 1083,
+      "prepared:motion_sweep_unknown_or_expired": 36,
+      "prepared:observed_free_motion_sweep": 14
+    },
+    "source": {
+      "line": 61,
+      "path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v31-campus-crossing/source_snapshot/nav/src/scan_planner_vendor/plan_manage/include/plan_manage/validation_cycle.hpp",
+      "sha256": "f5250225725aa5ba3fa1757756a5e261bf6b07560c5fd361f69190e101678b7d"
+    },
+    "successful_handoff_count": 7,
+    "successful_handoff_ids": [
+      "1",
+      "6",
+      "7",
+      "8",
+      "9",
+      "10",
+      "11"
+    ]
+  },
+  "remaining_issues": [
+    "New candidate geometry changes executable direction and near-entry forward demand: curve10 reduces .092 to .033; curve11 has negative lookahead Vx and initially zero forward with about -.3 yaw. Admission remains strict, but continuity of useful forward control across replacements needs investigation.",
+    "Recovery actual-body trajectory oscillates; the confirmed route arc peaks at only about .112 m. Its gain after source25s is about .084 m; cumulative total .404 m includes non-progress motion. Budget repair alone does not produce sustained task progress.",
+    "The precise Owner progress-credit events are not serialized in the trace. Its required recovery predicates cannot be fully reconstructed from reduced trace fields; no additional watchdog bug is asserted.",
+    "No new independent plant probe, heading-direction counterfactual or smoothing/replan experiment was run. Do not present a ramp reset, controller deadzone or measured-twist noise as an established sole cause.",
+    "Dynamic UNKNOWN remains a veto; no collision geometry, source/receipt lease, high-level authority, command cap or watchdog changes were made."
+  ],
+  "result": {
+    "physical_stop_confirmed": false,
+    "reason": "execution_blocked_timeout:waiting_measured_motion_progress",
+    "retirement_confirmed": true,
+    "success": false
+  },
+  "route_progress_evidence": {
+    "first_position": [
+      -7.920832633972168,
+      -5.024502277374268,
+      0.48107627034187317
+    ],
+    "greedy_three_cm_threshold_crossings": [
+      {
+        "confirmed_arc_m": 0.03082605978004566,
+        "measured_arc_m": 0.03082605978004566,
+        "source_s": 26.52,
+        "x_m": -7.889866352081299
+      },
+      {
+        "confirmed_arc_m": 0.06170978542912613,
+        "measured_arc_m": 0.06170978542912613,
+        "source_s": 26.86,
+        "x_m": -7.858967304229736
+      },
+      {
+        "confirmed_arc_m": 0.09190665279977092,
+        "measured_arc_m": 0.09190665279977092,
+        "source_s": 30.96,
+        "x_m": -7.828752517700195
+      }
+    ],
+    "last_active_position": [
+      -7.811100482940674,
+      -5.024813652038574,
+      0.49713122844696045
+    ],
+    "owner_recovery_source": {
+      "line": 522,
+      "path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v31-campus-crossing/source_snapshot/nav/src/d1max_navigation_bt/include/d1max_navigation_bt/execution_owner.hpp",
+      "sha256": "558c9a0ea6d70f07febb9d35fa98193628692c1cd875c986bd4c0e21927992c4"
+    },
+    "peak_confirmed_arc_m": 0.11198796273694754,
+    "peak_confirmed_arc_source_s": 32.8,
+    "rule": "Original recovery requires a continuously healthy 1 source second and at least two additional verified progress samples; merely cumulative gait motion or a prior route high water mark is insufficient.",
+    "supervisor_source": {
+      "line": 123,
+      "path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v31-campus-crossing/source_snapshot/nav/src/d1max_navigation_bt/include/d1max_navigation_bt/route_progress_supervisor.hpp",
+      "sha256": "97658feae94827d4a092dd13714f6663d8895e3485b64a9771f35cb44488bcbd"
+    },
+    "threshold_crossing_scope": "Straight-route x displacement, confirmed and measured arc >=3 cm from earliest trace baseline. This omits independent body-source matching and admitted-command prerequisites, so these are not asserted Owner progress credit events.",
+    "transform_anchor_unique_count": 1
+  },
+  "ruled_out_claims": {
+    "anchor_or_transform_churn": {
+      "status": "not observed",
+      "unique_values": 1
+    },
+    "unconditional_ramp_zero_on_successful_handoff": {
+      "applied_output_source": {
+        "line": 1294,
+        "path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v31-campus-crossing/source_snapshot/nav/src/d1max_trajectory_tracker/include/d1max_trajectory_tracker/tracker_core.hpp",
+        "sha256": "c334aeb707113b4c6d76ca11e060c674a581e70abd409d1d9217b0ac5f2f68aa"
+      },
+      "boundary_refresh_source": {
+        "line": 1285,
+        "path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v31-campus-crossing/source_snapshot/nav/src/d1max_trajectory_tracker/include/d1max_trajectory_tracker/tracker_core.hpp",
+        "sha256": "c334aeb707113b4c6d76ca11e060c674a581e70abd409d1d9217b0ac5f2f68aa"
+      },
+      "evidence": "Successful swap copies incumbent last_output and records the exact writer-applied output. At 26.70 s demand remains about .069 m/s, then rises above .09; at 31.26 s new demand rises to about .077. Geometry/forward direction varies between candidates.",
+      "status": "not supported; source preserves history",
+      "writer_promotion_source": {
+        "line": 615,
+        "path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v31-campus-crossing/source_snapshot/nav/src/d1max_trajectory_tracker/include/d1max_trajectory_tracker/execution_contract.hpp",
+        "sha256": "9a0f61955f7eb043fd7369084ba74bdfb26dd51d2e0bb936265a159f35f1e865"
+      }
+    },
+    "unexpected_retirement_of_last_successful_handoff": {
+      "evidence": "Trajectory18/install8 tracks with geometry until 33.40 s. At 33.42 s original Owner sends revoked stopping timeout; geometry unavailable and handoff_retired_or_applied_uncertain start at that same source stamp. The string writer_applied is historical, not a new writer error.",
+      "status": "not supported"
+    }
+  },
+  "schema": 1,
+  "scope": "Only audited the naturally ended original Action v31 run. No code edits, tests, build, ROS/Kit/RViz launch, Git or live robot operation.",
+  "session_id": "2b0329023eca4367b48355493c1903b9",
+  "source_origin_ns": 1791302666869687328,
+  "source_time_basis": "(original source_clock_ns - phase source_origin_ns) / 1e9",
+  "whole_body_attestation": true,
+  "writer_ack_timeline": [
+    {
+      "applied": true,
+      "handoff_id": "initial",
+      "reason": "writer_software_commit_not_physical_confirmation",
+      "source_s": 3.44
+    },
+    {
+      "applied": true,
+      "handoff_id": "1",
+      "reason": "writer_software_commit_not_physical_confirmation",
+      "source_s": 4.398
+    },
+    {
+      "applied": false,
+      "handoff_id": "2",
+      "reason": "handoff_deadline_expired",
+      "source_s": 6.08
+    },
+    {
+      "applied": false,
+      "handoff_id": "3",
+      "reason": "handoff_deadline_expired",
+      "source_s": 6.34
+    },
+    {
+      "applied": false,
+      "handoff_id": "4",
+      "reason": "owner_hold_or_phase_barrier",
+      "source_s": 6.4
+    },
+    {
+      "applied": false,
+      "handoff_id": "5",
+      "reason": "owner_hold_or_phase_barrier",
+      "source_s": 6.6
+    },
+    {
+      "applied": true,
+      "handoff_id": "6",
+      "reason": "writer_software_commit_not_physical_confirmation",
+      "source_s": 26.7
+    },
+    {
+      "applied": true,
+      "handoff_id": "7",
+      "reason": "writer_software_commit_not_physical_confirmation",
+      "source_s": 27.76
+    },
+    {
+      "applied": true,
+      "handoff_id": "8",
+      "reason": "writer_software_commit_not_physical_confirmation",
+      "source_s": 28.78
+    },
+    {
+      "applied": true,
+      "handoff_id": "9",
+      "reason": "writer_software_commit_not_physical_confirmation",
+      "source_s": 29.98
+    },
+    {
+      "applied": true,
+      "handoff_id": "10",
+      "reason": "writer_software_commit_not_physical_confirmation",
+      "source_s": 31.24
+    },
+    {
+      "applied": true,
+      "handoff_id": "11",
+      "reason": "writer_software_commit_not_physical_confirmation",
+      "source_s": 33.26
+    }
+  ]
+}

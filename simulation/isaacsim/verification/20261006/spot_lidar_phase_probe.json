@@ -1,0 +1,19 @@
+{
+  "schema": 1,
+  "kind": "isaac_spot_lidar_physics_phase_probe",
+  "scope": "Independent no-ROS walking diagnostic, not navigation acceptance",
+  "physical_acceptance": false,
+  "physics_hz": 500,
+  "source_duration_s": 4,
+  "scans": 80,
+  "desired_linear_mps": 0.15,
+  "native_floor_hit_identity": "/World/GroundPlane/collisionPlane",
+  "reported_end_pose_max_floor_error_m": 0.017679424192202586,
+  "measured_begin_pose_max_floor_error_m": 6.126620228530388e-06,
+  "observed_phase_delta_ns": 2000000,
+  "raw_diagnostic_sha256": "703eeb43a31da3611bea6418880ab5edb8f6c0fa39b48f772b939c17823b390f",
+  "raw_trajectory_sha256": "8410cbd2ad166234520645cf9aa0775a9885e37f018e4d64d0993e5a01fcc61b",
+  "raw_end_counter_preserved": true,
+  "point_coordinates_unchanged": true,
+  "implementation_validation": "Pending fresh immutable candidate formal navigation run"
+}

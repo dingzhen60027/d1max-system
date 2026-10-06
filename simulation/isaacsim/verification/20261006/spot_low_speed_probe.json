@@ -1,0 +1,16 @@
+{
+  "schema": 1,
+  "kind": "actual_spot_low_speed_component_probe",
+  "navigation_acceptance": false,
+  "physical_acceptance": false,
+  "scope": "constant desired .01m/s, real official Spot joints/PhysX, no ROS/navigation action",
+  "source_duration_s": 20.0,
+  "samples": 1200,
+  "net_xy_displacement_m": 0.03168422604861928,
+  "final_five_seconds_median_xy_speed_mps": 0.0009958549146453438,
+  "maximum_xy_speed_mps": 0.015374822359821643,
+  "trajectory_sha256": "fba581604846b0682504ec81a2309db7a92d455a85aca044bdd1fc83b3ee3ca5",
+  "summary_sha256": "8f53ebb30701513ae1c1cd528071c62320d2814ab1cfa53be1ab1bf3f9764c37",
+  "local_evidence_directory": "/home/eric/wjg/d1max-build-isaac/campus-low-speed-probe-v1",
+  "interpretation": "Low desired speed does not produce matching XY body movement with existing bounded PI. Vertical body oscillation must not be interpreted as XY progress. Servo improvement pending."
+}

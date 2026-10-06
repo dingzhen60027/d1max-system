@@ -64,8 +64,11 @@ def main():
                         help="GUI recording: render-only cadence (0 keeps original behavior; max 60)")
     parser.add_argument("--capture-scene", action="store_true", help="Capture a rendered overview during a headless run")
     parser.add_argument("--rviz", action="store_true", help="Open the original single navigation RViz")
+    parser.add_argument("--camera", choices=("overview", "follow"), default="follow",
+                        help="Isaac viewport camera; large scenes default to following the physical robot")
     parser.add_argument("--duration", type=float, default=0., help="Wall seconds; 0 waits for Ctrl+C")
     parser.add_argument("--smoke", action="store_true", help="Send a goal through the original BT command interface")
+    parser.add_argument("--scenario-case", help="Run a sealed system-test case in this same scene and navigation session")
     parser.add_argument("--smoke-case", choices=("goal", "cancel", "preview_cancel"), default="goal")
     parser.add_argument("--smoke-duration", type=float, default=90., help="Navigation test timeout in wall seconds")
     parser.add_argument("--goal", nargs=3, type=float, help="Ground XYZ goal in the original map frame")
@@ -74,6 +77,8 @@ def main():
         parser.error("render-fps must be finite and between 0 and 60")
     if args.headless and args.render_fps:
         parser.error("render-fps requires a visible Isaac GUI; omit --headless")
+    if args.scenario_case and (args.smoke or args.goal):
+        parser.error('scenario-case selects its sealed goals; omit smoke/goal')
     candidate = (args.candidate or selected_candidate(build_root)).resolve()
     fixture = candidate / "simulation"
     if not candidate.is_dir():
@@ -176,9 +181,15 @@ def main():
                 "--result-dir", str(session / "physics"),
                 "--export-scene", str(session / "physics/indoor_scene.usda"),
                 "--control-file", str(session / "physics_control.json")]
+            scene_command.extend(["--camera", args.camera])
+            scene_command.extend(['--session-id', session_spec['id'], '--clock-anchor-ns',
+                str(plant_contract['clock_anchor_ns'])])
             if session_spec.get('static_collision_prior_contract'):
                 scene_command.extend(['--static-prior-geometry-sha256',
                     session_spec['static_collision_prior_contract']['static_prior_geometry_sha256']])
+                if session_spec['static_collision_prior_contract'].get('body_envelope_attestation_required'):
+                    scene_command.extend(['--body-envelope-json', json.dumps(
+                        session_spec['static_collision_prior_contract']['body_envelope'], separators=(',', ':'))])
             if args.headless:
                 scene_command.append("--headless")
             if args.render_fps:
@@ -216,6 +227,9 @@ def main():
                 if args.goal:
                     smoke_command.extend(["--goal", *map(str, args.goal)])
                 smoke = start("smoke", smoke_command, env)
+            elif args.scenario_case:
+                smoke = start('smoke', [sys.executable, str(fixture/'scenario_suite.py'),
+                    'execute', '--session', str(session), '--case', args.scenario_case], env)
             print("Isaac navigation running. Logs: " + str(session), flush=True)
             while not stopping:
                 status = bridge_status()
@@ -228,8 +242,9 @@ def main():
                     raise RuntimeError("Required process exited: " + repr(failures))
                 if smoke is not None and smoke.poll() is not None:
                     if smoke.returncode:
-                        raise RuntimeError("Navigation smoke failed; inspect smoke.log")
+                        raise RuntimeError("Navigation test failed; inspect smoke.log and its original reports")
                     result["smoke_completed"] = True
+                    result['scenario_case'] = args.scenario_case
                     break
                 if args.duration and time.monotonic() - started >= args.duration:
                     if smoke is not None:

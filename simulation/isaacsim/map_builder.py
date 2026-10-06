@@ -7,6 +7,7 @@ CPU tomography equations and native PCT route planner remain the repo's own.
 import argparse
 import hashlib
 import json
+import math
 from pathlib import Path
 import shutil
 import sys
@@ -44,6 +45,24 @@ def box_surface(center, size, spacing):
     return np.vstack(parts)
 
 
+def generation_settings(spec):
+    """Explicit bounded resource budgets; world size never silently changes."""
+    value = spec.get('map_generation', {})
+    spacing = value.get('surface_spacing_m', .05)
+    resolution = value.get('pct_resolution_m', .10)
+    if any(isinstance(x, bool) or not isinstance(x, (int, float))
+           or not math.isfinite(x) for x in (spacing, resolution)):
+        raise ValueError('invalid_map_generation_resolution')
+    if not .025 <= spacing <= .10 or not .05 <= resolution <= .20:
+        raise ValueError('map_generation_resolution_outside_supported_range')
+    limits = dict(max_total_cells=value.get('pct_max_total_cells', 1000000),
+                  max_working_bytes=value.get('pct_max_working_bytes', 200000000))
+    for key, upper in [('max_total_cells', 25000000), ('max_working_bytes', 2500000000)]:
+        if type(limits[key]) is not int or not 0 < limits[key] <= upper:
+            raise ValueError('invalid_map_generation_budget:'+key)
+    return float(spacing), float(resolution), limits
+
+
 def write_pcd(path, xyz):
     xyz = np.asarray(xyz, dtype='<f4')
     xyzi = np.c_[xyz, np.ones(len(xyz), dtype='<f4')].astype('<f4')
@@ -64,7 +83,7 @@ def build(scene_config, output, vendor_root):
     spec = json.loads(scene_config.read_text())
     floor = spec['floor']
     x0, x1, y0, y1 = floor['bounds']
-    spacing = .05
+    spacing, pct_resolution, pct_limits = generation_settings(spec)
     ground = plane((x0, x1), (y0, y1), floor['z'], spacing)
     supported = np.ones(len(ground), bool)
     parts = [ground, plane((x0, x1), (y0, y1), spec['ceiling']['z'], spacing)]
@@ -86,8 +105,8 @@ def build(scene_config, output, vendor_root):
     support = xyz[indices]
     np.savez_compressed(output/'source_indices.npz', selected_source_indices=np.arange(len(xyz)),
         **{floor_id+'_support_source_indices': indices, floor_id+'_support_xyz': support})
-    pct = dict(resolution=.10, slice_dh=.50, ground_height=float(floor['z']),
-        simplify_layers=False, limits=dict(max_total_cells=1000000, max_working_bytes=200000000),
+    pct = dict(resolution=pct_resolution, slice_dh=.50, ground_height=float(floor['z']),
+        simplify_layers=False, limits=pct_limits,
         traversability=dict(kernel_size=7, interval_min=.55, interval_free=.70,
             slope_max_rad=.40, step_max=.17, standable_ratio=.20, cost_barrier=50.,
             safe_margin=.40, inflation=.20))
@@ -148,6 +167,8 @@ def build(scene_config, output, vendor_root):
         support_z, distance = checked['bridge'].query(np.asarray(point[:2]).reshape(1,2))
         stats[name+'_support'] = dict(z=float(support_z[0]), distance_m=float(distance[0]))
     stats.update(physical_acceptance=False, simulation=True, scene_sha256=sha(scene_config),
+        sampled_surface_spacing_m=spacing, pct_resolution_m=pct_resolution,
+        generation_resource_limits=pct_limits,
         source_sha256=sha(source), tomogram_sha256=sha(output/'tomogram.npz'), floor_mask=masks)
     (output/'build_report.json').write_text(json.dumps(stats, indent=2)+'\n')
     return dict(output=str(output), source_points=len(xyz), support_points=len(support),

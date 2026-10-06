@@ -18,6 +18,16 @@ SPEC = json.loads(SPEC_PATH.read_text())
 HAS_USD = importlib.util.find_spec("pxr") is not None
 
 
+def support_spec(endpoint_error_bound=None):
+    spec = copy.deepcopy(SPEC)
+    spec["dynamic_actors"] = []
+    spec["flat_support_contact"] = dict(enabled=True, floor_path="/World/GroundPlane/collisionPlane",
+                                        floor_z=0., penetration_allowance_m=.02)
+    if endpoint_error_bound is not None:
+        spec["flat_support_contact"]["floor_endpoint_error_bound_m"] = endpoint_error_bound
+    return spec
+
+
 class FullCellGeometryTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -37,6 +47,70 @@ class FullCellGeometryTests(unittest.TestCase):
             for y in range(-67, -52):
                 for z in range(2, 13):
                     self.assertEqual(self.status([x, y, z]), truth.FREE)
+
+    def test_support_contact_is_distinct_and_never_erases_low_obstacle(self):
+        from test_dynamic_collision import ACTOR
+        spec = copy.deepcopy(SPEC)
+        spec["dynamic_actors"] = [ACTOR]
+        spec["flat_support_contact"] = dict(enabled=True, floor_path="/World/GroundPlane/collisionPlane", floor_z=0., penetration_allowance_m=.02)
+        geometry = truth.geometry_from_spec(spec)
+        data, origin, shape = truth.rasterize(geometry)
+        def status(cell):
+            a, b, c = [i - o for i, o in zip(cell, origin)]
+            return data[(a * shape[1] + b) * shape[2] + c]
+        self.assertEqual(status([-80, -60, -1]), truth.SUPPORT_CONTACT)
+        self.assertEqual(status([-80, -60, 0]), truth.SUPPORT_CONTACT)
+        self.assertEqual(status([-76, 64, 0]), truth.OCCUPIED)
+        self.assertEqual(status([-120, -60, 0]), truth.OCCUPIED)
+        self.assertEqual(status([-80, -60, 1]), truth.FREE)
+
+    def test_floor_endpoint_error_bound_is_optional_hash_bound_and_never_changes_voxels(self):
+        legacy = truth.geometry_from_spec(support_spec())
+        widened = truth.geometry_from_spec(support_spec(.0002))
+        self.assertNotIn("floor_endpoint_error_bound_m", legacy["flat_support_contact"])
+        self.assertEqual(truth._floor_endpoint_error_bound(legacy["flat_support_contact"]), 1e-5)
+        self.assertEqual(widened["flat_support_contact"]["floor_endpoint_error_bound_m"], .0002)
+        self.assertNotEqual(hashlib.sha256(truth._canonical(legacy)).hexdigest(),
+                            hashlib.sha256(truth._canonical(widened)).hexdigest())
+        self.assertEqual(truth.rasterize(legacy), truth.rasterize(widened))
+        self.assertEqual(widened["floor"], legacy["floor"])
+        self.assertEqual(widened["boxes"], legacy["boxes"])
+
+    def test_floor_endpoint_error_bound_rejects_invalid_values_or_disabled_contact(self):
+        for value in (0., -1., math.nan, math.inf, True, ".0002", 9e-6, .001000001):
+            with self.subTest(value=value):
+                with self.assertRaisesRegex(ValueError, "floor_endpoint_error_bound"):
+                    truth.geometry_from_spec(support_spec(value))
+        disabled = support_spec(.0002);disabled["flat_support_contact"]["enabled"] = False
+        with self.assertRaisesRegex(ValueError, "invalid_flat_support_contact_contract"):
+            truth.geometry_from_spec(disabled)
+        self.assertEqual(truth.geometry_from_spec(support_spec(.001))["flat_support_contact"]["floor_endpoint_error_bound_m"], .001)
+
+    def test_floor_endpoint_error_bound_resolution_cap_is_checked_before_allocation(self):
+        for value, resolution in ((.000500001, .01), (.0002, .001), (None, .0001)):
+            geometry = truth.geometry_from_spec(support_spec(value))
+            with patch.object(truth, "bytearray", side_effect=RuntimeError("allocation_reached"), create=True):
+                with self.assertRaisesRegex(ValueError, "floor_endpoint_error_bound_out_of_range"):
+                    truth.rasterize(geometry, resolution=resolution)
+        geometry = truth.geometry_from_spec(support_spec(.0005))
+        geometry["boxes"] = []
+        geometry["closed_world_bounds"] = dict(min=[-1., -1., 0.], max=[1., 1., 1.])
+        with patch.object(truth, "bytearray", side_effect=RuntimeError("allocation_reached"), create=True):
+            with self.assertRaisesRegex(RuntimeError, "allocation_reached"):
+                truth.rasterize(geometry, resolution=.01)
+
+    def test_resource_bound_matches_cpp_256mib_and_rejects_indices_before_allocation(self):
+        geometry = dict(boxes=[], floor=dict(z=0.), closed_world_bounds=dict(min=[-50., -40., 0.], max=[50., 40., 3.4]))
+        self.assertEqual(truth.MAX_VOXELS, 256 * 1024 * 1024)
+        # This large legitimate volume exceeds the old 20M cap. Intercept the
+        # actual allocation so a resource-bound regression needs no huge RAM.
+        with patch.object(truth, "bytearray", side_effect=RuntimeError("allocation_reached"), create=True):
+            with self.assertRaisesRegex(RuntimeError, "allocation_reached"):
+                truth.rasterize(geometry)
+        for upper in ([100., 100., 4.], [1e10, 1., 1.]):
+            invalid = copy.deepcopy(geometry);invalid["closed_world_bounds"]["max"] = upper
+            with self.assertRaisesRegex(ValueError, "voxel_prior_too_large"):
+                truth.rasterize(invalid)
 
     def test_floor_ceiling_wall_cabinet_and_low_block_are_complete_solids(self):
         for index in ([-80, -60, -1], [-80, -60, 0], [-80, -60, 49],
@@ -116,6 +190,50 @@ class PriorFileTests(unittest.TestCase):
         value.update(changes)
         self.manifest.write_text(json.dumps(value))
 
+    def build_support_prior(self, endpoint_error_bound=None):
+        spec_path = self.folder / "contact_spec.json"
+        spec_path.write_text(json.dumps(support_spec(endpoint_error_bound)))
+        with patch.object(truth, "verify_stage", return_value={}):
+            truth.build(spec_path, self.usd, self.manifest)
+        return json.loads(self.manifest.read_text())
+
+    def test_floor_endpoint_loader_keeps_legacy_default_and_exact_sealed_optional_field(self):
+        legacy = self.build_support_prior()
+        self.assertEqual(truth.StaticPrior(self.manifest).floor_endpoint_error_bound_m, 1e-5)
+        self.assertNotIn("floor_endpoint_error_bound_m", legacy["flat_support_contact"])
+        sealed = self.build_support_prior(.0002)
+        self.assertEqual(truth.StaticPrior(self.manifest).floor_endpoint_error_bound_m, .0002)
+        self.assertEqual(sealed["flat_support_contact"], sealed["collision_geometry"]["flat_support_contact"])
+        self.assertEqual(sealed["data_sha256"], legacy["data_sha256"])
+        self.assertNotEqual(sealed["collider_sha256"], legacy["collider_sha256"])
+
+    def test_floor_endpoint_loader_rejects_contact_copy_mismatch_and_unbound_hash_change(self):
+        original = self.build_support_prior(.0002)
+        for variant in ("top_only", "geometry_only", "both"):
+            with self.subTest(variant=variant):
+                changed = copy.deepcopy(original)
+                if variant in ("top_only", "both"):
+                    changed["flat_support_contact"]["floor_endpoint_error_bound_m"] = .0003
+                if variant in ("geometry_only", "both"):
+                    changed["collision_geometry"]["flat_support_contact"]["floor_endpoint_error_bound_m"] = .0003
+                self.manifest.write_text(json.dumps(changed))
+                reason = "static_prior_geometry_hash_mismatch" if variant == "both" else "invalid_flat_support_contact_contract"
+                with self.assertRaisesRegex(ValueError, reason):
+                    truth.StaticPrior(self.manifest)
+
+    def test_floor_endpoint_loader_enforces_absolute_and_resolution_caps_even_with_matching_hash(self):
+        original = self.build_support_prior(.0002)
+        for bound, resolution in ((9e-6, .05), (.001000001, .05), (.0002, .001)):
+            with self.subTest(bound=bound, resolution=resolution):
+                changed = copy.deepcopy(original)
+                for contact in (changed["flat_support_contact"], changed["collision_geometry"]["flat_support_contact"]):
+                    contact["floor_endpoint_error_bound_m"] = bound
+                changed["collider_sha256"] = hashlib.sha256(truth._canonical(changed["collision_geometry"])).hexdigest()
+                changed["voxel_resolution"] = resolution
+                self.manifest.write_text(json.dumps(changed))
+                with self.assertRaisesRegex(ValueError, "floor_endpoint_error_bound_out_of_range"):
+                    truth.StaticPrior(self.manifest)
+
     def test_layout_global_negative_indices_and_outside_unknown(self):
         prior = truth.StaticPrior(self.manifest)
         self.assertEqual(prior.status([-80, -60, 10]), truth.FREE)
@@ -187,6 +305,17 @@ class CollisionStageTests(unittest.TestCase):
         stage.GetPrimAtPath("/World/WheelFixture/Geometry/base_link/left_wheel_link").GetAttribute("xformOp:orient").Set(Gf.Quatf(.8, .6, 0, 0))
         self.assertEqual(truth.verify_stage_geometry(stage, SPEC), expected)
 
+    def test_floor_endpoint_error_bound_does_not_relax_exact_plane_geometry_attestation(self):
+        from pxr import Gf
+        stage = self.stage();spec = support_spec(.0002)
+        verifier = truth.StageGeometryVerifier(stage, spec)
+        original = verifier.verify()
+        self.assertEqual(original, hashlib.sha256(truth._canonical(truth.geometry_from_spec(spec))).hexdigest())
+        stage.GetPrimAtPath("/World/GroundPlane").GetAttribute("xformOp:translate").Set(Gf.Vec3f(0., 0., .0001))
+        with self.assertRaisesRegex(ValueError, "floor_plane_mismatch"):
+            verifier.verify()
+        self.assertEqual(verifier.full_audits, 2);verifier.close()
+
     def test_new_nonrobot_dynamic_obstacle_invalidates_static_free(self):
         from pxr import UsdGeom, UsdPhysics
         stage = self.stage()
@@ -195,6 +324,272 @@ class CollisionStageTests(unittest.TestCase):
         UsdPhysics.RigidBodyAPI.Apply(obstacle)
         with self.assertRaisesRegex(ValueError, "unlisted_static_collider"):
             truth.verify_stage_geometry(stage, SPEC)
+
+    def test_explicitly_disabled_visual_api_allowed_but_enable_revokes(self):
+        from pxr import UsdGeom, UsdPhysics
+        stage = self.stage()
+        visual = UsdGeom.Mesh.Define(stage, "/World/WheelFixture/Visual/disabled_mesh").GetPrim()
+        api = UsdPhysics.CollisionAPI.Apply(visual);api.CreateCollisionEnabledAttr(False)
+        truth.verify_stage_geometry(stage, SPEC)
+        api.CreateCollisionEnabledAttr(True)
+        with self.assertRaisesRegex(ValueError, "unlisted_static_collider"):
+            truth.verify_stage_geometry(stage, SPEC)
+
+    def test_notice_cache_reuses_only_exact_pose_changes_and_never_hides_static_mutation(self):
+        from pxr import Gf, UsdGeom, UsdPhysics
+        stage = self.stage();verifier = truth.StageGeometryVerifier(stage, SPEC)
+        original = verifier.verify();self.assertEqual(verifier.full_audits, 1)
+        root = stage.GetPrimAtPath("/World/WheelFixture/Geometry/base_link")
+        for x in [1., 2., 3.]:
+            root.GetAttribute("xformOp:translate").Set(Gf.Vec3d(x, 2, .35))
+            self.assertEqual(verifier.verify(), original)
+        self.assertEqual(verifier.full_audits, 1);self.assertEqual(verifier.cache_hits, 3)
+        stage.GetPrimAtPath("/World/Indoor/low_block").GetAttribute("xformOp:translate").Set(Gf.Vec3d(0, 0, .12))
+        with self.assertRaisesRegex(ValueError, "static_collider_geometry_mismatch"):
+            verifier.verify()
+        with self.assertRaises(ValueError):
+            verifier.verify() # Cannot return an old certificate after a failed recheck.
+        verifier.close()
+        with self.assertRaisesRegex(ValueError, "geometry_verifier_closed"):
+            verifier.verify()
+
+    def measurement_stage(self):
+        from pxr import Gf, Sdf, UsdPhysics
+        stage = self.stage()
+        body = stage.GetPrimAtPath("/World/WheelFixture/Geometry/base_link")
+        api = UsdPhysics.RigidBodyAPI(body)
+        api.CreateVelocityAttr(Gf.Vec3f(0.));api.CreateAngularVelocityAttr(Gf.Vec3f(0.))
+        joint = UsdPhysics.RevoluteJoint.Define(stage, str(body.GetPath()) + "/MeasuredJoint").GetPrim()
+        for name in ("state:angular:physics:position", "state:angular:physics:velocity"):
+            joint.CreateAttribute(name, Sdf.ValueTypeNames.Float).Set(0.)
+        lidar = stage.GetPrimAtPath(str(body.GetPath()) + "/Lidar_0")
+        lidar.CreateAttribute("enabled", Sdf.ValueTypeNames.Bool).Set(True)
+        return stage, body, joint, lidar
+
+    def test_native_rigid_joint_and_lidar_measurements_reuse_only_existing_typed_defaults(self):
+        from pxr import Gf
+        stage, body, joint, lidar = self.measurement_stage()
+        verifier = truth.StageGeometryVerifier(stage, SPEC);original = verifier.verify()
+        for index in range(50):
+            body.GetAttribute("physics:velocity").Set(Gf.Vec3f(index * .001, .02, -.01))
+            body.GetAttribute("physics:angularVelocity").Set(Gf.Vec3f(.01, index * .002, .03))
+            joint.GetAttribute("state:angular:physics:position").Set(index * .01)
+            joint.GetAttribute("state:angular:physics:velocity").Set(index * .02)
+            lidar.GetAttribute("enabled").Set(bool(index % 2))
+            self.assertEqual(verifier.verify(), original)
+        self.assertEqual(verifier.full_audits, 1);self.assertEqual(verifier.cache_hits, 50)
+        verifier.close()
+
+    def test_existing_configured_rtx_camera_lidar_enable_is_cached_without_type_prefix_exemption(self):
+        from pxr import Sdf, UsdGeom
+        stage, body, joint, lidar = self.measurement_stage()
+        lidar.SetTypeName("Camera")
+        extra = UsdGeom.Camera.Define(stage, str(body.GetPath()) + "/UnconfiguredLidar").GetPrim()
+        extra.CreateAttribute("enabled", Sdf.ValueTypeNames.Bool).Set(True)
+        verifier = truth.StageGeometryVerifier(stage, SPEC);original = verifier.verify()
+        for state in (False, True, False):
+            lidar.GetAttribute("enabled").Set(state)
+            self.assertEqual(verifier.verify(), original)
+        self.assertEqual(verifier.full_audits, 1)
+        extra.GetAttribute("enabled").Set(False)
+        self.assertTrue(verifier._dirty);verifier.verify();self.assertEqual(verifier.full_audits, 2)
+        verifier.close()
+
+    def test_measurement_names_on_unapproved_or_wrong_typed_prim_are_never_exempt(self):
+        from pxr import Gf, Sdf, UsdGeom, UsdPhysics
+        for variant in ("outside_rigid", "not_joint", "not_lidar", "collision_lidar", "wrong_type"):
+            with self.subTest(variant=variant):
+                stage, body, joint, lidar = self.measurement_stage()
+                if variant == "outside_rigid":
+                    prim = UsdGeom.Xform.Define(stage, "/World/UnregisteredBody").GetPrim()
+                    attribute = UsdPhysics.RigidBodyAPI.Apply(prim).CreateVelocityAttr(Gf.Vec3f(0.));value = Gf.Vec3f(1.)
+                elif variant == "not_joint":
+                    prim = UsdGeom.Xform.Define(stage, str(body.GetPath()) + "/NotJoint").GetPrim()
+                    attribute = prim.CreateAttribute("state:angular:physics:position", Sdf.ValueTypeNames.Float)
+                    attribute.Set(0.);value = 1.
+                elif variant == "not_lidar":
+                    prim = UsdGeom.Xform.Define(stage, str(body.GetPath()) + "/NotLidar").GetPrim()
+                    attribute = prim.CreateAttribute("enabled", Sdf.ValueTypeNames.Bool);attribute.Set(True);value = False
+                elif variant == "collision_lidar":
+                    UsdPhysics.CollisionAPI.Apply(lidar).CreateCollisionEnabledAttr(False)
+                    attribute = lidar.GetAttribute("enabled");value = False
+                else:
+                    stage.GetRootLayer().GetAttributeAtPath(str(body.GetPath()) + ".physics:velocity").SetInfo("typeName", "double3")
+                    attribute = body.GetAttribute("physics:velocity");value = Gf.Vec3d(1.)
+                verifier = truth.StageGeometryVerifier(stage, SPEC);original = verifier.verify()
+                attribute.Set(value)
+                self.assertTrue(verifier._dirty)
+                self.assertEqual(verifier.verify(), original);self.assertEqual(verifier.full_audits, 2)
+                verifier.close()
+
+    def test_measurement_type_schema_control_scale_and_time_sample_changes_still_invalidate(self):
+        from pxr import Gf, Sdf, Usd, UsdGeom, UsdPhysics
+        for variant in ("type", "late_attribute", "new_prim", "api", "gain", "damping", "material", "scale", "time_sample"):
+            with self.subTest(variant=variant):
+                stage, body, joint, lidar = self.measurement_stage()
+                if variant == "late_attribute":
+                    joint.RemoveProperty("state:angular:physics:velocity")
+                for name in ("drive:angular:physics:stiffness", "drive:angular:physics:damping"):
+                    joint.CreateAttribute(name, Sdf.ValueTypeNames.Float).Set(0.)
+                verifier = truth.StageGeometryVerifier(stage, SPEC);verifier.verify()
+                if variant == "type":
+                    stage.GetRootLayer().GetAttributeAtPath(str(body.GetPath()) + ".physics:velocity").SetInfo("typeName", "double3")
+                elif variant == "late_attribute":
+                    joint.CreateAttribute("state:angular:physics:velocity", Sdf.ValueTypeNames.Float).Set(1.)
+                elif variant == "new_prim":
+                    added = UsdPhysics.RevoluteJoint.Define(stage, str(body.GetPath()) + "/LateJoint").GetPrim()
+                    added.CreateAttribute("state:angular:physics:position", Sdf.ValueTypeNames.Float).Set(1.)
+                elif variant == "api":
+                    UsdPhysics.CollisionAPI.Apply(lidar).CreateCollisionEnabledAttr(True)
+                elif variant == "gain":
+                    joint.GetAttribute("drive:angular:physics:stiffness").Set(20.)
+                elif variant == "damping":
+                    joint.GetAttribute("drive:angular:physics:damping").Set(80.)
+                elif variant == "material":
+                    body.CreateRelationship("material:binding:physics").SetTargets(["/World/NewMaterial"])
+                elif variant == "scale":
+                    stage.GetPrimAtPath(str(body.GetPath()) + "/box_1").GetAttribute("xformOp:scale").Set(Gf.Vec3d(2., 2., 2.))
+                else:
+                    body.GetAttribute("physics:velocity").Set(Gf.Vec3f(1.), Usd.TimeCode(1.))
+                self.assertTrue(verifier._dirty)
+                if variant in ("api", "scale"):
+                    with self.assertRaises(ValueError):
+                        verifier.verify()
+                else:
+                    verifier.verify()
+                self.assertEqual(verifier.full_audits, 2)
+                # A recheck does not enroll late attrs/prims or a changed type,
+                # and time-sampled measurements never become default-only.
+                if variant in ("type", "late_attribute", "new_prim", "time_sample"):
+                    if variant == "type":
+                        body.GetAttribute("physics:velocity").Set(Gf.Vec3d(2.))
+                    elif variant == "late_attribute":
+                        joint.GetAttribute("state:angular:physics:velocity").Set(2.)
+                    elif variant == "new_prim":
+                        added.GetAttribute("state:angular:physics:position").Set(2.)
+                    else:
+                        body.GetAttribute("physics:velocity").Set(Gf.Vec3f(2.))
+                    self.assertTrue(verifier._dirty);verifier.verify();self.assertEqual(verifier.full_audits, 3)
+                verifier.close()
+
+    def test_notice_cache_revokes_on_disabled_visual_enable_new_collider_scale_and_composition(self):
+        from pxr import Gf, UsdGeom, UsdPhysics
+        for variant in ("enable", "new", "scale", "delete", "composition"):
+            stage = self.stage()
+            mesh = UsdGeom.Mesh.Define(stage, "/World/Visual").GetPrim()
+            api = UsdPhysics.CollisionAPI.Apply(mesh);api.CreateCollisionEnabledAttr(False)
+            verifier = truth.StageGeometryVerifier(stage, SPEC);verifier.verify()
+            if variant == "enable":
+                api.CreateCollisionEnabledAttr(True)
+            if variant == "new":
+                UsdPhysics.CollisionAPI.Apply(UsdGeom.Cube.Define(stage, "/World/Unexpected").GetPrim())
+            if variant == "scale":
+                stage.GetPrimAtPath("/World/WheelFixture/Geometry/base_link/box_1").GetAttribute("xformOp:scale").Set(Gf.Vec3d(10, 10, 10))
+            if variant == "delete":
+                stage.RemovePrim("/World/Indoor/low_block")
+            if variant == "composition":
+                stage.GetPrimAtPath("/World/Indoor/low_block").GetReferences().AddInternalReference("/World/Indoor/west_cabinet")
+            if variant == "composition":
+                verifier.verify() # Harmless geometry-equivalent composition still needs a full recheck.
+            else:
+                with self.assertRaises(ValueError, msg=variant):
+                    verifier.verify()
+            self.assertGreater(verifier.full_audits, 1);verifier.close()
+
+    def test_existing_decor_camera_matrix_is_cached_but_collision_api_never_exempt(self):
+        from pxr import Gf, UsdGeom, UsdPhysics
+        stage = self.stage()
+        camera = UsdGeom.Camera.Define(stage, "/World/ExistingFollowCamera").GetPrim()
+        transform = UsdGeom.Xformable(camera).AddTransformOp();transform.Set(Gf.Matrix4d(1.))
+        verifier = truth.StageGeometryVerifier(stage, SPEC);original = verifier.verify()
+        for x in [1., 2., 3.]:
+            transform.Set(Gf.Matrix4d(1.).SetTranslate(Gf.Vec3d(x, 2, 3)))
+            self.assertEqual(verifier.verify(), original)
+        self.assertEqual(verifier.full_audits, 1)
+        UsdPhysics.CollisionAPI.Apply(camera).CreateCollisionEnabledAttr(True)
+        with self.assertRaisesRegex(ValueError, "unlisted_static_collider"):
+            verifier.verify()
+        self.assertEqual(verifier.full_audits, 2);verifier.close()
+
+    def test_floor_physics_material_is_in_hash_and_cache_rejects_binding_or_friction_change(self):
+        from pxr import Sdf, UsdPhysics, UsdShade
+        stage = self.stage();spec = copy.deepcopy(SPEC)
+        declaration = dict(schema=1, path="/World/PhysicsMaterials/CampusFloor", static_friction=1.,
+            dynamic_friction=1., restitution=0., binding_purpose="physics")
+        spec["floor"]["physics_material"] = declaration
+        material = UsdShade.Material.Define(stage, declaration["path"])
+        api = UsdPhysics.MaterialAPI.Apply(material.GetPrim())
+        api.CreateStaticFrictionAttr(1.);api.CreateDynamicFrictionAttr(1.);api.CreateRestitutionAttr(0.)
+        floor = stage.GetPrimAtPath("/World/GroundPlane/collisionPlane")
+        binding = UsdShade.MaterialBindingAPI.Apply(floor);binding.Bind(material, materialPurpose="physics")
+        verifier = truth.StageGeometryVerifier(stage, spec);original = verifier.verify()
+        self.assertNotEqual(original, truth.verify_stage_geometry(stage, SPEC))
+        api.CreateStaticFrictionAttr(.9)
+        with self.assertRaisesRegex(ValueError, "floor_physics_material_value_changed"):
+            verifier.verify()
+        api.CreateStaticFrictionAttr(1.);self.assertEqual(verifier.verify(), original)
+        alternative = UsdShade.Material.Define(stage, "/World/PhysicsMaterials/Unapproved")
+        binding.Bind(alternative, materialPurpose="physics")
+        with self.assertRaisesRegex(ValueError, "floor_physics_material_binding_changed"):
+            verifier.verify()
+        binding.Bind(material, materialPurpose="physics");self.assertEqual(verifier.verify(), original)
+        material.GetPrim().CreateAttribute("physxMaterial:frictionCombineMode", Sdf.ValueTypeNames.Token).Set("min")
+        with self.assertRaisesRegex(ValueError, "unsealed_floor_physical_material_attribute"):
+            verifier.verify()
+        verifier.close()
+
+    def test_finite_quadruped_registry_supports_capsule_and_has_no_wheel_count_exemption(self):
+        from pxr import Gf, UsdGeom, UsdPhysics
+        stage = self.stage();stage.RemovePrim("/World/WheelFixture")
+        root = UsdGeom.Xform.Define(stage, "/World/Spot").GetPrim();UsdPhysics.RigidBodyAPI.Apply(root)
+        capsule = UsdGeom.Capsule.Define(stage, "/World/Spot/link/leg")
+        capsule.CreateRadiusAttr(.04);capsule.CreateHeightAttr(.2);capsule.CreateAxisAttr("X")
+        UsdPhysics.CollisionAPI.Apply(capsule.GetPrim()).CreateCollisionEnabledAttr(True)
+        spec = copy.deepcopy(SPEC);spec["robot_collision_registry"] = truth.robot_registry_from_stage(stage, "/World/Spot")
+        self.assertEqual(len(spec["robot_collision_registry"]["colliders"]), 1)
+        original = truth.verify_stage_geometry(stage, spec)
+        UsdGeom.Xformable(root).AddTranslateOp().Set(Gf.Vec3d(2, 3, .5))
+        UsdGeom.Xformable(root).AddRotateXYZOp().Set(Gf.Vec3f(8, 6, 20))
+        self.assertEqual(truth.verify_stage_geometry(stage, spec), original)
+        bounds = truth.registered_robot_world_bounds(stage, spec["robot_collision_registry"])
+        self.assertEqual(len(bounds[0]["corners_world"]), 8)
+        rogue = UsdGeom.Cube.Define(stage, "/World/Spot/link/unregistered").GetPrim();UsdPhysics.CollisionAPI.Apply(rogue)
+        with self.assertRaisesRegex(ValueError, "unlisted_static_collider"):
+            truth.verify_stage_geometry(stage, spec)
+
+    def test_registered_dynamic_geometry_can_move_but_cannot_change_or_disappear(self):
+        from pxr import Gf, UsdGeom, UsdPhysics
+        from test_dynamic_collision import ACTOR
+        stage = self.stage();spec = copy.deepcopy(SPEC);spec["dynamic_actors"] = [ACTOR]
+        root = UsdGeom.Xform.Define(stage, "/World/Dynamic/person").GetPrim()
+        UsdPhysics.RigidBodyAPI.Apply(root).CreateKinematicEnabledAttr(True)
+        transform = UsdGeom.Xformable(root);translate = transform.AddTranslateOp();translate.Set(Gf.Vec3d(0, 0, 0))
+        rotate = transform.AddRotateZOp();rotate.Set(0.)
+        cube = UsdGeom.Cube.Define(stage, "/World/Dynamic/person/torso");cube.CreateSizeAttr(1.)
+        transform = UsdGeom.Xformable(cube);transform.AddTranslateOp().Set(Gf.Vec3d(0, 0, .9))
+        transform.AddScaleOp(UsdGeom.XformOp.PrecisionDouble).Set(Gf.Vec3d(.5, .5, 1.8))
+        UsdPhysics.CollisionAPI.Apply(cube.GetPrim()).CreateCollisionEnabledAttr(True)
+        original = truth.verify_stage_geometry(stage, spec)
+        verifier = truth.StageGeometryVerifier(stage, spec);verifier.verify()
+        translate.Set(Gf.Vec3d(-4, -3, 0));rotate.Set(90.)
+        self.assertEqual(truth.verify_stage_geometry(stage, spec), original)
+        self.assertEqual(verifier.verify(), original);self.assertEqual(verifier.full_audits, 1)
+        cube.CreateSizeAttr(2.)
+        with self.assertRaisesRegex(ValueError, "registered_actor_shape_changed"):
+            truth.verify_stage_geometry(stage, spec)
+        with self.assertRaisesRegex(ValueError, "registered_actor_shape_changed"):
+            verifier.verify()
+        cube.CreateSizeAttr(1.);verifier.verify()
+        root.GetAttribute("physics:kinematicEnabled").Set(False)
+        with self.assertRaisesRegex(ValueError, "registered_actor_not_dynamic"):
+            verifier.verify()
+        root.GetAttribute("physics:kinematicEnabled").Set(True);verifier.verify()
+        cube.CreateSizeAttr(1.);stage.RemovePrim("/World/Dynamic/person/torso")
+        with self.assertRaisesRegex(ValueError, "missing_registered_dynamic_actor"):
+            truth.verify_stage_geometry(stage, spec)
+        with self.assertRaisesRegex(ValueError, "missing_registered_dynamic_actor"):
+            verifier.verify()
+        verifier.close()
 
     def test_new_instanced_collision_child_cannot_evade_attestation(self):
         from pxr import Usd, UsdGeom, UsdPhysics
@@ -261,7 +656,9 @@ class CollisionStageTests(unittest.TestCase):
             stage = self.stage()
             stage.RemovePrim("/World/WheelFixture")
             UsdGeom.Xform.Define(stage, "/World/WheelFixture").GetPrim().GetReferences().AddReference(str(asset), "/Fixture")
-            truth.verify_stage_geometry(stage, SPEC)
+            registered_spec = copy.deepcopy(SPEC)
+            registered_spec["robot_collision_registry"] = truth.robot_registry_from_stage(stage, "/World/WheelFixture")
+            truth.verify_stage_geometry(stage, registered_spec)
             # A static stage sublayer can silently alter or add environment
             # geometry. It must not inherit the robot import exception.
             static_asset = Path(folder) / "static.usda"
@@ -270,7 +667,7 @@ class CollisionStageTests(unittest.TestCase):
             external.GetRootLayer().Save()
             stage.GetRootLayer().subLayerPaths.append(str(static_asset))
             with self.assertRaisesRegex(ValueError, "static_geometry_has_external_dependencies"):
-                truth.verify_stage_geometry(stage, SPEC)
+                truth.verify_stage_geometry(stage, registered_spec)
 
 
 if __name__ == "__main__":

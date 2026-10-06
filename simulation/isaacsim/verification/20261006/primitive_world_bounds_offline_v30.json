@@ -1,0 +1,32 @@
+{
+  "schema": 1,
+  "kind": "full_actual_affine_primitive_world_AABB_floor_certificate",
+  "physical_acceptance": false,
+  "full_robot_registry_and_navigation_geometry_retained": true,
+  "floor_support_penetration_limit_m": 0.02,
+  "source_and_receipt_leases_unchanged": true,
+  "tests": {
+    "full_simulation_suite_passed": 232,
+    "wall_seconds": 7.17
+  },
+  "historical_replay": {
+    "session": "campus_cancel_v29_001",
+    "full_thirteen_collider_snapshots": 549,
+    "passed": 549,
+    "first_rotated_local_box_false_floor_reject_source_ns": 5080000000,
+    "old_box_lower_world_z_m": -0.020004574,
+    "actual_full_sphere_lower_world_z_m": -9.935e-06
+  },
+  "regressions": [
+    "actual_failed_rotation_matrix",
+    "rotated_sphere_uniform_and_affine_nonuniform_shear_enclosure",
+    "full_Capsule_Cube_affine_support_bounds",
+    "true_21mm_foot_penetration_rejected",
+    "nonfoot_penetration_rejected",
+    "horizontal_and_upper_volume_violation_rejected"
+  ],
+  "source_sha256": {
+    "simulation/isaacsim/runtime_geometry.py": "9a5b4e3860fd310a5468393914ef749c11e1bd1f47554b54c60e094ecaa293b6",
+    "simulation/isaacsim/test_runtime_geometry.py": "fa7f6c53780bfb942ac5c59d89d55a9ccc38f5e68eb9c1b19ab24aca93873f22"
+  }
+}

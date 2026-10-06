@@ -1,0 +1,109 @@
+{
+  "acceptance_claim": "Offline scheduling and original strict fences pass. No new navigation, dynamic-avoidance, live transport or physical robot acceptance claimed.",
+  "budgets": {
+    "original_actual_motion_cap_s": 0.025,
+    "original_fixed_round_period_s": 0.05,
+    "prepared_cap_reuses_actual_motion_cap_s": 0.025,
+    "prepared_reserved_time_s": 0.005,
+    "renewal_motion_reserve_s": 0.005,
+    "slow_curve_budget_s": 0.12
+  },
+  "build": {
+    "build_node": {
+      "path": "/home/eric/wjg/d1max-build-isaac/nav/build/scan_planner/scan_planner_node",
+      "sha256": "d6133f85b567893af4fc0663052c691f53c5a41255466c7283623f5da7434294"
+    },
+    "command": "source simulation/isaacsim/env.sh; cmake --build existing nav/build/scan_planner --parallel 2; cmake --install same build",
+    "installed_node": {
+      "path": "/home/eric/wjg/d1max-build-isaac/nav/install/scan_planner/lib/scan_planner/scan_planner_node",
+      "sha256": "1ece00121cd20bf116372441e1ee354e0c4b6bc0a31dc11a03ebe648af64fbe8"
+    },
+    "installed_validation_cycle": {
+      "path": "/home/eric/wjg/d1max-build-isaac/nav/install/scan_planner/include/plan_manage/validation_cycle.hpp",
+      "sha256": "f5250225725aa5ba3fa1757756a5e261bf6b07560c5fd361f69190e101678b7d"
+    },
+    "status": "passed"
+  },
+  "change": "prepared_same_round_unused_budget_v31",
+  "independent_review": {
+    "reviewer": "/root/scan_audit",
+    "scope": "Two files and unchanged checkPreparedMotion deadlines; read-only.",
+    "status": "no safety or test blocker"
+  },
+  "invariants": [
+    "Actual motion first; incumbent renewal follows; positive renewal may request at most one additional actual sweep; prepared stays last.",
+    "Prepared receives min(existing 25 ms actual-motion cap, unused time before original begin+50 ms).",
+    "Map geometry, support checks, UNKNOWN/occupied vetoes and exact proof/source/receipt/grant/barrier checks unchanged.",
+    "No sensor lease, source stamp, round deadline, timer rate or motion command authority changes."
+  ],
+  "new_original_action_run_status": "pending",
+  "physical_robot_acceptance": false,
+  "schema": 1,
+  "scope": "Only validation_cycle.hpp and test_execution_ledger.cpp changed; scan_planner rebuilt and installed into the existing isolated overlay.",
+  "source_files": [
+    {
+      "isolated_source_copy": "/home/eric/wjg/d1max-build-isaac/nav-source/src/scan_planner_vendor/plan_manage/include/plan_manage/validation_cycle.hpp",
+      "isolated_source_sha256": "f5250225725aa5ba3fa1757756a5e261bf6b07560c5fd361f69190e101678b7d",
+      "path": "/home/eric/wjg/d1max-system/d1max_nav_ws/src/scan_planner_vendor/plan_manage/include/plan_manage/validation_cycle.hpp",
+      "sha256": "f5250225725aa5ba3fa1757756a5e261bf6b07560c5fd361f69190e101678b7d"
+    },
+    {
+      "isolated_source_copy": "/home/eric/wjg/d1max-build-isaac/nav-source/src/scan_planner_vendor/plan_manage/test/test_execution_ledger.cpp",
+      "isolated_source_sha256": "d80571674e55bd90ea405d14678d394527ba2e860d7b439074b6556580bd0036",
+      "path": "/home/eric/wjg/d1max-system/d1max_nav_ws/src/scan_planner_vendor/plan_manage/test/test_execution_ledger.cpp",
+      "sha256": "d80571674e55bd90ea405d14678d394527ba2e860d7b439074b6556580bd0036"
+    }
+  ],
+  "source_frozen": true,
+  "unchanged_publisher_deadline_fence": {
+    "budget_clamp_line": 623,
+    "path": "/home/eric/wjg/d1max-system/d1max_nav_ws/src/scan_planner_vendor/plan_manage/include/plan_manage/execution_validator.hpp",
+    "publication_deadline_line": 641,
+    "sha256": "b373d4122889da9169988dbc94b3db38b7ff94b74171161547160a623a14a954"
+  },
+  "v30_trigger": {
+    "audit": {
+      "path": "/home/eric/wjg/d1max-build-isaac/crossing_failure_audit_v30.json",
+      "sha256": "ab4fb349d66bb6b5a0c3b71ce3be1207a556a8960de0bcd72536952beaa6e79c"
+    },
+    "incumbent_curve_positive": 1595,
+    "incumbent_motion_positive": 965,
+    "prepared_budget_exhaustions": 445,
+    "prepared_successes": 0,
+    "recovery_window_source_s": [
+      106.6,
+      115.74
+    ]
+  },
+  "verification": {
+    "ctest": {
+      "excluded_label": "launch_test",
+      "failed": 0,
+      "log": {
+        "path": "/home/eric/wjg/d1max-build-isaac/prepared_lane_ctest_v31.log",
+        "sha256": "dc06a8aa5a2a956ea4773920ffa287e1973819aa0e03cdadd294a24a03269c18"
+      },
+      "passed": 15
+    },
+    "execution_ledger": {
+      "artifact": {
+        "path": "/home/eric/wjg/d1max-build-isaac/prepared_lane_execution_ledger_v31.xml",
+        "sha256": "9a24174670412ef88f651b1adf36438467f96958ee34f123f75e3a01bb8b2a92"
+      },
+      "failures": 0,
+      "log": {
+        "path": "/home/eric/wjg/d1max-build-isaac/prepared_lane_execution_ledger_v31.log",
+        "sha256": "a33f4b22b56aef4f6999f7b6d37820e4ddb80ca721d153c0b0bc607d9612b92f"
+      },
+      "tests": 39
+    },
+    "prepared_fake_clock_cases": [
+      "PreparedZeroStillRequiresFreshExactEntryAndStrictBoundary",
+      "PreparedSweepComesAfterIncumbentRenewalAndSharesFixedRoundBudget",
+      "PreparedUnusedRoundTimeIsCappedByExistingActualMotionBudget",
+      "PreparedBudgetIsClampedToLessThanReserveWhenRoundTimeIsShort",
+      "PreparedRemainsLastAfterUnsuccessfulIncumbentRenewalWithoutMotionRetry",
+      "PreparedCannotStartAtOrAfterOriginalDeadlineFromAnyEarlierPhase"
+    ]
+  }
+}

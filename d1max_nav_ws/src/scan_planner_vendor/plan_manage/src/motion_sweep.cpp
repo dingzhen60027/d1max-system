@@ -16,6 +16,8 @@ BrakingModel BrakingModel::load(const std::string& file,const std::string& sha,c
   std::ostringstream hex;for(unsigned int i=0;i<count;++i)hex<<std::hex<<std::setfill('0')<<std::setw(2)<<int(digest[i]);
   if(hex.str()!=sha)throw std::invalid_argument("braking record hash mismatch");
   const auto j=nlohmann::json::parse(bytes);
+  if(j.contains("isolated_platform_model")&&transport!="isolated_mock")
+    throw std::invalid_argument("isolated platform cannot authorize real robot");
   if(transport=="isolated_mock") {
     if(j.value("schema_version",0)!=3||j.value("transport_mode","")!=transport||!j.value("fixture_only",false)||
        j.value("model","")!="reaction_braking_reachable_v1")throw std::invalid_argument("fixture braking record required");
@@ -36,6 +38,24 @@ BrakingModel BrakingModel::load(const std::string& file,const std::string& sha,c
   BrakingModel out{number("max_speed_mps"),number("max_yaw_radps"),number("reaction_bound_s"),
     number("stopping_distance_m"),number("stopping_yaw_rad"),number("stop_latency_bound_s"),
     number("tracking_error_bound_m"),number("heading_error_bound_rad"),sha};
+  if(j.contains("isolated_platform_model")) {
+    const auto& p=j.at("isolated_platform_model");
+    if(!j.at("fixture_only").is_boolean()||j.at("fixture_only")!=true||!p.is_object()||p.size()!=7||
+        !p.at("schema").is_number_integer()||p.at("schema")!=1||p.at("kind")!="official_spot_physx"||
+        p.at("source_scope")!="isolated_simulation_physx_measured_model")
+      throw std::invalid_argument("invalid isolated platform model");
+    const auto bounded=[&](const char* name,double cap) {
+      const auto& field=p.at(name);if(!field.is_number())throw std::invalid_argument("nonnumeric isolated platform bound");
+      const double value=field.get<double>();
+      if(!std::isfinite(value)||value<=0.||value>cap)throw std::invalid_argument("invalid isolated platform bound");
+      return value;
+    };
+    out.command_max_speed=bounded("command_max_speed_mps",.3);
+    out.command_max_yaw=bounded("command_max_yaw_radps",.5);
+    if(bounded("reachable_max_speed_mps",.6)!=out.max_speed||bounded("reachable_max_yaw_radps",.8)!=out.max_yaw)
+      throw std::invalid_argument("isolated platform measurement mismatch");
+    out.isolated_spot_model=true;
+  }
   // Match the SDK writer and Python safety contract. A geometrically correct
   // sweep is insufficient if its reaction bound omits queued sensor age.
   const auto& timing=j.at("execution_timing");

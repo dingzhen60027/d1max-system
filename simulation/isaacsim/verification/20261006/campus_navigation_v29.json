@@ -1,0 +1,150 @@
+{
+  "schema": 1,
+  "kind": "actual_large_Spot_navigation_v29",
+  "physical_acceptance": false,
+  "runs": [
+    {
+      "run": "campus_spot_near_v29_001",
+      "case": "original_Action_near_goal",
+      "passed": true,
+      "session_id": "3534bd9a311e48b0804cf459a7b3e2de",
+      "goal": [
+        -43.0,
+        -4.0,
+        0.0
+      ],
+      "result": {
+        "success": true,
+        "reason": "measured_goal_reached",
+        "retirement_confirmed": true,
+        "physical_stop_confirmed": false
+      },
+      "measured_distance_m": 0.8114982461920642,
+      "measured_final_position": [
+        -43.1744499206543,
+        -4.014949798583984,
+        0.48855167627334595
+      ],
+      "measured_stationary": true,
+      "imu_source_matching": true,
+      "whole_body_attestation": true,
+      "physics": {
+        "samples": 741,
+        "source_seconds": 12.340000000000002,
+        "first_position": [
+          -43.92574691772461,
+          -4.0229172706604,
+          0.4817159175872803
+        ],
+        "last_position": [
+          -43.176612854003906,
+          -4.01504373550415,
+          0.4877287447452545
+        ],
+        "net_xy_m": 0.749175438720832,
+        "max_actual_xy_mps": 0.40546113158511216,
+        "max_actual_full_linear_mps": 0.405998707124325,
+        "max_abs_applied_forward_mps": 0.1483156616904063,
+        "nonzero_command_rows": 279
+      },
+      "sampled_foot_flight": {
+        "link_witness_samples": 741,
+        "foot_bottom_more_than_1cm_above_floor_samples": {
+          "fl_foot": 103,
+          "hr_foot": 108,
+          "fr_foot": 119,
+          "hl_foot": 119
+        },
+        "scope": "actual sampled collider geometry; not continuous contact proof"
+      },
+      "trace_reasons": {
+        "tracker": {
+          "tracking": 285,
+          "permission_or_native_proof_expired": 149,
+          "waiting_execution_permission": 86,
+          "waiting_trajectory_clock": 5,
+          "geometry_only_no_motion_permission": 3,
+          "source_clock_paused_command_expired": 2,
+          "handoff_retired_or_applied_uncertain": 2
+        },
+        "motion_validation": {
+          "observed_free_motion_sweep": 720,
+          "motion_check_budget_exhausted": 15
+        },
+        "trajectory_validation": {
+          "observed_free": 655,
+          "source_expired_during_check": 193
+        },
+        "commit_ack": {
+          "writer_software_commit_not_physical_confirmation": 1,
+          "handoff_deadline_expired": 1
+        }
+      },
+      "timing": {
+        "measured_state_samples": 741,
+        "measured_state_wall_seconds": 35.306931976927444,
+        "measured_state_sim_seconds": 12.322000000000001,
+        "wall_seconds_per_sim_second": 2.8653572453276612,
+        "realtime_factor": 0.34899662219453803,
+        "state_wall_hz": 20.959057005677497,
+        "longest_state_wall_gap_s": 0.09137979405932128,
+        "longest_rays_wall_gap_s": [
+          0.34607615997083485,
+          0.34650366590358317
+        ]
+      },
+      "native_floor_hit_audit": {
+        "scans": 248,
+        "native_floor_hits": 590145,
+        "max_abs_error_m": 6.182078926220136e-06,
+        "sealed_error_bound_m": 0.0002,
+        "raw_endpoints_and_source_times_preserved": true
+      },
+      "body_envelope_attestation": {
+        "required": true,
+        "verified_samples": 741,
+        "failures": 0,
+        "envelope": {
+          "radius": 0.6078651750202781,
+          "offset": 0.3125,
+          "above": 0.55,
+          "support_floor_z": 0.0,
+          "support_penetration_m": 0.02
+        }
+      },
+      "sampled_collision_audit": {
+        "completed": true,
+        "continuous_collision_proof": false,
+        "sample_count": 741,
+        "trajectory_sample_count": 741,
+        "trajectory_sources_all_audited": true,
+        "non_floor_static_penetration_count": 0,
+        "dynamic_penetration_count": 0,
+        "possible_overlap_counts": {
+          "static": 0,
+          "dynamic": 0
+        },
+        "possible_overlap_sample_counts": {
+          "static": 0,
+          "dynamic": 0
+        },
+        "min_static_separation_lower_bound_m": 2.78523698942067,
+        "min_actor_separation_lower_bound_m": 23.38977416257601,
+        "faults": []
+      },
+      "physical_acceptance": false,
+      "hashes": {
+        "isaac_smoke_report.json": "efdde125cadf7195314730ea2b98c425c61bf58ff9746931eadde3cdd12a1fad",
+        "session.json": "b5bfe14b53bc01f9a5b0265f6be42dfa681ca1fec00c94f5578f7abf9fa28f81",
+        "braking_model.json": "3f0553bfbc7b27fa650fcb14ea6ed28b3bf1de429ea3905b8de08f773d94d23f",
+        "physics/trajectory.jsonl": "21e87f56ab1115c6a783ca303d8ee7a317f9936abad1e463b24cbb0e2106078b",
+        "physics/robot_link_readings.jsonl": "aaf8368744f3e27d7a2b1865a826cd8eda0d18ee6ff1f4acc60892868cae2f69",
+        "physics/collision_audit.json": "0005d4dae378da0abd720363569894967ebeac3875ae6da83a863db56483080f",
+        "physics/dynamic_actor_readings.jsonl": "fa2adcdd034ab56c04b9ad79565048f16f8167f8fa0a26be0663a02290f729ec",
+        "physics/floor_hit_audit.jsonl": "5a747faa00eceed87afa572a9e675f7f68d3e1a6a0773f5d1c6a0760863046d0"
+      },
+      "candidate_integrity_sha256": "46ece516b00eecb6d8faf004349485270113932b5c02a82bf584794cd53192a2"
+    }
+  ],
+  "systematic_suite": "pending; near_goal is a smoke task, not one of six full cases"
+}

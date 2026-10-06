@@ -228,15 +228,85 @@ TEST(ExecutionLedger,PreparedSweepComesAfterIncumbentRenewalAndSharesFixedRoundB
   using C=scan_planner::ValidationCycle;const auto begin=C::Clock::time_point{};auto now=begin;
   std::vector<std::string> order;
   C::priorityPassWithPrepared(begin,[&](double){order.push_back("current_sweep");now+=std::chrono::milliseconds(2);},
-    [&](double budget){order.push_back("current_curve");EXPECT_LE(budget,.041);now+=std::chrono::milliseconds(30);return true;},
-    [&](double budget){order.push_back("prepared_sweep");EXPECT_LE(budget,.005);now+=std::chrono::milliseconds(5);},[&]{return now;});
+    [&](double budget){order.push_back("current_curve");EXPECT_NEAR(budget,.038,1e-9);now+=std::chrono::milliseconds(30);return true;},
+    [&](double budget){order.push_back("prepared_sweep");EXPECT_NEAR(budget,.016,1e-9);now+=std::chrono::milliseconds(16);},[&]{return now;});
   EXPECT_EQ(order,(std::vector<std::string>{"current_sweep","current_curve","current_sweep","prepared_sweep"}));
-  EXPECT_LT(now,begin+C::period);
+  EXPECT_EQ(now,begin+C::period); // unused time, never a second round.
   order.clear();now=begin;
   C::priorityPassWithPrepared(begin,[&](double){order.push_back("current_sweep");now=begin+std::chrono::milliseconds(51);},
     [&](double){ADD_FAILURE()<<"expired round must not renew";return true;},
     [&](double){ADD_FAILURE()<<"expired round must not prepare";},[&]{return now;});
   EXPECT_EQ(order,(std::vector<std::string>{"current_sweep"}));
+}
+TEST(ExecutionLedger,PreparedUnusedRoundTimeIsCappedByExistingActualMotionBudget) {
+  using C=scan_planner::ValidationCycle;const auto begin=C::Clock::time_point{};auto now=begin;
+  std::vector<std::string> order;unsigned motions=0,prepared=0;
+  C::priorityPassWithPrepared(begin,[&](double budget){
+      order.push_back("current_sweep");++motions;EXPECT_DOUBLE_EQ(budget,.025);
+      now+=std::chrono::milliseconds(2);
+    },[&](double budget){
+      order.push_back("current_curve");EXPECT_NEAR(budget,.038,1e-9);return true;
+    },[&](double budget){
+      order.push_back("prepared_sweep");++prepared;EXPECT_DOUBLE_EQ(budget,.025);
+      now+=std::chrono::milliseconds(25);
+    },[&]{return now;});
+  EXPECT_EQ(order,(std::vector<std::string>{"current_sweep","current_curve","current_sweep","prepared_sweep"}));
+  EXPECT_EQ(motions,2U);EXPECT_EQ(prepared,1U);
+  EXPECT_EQ(now,begin+std::chrono::milliseconds(29));
+}
+TEST(ExecutionLedger,PreparedBudgetIsClampedToLessThanReserveWhenRoundTimeIsShort) {
+  using C=scan_planner::ValidationCycle;const auto begin=C::Clock::time_point{};auto now=begin;
+  std::vector<std::string> order;unsigned motions=0;
+  C::priorityPassWithPrepared(begin,[&](double budget){
+      order.push_back("current_sweep");++motions;
+      EXPECT_NEAR(budget,motions==1?.025:.017,1e-9);
+      now+=std::chrono::milliseconds(motions==1?23:14);
+    },[&](double budget){
+      order.push_back("current_curve");EXPECT_NEAR(budget,.017,1e-9);
+      now+=std::chrono::milliseconds(10);return true;
+    },[&](double budget){
+      order.push_back("prepared_sweep");EXPECT_NEAR(budget,.003,1e-9);
+      now+=std::chrono::milliseconds(3);
+    },[&]{return now;});
+  EXPECT_EQ(order,(std::vector<std::string>{"current_sweep","current_curve","current_sweep","prepared_sweep"}));
+  EXPECT_EQ(now,begin+C::period);
+}
+TEST(ExecutionLedger,PreparedRemainsLastAfterUnsuccessfulIncumbentRenewalWithoutMotionRetry) {
+  using C=scan_planner::ValidationCycle;const auto begin=C::Clock::time_point{};auto now=begin;
+  std::vector<std::string> order;unsigned motions=0;
+  C::priorityPassWithPrepared(begin,[&](double budget){
+      order.push_back("current_sweep");++motions;EXPECT_DOUBLE_EQ(budget,.025);
+      now+=std::chrono::milliseconds(5);
+    },[&](double budget){
+      order.push_back("current_curve");EXPECT_NEAR(budget,.035,1e-9);
+      now+=std::chrono::milliseconds(10);return false;
+    },[&](double budget){
+      order.push_back("prepared_sweep");EXPECT_DOUBLE_EQ(budget,.025);
+      now+=std::chrono::milliseconds(25);
+    },[&]{return now;});
+  EXPECT_EQ(order,(std::vector<std::string>{"current_sweep","current_curve","prepared_sweep"}));
+  EXPECT_EQ(motions,1U);EXPECT_EQ(now,begin+std::chrono::milliseconds(40));
+}
+TEST(ExecutionLedger,PreparedCannotStartAtOrAfterOriginalDeadlineFromAnyEarlierPhase) {
+  using C=scan_planner::ValidationCycle;
+  for(unsigned exhausted_phase=0;exhausted_phase<3;++exhausted_phase) {
+    for(int end_ms:{50,51}) {
+      const auto begin=C::Clock::time_point{};auto now=begin;unsigned motions=0,active=0,prepared=0;
+      C::priorityPassWithPrepared(begin,[&](double budget){
+          ++motions;EXPECT_GT(budget,0.);EXPECT_LE(budget,.025);
+          if(exhausted_phase==(motions==1?0U:2U))now=begin+std::chrono::milliseconds(end_ms);
+          else now+=std::chrono::milliseconds(1);
+        },[&](double budget){
+          ++active;EXPECT_GT(budget,0.);
+          if(exhausted_phase==1)now=begin+std::chrono::milliseconds(end_ms);
+          else now+=std::chrono::milliseconds(1);
+          return true;
+        },[&](double){++prepared;ADD_FAILURE()<<"prepared must not obtain a fresh round";},[&]{return now;});
+      EXPECT_EQ(motions,exhausted_phase==2?2U:1U);
+      EXPECT_EQ(active,exhausted_phase==0?0U:1U);EXPECT_EQ(prepared,0U);
+      EXPECT_EQ(now,begin+std::chrono::milliseconds(end_ms));
+    }
+  }
 }
 TEST(ExecutionLedger,CandidateAndDebugNeverReplaceCommittedOwner) {
   Fixture f;f.ledger.candidate(f.spline,f.proposal);EXPECT_FALSE(f.ledger.committedView());

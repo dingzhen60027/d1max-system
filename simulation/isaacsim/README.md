@@ -2,11 +2,19 @@
 
 分支：`isaacsim-simulation`。比较基线：`5dfaf8cddec952b3453a02e3a231de5228bd6017`。这是同一导航主线的 Isaac Sim 仿真候选与取证分支，当前仍有未解决的换轨失败。
 
-**最新状态（2026-10-06）：** `live_view_20261006_001` 实测行驶 **8.0010 m** 后失败，原任务原因是 `execution_blocked_timeout:waiting_admitted_nonzero_command`。记录显示 generation 7 → 8 的换轨未完成；根因尚未确证，不能将超时原因直接当成算法根因，也不能据此断言由 SCAN UNKNOWN 引起。已确认实测停稳与任务软件退役。[最新失败取证](verification/20261006/live_view_failure.json)随本分支保存；完整原始日志和大体积测量仍在本机证据目录。
+**最新状态（北京时间 2026-10-07）：本机默认候选为 `isaac-candidate-v31-campus`。** Spot 原 Action 近距离到达实测 **1.040435 m**，返回 `measured_goal_reached`；v31 `cancel_and_park` 实测 **1.047985 m** 后返回 `action_cancelled`，最终 **2.018 s 源时间**静止窗口与独立关卡评估通过。两次停车、IMU 与全身检查均通过。v31 `crossing_blocker` 实测累计 **0.403687 m** 后以 `execution_blocked_timeout:waiting_measured_motion_progress` 失败：准备运动证明有 14 条通过、7 次成功换轨、零准备预算耗尽，v30 的准备通道饥饿不再出现，但新候选几何入口的低速／方向变化及持续进度仍需修复。其余四关未执行，不能宣称动态避障或全部六关通过。[v31 实测摘要](verification/20261006/campus_navigation_v31.json)和 [横穿失败审查](verification/20261006/crossing_failure_audit_v31.json)分别保存结果与分析。文档日期为北京时间，证据目录 `20261006` 保留 UTC 日期。
+
+v30 的近距 **0.827614 m** 到达、取消关卡 **1.197793 m** 行程及最终 **2.02 s 源时间**静止窗口通过，横穿 **5.583955 m** 后失败，均保留为 [历史 v30 会话证据](verification/20261006/campus_navigation_v30.json)，与 v31 的独立会话分别记录。
+
+**历史未解决失败：** 旧轮式 `live_view_20261006_001` 实测行驶 **8.0010 m** 后因 `execution_blocked_timeout:waiting_admitted_nonzero_command` 失败。记录显示 generation 7 → 8 的换轨未完成；根因尚未确证，也不能据此断言由 SCAN UNKNOWN 引起。实测停稳与任务软件退役成立。[历史失败取证](verification/20261006/live_view_failure.json)随本分支保存；完整原始日志和大体积测量仍在本机证据目录。
 
 历史 v19 三项任务和 v22 录屏的成功记录保留，适用范围限于各次封存候选与会话。[历史验证摘要](verification/20261005/historical_verification.json)随分支保存；这些成功不能抵消此次失败或证明连续换轨已经稳定。
 
-本目录把本仓库的导航主线接到本机 Isaac Sim 6.0.1-rc.7 轮式机器人。任务仍由原 BehaviorTree.CPP 管理，经过 PCT 全局路线、连续参考、SCAN 三维局部规划、轨迹跟踪、安全门和原 SDK-free writer，最后驱动 PhysX 轮关节。
+新增的 **100×80 m 官方 Spot 园区**与六个系统测试关卡见 [大型园区及可复现关卡说明](CAMPUS_SCENARIOS.md)。场景有 85 个静态 box、地板／天花板和 6 个确定性动态几何演员；五点路线 **332.84 m** 目前是离线几何长度；导航 command 限 0.15 m/s／0.30 rad/s，长程观察预算 3600 s 源时间，原 BT 保护期限保持。v31 取消停车关卡通过、横穿关卡失败，其余四关未执行；v30 结果单独保留。旧轮式任务结果与大型机器狗场景的验证分别保留。
+
+大型场景的入口顺序为 `scenario_suite.py list` → `prepare --case ID --output-config 新路径` → `build_candidate.py --scene-config 准备配置 --output 新候选` → `scenario_suite.py run --case ID --candidate 新候选 --session 新会话` → `evaluate --prepared-config 候选内最终配置 --session 会话 --output 新报告`。完整路径、构建参数和待验证证据要求均在上述说明中；每个关卡封存自己的模型、地图和演员集合，多点任务保持同一原导航图与同一物理会话，缺证据保持 `pending`。
+
+本目录把本仓库的导航主线接到本机 Isaac Sim 6.0.1-rc.7，默认使用官方 Spot 与匹配行走策略（500 Hz PhysX、50 Hz 策略、50 Hz 原始机身状态）；旧轮式场景保留。任务仍由原 BehaviorTree.CPP 管理，经过 PCT 全局路线、连续参考、SCAN 三维局部规划、轨迹跟踪、安全门和原 SDK-free writer，最后驱动真实关节。行走策略的实测速度反馈只调节低层策略输入。
 
 本次重点是导航任务和物理执行反馈。定位输入使用 PhysX 测量的真实机器人位姿，标记为 `groundtruth_fixture`；雷达和 IMU 使用实际仿真传感器。Faster-LIO、ICP 和机器人原厂 SDK 的性能不属于这组测试结果。
 
@@ -16,13 +24,17 @@
 
 | 本分支新增或修复 | 代码与说明 |
 | --- | --- |
-| Isaac Sim 轮式物理场景与双三维雷达、原生 IMU 接口 | [场景](scene.py)、[原接口桥接](bridge.py)、[候选组装](build_candidate.py)；定位是显式 PhysX 真值夹具 |
+| 100×80 m 园区、官方 Spot 真实关节行走、双三维雷达与原生 IMU | [场景](scene.py)、[Spot 控制](quadruped.py)、[原接口桥接](bridge.py)、[候选组装](build_candidate.py)；定位是显式 PhysX 真值夹具 |
 | 认证静态空体积与实时射线融合 | [静态先验加载](../../d1max_nav_ws/src/scan_planner_vendor/plan_env/src/static_occupancy_prior.cpp)、[GridMap 查询](../../d1max_nav_ws/src/scan_planner_vendor/plan_env/src/grid_map.cpp)、[USD 体积生成](truth_map.py)；真实 hit 撤销先验 FREE，默认严格模式保留 |
-| 查询性能与失败取证 | 同一快照及证据范围的稠密体素缓存、原始失败位置和期限记录；原几何范围和计算预算保持 |
+| 查询性能与失败取证 | 同一快照的完整列批量查询与稠密体素缓存；资源计数使用实际完整扫掠体积，保留原几何范围、计算预算和证据期限 |
+| 准备证明轮内调度 | v31 prepared 使用原 50 ms 轮内未用时间，最多沿用原 25 ms motion cap；5 ms 预留、当前轨迹优先级和全部原 deadline／证据检查保持，见 [离线回归](verification/20261006/prepared_lane_offline_v31.json) |
+| Spot 水平跟踪与全身证明 | 已认证平面支撑上的逐区间水平制动包络保留 XYZ 曲线；实际 primitive 支撑函数计算 world AABB，修正旋转局部包围盒导致的脚球假穿地 |
 | 源时间、进度与取消修复 | 原始整数纳秒、合法重复仿真 tick、同 tick 取消 ACK、原始位姿证据和规范化计算分离、弯道物理进度判定；细节见 [分析记录](SCAN_UNKNOWN_ANALYSIS.md) |
-| 单 RViz 与 Isaac Sim 录屏 | RViz 初始化与仿真时钟诊断修复，真实窗口录制；历史 v22 录屏结果见下文 |
+| 单 RViz 显示与仿真时钟诊断 | RViz 初始化与时效判断修复；下文保留历史 v22 轮式录屏，当前按用户要求不录制 |
 
-尚未验收：generation 7 → 8 换轨失败的根因与修复；真实 LIO／重定位条件下的先验配准；动态遮挡物持续避让；轮胎低部与地面支撑面的通用碰撞合同；坡地、楼梯、跨层执行及机器狗构型；原厂 SDK 与实机刹停。本先验当前要求固定单位 `map←odom`、认证静态场景和有限姿态／高度偏差，不能直接当作实机通用方案。所有仿真结果保留 `physical_acceptance=false`。
+Spot 新增 13 个实际碰撞体的同源全身包络证据、固定平面 `support_contact` 体素（不会当作雷达 FREE）、独立演员 oracle 否决和采样几何分离报告。动态消息的 source／steady 租约为 0.20 s，预测包络另覆盖 6 s，必须覆盖原反应与制动模型；两者不会相互续期。缺演员、新增碰撞体、时间倒退、证据过期均拒绝运动。默认 production 严格模式不启用这些仿真证书。
+
+尚未验收：旧轮式 generation 7 → 8 换轨失败及 v31 横穿任务的入口几何与持续实测进度问题；真实 LIO／重定位条件下的先验配准；完整动态避让与四项未运行关卡；坡地、楼梯、跨层执行；原厂 SDK 与实机刹停。当前固定单位 `map←odom`、固定平面接触与仿真演员真值是明确测试条件。早期独立 Spot 组件测试满足原 `.03 m/s / .05 rad/s` 连续一秒阈值用时 2.418 s，更严格静止阈值用时 4.328 s，见 [历史时间窗摘要](verification/20261006/spot_stop_window.json)。v30 与 v31 取消会话分别以至少两秒源时间验证最终停车；均不作为实机制动验收。所有仿真结果保留 `physical_acceptance=false`。
 
 本 README 中仓库内代码与最新失败摘要使用相对链接。标为“本机证据”的绝对路径用于保留原始会话索引，GitHub 无法直接读取；完整视频、运行日志、候选安装及历史测量没有作为仓库文件发布。
 
@@ -51,11 +63,25 @@ cd /home/eric/wjg/d1max-system
 bash simulation/isaacsim/launch.sh --headless --rviz
 ```
 
-该命令使用已实测的无界面 PhysX 场景，原仓库的单个 RViz 显示三维地图、任务和规划轨迹。在 RViz 中设置 XYZ 目标，预览路线后通过原面板确认执行或取消。目标的 Z 是**地面支撑点高度**，当前室内地板用 `0`；机器人机身参考点实测高度约 `0.35 m`。上表 v19 三测使用无界面 PhysX；v22 录屏在可见视口完成跨门任务。两个窗口同时显示使用：
+本机仿真选择器使用已通过 Spot 近距离任务的 `isaac-candidate-v31-campus`。原仓库的单个 RViz 显示三维地图、任务和规划轨迹；在 RViz 设置 XYZ 目标，预览后通过原面板确认执行或取消。目标 Z 是**地面支撑点高度**，本园区地板用 `0`；Spot 名义机身参考高度 `.52 m`，真实步态高度单独保留。两个窗口同时显示使用：
 
 ```bash
-bash simulation/isaacsim/launch.sh --rviz --render-fps 15
+bash simulation/isaacsim/launch.sh --rviz --render-fps 3
 ```
+
+复现已通过的 v31 Spot 原 Action 近距离到达（实测行程 `1.040435 m`）：
+
+```bash
+bash simulation/isaacsim/launch.sh \
+  --candidate ../d1max-build-isaac/isaac-candidate-v31-campus \
+  --headless --smoke --goal -43 -4 0 --smoke-duration 300
+```
+
+v31 近距离任务沿用默认 smoke 停车观察，其通过结果见 [v31 实测证据](verification/20261006/campus_navigation_v31.json)。v31 调度回归 ledger **39/39**、非 launch CTest **15/15** 通过；仿真纯 Python 回归 **232 项通过**，均不能代替实际关卡验证。成功换轨保留当前输出与真实 writer 应用历史；横穿失败记录不支持“换轨无条件清零 ramp”的结论，新几何入口的前进需求和方向变化须另行调查。
+
+v31 取消会话 `campus_cancel_v31_001` 原 Action 返回 `action_cancelled`，实测行程 **1.047985 m**；最终 122 个停车样本覆盖 **2.018 s 源时间**，最大源间隔 20 ms，独立评估 `passed`，实测停稳、IMU 与全身检查均成立。近距与取消短测未要求演员近距离遭遇，两次成功不能声明动态避障通过。当前可见 v31 Isaac 与单个 RViz 使用 3 fps 绘制以降低 CPU 争用，物理和传感器源频率保持。
+
+历史 v30 `cancel_and_park` 使用专门的两秒源时间停车合同：报告的 991 个状态逐项匹配同源 PhysX 原始姿态和完整三维速度，1,653 个独立 IMU 样本与原生日志一致；1,107 个全身快照审计无失败。最终 122 个停车样本覆盖 2.02 s，最大源间隔 20 ms，完整线速度／角速度最大为 `.007147 m/s / .022544 rad/s`，低于原 `.03 / .05` 阈值。演员离这些短测路线较远，不能由此声明动态避让通过。v29 近距离成功仍保留在 [历史 Spot 短测](verification/20261006/campus_navigation_v29.json)；其后取消关卡出现脚球假穿地，v30 已修正完整 primitive 的世界包围盒，见 [几何回归](verification/20261006/primitive_world_bounds_offline_v30.json)。历史结果见 [v30 实测证据](verification/20261006/campus_navigation_v30.json)，不作为 v31 取消关卡通过证据。约 333 m 和六个系统关卡的范围与入口见 [园区测试说明](CAMPUS_SCENARIOS.md)。当前按用户要求不录制视频。
 
 ## 历史 v22 同会话真实录屏（2026-10-05）
 
@@ -65,24 +91,28 @@ bash simulation/isaacsim/launch.sh --rviz --render-fps 15
 
 `record_windows.py capture` 只接收两个显式 X11 窗口 ID，使用同一墙钟时间轴录制，SIGINT 正常封装；`postprocess` 生成并排版。视频时间轴用于对照画面，导航验收仍使用原任务报告及真实传感器源时间。
 
+### 历史轮式夹具的任务命令
+
+以下目标属于 12×10 m 轮式场景。复现时显式选用保留的轮式候选；Spot 园区目标与六关卡入口见 [园区测试说明](CAMPUS_SCENARIOS.md)。
+
 自动近距离到达和取消测试：
 
 ```bash
-bash simulation/isaacsim/launch.sh --headless --smoke
-bash simulation/isaacsim/launch.sh --headless --smoke --smoke-case cancel
+bash simulation/isaacsim/launch.sh --candidate ../d1max-build-isaac/isaac-candidate-v19 --headless --smoke
+bash simulation/isaacsim/launch.sh --candidate ../d1max-build-isaac/isaac-candidate-v19 --headless --smoke --smoke-case cancel
 ```
 
 跨房间完整执行测试：
 
 ```bash
-bash simulation/isaacsim/launch.sh --headless --rviz --smoke \
+bash simulation/isaacsim/launch.sh --candidate ../d1max-build-isaac/isaac-candidate-v19 --headless --rviz --smoke \
   --goal 4 -3 0 --smoke-duration 360
 ```
 
 另有独立的跨房间路线预览取消用例：
 
 ```bash
-bash simulation/isaacsim/launch.sh --headless --rviz --smoke \
+bash simulation/isaacsim/launch.sh --candidate ../d1max-build-isaac/isaac-candidate-v19 --headless --rviz --smoke \
   --smoke-case preview_cancel --goal 4 -3 0 --smoke-duration 120
 ```
 
@@ -92,7 +122,7 @@ bash simulation/isaacsim/launch.sh --headless --rviz --smoke \
 
 IMU 取证在固定测量边界冻结状态集合，再给独立 IMU 回调最多 1 s 实际时间完成接收；所有引用时间必须精确匹配实际收到的 IMU，不从原生日志补填。边界和缺失源时间写入 `imu_evidence`，内部缺样仍判失败；该接收等待不延长导航或物理执行的有效期。v19 近距离测试的 841 条原始状态含 2 条早于首个独立 ROS IMU 接收的启动前缀，边界内 839 条全部匹配；这 2 条在原生 PhysX IMU 日志也有精确同源记录，任务发出后的 498 条状态全部匹配。前缀不补填进 ROS 接收集合。
 
-## 场景和传感器
+## 历史轮式场景和传感器
 
 场景为 12×10 m 室内空间，含两个门口、隔墙、柜体、低障碍、柱体和真实碰撞天花板。机器人是自建差速轮模型，具有实体轮关节和脚轮。查看 [场景预览](assets/overview.png)，或查看 [静态环境模板 USD](assets/indoor_scene.usda)。包含实体机器人、双雷达、IMU 和全部物理配置的实际初始场景已导出为 完整轮式场景 USD（本机证据：`/home/eric/wjg/d1max-build-isaac/runs/task_cross_room_v19_001/physics/indoor_scene.usda`）；控制与 ROS 会话由启动脚本连接。
 
@@ -129,7 +159,7 @@ Isaac Python 3.12 与 Humble Python 3.10 分进程运行，通过有大小、顺
 
 启动前检查候选安装产物和地图的 SHA256，并由原 `navigation_session.verify()` 封存运行会话。仿真地图来自实际场景的三维表面和源点身份；PCT 原生库在当前机器编译。候选包不修改仓库的默认生产 release 选择器。
 
-暂停、源时钟回退、场景重置或传感器过期都会撤销当前会话。重新测试需退出并创建新会话。命令过期时物理轮驱动置零，停稳判断继续读取测得速度。
+暂停、源时钟回退、场景重置或传感器过期都会撤销当前会话。重新测试需退出并创建新会话。命令过期时撤销低层前进需求，轮式驱动置零或 Spot 策略继续处理零需求，停稳判断始终读取测得速度。
 
 Isaac 隔离会话显式使用双时间域的局部地图期限：实际射线的原始源时间和真实回调接收时间分别受原 0.5 s 期限约束。慢速仿真中的新测量可更新经过的体素，重复扫描、远处扫描和暂停均不能延长旧体素的期限。默认实机时间策略保留。任务依赖的纯功能心跳使用单调实际时间，感知、许可和命令仍检查各自的源时间。
 
@@ -167,4 +197,4 @@ bash simulation/isaacsim/build_local.sh
 
 脚本保留已有候选。默认仿真候选由构建目录中的 `isaac_fixture.json` 明确选择，并检查其完整性清单哈希。改过传感器、场景或导航代码后，使用 `build_candidate.py --output 新路径` 重新组装，再给 `launch.sh --candidate 新路径`；也可用组装器的 `--select-local ../d1max-build-isaac/isaac_fixture.json` 更新本机仿真选择。PCT 的原生编译证据绑定外部 `pct_vendor` 目录；保留该构建目录，移动到另一台机器时重新编译。
 
-这组仿真不提供机器狗几何、实机刹停、真实 SDK 阻塞、楼梯或跨层执行验收。实际测试结果以各会话的报告和测量数据为准。
+这组仿真不提供实机机器狗几何、实机刹停、真实 SDK 阻塞、楼梯或跨层执行验收。实际测试结果以各会话的报告和测量数据为准。

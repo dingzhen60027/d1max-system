@@ -1,0 +1,717 @@
+{
+  "schema": 1,
+  "kind": "actual_large_Spot_navigation_v31",
+  "physical_acceptance": false,
+  "runs": [
+    {
+      "run": "campus_crossing_v31_001",
+      "case": "crossing_blocker",
+      "session_id": "2b0329023eca4367b48355493c1903b9",
+      "physical_acceptance": false,
+      "passed": false,
+      "goal": [
+        8.0,
+        -5.0,
+        0.0
+      ],
+      "result": {
+        "success": false,
+        "reason": "execution_blocked_timeout:waiting_measured_motion_progress",
+        "retirement_confirmed": true,
+        "physical_stop_confirmed": false
+      },
+      "action_result_status": 6,
+      "measured_distance_m": 0.40368652373768477,
+      "measured_final_position": [
+        -7.884727478027344,
+        -5.010884761810303,
+        0.48994699120521545
+      ],
+      "measured_stationary": true,
+      "stationarity_evidence": {
+        "fence_elapsed_s": 104.75345099088736,
+        "window_s": 2.0,
+        "sample_count": 122,
+        "source_begin_ns": 1791302702709687328,
+        "source_end_ns": 1791302704729687328,
+        "source_span_s": 2.02,
+        "longest_source_sample_gap_ns": 20000000,
+        "source_window_complete": true
+      },
+      "imu_source_matching": true,
+      "imu_evidence": {
+        "matched": true,
+        "state_count": 2271,
+        "captured_state_count": 2272,
+        "fence_source_stamp_ns": 1791302704729687328,
+        "missing_imu_source_stamps_ns": [],
+        "receipt_wait_budget_s": 1.0,
+        "receipt_wait_elapsed_s": 0.0005601891316473484,
+        "fence_elapsed_s": 104.75345099088736
+      },
+      "whole_body_attestation": true,
+      "body_envelope_attestation_evidence": {
+        "required": true,
+        "verified": true,
+        "body_envelope_verified_samples": 2294,
+        "body_envelope_failures": 0,
+        "body_envelope_registry_sha256": "e68b27ca3e0a30c3bdbaeb43414ae4a19674f9661adb167cc6bd0e38ab6ebc76",
+        "observed_measured_state_count": 2272,
+        "scope": "same_source_actual_whole_body_envelope_attestation; not_complete_contact_or_collision_acceptance"
+      },
+      "stop": {
+        "execution_id": "2b0329023eca4367b48355493c1903b9.1:execution",
+        "stop_submitted": true,
+        "measured_stop_confirmed": true,
+        "physical_acceptance_verified": false,
+        "stationary_samples": 212,
+        "measured_linear_mps": 0.0071125971875889565,
+        "measured_angular_radps": 0.007965496304100674,
+        "reason": "execution_blocked_timeout:waiting_measured_motion_progress"
+      },
+      "source_origin_ns": 1791302666869687328,
+      "source_duration_s": 281.0,
+      "source_events": [
+        {
+          "source_stamp_ns": 1791302669809687328,
+          "key": "goal_sent",
+          "xyz": [
+            8.0,
+            -5.0,
+            0.0
+          ]
+        },
+        {
+          "source_stamp_ns": 1791302702249687328,
+          "key": "BT_result",
+          "success": false,
+          "reason": "execution_blocked_timeout:waiting_measured_motion_progress",
+          "retirement_confirmed": true,
+          "physical_stop_confirmed": false
+        }
+      ],
+      "trace_reasons": {
+        "tracker": {
+          "actual:waiting_execution_permission": 92,
+          "actual:geometry_only_no_motion_permission": 2,
+          "actual:waiting_trajectory_clock": 6,
+          "actual:tracking": 660,
+          "actual:permission_or_native_proof_expired": 1137,
+          "actual:source_clock_paused_command_expired": 6,
+          "actual:handoff_retired_or_applied_uncertain": 268
+        },
+        "trajectory_validation": {
+          "actual:observed_free": 1308,
+          "actual:source_expired_during_check": 135,
+          "actual:unknown_or_unobserved": 4131
+        },
+        "commit_ack": {
+          "actual:writer_software_commit_not_physical_confirmation": 1,
+          "prepared:writer_software_commit_not_physical_confirmation": 7,
+          "prepared:handoff_deadline_expired": 2,
+          "prepared:owner_hold_or_phase_barrier": 2
+        },
+        "motion_validation": {
+          "actual:observed_free_motion_sweep": 1083,
+          "prepared:observed_free_motion_sweep": 14,
+          "actual:motion_sweep_unknown_or_expired": 333,
+          "prepared:motion_sweep_unknown_or_expired": 36
+        }
+      },
+      "bridge": {
+        "measured_state_samples": 2385,
+        "ray_scans": [
+          398,
+          398
+        ],
+        "native_imu_samples": 3976,
+        "body_envelope_verified_samples": 2385,
+        "body_envelope_failures": 0,
+        "fault": ""
+      },
+      "sampled_collision_audit": {
+        "completed": true,
+        "continuous_collision_proof": false,
+        "sample_count": 2396,
+        "trajectory_sample_count": 2396,
+        "trajectory_sources_all_audited": true,
+        "max_source_sampling_gap_ns": 20000000,
+        "non_floor_static_penetration_count": 0,
+        "dynamic_penetration_count": 0,
+        "possible_overlap_counts": {
+          "static": 0,
+          "dynamic": 0
+        },
+        "possible_overlap_sample_counts": {
+          "static": 0,
+          "dynamic": 0
+        },
+        "min_static_separation_lower_bound_m": 2.7845981399824127,
+        "min_actor_separation_lower_bound_m": 7.180918121529363,
+        "faults": [],
+        "actual_actor_encounter": {
+          "schema": 1,
+          "rule": "measured_primitive_center_approach_near_depart_v1",
+          "source": "actual_registered_link_and_actor_geometry",
+          "scope": "sampled_same_step_primitive_center_proximity_only",
+          "completed": true,
+          "required_actor_ids": [
+            "plaza_person"
+          ],
+          "contract_sha256": "32fdb8ca3a3198cd0b6c79b6134cb1224203ce98181ff8c8077d48dcad367f7f",
+          "observed": false,
+          "actors": [
+            {
+              "actor_id": "plaza_person",
+              "observed": false,
+              "witnesses": []
+            }
+          ],
+          "truncated_actor_ids": [],
+          "maximum_source_sampling_gap_ns": 20000000,
+          "source_begin_ns": 1791302666467687328,
+          "source_end_ns": 1791302706369687328,
+          "source_anchor_ns": 1791302666449687328,
+          "session_id": "2b0329023eca4367b48355493c1903b9",
+          "scene_sha256": "3d3fdc22cf63ef7b77aebc7d77076a7d07246a1c7d5d601afc1867b3132b7af8",
+          "robot_collision_registry_sha256": "e68b27ca3e0a30c3bdbaeb43414ae4a19674f9661adb167cc6bd0e38ab6ebc76",
+          "actor_collision_registry_sha256": "be6813e188ff52611e04611682ce21bf303633099a61d7649d6b2e9712a478a6",
+          "observation_status": "completed",
+          "limitations": [
+            "sampled_proximity_only",
+            "not_route_blocking_or_yield_or_contact_evidence",
+            "caller_binds_actual_snapshots_to_same_physics_step"
+          ]
+        }
+      },
+      "hashes": {
+        "scenario_suite/phase_000_report.json": "8b9687f12585615439a8e3af978d5a53b7db325a13788dc1f0b41e12a05e6fe2",
+        "scenario_suite/phase_000_trace.jsonl": "fb55697694ebcf1309c25e1f82f4e01bff779f665a1f246aea68834fb112c271",
+        "session.json": "b6c1cba7a06d07b0a156a6f1161b03efca3270b2853c05ede60cf40a15217702",
+        "braking_model.json": "70a9661528bf43afc6234bf642b838c64efe3eb80b023c7ac0c37db5cb5cd881",
+        "physics/trajectory.jsonl": "61801257b0162d85a46307826674147c6ca47c52f543709000f8269d567c3d8f",
+        "physics/robot_link_readings.jsonl": "2947e90344f31aedf25f4cbe0b9020d1f4edda643698a5ce9da91f4c759c65df",
+        "physics/imu_readings.jsonl": "7b84ae47b2ea2ba131b626c076af702910ee585b8592251f4f654cafe9313d1c",
+        "physics/collision_audit.json": "e5655512126895c904e7b2d3f039001ddfdae6ee15f097139a9da439a979614e",
+        "physics/dynamic_actor_readings.jsonl": "1733100ed14a5fa65fde3ee0449e393f930b23fb4751cac453a35732406b586e",
+        "physics/floor_hit_audit.jsonl": "fc3753cafe8d2f2ee02865aeb028301a079da49706cabc31eeb5bdc16e5a4c5b",
+        "run_summary.json": "c57f3afdb491559f5bb02a0a6753f90734f05fd35a1b5dcd5de5db5a7ce70c78",
+        "scenario_suite/execution.json": "a52e332e558b3eb4c07e23965a2aa4026f48b61ff93e4e31bce2cc4498112022"
+      },
+      "candidate_integrity_sha256": "e68ddbdb0a0b86c3778589e560620706b6fbfc40325bd38da999f02c9ccbccc2",
+      "candidate_scan_elf_sha256": "1ece00121cd20bf116372441e1ee354e0c4b6bc0a31dc11a03ebe648af64fbe8",
+      "systematic_evaluation": {
+        "schema": 1,
+        "kind": "isolated_isaac_scenario_evaluation_v1",
+        "case_id": "crossing_blocker",
+        "configuration_sha256": "d459e968ce370a8a161b444185fbcc83de644210067188a28afda7a1fc647cbc",
+        "session": "/home/eric/wjg/d1max-build-isaac/runs/campus_crossing_v31_001",
+        "status": "failed",
+        "passed": false,
+        "checks": [
+          {
+            "name": "sealed_same_scene",
+            "status": "passed",
+            "reason": "",
+            "evidence": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v31-campus-crossing/simulation/assets/scene_config.json"
+          },
+          {
+            "name": "single_session_ordered_actions",
+            "status": "failed",
+            "reason": "original_smoke_phase_failed:0",
+            "evidence": null
+          },
+          {
+            "name": "phase_000_action_stop_source",
+            "status": "failed",
+            "reason": "original_action_or_measured_stop_failed",
+            "evidence": "/home/eric/wjg/d1max-build-isaac/runs/campus_crossing_v31_001/scenario_suite/phase_000_report.json"
+          },
+          {
+            "name": "phase_000_test_source_budget",
+            "status": "passed",
+            "reason": "",
+            "evidence": {
+              "source_elapsed_s": 35.38,
+              "applied_source_budget_s": 281.0,
+              "sealed_phase_source_budget_s": 281
+            }
+          },
+          {
+            "name": "phase_000_goal",
+            "status": "failed",
+            "reason": "",
+            "evidence": {
+              "measured_xy_error_m": 15.884731207333557
+            }
+          },
+          {
+            "name": "fresh_ordered_task_identities_and_source_deadline",
+            "status": "passed",
+            "reason": "",
+            "evidence": null
+          },
+          {
+            "name": "actual_link_static_and_actor_collision",
+            "status": "passed",
+            "reason": "",
+            "evidence": "/home/eric/wjg/d1max-build-isaac/runs/campus_crossing_v31_001/physics/collision_audit.json"
+          },
+          {
+            "name": "intended_dynamic_encounter_observed",
+            "status": "failed",
+            "reason": "intended_sampled_proximity_encounter_not_exercised_during_original_action_interval",
+            "evidence": {
+              "collision_audit_sha256": "e5655512126895c904e7b2d3f039001ddfdae6ee15f097139a9da439a979614e",
+              "source": "actual_registered_link_and_actor_geometry",
+              "scope": "sampled_same_step_primitive_center_proximity_only",
+              "selected_exact_pair_witnesses": []
+            }
+          },
+          {
+            "name": "owned_graph_retirement",
+            "status": "failed",
+            "reason": "Navigation test failed; inspect smoke.log and its original reports",
+            "evidence": "/home/eric/wjg/d1max-build-isaac/runs/campus_crossing_v31_001/run_summary.json"
+          }
+        ],
+        "physical_robot_acceptance": false,
+        "collision_scope": "sampled_actual_geometry_only_when_bound_evidence_present",
+        "continuous_collision_certificate": false,
+        "localization_validation": false
+      }
+    },
+    {
+      "run": "campus_spot_near_v31_001",
+      "case": "original_Action_near_goal",
+      "session_id": "2fe91e31886e466f886cd9e975894546",
+      "physical_acceptance": false,
+      "passed": true,
+      "goal": [
+        -43.0,
+        -4.0,
+        0.0
+      ],
+      "result": {
+        "success": true,
+        "reason": "measured_goal_reached",
+        "retirement_confirmed": true,
+        "physical_stop_confirmed": false
+      },
+      "action_result_status": 4,
+      "measured_distance_m": 1.0404349518614922,
+      "measured_final_position": [
+        -43.194908142089844,
+        -3.9668142795562744,
+        0.49236905574798584
+      ],
+      "measured_stationary": true,
+      "stationarity_evidence": {
+        "fence_elapsed_s": 63.54084939789027,
+        "window_s": 1.0,
+        "sample_count": 20,
+        "source_begin_ns": 1791303150884413699,
+        "source_end_ns": 1791303151204413699,
+        "source_span_s": 0.32,
+        "longest_source_sample_gap_ns": 20000000,
+        "source_window_complete": true
+      },
+      "imu_source_matching": true,
+      "imu_evidence": {
+        "matched": true,
+        "state_count": 1255,
+        "captured_state_count": 1255,
+        "fence_source_stamp_ns": 1791303151204413699,
+        "missing_imu_source_stamps_ns": [],
+        "receipt_wait_budget_s": 1.0,
+        "receipt_wait_elapsed_s": 0.00023954291827976704,
+        "fence_elapsed_s": 63.54084939789027
+      },
+      "whole_body_attestation": true,
+      "body_envelope_attestation_evidence": {
+        "required": true,
+        "verified": true,
+        "body_envelope_verified_samples": 1268,
+        "body_envelope_failures": 0,
+        "body_envelope_registry_sha256": "e68b27ca3e0a30c3bdbaeb43414ae4a19674f9661adb167cc6bd0e38ab6ebc76",
+        "observed_measured_state_count": 1255,
+        "scope": "same_source_actual_whole_body_envelope_attestation; not_complete_contact_or_collision_acceptance"
+      },
+      "stop": {
+        "execution_id": "2fe91e31886e466f886cd9e975894546.1:execution",
+        "stop_submitted": true,
+        "measured_stop_confirmed": true,
+        "physical_acceptance_verified": false,
+        "stationary_samples": 106,
+        "measured_linear_mps": 0.0070563490714862275,
+        "measured_angular_radps": 0.018834850451242453,
+        "reason": "goal_reached"
+      },
+      "source_origin_ns": 1791303130304413699,
+      "source_duration_s": null,
+      "source_events": [
+        {
+          "source_stamp_ns": 1791303132964413699,
+          "key": "goal_sent",
+          "xyz": [
+            -43.0,
+            -4.0,
+            0.0
+          ]
+        },
+        {
+          "source_stamp_ns": 1791303150704413699,
+          "key": "BT_result",
+          "success": true,
+          "reason": "measured_goal_reached",
+          "retirement_confirmed": true,
+          "physical_stop_confirmed": false
+        }
+      ],
+      "trace_reasons": {
+        "tracker": {
+          "actual:waiting_execution_permission": 83,
+          "actual:geometry_only_no_motion_permission": 278,
+          "actual:waiting_trajectory_clock": 19,
+          "actual:tracking": 471,
+          "actual:permission_or_native_proof_expired": 189,
+          "actual:braking_envelope_reentry_required": 5,
+          "actual:stationary_reentry_waiting_writer": 9,
+          "actual:handoff_retired_or_applied_uncertain": 140,
+          "actual:goal_position_reached": 4
+        },
+        "trajectory_validation": {
+          "actual:observed_free": 1700,
+          "actual:source_expired_during_check": 846
+        },
+        "motion_validation": {
+          "actual:observed_free_motion_sweep": 1171,
+          "actual:motion_permission_or_source_unavailable": 3,
+          "prepared:observed_free_motion_sweep": 13
+        },
+        "commit_ack": {
+          "actual:writer_software_commit_not_physical_confirmation": 1,
+          "prepared:writer_software_commit_not_physical_confirmation": 9,
+          "prepared:owner_hold_or_phase_barrier": 1
+        }
+      },
+      "bridge": {
+        "measured_state_samples": 1353,
+        "ray_scans": [
+          226,
+          226
+        ],
+        "native_imu_samples": 2255,
+        "body_envelope_verified_samples": 1353,
+        "body_envelope_failures": 0,
+        "fault": ""
+      },
+      "sampled_collision_audit": {
+        "completed": true,
+        "continuous_collision_proof": false,
+        "sample_count": 1358,
+        "trajectory_sample_count": 1358,
+        "trajectory_sources_all_audited": true,
+        "max_source_sampling_gap_ns": 20000000,
+        "non_floor_static_penetration_count": 0,
+        "dynamic_penetration_count": 0,
+        "possible_overlap_counts": {
+          "static": 0,
+          "dynamic": 0
+        },
+        "possible_overlap_sample_counts": {
+          "static": 0,
+          "dynamic": 0
+        },
+        "min_static_separation_lower_bound_m": 2.7856269106168368,
+        "min_actor_separation_lower_bound_m": 23.438344142465468,
+        "faults": [],
+        "actual_actor_encounter": null
+      },
+      "hashes": {
+        "isaac_smoke_report.json": "1a7e940571757bc6583b6d1d83f7ce45ef26f3465f58a89a937a4834ad6bc541",
+        "control_trace.jsonl": "cf111fd600c4657d8674e8834cf5ce77ee79a3058fa804213573c52856647213",
+        "session.json": "a0aa0804af5e5ec1e8d973c0b84ac501ac5f5ddffa45d2d1712a765c16e3cbeb",
+        "braking_model.json": "be173ad974a841f80df39894706a78fac281613dad22a54c474d5e3c44ab15ad",
+        "physics/trajectory.jsonl": "32a877d26bd4747897b7f4e94497057825ae130b987ae496c8e1502d8e67847c",
+        "physics/robot_link_readings.jsonl": "5232f722d7e962fe2d98a76e4986e8a615ea912de4588a9aee04bbed03aaf75f",
+        "physics/imu_readings.jsonl": "e5e6337e0a3e199c01ca5aea5581059270d87826f9290cca6ee5c813c2957cef",
+        "physics/collision_audit.json": "0ff3ae326d90a2e7df17c672d97d187d3c10ebe85c3aeeb215f675b2799fe2a8",
+        "physics/dynamic_actor_readings.jsonl": "6371ed840cc42191776b8f5d1634b544de16c80534a943e4bdfc7ba33b8dc219",
+        "physics/floor_hit_audit.jsonl": "d8ed32a1a22147ccd687b9799bd5e0fee4d6d230d3121f1864a5a93bf8caaaf4",
+        "run_summary.json": "e3ac65c9c06aca9dd0ef53763345eef517f1f3e4cdc0a9f97d70009115e7155a"
+      },
+      "candidate_integrity_sha256": "2ec72182b30cb272395389f20e7482dd189c1d1ebf721baff5179e3ab7a173d4",
+      "candidate_scan_elf_sha256": "1ece00121cd20bf116372441e1ee354e0c4b6bc0a31dc11a03ebe648af64fbe8"
+    },
+    {
+      "run": "campus_cancel_v31_001",
+      "case": "cancel_and_park",
+      "session_id": "45a0f88d626147d6aac4bdb570626c53",
+      "physical_acceptance": false,
+      "passed": true,
+      "goal": [
+        10.0,
+        -4.0,
+        0.0
+      ],
+      "result": {
+        "success": false,
+        "reason": "action_cancelled",
+        "retirement_confirmed": true,
+        "physical_stop_confirmed": false
+      },
+      "action_result_status": 5,
+      "measured_distance_m": 1.0479846777335942,
+      "measured_final_position": [
+        -6.973336696624756,
+        -4.009151935577393,
+        0.4898602366447449
+      ],
+      "measured_stationary": true,
+      "stationarity_evidence": {
+        "fence_elapsed_s": 44.85328375012614,
+        "window_s": 2.0,
+        "sample_count": 122,
+        "source_begin_ns": 1791303328912886308,
+        "source_end_ns": 1791303330930886308,
+        "source_span_s": 2.0180000000000002,
+        "longest_source_sample_gap_ns": 20000000,
+        "source_window_complete": true
+      },
+      "imu_source_matching": true,
+      "imu_evidence": {
+        "matched": true,
+        "state_count": 995,
+        "captured_state_count": 995,
+        "fence_source_stamp_ns": 1791303330930886308,
+        "missing_imu_source_stamps_ns": [],
+        "receipt_wait_budget_s": 1.0,
+        "receipt_wait_elapsed_s": 0.00023789796978235245,
+        "fence_elapsed_s": 44.85328375012614
+      },
+      "whole_body_attestation": true,
+      "body_envelope_attestation_evidence": {
+        "required": true,
+        "verified": true,
+        "body_envelope_verified_samples": 1019,
+        "body_envelope_failures": 0,
+        "body_envelope_registry_sha256": "e68b27ca3e0a30c3bdbaeb43414ae4a19674f9661adb167cc6bd0e38ab6ebc76",
+        "observed_measured_state_count": 995,
+        "scope": "same_source_actual_whole_body_envelope_attestation; not_complete_contact_or_collision_acceptance"
+      },
+      "stop": {
+        "execution_id": "45a0f88d626147d6aac4bdb570626c53.1:execution",
+        "stop_submitted": true,
+        "measured_stop_confirmed": true,
+        "physical_acceptance_verified": false,
+        "stationary_samples": 212,
+        "measured_linear_mps": 0.007089431628005588,
+        "measured_angular_radps": 0.009916537176288102,
+        "reason": "task_retired"
+      },
+      "source_origin_ns": 1791303314352886308,
+      "source_duration_s": 60.0,
+      "source_events": [
+        {
+          "source_stamp_ns": 1791303317412886308,
+          "key": "goal_sent",
+          "xyz": [
+            10.0,
+            -4.0,
+            0.0
+          ]
+        },
+        {
+          "source_stamp_ns": 1791303326352886308,
+          "key": "cancel_requested",
+          "measured_distance_m": 0.9819848238864519
+        },
+        {
+          "source_stamp_ns": 1791303328432886308,
+          "key": "BT_result",
+          "success": false,
+          "reason": "action_cancelled",
+          "retirement_confirmed": true,
+          "physical_stop_confirmed": false
+        }
+      ],
+      "trace_reasons": {
+        "tracker": {
+          "actual:waiting_execution_permission": 93,
+          "actual:geometry_only_no_motion_permission": 2,
+          "actual:tracking": 505,
+          "actual:source_clock_paused_command_expired": 6,
+          "actual:handoff_retired_or_applied_uncertain": 3,
+          "actual:permission_or_native_proof_expired": 276,
+          "actual:waiting_trajectory_clock": 3
+        },
+        "trajectory_validation": {
+          "actual:observed_free": 1072,
+          "actual:source_expired_during_check": 81
+        },
+        "motion_validation": {
+          "actual:observed_free_motion_sweep": 1136,
+          "prepared:observed_free_motion_sweep": 11
+        },
+        "commit_ack": {
+          "actual:writer_software_commit_not_physical_confirmation": 1,
+          "prepared:writer_software_commit_not_physical_confirmation": 2,
+          "prepared:handoff_deadline_expired": 3,
+          "prepared:task_retired": 122
+        }
+      },
+      "bridge": {
+        "measured_state_samples": 1112,
+        "ray_scans": [
+          186,
+          186
+        ],
+        "native_imu_samples": 1854,
+        "body_envelope_verified_samples": 1112,
+        "body_envelope_failures": 0,
+        "fault": ""
+      },
+      "sampled_collision_audit": {
+        "completed": true,
+        "continuous_collision_proof": false,
+        "sample_count": 1121,
+        "trajectory_sample_count": 1121,
+        "trajectory_sources_all_audited": true,
+        "max_source_sampling_gap_ns": 20000000,
+        "non_floor_static_penetration_count": 0,
+        "dynamic_penetration_count": 0,
+        "possible_overlap_counts": {
+          "static": 0,
+          "dynamic": 0
+        },
+        "possible_overlap_sample_counts": {
+          "static": 0,
+          "dynamic": 0
+        },
+        "min_static_separation_lower_bound_m": 2.7835978919281956,
+        "min_actor_separation_lower_bound_m": 11.080257235830064,
+        "faults": [],
+        "actual_actor_encounter": {
+          "schema": 1,
+          "rule": "measured_primitive_center_approach_near_depart_v1",
+          "source": "actual_registered_link_and_actor_geometry",
+          "scope": "sampled_same_step_primitive_center_proximity_only",
+          "completed": true,
+          "required_actor_ids": [],
+          "contract_sha256": "33edad394f14aa419241da93200c97ff778f18e5d0a5a120cffb7dabd978ce16",
+          "observed": null,
+          "actors": [],
+          "truncated_actor_ids": [],
+          "maximum_source_sampling_gap_ns": 20000000,
+          "source_begin_ns": 1791303313930886308,
+          "source_end_ns": 1791303332592886308,
+          "source_anchor_ns": 1791303313912886308,
+          "session_id": "45a0f88d626147d6aac4bdb570626c53",
+          "scene_sha256": "9b30cfa09c4a3fc74adefddb900fd8b66d765737bd21ec0b490fcfc20e003df1",
+          "robot_collision_registry_sha256": "e68b27ca3e0a30c3bdbaeb43414ae4a19674f9661adb167cc6bd0e38ab6ebc76",
+          "actor_collision_registry_sha256": "964a053fd67bdb6f815384ceb4519eb00f30acb4b2e8f83e4309eb605db51515",
+          "observation_status": "not_required",
+          "limitations": [
+            "sampled_proximity_only",
+            "not_route_blocking_or_yield_or_contact_evidence",
+            "caller_binds_actual_snapshots_to_same_physics_step"
+          ]
+        }
+      },
+      "hashes": {
+        "scenario_suite/phase_000_report.json": "b2973bc3e26400895fd9864b56271ebe80f9f179d44bb99db2755a6e78041106",
+        "scenario_suite/phase_000_trace.jsonl": "8da5fb4697b0f6f371e9320a18efc7ff4d0b5c26f5bacf5da8aa430e38045506",
+        "session.json": "763578c2c9e53d04e242c3aa6a085e72757bdc75ef94c6447e8bee5ca077093c",
+        "braking_model.json": "e6a498d17d03598509046859d2cd5ddc81fe66e4271e6d7592feb1affddf4f28",
+        "physics/trajectory.jsonl": "840e5a4becd3ea968a11f79446808084ef10fa67f703ec5ca831980a8f323bc0",
+        "physics/robot_link_readings.jsonl": "98b1d5b6f7843693a72f74c52bee77f56c962228e8dddb6e656549fe4b6aa54a",
+        "physics/imu_readings.jsonl": "5b0e6d71945e314e659db02e391de43303f1ccd63bcc146085f762ae30793329",
+        "physics/collision_audit.json": "62599635105722b276f59a6fafba6cfa1a7ea63ed4fde169539914285c0ff2b4",
+        "physics/dynamic_actor_readings.jsonl": "f672280775cff604a9b61ad1596824e56487b9260d708e646de70b88b28ef42a",
+        "physics/floor_hit_audit.jsonl": "a7b0b93cada2fe677e77110476efa0e0a72e78bc3bdd603b34a952150b38b511",
+        "run_summary.json": "2e536899fefa5d6e5e169d351732969464ac5e3fee8d6f118ca66c2536b2ee2c",
+        "scenario_suite/execution.json": "bba6c3f21961b7a9c243fdc43d8ee5a34b9d67b8e7223522ed3048b3b70b392d"
+      },
+      "candidate_integrity_sha256": "d0b311fcd824294ef1efbe25a21b19df54f4b1ea127d0a5bff40034d5a1663dd",
+      "candidate_scan_elf_sha256": "1ece00121cd20bf116372441e1ee354e0c4b6bc0a31dc11a03ebe648af64fbe8",
+      "systematic_evaluation": {
+        "schema": 1,
+        "kind": "isolated_isaac_scenario_evaluation_v1",
+        "case_id": "cancel_and_park",
+        "configuration_sha256": "2d4a4d1f03015092c548c1a326ef62074f3682cde7508ff672268912c8319e70",
+        "session": "/home/eric/wjg/d1max-build-isaac/runs/campus_cancel_v31_001",
+        "status": "passed",
+        "passed": true,
+        "checks": [
+          {
+            "name": "sealed_same_scene",
+            "status": "passed",
+            "reason": "",
+            "evidence": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v31-campus-cancel/simulation/assets/scene_config.json"
+          },
+          {
+            "name": "single_session_ordered_actions",
+            "status": "passed",
+            "reason": "",
+            "evidence": "/home/eric/wjg/d1max-build-isaac/runs/campus_cancel_v31_001/scenario_suite/execution.json"
+          },
+          {
+            "name": "phase_000_action_stop_source",
+            "status": "passed",
+            "reason": "",
+            "evidence": "/home/eric/wjg/d1max-build-isaac/runs/campus_cancel_v31_001/scenario_suite/phase_000_report.json"
+          },
+          {
+            "name": "phase_000_test_source_budget",
+            "status": "passed",
+            "reason": "",
+            "evidence": {
+              "source_elapsed_s": 14.08,
+              "applied_source_budget_s": 60.0,
+              "sealed_phase_source_budget_s": 60
+            }
+          },
+          {
+            "name": "phase_000_source_cancel",
+            "status": "passed",
+            "reason": "",
+            "evidence": {
+              "source_elapsed_s": 12.0
+            }
+          },
+          {
+            "name": "fresh_ordered_task_identities_and_source_deadline",
+            "status": "passed",
+            "reason": "",
+            "evidence": null
+          },
+          {
+            "name": "actual_link_static_and_actor_collision",
+            "status": "passed",
+            "reason": "",
+            "evidence": "/home/eric/wjg/d1max-build-isaac/runs/campus_cancel_v31_001/physics/collision_audit.json"
+          },
+          {
+            "name": "owned_graph_retirement",
+            "status": "passed",
+            "reason": "",
+            "evidence": "/home/eric/wjg/d1max-build-isaac/runs/campus_cancel_v31_001/run_summary.json"
+          }
+        ],
+        "physical_robot_acceptance": false,
+        "collision_scope": "sampled_actual_geometry_only_when_bound_evidence_present",
+        "continuous_collision_certificate": false,
+        "localization_validation": false
+      }
+    }
+  ],
+  "systematic_suite_status": {
+    "long_distance_multi_goal": "pending",
+    "crossing_blocker": "failed",
+    "narrow_head_on": "pending",
+    "temporary_door_block": "pending",
+    "cancel_and_park": "passed",
+    "resume_after_block": "pending"
+  }
+}

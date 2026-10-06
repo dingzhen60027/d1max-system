@@ -2,7 +2,8 @@
 import math
 import pytest
 
-from protocol import RayAssembler, decode, ray_packets, state_packet, command_packet, imu_packet
+from protocol import (RayAssembler, decode, ray_packets, state_packet, command_packet, imu_packet,
+                      NATIVE_RAY_PHASE, native_ray_metadata, encode)
 
 
 def packets(count=2500, sequence=1):
@@ -121,3 +122,59 @@ def test_native_ndarray_fast_path_is_wire_identical_and_retains_invalid_data_che
     rings_invalid=rings.astype(np.int32);rings_invalid[4]=-1
     with pytest.raises(ValueError,match='invalid_native_ring_indices'):
         list(ray_packets('epoch-a',1,10,0,[.42,0,.15],xyz,rings=rings_invalid))
+
+
+def phase_packets(original_native_time_s=None):
+    original = math.nextafter(.020, math.inf) if original_native_time_s is None else original_native_time_s
+    metadata = dict(native_frame_time_ns=round(original*1e9), native_frame_time_s=original,
+        phase=NATIVE_RAY_PHASE, native_frame_physics_step=10, capture_physics_step=9)
+    return [decode(data) for data in ray_packets('epoch-a', 1, 18_000_000, 0,
+        [.2, 0., .2], [[i*.01, 1., -.2] for i in range(2500)], **metadata)]
+
+
+def test_native_end_metadata_reassembles_exact_float_without_changing_begin():
+    parts = phase_packets()
+    assembler = RayAssembler()
+    result = None
+    for index, part in enumerate(reversed(parts)):
+        result = assembler.add(part, now=index*.01)
+    assert result['sim_time_ns'] == 18_000_000
+    assert result['native_frame_time_ns'] == 20_000_000
+    assert result['native_frame_time_s'].hex() == math.nextafter(.020, math.inf).hex()
+    assert result['phase'] == NATIVE_RAY_PHASE
+    assert result['capture_physics_step'] == 9 and result['native_frame_physics_step'] == 10
+    assert 'phase' not in packets(count=1)[0]  # legacy wire stays optional
+
+
+@pytest.mark.parametrize('update', [
+    dict(native_frame_time_s=None), dict(native_frame_time_s=math.nan),
+    dict(native_frame_time_s=1e300), dict(native_frame_time_ns=20_000_001),
+    dict(native_frame_time_ns=True), dict(phase='postphysics'),
+    dict(native_frame_physics_step=9), dict(capture_physics_step=True),
+    dict(capture_physics_step=None)])
+def test_incomplete_or_invalid_native_phase_metadata_is_rejected(update):
+    packet = dict(phase_packets()[0], **update)
+    with pytest.raises(ValueError, match='invalid_native_ray_phase_metadata'):
+        native_ray_metadata(packet)
+    # Test hostile decoded metadata as well as the sender's kwargs path.
+    if not any(isinstance(v,float) and not math.isfinite(v) for v in update.values()):
+        with pytest.raises(ValueError, match='invalid_native_ray_phase_metadata'):
+            decode(encode(packet))
+
+
+def test_native_phase_metadata_must_match_on_every_chunk():
+    for mutation in ('native_float', 'native_ns', 'physics_step', 'missing'):
+        parts = phase_packets()
+        assembler = RayAssembler()
+        assert assembler.add(parts[0], now=0.) is None
+        if mutation == 'native_float':
+            parts[1]['native_frame_time_s'] = math.nextafter(parts[1]['native_frame_time_s'], math.inf)
+        elif mutation == 'native_ns':
+            parts[1].update(native_frame_time_s=.020000001, native_frame_time_ns=20_000_001)
+        elif mutation == 'physics_step':
+            parts[1].update(capture_physics_step=10, native_frame_physics_step=11)
+        else:
+            parts[1].pop('phase')
+        with pytest.raises(ValueError, match='inconsistent_scan_chunks|invalid_native_ray_phase_metadata'):
+            assembler.add(parts[1], now=.01)
+        assert not assembler.pending

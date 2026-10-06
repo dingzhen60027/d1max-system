@@ -1,0 +1,676 @@
+{
+  "schema": 1,
+  "kind": "actual_campus_navigation_initial_failures",
+  "runs": [
+    {
+      "run": "campus_spot_near_v23_001",
+      "passed": false,
+      "session_id": "fe251350c9574797a3ada5ce98e1e78d",
+      "result": {
+        "success": false,
+        "reason": "execution_blocked_timeout:waiting_current_collision_and_tracker_proof",
+        "retirement_confirmed": true,
+        "physical_stop_confirmed": false
+      },
+      "measured_distance_m": 0.006689874117452501,
+      "diagnosis": "Full foot collision proof exceeded native check budget; no task motion admitted.",
+      "bridge": {
+        "schema": 1,
+        "simulation": true,
+        "physical_acceptance": false,
+        "session_id": "fe251350c9574797a3ada5ce98e1e78d",
+        "epoch": "91fb2071-14b4-43df-949d-32d11b17015d",
+        "last_sim_time_ns": 38480000000,
+        "measured_state_samples": 1924,
+        "ray_scans": [
+          385,
+          385
+        ],
+        "incomplete_scans_dropped": 0,
+        "native_imu_samples": 3850,
+        "latest_native_imu_sim_time_ns": 38492001038,
+        "body_envelope_verified_samples": 1924,
+        "body_envelope_failures": 0,
+        "body_envelope_registry_sha256": "e68b27ca3e0a30c3bdbaeb43414ae4a19674f9661adb167cc6bd0e38ab6ebc76",
+        "dynamic_oracle_samples": 1740,
+        "fault": "",
+        "localization": "groundtruth_fixture",
+        "transport": "isolated_mock",
+        "clock": "simulation_time_with_fixed_session_anchor"
+      },
+      "stop": {
+        "execution_id": "fe251350c9574797a3ada5ce98e1e78d.1:execution",
+        "stop_submitted": true,
+        "measured_stop_confirmed": true,
+        "physical_acceptance_verified": false,
+        "stationary_samples": 81,
+        "measured_linear_mps": 0.007260023566332294,
+        "measured_angular_radps": 0.001191387384848998,
+        "reason": "execution_blocked_timeout:waiting_current_collision_and_tracker_proof"
+      },
+      "timing": {
+        "measured_state_samples": 2013,
+        "measured_state_wall_seconds": 108.39859716501087,
+        "measured_state_sim_seconds": 40.24,
+        "wall_seconds_per_sim_second": 2.693802116426711,
+        "realtime_factor": 0.3712225162724592,
+        "state_wall_hz": 18.56112581362296,
+        "longest_state_wall_gap_s": 0.09232189995236695,
+        "longest_rays_wall_gap_s": [
+          0.3338588790502399,
+          0.3339648758992553
+        ]
+      },
+      "static_geometry_attestation": {
+        "expected_sha256": "5f0c89af817a15100f4ed95371696d23eafd9d20c962c3c9add3c8716fb9c2e7",
+        "cadence": "every actual body state; source timestamp unchanged",
+        "count": 2013,
+        "faults": 0,
+        "fault_latched": false,
+        "last_sha256": "5f0c89af817a15100f4ed95371696d23eafd9d20c962c3c9add3c8716fb9c2e7",
+        "last_fault": "",
+        "total_wall_s": 31.539331445703283,
+        "max_wall_s": 0.03047893405891955,
+        "full_stage_audits": 2013,
+        "cache_hits": 0
+      },
+      "physical_acceptance": false,
+      "raw_report_sha256": "38e28a1ef0f5efcc25e2c41c303f2998b52a2107284fa899f05c671e99c9aac0",
+      "trajectory_sha256": "719ec30979cdaf7c9c73bc44a21ce673470240189390e4d899cd009520e4bd96"
+    },
+    {
+      "run": "campus_spot_near_v24_001",
+      "passed": false,
+      "session_id": "e4a686abb4bb4653805f63465d062155",
+      "result": {
+        "success": false,
+        "reason": "execution_blocked_timeout:waiting_stationary_writer_handoff_outcome",
+        "retirement_confirmed": true,
+        "physical_stop_confirmed": false
+      },
+      "measured_distance_m": 0.006460621565977023,
+      "diagnosis": "Proof cost reduced, but raw floor hits contradicted support because wrapper END was projected with END pose instead of actual BEGIN pose. Separate handoff blockers remain under review.",
+      "bridge": {
+        "schema": 1,
+        "simulation": true,
+        "physical_acceptance": false,
+        "session_id": "e4a686abb4bb4653805f63465d062155",
+        "epoch": "e0e29be4-e989-45cd-9345-fe69fde7de76",
+        "last_sim_time_ns": 35660000000,
+        "measured_state_samples": 1783,
+        "ray_scans": [
+          357,
+          357
+        ],
+        "incomplete_scans_dropped": 0,
+        "native_imu_samples": 3567,
+        "latest_native_imu_sim_time_ns": 35660000305,
+        "body_envelope_verified_samples": 1783,
+        "body_envelope_failures": 0,
+        "body_envelope_registry_sha256": "e68b27ca3e0a30c3bdbaeb43414ae4a19674f9661adb167cc6bd0e38ab6ebc76",
+        "dynamic_oracle_samples": 1651,
+        "fault": "",
+        "localization": "groundtruth_fixture",
+        "transport": "isolated_mock",
+        "clock": "simulation_time_with_fixed_session_anchor"
+      },
+      "stop": {
+        "execution_id": "e4a686abb4bb4653805f63465d062155.1:execution",
+        "stop_submitted": true,
+        "measured_stop_confirmed": true,
+        "physical_acceptance_verified": false,
+        "stationary_samples": 79,
+        "measured_linear_mps": 0.007564607039563891,
+        "measured_angular_radps": 0.001873249201855131,
+        "reason": "execution_blocked_timeout:waiting_stationary_writer_handoff_outcome"
+      },
+      "timing": {
+        "measured_state_samples": 1873,
+        "measured_state_wall_seconds": 95.60128309391439,
+        "measured_state_sim_seconds": 37.440000000000005,
+        "wall_seconds_per_sim_second": 2.5534530740895933,
+        "realtime_factor": 0.39162654295361954,
+        "state_wall_hz": 19.581327147680973,
+        "longest_state_wall_gap_s": 0.09106506779789925,
+        "longest_rays_wall_gap_s": [
+          0.3208316438831389,
+          0.32070677587762475
+        ]
+      },
+      "static_geometry_attestation": {
+        "expected_sha256": "e0704715927e786dfc4364a831b360e704ace58d0165da17d926df9f202a4fac",
+        "cadence": "every actual body state; source timestamp unchanged",
+        "count": 1873,
+        "faults": 0,
+        "fault_latched": false,
+        "last_sha256": "e0704715927e786dfc4364a831b360e704ace58d0165da17d926df9f202a4fac",
+        "last_fault": "",
+        "total_wall_s": 0.047222624300047755,
+        "max_wall_s": 0.015058354940265417,
+        "full_stage_audits": 3,
+        "cache_hits": 1870
+      },
+      "physical_acceptance": false,
+      "raw_report_sha256": "65357160bebab2f21392215ef9af7df7cd9e15cc3ae018584e4427967e6ec52a",
+      "trajectory_sha256": "373023efaeec150c1e4bb6b8163d5169e763dedf96ebd5a2750b3c926b6d4500"
+    },
+    {
+      "run": "campus_spot_near_v25_001",
+      "passed": false,
+      "session_id": "e4d78c9fc50946ba950287c7558c356a",
+      "result": {
+        "success": false,
+        "reason": "execution_blocked_timeout:waiting_measured_motion_progress",
+        "retirement_confirmed": true,
+        "physical_stop_confirmed": false
+      },
+      "measured_distance_m": 0.0464374252353801,
+      "diagnosis": "Actual BEGIN phase corrects floor contact; asynchronous front/rear integration still produced mixed-source proof failures; task blocked on low measured progress.",
+      "bridge": {
+        "schema": 1,
+        "simulation": true,
+        "physical_acceptance": false,
+        "session_id": "e4d78c9fc50946ba950287c7558c356a",
+        "epoch": "789338be-7a4f-4512-b37e-bfa27168f9d0",
+        "last_sim_time_ns": 35560000000,
+        "measured_state_samples": 2134,
+        "ray_scans": [
+          356,
+          356
+        ],
+        "incomplete_scans_dropped": 0,
+        "native_imu_samples": 3557,
+        "latest_native_imu_sim_time_ns": 35560001831,
+        "body_envelope_verified_samples": 2134,
+        "body_envelope_failures": 0,
+        "body_envelope_registry_sha256": "e68b27ca3e0a30c3bdbaeb43414ae4a19674f9661adb167cc6bd0e38ab6ebc76",
+        "dynamic_oracle_samples": 1981,
+        "fault": "",
+        "localization": "groundtruth_fixture",
+        "transport": "isolated_mock",
+        "clock": "simulation_time_with_fixed_session_anchor",
+        "perception_native_phase_contract": {
+          "schema": 1,
+          "phase": "physx_prephysics_capture_v1",
+          "physics_dt_ns": 2000000
+        },
+        "latest_native_ray_frame_metadata": [
+          {
+            "source_capture_sim_time_ns": 35518000000,
+            "native_frame_time_ns": 35520001687,
+            "native_frame_time_s": 35.52000168710947,
+            "phase": "physx_prephysics_capture_v1",
+            "native_frame_physics_step": 17760,
+            "capture_physics_step": 17759
+          },
+          {
+            "source_capture_sim_time_ns": 35518000000,
+            "native_frame_time_ns": 35520001687,
+            "native_frame_time_s": 35.52000168710947,
+            "phase": "physx_prephysics_capture_v1",
+            "native_frame_physics_step": 17760,
+            "capture_physics_step": 17759
+          }
+        ]
+      },
+      "stop": {
+        "execution_id": "e4d78c9fc50946ba950287c7558c356a.1:execution",
+        "stop_submitted": true,
+        "measured_stop_confirmed": true,
+        "physical_acceptance_verified": false,
+        "stationary_samples": 97,
+        "measured_linear_mps": 0.007486374707512775,
+        "measured_angular_radps": 0.0014470134479483451,
+        "reason": "execution_blocked_timeout:waiting_measured_motion_progress"
+      },
+      "timing": {
+        "measured_state_samples": 2231,
+        "measured_state_wall_seconds": 101.82413422199897,
+        "measured_state_sim_seconds": 37.162,
+        "wall_seconds_per_sim_second": 2.740006840912733,
+        "realtime_factor": 0.36496259245355994,
+        "state_wall_hz": 21.900505386454945,
+        "longest_state_wall_gap_s": 0.08611037512309849,
+        "longest_rays_wall_gap_s": [
+          0.32301961607299745,
+          0.32332407403737307
+        ]
+      },
+      "static_geometry_attestation": {
+        "expected_sha256": "e01ba3803f1ee51e2f420168e7317a2dd945be7723680c81e439cc26f3d14ff0",
+        "cadence": "every actual body state; source timestamp unchanged",
+        "count": 2231,
+        "faults": 0,
+        "fault_latched": false,
+        "last_sha256": "e01ba3803f1ee51e2f420168e7317a2dd945be7723680c81e439cc26f3d14ff0",
+        "last_fault": "",
+        "total_wall_s": 0.04498912347480655,
+        "max_wall_s": 0.014462231192737818,
+        "full_stage_audits": 3,
+        "cache_hits": 2228
+      },
+      "native_floor_hit_audit": {
+        "scans": 744,
+        "native_floor_hits": 1755957,
+        "max_abs_error_m": 6.146762141390205e-06,
+        "sealed_error_bound_m": 0.0002,
+        "raw_endpoints_and_source_times_preserved": true
+      },
+      "physical_acceptance": false,
+      "raw_report_sha256": "5df426c5b451c09f4205e716ae8614d751340e0eb1d266d4ec5d5b85689317bb",
+      "trajectory_sha256": "3e5628024aaacf34e026afdc58d899e33f87f386abbdb44138faf606c4ec6ffa"
+    },
+    {
+      "run": "campus_spot_near_v26_001",
+      "passed": false,
+      "session_id": "bb5c0bb7a77543f3978b9f7e7781042a",
+      "result": {
+        "success": false,
+        "reason": "execution_blocked_timeout:braking_envelope_reentry_required",
+        "retirement_confirmed": true,
+        "physical_stop_confirmed": false
+      },
+      "measured_distance_m": 0.038322570738876835,
+      "diagnosis": "Exact front/rear integration removes observed UNKNOWN failures; actual XY response to ~0.008 m/s held command remains weak. End clock-hold reason needs newly added diagnostics; no successful arrival claimed.",
+      "bridge": {
+        "schema": 1,
+        "simulation": true,
+        "physical_acceptance": false,
+        "session_id": "bb5c0bb7a77543f3978b9f7e7781042a",
+        "epoch": "fbc45b9e-1ffd-4f77-941a-2c289691ae88",
+        "last_sim_time_ns": 35420000000,
+        "measured_state_samples": 2126,
+        "ray_scans": [
+          355,
+          355
+        ],
+        "incomplete_scans_dropped": 0,
+        "native_imu_samples": 3544,
+        "latest_native_imu_sim_time_ns": 35430000763,
+        "body_envelope_verified_samples": 2126,
+        "body_envelope_failures": 0,
+        "body_envelope_registry_sha256": "e68b27ca3e0a30c3bdbaeb43414ae4a19674f9661adb167cc6bd0e38ab6ebc76",
+        "dynamic_oracle_samples": 1975,
+        "fault": "",
+        "localization": "groundtruth_fixture",
+        "transport": "isolated_mock",
+        "clock": "simulation_time_with_fixed_session_anchor",
+        "perception_native_phase_contract": {
+          "schema": 1,
+          "phase": "physx_prephysics_capture_v1",
+          "physics_dt_ns": 2000000
+        },
+        "latest_native_ray_frame_metadata": [
+          {
+            "source_capture_sim_time_ns": 35418000000,
+            "native_frame_time_ns": 35420001682,
+            "native_frame_time_s": 35.420001682359725,
+            "phase": "physx_prephysics_capture_v1",
+            "native_frame_physics_step": 17710,
+            "capture_physics_step": 17709
+          },
+          {
+            "source_capture_sim_time_ns": 35418000000,
+            "native_frame_time_ns": 35420001682,
+            "native_frame_time_s": 35.420001682359725,
+            "phase": "physx_prephysics_capture_v1",
+            "native_frame_physics_step": 17710,
+            "capture_physics_step": 17709
+          }
+        ]
+      },
+      "stop": {
+        "execution_id": "bb5c0bb7a77543f3978b9f7e7781042a.1:execution",
+        "stop_submitted": true,
+        "measured_stop_confirmed": true,
+        "physical_acceptance_verified": false,
+        "stationary_samples": 95,
+        "measured_linear_mps": 0.0074418974269664494,
+        "measured_angular_radps": 0.0007170268664465562,
+        "reason": "execution_blocked_timeout:braking_envelope_reentry_required"
+      },
+      "timing": {
+        "measured_state_samples": 2225,
+        "measured_state_wall_seconds": 103.28593673487194,
+        "measured_state_sim_seconds": 37.062000000000005,
+        "wall_seconds_per_sim_second": 2.786841960360259,
+        "realtime_factor": 0.3588291026990022,
+        "state_wall_hz": 21.532457082795876,
+        "longest_state_wall_gap_s": 0.08999664196744561,
+        "longest_rays_wall_gap_s": [
+          0.370737676974386,
+          0.37076092418283224
+        ]
+      },
+      "static_geometry_attestation": {
+        "expected_sha256": "e01ba3803f1ee51e2f420168e7317a2dd945be7723680c81e439cc26f3d14ff0",
+        "cadence": "every actual body state; source timestamp unchanged",
+        "count": 2225,
+        "faults": 0,
+        "fault_latched": false,
+        "last_sha256": "e01ba3803f1ee51e2f420168e7317a2dd945be7723680c81e439cc26f3d14ff0",
+        "last_fault": "",
+        "total_wall_s": 0.05896063079126179,
+        "max_wall_s": 0.026061191922053695,
+        "full_stage_audits": 3,
+        "cache_hits": 2222
+      },
+      "native_floor_hit_audit": {
+        "scans": 742,
+        "native_floor_hits": 1749861,
+        "max_abs_error_m": 6.161504497892434e-06,
+        "sealed_error_bound_m": 0.0002,
+        "raw_endpoints_and_source_times_preserved": true
+      },
+      "physical_acceptance": false,
+      "raw_report_sha256": "8af2fab8798bb27a8771f36df88366d421747f195788b35e1532c86a893a21dc",
+      "trajectory_sha256": "2807cf81366e6212026665136cfc493d782956a0b7d2ae04666a53c81001a52a"
+    },
+    {
+      "run": "campus_spot_near_v27_001",
+      "passed": false,
+      "session_id": "b8e970735588481fb8e553dee149eaa3",
+      "result": {
+        "success": false,
+        "reason": "execution_blocked_timeout:waiting_current_collision_and_tracker_proof",
+        "retirement_confirmed": true,
+        "physical_stop_confirmed": false
+      },
+      "measured_distance_m": 0.06624258035823274,
+      "diagnosis": "FullfutureSpotreaction geometry preserved but per-voxel coldquery exhausted originalbudget; proofexpiration and wholecurve minimum planar conversion suppressed horizontal command. No genuine gait acceptance in this run. Batch query and spatial envelope work pending.",
+      "bridge": {
+        "schema": 1,
+        "simulation": true,
+        "physical_acceptance": false,
+        "session_id": "b8e970735588481fb8e553dee149eaa3",
+        "epoch": "14f03d82-e472-4d91-b4a6-aa80bd16dddf",
+        "last_sim_time_ns": 34540000000,
+        "measured_state_samples": 2073,
+        "ray_scans": [
+          346,
+          346
+        ],
+        "incomplete_scans_dropped": 0,
+        "native_imu_samples": 3456,
+        "latest_native_imu_sim_time_ns": 34549999695,
+        "body_envelope_verified_samples": 2073,
+        "body_envelope_failures": 0,
+        "body_envelope_registry_sha256": "e68b27ca3e0a30c3bdbaeb43414ae4a19674f9661adb167cc6bd0e38ab6ebc76",
+        "dynamic_oracle_samples": 1947,
+        "fault": "",
+        "localization": "groundtruth_fixture",
+        "transport": "isolated_mock",
+        "clock": "simulation_time_with_fixed_session_anchor",
+        "perception_native_phase_contract": {
+          "schema": 1,
+          "phase": "physx_prephysics_capture_v1",
+          "physics_dt_ns": 2000000
+        },
+        "latest_native_ray_frame_metadata": [
+          {
+            "source_capture_sim_time_ns": 34518000000,
+            "native_frame_time_ns": 34520001640,
+            "native_frame_time_s": 34.52000163961202,
+            "phase": "physx_prephysics_capture_v1",
+            "native_frame_physics_step": 17260,
+            "capture_physics_step": 17259
+          },
+          {
+            "source_capture_sim_time_ns": 34518000000,
+            "native_frame_time_ns": 34520001640,
+            "native_frame_time_s": 34.52000163961202,
+            "phase": "physx_prephysics_capture_v1",
+            "native_frame_physics_step": 17260,
+            "capture_physics_step": 17259
+          }
+        ]
+      },
+      "stop": {
+        "execution_id": "b8e970735588481fb8e553dee149eaa3.1:execution",
+        "stop_submitted": true,
+        "measured_stop_confirmed": true,
+        "physical_acceptance_verified": false,
+        "stationary_samples": 86,
+        "measured_linear_mps": 0.007711199800881889,
+        "measured_angular_radps": 0.0008951989118783421,
+        "reason": "execution_blocked_timeout:waiting_current_collision_and_tracker_proof"
+      },
+      "timing": {
+        "measured_state_samples": 2151,
+        "measured_state_wall_seconds": 134.38739489903674,
+        "measured_state_sim_seconds": 35.822,
+        "wall_seconds_per_sim_second": 3.7515324353480186,
+        "realtime_factor": 0.26655773800000027,
+        "state_wall_hz": 15.99852427837643,
+        "longest_state_wall_gap_s": 0.1323152589611709,
+        "longest_rays_wall_gap_s": [
+          0.5323663149029016,
+          0.5388686580117792
+        ]
+      },
+      "static_geometry_attestation": {
+        "expected_sha256": "e01ba3803f1ee51e2f420168e7317a2dd945be7723680c81e439cc26f3d14ff0",
+        "cadence": "every actual body state; source timestamp unchanged",
+        "count": 2151,
+        "faults": 0,
+        "fault_latched": false,
+        "last_sha256": "e01ba3803f1ee51e2f420168e7317a2dd945be7723680c81e439cc26f3d14ff0",
+        "last_fault": "",
+        "total_wall_s": 0.021830935031175613,
+        "max_wall_s": 0.01735713705420494,
+        "full_stage_audits": 1,
+        "cache_hits": 2150
+      },
+      "native_floor_hit_audit": {
+        "scans": 718,
+        "native_floor_hits": 1697470,
+        "max_abs_error_m": 6.170939185534685e-06,
+        "sealed_error_bound_m": 0.0002,
+        "raw_endpoints_and_source_times_preserved": true
+      },
+      "physical_acceptance": false,
+      "raw_report_sha256": "41d085c531b40a6b7ba0eae842112b108a9b7ee6c32223ba57b286116b47e9a6",
+      "trajectory_sha256": "eee2abe82478a16a17bcd72d5f2ab68c083311d6329b0d1d0270b825a347fd1c",
+      "actual_link_readings_sha256": "de4df030914655cff5f438fad5822fb67ff5bd6ecb5095b90e1e1a7fe7cf1715"
+    },
+    {
+      "run": "campus_spot_near_v28_001",
+      "passed": false,
+      "session_id": "859e10d0a017435aa093b23c8f0d1091",
+      "result": {
+        "success": false,
+        "reason": "execution_blocked_timeout:actual_command_blocked:motion_volume_budget_exhausted",
+        "retirement_confirmed": true,
+        "physical_stop_confirmed": false
+      },
+      "measured_distance_m": 0.2817538409389822,
+      "net_xy_m": 0.25934984503066655,
+      "diagnosis": "Actual gait and horizontal authority restored, but pre-query resource guard counted unqueried rotated AABB corner cells against the original 200000 voxel limit. Full sweep/actual resource accounting fix pending v29.",
+      "bridge": {
+        "schema": 1,
+        "simulation": true,
+        "physical_acceptance": false,
+        "session_id": "859e10d0a017435aa093b23c8f0d1091",
+        "epoch": "06ea92e5-40be-46dc-8f16-775fce0c226b",
+        "last_sim_time_ns": 37980000000,
+        "measured_state_samples": 2279,
+        "ray_scans": [
+          380,
+          380
+        ],
+        "incomplete_scans_dropped": 0,
+        "native_imu_samples": 3800,
+        "latest_native_imu_sim_time_ns": 37992001038,
+        "body_envelope_verified_samples": 2279,
+        "body_envelope_failures": 0,
+        "body_envelope_registry_sha256": "e68b27ca3e0a30c3bdbaeb43414ae4a19674f9661adb167cc6bd0e38ab6ebc76",
+        "dynamic_oracle_samples": 2137,
+        "fault": "",
+        "localization": "groundtruth_fixture",
+        "transport": "isolated_mock",
+        "clock": "simulation_time_with_fixed_session_anchor",
+        "perception_native_phase_contract": {
+          "schema": 1,
+          "phase": "physx_prephysics_capture_v1",
+          "physics_dt_ns": 2000000
+        },
+        "latest_native_ray_frame_metadata": [
+          {
+            "source_capture_sim_time_ns": 37918000000,
+            "native_frame_time_ns": 37920001801,
+            "native_frame_time_s": 37.92000180110335,
+            "phase": "physx_prephysics_capture_v1",
+            "native_frame_physics_step": 18960,
+            "capture_physics_step": 18959
+          },
+          {
+            "source_capture_sim_time_ns": 37918000000,
+            "native_frame_time_ns": 37920001801,
+            "native_frame_time_s": 37.92000180110335,
+            "phase": "physx_prephysics_capture_v1",
+            "native_frame_physics_step": 18960,
+            "capture_physics_step": 18959
+          }
+        ]
+      },
+      "stop": {
+        "execution_id": "859e10d0a017435aa093b23c8f0d1091.1:execution",
+        "stop_submitted": true,
+        "measured_stop_confirmed": true,
+        "physical_acceptance_verified": false,
+        "stationary_samples": 94,
+        "measured_linear_mps": 0.007421817884038329,
+        "measured_angular_radps": 0.0017539174072007575,
+        "reason": "execution_blocked_timeout:actual_command_blocked:motion_volume_budget_exhausted"
+      },
+      "timing": {
+        "measured_state_samples": 2375,
+        "measured_state_wall_seconds": 114.97144305706024,
+        "measured_state_sim_seconds": 39.562000000000005,
+        "wall_seconds_per_sim_second": 2.906107958572879,
+        "realtime_factor": 0.34410283934911917,
+        "state_wall_hz": 20.648605748314264,
+        "longest_state_wall_gap_s": 0.10303590795956552,
+        "longest_rays_wall_gap_s": [
+          0.3366371118463576,
+          0.33965067309327424
+        ]
+      },
+      "static_geometry_attestation": {
+        "expected_sha256": "e01ba3803f1ee51e2f420168e7317a2dd945be7723680c81e439cc26f3d14ff0",
+        "cadence": "every actual body state; source timestamp unchanged",
+        "count": 2375,
+        "faults": 0,
+        "fault_latched": false,
+        "last_sha256": "e01ba3803f1ee51e2f420168e7317a2dd945be7723680c81e439cc26f3d14ff0",
+        "last_fault": "",
+        "total_wall_s": 0.017839213367551565,
+        "max_wall_s": 0.01441274699755013,
+        "full_stage_audits": 1,
+        "cache_hits": 2374
+      },
+      "native_floor_hit_audit": {
+        "scans": 792,
+        "native_floor_hits": 1892344,
+        "max_abs_error_m": 6.164558377874663e-06,
+        "sealed_error_bound_m": 0.0002,
+        "raw_endpoints_and_source_times_preserved": true
+      },
+      "physical_acceptance": false,
+      "sampled_foot_flight": {
+        "link_witness_samples": 2375,
+        "foot_bottom_more_than_1cm_above_floor_samples": {
+          "hr_foot": 36,
+          "fl_foot": 30,
+          "fr_foot": 35,
+          "hl_foot": 34
+        },
+        "scope": "actual sampled collider geometry; not continuous contact proof"
+      },
+      "trace_reasons": {
+        "tracker": {
+          "tracking": 1654,
+          "permission_or_native_proof_expired": 236,
+          "stationary_reentry_waiting_writer": 170,
+          "waiting_execution_permission": 92,
+          "source_clock_paused_command_expired": 22,
+          "waiting_trajectory_clock": 21,
+          "handoff_retired_or_applied_uncertain": 17
+        },
+        "motion_validation": {
+          "motion_volume_budget_exhausted": 4761,
+          "observed_free_motion_sweep": 279,
+          "motion_check_budget_exhausted": 17,
+          "motion_permission_or_source_unavailable": 6
+        },
+        "trajectory_validation": {
+          "observed_free": 5272,
+          "source_expired_during_check": 523
+        },
+        "commit_ack": {
+          "handoff_deadline_expired": 26,
+          "owner_hold_or_phase_barrier": 3,
+          "writer_software_commit_not_physical_confirmation": 1,
+          "owner_handoff_withdrawn:waiting_writer_handoff_outcome": 1
+        }
+      },
+      "raw_report_sha256": "7574def15311abcf71ded0d7524b3894b069b135c54a83c66b4fa324209f68bc",
+      "trajectory_sha256": "4196f2649e151882585c58c9caa38a2bb61091a516727cde86473bbe43263068",
+      "actual_link_readings_sha256": "5803c0a359640304bff985e8fd87ef806f355681c9213bb95b747665de6b99c0"
+    },
+    {
+      "run": "campus_cancel_v29_001",
+      "case": "cancel_and_park",
+      "passed": false,
+      "session_id": "23a4242c3a70436cb6c9036216e0bf40",
+      "result": null,
+      "bridge_fault": "isaac_static_collision_geometry_revoked",
+      "diagnosis": "Rotated local AABB corners for a spherical foot reached below the certified slab although actual full sphere world lower bound was only about -16 micrometres; false conservative primitive enclosure, not actual 2 cm penetration. Runtime exact world AABB correction pending new candidate.",
+      "static_geometry_attestation": {
+        "expected_sha256": "70f088219b295d95f47888bf8740b0f9b18e762aa03c43629084ae022b38db21",
+        "cadence": "every actual body state; source timestamp unchanged",
+        "count": 549,
+        "faults": 0,
+        "fault_latched": true,
+        "last_sha256": "70f088219b295d95f47888bf8740b0f9b18e762aa03c43629084ae022b38db21",
+        "last_fault": "robot_link_below_certified_support_slab:/World/Spot/fl_foot/collisions/mesh_0",
+        "total_wall_s": 0.016380053479224443,
+        "max_wall_s": 0.015538309002295136,
+        "full_stage_audits": 1,
+        "cache_hits": 548
+      },
+      "body_envelope_attestation": {
+        "required": true,
+        "verified_samples": 548,
+        "failures": 1,
+        "envelope": {
+          "radius": 0.6078651750202781,
+          "offset": 0.3125,
+          "above": 0.55,
+          "support_floor_z": 0.0,
+          "support_penetration_m": 0.02
+        }
+      },
+      "timing": {
+        "measured_state_samples": 549,
+        "measured_state_wall_seconds": 23.857542875921354,
+        "measured_state_sim_seconds": 9.122,
+        "wall_seconds_per_sim_second": 2.6153850993117027,
+        "realtime_factor": 0.38235287042935756,
+        "state_wall_hz": 22.969674741864498,
+        "longest_state_wall_gap_s": 0.07641272176988423,
+        "longest_rays_wall_gap_s": [
+          0.3199130960274488,
+          0.3195964538026601
+        ]
+      },
+      "physical_acceptance": false,
+      "hashes": {
+        "physics/robot_link_readings.jsonl": "a82ae9cfa0f8e796a8004ad70608e41ff464cbda69b3cf5b491c6a0a250d0855",
+        "physics/trajectory.jsonl": "7126f0a0f03567952c08dc8d71130765decb28fb8a13ceaa56ae6503f3f9c289",
+        "physics/summary.json": "6d1b223129246907a1ab66c6a81c92da490f994fd8608647e323c2cafaeaadee",
+        "scenario_suite/execution.json": "88580a430597ebc4c67fc7986da3e859ff425c55551165cba2d8ec9b904134a0"
+      }
+    }
+  ]
+}

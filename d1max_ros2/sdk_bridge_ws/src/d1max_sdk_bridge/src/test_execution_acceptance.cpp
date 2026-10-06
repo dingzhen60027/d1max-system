@@ -55,6 +55,41 @@ int main(){
  auto mock=j;mock["fixture_only"]=true;mock["transport_mode"]="isolated_mock";check(mock);
  assert(loadBrakingModel(record.string(),fileSha256(record),"isolated_mock").valid);
  assert(!loadBrakingModel(record.string(),fileSha256(record),"live").valid);
+ // Actual articulated-gait speed is not the writer's command authority.
+ auto spot=mock;spot["measurements"]["max_speed_mps"]=.6;spot["measurements"]["max_yaw_radps"]=.8;
+ spot["measurements"]["stopping_distance_m"]=.5;spot["measurements"]["stop_latency_bound_s"]=3.;
+ spot["isolated_platform_model"]={{"schema",1},{"kind","official_spot_physx"},
+   {"command_max_speed_mps",.15},{"command_max_yaw_radps",.3},
+   {"reachable_max_speed_mps",.6},{"reachable_max_yaw_radps",.8},
+   {"source_scope","isolated_simulation_physx_measured_model"}};
+ auto loadMock=[&](const nlohmann::json& item,const std::string& mode="isolated_mock"){
+   {std::ofstream out(record);out<<item;}
+   return loadBrakingModel(record.string(),fileSha256(record),mode);
+ };
+ const auto plant=loadMock(spot);assert(plant.valid&&plant.isolated_spot_model);
+ assert(plant.max_speed==.6&&plant.max_yaw==.8&&plant.command_max_speed==.15&&plant.command_max_yaw==.3);
+ assert(plant.stop_latency==3.&&plant.stopping_distance==.5);
+ assert(!check(spot).valid);assert(!loadMock(spot,"live").valid);
+ bad=spot;bad["fixture_only"]=false;bad["transport_mode"]="live";
+ assert(!check(bad).valid);assert(!loadMock(bad,"live").valid);
+ bad=spot;bad.erase("isolated_platform_model");assert(!loadMock(bad).valid);
+ for(const auto& pair:std::vector<std::pair<std::string,nlohmann::json>>{
+     {"schema",true},{"schema",1.},{"schema",2},{"kind","official_go2_physx"},{"source_scope","live"},
+     {"command_max_speed_mps",.301},{"command_max_yaw_radps",.501},
+     {"command_max_speed_mps",0.},{"command_max_yaw_radps",true},
+     {"reachable_max_speed_mps",.601},{"reachable_max_yaw_radps",.801},
+     {"reachable_max_speed_mps",.59},{"reachable_max_yaw_radps","0.8"}}) {
+   bad=spot;bad["isolated_platform_model"][pair.first]=pair.second;assert(!loadMock(bad).valid);
+ }
+ for(const auto*field:{"schema","kind","command_max_speed_mps","command_max_yaw_radps",
+     "reachable_max_speed_mps","reachable_max_yaw_radps","source_scope"}) {
+   bad=spot;bad["isolated_platform_model"].erase(field);assert(!loadMock(bad).valid);
+ }
+ bad=spot;bad["isolated_platform_model"]["extra_permission"]=true;assert(!loadMock(bad).valid);
+ for(const auto& pair:std::vector<std::pair<std::string,double>>{
+     {"stop_latency_bound_s",3.01},{"stopping_distance_m",1.01},{"reaction_bound_s",1.01}}) {
+   bad=spot;bad["measurements"][pair.first]=pair.second;assert(!loadMock(bad).valid);
+ }
  {std::ofstream out(evidence);out<<"changed";}assert(!check(j).valid);
  assert(!validateAcceptance("relative.json","robot","test",cal,profile).valid);
  std::filesystem::remove(record);std::filesystem::remove(evidence);std::filesystem::remove(dir);

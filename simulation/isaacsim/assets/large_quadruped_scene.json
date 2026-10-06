@@ -1,0 +1,2677 @@
+{
+  "schema": 1,
+  "name": "large_quadruped_campus",
+  "units": "m",
+  "seed": 60027,
+  "scope": {
+    "ground": "flat_single_level",
+    "floor_id": "floor1",
+    "stairs_supported": false,
+    "cross_level_supported": false,
+    "dynamic_free_space": "requires_fresh_registered_collision_oracle"
+  },
+  "physics": {
+    "frequency_hz": 500.0,
+    "state_frequency_hz": 50.0
+  },
+  "room": {
+    "x_min": -50.0,
+    "x_max": 50.0,
+    "y_min": -40.0,
+    "y_max": 40.0,
+    "width": 100.0,
+    "depth": 80.0,
+    "height": 3.4,
+    "wall_thickness": 0.2
+  },
+  "floor": {
+    "z": 0.0,
+    "bounds": [
+      -50.0,
+      50.0,
+      -40.0,
+      40.0
+    ],
+    "physics_material": {
+      "schema": 1,
+      "path": "/World/PhysicsMaterials/CampusFloor",
+      "static_friction": 1.0,
+      "dynamic_friction": 1.0,
+      "restitution": 0.0,
+      "binding_purpose": "physics"
+    }
+  },
+  "ceiling": {
+    "z": 3.4,
+    "thickness": 0.15,
+    "visible": false
+  },
+  "flat_support_contact": {
+    "enabled": true,
+    "floor_path": "/World/GroundPlane/collisionPlane",
+    "floor_z": 0.0,
+    "penetration_allowance_m": 0.02,
+    "scope": "closed_authorized_flat_plane_only; actual_full_leg_registry_and_bounded_dynamic_oracle_required"
+  },
+  "static_boxes": [
+    {
+      "name": "south_wall",
+      "kind": "wall",
+      "center": [
+        0,
+        -40.1,
+        1.7
+      ],
+      "size": [
+        100.4,
+        0.2,
+        3.4
+      ]
+    },
+    {
+      "name": "north_wall",
+      "kind": "wall",
+      "center": [
+        0,
+        40.1,
+        1.7
+      ],
+      "size": [
+        100.4,
+        0.2,
+        3.4
+      ]
+    },
+    {
+      "name": "west_wall",
+      "kind": "wall",
+      "center": [
+        -50.1,
+        0,
+        1.7
+      ],
+      "size": [
+        0.2,
+        80,
+        3.4
+      ]
+    },
+    {
+      "name": "east_wall",
+      "kind": "wall",
+      "center": [
+        50.1,
+        0,
+        1.7
+      ],
+      "size": [
+        0.2,
+        80,
+        3.4
+      ]
+    },
+    {
+      "name": "office_west_segment_end",
+      "kind": "wall",
+      "center": [
+        -48,
+        22.0,
+        1.7
+      ],
+      "size": [
+        0.2,
+        32,
+        3.4
+      ]
+    },
+    {
+      "name": "office_north_segment_end",
+      "kind": "wall",
+      "center": [
+        -31.0,
+        38,
+        1.7
+      ],
+      "size": [
+        34,
+        0.2,
+        3.4
+      ]
+    },
+    {
+      "name": "office_south_segment_0",
+      "kind": "wall",
+      "center": [
+        -40.5,
+        6,
+        1.7
+      ],
+      "size": [
+        15.0,
+        0.2,
+        3.4
+      ]
+    },
+    {
+      "name": "office_south_lintel_0",
+      "kind": "wall",
+      "center": [
+        -31,
+        6,
+        2.85
+      ],
+      "size": [
+        4,
+        0.2,
+        1.1
+      ]
+    },
+    {
+      "name": "office_south_segment_end",
+      "kind": "wall",
+      "center": [
+        -21.5,
+        6,
+        1.7
+      ],
+      "size": [
+        15.0,
+        0.2,
+        3.4
+      ]
+    },
+    {
+      "name": "office_east_segment_0",
+      "kind": "wall",
+      "center": [
+        -14,
+        12.0,
+        1.7
+      ],
+      "size": [
+        0.2,
+        12.0,
+        3.4
+      ]
+    },
+    {
+      "name": "office_east_lintel_0",
+      "kind": "wall",
+      "center": [
+        -14,
+        20,
+        2.85
+      ],
+      "size": [
+        0.2,
+        4,
+        1.1
+      ]
+    },
+    {
+      "name": "office_east_segment_end",
+      "kind": "wall",
+      "center": [
+        -14,
+        30.0,
+        1.7
+      ],
+      "size": [
+        0.2,
+        16.0,
+        3.4
+      ]
+    },
+    {
+      "name": "office_corridor_north_segment_0",
+      "kind": "wall",
+      "center": [
+        -46.325,
+        22,
+        1.7
+      ],
+      "size": [
+        3.3500000000000014,
+        0.2,
+        3.4
+      ]
+    },
+    {
+      "name": "office_corridor_north_lintel_0",
+      "kind": "wall",
+      "center": [
+        -43.75,
+        22,
+        2.85
+      ],
+      "size": [
+        1.8,
+        0.2,
+        1.1
+      ]
+    },
+    {
+      "name": "office_corridor_north_segment_1",
+      "kind": "wall",
+      "center": [
+        -39.5,
+        22,
+        1.7
+      ],
+      "size": [
+        6.700000000000003,
+        0.2,
+        3.4
+      ]
+    },
+    {
+      "name": "office_corridor_north_lintel_1",
+      "kind": "wall",
+      "center": [
+        -35.25,
+        22,
+        2.85
+      ],
+      "size": [
+        1.8,
+        0.2,
+        1.1
+      ]
+    },
+    {
+      "name": "office_corridor_north_segment_2",
+      "kind": "wall",
+      "center": [
+        -31.0,
+        22,
+        1.7
+      ],
+      "size": [
+        6.700000000000003,
+        0.2,
+        3.4
+      ]
+    },
+    {
+      "name": "office_corridor_north_lintel_2",
+      "kind": "wall",
+      "center": [
+        -26.75,
+        22,
+        2.85
+      ],
+      "size": [
+        1.8,
+        0.2,
+        1.1
+      ]
+    },
+    {
+      "name": "office_corridor_north_segment_3",
+      "kind": "wall",
+      "center": [
+        -22.5,
+        22,
+        1.7
+      ],
+      "size": [
+        6.700000000000003,
+        0.2,
+        3.4
+      ]
+    },
+    {
+      "name": "office_corridor_north_lintel_3",
+      "kind": "wall",
+      "center": [
+        -18.25,
+        22,
+        2.85
+      ],
+      "size": [
+        1.8,
+        0.2,
+        1.1
+      ]
+    },
+    {
+      "name": "office_corridor_north_segment_end",
+      "kind": "wall",
+      "center": [
+        -15.675,
+        22,
+        1.7
+      ],
+      "size": [
+        3.3500000000000014,
+        0.2,
+        3.4
+      ]
+    },
+    {
+      "name": "office_corridor_south_segment_0",
+      "kind": "wall",
+      "center": [
+        -46.325,
+        18,
+        1.7
+      ],
+      "size": [
+        3.3500000000000014,
+        0.2,
+        3.4
+      ]
+    },
+    {
+      "name": "office_corridor_south_lintel_0",
+      "kind": "wall",
+      "center": [
+        -43.75,
+        18,
+        2.85
+      ],
+      "size": [
+        1.8,
+        0.2,
+        1.1
+      ]
+    },
+    {
+      "name": "office_corridor_south_segment_1",
+      "kind": "wall",
+      "center": [
+        -39.5,
+        18,
+        1.7
+      ],
+      "size": [
+        6.700000000000003,
+        0.2,
+        3.4
+      ]
+    },
+    {
+      "name": "office_corridor_south_lintel_1",
+      "kind": "wall",
+      "center": [
+        -35.25,
+        18,
+        2.85
+      ],
+      "size": [
+        1.8,
+        0.2,
+        1.1
+      ]
+    },
+    {
+      "name": "office_corridor_south_segment_2",
+      "kind": "wall",
+      "center": [
+        -31.0,
+        18,
+        1.7
+      ],
+      "size": [
+        6.700000000000003,
+        0.2,
+        3.4
+      ]
+    },
+    {
+      "name": "office_corridor_south_lintel_2",
+      "kind": "wall",
+      "center": [
+        -26.75,
+        18,
+        2.85
+      ],
+      "size": [
+        1.8,
+        0.2,
+        1.1
+      ]
+    },
+    {
+      "name": "office_corridor_south_segment_3",
+      "kind": "wall",
+      "center": [
+        -22.5,
+        18,
+        1.7
+      ],
+      "size": [
+        6.700000000000003,
+        0.2,
+        3.4
+      ]
+    },
+    {
+      "name": "office_corridor_south_lintel_3",
+      "kind": "wall",
+      "center": [
+        -18.25,
+        18,
+        2.85
+      ],
+      "size": [
+        1.8,
+        0.2,
+        1.1
+      ]
+    },
+    {
+      "name": "office_corridor_south_segment_end",
+      "kind": "wall",
+      "center": [
+        -15.675,
+        18,
+        1.7
+      ],
+      "size": [
+        3.3500000000000014,
+        0.2,
+        3.4
+      ]
+    },
+    {
+      "name": "office_north_partition_0_segment_end",
+      "kind": "wall",
+      "center": [
+        -39.5,
+        30.0,
+        1.7
+      ],
+      "size": [
+        0.2,
+        16,
+        3.4
+      ]
+    },
+    {
+      "name": "office_south_partition_0_segment_end",
+      "kind": "wall",
+      "center": [
+        -39.5,
+        12.0,
+        1.7
+      ],
+      "size": [
+        0.2,
+        12,
+        3.4
+      ]
+    },
+    {
+      "name": "office_north_partition_1_segment_end",
+      "kind": "wall",
+      "center": [
+        -31,
+        30.0,
+        1.7
+      ],
+      "size": [
+        0.2,
+        16,
+        3.4
+      ]
+    },
+    {
+      "name": "office_south_partition_1_segment_end",
+      "kind": "wall",
+      "center": [
+        -31,
+        12.0,
+        1.7
+      ],
+      "size": [
+        0.2,
+        12,
+        3.4
+      ]
+    },
+    {
+      "name": "office_north_partition_2_segment_end",
+      "kind": "wall",
+      "center": [
+        -22.5,
+        30.0,
+        1.7
+      ],
+      "size": [
+        0.2,
+        16,
+        3.4
+      ]
+    },
+    {
+      "name": "office_south_partition_2_segment_end",
+      "kind": "wall",
+      "center": [
+        -22.5,
+        12.0,
+        1.7
+      ],
+      "size": [
+        0.2,
+        12,
+        3.4
+      ]
+    },
+    {
+      "name": "office_north_desk_0",
+      "kind": "desk",
+      "center": [
+        -42.05,
+        33,
+        0.38
+      ],
+      "size": [
+        2,
+        1.2,
+        0.76
+      ],
+      "color": [
+        0.56,
+        0.37,
+        0.23
+      ]
+    },
+    {
+      "name": "office_south_desk_0",
+      "kind": "desk",
+      "center": [
+        -42.05,
+        10,
+        0.38
+      ],
+      "size": [
+        2,
+        1.2,
+        0.76
+      ],
+      "color": [
+        0.56,
+        0.37,
+        0.23
+      ]
+    },
+    {
+      "name": "office_north_desk_1",
+      "kind": "desk",
+      "center": [
+        -33.55,
+        33,
+        0.38
+      ],
+      "size": [
+        2,
+        1.2,
+        0.76
+      ],
+      "color": [
+        0.56,
+        0.37,
+        0.23
+      ]
+    },
+    {
+      "name": "office_south_desk_1",
+      "kind": "desk",
+      "center": [
+        -33.55,
+        10,
+        0.38
+      ],
+      "size": [
+        2,
+        1.2,
+        0.76
+      ],
+      "color": [
+        0.56,
+        0.37,
+        0.23
+      ]
+    },
+    {
+      "name": "office_north_desk_2",
+      "kind": "desk",
+      "center": [
+        -25.05,
+        33,
+        0.38
+      ],
+      "size": [
+        2,
+        1.2,
+        0.76
+      ],
+      "color": [
+        0.56,
+        0.37,
+        0.23
+      ]
+    },
+    {
+      "name": "office_south_desk_2",
+      "kind": "desk",
+      "center": [
+        -25.05,
+        10,
+        0.38
+      ],
+      "size": [
+        2,
+        1.2,
+        0.76
+      ],
+      "color": [
+        0.56,
+        0.37,
+        0.23
+      ]
+    },
+    {
+      "name": "office_north_desk_3",
+      "kind": "desk",
+      "center": [
+        -16.55,
+        33,
+        0.38
+      ],
+      "size": [
+        2,
+        1.2,
+        0.76
+      ],
+      "color": [
+        0.56,
+        0.37,
+        0.23
+      ]
+    },
+    {
+      "name": "office_south_desk_3",
+      "kind": "desk",
+      "center": [
+        -16.55,
+        10,
+        0.38
+      ],
+      "size": [
+        2,
+        1.2,
+        0.76
+      ],
+      "color": [
+        0.56,
+        0.37,
+        0.23
+      ]
+    },
+    {
+      "name": "warehouse_west_segment_0",
+      "kind": "wall",
+      "center": [
+        14,
+        11.75,
+        1.7
+      ],
+      "size": [
+        0.2,
+        11.5,
+        3.4
+      ]
+    },
+    {
+      "name": "warehouse_west_lintel_0",
+      "kind": "wall",
+      "center": [
+        14,
+        20,
+        2.85
+      ],
+      "size": [
+        0.2,
+        5,
+        1.1
+      ]
+    },
+    {
+      "name": "warehouse_west_segment_end",
+      "kind": "wall",
+      "center": [
+        14,
+        30.25,
+        1.7
+      ],
+      "size": [
+        0.2,
+        15.5,
+        3.4
+      ]
+    },
+    {
+      "name": "warehouse_east_segment_end",
+      "kind": "wall",
+      "center": [
+        48,
+        22.0,
+        1.7
+      ],
+      "size": [
+        0.2,
+        32,
+        3.4
+      ]
+    },
+    {
+      "name": "warehouse_north_segment_end",
+      "kind": "wall",
+      "center": [
+        31.0,
+        38,
+        1.7
+      ],
+      "size": [
+        34,
+        0.2,
+        3.4
+      ]
+    },
+    {
+      "name": "warehouse_south_segment_0",
+      "kind": "wall",
+      "center": [
+        21.75,
+        6,
+        1.7
+      ],
+      "size": [
+        15.5,
+        0.2,
+        3.4
+      ]
+    },
+    {
+      "name": "warehouse_south_lintel_0",
+      "kind": "wall",
+      "center": [
+        32,
+        6,
+        2.85
+      ],
+      "size": [
+        5,
+        0.2,
+        1.1
+      ]
+    },
+    {
+      "name": "warehouse_south_segment_end",
+      "kind": "wall",
+      "center": [
+        41.25,
+        6,
+        1.7
+      ],
+      "size": [
+        13.5,
+        0.2,
+        3.4
+      ]
+    },
+    {
+      "name": "warehouse_rack_0_0",
+      "kind": "rack",
+      "center": [
+        20,
+        14.5,
+        1.3
+      ],
+      "size": [
+        1.4,
+        7,
+        2.6
+      ],
+      "color": [
+        0.2,
+        0.36,
+        0.65
+      ]
+    },
+    {
+      "name": "warehouse_rack_0_1",
+      "kind": "rack",
+      "center": [
+        20,
+        29,
+        1.3
+      ],
+      "size": [
+        1.4,
+        8,
+        2.6
+      ],
+      "color": [
+        0.2,
+        0.36,
+        0.65
+      ]
+    },
+    {
+      "name": "warehouse_rack_1_0",
+      "kind": "rack",
+      "center": [
+        28,
+        14.5,
+        1.3
+      ],
+      "size": [
+        1.4,
+        7,
+        2.6
+      ],
+      "color": [
+        0.2,
+        0.36,
+        0.65
+      ]
+    },
+    {
+      "name": "warehouse_rack_1_1",
+      "kind": "rack",
+      "center": [
+        28,
+        29,
+        1.3
+      ],
+      "size": [
+        1.4,
+        8,
+        2.6
+      ],
+      "color": [
+        0.2,
+        0.36,
+        0.65
+      ]
+    },
+    {
+      "name": "warehouse_rack_2_0",
+      "kind": "rack",
+      "center": [
+        36,
+        14.5,
+        1.3
+      ],
+      "size": [
+        1.4,
+        7,
+        2.6
+      ],
+      "color": [
+        0.2,
+        0.36,
+        0.65
+      ]
+    },
+    {
+      "name": "warehouse_rack_2_1",
+      "kind": "rack",
+      "center": [
+        36,
+        29,
+        1.3
+      ],
+      "size": [
+        1.4,
+        8,
+        2.6
+      ],
+      "color": [
+        0.2,
+        0.36,
+        0.65
+      ]
+    },
+    {
+      "name": "warehouse_rack_3_0",
+      "kind": "rack",
+      "center": [
+        44,
+        14.5,
+        1.3
+      ],
+      "size": [
+        1.4,
+        7,
+        2.6
+      ],
+      "color": [
+        0.2,
+        0.36,
+        0.65
+      ]
+    },
+    {
+      "name": "warehouse_rack_3_1",
+      "kind": "rack",
+      "center": [
+        44,
+        29,
+        1.3
+      ],
+      "size": [
+        1.4,
+        8,
+        2.6
+      ],
+      "color": [
+        0.2,
+        0.36,
+        0.65
+      ]
+    },
+    {
+      "name": "narrow_service_gate_segment_0",
+      "kind": "wall",
+      "center": [
+        12,
+        -31.85,
+        1.7
+      ],
+      "size": [
+        0.2,
+        12.3,
+        3.4
+      ]
+    },
+    {
+      "name": "narrow_service_gate_lintel_0",
+      "kind": "wall",
+      "center": [
+        12,
+        -25,
+        2.85
+      ],
+      "size": [
+        0.2,
+        1.4,
+        1.1
+      ]
+    },
+    {
+      "name": "narrow_service_gate_segment_end",
+      "kind": "wall",
+      "center": [
+        12,
+        -19.15,
+        1.7
+      ],
+      "size": [
+        0.2,
+        10.3,
+        3.4
+      ]
+    },
+    {
+      "name": "column_0_0",
+      "kind": "column",
+      "center": [
+        -43,
+        -32,
+        1.7
+      ],
+      "size": [
+        0.8,
+        0.8,
+        3.4
+      ],
+      "color": [
+        0.56,
+        0.59,
+        0.63
+      ]
+    },
+    {
+      "name": "column_0_1",
+      "kind": "column",
+      "center": [
+        -43,
+        -25,
+        1.7
+      ],
+      "size": [
+        0.8,
+        0.8,
+        3.4
+      ],
+      "color": [
+        0.56,
+        0.59,
+        0.63
+      ]
+    },
+    {
+      "name": "column_0_2",
+      "kind": "column",
+      "center": [
+        -43,
+        -18,
+        1.7
+      ],
+      "size": [
+        0.8,
+        0.8,
+        3.4
+      ],
+      "color": [
+        0.56,
+        0.59,
+        0.63
+      ]
+    },
+    {
+      "name": "column_1_0",
+      "kind": "column",
+      "center": [
+        -36,
+        -32,
+        1.7
+      ],
+      "size": [
+        0.8,
+        0.8,
+        3.4
+      ],
+      "color": [
+        0.56,
+        0.59,
+        0.63
+      ]
+    },
+    {
+      "name": "column_1_1",
+      "kind": "column",
+      "center": [
+        -36,
+        -25,
+        1.7
+      ],
+      "size": [
+        0.8,
+        0.8,
+        3.4
+      ],
+      "color": [
+        0.56,
+        0.59,
+        0.63
+      ]
+    },
+    {
+      "name": "column_1_2",
+      "kind": "column",
+      "center": [
+        -36,
+        -18,
+        1.7
+      ],
+      "size": [
+        0.8,
+        0.8,
+        3.4
+      ],
+      "color": [
+        0.56,
+        0.59,
+        0.63
+      ]
+    },
+    {
+      "name": "column_2_0",
+      "kind": "column",
+      "center": [
+        -29,
+        -32,
+        1.7
+      ],
+      "size": [
+        0.8,
+        0.8,
+        3.4
+      ],
+      "color": [
+        0.56,
+        0.59,
+        0.63
+      ]
+    },
+    {
+      "name": "column_2_1",
+      "kind": "column",
+      "center": [
+        -29,
+        -25,
+        1.7
+      ],
+      "size": [
+        0.8,
+        0.8,
+        3.4
+      ],
+      "color": [
+        0.56,
+        0.59,
+        0.63
+      ]
+    },
+    {
+      "name": "column_2_2",
+      "kind": "column",
+      "center": [
+        -29,
+        -18,
+        1.7
+      ],
+      "size": [
+        0.8,
+        0.8,
+        3.4
+      ],
+      "color": [
+        0.56,
+        0.59,
+        0.63
+      ]
+    },
+    {
+      "name": "column_3_0",
+      "kind": "column",
+      "center": [
+        -22,
+        -32,
+        1.7
+      ],
+      "size": [
+        0.8,
+        0.8,
+        3.4
+      ],
+      "color": [
+        0.56,
+        0.59,
+        0.63
+      ]
+    },
+    {
+      "name": "column_3_1",
+      "kind": "column",
+      "center": [
+        -22,
+        -25,
+        1.7
+      ],
+      "size": [
+        0.8,
+        0.8,
+        3.4
+      ],
+      "color": [
+        0.56,
+        0.59,
+        0.63
+      ]
+    },
+    {
+      "name": "column_3_2",
+      "kind": "column",
+      "center": [
+        -22,
+        -18,
+        1.7
+      ],
+      "size": [
+        0.8,
+        0.8,
+        3.4
+      ],
+      "color": [
+        0.56,
+        0.59,
+        0.63
+      ]
+    },
+    {
+      "name": "low_obstacle_0",
+      "kind": "low_obstacle",
+      "center": [
+        -45,
+        -11,
+        0.09
+      ],
+      "size": [
+        1.2,
+        1.2,
+        0.18
+      ],
+      "color": [
+        0.85,
+        0.42,
+        0.12
+      ]
+    },
+    {
+      "name": "low_obstacle_1",
+      "kind": "low_obstacle",
+      "center": [
+        -35,
+        -11,
+        0.15
+      ],
+      "size": [
+        1.2,
+        1.2,
+        0.3
+      ],
+      "color": [
+        0.85,
+        0.42,
+        0.12
+      ]
+    },
+    {
+      "name": "low_obstacle_2",
+      "kind": "low_obstacle",
+      "center": [
+        -25,
+        -11,
+        0.225
+      ],
+      "size": [
+        1.2,
+        1.2,
+        0.45
+      ],
+      "color": [
+        0.85,
+        0.42,
+        0.12
+      ]
+    },
+    {
+      "name": "low_obstacle_3",
+      "kind": "low_obstacle",
+      "center": [
+        40,
+        -32,
+        0.11
+      ],
+      "size": [
+        1.2,
+        1.2,
+        0.22
+      ],
+      "color": [
+        0.85,
+        0.42,
+        0.12
+      ]
+    },
+    {
+      "name": "low_obstacle_4",
+      "kind": "low_obstacle",
+      "center": [
+        34,
+        -32,
+        0.2
+      ],
+      "size": [
+        1.2,
+        1.2,
+        0.4
+      ],
+      "color": [
+        0.85,
+        0.42,
+        0.12
+      ]
+    },
+    {
+      "name": "low_clearance_beam",
+      "kind": "overhead",
+      "center": [
+        33,
+        -8,
+        0.85
+      ],
+      "size": [
+        6,
+        3,
+        0.3
+      ],
+      "color": [
+        0.95,
+        0.66,
+        0.12
+      ]
+    },
+    {
+      "name": "low_clearance_post_a",
+      "kind": "column",
+      "center": [
+        29.85,
+        -8,
+        0.85
+      ],
+      "size": [
+        0.3,
+        3,
+        1.7
+      ]
+    },
+    {
+      "name": "low_clearance_post_b",
+      "kind": "column",
+      "center": [
+        36.15,
+        -8,
+        0.85
+      ],
+      "size": [
+        0.3,
+        3,
+        1.7
+      ]
+    },
+    {
+      "name": "plaza_bench_a",
+      "kind": "bench",
+      "center": [
+        -10,
+        31,
+        0.35
+      ],
+      "size": [
+        3,
+        0.8,
+        0.7
+      ]
+    },
+    {
+      "name": "plaza_bench_b",
+      "kind": "bench",
+      "center": [
+        10,
+        31,
+        0.35
+      ],
+      "size": [
+        3,
+        0.8,
+        0.7
+      ]
+    }
+  ],
+  "doorways": [
+    {
+      "name": "office_south_door_0",
+      "center": [
+        -31,
+        6
+      ],
+      "width": 4,
+      "clear_height": 2.3,
+      "opening_axis": "x"
+    },
+    {
+      "name": "office_east_door_0",
+      "center": [
+        -14,
+        20
+      ],
+      "width": 4,
+      "clear_height": 2.3,
+      "opening_axis": "y"
+    },
+    {
+      "name": "office_corridor_north_door_0",
+      "center": [
+        -43.75,
+        22
+      ],
+      "width": 1.8,
+      "clear_height": 2.3,
+      "opening_axis": "x"
+    },
+    {
+      "name": "office_corridor_north_door_1",
+      "center": [
+        -35.25,
+        22
+      ],
+      "width": 1.8,
+      "clear_height": 2.3,
+      "opening_axis": "x"
+    },
+    {
+      "name": "office_corridor_north_door_2",
+      "center": [
+        -26.75,
+        22
+      ],
+      "width": 1.8,
+      "clear_height": 2.3,
+      "opening_axis": "x"
+    },
+    {
+      "name": "office_corridor_north_door_3",
+      "center": [
+        -18.25,
+        22
+      ],
+      "width": 1.8,
+      "clear_height": 2.3,
+      "opening_axis": "x"
+    },
+    {
+      "name": "office_corridor_south_door_0",
+      "center": [
+        -43.75,
+        18
+      ],
+      "width": 1.8,
+      "clear_height": 2.3,
+      "opening_axis": "x"
+    },
+    {
+      "name": "office_corridor_south_door_1",
+      "center": [
+        -35.25,
+        18
+      ],
+      "width": 1.8,
+      "clear_height": 2.3,
+      "opening_axis": "x"
+    },
+    {
+      "name": "office_corridor_south_door_2",
+      "center": [
+        -26.75,
+        18
+      ],
+      "width": 1.8,
+      "clear_height": 2.3,
+      "opening_axis": "x"
+    },
+    {
+      "name": "office_corridor_south_door_3",
+      "center": [
+        -18.25,
+        18
+      ],
+      "width": 1.8,
+      "clear_height": 2.3,
+      "opening_axis": "x"
+    },
+    {
+      "name": "warehouse_west_door_0",
+      "center": [
+        14,
+        20
+      ],
+      "width": 5,
+      "clear_height": 2.3,
+      "opening_axis": "y"
+    },
+    {
+      "name": "warehouse_south_door_0",
+      "center": [
+        32,
+        6
+      ],
+      "width": 5,
+      "clear_height": 2.3,
+      "opening_axis": "x"
+    },
+    {
+      "name": "narrow_service_gate_door_0",
+      "center": [
+        12,
+        -25
+      ],
+      "width": 1.4,
+      "clear_height": 2.3,
+      "opening_axis": "y"
+    }
+  ],
+  "robot": {
+    "name": "official_spot",
+    "kind": "official_spot_physx",
+    "body_size": [
+      1.1,
+      0.6,
+      0.25
+    ],
+    "body_reference_height": 0.52,
+    "initial_pose": [
+      -44.0,
+      -4.0,
+      0.8,
+      0.0
+    ],
+    "initial_spawn_height_m": 0.8,
+    "goal": [
+      0.0,
+      24.0,
+      0.52
+    ],
+    "max_linear_speed": 0.15,
+    "max_angular_speed": 0.3,
+    "offline_collision_envelope": {
+      "radius_m": 0.65,
+      "bottom_z_offset_m": -0.52,
+      "top_z_offset_m": 0.55
+    },
+    "navigation_envelope": {
+      "length_m": 1.25,
+      "width_m": 0.9,
+      "above_body_m": 0.55
+    },
+    "model_limits": {
+      "max_linear_speed_mps": 0.6,
+      "max_angular_speed_radps": 0.8
+    },
+    "speed_limit_scope": "navigation_command_0.15mps_0.30radps; isolated_PhysX_reachable_bounds_0.60mps_0.80radps; live_transport_unchanged",
+    "body_size_scope": "nominal navigation body dimensions; exact loaded official collision registry is authoritative",
+    "stance_status": "reference_height_from_official_Spot_PhysX_standing_test; offline_envelope_is_conservative_design_only",
+    "observed_standing_body_z_range_m": [
+      0.478,
+      0.544
+    ],
+    "terrain_contract": "flat_ground_contacts_require_actual_link_contact_certificate; stairs_and_cross_level_not_supported",
+    "model_binding": "official_Spot_PhysX_asset; exact_runtime_collision_registry_and_contact_evidence_required",
+    "spawn_clearance_basis": "authored_zero_joint_foot_bottom_minus_0.692m_relative_to_body; 0.80m_spawn_leaves_about_0.108m_clearance",
+    "velocity_feedback_mode": "spot_nonlinear_measured_v1"
+  },
+  "lidar": {
+    "origins": [
+      [
+        0.2,
+        0.0,
+        0.2
+      ],
+      [
+        -0.2,
+        0.0,
+        0.2
+      ]
+    ],
+    "horizontal_fov_deg": 360.0,
+    "vertical_fov_deg": 160.0,
+    "horizontal_resolution_deg": 1.0,
+    "vertical_resolution_deg": 5.0,
+    "range_min": 0.06,
+    "range_max": 35.0,
+    "frequency_hz": 10.0,
+    "self_hit_filter": "actual registered robot geometry; no synthesized ray returns"
+  },
+  "imu": {
+    "model": "Isaac 6 PhysX experimental IMUSensor",
+    "native_frequency_hz": 500,
+    "frequency_hz": 100,
+    "origin": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "orientation_wxyz": [
+      1.0,
+      0.0,
+      0.0,
+      0.0
+    ],
+    "include_gravity": true,
+    "linear_acceleration_filter_size": 1,
+    "angular_velocity_filter_size": 1,
+    "orientation_filter_size": 1,
+    "output_sampling": "real physics-step readings retain native source time"
+  },
+  "map_generation": {
+    "surface_spacing_m": 0.1,
+    "pct_resolution_m": 0.1,
+    "pct_max_total_cells": 10000000,
+    "pct_max_working_bytes": 2000000000,
+    "static_prior_resolution_m": 0.05
+  },
+  "regions": [
+    {
+      "id": "office",
+      "label": "OFFICE",
+      "bounds": [
+        -48,
+        -14,
+        6,
+        38
+      ],
+      "color": [
+        0.33,
+        0.43,
+        0.56
+      ]
+    },
+    {
+      "id": "office_corridor",
+      "label": "CORRIDOR",
+      "bounds": [
+        -48,
+        -14,
+        18.1,
+        21.9
+      ],
+      "color": [
+        0.48,
+        0.59,
+        0.68
+      ]
+    },
+    {
+      "id": "warehouse",
+      "label": "WAREHOUSE",
+      "bounds": [
+        14,
+        48,
+        6,
+        38
+      ],
+      "color": [
+        0.43,
+        0.4,
+        0.3
+      ]
+    },
+    {
+      "id": "plaza",
+      "label": "PLAZA",
+      "bounds": [
+        -13,
+        13,
+        -13,
+        37
+      ],
+      "color": [
+        0.35,
+        0.48,
+        0.39
+      ]
+    },
+    {
+      "id": "pillar_field",
+      "label": "PILLARS",
+      "bounds": [
+        -47,
+        -18,
+        -36,
+        -10
+      ],
+      "color": [
+        0.43,
+        0.36,
+        0.47
+      ]
+    },
+    {
+      "id": "service",
+      "label": "SERVICE",
+      "bounds": [
+        14,
+        47,
+        -37,
+        4
+      ],
+      "color": [
+        0.44,
+        0.43,
+        0.4
+      ]
+    },
+    {
+      "id": "south_route",
+      "label": "SOUTH ROUTE",
+      "bounds": [
+        -48,
+        48,
+        -39,
+        -36.5
+      ],
+      "color": [
+        0.27,
+        0.36,
+        0.43
+      ]
+    },
+    {
+      "id": "east_west_route",
+      "label": "CONNECTOR",
+      "bounds": [
+        -48,
+        48,
+        -5,
+        4
+      ],
+      "color": [
+        0.35,
+        0.39,
+        0.43
+      ]
+    }
+  ],
+  "signs": [
+    {
+      "id": "office_sign",
+      "text": "OFFICE",
+      "center": [
+        -31.0,
+        22.0,
+        0.008
+      ],
+      "letter_height_m": 0.9
+    },
+    {
+      "id": "warehouse_sign",
+      "text": "WAREHOUSE",
+      "center": [
+        31.0,
+        22.0,
+        0.008
+      ],
+      "letter_height_m": 0.9
+    },
+    {
+      "id": "plaza_sign",
+      "text": "PLAZA",
+      "center": [
+        0.0,
+        12.0,
+        0.008
+      ],
+      "letter_height_m": 0.9
+    },
+    {
+      "id": "pillar_field_sign",
+      "text": "PILLARS",
+      "center": [
+        -32.5,
+        -23.0,
+        0.008
+      ],
+      "letter_height_m": 0.9
+    },
+    {
+      "id": "service_sign",
+      "text": "SERVICE",
+      "center": [
+        30.5,
+        -16.5,
+        0.008
+      ],
+      "letter_height_m": 0.9
+    },
+    {
+      "id": "south_route_sign",
+      "text": "SOUTH ROUTE",
+      "center": [
+        0.0,
+        -37.75,
+        0.008
+      ],
+      "letter_height_m": 0.9
+    },
+    {
+      "id": "east_west_route_sign",
+      "text": "CONNECTOR",
+      "center": [
+        0.0,
+        -0.5,
+        0.008
+      ],
+      "letter_height_m": 0.9
+    },
+    {
+      "id": "gate_sign",
+      "text": "GATE 1.4 M",
+      "center": [
+        8,
+        -22,
+        0.008
+      ],
+      "letter_height_m": 0.6
+    },
+    {
+      "id": "clearance_sign",
+      "text": "LOW CLEARANCE",
+      "center": [
+        33,
+        -5,
+        0.008
+      ],
+      "letter_height_m": 0.55
+    }
+  ],
+  "lighting": {
+    "dome_intensity": 300.0,
+    "sunlight_intensity": 600.0,
+    "sunlight_rotation_xyz_deg": [
+      -35.0,
+      20.0,
+      -25.0
+    ]
+  },
+  "cameras": {
+    "overview": {
+      "path": "/World/OverviewCamera",
+      "position": [
+        0.0,
+        0.0,
+        120.0
+      ],
+      "projection": "orthographic",
+      "rotation_z_deg": 180.0,
+      "horizontal_aperture": 1440.0,
+      "vertical_aperture": 1040.0,
+      "framing_basis": "1280x900 viewport; horizontal conform shows about144x101.25m with >=8m margin on each side"
+    },
+    "follow": {
+      "path": "/World/FollowCamera",
+      "offset_robot": [
+        -4.0,
+        -6.0,
+        3.0
+      ],
+      "look_at_robot": [
+        0.0,
+        0.0,
+        0.3
+      ],
+      "focal_length": 22.0
+    }
+  },
+  "dynamic_actors": [
+    {
+      "id": "plaza_person",
+      "kind": "person",
+      "enabled": true,
+      "seed": 60027,
+      "start_time_s": 0,
+      "end_time_s": 1600,
+      "presence": "persistent_when_enabled",
+      "trajectory": {
+        "mode": "loop",
+        "interpolation": "c1_smoothstep",
+        "waypoints": [
+          {
+            "time_s": 0,
+            "position": [
+              0,
+              -15,
+              0
+            ],
+            "yaw": 1.5707963267948966
+          },
+          {
+            "time_s": 40,
+            "position": [
+              0,
+              12,
+              0
+            ],
+            "yaw": 1.5707963267948966
+          },
+          {
+            "time_s": 80,
+            "position": [
+              0,
+              -15,
+              0
+            ],
+            "yaw": 1.5707963267948966
+          }
+        ]
+      },
+      "analytic_max_linear_speed_mps": 1.0125,
+      "native_physics_velocity_margin_mps": 0.02,
+      "max_linear_speed_mps": 1.0325,
+      "max_linear_acceleration_mps2": 0.10125,
+      "velocity_bound_scope": "analytic_C1_bound_plus_explicit_0.02mps_native_f32_position_500Hz_quantization_margin_for_100x80m_campus; retain_all_measured_samples",
+      "max_yaw_rate_radps": 0.0,
+      "collision_shapes": [
+        {
+          "id": "body",
+          "type": "cylinder",
+          "center": [
+            0,
+            0,
+            0.8
+          ],
+          "radius": 0.28,
+          "height": 1.6,
+          "collision": true
+        },
+        {
+          "id": "head",
+          "type": "cylinder",
+          "center": [
+            0,
+            0,
+            1.7
+          ],
+          "radius": 0.17,
+          "height": 0.2,
+          "collision": true
+        }
+      ],
+      "color": [
+        0.8,
+        0.35,
+        0.2
+      ],
+      "scenario_ids": [
+        "long_distance_multi_goal",
+        "crossing_blocker"
+      ]
+    },
+    {
+      "id": "office_person",
+      "kind": "person",
+      "enabled": true,
+      "seed": 60027,
+      "start_time_s": 0,
+      "end_time_s": 2200,
+      "presence": "persistent_when_enabled",
+      "trajectory": {
+        "mode": "loop",
+        "interpolation": "c1_smoothstep",
+        "waypoints": [
+          {
+            "time_s": 0,
+            "position": [
+              -44,
+              20,
+              0
+            ],
+            "yaw": 0
+          },
+          {
+            "time_s": 55,
+            "position": [
+              -16,
+              20,
+              0
+            ],
+            "yaw": 0
+          },
+          {
+            "time_s": 110,
+            "position": [
+              -44,
+              20,
+              0
+            ],
+            "yaw": 0
+          }
+        ]
+      },
+      "analytic_max_linear_speed_mps": 0.7636363636363637,
+      "native_physics_velocity_margin_mps": 0.02,
+      "max_linear_speed_mps": 0.7836363636363637,
+      "max_linear_acceleration_mps2": 0.05553719008264463,
+      "velocity_bound_scope": "analytic_C1_bound_plus_explicit_0.02mps_native_f32_position_500Hz_quantization_margin_for_100x80m_campus; retain_all_measured_samples",
+      "max_yaw_rate_radps": 0.0,
+      "collision_shapes": [
+        {
+          "id": "body",
+          "type": "cylinder",
+          "center": [
+            0,
+            0,
+            0.8
+          ],
+          "radius": 0.28,
+          "height": 1.6,
+          "collision": true
+        },
+        {
+          "id": "head",
+          "type": "cylinder",
+          "center": [
+            0,
+            0,
+            1.7
+          ],
+          "radius": 0.17,
+          "height": 0.2,
+          "collision": true
+        }
+      ],
+      "color": [
+        0.6,
+        0.3,
+        0.7
+      ],
+      "scenario_ids": [
+        "long_distance_multi_goal"
+      ]
+    },
+    {
+      "id": "plaza_cart",
+      "kind": "cart",
+      "enabled": true,
+      "seed": 60027,
+      "start_time_s": 0,
+      "end_time_s": 1400,
+      "presence": "persistent_when_enabled",
+      "trajectory": {
+        "mode": "loop",
+        "interpolation": "c1_smoothstep",
+        "waypoints": [
+          {
+            "time_s": 0,
+            "position": [
+              5,
+              -10,
+              0
+            ],
+            "yaw": 1.5707963267948966
+          },
+          {
+            "time_s": 35,
+            "position": [
+              5,
+              15,
+              0
+            ],
+            "yaw": 1.5707963267948966
+          },
+          {
+            "time_s": 70,
+            "position": [
+              5,
+              -10,
+              0
+            ],
+            "yaw": 1.5707963267948966
+          }
+        ]
+      },
+      "analytic_max_linear_speed_mps": 1.0714285714285714,
+      "native_physics_velocity_margin_mps": 0.02,
+      "max_linear_speed_mps": 1.0914285714285714,
+      "max_linear_acceleration_mps2": 0.12244897959183673,
+      "velocity_bound_scope": "analytic_C1_bound_plus_explicit_0.02mps_native_f32_position_500Hz_quantization_margin_for_100x80m_campus; retain_all_measured_samples",
+      "max_yaw_rate_radps": 0.0,
+      "collision_shapes": [
+        {
+          "id": "load",
+          "type": "box",
+          "center": [
+            0,
+            0,
+            0.5
+          ],
+          "size": [
+            0.9,
+            0.7,
+            1.0
+          ],
+          "collision": true
+        },
+        {
+          "id": "wheel_left",
+          "type": "cylinder",
+          "center": [
+            -0.25,
+            -0.27,
+            0.12
+          ],
+          "radius": 0.1,
+          "height": 0.24,
+          "collision": true
+        },
+        {
+          "id": "wheel_right",
+          "type": "cylinder",
+          "center": [
+            -0.25,
+            0.27,
+            0.12
+          ],
+          "radius": 0.1,
+          "height": 0.24,
+          "collision": true
+        }
+      ],
+      "color": [
+        0.2,
+        0.65,
+        0.72
+      ],
+      "scenario_ids": [
+        "long_distance_multi_goal",
+        "cancel_and_park"
+      ]
+    },
+    {
+      "id": "warehouse_forklift",
+      "kind": "forklift",
+      "enabled": true,
+      "seed": 60027,
+      "start_time_s": 0,
+      "end_time_s": 2600,
+      "presence": "persistent_when_enabled",
+      "trajectory": {
+        "mode": "loop",
+        "interpolation": "c1_smoothstep",
+        "waypoints": [
+          {
+            "time_s": 0,
+            "position": [
+              32,
+              9,
+              0
+            ],
+            "yaw": 1.5707963267948966
+          },
+          {
+            "time_s": 65,
+            "position": [
+              32,
+              35,
+              0
+            ],
+            "yaw": 1.5707963267948966
+          },
+          {
+            "time_s": 130,
+            "position": [
+              32,
+              9,
+              0
+            ],
+            "yaw": 1.5707963267948966
+          }
+        ]
+      },
+      "analytic_max_linear_speed_mps": 0.6,
+      "native_physics_velocity_margin_mps": 0.02,
+      "max_linear_speed_mps": 0.62,
+      "max_linear_acceleration_mps2": 0.036923076923076927,
+      "velocity_bound_scope": "analytic_C1_bound_plus_explicit_0.02mps_native_f32_position_500Hz_quantization_margin_for_100x80m_campus; retain_all_measured_samples",
+      "max_yaw_rate_radps": 0.0,
+      "collision_shapes": [
+        {
+          "id": "chassis",
+          "type": "box",
+          "center": [
+            0,
+            0,
+            0.45
+          ],
+          "size": [
+            1.8,
+            1.15,
+            0.9
+          ],
+          "collision": true
+        },
+        {
+          "id": "cab",
+          "type": "box",
+          "center": [
+            -0.3,
+            0,
+            1.3
+          ],
+          "size": [
+            1,
+            1.1,
+            1.6
+          ],
+          "collision": true
+        },
+        {
+          "id": "fork_left",
+          "type": "box",
+          "center": [
+            1.2,
+            -0.38,
+            0.14
+          ],
+          "size": [
+            1.0,
+            0.12,
+            0.12
+          ],
+          "collision": true
+        },
+        {
+          "id": "fork_right",
+          "type": "box",
+          "center": [
+            1.2,
+            0.38,
+            0.14
+          ],
+          "size": [
+            1.0,
+            0.12,
+            0.12
+          ],
+          "collision": true
+        }
+      ],
+      "color": [
+        0.95,
+        0.65,
+        0.1
+      ],
+      "scenario_ids": [
+        "long_distance_multi_goal"
+      ]
+    },
+    {
+      "id": "oncoming_cart",
+      "kind": "cart",
+      "enabled": false,
+      "seed": 60027,
+      "start_time_s": 5,
+      "end_time_s": 45,
+      "presence": "persistent_when_enabled",
+      "trajectory": {
+        "mode": "once",
+        "interpolation": "c1_smoothstep",
+        "waypoints": [
+          {
+            "time_s": 0,
+            "position": [
+              22,
+              -25,
+              0
+            ],
+            "yaw": 3.141592653589793
+          },
+          {
+            "time_s": 40,
+            "position": [
+              2,
+              -25,
+              0
+            ],
+            "yaw": 3.141592653589793
+          }
+        ]
+      },
+      "analytic_max_linear_speed_mps": 0.75,
+      "native_physics_velocity_margin_mps": 0.02,
+      "max_linear_speed_mps": 0.77,
+      "max_linear_acceleration_mps2": 0.075,
+      "velocity_bound_scope": "analytic_C1_bound_plus_explicit_0.02mps_native_f32_position_500Hz_quantization_margin_for_100x80m_campus; retain_all_measured_samples",
+      "max_yaw_rate_radps": 0.0,
+      "collision_shapes": [
+        {
+          "id": "load",
+          "type": "box",
+          "center": [
+            0,
+            0,
+            0.5
+          ],
+          "size": [
+            0.9,
+            0.7,
+            1.0
+          ],
+          "collision": true
+        },
+        {
+          "id": "wheel_left",
+          "type": "cylinder",
+          "center": [
+            -0.25,
+            -0.27,
+            0.12
+          ],
+          "radius": 0.1,
+          "height": 0.24,
+          "collision": true
+        },
+        {
+          "id": "wheel_right",
+          "type": "cylinder",
+          "center": [
+            -0.25,
+            0.27,
+            0.12
+          ],
+          "radius": 0.1,
+          "height": 0.24,
+          "collision": true
+        }
+      ],
+      "color": [
+        0.8,
+        0.35,
+        0.2
+      ],
+      "scenario_ids": [
+        "narrow_head_on"
+      ]
+    },
+    {
+      "id": "door_blocking_cart",
+      "kind": "cart",
+      "enabled": false,
+      "seed": 60027,
+      "start_time_s": 20,
+      "end_time_s": 95,
+      "presence": "persistent_when_enabled",
+      "trajectory": {
+        "mode": "once",
+        "interpolation": "c1_smoothstep",
+        "waypoints": [
+          {
+            "time_s": 0,
+            "position": [
+              18,
+              -25,
+              0
+            ],
+            "yaw": 3.141592653589793
+          },
+          {
+            "time_s": 25,
+            "position": [
+              12,
+              -25,
+              0
+            ],
+            "yaw": 3.141592653589793
+          },
+          {
+            "time_s": 50,
+            "position": [
+              12,
+              -25,
+              0
+            ],
+            "yaw": 3.141592653589793
+          },
+          {
+            "time_s": 75,
+            "position": [
+              18,
+              -25,
+              0
+            ],
+            "yaw": 0
+          }
+        ]
+      },
+      "analytic_max_linear_speed_mps": 0.36,
+      "native_physics_velocity_margin_mps": 0.02,
+      "max_linear_speed_mps": 0.38,
+      "max_linear_acceleration_mps2": 0.0576,
+      "velocity_bound_scope": "analytic_C1_bound_plus_explicit_0.02mps_native_f32_position_500Hz_quantization_margin_for_100x80m_campus; retain_all_measured_samples",
+      "max_yaw_rate_radps": 0.18849555921538758,
+      "collision_shapes": [
+        {
+          "id": "load",
+          "type": "box",
+          "center": [
+            0,
+            0,
+            0.5
+          ],
+          "size": [
+            0.9,
+            0.7,
+            1.0
+          ],
+          "collision": true
+        },
+        {
+          "id": "wheel_left",
+          "type": "cylinder",
+          "center": [
+            -0.25,
+            -0.27,
+            0.12
+          ],
+          "radius": 0.1,
+          "height": 0.24,
+          "collision": true
+        },
+        {
+          "id": "wheel_right",
+          "type": "cylinder",
+          "center": [
+            -0.25,
+            0.27,
+            0.12
+          ],
+          "radius": 0.1,
+          "height": 0.24,
+          "collision": true
+        }
+      ],
+      "color": [
+        0.8,
+        0.35,
+        0.2
+      ],
+      "scenario_ids": [
+        "temporary_door_block",
+        "resume_after_block"
+      ]
+    }
+  ],
+  "scenarios": [
+    {
+      "id": "long_distance_multi_goal",
+      "start": [
+        -44,
+        -4,
+        0.52,
+        0
+      ],
+      "goals": [
+        [
+          -43.75,
+          29,
+          0.52
+        ],
+        [
+          42,
+          20,
+          0.52
+        ],
+        [
+          24,
+          -25,
+          0.52
+        ],
+        [
+          -34,
+          -28,
+          0.52
+        ],
+        [
+          0,
+          24,
+          0.52
+        ]
+      ],
+      "actor_ids": [
+        "plaza_person",
+        "office_person",
+        "plaza_cart",
+        "warehouse_forklift"
+      ],
+      "timeout_source_s": 3600,
+      "checks": [
+        "all_goals_reached",
+        "no_static_or_actor_collision",
+        "bounded_progress",
+        "stop_at_final_goal"
+      ]
+    },
+    {
+      "id": "crossing_blocker",
+      "start": [
+        -8,
+        -5,
+        0.52,
+        0
+      ],
+      "goals": [
+        [
+          8,
+          -5,
+          0.52
+        ]
+      ],
+      "actor_ids": [
+        "plaza_person"
+      ],
+      "timeout_source_s": 360,
+      "checks": [
+        "yield_or_verified_detour",
+        "actor_not_teleported",
+        "goal_reached_after_crossing"
+      ]
+    },
+    {
+      "id": "narrow_head_on",
+      "start": [
+        5,
+        -25,
+        0.52,
+        0
+      ],
+      "goals": [
+        [
+          20,
+          -25,
+          0.52
+        ]
+      ],
+      "actor_ids": [
+        "oncoming_cart"
+      ],
+      "timeout_source_s": 600,
+      "checks": [
+        "yield_or_alternate_route",
+        "no_two_body_overlap_in_gate",
+        "goal_reached"
+      ]
+    },
+    {
+      "id": "temporary_door_block",
+      "start": [
+        5,
+        -25,
+        0.52,
+        0
+      ],
+      "goals": [
+        [
+          20,
+          -25,
+          0.52
+        ]
+      ],
+      "actor_ids": [
+        "door_blocking_cart"
+      ],
+      "timeout_source_s": 600,
+      "checks": [
+        "blocked_door_not_free",
+        "wait_or_verified_detour",
+        "goal_reached_after_release"
+      ]
+    },
+    {
+      "id": "cancel_and_park",
+      "start": [
+        -8,
+        -4,
+        0.52,
+        0
+      ],
+      "goals": [
+        [
+          10,
+          -4,
+          0.52
+        ]
+      ],
+      "actor_ids": [
+        "plaza_cart"
+      ],
+      "events": [
+        {
+          "source_time_s": 12,
+          "action": "cancel_current_task"
+        }
+      ],
+      "timeout_source_s": 60,
+      "checks": [
+        "cancel_terminal_identity",
+        "writer_stop_ack",
+        "measured_stationary_for_2s"
+      ]
+    },
+    {
+      "id": "resume_after_block",
+      "start": [
+        5,
+        -25,
+        0.52,
+        0
+      ],
+      "goals": [
+        [
+          20,
+          -25,
+          0.52
+        ]
+      ],
+      "actor_ids": [
+        "door_blocking_cart"
+      ],
+      "events": [
+        {
+          "source_time_s": 65,
+          "action": "cancel_current_task"
+        },
+        {
+          "source_time_s": 110,
+          "action": "submit_new_task",
+          "goal": [
+            20,
+            -25,
+            0.52
+          ]
+        }
+      ],
+      "timeout_source_s": 600,
+      "checks": [
+        "retired_task_never_resumes",
+        "fresh_task_identity",
+        "goal_reached",
+        "measured_final_stop"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,125 @@
+{
+  "schema": 1,
+  "kind": "sealed_floor_endpoint_numeric_interface_offline_verification",
+  "verified_at_utc": "2026-10-06T13:33:41.997696+00:00",
+  "acceptance": "OFFLINE_ONLY; formal navigation with corrected native BEGIN capture phase is pending. No completed walking numerical calibration or navigation success is claimed.",
+  "numeric_contract": {
+    "opt_in_parameter": "grid_map.static_prior_support_floor_endpoint_error_bound_m",
+    "manifest_field": "flat_support_contact.floor_endpoint_error_bound_m",
+    "default_bound_m": 1e-05,
+    "fixture_bound_m": 0.0002,
+    "absolute_hard_cap_m": 0.001,
+    "resolution_fraction_hard_cap": 0.05,
+    "manifest_expected_exact_match": true,
+    "collision_geometry_copy_exact_match": true,
+    "raw_point_odds_and_source_stamps_unchanged": true,
+    "code3_is_free": false,
+    "dynamic_geometry_veto_precedes_contact": true,
+    "production_default_floor_contact": false,
+    "production_default_oracle_enabled": false,
+    "nondefault_bound_without_opt_in_rejected": true,
+    "source_or_steady_lease_changed": false,
+    "check_budget_changed": false
+  },
+  "build": {
+    "packages": [
+      "plan_env",
+      "path_searching",
+      "bspline_opt",
+      "scan_planner"
+    ],
+    "exit_code": 0,
+    "duration_seconds": 148,
+    "log_directory": "/home/eric/wjg/d1max-build-isaac/nav/log/build_2026-10-06_21-26-49",
+    "source_to_isolated_copy_identical": {
+      "d1max_nav_ws/src/scan_planner_vendor/plan_env/include/plan_env/static_occupancy_prior.hpp": true,
+      "d1max_nav_ws/src/scan_planner_vendor/plan_env/src/static_occupancy_prior.cpp": true,
+      "d1max_nav_ws/src/scan_planner_vendor/plan_env/src/grid_map.cpp": true,
+      "d1max_nav_ws/src/scan_planner_vendor/plan_env/test/test_static_occupancy_prior.cpp": true,
+      "d1max_nav_ws/src/scan_planner_vendor/plan_env/test/test_projected_rays.cpp": true
+    },
+    "installed_header_identical": "/home/eric/wjg/d1max-build-isaac/nav/install/plan_env/include/plan_env/static_occupancy_prior.hpp",
+    "installed_static_library_identical": true,
+    "installed_static_library_sha256": "fb45fd1aee21edd34cb23557796070e804d0a5822e04e8c88a0c71a16d2d55f5"
+  },
+  "ctest": {
+    "targets_passed": 31,
+    "targets_failed": 0,
+    "by_package": {
+      "plan_env": 8,
+      "path_searching": 4,
+      "bspline_opt": 4,
+      "scan_planner": 15
+    },
+    "projected_ray_cases": 91,
+    "projected_ray_failures": 0,
+    "static_prior_cases": 26,
+    "static_prior_failures": 0,
+    "excluded_ros_launch_tests": [
+      "test_planner_startup",
+      "test_waypoint_parameters"
+    ],
+    "commands": [
+      "ctest --test-dir /home/eric/wjg/d1max-build-isaac/nav/build/plan_env --output-on-failure",
+      "ctest --test-dir /home/eric/wjg/d1max-build-isaac/nav/build/path_searching --output-on-failure",
+      "ctest --test-dir /home/eric/wjg/d1max-build-isaac/nav/build/bspline_opt --output-on-failure",
+      "ctest --test-dir /home/eric/wjg/d1max-build-isaac/nav/build/scan_planner --output-on-failure -E test_planner_startup|test_waypoint_parameters"
+    ],
+    "log_paths": [
+      "/home/eric/wjg/d1max-build-isaac/nav/build/plan_env/Testing/Temporary/LastTest.log",
+      "/home/eric/wjg/d1max-build-isaac/nav/build/path_searching/Testing/Temporary/LastTest.log",
+      "/home/eric/wjg/d1max-build-isaac/nav/build/bspline_opt/Testing/Temporary/LastTest.log",
+      "/home/eric/wjg/d1max-build-isaac/nav/build/scan_planner/Testing/Temporary/LastTest.log"
+    ]
+  },
+  "python": {
+    "passed": 66,
+    "failed": 0,
+    "duration_seconds": 3.16,
+    "command": "/home/eric/anaconda3/bin/python -m pytest -q simulation/isaacsim/test_truth_map.py simulation/isaacsim/test_dynamic_collision.py simulation/isaacsim/test_world_builder.py",
+    "scope": "Memory-only Python/OpenUSD; no SimulationApp or ROS participant launched by this verifier."
+  },
+  "production_default_probe": {
+    "source": "/tmp/d1max_scan_default_off.cpp",
+    "compiled_against_installed_headers": true,
+    "exit_code": 0,
+    "output": "production_defaults_oracle_disabled=true floor_contact_disabled=true endpoint_bound_default=1e-5 empty_digest_rejected=true"
+  },
+  "native_diagnostics": {
+    "stationary_native_floor_identity": {
+      "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/campus_floor_identity_probe_v2.json",
+      "sha256": "8aef07dbacd40abcb53d62ec89441e3cf63adaafeb6844b88ab936112629f177",
+      "samples": 20,
+      "floor_hits": 47314,
+      "floor_z_min_m": -8.713988572911502e-05,
+      "floor_z_max_m": 8.737962465216187e-05
+    },
+    "walking_probe_v3": {
+      "local_log": "/home/eric/wjg/d1max-build-isaac/campus_floor_gait_probe_v3.log",
+      "outcome": "Rejected native_floor_endpoint_error_exceeds_sealed_bound at first scan; .0002 does not cover wrong-phase projection."
+    },
+    "native_capture_phase": {
+      "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/campus_floor_phase_probe.json",
+      "sha256": "703eeb43a31da3611bea6418880ab5edb8f6c0fa39b48f772b939c17823b390f",
+      "scope": "DIAGNOSTIC_ONLY_no_floor_certificate_acceptance",
+      "samples": 80,
+      "post_pose_residual_min_m": 0.00029651704714933613,
+      "post_pose_residual_max_m": 0.017679424192202586,
+      "latest_real_prephysics_pose_residual_min_m": 5.8522118147608104e-06,
+      "latest_real_prephysics_pose_residual_max_m": 6.126620228530388e-06,
+      "latest_real_prephysics_pose_under_original_1e_5_count": 80,
+      "first_native_readout_label_ns": 20000000,
+      "first_corresponding_actual_prephysics_pose_ns": 18000000,
+      "interpretation": "Native readout label follows post-step callback; ray geometry corresponds to previous actual prephysics pose. Acquisition BEGIN and unmodified native END label need separate immutable witnesses; do not choose poses by point residual at runtime."
+    }
+  },
+  "source_sha256": {
+    "d1max_nav_ws/src/scan_planner_vendor/plan_env/include/plan_env/static_occupancy_prior.hpp": "94b56c3502c56af185c6885614b286a2c70bd714af2f6a14107635f33c747474",
+    "d1max_nav_ws/src/scan_planner_vendor/plan_env/src/static_occupancy_prior.cpp": "9b127f9ea2833c59b824bd2973f281cdecd8e031459b26abdb6985eb9c3456fc",
+    "d1max_nav_ws/src/scan_planner_vendor/plan_env/src/grid_map.cpp": "b5ece612707803c25db0bafad86b2193b7702cae9db41cebb96a714d948a525b",
+    "d1max_nav_ws/src/scan_planner_vendor/plan_env/test/test_static_occupancy_prior.cpp": "21f280b132ebdca5a3d30187c5bec21853cedf29425ba38bf79c3d9aaf0d18be",
+    "d1max_nav_ws/src/scan_planner_vendor/plan_env/test/test_projected_rays.cpp": "a98183cf4fa5d5f4d1d806e7d54c93c861d27da3433594ae0654774e8a329612",
+    "simulation/isaacsim/truth_map.py": "81fe26ae061b32cc4eeecc73eef9ec8f705386c45f6049a2108c6bc8555b6baa",
+    "simulation/isaacsim/test_truth_map.py": "a4f74644f97e53c9d90a21cbabaff50decdb00c76d063647c319072958537c77"
+  }
+}

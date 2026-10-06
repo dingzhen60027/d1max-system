@@ -91,6 +91,13 @@ class VoxelStatusCache {
   std::uint64_t generationIdentifier() const {return clear_serial_;}
   bool generationReusable() const {return clear_serial_<std::numeric_limits<std::uint64_t>::max();}
   std::size_t size() const { return entries_.size(); }
+  // Reserve accounting is independent of cold/hot cache population. Readers
+  // must budget the bounded eventual allocation before accepting a snapshot.
+  std::size_t maximumStorageBytes() const {
+    std::size_t slots=1;
+    while(slots<capacity_*2)slots*=2;
+    return capacity_*sizeof(Entry)+slots*sizeof(Slot);
+  }
   template <class Query> int get(int address, Query query) {
     return get(address, 0, 0, query);
   }

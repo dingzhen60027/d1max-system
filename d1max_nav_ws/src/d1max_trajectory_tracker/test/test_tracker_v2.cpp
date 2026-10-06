@@ -438,6 +438,38 @@ wire::SupportReference supportWire(const wire::ExecutionVersion& v=version()) {
   s.support_xy_radius_m=.3;s.body_reference_height_m=.55;s.max_support_slope_rad=.15;s.max_support_step_m=.05;s.verified=true;
   for(int i=-2;i<=60;++i){geometry_msgs::msg::Point p;p.x=i*.05;s.support_ground_xyz.push_back(p);}return s;
 }
+
+TEST(TrackerV2, VerifiedFloorSpatialProfileDoesNotFlattenOrGloballyThrottleXYZCurve) {
+  auto legacy=config();legacy.require_support_reference=true;
+  auto spatial=legacy;spatial.spatial_planar_braking_envelope=true;
+  auto t=curve();
+  for(std::size_t i=0;i<t.points.size();++i) {
+    const double early=std::min<double>(i,5.);
+    t.points[i]={early*.00005+std::max(0.,static_cast<double>(i)-5.)*.03,0.,.55+early*.006};
+  }
+  for(std::size_t i=0;i<t.knots.size();++i)t.knots[i]=(static_cast<double>(i)-3.)*.5;
+  certify(t);
+  const auto support=supportEvidence(supportWire());
+  const auto old=PreparedGeometry::build(legacy,t,support),now=PreparedGeometry::build(spatial,t,support);
+  ASSERT_TRUE(old->failure.empty())<<old->failure;ASSERT_TRUE(now->failure.empty())<<now->failure;
+  ASSERT_TRUE(now->derivatives_valid);ASSERT_TRUE(now->spatial_planar_envelope.valid());
+  EXPECT_LT(old->planarSpeedLimit(7.,0.,legacy),.003);
+  EXPECT_GT(now->planarSpeedLimit(7.,0.,spatial),.29);
+  EXPECT_GT(now->planarAccelerationLimit(7.,spatial),.34);
+  EXPECT_EQ(old->entry.times,now->entry.times);EXPECT_EQ(old->entry.arcs,now->entry.arcs);
+  ASSERT_EQ(old->entry.points.size(),now->entry.points.size());
+  for(std::size_t i=0;i<old->entry.points.size();++i)
+    EXPECT_EQ(old->entry.points[i],now->entry.points[i]);
+  EXPECT_GT(now->entry.velocity->evaluateDeBoorT(.5).z(),.01);
+  EXPECT_FALSE(now->matches(legacy,t));EXPECT_TRUE(now->matches(spatial,t));
+  for(const auto kind:{"stairs","ramp"}) {
+    auto wrong=support;wrong.segment_kind=kind;
+    EXPECT_EQ(PreparedGeometry::build(spatial,t,wrong)->failure,"support_invalid");
+  }
+  auto unsupported=spatial;unsupported.require_support_reference=false;
+  EXPECT_EQ(PreparedGeometry::build(unsupported,t,support)->failure,
+    "spatial_planar_envelope_requires_verified_floor_support");
+}
 wire::ReferenceProposal proposalWire(const wire::ExecutionVersion& v=version()) {
   wire::ReferenceProposal p;p.proposal_id="proposal";p.version=v;p.expected_trajectory_id=-1;
   p.source_stamp=stamp(100.);p.valid_until=stamp(100.9);p.transport_mode="isolated_mock";

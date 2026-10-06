@@ -1,0 +1,226 @@
+{
+  "schema": 1,
+  "candidate": "v29",
+  "created_utc": "2026-10-06T15:21:15.050771+00:00",
+  "scope": "Correct spatial resource accounting of unchanged complete motion sweep; actual Action navigation acceptance remains pending.",
+  "v28_failure": {
+    "run_path": "/home/eric/wjg/d1max-build-isaac/runs/campus_spot_near_v28_001",
+    "status": "Naturally failed and retired before this build; original immutable candidate unchanged.",
+    "reported_by_parent": {
+      "source_duration_s": 39.58,
+      "action_reason": "execution_blocked_timeout:actual_command_blocked:motion_volume_budget_exhausted",
+      "net_xy_m": 0.25935,
+      "observer_cumulative_m": 0.28175,
+      "real_feet_lifted": true,
+      "stop_imu_full_body_checks": true
+    },
+    "established_root_cause": "Old resource gate rejected world rotated AABB size.prod()>200000 before any query, even though padded footprint excluded its corner cells. Gait velocity legitimately increases original Z span; new code retains it."
+  },
+  "actual_v28_source_examples": {
+    "cases": [
+      {
+        "body_source_stamp_ns": 1791299362644907200,
+        "sim_time_ns": 5480000000,
+        "position": [
+          -43.75069046020508,
+          -3.95688796043396,
+          0.5157955288887024
+        ],
+        "yaw_deg": -2.3413159663962855,
+        "vz": 0.12750549614429474,
+        "grid_shape": [
+          94,
+          82,
+          27
+        ],
+        "world_aabb_cells": 208116,
+        "inside_columns": 6781,
+        "actual_complete_query_cells": 183087,
+        "max_z": 1.2550025917568373,
+        "threshold": 200000
+      },
+      {
+        "body_source_stamp_ns": 1791299393584907200,
+        "sim_time_ns": 36420000000,
+        "position": [
+          -43.680015563964844,
+          -3.9400014877319336,
+          0.4916352927684784
+        ],
+        "yaw_deg": -10.508377432836072,
+        "vz": 0.007505736313760281,
+        "grid_shape": [
+          103,
+          93,
+          25
+        ],
+        "world_aabb_cells": 239475,
+        "inside_columns": 6776,
+        "actual_complete_query_cells": 169400,
+        "max_z": 1.150442516550155,
+        "threshold": 200000
+      }
+    ],
+    "method": "Exact body_source_stamp_ns route_progress pose matched actual native physics trajectory pose/velocity; original full padded footprint counted without evidence queries. World floor min=-.02; zpad=tan(.15)*.025+.1+abs(measured_vz)*.67; original body-above=.55. Counts do not claim observed FREE.",
+    "source_files": [
+      "/home/eric/wjg/d1max-build-isaac/runs/campus_spot_near_v28_001/control_trace.jsonl",
+      "/home/eric/wjg/d1max-build-isaac/runs/campus_spot_near_v28_001/physics/trajectory.jsonl"
+    ],
+    "fixture_shape": {
+      "radius_m": 0.6078651750202781,
+      "offset_m": 0.3125,
+      "above_m": 0.55
+    }
+  },
+  "change": {
+    "source_range": "motion_sweep.hpp:191-236",
+    "description": "Allocation-free first pass counts only original padded inside XY columns through complete original Z span. Reject iff columns>floor(200000/NZ); division avoids overflow. Both count and evidence passes share exactly the original inside predicate. Full Z geometry unchanged. Each first-pass XY iteration and second-pass queried column obey original total steady budget. Original end source/steady validity remains mandatory.",
+    "resource_limit_actual_voxels": 200000,
+    "motion_cpu_budget_s": 0.04,
+    "volume_shrunk": false,
+    "budget_or_lease_increased": false,
+    "raw_or_oracle_bypassed": false,
+    "new_cache_or_gridmap_abi_changes": false
+  },
+  "source_freeze": [
+    {
+      "source": "/home/eric/wjg/d1max-system/d1max_nav_ws/src/scan_planner_vendor/plan_manage/include/plan_manage/motion_sweep.hpp",
+      "sha256": "7f49e45a6bf1606b8eac357a1d1c220d2eef35061538d724edd93b8c1ddc98e8",
+      "isolated": "/home/eric/wjg/d1max-build-isaac/nav-source/src/scan_planner_vendor/plan_manage/include/plan_manage/motion_sweep.hpp",
+      "isolated_bytes_identical": true,
+      "installed": "/home/eric/wjg/d1max-build-isaac/nav/install/scan_planner/include/plan_manage/motion_sweep.hpp",
+      "installed_bytes_identical": true,
+      "installed_sha256": "7f49e45a6bf1606b8eac357a1d1c220d2eef35061538d724edd93b8c1ddc98e8"
+    },
+    {
+      "source": "/home/eric/wjg/d1max-system/d1max_nav_ws/src/scan_planner_vendor/plan_manage/test/test_motion_sweep.cpp",
+      "sha256": "087c5a5fd77dbba2d4d4aa18b2f8f4b02b99b316c0efed6607191763d625482d",
+      "isolated": "/home/eric/wjg/d1max-build-isaac/nav-source/src/scan_planner_vendor/plan_manage/test/test_motion_sweep.cpp",
+      "isolated_bytes_identical": true
+    }
+  ],
+  "build": {
+    "package": "scan_planner",
+    "exit_code": 0,
+    "duration_s": 51.135997,
+    "log_directory": "/home/eric/wjg/d1max-build-isaac/nav/log/build_2026-10-06_23-15-20",
+    "events_sha256": "f32976ade4f3a1223c3163d42518f386782b6e1db319baaddc461d243d65f46e",
+    "reason_scan_only": "Only inline motion_sweep and test source changed; no GridMap/API/layout or native library change since completed four-package v28 build.",
+    "final_new_test_target_rebuild_log": {
+      "path": "/tmp/d1max_v29_motion_test_rebuild.log",
+      "sha256": "0c7728f115c99945ff53ec2f7158ea9dff2f9577562649b4ae5fb716616c6c54"
+    },
+    "elf_artifacts": [
+      {
+        "name": "scan_planner_node",
+        "build": "/home/eric/wjg/d1max-build-isaac/nav/build/scan_planner/scan_planner_node",
+        "install": "/home/eric/wjg/d1max-build-isaac/nav/install/scan_planner/lib/scan_planner/scan_planner_node",
+        "build_sha256": "50ffb8161b7ff4836ff1403e00054d31b86fd80b4a71ad5b402aef36163b570b",
+        "install_sha256": "815b64f9e6a65e13450a41cbd6560fec0973ac05b8c1685d9defc1db90085f9c",
+        "text_identical": true,
+        "differing_sections": [
+          ".dynstr",
+          ".dynamic"
+        ],
+        "reason": "CMake clears build RUNPATH during installation."
+      },
+      {
+        "name": "closed_loop_controller",
+        "build": "/home/eric/wjg/d1max-build-isaac/nav/build/scan_planner/closed_loop_controller",
+        "install": "/home/eric/wjg/d1max-build-isaac/nav/install/scan_planner/lib/scan_planner/closed_loop_controller",
+        "build_sha256": "373f94e0a22916355583b6eb3eae5f90a880dc88ed48bf5ceaeaa6da0d2f8e37",
+        "install_sha256": "ee0f6a9a21a434e608a7f9f0f9f74c0aa6efeedfbc3a6323eb2b6e31060c42a4",
+        "text_identical": true,
+        "differing_sections": [
+          ".dynstr",
+          ".dynamic"
+        ],
+        "reason": "CMake clears build RUNPATH during installation."
+      }
+    ],
+    "unchanged_plan_env_library": {
+      "path": "/home/eric/wjg/d1max-build-isaac/nav/install/plan_env/lib/libplan_env.a",
+      "sha256": "6e6ca54a5bc15489c65c9d7f20d11c218b05aad8de37c503c633a5288d03a8ba",
+      "identical_to_v28": true
+    }
+  },
+  "tests": {
+    "fresh_v29_ctest_targets": 15,
+    "failed_targets": 0,
+    "ctest_log": "/home/eric/wjg/d1max-build-isaac/nav/build/scan_planner/Testing/Temporary/LastTest.log",
+    "ctest_log_sha256": "b158d9770fe3cc87fc443a00f2fe7ddbbf110542fb24ff7c9d18915f530674bb",
+    "motion_gtest_cases": 35,
+    "motion_gtest_failures": 0,
+    "motion_xml": "/home/eric/wjg/d1max-build-isaac/nav/build/scan_planner/test_results/scan_planner/test_motion_sweep.gtest.xml",
+    "motion_xml_sha256": "22af3c3c0c8c57fcce173f6b63f3def76a95167a128e1858c19281a84ba522a8",
+    "new_tests": [
+      "PhysicalSpotRotatedAabbDoesNotConsumeUnqueriedCornerVoxelBudget",
+      "PhysicalSpotTrueInsideVoxelOverflowStillRejectsEntireVolume",
+      "PhysicalSpotRotatedFullVolumeStillFindsFootAndTopLiveObstacles",
+      "PhysicalSpotRotatedCountPassCannotRenewEitherRaySourceOrReceipt"
+    ],
+    "new_test_motion_budget_s": 0.04,
+    "excluded_ros_launch_tests": [
+      "test_planner_startup",
+      "test_waypoint_parameters"
+    ],
+    "prior_unchanged_package_validation": "v28 plan_env8/path_searching4/bspline_opt4 targets passed; retained without redundant rebuild/retest.",
+    "yaw_fixture_cells": [
+      {
+        "yaw_deg": 0,
+        "aabb_cells": 168480,
+        "complete_inside_cells": 161856
+      },
+      {
+        "yaw_deg": -10.508,
+        "aabb_cells": 225216,
+        "complete_inside_cells": 162768
+      },
+      {
+        "yaw_deg": 45,
+        "aabb_cells": 334176,
+        "complete_inside_cells": 163776
+      },
+      {
+        "yaw_deg": -45,
+        "aabb_cells": 334176,
+        "complete_inside_cells": 163776
+      },
+      {
+        "yaw_deg": 90,
+        "aabb_cells": 168480,
+        "complete_inside_cells": 161856
+      }
+    ],
+    "true_overflow": "At measured_vz=.5 the original complete Z span is31 cells; inside coverage209064/210242/211544 cells at yaw0/-10.508/45 remains rejected.",
+    "foot_top_and_expiry": "Rotated live nonfloor endpoints at foot=.025 and top1.075 block; front and rear source/receipt expiry independently reject and repeated passes cannot renew stamps.",
+    "reference": "Independent frozen old footprint/Z formulas enumerate XY/Z cells; does not call new inside lambda.",
+    "cold_benchmark_25": {
+      "above": 0.55,
+      "body_offset": 0.3125,
+      "body_radius": 0.608,
+      "clock": "steady_clock",
+      "floor_lower": -0.02,
+      "iterations": 25,
+      "map_shape": [
+        160,
+        160,
+        60
+      ],
+      "performance_assertion": false,
+      "probe": "physical_spot_cold_motion_columns",
+      "reaction_length": 0.902,
+      "resolution": 0.05,
+      "setup_excluded": true,
+      "unique_voxels": 161856,
+      "wall_ms_p50": 3.502154,
+      "wall_ms_p95": 3.548855,
+      "yaw_bound": 1.036
+    }
+  },
+  "limits": [
+    "Only resources formerly counted outside the unchanged query footprint were excluded from accounting. Every originally queried Z cell and actor veto remains required.",
+    "Offline 40ms regression and benchmark do not establish IsaacSim realtime factor or actual arrival; parent must assemble fresh v29.",
+    "No ROS/Kit/SDK/Git/deployment process started by this implementation."
+  ]
+}

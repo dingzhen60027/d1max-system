@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Isaac Sim 6 indoor fixture: physical differential wheels and two real LiDARs.
+"""Isaac Sim 6 navigation plant: physical quadruped or legacy wheel regression.
 
 Run with Isaac's python.sh. ROS runs in a separate Humble/Zenoh process; the
 loopback wire protocol carries only measured state, ray hits and applied motion.
@@ -21,7 +21,7 @@ from pathlib import Path
 
 import numpy as np
 
-from protocol import COMMAND_PORT, STATE_PORT, decode, encode, finite_vector, imu_packet, ray_packets, state_packet
+from protocol import COMMAND_PORT, STATE_PORT, decode, dynamic_packet, encode, finite_vector, imu_packet, ray_packets, state_packet
 
 HERE = Path(__file__).resolve().parent
 
@@ -29,12 +29,16 @@ HERE = Path(__file__).resolve().parent
 def parse_args():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--headless", action=argparse.BooleanOptionalAction, default=False)
+    parser.add_argument("--camera", choices=("overview", "follow"), default="follow")
     parser.add_argument("--render-fps", type=float, default=0.,
                         help="GUI recording: render-only updates at this source cadence; 0 keeps the original loop")
     parser.add_argument("--scene-file", type=Path, default=HERE / "assets/scene_config.json")
     parser.add_argument("--scene-sha256", help="Require the sealed session's exact scene specification")
     parser.add_argument("--static-prior-geometry-sha256",
                         help="Require this static collider attestation before each measured state")
+    parser.add_argument('--body-envelope-json', help='Sealed full articulated-body collision query envelope')
+    parser.add_argument('--session-id', help='Original navigation session identity for simulation audits')
+    parser.add_argument('--clock-anchor-ns', type=int, default=0, help='Original fixed session source-clock anchor')
     parser.add_argument("--result-dir", type=Path, default=HERE / "runs/latest")
     parser.add_argument("--control-file", type=Path, help='Optional JSON {"paused":bool,"stop":bool}')
     parser.add_argument("--epoch", default=None)
@@ -68,6 +72,8 @@ SCENE_BYTES = ARGS.scene_file.read_bytes()
 if ARGS.scene_sha256 and hashlib.sha256(SCENE_BYTES).hexdigest() != ARGS.scene_sha256:
     raise SystemExit("Scene specification does not match the sealed navigation session")
 CONFIG = json.loads(SCENE_BYTES)
+IS_QUADRUPED = CONFIG['robot'].get('kind') in ('quadruped', 'official_go2_physx', 'official_spot_physx')
+PLANT = None
 ARGS.physics_hz = ARGS.physics_hz or float(CONFIG.get("physics", {}).get("frequency_hz", 120.0))
 if ARGS.physics_hz < CONFIG["imu"]["frequency_hz"]:
     raise SystemExit("Physics frequency must cover the configured native IMU sampling frequency")
@@ -95,7 +101,7 @@ from isaacsim.core.experimental.prims import GeomPrim
 from isaacsim.core.simulation_manager import SimulationManager
 from isaacsim.robot.experimental.wheeled_robots.controllers import DifferentialController
 from isaacsim.robot.experimental.wheeled_robots.robots import WheeledRobot
-from pxr import Gf, Usd, UsdGeom, UsdPhysics
+from pxr import Gf, Sdf, Usd, UsdGeom, UsdPhysics
 
 
 def array(value):
@@ -131,6 +137,10 @@ def add_box(name, center, size, color):
 
 
 def build_room():
+    if IS_QUADRUPED:
+        from world_builder import author_world
+        author_world(omni.usd.get_context().get_stage(), CONFIG)
+        return
     GroundPlane("/World/GroundPlane", sizes=14.0, colors=[[0.34, 0.38, 0.43]], templates=None)
     for box in CONFIG["static_boxes"]:
         color = [0.68, 0.74, 0.83] if box["kind"] == "wall" else [0.82, 0.48, 0.20]
@@ -185,11 +195,15 @@ def assign_contact_materials():
             geometry.set_offsets(contact_offsets=0.002, rest_offsets=0.0)
 
 
-def external_hit_mask(points):
+def external_hit_mask(points, capture=None):
     """Exclude only this fixture's authored collision solids, in body coordinates.
 
     A self hit is dropped; its occluded ray never becomes an invented free ray.
     """
+    if IS_QUADRUPED:
+        pose = capture['pose']
+        return PLANT.external_hit_mask(points, measured_snapshot=capture['robot_snapshot'],
+            body_position=pose[:3], body_orientation_wxyz=[pose[6], *pose[3:6]])
     robot = CONFIG["robot"]
     half = np.asarray(robot["body_size"]) / 2 + 0.005
     inside = np.all(np.abs(points) <= half, axis=1)
@@ -204,7 +218,7 @@ def external_hit_mask(points):
 
 
 class WireInterface:
-    def __init__(self, robot, controller):
+    def __init__(self, robot, controller, dynamic_view=None):
         self.robot, self.controller = robot, controller
         self.sender = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.receiver = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -250,6 +264,44 @@ class WireInterface:
         self.geometry_audit_total_wall_s = self.geometry_audit_max_wall_s = 0.0
         self.geometry_last_sha256 = self.geometry_last_fault = ""
         self.geometry_fault_latched = False
+        self.stage_geometry_verifier = None
+        if ARGS.static_prior_geometry_sha256:
+            from truth_map import StageGeometryVerifier
+            self.stage_geometry_verifier = StageGeometryVerifier(omni.usd.get_context().get_stage(), CONFIG)
+        from dynamic_collision import actor_registry, registry_digest
+        self.dynamic_registry = actor_registry(CONFIG)
+        self.dynamic_registry_sha256 = registry_digest(self.dynamic_registry)
+        self.dynamic_samples = 0
+        self.dynamic_stream = (RESULT_DIR/'dynamic_actor_readings.jsonl').open('w') if IS_QUADRUPED else None
+        self.last_body_certificate = None
+        self.collision_audit = None
+        if IS_QUADRUPED and CONFIG.get('robot_collision_registry'):
+            from collision_audit import Audit
+            self.collision_audit = Audit(CONFIG, ARGS.session_id or EPOCH,
+                hashlib.sha256(SCENE_BYTES).hexdigest(), ARGS.clock_anchor_ns)
+        self.dynamic_view = dynamic_view
+        self.dynamic_index = {}
+        if dynamic_view is not None:
+            if not dynamic_view.is_physics_tensor_entity_valid():
+                raise RuntimeError('dynamic_actor_actual_physics_view_invalid')
+            native_paths = [str(path) for path in dynamic_view._physics_rigid_body_view.prim_paths]
+            expected_paths = [actor['path'] for actor in self.dynamic_registry]
+            if len(native_paths) != len(expected_paths) or set(native_paths) != set(expected_paths):
+                raise RuntimeError('dynamic_actor_native_identity_mismatch')
+            self.dynamic_index = {path: index for index, path in enumerate(native_paths)}
+        self.body_envelope = json.loads(ARGS.body_envelope_json) if ARGS.body_envelope_json else None
+        self.body_audit_count = self.body_audit_faults = 0
+        self.floor_hit_audits = self.floor_hit_samples = 0
+        self.floor_endpoint_max_abs_error_m = 0.
+        self.floor_hit_stream = (RESULT_DIR/'floor_hit_audit.jsonl').open('w') if IS_QUADRUPED else None
+        self.link_snapshot_stream = (RESULT_DIR/'robot_link_readings.jsonl').open('w') if IS_QUADRUPED else None
+        self.lidar_capture = None
+
+    def apply_motion(self, command):
+        # The quadruped policy consumes this command only on a physics tick.
+        # Wheels remain solely for reproducible historical regression.
+        if not IS_QUADRUPED:
+            self.robot.apply_wheel_actions(self.controller.forward(command))
 
     def ray_phase(self, name, started):
         elapsed = time.monotonic() - started
@@ -288,7 +340,7 @@ class WireInterface:
             self.command[:] = 0
         if not paused and not self.geometry_fault_latched and ARGS.test_frames and (ARGS.test_linear_speed or ARGS.test_angular_speed):
             self.command[:] = [ARGS.test_linear_speed, ARGS.test_angular_speed]
-        self.robot.apply_wheel_actions(self.controller.forward(self.command))
+        self.apply_motion(self.command)
 
     def guard_command_expiry(self, step_dt, source_start_time):
         if ARGS.test_frames and (ARGS.test_linear_speed or ARGS.test_angular_speed):
@@ -296,7 +348,7 @@ class WireInterface:
         next_step_ns = round((SimulationManager.get_simulation_time() - source_start_time + step_dt) * 1e9)
         if (time.monotonic() >= self.command_until or next_step_ns >= self.command_source_deadline_ns) and np.any(self.command):
             self.command[:] = 0
-            self.robot.apply_wheel_actions(self.controller.forward(self.command))
+            self.apply_motion(self.command)
 
     def send(self, packet):
         self.sender.sendto(packet, ("127.0.0.1", ARGS.state_port))
@@ -313,15 +365,23 @@ class WireInterface:
         linear, angular = [array(v)[0] for v in self.robot.get_velocities()]
         w, x, y, z = orientations.tolist()
         pose = positions.tolist() + [x, y, z, w]
+        robot_snapshot = self.robot.collider_snapshot() if IS_QUADRUPED else None
+        self.last_robot_snapshot = robot_snapshot
+        if self.link_snapshot_stream is not None:
+            # Preserve the exact same measured bundle used by full-body proof
+            # and laser self-filtering. This is independent gait evidence;
+            # no extra pose reads, interpolation or policy-derived state.
+            self.link_snapshot_stream.write(json.dumps(dict(sim_time_ns=sim_time_ns,
+                session_id=ARGS.session_id, clock_anchor_ns=ARGS.clock_anchor_ns,
+                pose=pose, colliders=robot_snapshot), separators=(',', ':'), allow_nan=False)+'\n')
         metadata = None
         if ARGS.static_prior_geometry_sha256:
             # This is a geometry-domain attestation, not a lidar observation or
             # localization measurement. Preserve the actual body's source stamp.
-            from truth_map import verify_stage_geometry
             started = time.monotonic()
             actual_hash, fault = "", ""
             try:
-                actual_hash = verify_stage_geometry(omni.usd.get_context().get_stage(), CONFIG)
+                actual_hash = self.stage_geometry_verifier.verify()
                 if actual_hash != ARGS.static_prior_geometry_sha256:
                     fault = "static_geometry_hash_mismatch"
             except ValueError as error:
@@ -337,11 +397,30 @@ class WireInterface:
                 self.geometry_last_fault = fault
             if self.geometry_fault_latched:
                 self.command[:] = 0
-                self.robot.apply_wheel_actions(self.controller.forward(self.command))
+                self.apply_motion(self.command)
             metadata = dict(static_prior_geometry_sha256=actual_hash,
                 static_prior_geometry_valid=not self.geometry_fault_latched,
                 static_prior_geometry_checked_sim_time_ns=sim_time_ns,
                 static_prior_geometry_fault=self.geometry_last_fault)
+            if self.body_envelope is not None:
+                from runtime_geometry import body_certificate
+                self.body_audit_count += 1
+                try:
+                    metadata.update(body_certificate(robot_snapshot, pose,
+                        CONFIG['robot_collision_registry'], self.body_envelope, sim_time_ns))
+                except (ValueError, RuntimeError) as error:
+                    from dynamic_collision import canonical
+                    self.body_audit_faults += 1
+                    self.geometry_fault_latched = True
+                    self.geometry_last_fault = str(error)[:512]
+                    metadata.update(body_envelope_valid=False,
+                        body_envelope_checked_sim_time_ns=sim_time_ns,
+                        body_envelope_registry_sha256=hashlib.sha256(canonical(CONFIG['robot_collision_registry'])).hexdigest(),
+                        body_envelope_fault=self.geometry_last_fault, static_prior_geometry_valid=False,
+                        static_prior_geometry_fault=self.geometry_last_fault)
+                    self.command[:] = 0
+                    self.apply_motion(self.command)
+                self.last_body_certificate = {k:v for k,v in metadata.items() if k.startswith('body_envelope_')}
         self.send(state_packet(EPOCH, self.state_sequence, sim_time_ns, pose, linear.tolist(), angular.tolist(), metadata=metadata))
         now_wall = time.monotonic()
         if self.state_first_wall is None:
@@ -351,6 +430,29 @@ class WireInterface:
             self.state_max_wall_gap = max(self.state_max_wall_gap, now_wall - self.state_last_wall)
         self.state_last_wall = now_wall
         self.state_sequence += 1
+        if IS_QUADRUPED:
+            samples = {}
+            if self.dynamic_view is not None:
+                from isaacsim.core.experimental.utils import backend
+                if not self.dynamic_view.is_physics_tensor_entity_valid():
+                    raise RuntimeError('dynamic_actor_actual_physics_view_invalid')
+                with backend.use_backend('tensor', raise_on_unsupported=True, raise_on_fallback=True):
+                    positions, orientations = [array(v) for v in self.dynamic_view.get_world_poses()]
+                    dynamic_linear, _dynamic_angular = [array(v) for v in self.dynamic_view.get_velocities()]
+                for actor in self.dynamic_registry:
+                    index = self.dynamic_index[actor['path']]
+                    w, x, y, z = orientations[index].tolist()
+                    samples[actor['id']] = dict(present=True, position=positions[index].tolist(),
+                        orientation_xyzw=[x, y, z, w], linear_velocity=dynamic_linear[index].tolist())
+            self.send(dynamic_packet(EPOCH, self.state_sequence, sim_time_ns,
+                self.dynamic_registry_sha256, samples))
+            self.dynamic_stream.write(json.dumps(dict(sim_time_ns=sim_time_ns,
+                registry_sha256=self.dynamic_registry_sha256, samples=samples), separators=(',', ':'))+'\n')
+            if self.dynamic_samples % 50 == 0:
+                self.dynamic_stream.flush()
+            self.dynamic_samples += 1
+            if self.collision_audit is not None:
+                self.collision_audit.sample(sim_time_ns, robot_snapshot, samples)
         return pose, linear.tolist(), angular.tolist()
 
     def timing_summary(self):
@@ -440,6 +542,13 @@ class WireInterface:
             if cloud is None or depth is None:
                 continue
             measured_scan_ns = round(float(frame["time"]) * 1e9)
+            capture = self.lidar_capture if IS_QUADRUPED else None
+            source_scan_ns = capture['sim_time_ns'] if capture else measured_scan_ns
+            capture_pose = capture['pose'] if capture else self.last_pose
+            if IS_QUADRUPED and (capture is None or capture['physics_step'] + 1 != frame['physics_step']):
+                self.geometry_fault_latched = True
+                self.command[:] = 0
+                raise RuntimeError('native_lidar_prephysics_witness_missing_or_mismatched')
             expected_step = round(sim_time_ns * ARGS.physics_hz / 1e9)
             # The native sensor sums its float step sizes; preserve that clock
             # rather than restamping it to the body's integer step clock.
@@ -461,9 +570,34 @@ class WireInterface:
             valid = (np.all(np.isfinite(cloud), axis=1) & np.isfinite(depth)
                      & (depth >= CONFIG["lidar"]["range_min"])
                      & (depth < CONFIG["lidar"]["range_max"] - .001))
+            if IS_QUADRUPED:
+                from runtime_geometry import floor_endpoint_certificate
+                hit_paths = np.asarray(lidar._lidar_sensor_interface.get_prim_data(lidar.prim_path), dtype=object)
+                if hit_paths.shape != (len(cloud),):
+                    self.geometry_fault_latched = True
+                    self.command[:] = 0
+                    raise RuntimeError('native_lidar_hit_identity_layout_changed')
+                try:
+                    floor_evidence = floor_endpoint_certificate(
+                        np.ascontiguousarray(cloud[valid] + origin, dtype=np.float32),
+                        capture_pose, hit_paths[valid], CONFIG['flat_support_contact'])
+                except ValueError:
+                    self.geometry_fault_latched = True
+                    self.command[:] = 0
+                    raise
+                self.floor_hit_audits += 1
+                self.floor_hit_samples += floor_evidence['native_floor_hits']
+                self.floor_endpoint_max_abs_error_m = max(self.floor_endpoint_max_abs_error_m,
+                    floor_evidence['floor_endpoint_max_abs_error_m'])
+                self.floor_hit_stream.write(json.dumps(dict(sensor_id=sensor_id,
+                    native_scan_time_ns=measured_scan_ns, scan_sequence=self.scan_sequence,
+                    acquisition_begin_ns=source_scan_ns,
+                    floor_path=CONFIG['flat_support_contact']['floor_path'],
+                    sealed_error_bound_m=CONFIG['flat_support_contact']['floor_endpoint_error_bound_m'],
+                    **floor_evidence), separators=(',', ':'))+'\n')
             points = cloud[valid] + origin
             rings = rings[valid]
-            external = external_hit_mask(points)
+            external = external_hit_mask(points, capture)
             points, rings = points[external], rings[external]
             self.ray_phase("exact_self_and_depth_filter", phase_start)
             if not len(points):
@@ -472,8 +606,12 @@ class WireInterface:
             points = np.ascontiguousarray(points, dtype=np.float32)
             rings = np.ascontiguousarray(rings, dtype=np.uint16)
             phase_start = time.monotonic()
-            for packet in ray_packets(EPOCH, self.scan_sequence, measured_scan_ns, sensor_id,
-                                      origin.tolist(), points, rings=rings):
+            phase_metadata = dict(native_frame_time_ns=measured_scan_ns,
+                native_frame_time_s=float(frame['time']), phase='physx_prephysics_capture_v1',
+                native_frame_physics_step=int(frame['physics_step']),
+                capture_physics_step=capture['physics_step']) if capture else {}
+            for packet in ray_packets(EPOCH, self.scan_sequence, source_scan_ns, sensor_id,
+                                      origin.tolist(), points, rings=rings, **phase_metadata):
                 self.send(packet)
             self.ray_phase("binary_pack_and_udp", phase_start)
             now_wall = time.monotonic()
@@ -484,7 +622,8 @@ class WireInterface:
             self.scan_counts[sensor_id] += 1
             self.hit_counts[sensor_id] = len(points)
             self.last_scan_data[sensor_id] = dict(xyz=points, origin=origin, ring=rings,
-                pose=np.asarray(self.last_pose), sim_time_ns=measured_scan_ns)
+                pose=np.asarray(capture_pose), sim_time_ns=source_scan_ns,
+                native_frame_time_ns=measured_scan_ns)
             if self.first_hits[sensor_id] is None:
                 self.first_hits[sensor_id] = {"count": len(points), "body_min": points.min(axis=0).tolist(),
                                                "body_max": points.max(axis=0).tolist(),
@@ -495,13 +634,21 @@ class WireInterface:
                                                "zenith": array(frame["zenith"]).tolist()}
                 phase_start = time.monotonic()
                 np.savez(RESULT_DIR / f"first_scan_{sensor_id}.npz", xyz=points, origin=origin, ring=rings,
-                                    pose=np.asarray(self.last_pose), sim_time_ns=measured_scan_ns)
+                                    pose=np.asarray(capture_pose), sim_time_ns=source_scan_ns,
+                                    native_frame_time_ns=measured_scan_ns)
                 self.ray_phase("first_scan_evidence_save", phase_start)
         self.scan_sequence += 1
 
     def close(self):
         self.imu_stream.close()
-        self.robot.apply_wheel_actions(self.controller.forward(np.zeros(2)))
+        if self.dynamic_stream is not None:
+            self.dynamic_stream.close()
+        if self.floor_hit_stream is not None:
+            self.floor_hit_stream.close()
+        if self.link_snapshot_stream is not None:
+            self.link_snapshot_stream.close()
+        self.command[:] = 0
+        self.apply_motion(self.command)
         self.sender.close()
         self.receiver.close()
         for sensor_id, capture in enumerate(self.last_scan_data):
@@ -510,37 +657,50 @@ class WireInterface:
 
 
 def main():
+    global PLANT
     for extension in ("isaacsim.asset.importer.urdf", "isaacsim.robot.wheeled_robots", "isaacsim.sensors.physx", "isaacsim.sensors.experimental.physics"):
         app_utils.enable_extension(extension)
     APP.update()
     APP.update()
-    asset = robot_asset()
-    generated_robot_usd_sha256 = hashlib.sha256(asset.read_bytes()).hexdigest()
+    asset = None if IS_QUADRUPED else robot_asset()
+    generated_robot_usd_sha256 = hashlib.sha256(asset.read_bytes()).hexdigest() if asset else None
     stage_utils.create_new_stage()
     stage_utils.set_stage_up_axis("Z")
     stage_utils.set_stage_units(meters_per_unit=1.0)
     build_room()
     if not ARGS.headless and ARGS.render_fps:
         # Give the actual viewport room in the two-window recording layout.
-        import omni.ui
+        from omni import ui as omni_ui
         for name in ("Stage", "Property", "Content", "Console"):
-            window = omni.ui.Workspace.get_window(name)
+            window = omni_ui.Workspace.get_window(name)
             if window is not None:
                 window.visible = False
     robot_config = CONFIG["robot"]
     x, y, z, yaw = robot_config["initial_pose"]
-    robot = WheeledRobot("/World/WheelFixture", wheel_dof_names=["left_wheel_joint", "right_wheel_joint"],
-                         usd_path=str(asset), positions=[[x, y, z]],
-                         orientations=[[math.cos(yaw / 2), 0, 0, math.sin(yaw / 2)]])
+    if IS_QUADRUPED:
+        app_utils.enable_extension('isaacsim.robot.policy.examples')
+        from quadruped import QuadrupedPlant
+        quad_config = dict(robot_config, initial_position=[x, y, z], initial_yaw=yaw)
+        robot = QuadrupedPlant(omni.usd.get_context().get_stage(), quad_config, RESULT_DIR)
+        PLANT = robot
+        body_path = robot.body_path
+        asset = robot.usd_path
+        generated_robot_usd_sha256 = hashlib.sha256(asset.read_bytes()).hexdigest()
+    else:
+        robot = WheeledRobot("/World/WheelFixture", wheel_dof_names=["left_wheel_joint", "right_wheel_joint"],
+                             usd_path=str(asset), positions=[[x, y, z]],
+                             orientations=[[math.cos(yaw / 2), 0, 0, math.sin(yaw / 2)]])
+        body_path = find_link('base_link')
     APP.update()
-    assign_contact_materials()
+    if not IS_QUADRUPED:
+        assign_contact_materials()
     from isaacsim.sensors.physx import RotatingLidarPhysX
     lidars = []
     lidar_config = CONFIG["lidar"]
     for index, xyz in enumerate(lidar_config["origins"]):
         origin = np.asarray(xyz, dtype=float)
         lidar = RotatingLidarPhysX(
-            prim_path=find_link("base_link") + f"/Lidar_{index}", name=f"fixture_lidar_{index}",
+            prim_path=body_path + f"/Lidar_{index}", name=f"fixture_lidar_{index}",
             translation=origin, rotation_frequency=0.0,
             fov=(lidar_config["horizontal_fov_deg"], lidar_config["vertical_fov_deg"]),
             resolution=(lidar_config["horizontal_resolution_deg"], lidar_config["vertical_resolution_deg"]),
@@ -548,10 +708,16 @@ def main():
         lidar.add_linear_depth_data_to_frame()
         lidar.add_point_cloud_data_to_frame()
         lidar.add_zenith_data_to_frame()
+        if IS_QUADRUPED:
+            lidar.enable_semantics()  # Native exact hit-prim identity, never synthetic labels.
+        # Enroll the native capture switch before sealing the stage audit.
+        # Runtime value changes are measurement gating; new schema/attributes
+        # after enrollment still require a full geometry audit.
+        lidar.prim.CreateAttribute("enabled", Sdf.ValueTypeNames.Bool).Set(True)
         lidars.append((lidar, origin))
     from isaacsim.sensors.experimental.physics import IMU, IMUSensor
     imu_config = CONFIG["imu"]
-    imu_sensor = IMUSensor(IMU.create(find_link("base_link") + "/BodyImu",
+    imu_sensor = IMUSensor(IMU.create(body_path + "/BodyImu",
                            translations=[imu_config["origin"]], orientations=[imu_config["orientation_wxyz"]],
                            linear_acceleration_filter_size=imu_config["linear_acceleration_filter_size"],
                            angular_velocity_filter_size=imu_config["angular_velocity_filter_size"],
@@ -559,35 +725,66 @@ def main():
     dt = 1 / ARGS.physics_hz
     SimulationManager.setup_simulation(dt=dt, device="cpu")
     SimulationManager.get_physics_scenes()[0].set_enabled_gpu_dynamics(False)
-    recording_render_mode = not ARGS.headless and ARGS.render_fps > 0
+    # At 500 Hz Kit updates can advance several physics steps. Step the
+    # quadruped explicitly so a 10 Hz native scan and its body pose coincide.
+    recording_render_mode = IS_QUADRUPED or (not ARGS.headless and ARGS.render_fps > 0)
+    effective_render_fps = ARGS.render_fps or (20. if IS_QUADRUPED else 0.)
     if recording_render_mode:
         app_utils.enable_extension("isaacsim.core.rendering_manager")
         from isaacsim.core.rendering_manager import RenderingManager
-    controller = DifferentialController(wheel_radius=robot_config["wheel_radius"], wheel_base=robot_config["wheel_base"],
+    controller = None if IS_QUADRUPED else DifferentialController(wheel_radius=robot_config["wheel_radius"], wheel_base=robot_config["wheel_base"],
                                         max_linear_speed=robot_config["max_linear_speed"],
                                         max_angular_speed=robot_config["max_angular_speed"], max_wheel_speed=12.0)
+    from dynamic_collision import actor_registry
+    dynamic_view = None
+    if actor_registry(CONFIG):
+        from isaacsim.core.experimental.prims import RigidPrim
+        dynamic_view = RigidPrim([actor['path'] for actor in actor_registry(CONFIG)], reset_xform_op_properties=False)
     app_utils.play()
+    from omni.physics import core as physics_core
+    policy_subscription = None
+    dynamic_subscription = None
+    wire_holder = {'wire': None}
+    if IS_QUADRUPED:
+        APP.update()  # Establish the native tensor view before policy initialization.
+        robot.initialize()
+        policy_subscription = physics_core.get_physics_simulation_interface().subscribe_physics_on_step_events(
+            pre_step=True, order=3, on_update=lambda step_dt, _context: robot.step(step_dt,
+                *(wire_holder['wire'].command if wire_holder['wire'] is not None else (0., 0.))))
+        from world_builder import update_actors, update_follow_camera
+        stage = omni.usd.get_context().get_stage()
+        if not ARGS.headless or ARGS.screenshot_path:
+            from omni.kit.viewport.utility import get_active_viewport
+            viewport = get_active_viewport()
+            if viewport:
+                viewport.camera_path = CONFIG['cameras'][ARGS.camera]['path']
     settle_start = SimulationManager.get_num_physics_steps()
     while SimulationManager.get_num_physics_steps() - settle_start < int(2 * ARGS.physics_hz):
-        APP.update()
+        SimulationManager.step(steps=1, update_fabric=False) if IS_QUADRUPED else APP.update()
     for lidar, _ in lidars:
         lidar.initialize()
-    wire = WireInterface(robot, controller)
+    wire = WireInterface(robot, controller, dynamic_view)
+    wire_holder['wire'] = wire
     initial_positions, initial_orientations = [array(v)[0].tolist() for v in robot.get_world_poses()]
     source_steps = SimulationManager.get_num_physics_steps()
     source_start_time = SimulationManager.get_simulation_time()
+    state_period_ns = round(1e9/CONFIG.get('physics', {}).get('state_frequency_hz', 50. if IS_QUADRUPED else ARGS.physics_hz/2))
+    next_state_ns = state_period_ns if IS_QUADRUPED else 0
+    if IS_QUADRUPED:
+        dynamic_subscription = physics_core.get_physics_simulation_interface().subscribe_physics_on_step_events(
+            pre_step=True, order=-1, on_update=lambda step_dt, _context: update_actors(stage, CONFIG,
+                SimulationManager.get_simulation_time()-source_start_time+step_dt))
     # The application can render at 60 Hz while physics advances at 120 Hz.
     # Read the native IMU after each physical step so its 100 Hz source does
     # not get undersampled by viewport rendering; state is still emitted once
     # per application update (normally 60 Hz).
-    import omni.physics.core
-    imu_subscription = omni.physics.core.get_physics_simulation_interface().subscribe_physics_on_step_events(
+    imu_subscription = physics_core.get_physics_simulation_interface().subscribe_physics_on_step_events(
         pre_step=False, order=2,
         on_update=lambda _dt, _context: wire.imu(imu_sensor, source_start_time))
-    command_expiry_subscription = omni.physics.core.get_physics_simulation_interface().subscribe_physics_on_step_events(
+    command_expiry_subscription = physics_core.get_physics_simulation_interface().subscribe_physics_on_step_events(
         pre_step=True, order=0,
         on_update=lambda _dt, _context: wire.guard_command_expiry(_dt, source_start_time))
-    next_lidar_capture_ns = round(2 * dt * 1e9)
+    next_lidar_capture_ns = state_period_ns if IS_QUADRUPED else round(2 * dt * 1e9)
     lidar_capture_count = 0
     lidar_native_enabled = True
 
@@ -603,14 +800,25 @@ def main():
             lidar.resume() if due else lidar.pause()
         lidar_native_enabled = due
         if due:
+            if IS_QUADRUPED:
+                # The native sensor raycasts at physics BEGIN. Its wrapper
+                # increments the frame counter to END before exposing data.
+                # Read actual tensors here, retain both source times, and send
+                # this extra real body witness for exact ray projection.
+                capture_step = SimulationManager.get_num_physics_steps() - source_steps
+                capture_ns = round(capture_step * 1e9 / ARGS.physics_hz)
+                captured_state = emit_state(capture_ns)
+                wire.lidar_capture = dict(sim_time_ns=capture_ns,
+                    physics_step=capture_step, pose=captured_state[0],
+                    robot_snapshot=wire.last_robot_snapshot)
             lidar_capture_count += 1
             while next_lidar_capture_ns <= measurement_ns + 500:
                 next_lidar_capture_ns += round(1e9 / lidar_config["frequency_hz"])
 
-    lidar_gate_subscription = omni.physics.core.get_physics_simulation_interface().subscribe_physics_on_step_events(
+    lidar_gate_subscription = physics_core.get_physics_simulation_interface().subscribe_physics_on_step_events(
         pre_step=True, order=1, on_update=gate_lidar_capture)
     previous_steps = source_steps
-    next_scan_ns = 0
+    next_scan_ns = state_period_ns if IS_QUADRUPED else 0
     stop_requested = False
     pause_requested = False
     screenshot_task = None
@@ -623,7 +831,7 @@ def main():
     next_pause_status = 0.0
     direct_step_wall_anchor = None
     direct_step_source_anchor = None
-    render_period_ns = round(1e9 / ARGS.render_fps) if recording_render_mode else 0
+    render_period_ns = round(1e9 / effective_render_fps) if recording_render_mode else 0
     next_render_ns = render_period_ns
     next_paused_render_wall = 0.0
     render_calls = 0
@@ -633,6 +841,16 @@ def main():
     render_uses_fabric = SimulationManager.is_fabric_enabled() if recording_render_mode else False
     phase_timings = {}
     trajectory = (RESULT_DIR / "trajectory.jsonl").open("w")
+
+    def emit_state(source_ns):
+        state = wire.state(source_ns)
+        trajectory.write(json.dumps(dict(sim_time_ns=source_ns, pose=state[0],
+            command=wire.command.tolist(), linear_velocity_world=state[1],
+            angular_velocity_world=state[2], body_envelope_certificate=wire.last_body_certificate,
+            policy_input_velocity=wire.robot._command.tolist() if IS_QUADRUPED else None,
+            velocity_feedback_integral=wire.robot.velocity_feedback.integral.tolist() if IS_QUADRUPED else None),
+            separators=(',', ':'), allow_nan=False)+'\n')
+        return state
 
     def record_phase(name, started):
         elapsed = time.monotonic() - started
@@ -682,8 +900,12 @@ def main():
         omni.usd.get_context().get_stage().Flatten().Export(str(ARGS.export_scene.resolve()))
     (RESULT_DIR / "ready.json").write_text(json.dumps({"epoch": EPOCH, "pid": __import__("os").getpid(),
         "initial_position": initial_positions, "schema": 1, "sensor_origins": lidar_config["origins"],
-        "generated_robot_usd": str(asset), "generated_robot_usd_sha256": generated_robot_usd_sha256}, indent=2))
-    carb.log_info(f"Wheel fixture READY epoch={EPOCH}; physical wheel drives, two PhysX LiDARs; UDP {ARGS.state_port}/{ARGS.command_port}")
+        "generated_robot_usd": str(asset), "generated_robot_usd_sha256": generated_robot_usd_sha256,
+        "robot_kind": robot_config.get('kind', 'wheel_fixture'),
+        "robot_asset": robot.asset_metadata() if IS_QUADRUPED else None,
+        "dynamic_actor_registry_sha256": wire.dynamic_registry_sha256,
+        "dynamic_actor_count": len(wire.dynamic_registry)}, indent=2))
+    carb.log_info(f"Navigation plant READY epoch={EPOCH}; physical joints, two PhysX LiDARs; UDP {ARGS.state_port}/{ARGS.command_port}")
     try:
         while not stop_requested and (ARGS.headless or APP.is_running()):
             now = time.monotonic()
@@ -729,7 +951,7 @@ def main():
                 if recording_render_mode:
                     if now >= next_paused_render_wall:
                         render_without_physics()
-                        next_paused_render_wall = time.monotonic() + 1 / ARGS.render_fps
+                        next_paused_render_wall = time.monotonic() + 1 / effective_render_fps
                         record_phase("paused_render_only_update", phase_start)
                 else:
                     APP.update()
@@ -751,12 +973,18 @@ def main():
             previous_steps = steps
             frame = steps - source_steps
             sim_time_ns = round(frame * 1_000_000_000 / ARGS.physics_hz)
+            if sim_time_ns < next_state_ns:
+                continue
+            while next_state_ns <= sim_time_ns:
+                next_state_ns += state_period_ns
             phase_start = time.monotonic()
-            last_state = wire.state(sim_time_ns)
+            last_state = emit_state(sim_time_ns)
             record_phase("measured_state_and_udp", phase_start)
             wire.last_pose = last_state[0]
-            trajectory.write(json.dumps({"sim_time_ns": sim_time_ns, "pose": last_state[0],
-                             "command": wire.command.tolist()}, separators=(",", ":"), allow_nan=False) + "\n")
+            if IS_QUADRUPED and ARGS.camera == 'follow':
+                px, py, pz, qx, qy, qz, qw = last_state[0]
+                camera_yaw = math.atan2(2*(qw*qz+qx*qy), 1-2*(qy*qy+qz*qz))
+                update_follow_camera(stage, CONFIG, [px, py, pz, camera_yaw])
             if frame % 60 == 0:
                 trajectory.flush()
             if sim_time_ns >= next_scan_ns:
@@ -771,7 +999,7 @@ def main():
                 if viewport:
                     capture = capture_viewport_to_file(viewport, file_path=str(ARGS.screenshot_path.resolve()), is_hdr=False)
                     screenshot_task = asyncio.ensure_future(capture.wait_for_result())
-            if recording_render_mode and sim_time_ns >= next_render_ns:
+            if recording_render_mode and sim_time_ns >= next_render_ns and not (ARGS.headless and viewport_disabled):
                 # Publish each real state/cloud before spending time drawing.
                 # The display cadence never changes the 120 Hz physical steps,
                 # native sensor stamps, command TTL, or 60 Hz body-state source.
@@ -786,7 +1014,12 @@ def main():
         imu_subscription = None
         command_expiry_subscription = None
         lidar_gate_subscription = None
+        dynamic_subscription = None
+        policy_subscription = None
         trajectory.close()
+        if wire.collision_audit is not None:
+            audit = wire.collision_audit.finish(RESULT_DIR/'trajectory.jsonl', completed=not wire.geometry_fault_latched)
+            (RESULT_DIR/'collision_audit.json').write_text(json.dumps(audit, indent=2, allow_nan=False)+'\n')
         wire.close()
         if screenshot_task is not None and not screenshot_task.done() and not render_failed:
             for _ in range(30):
@@ -798,7 +1031,19 @@ def main():
                    "final_pose": last_state[0] if last_state else None,
                    "final_linear_velocity_world": last_state[1] if last_state else None,
                    "final_angular_velocity_world": last_state[2] if last_state else None,
-                   "wheel_dof_velocities": array(robot.get_dof_velocities())[0].tolist(),
+                   "joint_velocities": array(robot.get_dof_velocities())[0].tolist(),
+                   "robot_kind": robot_config.get('kind', 'wheel_fixture'),
+                   "robot_asset": robot.asset_metadata() if IS_QUADRUPED else None,
+                   "dynamic_actor_count": len(wire.dynamic_registry),
+                   "dynamic_measurement_samples": wire.dynamic_samples,
+                   "native_floor_hit_audit": dict(scans=wire.floor_hit_audits,
+                       native_floor_hits=wire.floor_hit_samples,
+                       max_abs_error_m=wire.floor_endpoint_max_abs_error_m,
+                       sealed_error_bound_m=CONFIG.get('flat_support_contact', {}).get('floor_endpoint_error_bound_m'),
+                       raw_endpoints_and_source_times_preserved=True),
+                   "body_envelope_attestation": dict(required=wire.body_envelope is not None,
+                       verified_samples=wire.body_audit_count-wire.body_audit_faults,
+                       failures=wire.body_audit_faults, envelope=wire.body_envelope),
                    "scans_per_sensor": wire.scan_counts, "last_hits_per_sensor": wire.hit_counts,
                    "first_hits": wire.first_hits, "commands_received": wire.commands_received,
                    "imu": wire.imu_summary(),
@@ -810,13 +1055,20 @@ def main():
                        count=wire.geometry_audit_count, faults=wire.geometry_audit_faults,
                        fault_latched=wire.geometry_fault_latched, last_sha256=wire.geometry_last_sha256,
                        last_fault=wire.geometry_last_fault, total_wall_s=wire.geometry_audit_total_wall_s,
-                       max_wall_s=wire.geometry_audit_max_wall_s),
+                       max_wall_s=wire.geometry_audit_max_wall_s,
+                       full_stage_audits=wire.stage_geometry_verifier.full_audits if wire.stage_geometry_verifier else None,
+                       cache_hits=wire.stage_geometry_verifier.cache_hits if wire.stage_geometry_verifier else None),
                    "native_lidar_captures_per_sensor": lidar_capture_count,
                    "lidar_acquisition_mode": "full native snapshot on each real 10 Hz acquisition step",
+                   "lidar_pose_phase": ('actual physics BEGIN witness; original native wrapper END retained'
+                       if IS_QUADRUPED else 'legacy wheel snapshot'),
+                   "body_state_cadence": ('50 Hz plus real 10 Hz acquisition BEGIN witnesses'
+                       if IS_QUADRUPED else 'legacy wheel cadence'),
                    "headless_viewport_disabled": viewport_disabled,
                    "viewport_disabled_at_physics_frame": viewport_disabled_at_frame,
                    "headless_step_mode": "native physics-only, paced at most 1x after viewport capture",
                    "recording_render": dict(enabled=recording_render_mode, requested_fps=ARGS.render_fps,
+                       effective_fps=effective_render_fps,
                        cadence="playing: real source clock; paused: wall clock; render calls are not completed GPU-frame counts",
                        render_calls=render_calls, max_render_wall_s=render_max_wall_s,
                        render_failed=render_failed,
@@ -827,7 +1079,7 @@ def main():
                    "generated_robot_usd_sha256": generated_robot_usd_sha256,
                    "calibration_command": [ARGS.test_linear_speed, ARGS.test_angular_speed]}
         (RESULT_DIR / "summary.json").write_text(json.dumps(summary, indent=2, allow_nan=False) + "\n")
-        carb.log_info("Wheel fixture summary: " + json.dumps(summary))
+        carb.log_info("Navigation plant summary: " + json.dumps(summary))
         app_utils.stop()
 
 

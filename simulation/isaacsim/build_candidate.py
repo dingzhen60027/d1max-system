@@ -112,12 +112,19 @@ def assemble(output, nav_install, pct_vendor, scene_config, sdk_install=None, lo
     copy_tree(Path(__file__).resolve().parent, simulation)
     config = simulation/'assets/scene_config.json'
     shutil.copyfile(Path(scene_config).resolve(strict=True), config)
+    scene_spec = json.loads(config.read_text())
+    collision_stage = simulation/'assets/indoor_scene.usda'
+    world_result = None
+    if scene_spec['robot'].get('kind') in ('quadruped', 'official_go2_physx', 'official_spot_physx'):
+        from prepare_world import prepare_world
+        world_result = prepare_world(config, simulation)
+        collision_stage = Path(world_result['collision_stage'])
     map_result = build_map(config, output/'map/isaac_floor', pct_vendor)
     map_dir = output/'map/isaac_floor'
     identity = json.loads((map_dir/'manifest.json').read_text())
     map_version = hashlib.sha256(('source_identity\n'+identity['source_sha256']+'\n'+
         digest(map_dir/'manifest.json')+'\n'+digest(map_dir/'tomogram.npz')).encode()).hexdigest()
-    prior_result = build_prior(config, simulation/'assets/indoor_scene.usda',
+    prior_result = build_prior(config, collision_stage,
         map_dir/'collision_prior/static_prior.json', map_version=map_version)
     descriptor = dict(schema=1, candidate_kind='isolated_isaac_fixture',
         default_map_directory='map/isaac_floor', template_source_root='source_snapshot/nav',
@@ -126,13 +133,15 @@ def assemble(output, nav_install, pct_vendor, scene_config, sdk_install=None, lo
         activation=False, physical_acceptance=False, production_release=False,
         external_pct_vendor=str(pct_vendor), simulation_config='simulation/assets/scene_config.json',
         static_collision_prior_manifest='map/isaac_floor/collision_prior/static_prior.json',
-        purpose='Isolated mainline BT/PCT/SCAN/tracker/safety validation with a PhysX wheel fixture')
+        simulation_collision_stage=collision_stage.relative_to(output).as_posix(),
+        purpose='Isolated mainline BT/PCT/SCAN/tracker/safety validation with measured PhysX joints and sensors')
     (output/'release.json').write_text(json.dumps(descriptor, indent=2)+'\n')
     files = {str(path.resolve()): digest(path) for path in sorted(output.rglob('*'))
         if path.is_file() and '__pycache__' not in path.parts}
     manifest = dict(schema=1, created_at=datetime.now(timezone.utc).isoformat(),
         kind='isaac_fixture_integrity_not_production_release_seal', files=files,
-        map=map_result, static_collision_prior=prior_result, activation=False, physical_acceptance=False,
+        map=map_result, static_collision_prior=prior_result, world=world_result,
+        activation=False, physical_acceptance=False,
         python_runtime_closure=python_runtime_closure,
         external_pct_vendor=str(pct_vendor),
         note='Session prepare/verify binds actual native/runtime loader dependencies before launch.')
@@ -148,7 +157,7 @@ if __name__ == '__main__':
     parser.add_argument('--sdk-install', type=Path)
     parser.add_argument('--localization-install', type=Path)
     parser.add_argument('--pct-vendor', type=Path, required=True)
-    parser.add_argument('--scene-config', type=Path, default=REPO/'simulation/isaacsim/assets/scene_config.json')
+    parser.add_argument('--scene-config', type=Path, default=REPO/'simulation/isaacsim/assets/large_quadruped_scene.json')
     parser.add_argument('--select-local', type=Path, help='Save an explicit local fixture selection; never changes the production selector')
     args = parser.parse_args()
     selector = args.select_local

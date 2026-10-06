@@ -1,0 +1,148 @@
+{
+  "physics_frames": 6000,
+  "physics_hz": 500.0,
+  "initial_position": [
+    -43.954593658447266,
+    -4.0304179191589355,
+    0.4865526556968689
+  ],
+  "final_pose": [
+    -42.609718322753906,
+    -3.9684574604034424,
+    0.49471578001976013,
+    0.009598709642887115,
+    0.021842097863554955,
+    0.014819073490798473,
+    0.9996055364608765
+  ],
+  "imu": {
+    "model": "Isaac 6 PhysX experimental IMUSensor",
+    "configured_hz": 100,
+    "physics_hz": 500.0,
+    "native_samples": 6000,
+    "native_measured_source_hz": 499.99998399733335,
+    "output_sampling": "select real native readings; retain their measured timestamps",
+    "measured_source_hz": 100.01666624384065,
+    "samples": 1201,
+    "invalid_reads": 0,
+    "duplicate_reads_skipped": 0,
+    "native_rate_samples_skipped": 4799,
+    "source_start_time": 2000074,
+    "source_end_time": 12000000458,
+    "include_gravity": true,
+    "first_reading": {
+      "sequence": 0,
+      "sim_time_ns": 2000074,
+      "absolute_sensor_time": 2.0220000743865967,
+      "orientation_xyzw": [
+        7.594066846650094e-05,
+        -0.004259434994310141,
+        -0.016843684017658234,
+        0.9998490810394287
+      ],
+      "angular_velocity": [
+        0.004167616367340088,
+        0.004202402662485838,
+        -0.02256624773144722
+      ],
+      "linear_acceleration": [
+        1.0841612815856934,
+        0.015894552692770958,
+        9.511210441589355
+      ]
+    },
+    "last_reading": {
+      "sequence": 1200,
+      "sim_time_ns": 12000000458,
+      "absolute_sensor_time": 14.020000457763672,
+      "orientation_xyzw": [
+        0.009577395394444466,
+        0.02183445356786251,
+        0.01476866565644741,
+        0.9996066689491272
+      ],
+      "angular_velocity": [
+        0.020044267177581787,
+        0.007862565107643604,
+        0.05083145946264267
+      ],
+      "linear_acceleration": [
+        -0.4574364423751831,
+        0.20468175411224365,
+        9.749162673950195
+      ]
+    },
+    "acceleration_mean": [
+      -0.118538552707528,
+      -0.029689072091000576,
+      9.81600350881
+    ],
+    "acceleration_min": [
+      -3.76007342338562,
+      -2.2422561645507812,
+      -1.5199098587036133
+    ],
+    "acceleration_max": [
+      1.9061434268951416,
+      1.5106364488601685,
+      12.119437217712402
+    ],
+    "angular_velocity_mean": [
+      0.0013403123110486306,
+      0.004584972997483289,
+      0.005158008134773243
+    ],
+    "angular_velocity_min": [
+      -0.36649802327156067,
+      -0.3315317928791046,
+      -0.1240491271018982
+    ],
+    "angular_velocity_max": [
+      0.677300751209259,
+      0.17331470549106598,
+      0.12507747113704681
+    ]
+  },
+  "timing": {
+    "measured_state_samples": 600,
+    "measured_state_wall_seconds": 31.481355104828253,
+    "measured_state_sim_seconds": 11.98,
+    "wall_seconds_per_sim_second": 2.6278259686834935,
+    "realtime_factor": 0.3805427040897183,
+    "state_wall_hz": 19.027135204485916,
+    "longest_state_wall_gap_s": 0.07953554787673056,
+    "longest_rays_wall_gap_s": [
+      0.30420638201758265,
+      0.30350688309408724
+    ]
+  },
+  "static_geometry_attestation": {
+    "expected_sha256": "b983f91d300045074cf065f8d64fdf6f6440a55c83d23de1bc099aa2587d1661",
+    "cadence": "every actual body state; source timestamp unchanged",
+    "count": 600,
+    "faults": 0,
+    "fault_latched": false,
+    "last_sha256": "b983f91d300045074cf065f8d64fdf6f6440a55c83d23de1bc099aa2587d1661",
+    "last_fault": "",
+    "total_wall_s": 9.502531382488087,
+    "max_wall_s": 0.023556669941172004
+  },
+  "dynamic_actor_count": 4,
+  "dynamic_measurement_samples": 600,
+  "schema": 1,
+  "scope": "large_world_actual_PhysX_calibration_not_navigation_task_acceptance",
+  "world_size_m": [
+    100,
+    80
+  ],
+  "model": "official_spot_physx",
+  "command_mps": 0.15,
+  "source_duration_s": 12,
+  "physical_robot_acceptance": false,
+  "source_hashes": {
+    "summary.json": "9084b089999bae39cbb5bd18d41b1e0c2bcb67f8626644a482746955471c476a",
+    "trajectory.jsonl": "d32f60a9bb48a5e29d418859387ef8c9dc8f4557ba0054508b0213c697bf83a5",
+    "ready.json": "10fb7595ae66f6cb419d8979beafda33516ec072e3aba23b43c4b254f500d261",
+    "overview.png": "22691d5bf4fe8dc78c886eaff59bc6c4f2952f42043f9a791973d62e7c229fef"
+  }
+}

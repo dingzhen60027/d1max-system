@@ -1,0 +1,142 @@
+{
+  "schema": 1,
+  "kind": "isolated_isaac_dynamic_core_offline_verification",
+  "verified_at_utc": "2026-10-06T12:57:39.581236+00:00",
+  "scope": "Offline build, CTest and Python tests only; no ROS participant, physics navigation run or GUI started by this subtask. This does not establish physical navigation acceptance.",
+  "build": {
+    "packages": [
+      "plan_env",
+      "path_searching",
+      "bspline_opt",
+      "scan_planner"
+    ],
+    "package_directory_note": "plan_manage package.xml names the ROS package scan_planner.",
+    "exit_code": 0,
+    "duration_seconds": 146,
+    "log_directory": "/home/eric/wjg/d1max-build-isaac/nav/log/build_2026-10-06_20-51-12",
+    "install_directory": "/home/eric/wjg/d1max-build-isaac/nav/install",
+    "command": "source /opt/ros/humble/setup.bash; source /home/eric/wjg/d1max-build-isaac/nav/install/setup.bash; export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin CMAKE_BUILD_PARALLEL_LEVEL=2 MAKEFLAGS=-j2; colcon --log-base /home/eric/wjg/d1max-build-isaac/nav/log build --base-paths /home/eric/wjg/d1max-build-isaac/nav-source/src --build-base /home/eric/wjg/d1max-build-isaac/nav/build --install-base /home/eric/wjg/d1max-build-isaac/nav/install --executor sequential --packages-select plan_env path_searching bspline_opt scan_planner --cmake-args -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON -DCMAKE_C_COMPILER=/usr/bin/gcc-11 -DCMAKE_CXX_COMPILER=/usr/bin/g++-11 -DPython3_EXECUTABLE=/usr/bin/python3"
+  },
+  "ctest": {
+    "targets_passed": 31,
+    "targets_failed": 0,
+    "by_package": {
+      "plan_env": 8,
+      "path_searching": 4,
+      "bspline_opt": 4,
+      "scan_planner": 15
+    },
+    "excluded_ros_launch_tests": [
+      "test_planner_startup",
+      "test_waypoint_parameters"
+    ],
+    "log_paths": [
+      "/home/eric/wjg/d1max-build-isaac/nav/build/plan_env/Testing/Temporary/LastTest.log",
+      "/home/eric/wjg/d1max-build-isaac/nav/build/path_searching/Testing/Temporary/LastTest.log",
+      "/home/eric/wjg/d1max-build-isaac/nav/build/bspline_opt/Testing/Temporary/LastTest.log",
+      "/home/eric/wjg/d1max-build-isaac/nav/build/scan_planner/Testing/Temporary/LastTest.log"
+    ]
+  },
+  "python": {
+    "passed": 54,
+    "failed": 0,
+    "command": "/home/eric/anaconda3/bin/python -m pytest -q simulation/isaacsim/test_truth_map.py simulation/isaacsim/test_dynamic_collision.py simulation/isaacsim/test_world_builder.py"
+  },
+  "production_default_probe": {
+    "installed_headers_used": true,
+    "oracle_disabled": true,
+    "floor_contact_disabled": true,
+    "empty_registry_digest_rejected": true,
+    "compiler": "/usr/bin/g++-11 -std=c++17",
+    "probe_path": "/tmp/d1max_scan_default_off.cpp",
+    "exit_code": 0
+  },
+  "installed_headers_identical": [
+    "plan_env/include/plan_env/grid_map.h",
+    "plan_env/include/plan_env/dynamic_occupancy_oracle.hpp",
+    "plan_env/include/plan_env/static_occupancy_prior.hpp",
+    "scan_planner/include/plan_manage/motion_sweep.hpp"
+  ],
+  "source_checks": [
+    {
+      "file": "d1max_nav_ws/src/scan_planner_vendor/plan_env/include/plan_env/grid_map.h",
+      "sha256": "42a48dc058a6255a3404bf72a0943f4c4f3416703292ad620c3bf58bdf791ce8",
+      "isolated_build_source_identical": true
+    },
+    {
+      "file": "d1max_nav_ws/src/scan_planner_vendor/plan_env/src/grid_map.cpp",
+      "sha256": "34938bb89bc90f6a9ed4ad1b890ebe82d03732ca0e155545abde264d28001060",
+      "isolated_build_source_identical": true
+    },
+    {
+      "file": "d1max_nav_ws/src/scan_planner_vendor/plan_env/include/plan_env/dynamic_occupancy_oracle.hpp",
+      "sha256": "3ab4a130f69488be9def35789d9c8c76ba5b9a39b7890c47c793af28d35fd1fd",
+      "isolated_build_source_identical": true
+    },
+    {
+      "file": "d1max_nav_ws/src/scan_planner_vendor/plan_env/include/plan_env/static_occupancy_prior.hpp",
+      "sha256": "6269e2a903301c589fb0c9ec9d75db32f808e0d1d3ab642c02ad0850f2842dff",
+      "isolated_build_source_identical": true
+    },
+    {
+      "file": "d1max_nav_ws/src/scan_planner_vendor/plan_env/src/static_occupancy_prior.cpp",
+      "sha256": "0fa4f7b7b95294dca27db93cde813c9b0ab61af4979cb52d87c070d8ea28a6cf",
+      "isolated_build_source_identical": true
+    },
+    {
+      "file": "d1max_nav_ws/src/scan_planner_vendor/plan_env/test/test_dynamic_occupancy_oracle.cpp",
+      "sha256": "05e41f6110fad5f6d8c8a48ff620d5a7c6adf4d72a7bd2d1d29e05779943d300",
+      "isolated_build_source_identical": true
+    },
+    {
+      "file": "d1max_nav_ws/src/scan_planner_vendor/plan_env/test/test_static_occupancy_prior.cpp",
+      "sha256": "5fc5a038c57946989bd38e77c2c913125c15c416030b193d1a6d7a534a2d0583",
+      "isolated_build_source_identical": true
+    },
+    {
+      "file": "d1max_nav_ws/src/scan_planner_vendor/plan_env/test/test_projected_rays.cpp",
+      "sha256": "e2de4acaa6a1d44f4696e50faa5688bdcfb44c040bcf4febceb1b06630e12637",
+      "isolated_build_source_identical": true
+    },
+    {
+      "file": "d1max_nav_ws/src/scan_planner_vendor/plan_env/CMakeLists.txt",
+      "sha256": "a2859c6659db099d280a592f1299c4b3a2a1847d5e87c2185890ec5e925b1d17",
+      "isolated_build_source_identical": true
+    },
+    {
+      "file": "d1max_nav_ws/src/scan_planner_vendor/plan_manage/include/plan_manage/motion_sweep.hpp",
+      "sha256": "05e79630fbf5c9dc4ed71aa4a13e0853c760eaaa417ed20a13a87d625bad7336",
+      "isolated_build_source_identical": true
+    },
+    {
+      "file": "d1max_nav_ws/src/scan_planner_vendor/plan_manage/test/test_motion_sweep.cpp",
+      "sha256": "b738805da768b60064356b106fb7c6f6ef3e2b0ea3c12c974b6ebe26d86a1159",
+      "isolated_build_source_identical": true
+    },
+    {
+      "file": "simulation/isaacsim/truth_map.py",
+      "sha256": "29aa801ddbd95ad6952b18cc894e27c7906c2bb0eac02b92e4cf50bc45f58651"
+    },
+    {
+      "file": "simulation/isaacsim/test_truth_map.py",
+      "sha256": "6da7fdaaaff2a243b3de0f36ef2d9b0ffcf2be996a08c9bfd35a55c6eb75e382"
+    },
+    {
+      "file": "simulation/isaacsim/dynamic_collision.py",
+      "sha256": "4fe7f61ac95e1031c024800af611bc08944a7cd90f7db3a1986d0ba7ce898d1a"
+    },
+    {
+      "file": "simulation/isaacsim/test_dynamic_collision.py",
+      "sha256": "5c3b1f0673970bdc2ede886126dd566d1425fd6a859efeb1b11e551346bff372"
+    }
+  ],
+  "semantics": {
+    "dynamic_truth": "Explicit simulator oracle, not LiDAR FREE evidence. Unknown reachable regions veto before static or laser evidence.",
+    "message_age_cap_seconds": 0.2,
+    "message_lease_cap_seconds": 0.3,
+    "reachable_horizon_cap_seconds": 8.0,
+    "empty_enabled_actor_set": "Explicit hash-pinned empty registry still requires complete same-source empty actor heartbeats.",
+    "floor_contact": "Opt-in state 3 certifies only the fixed flat floor contact slab; nonfloor solids and dynamic veto retain precedence.",
+    "floor_material": "Declared direct/resolved physics binding and static/dynamic friction/restitution are hash-pinned and re-audited after notices."
+  }
+}

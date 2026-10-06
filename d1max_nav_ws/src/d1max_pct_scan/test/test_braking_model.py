@@ -59,3 +59,63 @@ def test_stationary_thresholds_are_bound_to_measured_noise_and_mc_rate(tmp_path)
     with pytest.raises(ValueError,match='minimum_new_samples'):validate_stationary(obj)
     del obj['stationary_evidence']
     with pytest.raises(ValueError,match='contract_missing'):validate_stationary(obj)
+
+
+def spot_record(tmp_path):
+    path,_=record(tmp_path)
+    obj=json.loads(path.read_text())
+    obj['measurements'].update(max_speed_mps=.6,max_yaw_radps=.8,
+        stopping_distance_m=.5,stop_latency_bound_s=3.)
+    obj['isolated_platform_model']=dict(schema=1,kind='official_spot_physx',
+        command_max_speed_mps=.15,command_max_yaw_radps=.30,
+        reachable_max_speed_mps=.6,reachable_max_yaw_radps=.8,
+        source_scope='isolated_simulation_physx_measured_model')
+    return path,obj
+
+
+def write_record(path,obj):
+    raw=json.dumps(obj).encode();path.write_bytes(raw)
+    return hashlib.sha256(raw).hexdigest()
+
+
+def test_spot_actual_motion_is_separate_from_command_authority(tmp_path):
+    path,obj=spot_record(tmp_path)
+    values=load_model(path,write_record(path,obj),'isolated_mock')
+    assert values['max_speed_mps']==.6 and values['max_yaw_radps']==.8
+    assert values['command_max_speed_mps']==.15 and values['command_max_yaw_radps']==.30
+    assert values['stop_latency_bound_s']==3. and values['stopping_distance_m']==.5
+    with pytest.raises(ValueError,match='cannot_authorize_real_robot'):
+        load_model(path,write_record(path,obj),'live')
+    obj['fixture_only']=False;obj['transport_mode']='live'
+    with pytest.raises(ValueError,match='cannot_authorize_real_robot'):
+        load_model(path,write_record(path,obj),'live')
+
+
+@pytest.mark.parametrize('field,value',[
+    ('schema',True),('schema',1.),('schema',2),('kind','official_go2_physx'),
+    ('source_scope','live'),('command_max_speed_mps',.301),('command_max_yaw_radps',.501),
+    ('command_max_speed_mps',0.),('command_max_yaw_radps',True),
+    ('reachable_max_speed_mps',.601),('reachable_max_yaw_radps',.801),
+    ('reachable_max_speed_mps',.59),('reachable_max_yaw_radps',.79),
+    ('reachable_max_speed_mps',float('nan')),('reachable_max_yaw_radps','0.8')])
+def test_spot_model_identity_numeric_bounds_and_measurement_match_are_required(tmp_path,field,value):
+    path,obj=spot_record(tmp_path);obj['isolated_platform_model'][field]=value
+    with pytest.raises(ValueError):load_model(path,write_record(path,obj),'isolated_mock')
+
+
+def test_spot_model_cannot_relax_stop_timing_or_legacy_default(tmp_path):
+    path,obj=spot_record(tmp_path)
+    for field,value in [('stop_latency_bound_s',3.01),('stopping_distance_m',1.01),
+            ('reaction_bound_s',1.01),('tracking_error_bound_m',.251)]:
+        saved=obj['measurements'][field];obj['measurements'][field]=value
+        with pytest.raises(ValueError):load_model(path,write_record(path,obj),'isolated_mock')
+        obj['measurements'][field]=saved
+    for field in tuple(obj['isolated_platform_model']):
+        saved=obj['isolated_platform_model'].pop(field)
+        with pytest.raises(ValueError):load_model(path,write_record(path,obj),'isolated_mock')
+        obj['isolated_platform_model'][field]=saved
+    obj['isolated_platform_model']['extra_permission']=True
+    with pytest.raises(ValueError):load_model(path,write_record(path,obj),'isolated_mock')
+    obj.pop('isolated_platform_model')
+    with pytest.raises(ValueError,match='first_acceptance_motion_limit'):
+        load_model(path,write_record(path,obj),'isolated_mock')

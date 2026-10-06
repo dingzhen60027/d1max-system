@@ -1,0 +1,143 @@
+{
+  "schema": 1,
+  "kind": "large_scene_source_code_audit_v1",
+  "generated_at_utc": "2026-10-06T14:12:46.250381+00:00",
+  "review_scope": "Read-only source review of official Spot PhysX scene, original navigation preparation, native LiDAR phase, exact sensor pairing, static floor contact, dynamic veto and actual full-body geometry; no ROS, Kit or Git invocation.",
+  "source_repository": "/home/eric/wjg/d1max-system",
+  "source_snapshot_frozen": false,
+  "reviewed_servo_baseline": "bounded_measured_body_velocity_PI_v1 reviewed before pending v3 physical stop and low-speed validation; current source hashes are an audit-time inventory, not a final v27 candidate seal.",
+  "physical_acceptance": false,
+  "simulation_goal_changed": false,
+  "recording_requested": false,
+  "runtime_validation_performed_in_this_review": false,
+  "acceptance_claim": false,
+  "material_regressions_established_in_sensor_floor_dynamic_chain": [],
+  "reviewed_contracts": [
+    {
+      "contract": "native_lidar_acquisition_phase",
+      "result": "Explicit sealed prephysics BEGIN phase retains actual capture pose and original native END frame time; native physics-step and finite dt checks reject mismatches.",
+      "sources": [
+        "simulation/isaacsim/bridge.py",
+        "simulation/isaacsim/scene.py",
+        "simulation/isaacsim/nav_prepare.py"
+      ]
+    },
+    {
+      "contract": "exact_pair_and_dual_clock_freshness",
+      "result": "Static prior queries require matching front/rear integrated source stamps and finite original source/receipt leases. No time-budget relaxation was found in the reviewed chain.",
+      "sources": [
+        "d1max_nav_ws/src/scan_planner_vendor/plan_env/src/grid_map.cpp"
+      ]
+    },
+    {
+      "contract": "flat_floor_contact",
+      "result": "Support-contact cells are isolated-simulation opt-in, intersect the certified plane and exclude closed nonfloor static solids plus margin; nonfloor hit contradictions remain vetoes.",
+      "sources": [
+        "simulation/isaacsim/truth_map.py",
+        "simulation/isaacsim/runtime_geometry.py",
+        "d1max_nav_ws/src/scan_planner_vendor/plan_env/src/static_occupancy_prior.cpp",
+        "d1max_nav_ws/src/scan_planner_vendor/plan_env/src/grid_map.cpp"
+      ]
+    },
+    {
+      "contract": "dynamic_occupancy",
+      "result": "Complete registered same-step measured actor snapshots add a reachable occupancy veto. The 6 s reachable geometry horizon does not replace the 200 ms source/receipt freshness limits. C1 actor trajectory speed/acceleration bounds and persistent presence are validated.",
+      "sources": [
+        "simulation/isaacsim/dynamic_collision.py",
+        "simulation/isaacsim/world_builder.py",
+        "simulation/isaacsim/bridge.py",
+        "d1max_nav_ws/src/scan_planner_vendor/plan_env/include/plan_env/dynamic_occupancy_oracle.hpp"
+      ]
+    },
+    {
+      "contract": "robot_self_filter_and_body_envelope",
+      "result": "Self-hit removal uses actual registered collider solids; full measured articulated bounds must fit the collision query envelope. Missing, changed or out-of-envelope geometry revokes evidence.",
+      "sources": [
+        "simulation/isaacsim/quadruped.py",
+        "simulation/isaacsim/runtime_geometry.py",
+        "simulation/isaacsim/dynamic_collision.py",
+        "simulation/isaacsim/scene.py"
+      ]
+    }
+  ],
+  "pending_validation": [
+    {
+      "item": "official_spot_low_speed_response_and_stop",
+      "status": "pending_controller_v3_probe_and_fresh_formal_run",
+      "evidence": "The parent-run 0.01 m/s physical probe traveled only about 0.0312 m in 20 source seconds. The reviewed PI baseline retains nonzero integral at exactly zero desired and measured velocity (quadruped.py:63-68); source behavior alone does not establish a physical stop violation. Pending v3 changes and measured stop/response must be assessed before sealing the candidate.",
+      "physical_probe": "/home/eric/wjg/d1max-build-isaac/campus-low-speed-probe-v1"
+    },
+    {
+      "item": "formal_navigation_acceptance",
+      "status": "pending_fresh_v27_candidate_and_runtime_evidence",
+      "evidence": "Source review does not establish goal completion, dynamic obstacle avoidance, measured stop, LIO localization performance, physical SDK behavior or deployment acceptance."
+    }
+  ],
+  "evidence_label_status": "Current smoke.py uses PhysX_robot_fixture; earlier v26 wheel-fixture test_scope is historical labeling and must not be used to identify the current robot.",
+  "limitations": [
+    "Review findings are limited to inspected current source and do not certify all possible defects.",
+    "Source files may change after this inventory; recompute hashes and repeat relevant verification for the final candidate."
+  ],
+  "files": {
+    "simulation/isaacsim/nav_prepare.py": {
+      "sha256": "f63bdac0ceec0fcf2a6a6abc9cb9e99e0c1e3280cd2a83d8e693243742bc47dd",
+      "size_bytes": 19334
+    },
+    "simulation/isaacsim/scene.py": {
+      "sha256": "7589a91723e28af2e144306fc15542789d60b881e83b14f4c27c5834f05a1d1b",
+      "size_bytes": 63333
+    },
+    "simulation/isaacsim/runtime_geometry.py": {
+      "sha256": "db784c6fc1dbc714ddd20eebab6d1b93fe88f7cfa96fd9b5ad70461ab343b859",
+      "size_bytes": 3491
+    },
+    "simulation/isaacsim/bridge.py": {
+      "sha256": "9526ae8ef605813db8cae8436083f7762d0ea7cea7595202023e6649430bbc0d",
+      "size_bytes": 35419
+    },
+    "simulation/isaacsim/quadruped.py": {
+      "sha256": "5da9f2183f8320fff0e22fe3808e12a19da0c3f599529fec55a5784fb18da049",
+      "size_bytes": 29392
+    },
+    "simulation/isaacsim/protocol.py": {
+      "sha256": "83445998f03945276f5ff75b3103cb64f30fc2d7c9cbaf15cb5c85870918f826",
+      "size_bytes": 16336
+    },
+    "simulation/isaacsim/dynamic_collision.py": {
+      "sha256": "4fe7f61ac95e1031c024800af611bc08944a7cd90f7db3a1986d0ba7ce898d1a",
+      "size_bytes": 13081
+    },
+    "simulation/isaacsim/world_builder.py": {
+      "sha256": "aa79aa2f20ccc157b8334c798c22995ca8732faa9496709552c38bc70248959a",
+      "size_bytes": 49465
+    },
+    "simulation/isaacsim/truth_map.py": {
+      "sha256": "81fe26ae061b32cc4eeecc73eef9ec8f705386c45f6049a2108c6bc8555b6baa",
+      "size_bytes": 50901
+    },
+    "simulation/isaacsim/collision_audit.py": {
+      "sha256": "6a6fa371703abc900c49f4e99f25c6d9686f26f642ed6b4ab82e1c45d86212b6",
+      "size_bytes": 30116
+    },
+    "simulation/isaacsim/smoke.py": {
+      "sha256": "b8b76abd5153b0436916f85816db46cde18c9f392c399432e2ac80c78784cd12",
+      "size_bytes": 35002
+    },
+    "d1max_nav_ws/src/scan_planner_vendor/plan_env/include/plan_env/dynamic_occupancy_oracle.hpp": {
+      "sha256": "3ab4a130f69488be9def35789d9c8c76ba5b9a39b7890c47c793af28d35fd1fd",
+      "size_bytes": 8890
+    },
+    "d1max_nav_ws/src/scan_planner_vendor/plan_env/include/plan_env/static_occupancy_prior.hpp": {
+      "sha256": "94b56c3502c56af185c6885614b286a2c70bd714af2f6a14107635f33c747474",
+      "size_bytes": 2664
+    },
+    "d1max_nav_ws/src/scan_planner_vendor/plan_env/src/static_occupancy_prior.cpp": {
+      "sha256": "9b127f9ea2833c59b824bd2973f281cdecd8e031459b26abdb6985eb9c3456fc",
+      "size_bytes": 14045
+    },
+    "d1max_nav_ws/src/scan_planner_vendor/plan_env/src/grid_map.cpp": {
+      "sha256": "d97e302d28e0f4aa05a68fb6d455c592f871fab71f93c97d41a5cb0d8110ec57",
+      "size_bytes": 123057
+    }
+  }
+}
