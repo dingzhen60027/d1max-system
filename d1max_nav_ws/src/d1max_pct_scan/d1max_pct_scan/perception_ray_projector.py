@@ -54,7 +54,8 @@ def create_node(settings):
             self.local_inbox = LocalNavigationInbox()
             self.core = RayProjectorCore(settings['limits'], settings.get('preview_exclusion'),
                 projection_frame=settings.get('projection_frame', 'map'),
-                allow_simulation_snapshot=settings.get('allow_simulation_snapshot', False))
+                allow_simulation_snapshot=settings.get('allow_simulation_snapshot', False),
+                maximum_isaac_actor_id=settings.get('maximum_isaac_actor_id', 0))
             self.exclusion_counts = {'matched': [0, 0], 'dropped': [0, 0]}
             self.request = self.ack = None
             self.highest_context_sequence = 0
@@ -432,7 +433,8 @@ def create_node(settings):
                     point_step=message.point_step, row_step=message.row_step,
                     width=message.width, height=message.height, bigendian=message.is_bigendian,
                     header_ns=stamp_ns(message.header.stamp), frame_id=message.header.frame_id,
-                    expected_frame=self.p['ray_frame'], max_points=self.core.limits.max_input_points)
+                    expected_frame=self.p['ray_frame'], max_points=self.core.limits.max_input_points,
+                    maximum_isaac_actor_id=self.p.get('maximum_isaac_actor_id', 0))
                 if raw.sensor_id not in self.p['sensor_ids']:
                     raise ProjectionError('unconfigured_sensor_source')
                 if raw.start_ns <= max(context.barrier_ns, self.last_raw_stamp[raw.sensor_id]):
@@ -479,8 +481,8 @@ def create_node(settings):
                     cloud = PointCloud2()
                     cloud.header.frame_id = self.p.get('output_frame', self.p['map_frame'])
                     assign_stamp(cloud.header.stamp, projected.start_ns)
-                    cloud.height, cloud.width, cloud.point_step = 1, len(projected.points), 64
-                    cloud.row_step, cloud.is_bigendian, cloud.is_dense = cloud.width*64, False, True
+                    cloud.height, cloud.width, cloud.point_step = 1, len(projected.points), projected.points.dtype.itemsize
+                    cloud.row_step, cloud.is_bigendian, cloud.is_dense = cloud.width*cloud.point_step, False, True
                     cloud.fields = message.fields
                     payload = array('B')
                     payload.frombytes(memoryview(projected.points).cast('B'))

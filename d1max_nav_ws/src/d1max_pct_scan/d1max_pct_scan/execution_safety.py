@@ -10,7 +10,7 @@ from dataclasses import dataclass
 import math
 
 from .atomic_projection_state import stamp_ns
-from .ray_projection import FIELDS, RAY_DTYPE
+from .ray_projection import FIELDS, RAY_DTYPE, ISAAC_FIELDS, ISAAC_RAY_DTYPE
 from .perception_contract import MAX_ACQUISITION_POINTS
 import numpy as np
 
@@ -42,12 +42,16 @@ class Decision:
 
 class ExecutionSafety:
     def __init__(self, session_id, transport_mode, *, max_speed=.30, max_yaw=.50,
-                 braking_model_sha256='',sensor_source_age_s=.5,stationary_policy=None):
+                 braking_model_sha256='',sensor_source_age_s=.5,stationary_policy=None,maximum_isaac_actor_id=0):
         if not session_id or transport_mode not in ('live','isolated_mock'):
             raise ValueError('explicit_execution_safety_context_required')
         if not 0 < max_speed <= .30 or not 0 < max_yaw <= .50:
             raise ValueError('invalid_first_acceptance_motion_limits')
         self.session,self.mode,self.max_speed,self.max_yaw=session_id,transport_mode,max_speed,max_yaw
+        if (type(maximum_isaac_actor_id) is not int or not 0 <= maximum_isaac_actor_id <= 64
+                or maximum_isaac_actor_id and transport_mode != 'isolated_mock'):
+            raise ValueError('native_hit_identity_requires_isolated_safety_session')
+        self.maximum_isaac_actor_id=maximum_isaac_actor_id
         if len(braking_model_sha256)!=64 or any(c not in '0123456789abcdef' for c in braking_model_sha256):
             raise ValueError('bound_braking_model_required')
         self.braking_model_sha256=braking_model_sha256
@@ -202,14 +206,17 @@ class ExecutionSafety:
     def on_rays(self, message, now_ns):
         cloud=message.rays
         fields=tuple((f.name,f.offset,f.datatype,f.count) for f in cloud.fields)
+        native=cloud.point_step==72 and self.maximum_isaac_actor_id>0
+        expected_fields,dtype=(ISAAC_FIELDS,ISAAC_RAY_DTYPE) if native else (FIELDS,RAY_DTYPE)
         if (message.session_id!=self.session or cloud.header.frame_id!='d1max_loc_odom'
                 or message.projection_sequence<=self.last_raw_sequence
-                or fields!=FIELDS or cloud.point_step!=64 or cloud.height!=1
+                or fields!=expected_fields or cloud.point_step!=dtype.itemsize or cloud.height!=1
                 or cloud.width<1 or cloud.width>MAX_ACQUISITION_POINTS or cloud.is_bigendian
-                or cloud.row_step!=cloud.width*64 or len(cloud.data)!=cloud.row_step
+                or cloud.row_step!=cloud.width*dtype.itemsize or len(cloud.data)!=cloud.row_step
                 or not fresh(message.acquisition_end,now_ns,self.sensor_max_age_ns)):
             return False
-        points=np.frombuffer(cloud.data,dtype=RAY_DTYPE,count=cloud.width)
+        points=np.frombuffer(cloud.data,dtype=dtype,count=cloud.width)
+        if native and np.any(points['isaac_actor_id']>self.maximum_isaac_actor_id):return False
         sensor=int(points['sensor_id'][0])
         if sensor not in (0,1) or np.any(points['sensor_id']!=sensor):
             return False

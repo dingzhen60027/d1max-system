@@ -555,6 +555,94 @@ TEST(Tracker, QuadraticPlanarDirectionBoundCoversInteriorAndZeroSpeedEnds) {
     Eigen::Vector3d(-.1,0.,0.),Eigen::Vector3d(.1,0.,0.)}),0.);
 }
 
+TEST(Tracker, QuadraticForwardClusterHasStrictSeparatingBoundDespiteLegacyTriangleTolerance) {
+  const std::array<Eigen::Vector3d,3> controls{{{.03,0.,0.},
+    {.03,3e-17,6e-10},{.03,-3e-17,9e-10}}};
+  std::array<Eigen::Vector2d,3> normalized;
+  for(std::size_t i=0;i<controls.size();++i)normalized[i]=controls[i].head<2>()/controls[i].stableNorm();
+  const auto cross=[](const Eigen::Vector2d& a,const Eigen::Vector2d& b){return a.x()*b.y()-a.y()*b.x();};
+  ASSERT_NE(cross(normalized[1]-normalized[0],normalized[2]-normalized[0]),0.);
+  // Exact forward projections separate all three controls from the origin,
+  // but the old absolute side tolerance admitted these mixed-sign sides.
+  EXPECT_GT(cross(normalized[1]-normalized[0],-normalized[0]),0.);
+  EXPECT_LT(cross(normalized[2]-normalized[1],-normalized[1]),0.);
+  EXPECT_GT(cross(normalized[0]-normalized[2],-normalized[2]),0.);
+  const double bound=quadraticPlanarScale(controls);ASSERT_GT(bound,.9999999);
+  for(int i=0;i<=1000;++i) {
+    const double t=i/1000.;const Eigen::Vector3d v=(1.-t)*(1.-t)*controls[0]+
+      2.*t*(1.-t)*controls[1]+t*t*controls[2];
+    EXPECT_LE(bound,spatialToPlanarScale(v));
+  }
+}
+
+TEST(Tracker, QuadraticSeparatingWitnessCoversNearCollinearDirectionAndAllSignedAxes) {
+  const std::array<Eigen::Vector3d,3> original{{{.03,0.,0.},
+    {.03,3e-17,6e-10},{.03,-3e-17,9e-10}}};
+  for(const double yaw:{0.,.59,1.5707963267948966,3.141592653589793,4.71238898038469}) {
+    const Eigen::AngleAxisd rotation(yaw,Eigen::Vector3d::UnitZ());
+    std::array<Eigen::Vector3d,3> controls;
+    for(std::size_t i=0;i<controls.size();++i)controls[i]=rotation*original[i];
+    const double bound=quadraticPlanarScale(controls);ASSERT_GT(bound,.5)<<yaw;
+    for(int i=0;i<=1000;++i) {
+      const double t=i/1000.;const Eigen::Vector3d v=(1.-t)*(1.-t)*controls[0]+
+        2.*t*(1.-t)*controls[1]+t*t*controls[2];
+      EXPECT_LE(bound,spatialToPlanarScale(v))<<yaw;
+    }
+  }
+}
+
+TEST(Tracker, QuadraticWitnessCannotAuthorizeVerticalOpposedCuspOrInventZeroControlMotion) {
+  const auto zero=Eigen::Vector3d::Zero().eval();
+  EXPECT_EQ(quadraticPlanarScale({zero,zero,zero}),0.);
+  EXPECT_EQ(quadraticPlanarScale({Eigen::Vector3d(0.,0.,.03),Eigen::Vector3d(.03,0.,0.),
+    Eigen::Vector3d(.03,0.,.001)}),0.);
+  EXPECT_EQ(quadraticPlanarScale({Eigen::Vector3d(.03,0.,0.),Eigen::Vector3d(-.03,0.,0.),
+    Eigen::Vector3d(.03,0.,0.)}),0.);
+  EXPECT_EQ(quadraticPlanarScale({Eigen::Vector3d(.03,0.,0.),Eigen::Vector3d(0.,.03,0.),
+    Eigen::Vector3d(-.03,-.03,0.)}),0.);
+  const std::array<Eigen::Vector3d,3> endpoint{{zero,{.03,3e-17,6e-10},{.03,-3e-17,9e-10}}};
+  const double bound=quadraticPlanarScale(endpoint);ASSERT_GT(bound,.9);
+  for(int i=1;i<=1000;++i) {
+    const double t=i/1000.;const Eigen::Vector3d v=2.*t*(1.-t)*endpoint[1]+t*t*endpoint[2];
+    EXPECT_LE(bound,spatialToPlanarScale(v));
+  }
+  // Negative world direction still has a positive ratio, not permission to
+  // send reverse/forward commands through the existing heading gate.
+  TrackerCore reverse(config());auto goal=task();goal.goal.x()=-2.;
+  ASSERT_TRUE(reverse.receiveTask(goal,100.,10.));ASSERT_TRUE(reverse.receiveOdom(odom(),100.,10.));
+  auto curve=trajectory();for(auto& p:curve.points)p.x()=-p.x();
+  ASSERT_TRUE(reverse.receiveTrajectory(curve,100.,10.));
+  EXPECT_EQ(reverse.step(100.02,10.02).forward,0.);
+}
+
+TEST(Tracker, QuadraticWitnessKeepsExistingPositiveResultAndFailsClosedAtNumericExtremes) {
+  const std::array<Eigen::Vector3d,3> ordinary{{{.03,0.,0.},{.06,0.,0.},{.09,0.,0.}}};
+  const double legacy=std::nextafter(1.-1e-12,0.);
+  EXPECT_DOUBLE_EQ(quadraticPlanarScale(ordinary),legacy); // Zero-only repair.
+  const double huge=std::numeric_limits<double>::max(),tiny=std::numeric_limits<double>::denorm_min();
+  EXPECT_EQ(quadraticPlanarScale({Eigen::Vector3d(huge,huge,huge),Eigen::Vector3d(huge,huge,huge),
+    Eigen::Vector3d(huge,huge,huge)}),0.);
+  EXPECT_EQ(quadraticPlanarScale({Eigen::Vector3d(tiny,0.,1e308),Eigen::Vector3d(tiny,0.,1e308),
+    Eigen::Vector3d(tiny,0.,1e308)}),0.);
+  for(const double invalid:{std::numeric_limits<double>::infinity(),std::numeric_limits<double>::quiet_NaN()})
+    EXPECT_EQ(quadraticPlanarScale({Eigen::Vector3d(invalid,0.,0.),Eigen::Vector3d(.03,0.,0.),
+      Eigen::Vector3d(.03,0.,0.)}),0.);
+  for(const double magnitude:{1e-150,1e150}) {
+    const std::array<Eigen::Vector3d,3> scaled{{{magnitude,0.,0.},
+      {magnitude,magnitude*1e-15,magnitude*2e-8},
+      {magnitude,-magnitude*1e-15,magnitude*3e-8}}};
+    const double bound=quadraticPlanarScale(scaled);ASSERT_GT(bound,.9);
+    for(int i=0;i<=1000;++i) {
+      const double t=i/1000.;const Eigen::Vector3d v=(1.-t)*(1.-t)*scaled[0]+
+        2.*t*(1.-t)*scaled[1]+t*t*scaled[2];
+      // Check the geometric ratio at either magnitude. The controller's
+      // separate <=1e-12 small-tangent convention must remain unchanged.
+      const double planar=std::hypot(v.x(),v.y());
+      EXPECT_LE(bound,planar/std::hypot(planar,v.z()));
+    }
+  }
+}
+
 TEST(Tracker, SpatialPlanarBrakingUsesLocalHorizontalTravelAndPreservesVerticalZeros) {
   const std::vector<double> times{0.,1.,2.,3.,4.};
   const std::vector<Eigen::Vector3d> points{{0.,0.,.48},{.0001,0.,.49},

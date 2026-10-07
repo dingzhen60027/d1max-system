@@ -23,6 +23,12 @@ FIELDS = (
 RAY_DTYPE = np.dtype({'names': [x[0] for x in FIELDS],
                      'formats': ['<f4'] * 7 + ['<u2', '<u2', '<u4', '<u4'] + ['<f8'] * 3,
                      'offsets': [x[1] for x in FIELDS], 'itemsize': 64})
+# Opt-in isolated native-hit identity. The original 64 bytes retain exactly
+# the same acquisition fields, offsets and types. Zero is never actor proof.
+ISAAC_FIELDS = FIELDS + (('isaac_actor_id', 64, 4, 1),)
+ISAAC_RAY_DTYPE = np.dtype({'names': list(RAY_DTYPE.names) + ['isaac_actor_id'],
+    'formats': [RAY_DTYPE.fields[name][0] for name in RAY_DTYPE.names] + ['<u2'],
+    'offsets': [RAY_DTYPE.fields[name][1] for name in RAY_DTYPE.names] + [64], 'itemsize': 72})
 
 
 class ProjectionError(ValueError):
@@ -171,6 +177,21 @@ def session_settings(session, localization):
         raise ProjectionError('unknown_projector_limit')
     result['limits'] = Limits(**options)
     result['allow_simulation_snapshot'] = snapshot_contract == 'isaac_physx_snapshot_v1'
+    result['maximum_isaac_actor_id'] = 0
+    dynamic = session.get('dynamic_oracle_contract', {})
+    if 'native_hit_provenance' in dynamic:
+        proof = dynamic['native_hit_provenance']
+        actors = dynamic.get('actor_ids')
+        digest = dynamic.get('registry_sha256')
+        if (not result['allow_simulation_snapshot'] or not isinstance(proof, dict)
+                or proof != dict(schema=1, kind='physx_exact_hit_prim_ordinal_v1', point_step=72,
+                    registry_sha256=digest) or not isinstance(digest, str) or len(digest) != 64
+                or any(c not in '0123456789abcdef' for c in digest)
+                or not isinstance(actors, list) or len(actors) > 64
+                or any(not isinstance(name, str) or not name for name in actors)
+                or actors != sorted(set(actors))):
+            raise ProjectionError('native_hit_provenance_requires_sealed_isaac_registry')
+        result['maximum_isaac_actor_id'] = len(actors)
     result['acquisition_contract'] = acquisition_budget(adapter, result['limits'].max_input_points)
     mode = adapter.get('lidar_mode', 'dual')
     if mode not in ('dual', 'front', 'rear'):
@@ -192,16 +213,23 @@ def checked_pose(position, orientation):
 
 
 def decode_rays(*, data, fields, point_step, row_step, width, height, bigendian,
-                header_ns, frame_id, expected_frame, max_points=MAX_ACQUISITION_POINTS):
+                header_ns, frame_id, expected_frame, max_points=MAX_ACQUISITION_POINTS,
+                maximum_isaac_actor_id=0):
     if type(max_points) is not int or not 1 <= max_points <= MAX_ACQUISITION_POINTS:
         raise ProjectionError('invalid_acquisition_point_budget')
+    if type(maximum_isaac_actor_id) is not int or not 0 <= maximum_isaac_actor_id <= 64:
+        raise ProjectionError('invalid_native_hit_actor_domain')
+    native = point_step == 72 and maximum_isaac_actor_id > 0
+    expected_fields, dtype = (ISAAC_FIELDS, ISAAC_RAY_DTYPE) if native else (FIELDS, RAY_DTYPE)
     if (type(header_ns) is not int or not 0 < header_ns < 2**63
             or frame_id != expected_frame or bigendian
             or type(width) is not int or not 1 <= width <= max_points or height != 1
-            or point_step != 64 or row_step != width * 64 or len(data) != row_step
-            or len(fields) != len(FIELDS) or set(fields) != set(FIELDS)):
+            or point_step != dtype.itemsize or row_step != width * dtype.itemsize or len(data) != row_step
+            or len(fields) != len(expected_fields) or set(fields) != set(expected_fields)):
         raise ProjectionError('invalid_raw_ray_schema_or_frame')
-    points = np.frombuffer(data, dtype=RAY_DTYPE, count=width)
+    points = np.frombuffer(data, dtype=dtype, count=width)
+    if native and np.any(points['isaac_actor_id'] > maximum_isaac_actor_id):
+        raise ProjectionError('native_hit_actor_outside_registry')
     # Do not reinterpret invalid endpoints/times as max-range clearing rays.
     for name in ('x', 'y', 'z', 'origin_x', 'origin_y', 'origin_z',
                  'timestamp', 'source_timestamp', 'raw_timestamp'):
@@ -322,7 +350,7 @@ def interpolate_many(history, times_ns, max_gap_ns):
 
 class RayProjectorCore:
     def __init__(self, limits=Limits(), preview_exclusion=None, *, projection_frame='map',
-                 allow_simulation_snapshot=False):
+                 allow_simulation_snapshot=False, maximum_isaac_actor_id=0):
         if projection_frame not in ('map', 'odom'):
             raise ValueError('projection_frame must explicitly be map or odom')
         self.limits = limits
@@ -331,6 +359,10 @@ class RayProjectorCore:
         if type(allow_simulation_snapshot) is not bool:
             raise ValueError('simulation_snapshot_flag_must_be_boolean')
         self.allow_simulation_snapshot = allow_simulation_snapshot
+        if (type(maximum_isaac_actor_id) is not int or not 0 <= maximum_isaac_actor_id <= 64
+                or maximum_isaac_actor_id and not allow_simulation_snapshot):
+            raise ValueError('native_hit_provenance_requires_isolated_snapshot')
+        self.maximum_isaac_actor_id = maximum_isaac_actor_id
         self.context = None
         self.local = deque(maxlen=limits.max_history_samples)
         self.global_pending = {}
@@ -374,7 +406,8 @@ class RayProjectorCore:
         """Small immutable-value history copy; geometry may run off the ROS thread."""
         snapshot = RayProjectorCore(self.limits, self.preview_exclusion,
                                     projection_frame=self.projection_frame,
-                                    allow_simulation_snapshot=self.allow_simulation_snapshot)
+                                    allow_simulation_snapshot=self.allow_simulation_snapshot,
+                                    maximum_isaac_actor_id=self.maximum_isaac_actor_id)
         snapshot.context = self.context
         snapshot.local = deque(self.local, maxlen=self.limits.max_history_samples)
         snapshot.alignments = deque(self.alignments, maxlen=self.limits.max_history_samples)
@@ -466,9 +499,12 @@ class RayProjectorCore:
         if self.ray_to_tracking is None:
             raise AwaitingCoverage('waiting_static_extrinsics')
         if (raw.sensor_id not in (0, 1) or type(now_ns) is not int
-                or type(authorized_pose_ns) is not int or raw.points.dtype != RAY_DTYPE
+                or type(authorized_pose_ns) is not int
+                or raw.points.dtype not in ((RAY_DTYPE, ISAAC_RAY_DTYPE) if self.maximum_isaac_actor_id else (RAY_DTYPE,))
                 or raw.points.ndim != 1 or not 1 <= len(raw.points) <= self.limits.max_input_points):
             raise ProjectionError('invalid_projection_input')
+        if raw.points.dtype == ISAAC_RAY_DTYPE and np.any(raw.points['isaac_actor_id'] > self.maximum_isaac_actor_id):
+            raise ProjectionError('native_hit_actor_outside_registry')
         duration_ns = raw.end_ns - raw.start_ns
         # PhysX LiDAR returns one simultaneous measured snapshot. It has no
         # measured per-beam sweep offsets; never fabricate a rotating scan's
@@ -535,7 +571,7 @@ class RayProjectorCore:
         # Structured ndarray.copy performs a separate strided copy per field.
         # The decoded wire buffer is contiguous: one byte copy preserves every
         # acquisition field exactly and owns its memory independently of input.
-        output = (points.view(np.uint8).copy().view(RAY_DTYPE)
+        output = (points.view(np.uint8).copy().view(points.dtype)
                   if points.flags.c_contiguous else points.copy())
         for world, names, indices in ((world_endpoints, ('x', 'y', 'z'), None),
                 (world_origins, ('origin_x', 'origin_y', 'origin_z'), time_index)):

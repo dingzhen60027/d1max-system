@@ -10,6 +10,7 @@
 #include <plan_manage/plan_container.hpp>
 #include <plan_manage/trajectory_collision.hpp>
 #include <plan_manage/candidate_adoption.hpp>
+#include <d1max_planning_interfaces/isolated_reference_model.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <traj_utils/planning_visualization.h>
 
@@ -110,6 +111,18 @@ namespace scan_planner
     rclcpp::Node *node_{nullptr};
     SolveBudget::Ptr solve_budget_;
     bool worker_only_{false};
+    bool fit_low_speed_entry_velocity_{false};
+    std::optional<d1max_planning_interfaces::IsolatedReferenceModel> isolated_reference_model_;
+    bool isolatedReferenceActive() const {
+      const auto floor=grid_map_?grid_map_->certifiedSupportFloorZ():std::optional<double>{};
+      return isolated_reference_model_&&!local_reference_.empty()&&floor&&std::isfinite(*floor);
+    }
+    double referenceSpeedLimit()const {
+      return isolatedReferenceActive()?isolated_reference_model_->referenceSpeed():pp_.max_vel_;
+    }
+    double measuredTravelSpeedLimit()const {
+      return isolatedReferenceActive()?isolated_reference_model_->measuredTravelSpeed():pp_.max_vel_;
+    }
     bool reboundReplanImpl(Eigen::Vector3d start_pt, Eigen::Vector3d start_vel, Eigen::Vector3d start_acc,
                           Eigen::Vector3d end_pt, Eigen::Vector3d end_vel,
                           bool flag_polyInit, bool flag_randomPolyTraj);

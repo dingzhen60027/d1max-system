@@ -22,12 +22,17 @@ inline std::optional<CandidateJoinEvidence> measuredCandidateJoin(
     UniformBspline &curve, const MeasuredBodyPose &solve_body,
     const MeasuredBodyPose &current_body, const Eigen::Vector3d &velocity,
     double resolution, double max_speed, double max_acceleration,
-    bool single_segment, const SolveBudget::Ptr &budget) {
+    bool single_segment, const SolveBudget::Ptr &budget,double measured_travel_max_speed=0.) {
+  // Legacy callers keep one bound. A sealed isolated model supplies an
+  // independent measured XYZ travel bound; it never changes curve geometry.
+  const double travel_speed=measured_travel_max_speed==0.?max_speed:measured_travel_max_speed;
   if (!budget || !budget->allowed() || !velocity.allFinite() ||
       !solve_body.position.allFinite() || !current_body.position.allFinite() ||
       solve_body.frame!=current_body.frame || current_body.frame.empty() ||
       !std::isfinite(resolution) || resolution<=0. || !std::isfinite(max_speed) ||
-      max_speed<=0. || !std::isfinite(max_acceleration) || max_acceleration<=0.) return {};
+      max_speed<=0. || !std::isfinite(travel_speed)||travel_speed<=0. ||
+      !std::isfinite(max_acceleration) || max_acceleration<=0. ||
+      (measured_travel_max_speed!=0.&&velocity.stableNorm()>travel_speed)) return {};
   const auto solve_ns=measuredBodySourceNs(solve_body),current_ns=measuredBodySourceNs(current_body);
   if (solve_ns<=0||current_ns<solve_ns||current_ns-solve_ns>400000000LL)
     return {};
@@ -50,9 +55,9 @@ inline std::optional<CandidateJoinEvidence> measuredCandidateJoin(
   const double join_limit=std::min(resolution*.25,.0125);
   Eigen::Vector3d previous=curve.evaluateDeBoorT(0.);
   if (!previous.allFinite() || (previous-solve_body.position).norm()>join_limit ||
-      (current_body.position-solve_body.position).norm()>max_speed*elapsed+join_limit)
+      (current_body.position-solve_body.position).norm()>travel_speed*elapsed+join_limit)
     return {};
-  const double maximum_arc=std::min(.5,max_speed*elapsed+join_limit);
+  const double maximum_arc=std::min(.5,travel_speed*elapsed+join_limit);
   const double dt=std::min(.02,resolution*.125/std::max(speed_bound,.01));
   double nearest_time=0.,nearest_square=(previous-current_body.position).squaredNorm(),arc=0.;
   std::size_t samples=0;
@@ -114,7 +119,8 @@ std::optional<CandidateJoinEvidence> certifyCandidateAdoption(
     const MeasuredBodyPose &current_body,const Eigen::Vector3d &velocity,
     double resolution,double max_speed,double max_acceleration,bool single_segment,
     std::uint64_t candidate_context,const SolveBudget::Ptr &budget,
-    ReadLease read_lease,SourcesFresh sources_fresh,CheckCollision check_collision) {
+    ReadLease read_lease,SourcesFresh sources_fresh,CheckCollision check_collision,
+    double measured_travel_max_speed=0.) {
   const auto before=read_lease();
   const auto gate=[&]() {
     const auto fresh=sources_fresh();
@@ -122,7 +128,7 @@ std::optional<CandidateJoinEvidence> certifyCandidateAdoption(
   };
   if (candidate_context!=before.context || !gate()) return {};
   const auto join=measuredCandidateJoin(curve,solve_body,current_body,velocity,
-      resolution,max_speed,max_acceleration,single_segment,budget);
+      resolution,max_speed,max_acceleration,single_segment,budget,measured_travel_max_speed);
   if (!join || !check_collision(join->curve_time) || !gate()) return {};
   return join;
 }

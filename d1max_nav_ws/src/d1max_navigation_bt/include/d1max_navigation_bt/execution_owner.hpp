@@ -631,6 +631,12 @@ public:
   }
   const std::string& executionId()const{return execution_;}uint64_t controlEpoch()const{return epoch_;}
   const std::string& phase()const{return phase_;}const std::string& reason()const{return reason_;}
+  // Diagnostic facts only: none of these accessors admits motion or resets a
+  // blocked episode. A credit still requires the original route/body witness.
+  uint64_t progressCreditSamples()const{return progress_samples_;}
+  double lastProgressSource()const{return progress_at_;}
+  double lastAdmittedMotionSource()const{return last_admitted_motion_;}
+  int64_t progressBodySourceNs()const{return progress_source_ns_;}
   Version grantVersion(SourceClock now)const {
     const auto*c=installedInitialProof(now);if(!c)c=candidate(now);
     return c?c->version:binding_;

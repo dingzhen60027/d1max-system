@@ -16,7 +16,7 @@ BrakingModel BrakingModel::load(const std::string& file,const std::string& sha,c
   std::ostringstream hex;for(unsigned int i=0;i<count;++i)hex<<std::hex<<std::setfill('0')<<std::setw(2)<<int(digest[i]);
   if(hex.str()!=sha)throw std::invalid_argument("braking record hash mismatch");
   const auto j=nlohmann::json::parse(bytes);
-  if(j.contains("isolated_platform_model")&&transport!="isolated_mock")
+  if((j.contains("isolated_platform_model")||j.contains("isolated_full_xyz_reference_model"))&&transport!="isolated_mock")
     throw std::invalid_argument("isolated platform cannot authorize real robot");
   if(transport=="isolated_mock") {
     if(j.value("schema_version",0)!=3||j.value("transport_mode","")!=transport||!j.value("fixture_only",false)||

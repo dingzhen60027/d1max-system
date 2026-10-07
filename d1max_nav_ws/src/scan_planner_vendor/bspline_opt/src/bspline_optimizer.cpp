@@ -25,6 +25,7 @@ namespace scan_planner
       throw std::invalid_argument("lambda_reference must be finite and nonnegative");
     dist0_ = get_double("optimization.dist0", -1.0);
     max_vel_ = get_double("optimization.max_vel", -1.0);
+    configured_max_vel_=max_vel_;
     max_acc_ = get_double("optimization.max_acc", -1.0);
     if (!node->has_parameter("optimization.order")) node->declare_parameter<int>("optimization.order", 3);
     order_ = static_cast<int>(node->get_parameter("optimization.order").as_int());

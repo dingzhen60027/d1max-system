@@ -439,6 +439,302 @@ wire::SupportReference supportWire(const wire::ExecutionVersion& v=version()) {
   for(int i=-2;i<=60;++i){geometry_msgs::msg::Point p;p.x=i*.05;s.support_ground_xyz.push_back(p);}return s;
 }
 
+Config movingEntryConfig() {
+  auto c=config();c.require_support_reference=true;c.spatial_planar_braking_envelope=true;return c;
+}
+Trajectory slowEntryCurve(std::int64_t id,double stamp,double initial_speed,double direction=0.,bool reverse_prefix=false) {
+  auto t=curve(id,stamp);
+  for(std::size_t i=0;i<t.points.size();++i) {
+    const double early=(static_cast<double>(i)-1.)*initial_speed;
+    const double x=i<4?early*std::cos(direction):.05*(static_cast<double>(i)-4.);
+    const double y=i<4?early*std::sin(direction):0.;
+    t.points[i]={x,y,.55};
+    if(reverse_prefix)t.points[i].z()=.55+.005*std::min(4.,static_cast<double>(i)-1.);
+  }
+  for(std::size_t i=0;i<t.knots.size();++i)t.knots[i]=(static_cast<double>(i)-3.);
+  certify(t);return t;
+}
+void initializeMovingEntry(TrackerCore& core,const SupportEvidence& support,bool move=true,double yaw=0.) {
+  auto body=odom();body.planar_speed=.05;body.velocity_in_frame={.05,0.,0.};
+  body.yaw=yaw;body.orientation=Eigen::AngleAxisd(yaw,Eigen::Vector3d::UnitZ());
+  ASSERT_TRUE(core.receiveOdom(body,100.,10.));
+  auto incumbent=curve();
+  for(std::size_t i=0;i<incumbent.knots.size();++i)incumbent.knots[i]=(static_cast<double>(i)-3.);
+  certify(incumbent);
+  ASSERT_TRUE(core.admitRevision(task(),incumbent,support,100.,10.,true));
+  if(move) {ASSERT_GT(core.step(100.04,10.04,true).forward,0.);}
+  body=odom(100.06);body.planar_speed=.01;body.velocity_in_frame={-.01,0.,.005};
+  body.yaw=yaw;body.orientation=Eigen::AngleAxisd(yaw,Eigen::Vector3d::UnitZ());
+  ASSERT_TRUE(core.receiveOdom(body,100.06,10.06));core.refreshTaskLease(10.06);
+}
+TEST(TrackerMovingEntry, ReverseMeasuredPrefixReproducesTurnaroundButCannotReplaceMovingIncumbent) {
+  const auto support=supportEvidence(supportWire());TrackerCore core(movingEntryConfig());
+  initializeMovingEntry(core,support);
+  const auto candidate=slowEntryCurve(2,100.06,-.01,0.,true);
+  // Same shape as v31 curve11: a small measured reverse boundary, an upward
+  // XYZ correction, then travel toward the unchanged forward goal. These are
+  // not invented v31 control points, which that run did not record.
+  TrackerCore position_velocity_only=core;
+  ASSERT_TRUE(position_velocity_only.receiveTrajectory(candidate,100.06,10.06));
+  const auto diagnostic=position_velocity_only.controlDiagnostic();
+  EXPECT_LT(diagnostic.lookahead_position.x(),core.odometry().position.x());
+  EXPECT_LT(diagnostic.lookahead_velocity.x(),0.);EXPECT_GT(diagnostic.lookahead_velocity.z(),0.);
+  const auto stopping=position_velocity_only.step(100.08,10.08,true);
+  EXPECT_TRUE(stopping.frozen);EXPECT_LT(stopping.forward,.014);
+  const auto turnaround=position_velocity_only.step(100.1,10.1,true);
+  EXPECT_TRUE(turnaround.frozen);EXPECT_EQ(turnaround.forward,0.);EXPECT_GT(std::abs(turnaround.yaw_rate),0.);
+
+  TrackerCore unchanged=core;const auto before=core.progress(100.06);
+  EXPECT_FALSE(core.admitRevision(task(),candidate,support,100.06,10.06,true));
+  EXPECT_EQ(core.candidateReason(),"moving_entry_heading_discontinuity");
+  EXPECT_EQ(core.trajectoryId(),1);EXPECT_DOUBLE_EQ(core.progress(100.06).curve_time,before.curve_time);
+  EXPECT_EQ(core.odometry().velocity_in_frame,unchanged.odometry().velocity_in_frame);
+  const auto kept=core.step(100.08,10.08,true),plain=unchanged.step(100.08,10.08,true);
+  EXPECT_EQ(kept.forward,plain.forward);EXPECT_EQ(kept.yaw_rate,plain.yaw_rate);EXPECT_GT(kept.forward,0.);
+}
+TEST(TrackerMovingEntry, ExistingHeadingThresholdAllowsContinuousDirectionAndRejectsOnlyItsOtherSide) {
+  const auto support=supportEvidence(supportWire());
+  for(double direction:{0.,.59,-.59,.61,-.61}) {
+    TrackerCore core(movingEntryConfig());initializeMovingEntry(core,support);
+    const auto candidate=slowEntryCurve(2,100.06,.01,direction);
+    const bool accepted=core.admitRevision(task(),candidate,support,100.06,10.06,true);
+    EXPECT_EQ(accepted,std::abs(direction)<=movingEntryConfig().heading_threshold)<<direction;
+    if(accepted) {
+      const auto out=core.step(100.08,10.08,true);EXPECT_EQ(out.reason,"tracking");EXPECT_GT(out.forward,0.);
+    } else {
+      EXPECT_EQ(core.candidateReason(),"moving_entry_heading_discontinuity");EXPECT_EQ(core.trajectoryId(),1);
+    }
+  }
+}
+TEST(TrackerMovingEntry, ZeroOutputMayAlignButPositiveNearZeroOutputDoesNotInventAMovingThreshold) {
+  const auto support=supportEvidence(supportWire());
+  for(double previous:{0.,1e-12}) {
+    TrackerCore core(movingEntryConfig());initializeMovingEntry(core,support,false);
+    core.recordAppliedOutput(previous,0.,100.06,10.06);
+    const auto candidate=slowEntryCurve(2,100.06,-.01,0.,true);
+    const bool accepted=core.admitRevision(task(),candidate,support,100.06,10.06,true);
+    EXPECT_EQ(accepted,previous==0.);
+    if(accepted) {
+      const auto out=core.step(100.08,10.08,true);EXPECT_TRUE(out.frozen);EXPECT_EQ(out.forward,0.);
+      EXPECT_GT(std::abs(out.yaw_rate),0.);EXPECT_DOUBLE_EQ(core.odometry().velocity_in_frame.z(),.005);
+    } else EXPECT_EQ(core.candidateReason(),"moving_entry_heading_discontinuity");
+  }
+  TrackerCore core(movingEntryConfig());initializeMovingEntry(core,support,false);
+  core.recordAppliedOutput(1e-12,0.,100.06,10.06);
+  auto candidate=slowEntryCurve(2,100.06,1e-8);
+  ASSERT_TRUE(core.admitRevision(task(),candidate,support,100.06,10.06,true));
+  const auto out=core.step(100.08,10.08,true);
+  EXPECT_GE(out.forward,0.);EXPECT_LT(out.forward,1e-5);EXPECT_EQ(out.yaw_rate,0.);
+}
+TEST(TrackerMovingEntry, PreparedEntryRechecksDirectionAfterIncumbentResumesWithoutPromotingGeometry) {
+  const auto support=supportEvidence(supportWire());TrackerCore core(movingEntryConfig());
+  initializeMovingEntry(core,support,false);
+  TrackerCore prepared=core;const auto candidate=slowEntryCurve(2,100.06,-.01,0.,true);
+  ASSERT_TRUE(prepared.admitRevision(task(),candidate,support,100.06,10.06,true));
+  ASSERT_GT(core.step(100.08,10.08,true).forward,0.);
+  auto body=core.odometry();body.stamp=body.posterior_stamp=body.imu_stamp=100.1;
+  ASSERT_TRUE(core.receiveOdom(body,100.1,10.1));core.refreshTaskLease(10.1);
+  EXPECT_FALSE(prepared.refreshPreparedState(core,100.1,10.1));
+  EXPECT_EQ(prepared.candidateReason(),"moving_entry_heading_discontinuity");EXPECT_EQ(core.trajectoryId(),1);
+  EXPECT_EQ(prepared.trajectoryId(),2); // private candidate was never promoted to the incumbent.
+}
+TEST(TrackerMovingEntry, IncumbentAlreadyOutsideHeadingGateCannotClaimContinuousForwardEntry) {
+  const auto support=supportEvidence(supportWire());TrackerCore core(movingEntryConfig());
+  initializeMovingEntry(core,support,true,.59);
+  auto body=core.odometry();body.stamp=body.posterior_stamp=body.imu_stamp=100.08;
+  body.yaw=.61;body.orientation=Eigen::AngleAxisd(body.yaw,Eigen::Vector3d::UnitZ());
+  body.angular_velocity_in_frame.z()=1.;
+  ASSERT_TRUE(core.receiveOdom(body,100.08,10.08));core.refreshTaskLease(10.08);
+  // The old straight curve must itself decelerate/turn now. Keeping it cannot
+  // provide a continuous forward control target, so the new conservative
+  // moving gate must not masquerade as a ban on all turn candidates.
+  const auto candidate=slowEntryCurve(2,100.08,.01,2.);
+  ASSERT_TRUE(core.admitRevision(task(),candidate,support,100.08,10.08,true));
+  const auto out=core.step(100.1,10.1,true);EXPECT_TRUE(out.frozen);EXPECT_GE(out.forward,0.);
+  EXPECT_LE(out.forward,.014);EXPECT_GT(std::abs(out.yaw_rate),0.);
+}
+
+namespace {
+Trajectory recordedV32Curve21() {
+  auto t=curve(21); // Test-only clocks/identity; literal recorded XYZ geometry.
+  t.points={
+    {-7.907934414428759,-5.024316829503006,.4647770089134252},
+    {-7.903770446777344,-5.024347305297852,.48240694403648376},
+    {-7.899606479125929,-5.0243777810926975,.5000368791595423},
+    {-7.829025524135243,-5.024273502951778,.5333972638083483},
+    {-7.667332895332643,-5.024036208695234,.5142537168430978},
+    {-7.418231753535922,-5.023653974884898,.5221175393921205},
+    {-7.104426057094434,-5.023196513773388,.5192777920609564},
+    {-6.762237803033336,-5.0226609878448425,.5202349559010571},
+    {-6.435496613210593,-5.022163554391532,.5199260637142652},
+    {-6.168623079004357,-5.021747257685324,.5200224081870802},
+    {-5.99436363877358,-5.021481491926568,.519994148377172},
+    {-5.920657606436189,-5.021366695036822,.52},
+    {-5.920657606436189,-5.021366695036822,.52},
+    {-5.920657606436189,-5.021366695036822,.52}};
+  t.knots={-7.036619677942245,-4.69107978529483,-2.345539892647415,0.,
+    2.345539892647415,4.69107978529483,7.036619677942245,9.38215957058966,
+    11.727699463237077,14.073239355884493,16.41877924853191,18.764319141179325,
+    21.10985903382674,23.455398926474157,25.800938819121573,28.14647871176899,
+    30.492018604416405,32.83755849706382};
+  certify(t,100.,.006008710643375313);return t;
+}
+SupportEvidence recordedV32Support() {
+  auto wire=supportWire();wire.body_reference_height_m=.52;
+  for(auto& p:wire.support_ground_xyz){p.x-=8.02;p.y=-5.024;}
+  return supportEvidence(wire);
+}
+}
+
+TEST(TrackerSpatialLookahead, ExactV32XYZCurveRequestsForwardWithoutAdvancingMeasuredPhaseOrRaisingItsCap) {
+  auto temporal=movingEntryConfig();temporal.max_speed=.15;temporal.max_yaw_rate=.3;
+  temporal.external_goal_completion=true;
+  auto spatial=temporal;spatial.spatial_control_lookahead=true;
+  auto t=recordedV32Curve21();auto target=task();target.goal=t.points.back();
+  auto body=odom();body.position={-7.903589248657227,-5.024343013763428,.48241183161735535};
+  body.velocity_in_frame={.0017976956490019242,-.00003470036776904071,.007539866956660318};
+  body.planar_speed=body.velocity_in_frame.head<2>().norm();body.yaw=-.02872978994229587;
+  body.orientation=Eigen::AngleAxisd(body.yaw,Eigen::Vector3d::UnitZ());
+  const auto support=recordedV32Support();TrackerCore old(temporal),next(spatial);
+  for(auto* core:{&old,&next}) {
+    ASSERT_TRUE(core->receiveOdom(body,100.,10.));
+    ASSERT_TRUE(core->admitRevision(target,t,support,100.,10.,true))<<core->candidateReason();
+    core->recordAppliedOutput(.004847684071105132,.03874788786047676,100.,10.);
+  }
+  const auto before=next.progress(100.);const auto a=old.controlDiagnostic(),b=next.controlDiagnostic();
+  EXPECT_NEAR(a.lookahead_curve_time,.8060087106433753,.04);
+  EXPECT_NEAR(b.lookahead_curve_time,4.982758844669522,.02);
+  EXPECT_TRUE(b.spatial_control_lookahead);EXPECT_NEAR(b.lookahead_requested_distance_m,.12,1e-15);
+  EXPECT_NEAR(b.lookahead_target_xyz_arc_m-b.lookahead_from_xyz_arc_m,.12,1e-15);
+  EXPECT_GT(b.lookahead_position.z(),.52); // Original 3D reference is still present.
+  const auto world=[&](const ControlDiagnostic& d){return
+    (temporal.kp_position*(d.lookahead_position.head<2>()-body.position.head<2>())+
+     d.lookahead_velocity.head<2>()).eval();};
+  EXPECT_NEAR(world(a).x(),.004806222287055701,.0002);EXPECT_GT(world(b).x(),.13);
+  EXPECT_DOUBLE_EQ(a.planar_speed_limit_mps,b.planar_speed_limit_mps);
+  EXPECT_NEAR(b.planar_speed_limit_mps,.03448031901565758,.0001);
+  EXPECT_DOUBLE_EQ(next.progress(100.).curve_time,before.curve_time);
+  EXPECT_DOUBLE_EQ(next.progress(100.).arc_length,before.arc_length);
+  auto output=next.step(100.02,10.02,true),legacy=old.step(100.02,10.02,true);
+  EXPECT_GT(output.forward,legacy.forward);EXPECT_LE(output.forward,b.planar_speed_limit_mps);
+  EXPECT_LE(output.forward,.004847684071105132+b.planar_acceleration_limit_mps2*.02+1e-12);
+  EXPECT_EQ(next.odometry().position,body.position);EXPECT_EQ(next.odometry().velocity_in_frame,body.velocity_in_frame);
+  EXPECT_DOUBLE_EQ(next.progress(100.02).curve_time,old.progress(100.02).curve_time);
+}
+
+TEST(TrackerSpatialLookahead, DefaultRequiresVerifiedFloorAndPureVerticalHasNoPlanarAuthority) {
+  EXPECT_FALSE(config().spatial_control_lookahead);
+  auto invalid=config();invalid.spatial_control_lookahead=true;
+  EXPECT_THROW(TrackerCore{invalid},std::invalid_argument);
+  auto c=movingEntryConfig();c.spatial_control_lookahead=true;c.external_goal_completion=true;
+  auto vertical=curve();
+  for(std::size_t i=0;i<vertical.points.size();++i)vertical.points[i]={0.,0.,.55+(static_cast<double>(i)-1.)*.003};
+  certify(vertical);auto body=odom();body.planar_speed=0.;body.velocity_in_frame=vertical.join_velocity;
+  auto target=task();target.goal=vertical.points.back();TrackerCore core(c);
+  ASSERT_TRUE(core.receiveOdom(body,100.,10.));
+  ASSERT_TRUE(core.admitRevision(target,vertical,supportEvidence(supportWire()),100.,10.,true));
+  const auto before=core.progress(100.);const auto diag=core.controlDiagnostic();
+  EXPECT_GT(diag.lookahead_position.z(),body.position.z());EXPECT_EQ(diag.planar_speed_limit_mps,0.);
+  EXPECT_EQ(core.step(100.02,10.02,true).forward,0.);
+  EXPECT_EQ(core.progress(100.02).curve_time,before.curve_time);
+  auto degenerate=vertical;for(auto& p:degenerate.points)p=body.position;certify(degenerate);
+  EXPECT_FALSE(core.admitRevision(target,degenerate,supportEvidence(supportWire()),100.02,10.02,true));
+}
+
+TEST(TrackerSpatialLookahead, OriginalCurvatureAndMovingHeadingGuardsStillConstrainAForwardLookPoint) {
+  const auto support=supportEvidence(supportWire());auto c=movingEntryConfig();c.spatial_control_lookahead=true;
+  // Isolate the existing heading gate from the separate conservative
+  // quadratic-XY-cone envelope; the exact recorded and loop cases below keep
+  // the support-following envelope enabled and verify its original caps.
+  c.spatial_planar_braking_envelope=false;
+  for(double direction:{.59,.61}) {
+    TrackerCore core(c);initializeMovingEntry(core,support);
+    auto candidate=curve(2,100.06);
+    for(std::size_t i=0;i<candidate.points.size();++i)candidate.points[i]={
+      (static_cast<double>(i)-1.)*.012*std::cos(direction),
+      (static_cast<double>(i)-1.)*.012*std::sin(direction),.55};
+    for(std::size_t i=0;i<candidate.knots.size();++i)candidate.knots[i]=(static_cast<double>(i)-3.);
+    certify(candidate);
+    // Exercise heading admission with writer history inside BOTH immutable
+    // entry envelopes; an unrelated future-braking rejection comes first.
+    const auto prepared=PreparedGeometry::build(c,candidate,support);
+    ASSERT_TRUE(prepared->failure.empty());
+    const double entry_cap=prepared->planarSpeedLimit(0.,0.,c);ASSERT_GT(entry_cap,0.);
+    core.recordAppliedOutput(std::min(.001,entry_cap*.5),0.,100.06,10.06);
+    const bool accepted=core.admitRevision(task(),candidate,support,100.06,10.06,true);
+    EXPECT_EQ(accepted,direction<.6);
+    if(!accepted) {EXPECT_EQ(core.candidateReason(),"moving_entry_heading_discontinuity");}
+  }
+  c.spatial_planar_braking_envelope=true;
+  auto turning=curve();
+  for(std::size_t i=0;i<turning.points.size();++i) {
+    const double phase=(static_cast<double>(i)-1.)*.12;
+    turning.points[i]={.12*std::sin(phase),.12*(1.-std::cos(phase)),.55+.002*std::sin(phase)};
+  }
+  certify(turning);auto body=odom();body.position=turning.join_position;body.velocity_in_frame=turning.join_velocity;
+  body.planar_speed=body.velocity_in_frame.head<2>().norm();TrackerCore loop(c);
+  ASSERT_TRUE(loop.receiveOdom(body,100.,10.));
+  ASSERT_TRUE(loop.admitRevision(task(),turning,support,100.,10.,true));
+  const auto before=loop.progress(100.);const auto diag=loop.controlDiagnostic();
+  const auto output=loop.step(100.02,10.02,true);
+  EXPECT_LE(output.forward,diag.planar_speed_limit_mps);EXPECT_LE(diag.planar_speed_limit_mps,c.max_yaw_rate*.12+.003);
+  EXPECT_DOUBLE_EQ(loop.progress(100.02).curve_time,before.curve_time);
+  EXPECT_GT(diag.lookahead_position.z(),body.position.z());
+}
+
+TEST(TrackerSpatialLookahead, TerminalZeroArcSpanKeepsEndpointFeedForwardAndOriginalMeasuredPhase) {
+  auto c=movingEntryConfig();c.spatial_control_lookahead=true;c.external_goal_completion=true;
+  auto t=curve();t.points.clear();t.knots.clear();
+  for(const double x:{-.1,0.,.1,.2,.3,.4,.4,.4,.4,.4})t.points.emplace_back(x,0.,.55);
+  for(int i=0;i<14;++i)t.knots.push_back(static_cast<double>(i)-3.);
+  certify(t,100.,6.);auto body=odom();body.position=t.join_position;body.velocity_in_frame=t.join_velocity;
+  body.planar_speed=body.velocity_in_frame.head<2>().norm();auto target=task();target.goal={2.,0.,.55};
+  TrackerCore core(c);ASSERT_TRUE(core.receiveOdom(body,100.,10.));
+  ASSERT_TRUE(core.admitRevision(target,t,supportEvidence(supportWire()),100.,10.,true))<<core.candidateReason();
+  const auto before=core.progress(100.);const auto diagnostic=core.controlDiagnostic();
+  EXPECT_DOUBLE_EQ(diagnostic.lookahead_curve_time,diagnostic.curve_duration);
+  EXPECT_DOUBLE_EQ(diagnostic.lookahead_target_xyz_arc_m,diagnostic.lookahead_from_xyz_arc_m);
+  EXPECT_EQ(diagnostic.lookahead_velocity,Eigen::Vector3d::Zero());
+  const auto output=core.step(100.02,10.02,true);
+  EXPECT_EQ(output.reason,"local_segment_finished_waiting_replan");EXPECT_EQ(output.forward,0.);
+  EXPECT_DOUBLE_EQ(core.progress(100.02).curve_time,before.curve_time);
+}
+
+TEST(TrackerSpatialLookahead, RecordedNearCuspKeepsFullXYZAndItsOriginalTinyBrakingCap) {
+  auto c=movingEntryConfig();c.max_speed=.15;c.max_yaw_rate=.3;c.external_goal_completion=true;
+  auto next_config=c;next_config.spatial_control_lookahead=true;
+  auto t=curve(10);t.points={
+    {-7.920397414110688,-5.024499824992143,.46761670211574113},
+    {-7.920529365539551,-5.024446487426758,.4811391532421112},
+    {-7.920661316968413,-5.024393149861373,.4946616043684813},
+    {-7.858874456990246,-5.024291095625852,.5363632283144415},
+    {-7.718580489724877,-5.024045160962571,.5130670332657837},
+    {-7.511018481741015,-5.023791554274413,.5224936360238212},
+    {-7.260497258905937,-5.023393565798314,.5192768821413135},
+    {-6.991593505944853,-5.023010465138475,.52},
+    {-6.720096829736523,-5.0225937472758515,.52},
+    {-6.448600153528193,-5.022177029413228,.52}};
+  t.knots={-5.429939920328693,-3.6199599468857957,-1.8099799734428978,0.,
+    1.8099799734428978,3.6199599468857957,5.429939920328693,7.239919893771591,
+    9.049899867214489,10.859879840657387,12.669859814100285,14.479839787543183,
+    16.28981976098608,18.099799734428977};
+  certify(t,100.,.0630176165601508);
+  auto body=odom();body.position=t.join_position;body.velocity_in_frame=t.join_velocity;
+  body.planar_speed=body.velocity_in_frame.head<2>().norm();auto target=task();target.goal=t.points.back();
+  TrackerCore old(c),next(next_config);
+  for(auto* core:{&old,&next}) {
+    ASSERT_TRUE(core->receiveOdom(body,100.,10.));
+    ASSERT_TRUE(core->admitRevision(target,t,recordedV32Support(),100.,10.,true))<<core->candidateReason();
+  }
+  const auto before=next.progress(100.);const auto a=old.controlDiagnostic(),b=next.controlDiagnostic();
+  EXPECT_DOUBLE_EQ(a.planar_speed_limit_mps,b.planar_speed_limit_mps);
+  EXPECT_LT(b.planar_speed_limit_mps,.0001);EXPECT_GT(b.lookahead_position.z(),.52);
+  const auto output=next.step(100.02,10.02,true);
+  EXPECT_LE(output.forward,b.planar_speed_limit_mps); // Stronger request is not extra authority.
+  EXPECT_DOUBLE_EQ(next.progress(100.02).curve_time,before.curve_time);
+  EXPECT_EQ(next.odometry().velocity_in_frame,body.velocity_in_frame);
+}
+
 TEST(TrackerV2, VerifiedFloorSpatialProfileDoesNotFlattenOrGloballyThrottleXYZCurve) {
   auto legacy=config();legacy.require_support_reference=true;
   auto spatial=legacy;spatial.spatial_planar_braking_envelope=true;
@@ -1695,6 +1991,98 @@ TEST(TrackerPreparationWorker, CachedGeometryCannotBeReusedForMutatedShapeOrRela
   EXPECT_FALSE(core.receiveTrajectory(t,100.,10.));EXPECT_EQ(core.trajectoryId(),1);
   t=curve(2);auto relaxed=config();relaxed.max_yaw_rate=.4;t.prepared=PreparedGeometry::build(relaxed,t,{});
   EXPECT_FALSE(core.receiveTrajectory(t,100.,10.));EXPECT_EQ(core.trajectoryId(),1);
+}
+
+namespace {
+Config isolatedReferenceConfig() {
+  auto c=config();c.max_speed=.15;c.max_yaw_rate=.3;c.require_support_reference=true;
+  c.spatial_planar_braking_envelope=true;c.spatial_control_lookahead=true;
+  const nlohmann::json record={{"schema_version",3},{"transport_mode","isolated_mock"},{"fixture_only",true},
+    {"model","reaction_braking_reachable_v1"},
+    {"measurements",{{"max_speed_mps",.6},{"max_yaw_radps",.8}}},
+    {"isolated_platform_model",{{"schema",1},{"kind","official_spot_physx"},
+      {"source_scope","isolated_simulation_physx_measured_model"},{"command_max_speed_mps",.15},
+      {"command_max_yaw_radps",.3},{"reachable_max_speed_mps",.6},{"reachable_max_yaw_radps",.8}}},
+    {"isolated_full_xyz_reference_model",{{"schema",1},{"kind","official_spot_physx"},
+      {"source_scope","isolated_simulation_physx_measured_model"},{"reference_max_speed_mps",.5},
+      {"measured_travel_max_speed_mps",.5},{"observed_max_full_xyz_speed_mps",.48905959685208217},
+      {"evidence_sha256",std::string(64,'b')}}}};
+  c.isolated_reference_model=d1max_planning_interfaces::IsolatedReferenceModel::parse(record,std::string(64,'a'),"isolated_mock");
+  return c;
+}
+Trajectory xyzReferenceCurve() {
+  auto t=curve();
+  for(std::size_t i=0;i<t.points.size();++i)t.points[i]={(.02*(double(i)-1.)),0.,.55+.005*(double(i)-1.)};
+  for(std::size_t i=0;i<t.knots.size();++i)t.knots[i]=(double(i)-3.)*.05;
+  certify(t);return t;
+}
+}
+
+TEST(TrackerReferenceDomain, FullXyzDerivativeAndTravelAreSeparateFromCommandCaps) {
+  const auto c=isolatedReferenceConfig();auto t=xyzReferenceCurve();const auto original=t.points;
+  const auto support=supportEvidence(supportWire());auto legacy=c;legacy.isolated_reference_model.reset();
+  EXPECT_FALSE(PreparedGeometry::build(legacy,t,support)->derivatives_valid);
+  t.prepared=PreparedGeometry::build(c,t,support);ASSERT_TRUE(t.prepared->derivatives_valid);
+  ASSERT_TRUE(t.prepared->failure.empty())<<t.prepared->failure;
+  const Eigen::Vector3d v{.4,0.,.1},position{.12,0.,.58};
+  auto body=odom(100.3);body.position=position;body.velocity_in_frame=v;body.planar_speed=.4;
+  TrackerCore core(c);ASSERT_TRUE(core.receiveOdom(body,100.3,10.3));
+  ASSERT_TRUE(core.admitRevision(task(),t,support,100.3,10.3,true))<<core.candidateReason();
+  EXPECT_NEAR(core.progressTime(),.3,1e-6);EXPECT_NEAR(core.progressArc(),v.norm()*.3,1e-6);
+  EXPECT_TRUE(core.odometry().velocity_in_frame.isApprox(v));
+  EXPECT_EQ(t.points,original);
+  const auto output=core.step(100.3,10.3);
+  EXPECT_GE(output.forward,0.);EXPECT_LE(output.forward,.15);EXPECT_LE(std::abs(output.yaw_rate),.3);
+  EXPECT_LE(output.forward,c.max_acceleration*.02+1e-8);
+}
+
+TEST(TrackerReferenceDomain, NoReferenceClockAdvanceAndXyzC1RemainsPointZeroFive) {
+  const auto c=isolatedReferenceConfig();auto t=xyzReferenceCurve();
+  const auto support=supportEvidence(supportWire());t.prepared=PreparedGeometry::build(c,t,support);
+  for(double difference:{.049,.050001}) {
+    auto body=odom(100.);body.position=t.join_position;body.velocity_in_frame={.4,difference,.1};body.planar_speed=std::hypot(.4,difference);
+    TrackerCore core(c);ASSERT_TRUE(core.receiveOdom(body,100.,10.));
+    const bool accepted=core.admitRevision(task(),t,support,100.,10.,true);
+    EXPECT_EQ(accepted,difference<.05)<<core.candidateReason();
+    if(accepted) {core.step(100.02,10.02);EXPECT_DOUBLE_EQ(core.progressTime(),0.);EXPECT_DOUBLE_EQ(core.progressArc(),0.);}
+  }
+}
+
+TEST(TrackerReferenceDomain, ActualAbovePointFiveStopsAndLegacyMeasurementsStayUnchanged) {
+  const auto c=isolatedReferenceConfig();TrackerCore core(c);
+  auto body=odom();body.velocity_in_frame={.4,0.,.31};body.planar_speed=.4;
+  EXPECT_FALSE(core.receiveOdom(body,100.,10.));EXPECT_EQ(core.reason(),"invalid_odometry");
+  body=odom(100.02);body.velocity_in_frame={.4,0.,.299};body.planar_speed=.4;
+  EXPECT_TRUE(core.receiveOdom(body,100.02,10.02));
+  TrackerCore legacy(config());body.velocity_in_frame={.4,0.,.31};EXPECT_TRUE(legacy.receiveOdom(body,100.02,10.02));
+}
+
+TEST(TrackerReferenceDomain, SealedReferenceCannotAuthorizeLiveDifferentRecordOrCommandIncrease) {
+  auto c=isolatedReferenceConfig();
+  EXPECT_THROW(ExecutionContract(c,"live",std::string(64,'a')),std::invalid_argument);
+  EXPECT_THROW(ExecutionContract(c,"isolated_mock",std::string(64,'b')),std::invalid_argument);
+  EXPECT_NO_THROW(ExecutionContract(c,"isolated_mock",std::string(64,'a')));
+  c.max_speed=.150001;EXPECT_THROW(c.validate(),std::invalid_argument);
+  c=isolatedReferenceConfig();c.require_support_reference=false;EXPECT_THROW(c.validate(),std::invalid_argument);
+}
+
+TEST(TrackerReferenceDomain, WriterAckUsesOriginalBoundedXyzArcAndKeepsC1) {
+  const auto c=isolatedReferenceConfig();auto t=xyzReferenceCurve();
+  t.prepared=PreparedGeometry::build(c,t,supportEvidence(supportWire()));
+  EXPECT_TRUE(isolatedAppliedEntryValid(c,t,0.,{.12,0.,.58},{.4,0.,.1},.3));
+  EXPECT_FALSE(isolatedAppliedEntryValid(c,t,0.,{.12,0.,.58},{.4,0.,.1},.1));
+  EXPECT_FALSE(isolatedAppliedEntryValid(c,t,0.,{.12,0.,.58},{.4,.050001,.1},.3));
+  EXPECT_FALSE(isolatedAppliedEntryValid(c,t,0.,{.12,0.,.62},{.4,0.,.1},.3));
+  EXPECT_FALSE(isolatedAppliedEntryValid(c,t,0.,{.4,0.,.65},{.4,0.,.1},.3));
+  auto unproved=t;auto bad_support=supportEvidence(supportWire());bad_support.verified=false;
+  unproved.prepared=PreparedGeometry::build(c,unproved,bad_support);
+  EXPECT_FALSE(isolatedAppliedEntryValid(c,unproved,0.,{.12,0.,.58},{.4,0.,.1},.3));
+}
+
+TEST(TrackerReferenceDomain, CachedGeometryCannotSwitchReferenceDomain) {
+  const auto c=isolatedReferenceConfig();auto t=xyzReferenceCurve();
+  t.prepared=PreparedGeometry::build(c,t,supportEvidence(supportWire()));
+  auto legacy=c;legacy.isolated_reference_model.reset();EXPECT_FALSE(t.prepared->matches(legacy,t));
 }
 
 TEST(TrackerPreparationWorker, CachedSupportCannotAuthorizeDifferentEvidenceWithReusedHash) {

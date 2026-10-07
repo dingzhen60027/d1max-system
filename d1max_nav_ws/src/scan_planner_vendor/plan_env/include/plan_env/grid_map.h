@@ -111,6 +111,7 @@ struct MappingParameters {
   bool simulation_collision_clock_{false};
   bool validated_static_prior_{false};
   bool projected_ray_exact_pair_{false};  // Opt-in Isaac simultaneous BEGIN acquisitions only.
+  bool dynamic_hit_provenance_enabled_{false}; // Explicit sealed native Isaac hit identities only.
   bool preview_only_{false};  // Diagnostic lease only, never execution authority.
   double cloud_pose_pair_wait_{0.25};
   double cloud_pose_max_age_{0.5};
@@ -201,6 +202,7 @@ public:
   inline int getInflateOccupancy(Eigen::Vector3d pos, double yaw);
   std::string describeInflateOccupancy(const Eigen::Vector3d &position,double yaw);
   std::string describeCollisionLease() const;
+  std::string describeObservedRawFailure() const;
   scan_planner::CollisionEvidence inspectInflateOccupancy(const Eigen::Vector3d &position,double yaw,bool detailed=false);
   // Offline diagnostic enablement only; no live config or permission changed.
   scan_planner::NearFieldDiagnostics &nearFieldDiagnostics() {return near_field_diagnostics_;}
@@ -288,6 +290,7 @@ public:
     collision_cache_receipt_deadline_ns_=collision_cache_receipt_ns_=0;
     static_prior_query_lease_valid_=false;
     dynamic_oracle_query_valid_=false;
+    observed_raw_failure_.reset();
     prepareRawCollisionCache();
   }
   std::uint64_t localizationContextSequence() const { return localization_context_sequence_; }
@@ -353,6 +356,8 @@ public:
          observed_column_cache_.maximumStorageBytes():0)+
         static_prior_live_hits_.size()*(sizeof(decltype(static_prior_live_hits_)::value_type)+4*sizeof(void*))+
         static_support_floor_witnesses_.size()*(sizeof(decltype(static_support_floor_witnesses_)::value_type)+4*sizeof(void*))+
+        dynamic_hit_provenance_.size()*(sizeof(decltype(dynamic_hit_provenance_)::value_type)+6*sizeof(void*))+
+        dynamic_hit_registry_sha256_.capacity()+
         dynamic_oracle_.bytes();
   }
 
@@ -428,6 +433,7 @@ private:
   // Fixed-size ring sidecar, not diagnostic witnesses. Only real traversals
   // renew it. Scan BEGIN is a conservative source-time bound for every ray.
   std::vector<std::int64_t> free_observation_stamps_, projected_ray_stamps_;
+  std::vector<std::uint16_t> projected_actor_ids_;
   // Isolated simulation only: actual callback receipts accompany each real
   // traversal, independently of its unchanged acquisition source stamp.
   std::vector<std::int64_t> free_observation_receipts_ns_, projected_ray_receipts_ns_;
@@ -479,9 +485,21 @@ private:
   // Only a newer real miss batch reaching strict FREE may clear it; TTL cannot.
   std::map<std::array<int,3>,std::int64_t> static_prior_live_hits_;
   std::map<std::array<int,3>,std::int64_t> static_support_floor_witnesses_;
+  struct DynamicHitProvenance {std::int64_t stamp{0};std::uint16_t actor_id{0};};
+  // World keys never alias sliding ring slots. Zero attribution is poisoned:
+  // later labeled hits cannot relabel an earlier unknown/static contradiction.
+  std::map<std::array<int,3>,DynamicHitProvenance> dynamic_hit_provenance_;
+  std::string dynamic_hit_registry_sha256_;
+  bool dynamic_hit_provenance_disabled_{false};
+  std::size_t dynamic_hit_provenance_limit_{100000};
+  struct ObservedRawFailure {Eigen::Vector3i cell;int state;};
+  std::optional<ObservedRawFailure> observed_raw_failure_;
+  bool dynamicHitProvenanceDomainValid() const;
+  void recordDynamicHitProvenance(const Eigen::Vector3i& cell,std::int64_t stamp,std::uint16_t actor_id);
+  bool retiredDynamicActorHit(const std::array<int,3>& cell) const;
   bool staticPriorLiveLeaseValid();
   void revokeStaticPriorContext(std::uint64_t sequence);
-  void recordStaticPriorHit(const Eigen::Vector3i &cell,std::int64_t stamp,double endpoint_z=std::numeric_limits<double>::quiet_NaN());
+  void recordStaticPriorHit(const Eigen::Vector3i &cell,std::int64_t stamp,double endpoint_z=std::numeric_limits<double>::quiet_NaN(),std::uint16_t actor_id=0);
   void clearStaticPriorHitAfterMiss(const Eigen::Vector3i &cell,int address);
   const char *collisionEvidenceSource(const Eigen::Vector3i &cell,int state);
   std::array<sensor_msgs::msg::PointCloud2, 2> visualization_cache_;

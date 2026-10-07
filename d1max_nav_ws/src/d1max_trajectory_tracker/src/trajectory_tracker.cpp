@@ -65,10 +65,17 @@ public:
     c.require_support_reference=true;
     c.spatial_planar_braking_envelope=declare_parameter<bool>(
       "spatial_planar_braking_envelope",c.spatial_planar_braking_envelope);
+    c.spatial_control_lookahead=declare_parameter<bool>(
+      "spatial_control_lookahead",c.spatial_control_lookahead);
     c.external_goal_completion=true;
+    const auto mode=declare_parameter<std::string>("transport_mode","live");
+    const auto braking_sha=declare_parameter<std::string>("execution_braking_model_sha256","");
+    const auto braking_record=declare_parameter<std::string>("execution_braking_model_record","");
+    if(!braking_record.empty())c.isolated_reference_model=
+      d1max_planning_interfaces::IsolatedReferenceModel::load(braking_record,braking_sha,mode);
     config_ = c;
-    execution_=std::make_unique<ExecutionContract>(c,declare_parameter<std::string>("transport_mode","live"),
-      declare_parameter<std::string>("execution_braking_model_sha256",""),declare_parameter<bool>("writer_handoff_enabled",false),true);
+    execution_=std::make_unique<ExecutionContract>(c,mode,
+      braking_sha,declare_parameter<bool>("writer_handoff_enabled",false),true);
     core_=&execution_->core();
     const auto topic = [this](const char *key, const char *value) {
       return declare_parameter<std::string>(key, value);
@@ -341,6 +348,10 @@ private:
         {"lookahead_velocity",{control.lookahead_velocity.x(),control.lookahead_velocity.y(),control.lookahead_velocity.z()}},
         {"planar_speed_limit_mps",control.planar_speed_limit_mps},
         {"spatial_planar_braking_envelope",control.spatial_planar_braking_envelope},
+        {"spatial_control_lookahead",control.spatial_control_lookahead},
+        {"lookahead_from_xyz_arc_m",control.lookahead_from_xyz_arc_m},
+        {"lookahead_target_xyz_arc_m",control.lookahead_target_xyz_arc_m},
+        {"lookahead_requested_distance_m",control.lookahead_requested_distance_m},
         {"planar_acceleration_limit_mps2",control.planar_acceleration_limit_mps2},
         {"body_present",control.body_present},{"body_source_stamp_ns",control.body_source_stamp_ns},
         {"measured_xy_speed_mps",control.measured_xy_speed_mps}}},
@@ -357,6 +368,10 @@ private:
         {"curve_time",join.curve_time},{"curve_duration",join.curve_duration},{"arc",join.arc}}},
       {"command", {{"x", output.forward}, {"y", 0.0}, {"yaw", output.yaw_rate}}},
       {"execution_frozen", output.frozen}, {"max_speed", config_.max_speed},
+      {"reference_xyz_speed_limit",config_.referenceSpeedLimit()},
+      {"measured_xyz_travel_speed_limit",config_.measuredTravelSpeedLimit()},
+      {"isolated_reference_record_sha256",config_.isolated_reference_model?
+        config_.isolated_reference_model->recordSha():std::string{}},
       {"maneuver_phase", core_->maneuverPhase()},
       {"hard_planar_limit", HARD_PLANAR_SPEED}, {"stamp", double(sourceNow())}
     };

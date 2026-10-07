@@ -36,6 +36,7 @@ def main(args=None):
             self.core=ExecutionSafety(sid,mode,braking_model_sha256=digest,
                 stationary_policy=validate_stationary(bound_record),
                 sensor_source_age_s=timing['sensor_source_age_bound_s'],
+                maximum_isaac_actor_id=self.declare_parameter('maximum_isaac_actor_id',0).value,
                 max_speed=self.declare_parameter('max_speed',.30).value,
                 max_yaw=self.declare_parameter('max_yaw',.50).value)
             self.handoff=ExecutionHandoffAdmission(self.core,

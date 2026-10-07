@@ -91,6 +91,15 @@ def test_spot_actual_motion_is_separate_from_command_authority(tmp_path):
         load_model(path,write_record(path,obj),'live')
 
 
+def test_new_reference_marker_alone_cannot_authorize_live(tmp_path):
+    path,obj=spot_record(tmp_path)
+    obj.pop('isolated_platform_model')
+    obj['isolated_full_xyz_reference_model']={'schema':1,'kind':'official_spot_physx'}
+    obj['fixture_only']=False;obj['transport_mode']='live'
+    with pytest.raises(ValueError,match='cannot_authorize_real_robot'):
+        load_model(path,write_record(path,obj),'live')
+
+
 @pytest.mark.parametrize('field,value',[
     ('schema',True),('schema',1.),('schema',2),('kind','official_go2_physx'),
     ('source_scope','live'),('command_max_speed_mps',.301),('command_max_yaw_radps',.501),

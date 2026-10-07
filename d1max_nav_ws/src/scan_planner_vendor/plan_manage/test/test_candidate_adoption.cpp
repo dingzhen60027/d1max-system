@@ -97,6 +97,46 @@ TEST(CandidateAdoption, UnixSourceOrderAndElapsedBoundUseOriginalNanoseconds) {
   f.measured.source_stamp_ns=ns+400000001LL;EXPECT_FALSE(join());
 }
 
+TEST(CandidateAdoption, IndependentXyzReferenceAndTravelKeepRawZAndMeasuredEntry) {
+  Fixture f;const Eigen::Vector3d raw{.36,0.,.30};
+  Eigen::MatrixXd controls(3,23);
+  for(int i=0;i<23;++i)controls.col(i)=f.original.position+(i-1)*.2*raw;
+  f.curve=UniformBspline(controls,3,.2);f.velocity=raw;
+  f.measured.position=f.original.position+.3*raw;
+  EXPECT_FALSE(measuredCandidateJoin(f.curve,f.original,f.measured,raw,.08,.15,.6,true,f.budget));
+  const auto joined=measuredCandidateJoin(f.curve,f.original,f.measured,raw,.08,.5,.6,true,f.budget,.5);
+  ASSERT_TRUE(joined);EXPECT_NEAR(joined->curve_time,.3,.02);
+  EXPECT_TRUE(joined->velocity.isApprox(raw));EXPECT_DOUBLE_EQ(joined->velocity.z(),.30);
+  EXPECT_TRUE(joined->measured.position.isApprox(f.measured.position));
+  EXPECT_FALSE(joined->acceleration_valid);EXPECT_TRUE(f.curve.getControlPoint().isApprox(controls));
+  EXPECT_FALSE(measuredCandidateJoin(f.curve,f.original,f.measured,raw,.08,.5,.6,true,f.budget,.15));
+}
+
+TEST(CandidateAdoption, ExpandedReferenceDomainStillRequiresOriginalXyzC1AndSourceLease) {
+  Fixture f;f.curve=line(.4);f.velocity={.4,0.,0.};f.measured.position={.12,0.,.55};
+  const auto join=[&](const Eigen::Vector3d& raw) {
+    return measuredCandidateJoin(f.curve,f.original,f.measured,raw,.08,.5,.6,true,f.budget,.5);
+  };
+  EXPECT_TRUE(join({.4,0.,.049}));EXPECT_FALSE(join({.4,0.,.050001}));
+  EXPECT_FALSE(join({.500001,0.,0.}));
+  f.measured.source_stamp=10.400001;EXPECT_FALSE(join(f.velocity));
+}
+
+TEST(CandidateAdoption, IndependentTravelDoesNotReplaceWholeCurveCollisionOrFinalSourceGate) {
+  Fixture f;f.curve=line(.4);f.velocity={.4,0.,0.};f.measured.position={.12,0.,.55};
+  bool clear=false;
+  const auto certify=[&] {
+    return certifyCandidateAdoption(f.curve,f.original,f.measured,f.velocity,.08,.5,.6,true,
+      f.candidate_context,f.budget,[&] {
+        return CandidateSourceLease{f.map->latestCloudStampNs(),f.map->localizationContextSequence(),
+          f.map->occupancyRevision(),f.measured.source_stamp};
+      },[]{return std::make_pair(true,true);},[&](double){++f.checks;f.during_check();return clear;},.5);
+  };
+  EXPECT_FALSE(certify());EXPECT_EQ(f.checks,1);
+  clear=true;f.during_check=[&]{GridMapTestAccess::context(*f.map);};
+  EXPECT_FALSE(certify());EXPECT_EQ(f.checks,2);
+}
+
 TEST(CandidateAdoption, NanosecondBodyChangeInvalidatesSourceLeaseAcrossFullCheck) {
   constexpr std::int64_t ns=1791124691902856036LL;
   Fixture f;

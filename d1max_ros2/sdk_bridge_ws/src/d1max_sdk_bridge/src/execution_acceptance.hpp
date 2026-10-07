@@ -64,7 +64,7 @@ inline BrakingModel loadBrakingModel(const std::string&path,const std::string&ex
     throw std::runtime_error("braking_record_hash_mismatch");
   std::ifstream f(path);nlohmann::json j;f>>j;
   if(j.at("schema_version")!=3)throw std::runtime_error("braking_record_schema");
-  if(j.contains("isolated_platform_model")&&mode!="isolated_mock")
+  if((j.contains("isolated_platform_model")||j.contains("isolated_full_xyz_reference_model"))&&mode!="isolated_mock")
     throw std::runtime_error("isolated_platform_cannot_authorize_real_robot");
   if(mode=="isolated_mock") {
    if(j.at("transport_mode")!="isolated_mock"||!j.at("fixture_only").get<bool>())throw std::runtime_error("explicit_mock_braking_fixture_required");
@@ -98,7 +98,7 @@ inline Acceptance validateAcceptance(const std::string&path,const std::string&ro
     if(path.empty()||robot.empty()||sdk.empty()||!sha(calibration)||!sha(profile)||!std::filesystem::path(path).is_absolute())
       throw std::runtime_error("explicit_acceptance_identity_and_absolute_record_required");
     std::ifstream f(path);nlohmann::json j;f>>j;
-    if(j.contains("isolated_platform_model"))throw std::runtime_error("isolated_platform_is_not_physical_acceptance");
+    if(j.contains("isolated_platform_model")||j.contains("isolated_full_xyz_reference_model"))throw std::runtime_error("isolated_platform_is_not_physical_acceptance");
     if(j.at("schema_version")!=3||j.at("robot_id")!=robot||j.at("sdk_version")!=sdk||j.at("profile")!="general_low_speed"||
        j.at("calibration_sha256")!=calibration||j.at("robot_profile_sha256")!=profile||j.at("evidence_id").get<std::string>().empty())throw std::runtime_error("acceptance_identity_mismatch");
     for(const auto*k:{"speed_mapping_verified","stop_timing_verified","body_envelope_verified","raw_ray_safety_verified"})

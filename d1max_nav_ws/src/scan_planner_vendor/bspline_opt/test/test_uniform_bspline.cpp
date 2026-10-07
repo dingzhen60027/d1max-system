@@ -3,6 +3,7 @@
 #include <Eigen/Core>
 #include <bspline_opt/uniform_bspline.h>
 #include <bspline_opt/trajectory_timing.hpp>
+#include <bspline_opt/reference_path.hpp>
 
 TEST(UniformBspline, EvaluatesLinearControlPoints)
 {
@@ -205,4 +206,43 @@ TEST(UniformBspline, MovingTimingRetainsTrueHalfMeterPerSecondStartUnderPointSix
   EXPECT_TRUE(scan_planner::cubicBoundaryMatches(candidate,boundary));
   EXPECT_LE(result.speed_bound,.6+1e-9);
   EXPECT_LE(result.acceleration_bound,.35+1e-9);
+}
+
+TEST(UniformBspline, FullXyzReferenceDomainAloneDoesNotGuaranteeFlatGuideFixedBoundaryFeasibility) {
+  auto boundary=straightBoundary();boundary.start_velocity={.38,0.,.30};boundary.end_velocity={.15,0.,0.};
+  scan_planner::UniformBspline candidate(
+      scan_planner::fitCubicWithFixedBoundary(straightSamples(),.2,boundary),3,.2);
+  const auto original=candidate.getControlPoint();
+  auto strict=candidate;
+  const auto rejected=scan_planner::refineTimingWithFixedBoundary(strict,boundary,.15,.35,
+      [](Eigen::MatrixXd &,double) {return true;});
+  EXPECT_FALSE(rejected.success);
+  const auto result=scan_planner::refineTimingWithFixedBoundary(candidate,boundary,.5,.35,
+      [](Eigen::MatrixXd &,double) {return true;});
+  // Increasing a reference derivative domain cannot manufacture a feasible
+  // passive-Z join. Without a successful interior refinement this original
+  // curve remains rejected, including after all eight timing refinements.
+  EXPECT_FALSE(result.success);EXPECT_EQ(result.reason,"constrained_timing_exhausted");
+  EXPECT_GT(result.speed_bound,.5);EXPECT_TRUE(candidate.getControlPoint().isApprox(original,0.));
+  EXPECT_TRUE(scan_planner::cubicBoundaryMatches(candidate,boundary));
+  EXPECT_NEAR(candidate.getDerivative().evaluateDeBoorT(0.).z(),.30,1e-10);
+}
+
+TEST(UniformBspline, SeparateXyzDomainAdmitsFeasibleCurveWithoutChangingGuideCruise) {
+  const Eigen::Vector3d raw{.38,0.,.30};
+  scan_planner::DiscreteReference guide;guide.set(straightSamples());
+  const auto seed=scan_planner::sampleReferenceSeed(guide,.15,.35,raw.norm(),.15,.2);
+  for(const auto& point:seed.samples)EXPECT_DOUBLE_EQ(point.z(),0.);
+  EXPECT_NEAR(seed.dt,double(guide.length()/.15)/(seed.samples.size()-1),1e-10);
+  scan_planner::CubicMotionBoundary boundary{Eigen::Vector3d::Zero(),raw,Eigen::Vector3d::Zero(),
+      raw*2.,raw,Eigen::Vector3d::Zero()};
+  std::vector<Eigen::Vector3d> measured_reference;
+  for(int i=0;i<=10;++i)measured_reference.push_back(raw*(i*.2));
+  scan_planner::UniformBspline candidate(scan_planner::fitCubicWithFixedBoundary(measured_reference,.2,boundary),3,.2);
+  auto strict=candidate;EXPECT_FALSE(scan_planner::refineTimingWithFixedBoundary(strict,boundary,.15,.35,
+      [](Eigen::MatrixXd&,double){return true;}).success);
+  const auto result=scan_planner::refineTimingWithFixedBoundary(candidate,boundary,.5,.35,
+      [](Eigen::MatrixXd&,double){return true;});
+  ASSERT_TRUE(result.success)<<result.reason;EXPECT_TRUE(scan_planner::cubicBoundaryMatches(candidate,boundary));
+  EXPECT_LE(result.speed_bound,.5+1e-9);EXPECT_LE(result.acceleration_bound,.35+1e-9);
 }

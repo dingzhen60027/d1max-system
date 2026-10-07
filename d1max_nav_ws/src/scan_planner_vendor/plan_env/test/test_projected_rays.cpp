@@ -58,6 +58,9 @@ struct GridMapTestAccess {
     return map.pending_rays_[sensor]?std::chrono::duration_cast<std::chrono::nanoseconds>(
         map.pending_rays_[sensor]->received.time_since_epoch()).count():0;
   }
+  static std::int64_t cloudMaxAgeNs(const GridMap &map) {
+    return static_cast<std::int64_t>(map.mp_.cloud_pose_max_age_*1e9);
+  }
   static auto nextWake(GridMap& map,std::int64_t now) {
     return map.projectedFusionWakeDelay(std::chrono::steady_clock::time_point(std::chrono::nanoseconds(now))).count();
   }
@@ -182,7 +185,8 @@ struct GridMapTestAccess {
     map.mp_.map_sliding_en_=false; // Further packet integration holds this test window.
   }
   static std::string attachStaticPrior(GridMap &map,
-      const std::vector<std::pair<Eigen::Vector3i,std::uint8_t>> &overrides={},bool support=false,double endpoint_error=1e-5) {
+      const std::vector<std::pair<Eigen::Vector3i,std::uint8_t>> &overrides={},bool support=false,double endpoint_error=1e-5,
+      const std::vector<std::string>& actors={"actor"}) {
     static unsigned sequence=0;
     const auto directory=std::filesystem::temp_directory_path()/
         ("d1max-grid-prior-"+std::to_string(getpid())+"-"+std::to_string(++sequence));
@@ -217,8 +221,9 @@ struct GridMapTestAccess {
       if(endpoint_error!=1e-5)manifest["flat_support_contact"]["floor_endpoint_error_bound_m"]=endpoint_error;
       manifest["collision_geometry"]={{"flat_support_contact",manifest["flat_support_contact"]},
         {"closed_world_bounds",manifest["closed_world_bounds"]},{"dynamic_actor_registry_sha256",std::string(64,'d')},
-        {"dynamic_actor_registry",nlohmann::json::array({{{"id","actor"}}})},{"boxes",nlohmann::json::array()},
+        {"dynamic_actor_registry",nlohmann::json::array()},{"boxes",nlohmann::json::array()},
         {"floor",{{"path","/World/GroundPlane/collisionPlane"},{"type","Plane"},{"axis","Z"},{"extent","infinite"},{"z",0.}}}};
+      for(const auto& actor:actors)manifest["collision_geometry"]["dynamic_actor_registry"].push_back({{"id",actor}});
     }
     const auto text=manifest.dump();const auto manifest_hash=scan_planner::StaticOccupancyPrior::sha256(text.data(),text.size());
     {std::ofstream file(directory/"volume.bin",std::ios::binary);file.write(reinterpret_cast<const char*>(data.data()),data.size());}
@@ -233,17 +238,41 @@ struct GridMapTestAccess {
     std::filesystem::remove_all(directory);
     return manifest_hash;
   }
-  static void dynamicOracle(GridMap &map) {
-    map.dynamic_oracle_.configure(std::string(64,'d'),"map",{"actor"},map.mp_.resolution_);
+  static void dynamicOracle(GridMap &map,const std::vector<std::string>& actors={"actor"}) {
+    map.dynamic_oracle_.configure(std::string(64,'d'),"map",actors,map.mp_.resolution_);
   }
-  static void actualPriorHit(GridMap &map,const Eigen::Vector3i &cell,std::int64_t stamp,double endpoint_z) {
-    map.recordStaticPriorHit(cell,stamp,endpoint_z);
+  static void actualPriorHit(GridMap &map,const Eigen::Vector3i &cell,std::int64_t stamp,double endpoint_z,std::uint16_t actor_id=0) {
+    map.recordStaticPriorHit(cell,stamp,endpoint_z,actor_id);
+  }
+  static void actorProvenance(GridMap& map,std::size_t limit=100000) {
+    map.mp_.dynamic_hit_provenance_enabled_=true;
+    map.dynamic_hit_registry_sha256_=map.dynamic_oracle_.registry();
+    map.dynamic_hit_provenance_limit_=limit;
+  }
+  static bool actorProvenanceDisabled(const GridMap& map) {return map.dynamic_hit_provenance_disabled_;}
+  static void disableActorProvenance(GridMap& map) {
+    map.mp_.dynamic_hit_provenance_enabled_=false;map.observed_cylinder_cache_.clear();
+  }
+  static void reset(GridMap& map) {map.resetAllMapData();}
+  static auto attribution(const GridMap& map,const Eigen::Vector3i& cell) {
+    const auto found=map.dynamic_hit_provenance_.find({cell.x(),cell.y(),cell.z()});
+    return found==map.dynamic_hit_provenance_.end()?std::uint16_t{0}:found->second.actor_id;
+  }
+  static int snapshotColumn(GridMap& map,const Eigen::Vector3i& first,int high,std::size_t& visited) {
+    const auto snapshot=map.collision_snapshot_;map.collision_snapshot_=true;
+    // Deterministic original query clocks are already bound by status(). The
+    // proof query itself does not renew either deadline.
+    const auto state=map.observedRawSnapshotColumnStatus(first,high,&visited);
+    map.collision_snapshot_=snapshot;return state;
   }
   static int status(GridMap &map,const Eigen::Vector3i &cell) {
     map.beginCollisionQuery();return map.rawCollisionStatus(cell);
   }
   static int uncachedStatus(GridMap &map,const Eigen::Vector3i &cell) {
     map.beginCollisionQuery();return map.uncachedRawCollisionStatus(cell);
+  }
+  static std::string evidenceSource(GridMap& map,const Eigen::Vector3i& cell,int state) {
+    return map.collisionEvidenceSource(cell,state);
   }
   static std::size_t collisionCacheSize(const GridMap &map) {
     return map.observed_cylinder_cache_.size()+
@@ -356,6 +385,389 @@ static std::string oraclePacket(std::uint64_t sequence=1,std::int64_t stamp=1020
     {"reachable_horizon_ns",6000000000LL},{"reachable_until_ns",stamp+6000000000LL},
     {"actors",nlohmann::json::array({{{"actor_id","actor"},{"regions",nlohmann::json::array({
       {{"state",2},{"min",{x,0.,-.1}},{"max",{x+.2,.2,1.}}}})}}})}}.dump();
+}
+
+static std::string oracleSpherePacket(const std::array<double,3>& center,double radius,
+    std::uint64_t sequence=1,std::int64_t stamp=102000000000LL) {
+  auto value=nlohmann::json::parse(oraclePacket(sequence,stamp));
+  nlohmann::json lower=nlohmann::json::array(),upper=nlohmann::json::array();
+  for(const auto v:center){lower.push_back(v-radius);upper.push_back(v+radius);}
+  value["actors"][0]["regions"][0]={{"state",2},{"min",lower},{"max",upper},
+      {"enclosure","sphere_v1"},{"center",center},{"radius",radius}};
+  return value.dump();
+}
+
+static d1max_planning_interfaces::msg::ProjectedRays withActorIds(
+    d1max_planning_interfaces::msg::ProjectedRays rays,const std::vector<std::uint16_t>& actors) {
+  auto& cloud=rays.rays;const auto original=cloud.data;
+  if(actors.size()!=cloud.width*cloud.height)throw std::invalid_argument("test actor count");
+  cloud.point_step=72;cloud.row_step=72*cloud.width;cloud.data.assign(cloud.row_step*cloud.height,0);
+  for(std::size_t i=0;i<actors.size();++i) {
+    std::memcpy(cloud.data.data()+72*i,original.data()+64*i,64);
+    std::memcpy(cloud.data.data()+72*i+64,&actors[i],2);
+  }
+  sensor_msgs::msg::PointField field;field.name="isaac_actor_id";field.offset=64;
+  field.datatype=sensor_msgs::msg::PointField::UINT16;field.count=1;cloud.fields.push_back(field);
+  return rays;
+}
+
+class ActorHitProvenance:public ::testing::Test {
+ protected:
+  GridMap map;
+  const Eigen::Vector3i hit{15,0,1}; // Nonfloor cell: contact rows -1 and 0 stay a separate contract.
+  void SetUp() override {
+    initialize(false);
+  }
+  void initialize(bool production) {
+    GridMapTestAccess::configure(map);GridMapTestAccess::pointQueryGeometry(map);
+    if(production)GridMapTestAccess::productionProbabilities(map);
+    const auto hash=GridMapTestAccess::attachStaticPrior(map,{},true);
+    ASSERT_TRUE(map.applyLocalizationContext(priorContext(hash)));GridMapTestAccess::dynamicOracle(map);
+    // Both live sources remain the original independent certificate lease.
+    // These real rays never traverse the later actor endpoint at x=1.55.
+    for(unsigned sensor=0;sensor<2;++sensor)ASSERT_TRUE(GridMapTestAccess::accept(map,
+        packet(sensor,101900000000LL,1,1,{.55,.05,.05},{-1.55,.05,.05})));
+    GridMapTestAccess::integrate(map);
+    ASSERT_TRUE(map.applyDynamicOccupancyOracle(oraclePacket(1,102000000000LL,3.),102000000000LL));
+    GridMapTestAccess::actorProvenance(map);
+  }
+  void taggedHit(const std::vector<std::uint16_t>& ids={1},std::int64_t source=101950000000LL,
+      std::int64_t now=102000000000LL,std::uint64_t sequence=2) {
+    ASSERT_TRUE(GridMapTestAccess::accept(map,withActorIds(packet(0,source,sequence,ids.size(),
+        {.55,.05,.15},{1.55,.05,.15}),ids),now,now*1e-9));
+    GridMapTestAccess::integrate(map,now,now*1e-9);
+  }
+};
+
+TEST(ActorRaySchema, LegacyBytesStayUnattributedAnd72RequiresExplicitBound) {
+  const auto legacy=packet(0,101900000000LL,1,2);
+  const auto tagged=withActorIds(legacy,{1,0});
+  EXPECT_FALSE(scan_planner::decodeProjectedRays(tagged.rays,"map"));
+  ASSERT_TRUE(scan_planner::decodeProjectedRays(legacy.rays,"map",false,2));
+  EXPECT_EQ(scan_planner::decodeProjectedRays(legacy.rays,"map",false,2)->actor_ids,(std::vector<std::uint16_t>{0,0}));
+  const auto decoded=scan_planner::decodeProjectedRays(tagged.rays,"map",false,1);ASSERT_TRUE(decoded);
+  EXPECT_EQ(decoded->actor_ids,(std::vector<std::uint16_t>{1,0}));
+  for(unsigned i=0;i<2;++i)EXPECT_TRUE(std::equal(legacy.rays.data.begin()+64*i,
+      legacy.rays.data.begin()+64*(i+1),tagged.rays.data.begin()+72*i));
+}
+
+TEST(ActorRaySchema, MalformedFieldUnknownActorAndUnsupportedStrideRejectEntireCloud) {
+  const auto valid=withActorIds(packet(0,101900000000LL,1,2),{1,0});
+  for(int variant=0;variant<8;++variant) {
+    auto rays=valid;auto& cloud=rays.rays;
+    if(variant==0)cloud.fields.back().offset=66;
+    if(variant==1)cloud.fields.back().count=2;
+    if(variant==2)cloud.fields.back().datatype=sensor_msgs::msg::PointField::UINT32;
+    if(variant==3)cloud.fields.push_back(cloud.fields.back());
+    if(variant==4)cloud.fields.pop_back();
+    if(variant==5){const std::uint16_t unknown=2;std::memcpy(cloud.data.data()+72+64,&unknown,2);}
+    if(variant==6)cloud.point_step=80;
+    if(variant==7){cloud=packet().rays;cloud.fields.push_back(valid.rays.fields.back());}
+    EXPECT_FALSE(scan_planner::decodeProjectedRays(cloud,"map",false,1))<<variant;
+  }
+}
+
+TEST_F(ActorHitProvenance, NewerCompleteDisjointActorUsesStaticFreeWithoutRewritingRawEvidence) {
+  const auto before=map.collisionSnapshotBytes();taggedHit();
+  EXPECT_EQ(GridMapTestAccess::attribution(map,hit),1);
+  EXPECT_EQ(GridMapTestAccess::category(map,hit),scan_planner::RawVoxelDiagnostic::Occupied);
+  const auto odds=GridMapTestAccess::buffers(map);const auto stamp=GridMapTestAccess::freeStamp(map,hit);
+  EXPECT_TRUE(GridMapTestAccess::conflict(map,hit));
+  EXPECT_EQ(GridMapTestAccess::status(map,hit),0);
+  EXPECT_EQ(GridMapTestAccess::buffers(map),odds);EXPECT_EQ(GridMapTestAccess::freeStamp(map,hit),stamp);
+  EXPECT_TRUE(GridMapTestAccess::conflict(map,hit));EXPECT_GT(map.collisionSnapshotBytes(),before);
+  EXPECT_EQ(map.observedProofDeadlineNs(),102200000000LL);
+  GridMapTestAccess::indexedUpdate(map,{14,0,1},.5);
+  EXPECT_FALSE(GridMapTestAccess::conflict(map,{14,0,1}));
+  EXPECT_EQ(GridMapTestAccess::status(map,{14,0,1}),2); // Arbitrary weak evidence without any real hit is unchanged.
+}
+
+TEST_F(ActorHitProvenance, ActorUnknownAndTwoActorsInSameNativeDeduplicatedCellPoisonAllHistory) {
+  taggedHit({1,0});EXPECT_EQ(GridMapTestAccess::attribution(map,hit),0);
+  EXPECT_EQ(GridMapTestAccess::status(map,hit),1);
+  taggedHit({1},101960000000LL,102010000000LL,3);
+  EXPECT_EQ(GridMapTestAccess::status(map,hit),1); // Later labels cannot erase the unknown hit.
+  GridMapTestAccess::actualPriorHit(map,hit,101970000000LL,.15,2);
+  EXPECT_EQ(GridMapTestAccess::attribution(map,hit),0);
+}
+
+TEST_F(ActorHitProvenance, UnknownOlderSourceStillPoisonsAndNewHitLaterThanOracleIsOccupied) {
+  taggedHit();ASSERT_EQ(GridMapTestAccess::status(map,hit),0);
+  GridMapTestAccess::actualPriorHit(map,hit,101800000000LL,.15,0);
+  EXPECT_EQ(GridMapTestAccess::status(map,hit),1); // Older source is not a reason to omit an actual unknown hit.
+  EXPECT_EQ(GridMapTestAccess::attribution(map,hit),0);
+}
+
+TEST_F(ActorHitProvenance, LaterActorHitCannotBorrowOlderOracleAndFreshOracleRevalidates) {
+  taggedHit({1},102100000000LL,102100000000LL);
+  EXPECT_EQ(GridMapTestAccess::status(map,hit),1);
+  ASSERT_TRUE(map.applyDynamicOccupancyOracle(oraclePacket(2,102110000000LL,3.),102110000000LL));
+  GridMapTestAccess::integrate(map,102110000000LL,102.11);
+  EXPECT_EQ(GridMapTestAccess::status(map,hit),0);
+  const auto source_deadline=map.observedProofDeadlineNs();
+  ASSERT_TRUE(map.applyDynamicOccupancyOracle(oraclePacket(2,102110000000LL,3.),102150000000LL));
+  EXPECT_EQ(map.observedProofDeadlineNs(),source_deadline);
+  GridMapTestAccess::integrate(map,102310000000LL,102.31);
+  EXPECT_EQ(GridMapTestAccess::status(map,hit),2); // Duplicate cannot renew either original oracle lease.
+}
+
+TEST_F(ActorHitProvenance, EqualSourceOracleCannotRetireEvenAttributedDisjointOccupiedHit) {
+  taggedHit({1},102000000000LL,102000000000LL);
+  EXPECT_EQ(GridMapTestAccess::attribution(map,hit),1);
+  EXPECT_EQ(GridMapTestAccess::status(map,hit),1);
+  const auto odds=GridMapTestAccess::buffers(map);
+  ASSERT_TRUE(map.applyDynamicOccupancyOracle(oraclePacket(2,102001000000LL,3.),102001000000LL));
+  GridMapTestAccess::integrate(map,102001000000LL,102.001);
+  EXPECT_EQ(GridMapTestAccess::status(map,hit),0);EXPECT_EQ(GridMapTestAccess::buffers(map),odds);
+}
+
+TEST_F(ActorHitProvenance, FullClosedVoxelBoundaryAndFutureUpperZStillVetoRetirement) {
+  taggedHit();
+  ASSERT_TRUE(map.applyDynamicOccupancyOracle(oracleSpherePacket({1.8,.05,.15},.2,2,102010000000LL),102010000000LL));
+  GridMapTestAccess::integrate(map,102010000000LL,102.01);
+  EXPECT_EQ(GridMapTestAccess::status(map,hit),2); // Face x=1.6 touches the future sphere.
+  const Eigen::Vector3i elevated{15,0,5};
+  GridMapTestAccess::actualPriorHit(map,elevated,102000000000LL,.55,1);
+  GridMapTestAccess::indexedUpdate(map,elevated,2.);
+  ASSERT_TRUE(map.applyDynamicOccupancyOracle(oracleSpherePacket({1.55,.05,.8},.2,3,102020000000LL),102020000000LL));
+  GridMapTestAccess::integrate(map,102020000000LL,102.02);
+  EXPECT_EQ(GridMapTestAccess::status(map,elevated),2); // Full upper-Z closed face is not an XY-only proof.
+}
+
+TEST_F(ActorHitProvenance, TaggedWeakMayUseStaticWhileLegacyAndDisabledSchemaStayRejected) {
+  GridMapTestAccess::actualPriorHit(map,hit,101950000000LL,.15,1);
+  GridMapTestAccess::indexedUpdate(map,hit,.5);
+  EXPECT_EQ(GridMapTestAccess::status(map,hit),0); // Exact weak actor-only history may borrow the same independent static FREE.
+  GridMap legacy;GridMapTestAccess::configure(legacy);
+  ASSERT_TRUE(legacy.applyLocalizationContext(context()));
+  EXPECT_FALSE(GridMapTestAccess::accept(legacy,withActorIds(packet(),{1})));
+}
+
+class WeakActorHitProvenance:public ActorHitProvenance {
+ protected:
+  void SetUp() override {initialize(true);}
+};
+
+TEST_F(WeakActorHitProvenance, ProductionSingleRealHitRemainsWeakAndOnlyUsesIndependentStaticEvidence) {
+  taggedHit();ASSERT_EQ(GridMapTestAccess::category(map,hit),scan_planner::RawVoxelDiagnostic::Insufficient);
+  const auto odds=GridMapTestAccess::buffers(map);const auto stamp=GridMapTestAccess::freeStamp(map,hit);
+  const auto receipt=GridMapTestAccess::freeReceipt(map,hit);
+  EXPECT_TRUE(GridMapTestAccess::conflict(map,hit));EXPECT_EQ(GridMapTestAccess::attribution(map,hit),1);
+  EXPECT_EQ(GridMapTestAccess::status(map,hit),0);
+  EXPECT_EQ(GridMapTestAccess::evidenceSource(map,hit,0),"certified_static_free");
+  EXPECT_EQ(GridMapTestAccess::buffers(map),odds);EXPECT_EQ(GridMapTestAccess::freeStamp(map,hit),stamp);
+  EXPECT_EQ(GridMapTestAccess::freeReceipt(map,hit),receipt);EXPECT_TRUE(GridMapTestAccess::conflict(map,hit));
+  EXPECT_EQ(map.observedProofDeadlineNs(),102200000000LL);
+}
+
+TEST_F(WeakActorHitProvenance, UnknownDeduplicatedLegacyAndOlderHitPoisonWeakActorHistory) {
+  taggedHit({1,0});ASSERT_EQ(GridMapTestAccess::category(map,hit),scan_planner::RawVoxelDiagnostic::Insufficient);
+  EXPECT_EQ(GridMapTestAccess::attribution(map,hit),0);EXPECT_EQ(GridMapTestAccess::status(map,hit),2);
+  EXPECT_EQ(GridMapTestAccess::evidenceSource(map,hit,2),"live_static_conflict");
+  taggedHit({1},101960000000LL,102010000000LL,3);
+  EXPECT_NE(GridMapTestAccess::status(map,hit),0);
+}
+
+TEST_F(WeakActorHitProvenance, OlderUnattributedHitAndFeatureOffRevokeWeakQualification) {
+  taggedHit();ASSERT_EQ(GridMapTestAccess::status(map,hit),0);
+  GridMapTestAccess::actualPriorHit(map,hit,101800000000LL,.15,0);
+  EXPECT_EQ(GridMapTestAccess::status(map,hit),2);
+  GridMapTestAccess::disableActorProvenance(map);EXPECT_EQ(GridMapTestAccess::status(map,hit),2);
+}
+
+TEST_F(WeakActorHitProvenance, Original64ByteWeakHitCannotBeRelabeledByLaterActorProvenance) {
+  ASSERT_TRUE(GridMapTestAccess::accept(map,packet(0,101950000000LL,2,1,{.55,.05,.15},{1.55,.05,.15})));
+  GridMapTestAccess::integrate(map);ASSERT_EQ(GridMapTestAccess::category(map,hit),scan_planner::RawVoxelDiagnostic::Insufficient);
+  EXPECT_EQ(GridMapTestAccess::status(map,hit),2);EXPECT_EQ(GridMapTestAccess::attribution(map,hit),0);
+  taggedHit({1},101960000000LL,102010000000LL,3);
+  EXPECT_EQ(GridMapTestAccess::attribution(map,hit),0);EXPECT_NE(GridMapTestAccess::status(map,hit),0);
+}
+
+TEST_F(WeakActorHitProvenance, EqualAndOlderOracleNeverRetireWeakHitsAndDuplicateNeverRenewsEitherDeadline) {
+  taggedHit({1},102000000000LL,102000000000LL);
+  ASSERT_EQ(GridMapTestAccess::category(map,hit),scan_planner::RawVoxelDiagnostic::Insufficient);
+  EXPECT_EQ(GridMapTestAccess::status(map,hit),2);
+  ASSERT_TRUE(map.applyDynamicOccupancyOracle(oraclePacket(2,102010000000LL,3.),102010000000LL));
+  GridMapTestAccess::integrate(map,102010000000LL,102.01);ASSERT_EQ(GridMapTestAccess::status(map,hit),0);
+  const auto deadline=map.observedProofDeadlineNs();const auto odds=GridMapTestAccess::buffers(map);
+  ASSERT_TRUE(map.applyDynamicOccupancyOracle(oraclePacket(2,102010000000LL,3.),102100000000LL));
+  EXPECT_EQ(map.observedProofDeadlineNs(),deadline);
+  GridMapTestAccess::integrate(map,102010000000LL,102.21);EXPECT_EQ(GridMapTestAccess::status(map,hit),2);
+  EXPECT_EQ(GridMapTestAccess::buffers(map),odds); // Original steady expiry; no source-time relaxation.
+}
+
+TEST_F(WeakActorHitProvenance, NewWeakHitLaterThanOracleWaitsForStrictlyNewerCompleteEvidence) {
+  taggedHit({1},102100000000LL,102100000000LL);
+  ASSERT_EQ(GridMapTestAccess::category(map,hit),scan_planner::RawVoxelDiagnostic::Insufficient);
+  EXPECT_EQ(GridMapTestAccess::status(map,hit),2);
+  ASSERT_TRUE(map.applyDynamicOccupancyOracle(oraclePacket(2,102110000000LL,3.),102110000000LL));
+  GridMapTestAccess::integrate(map,102110000000LL,102.11);EXPECT_EQ(GridMapTestAccess::status(map,hit),0);
+  GridMapTestAccess::queryTime(map,101900000000LL);EXPECT_EQ(GridMapTestAccess::status(map,hit),2);
+}
+
+TEST_F(WeakActorHitProvenance, FullClosedFutureCellFacesAndUpperZVetoWeakRetirement) {
+  taggedHit();const auto odds=GridMapTestAccess::buffers(map);
+  ASSERT_TRUE(map.applyDynamicOccupancyOracle(oracleSpherePacket({1.8,.05,.15},.2,2,102010000000LL),102010000000LL));
+  GridMapTestAccess::integrate(map,102010000000LL,102.01);EXPECT_EQ(GridMapTestAccess::status(map,hit),2);
+  ASSERT_TRUE(GridMapTestAccess::accept(map,withActorIds(packet(0,101960000000LL,3,1,
+      {.55,.05,.55},{1.55,.05,.55}),{1}),102020000000LL,102.02));
+  GridMapTestAccess::integrate(map,102020000000LL,102.02);
+  ASSERT_EQ(GridMapTestAccess::category(map,{15,0,5}),scan_planner::RawVoxelDiagnostic::Insufficient);
+  ASSERT_TRUE(map.applyDynamicOccupancyOracle(oracleSpherePacket({1.55,.05,.8},.2,3,102020000000LL),102020000000LL));
+  EXPECT_EQ(GridMapTestAccess::status(map,{15,0,5}),2);
+  EXPECT_EQ(GridMapTestAccess::raw(map,1.55,.05,.15),odds[GridMapTestAccess::address(map,hit)]);
+}
+
+TEST_F(WeakActorHitProvenance, OverflowAndRevokedStaticContextKeepWeakHistoryBlocked) {
+  GridMapTestAccess::actorProvenance(map,1);taggedHit();ASSERT_EQ(GridMapTestAccess::status(map,hit),0);
+  GridMapTestAccess::actualPriorHit(map,{14,0,1},101960000000LL,.15,0);
+  EXPECT_TRUE(GridMapTestAccess::actorProvenanceDisabled(map));EXPECT_EQ(GridMapTestAccess::status(map,hit),2);
+  GridMapTestAccess::reset(map);EXPECT_TRUE(GridMapTestAccess::actorProvenanceDisabled(map));
+  EXPECT_FALSE(map.applyLocalizationContext(context(2,2)));EXPECT_EQ(GridMapTestAccess::status(map,hit),2);
+}
+
+TEST(WeakActorHitProvenanceRegistry, ValidDifferentActorsAndUncertifiedStaticCellsDoNotUseException) {
+  for(const auto prior:std::vector<std::uint8_t>{0,1,2}) {
+    GridMap map;GridMapTestAccess::configure(map);GridMapTestAccess::productionProbabilities(map);
+    const auto hash=GridMapTestAccess::attachStaticPrior(map,{{{15,0,1},prior}},true,1e-5,{"actor","other"});
+    ASSERT_TRUE(map.applyLocalizationContext(priorContext(hash)));
+    GridMapTestAccess::dynamicOracle(map,{"actor","other"});GridMapTestAccess::actorProvenance(map);
+    auto oracle=nlohmann::json::parse(oraclePacket(1,102000000000LL,3.));
+    auto other=oracle["actors"][0];other["actor_id"]="other";oracle["actors"].push_back(other);
+    ASSERT_TRUE(map.applyDynamicOccupancyOracle(oracle.dump(),102000000000LL));
+    for(unsigned sensor=0;sensor<2;++sensor)ASSERT_TRUE(GridMapTestAccess::accept(map,withActorIds(
+        packet(sensor,101900000000LL,1,2,{.55,.05,.15},{1.55,.05,.15}),prior==0?
+          std::vector<std::uint16_t>{1,2}:std::vector<std::uint16_t>{1,1})));
+    GridMapTestAccess::integrate(map);ASSERT_EQ(GridMapTestAccess::category(map,{15,0,1}),scan_planner::RawVoxelDiagnostic::Insufficient);
+    EXPECT_NE(GridMapTestAccess::status(map,{15,0,1}),0)<<int(prior);
+  }
+}
+
+TEST(WeakActorHitProvenanceSnapshot, ImmutablePositiveSnapshotDoesNotAcquireLaterUnknownHitOrFreshLease) {
+  GridMap writer,snapshot;GridMapTestAccess::configure(writer);GridMapTestAccess::productionProbabilities(writer);
+  const auto hash=GridMapTestAccess::attachStaticPrior(writer,{},true);
+  ASSERT_TRUE(writer.applyLocalizationContext(priorContext(hash)));GridMapTestAccess::dynamicOracle(writer);
+  GridMapTestAccess::actorProvenance(writer);
+  const auto receipt=std::chrono::steady_clock::now();
+  const auto receipt_ns=std::chrono::duration_cast<std::chrono::nanoseconds>(receipt.time_since_epoch()).count();
+  for(unsigned sensor=0;sensor<2;++sensor)ASSERT_TRUE(GridMapTestAccess::accept(writer,withActorIds(
+      packet(sensor,101950000000LL,1,1,{.55,.05,.15},{1.55,.05,.15}),{1}),102000000000LL,receipt_ns*1e-9));
+  GridMapTestAccess::integrate(writer,102000000000LL,receipt_ns*1e-9);
+  ASSERT_TRUE(writer.applyDynamicOccupancyOracle(oraclePacket(1,102000000000LL,3.),receipt_ns));
+  writer.copyCollisionSnapshotTo(snapshot,102000000000LL,receipt);
+  snapshot.beginObservedProof();EXPECT_EQ(snapshot.observedRawSnapshotStatus({15,0,1}),0);
+  const auto deadline=snapshot.observedProofDeadlineNs();
+  const auto captured_lease=nlohmann::json::parse(snapshot.describeCollisionLease());
+  GridMapTestAccess::actualPriorHit(writer,{15,0,1},102010000000LL,.15,0);
+  EXPECT_EQ(GridMapTestAccess::status(writer,{15,0,1}),2);
+  EXPECT_EQ(snapshot.observedRawSnapshotStatus({15,0,1}),0);EXPECT_LE(snapshot.observedProofDeadlineNs(),deadline);
+  EXPECT_EQ(nlohmann::json::parse(snapshot.describeCollisionLease()),captured_lease); // Original source/receipt deadlines never renew.
+  EXPECT_TRUE(snapshot.observedProofFresh());EXPECT_EQ(GridMapTestAccess::attribution(snapshot,{15,0,1}),1);
+  EXPECT_EQ(GridMapTestAccess::attribution(writer,{15,0,1}),0);
+}
+
+TEST_F(ActorHitProvenance, FeatureOffOldUntaggedHistoryAndLostContextCannotRetireOccupied) {
+  ASSERT_TRUE(GridMapTestAccess::accept(map,packet(0,101950000000LL,2,1,{.55,.05,.15},{1.55,.05,.15})));
+  GridMapTestAccess::integrate(map);EXPECT_EQ(GridMapTestAccess::status(map,hit),1);
+  taggedHit({1},101960000000LL,102010000000LL,3);
+  EXPECT_EQ(GridMapTestAccess::attribution(map,hit),0);EXPECT_EQ(GridMapTestAccess::status(map,hit),1);
+  EXPECT_FALSE(map.applyLocalizationContext(context(2,2))); // No matching static identity attestation.
+  EXPECT_NE(GridMapTestAccess::status(map,hit),0);
+}
+
+TEST(ActorHitProvenanceRegistry, TwoValidActorsUnknownRegistryAndEmptyRegistryStayFailClosed) {
+  GridMap map;GridMapTestAccess::configure(map);
+  const auto hash=GridMapTestAccess::attachStaticPrior(map,{},true,1e-5,{"actor","other"});
+  ASSERT_TRUE(map.applyLocalizationContext(priorContext(hash)));
+  GridMapTestAccess::dynamicOracle(map,{"other","actor"});GridMapTestAccess::actorProvenance(map);
+  auto oracle=nlohmann::json::parse(oraclePacket(1,102000000000LL,3.));
+  auto other=oracle["actors"][0];other["actor_id"]="other";oracle["actors"].push_back(other);
+  ASSERT_TRUE(map.applyDynamicOccupancyOracle(oracle.dump(),102000000000LL));
+  for(unsigned sensor=0;sensor<2;++sensor)ASSERT_TRUE(GridMapTestAccess::accept(map,withActorIds(
+      packet(sensor,101900000000LL,1,2,{.55,.05,.15},{1.55,.05,.15}),{1,2})));
+  GridMapTestAccess::integrate(map);EXPECT_EQ(GridMapTestAccess::attribution(map,{15,0,1}),0);
+  EXPECT_EQ(GridMapTestAccess::status(map,{15,0,1}),1);
+  GridMapTestAccess::dynamicOracle(map,{"different"});
+  GridMapTestAccess::actualPriorHit(map,{14,0,0},102010000000LL,.05,1);
+  EXPECT_TRUE(GridMapTestAccess::actorProvenanceDisabled(map));
+  EXPECT_NE(GridMapTestAccess::status(map,{15,0,1}),0);
+  GridMap empty;GridMapTestAccess::configure(empty);
+  const auto empty_hash=GridMapTestAccess::attachStaticPrior(empty,{},true,1e-5,{});
+  ASSERT_TRUE(empty.applyLocalizationContext(priorContext(empty_hash)));
+  GridMapTestAccess::dynamicOracle(empty,{});GridMapTestAccess::actorProvenance(empty);
+  EXPECT_FALSE(GridMapTestAccess::accept(empty,withActorIds(packet(),{0})));
+  EXPECT_TRUE(GridMapTestAccess::accept(empty,packet())); // Exact empty fixture heartbeat still uses legacy64.
+}
+
+TEST_F(ActorHitProvenance, BoundedMetadataOverflowRevokesAllPrivilegesAndPersistsAcrossReset) {
+  GridMapTestAccess::actorProvenance(map,1);taggedHit();ASSERT_EQ(GridMapTestAccess::status(map,hit),0);
+  GridMapTestAccess::actualPriorHit(map,{14,0,0},101960000000LL,.05,0);
+  EXPECT_TRUE(GridMapTestAccess::actorProvenanceDisabled(map));
+  EXPECT_EQ(GridMapTestAccess::status(map,hit),1);
+  GridMapTestAccess::reset(map);EXPECT_TRUE(GridMapTestAccess::actorProvenanceDisabled(map));
+  taggedHit({1},101970000000LL,102010000000LL,3);
+  EXPECT_NE(GridMapTestAccess::status(map,hit),0);
+}
+
+TEST_F(ActorHitProvenance, SnapshotIdentitySourceRollbackAndFirstOccupiedEvidenceRemainOriginal) {
+  taggedHit();GridMap snapshot;
+  map.copyCollisionSnapshotTo(snapshot,102000000000LL,std::chrono::steady_clock::time_point(std::chrono::nanoseconds(102000000000LL)));
+  EXPECT_EQ(GridMapTestAccess::attribution(snapshot,hit),1);
+  GridMapTestAccess::actualPriorHit(map,hit,102010000000LL,.15,0);
+  EXPECT_EQ(GridMapTestAccess::attribution(snapshot,hit),1);EXPECT_EQ(GridMapTestAccess::attribution(map,hit),0);
+  EXPECT_EQ(GridMapTestAccess::status(map,hit),1);
+  std::size_t visited=0;ASSERT_EQ(GridMapTestAccess::snapshotColumn(map,hit,2,visited),1);EXPECT_EQ(visited,1U);
+  const auto detail=nlohmann::json::parse(map.describeObservedRawFailure());
+  EXPECT_EQ(detail["index"],(std::array<int,3>{{15,0,1}}));EXPECT_EQ(detail["raw_state"],1);
+  EXPECT_EQ(detail["hit_source_ns"],102010000000LL);EXPECT_EQ(detail["hit_actor_id"],0);
+  const auto odds=GridMapTestAccess::buffers(map);GridMapTestAccess::queryTime(map,101800000000LL);
+  EXPECT_NE(GridMapTestAccess::status(map,hit),0);EXPECT_EQ(GridMapTestAccess::buffers(map),odds);
+}
+
+TEST(DynamicOracleIntegration, SphereCornerDisjointnessRetainsPriorContactLiveHitsAndCompleteTopVolume) {
+  GridMap map;GridMapTestAccess::configure(map);
+  const auto hash=GridMapTestAccess::attachStaticPrior(map,{},true);
+  ASSERT_TRUE(map.applyLocalizationContext(priorContext(hash)));GridMapTestAccess::dynamicOracle(map);
+  for(unsigned sensor=0;sensor<2;++sensor)ASSERT_TRUE(GridMapTestAccess::accept(map,packet(sensor)));
+  GridMapTestAccess::integrate(map);const auto odds=GridMapTestAccess::buffers(map);
+  ASSERT_TRUE(map.applyDynamicOccupancyOracle(oracleSpherePacket({.5,.5,.5},.5),102000000000LL));
+  EXPECT_EQ(GridMapTestAccess::columnStatus(map,{0,0,-1},11),0); // Broad box corner is outside the full ball.
+  GridMapTestAccess::actualPriorHit(map,{0,0,1},102001000000LL,.15);
+  EXPECT_EQ(GridMapTestAccess::columnStatus(map,{0,0,-1},11),2); // Sphere disjointness never erases raw hit.
+  EXPECT_TRUE(GridMapTestAccess::conflict(map,{0,0,1}));
+  EXPECT_EQ(GridMapTestAccess::buffers(map),odds);
+
+  GridMap top;GridMapTestAccess::configure(top);
+  const auto top_hash=GridMapTestAccess::attachStaticPrior(top,{},true);
+  ASSERT_TRUE(top.applyLocalizationContext(priorContext(top_hash)));GridMapTestAccess::dynamicOracle(top);
+  for(unsigned sensor=0;sensor<2;++sensor)ASSERT_TRUE(GridMapTestAccess::accept(top,packet(sensor)));
+  GridMapTestAccess::integrate(top);
+  ASSERT_TRUE(top.applyDynamicOccupancyOracle(oracleSpherePacket({.05,.05,1.15},.04),102000000000LL));
+  EXPECT_EQ(GridMapTestAccess::columnStatus(top,{0,0,-1},10),0);
+  EXPECT_EQ(GridMapTestAccess::columnStatus(top,{0,0,-1},11),2); // Full Z top, not a 2D/center test.
+}
+
+TEST(DynamicOracleIntegration, SphereDisjointColumnCannotBorrowExpiredOrRevokedLeaseOrStaticOccupiedFree) {
+  for(int variant=0;variant<3;++variant) {
+    GridMap map;GridMapTestAccess::configure(map);
+    const auto hash=GridMapTestAccess::attachStaticPrior(map,{},true);
+    ASSERT_TRUE(map.applyLocalizationContext(priorContext(hash)));GridMapTestAccess::dynamicOracle(map);
+    for(unsigned sensor=0;sensor<2;++sensor)ASSERT_TRUE(GridMapTestAccess::accept(map,packet(sensor)));
+    GridMapTestAccess::integrate(map);
+    ASSERT_TRUE(map.applyDynamicOccupancyOracle(oracleSpherePacket({.5,.5,.5},.5),102000000000LL));
+    ASSERT_EQ(GridMapTestAccess::columnStatus(map,{0,0,-1},11),0);
+    if(variant==0)GridMapTestAccess::steadyClockAdvance(map,102200000000LL,102100000000LL);
+    if(variant==1)GridMapTestAccess::steadyClockAdvance(map,102100000000LL,102200000000LL);
+    if(variant==2)EXPECT_FALSE(map.applyDynamicOccupancyOracle("{}",102010000000LL));
+    EXPECT_EQ(GridMapTestAccess::columnStatus(map,{0,0,-1},11),2)<<variant;
+  }
+  GridMap wall;GridMapTestAccess::configure(wall);
+  const auto hash=GridMapTestAccess::attachStaticPrior(wall,{{{0,0,3},1}},true);
+  ASSERT_TRUE(wall.applyLocalizationContext(priorContext(hash)));GridMapTestAccess::dynamicOracle(wall);
+  for(unsigned sensor=0;sensor<2;++sensor)ASSERT_TRUE(GridMapTestAccess::accept(wall,packet(sensor)));
+  GridMapTestAccess::integrate(wall);
+  ASSERT_TRUE(wall.applyDynamicOccupancyOracle(oracleSpherePacket({.5,.5,.5},.5),102000000000LL));
+  EXPECT_EQ(GridMapTestAccess::columnStatus(wall,{0,0,-1},11),1);
 }
 
 TEST(DynamicOracleIntegration, HiddenActorVetoOverridesStaticFreeWithoutTouchingLaserEvidence) {
@@ -1180,7 +1592,8 @@ TEST(ProjectedRayExactPair, MismatchedWatchdogAddsActualObstacleWithoutCurrentPr
   map.setCollisionUpdateCallback([&]{++snapshots;published_cloud=map.latestCloudStampNs();});
   ASSERT_TRUE(GridMapTestAccess::accept(map,packet(0,102000000000LL),102100000000LL,400.));
   ASSERT_TRUE(GridMapTestAccess::accept(map,packet(1,101900000000LL),102100000000LL,400.));
-  ASSERT_TRUE(GridMapTestAccess::eventFusionAt(map,102100000000LL,400020000000LL,true));
+  EXPECT_FALSE(GridMapTestAccess::eventFusionAt(map,102100000000LL,400020000000LL,true));
+  ASSERT_TRUE(GridMapTestAccess::eventFusionAt(map,102100000000LL,400200000000LL,true));
   EXPECT_EQ(snapshots,1);EXPECT_EQ(published_cloud,0);
   EXPECT_EQ(map.integratedRaySourceStamp(0),102000000000LL);
   EXPECT_EQ(map.integratedRaySourceStamp(1),101900000000LL);
@@ -1235,13 +1648,148 @@ TEST(ProjectedRayExactPair, DueWatchdogRevokesPreviouslyCachedPairedFreeAfterMis
   ASSERT_TRUE(GridMapTestAccess::accept(map,packet(1,102000000000LL,2),102200000000LL,400.2));
   EXPECT_FALSE(GridMapTestAccess::eventFusionAt(map,102210000000LL,400299000000LL,true));
   EXPECT_EQ(GridMapTestAccess::pending(map),2);
-  ASSERT_TRUE(GridMapTestAccess::eventFusionAt(map,102210000000LL,400301000000LL,true));
+  EXPECT_FALSE(GridMapTestAccess::eventFusionAt(map,102210000000LL,400301000000LL,true));
+  ASSERT_TRUE(GridMapTestAccess::eventFusionAt(map,102210000000LL,400400000000LL,true));
   EXPECT_EQ(map.integratedRaySourceStamp(0),102100000000LL);
   EXPECT_EQ(map.integratedRaySourceStamp(1),102000000000LL);
   EXPECT_EQ(GridMapTestAccess::status(map,{15,0,0}),1);
   EXPECT_EQ(map.getInflateOccupancy({.05,.05,.05},0.),2);
   EXPECT_FALSE(GridMapTestAccess::cachedPriorLease(map));
   EXPECT_EQ(map.latestCloudStampNs(),0);EXPECT_EQ(map.observedProofDeadlineNs(),1);
+}
+
+TEST(ProjectedRayExactPair, LateFrontAfterOldFusionGetsOwnWaitForNinetyMillisecondPeer) {
+  GridMap map;GridMapTestAccess::configure(map);GridMapTestAccess::exactProjectedPair(map);
+  const auto hash=GridMapTestAccess::attachStaticPrior(map);
+  ASSERT_TRUE(map.applyLocalizationContext(priorContext(hash)));
+  for(unsigned sensor=0;sensor<2;++sensor)
+    ASSERT_TRUE(GridMapTestAccess::accept(map,packet(sensor),102000000000LL,400.));
+  ASSERT_TRUE(GridMapTestAccess::eventFusionAt(map,102000000000LL,400000000000LL));
+  const auto previous=map.fusionTiming();
+  const auto limit=GridMapTestAccess::cloudMaxAgeNs(map);
+  const auto previous_source_deadline=std::min(map.integratedRaySourceStamp(0),
+      map.integratedRaySourceStamp(1))+limit;
+  const auto previous_receipt_deadline=std::min(GridMapTestAccess::integratedReceipt(map,0),
+      GridMapTestAccess::integratedReceipt(map,1))+limit;
+  // The old fusion is already >300 ms ago when this NEW front arrives.
+  ASSERT_TRUE(GridMapTestAccess::accept(map,packet(0,102000000000LL,2),102100000000LL,400.4));
+  EXPECT_FALSE(GridMapTestAccess::eventFusionAt(map,102100000000LL,400401000000LL,true));
+  EXPECT_EQ(map.fusionTiming().sequence,previous.sequence);
+  EXPECT_EQ(GridMapTestAccess::pending(map),1);
+  EXPECT_EQ(GridMapTestAccess::pendingReceipt(map,0),400400000000LL);
+  EXPECT_EQ(map.integratedRaySourceStamp(0),101900000000LL);
+  EXPECT_EQ(GridMapTestAccess::integratedReceipt(map,0),400000000000LL);
+  ASSERT_TRUE(GridMapTestAccess::accept(map,packet(1,102000000000LL,2),102120000000LL,400.49));
+  ASSERT_TRUE(GridMapTestAccess::eventFusionAt(map,102120000000LL,400490000000LL,true));
+  EXPECT_EQ(map.fusionTiming().sequence,previous.sequence+1);
+  EXPECT_EQ(map.fusionTiming().source_stamps[0],102000000000LL);
+  EXPECT_EQ(map.fusionTiming().source_stamps[1],102000000000LL);
+  EXPECT_EQ(GridMapTestAccess::pending(map),0);
+  EXPECT_EQ(GridMapTestAccess::integratedReceipt(map,0),400400000000LL);
+  EXPECT_EQ(GridMapTestAccess::integratedReceipt(map,1),400490000000LL);
+  EXPECT_TRUE(map.integratedCloudFreshAt(102120000000LL));
+  EXPECT_EQ(GridMapTestAccess::status(map,{0,0,0}),0);
+  // Before replacing the integrated pair, processProjectedRays queries the
+  // original prior/context witness. A completed pair cannot renew those
+  // existing proof-scope deadlines; convert its remaining true receipt lease
+  // at this query, then retain the minimum of both source/receipt generations.
+  const auto paired_source_deadline=std::min(map.integratedRaySourceStamp(0),
+      map.integratedRaySourceStamp(1))+limit;
+  const auto paired_receipt_deadline=std::min(GridMapTestAccess::integratedReceipt(map,0),
+      GridMapTestAccess::integratedReceipt(map,1))+limit;
+  const auto receipt_deadline=std::min(previous_receipt_deadline,paired_receipt_deadline);
+  constexpr std::int64_t query_source=102120000000LL,query_receipt=400490000000LL;
+  const auto expected_deadline=std::min({previous_source_deadline,paired_source_deadline,
+      query_source+(receipt_deadline-query_receipt)});
+  ASSERT_EQ(expected_deadline,102130000000LL);
+  EXPECT_EQ(map.observedProofDeadlineNs(),expected_deadline);
+}
+
+TEST(ProjectedRayExactPair, MissingPeerDueOrphanStillAddsActualHitAndRevokesPairedFree) {
+  GridMap map;GridMapTestAccess::configure(map);GridMapTestAccess::exactProjectedPair(map);
+  GridMapTestAccess::pointQueryGeometry(map);
+  const auto hash=GridMapTestAccess::attachStaticPrior(map);
+  ASSERT_TRUE(map.applyLocalizationContext(priorContext(hash)));
+  for(unsigned sensor=0;sensor<2;++sensor)
+    ASSERT_TRUE(GridMapTestAccess::accept(map,packet(sensor,101900000000LL,1,1,
+        {.55,.05,.05},{1.05,.05,.05}),102000000000LL,400.));
+  ASSERT_TRUE(GridMapTestAccess::eventFusionAt(map,102000000000LL,400000000000LL));
+  ASSERT_LT(GridMapTestAccess::raw(map,1.55),1.); // New hit must not reuse the old paired endpoint.
+  ASSERT_TRUE(GridMapTestAccess::accept(map,packet(0,102100000000LL,2,1,
+      {.55,.05,.05},{1.55,.05,.05}),102200000000LL,400.4));
+  EXPECT_FALSE(GridMapTestAccess::eventFusionAt(map,102220000000LL,400599999999LL,true));
+  EXPECT_EQ(GridMapTestAccess::pending(map),1);
+  ASSERT_TRUE(GridMapTestAccess::eventFusionAt(map,102220000000LL,400600000000LL,true));
+  EXPECT_EQ(GridMapTestAccess::pending(map),0);
+  EXPECT_EQ(map.integratedRaySourceStamp(0),102100000000LL);
+  EXPECT_EQ(map.integratedRaySourceStamp(1),101900000000LL);
+  EXPECT_EQ(GridMapTestAccess::integratedReceipt(map,0),400400000000LL);
+  EXPECT_EQ(GridMapTestAccess::integratedReceipt(map,1),400000000000LL);
+  EXPECT_EQ(GridMapTestAccess::status(map,{15,0,0}),1);
+  EXPECT_EQ(map.getInflateOccupancy({.05,.05,.05},0.),2);
+  EXPECT_FALSE(GridMapTestAccess::cachedPriorLease(map));
+  EXPECT_EQ(map.latestCloudStampNs(),0);EXPECT_EQ(map.observedProofDeadlineNs(),1);
+}
+
+TEST(ProjectedRayExactPair, DueOldOrphanDoesNotConsumeOrRestampNewUnmatchedPeer) {
+  GridMap map;GridMapTestAccess::configure(map);GridMapTestAccess::exactProjectedPair(map);
+  GridMapTestAccess::pointQueryGeometry(map);
+  const auto hash=GridMapTestAccess::attachStaticPrior(map);
+  ASSERT_TRUE(map.applyLocalizationContext(priorContext(hash)));
+  for(unsigned sensor=0;sensor<2;++sensor)
+    ASSERT_TRUE(GridMapTestAccess::accept(map,packet(sensor,101900000000LL,1,1,
+        {.55,.05,.05},{1.05,.05,.05}),102000000000LL,400.));
+  ASSERT_TRUE(GridMapTestAccess::eventFusionAt(map,102000000000LL,400000000000LL));
+  ASSERT_LT(GridMapTestAccess::raw(map,1.55),1.); // The due orphan must supply this actual hit.
+  ASSERT_TRUE(GridMapTestAccess::accept(map,packet(1,102000000000LL,2,1,
+      {.55,.05,.05},{1.55,.05,.05}),102100000000LL,400.2));
+  ASSERT_TRUE(GridMapTestAccess::accept(map,packet(0,102100000000LL,2),102200000000LL,400.4));
+  ASSERT_TRUE(GridMapTestAccess::eventFusionAt(map,102210000000LL,400400000000LL,true));
+  EXPECT_EQ(map.integratedRaySourceStamp(0),101900000000LL);
+  EXPECT_EQ(map.integratedRaySourceStamp(1),102000000000LL);
+  EXPECT_EQ(GridMapTestAccess::status(map,{15,0,0}),1);
+  EXPECT_EQ(GridMapTestAccess::pending(map),1);
+  EXPECT_EQ(GridMapTestAccess::pendingReceipt(map,0),400400000000LL);
+  EXPECT_EQ(map.latestCloudStampNs(),0);EXPECT_EQ(map.observedProofDeadlineNs(),1);
+  ASSERT_TRUE(GridMapTestAccess::accept(map,packet(1,102100000000LL,3),102230000000LL,400.49));
+  EXPECT_FALSE(GridMapTestAccess::eventFusionAt(map,102230000000LL,400490000000LL)); // Original 5 Hz cap.
+  ASSERT_TRUE(GridMapTestAccess::eventFusionAt(map,102240000000LL,400600000000LL,true));
+  EXPECT_EQ(GridMapTestAccess::pending(map),0);
+  EXPECT_EQ(map.integratedRaySourceStamp(0),102100000000LL);
+  EXPECT_EQ(map.integratedRaySourceStamp(1),102100000000LL);
+  EXPECT_EQ(GridMapTestAccess::integratedReceipt(map,0),400400000000LL);
+  EXPECT_EQ(GridMapTestAccess::integratedReceipt(map,1),400490000000LL);
+  EXPECT_EQ(GridMapTestAccess::status(map,{0,0,0}),0);
+}
+
+TEST(ProjectedRayExactPair, LateWatchdogPastOriginalPendingDeadlineDropsWithoutRenewingEvidence) {
+  GridMap map;GridMapTestAccess::configure(map);GridMapTestAccess::exactProjectedPair(map);
+  GridMapTestAccess::pointQueryGeometry(map);
+  const auto hash=GridMapTestAccess::attachStaticPrior(map);
+  ASSERT_TRUE(map.applyLocalizationContext(priorContext(hash)));
+  for(unsigned sensor=0;sensor<2;++sensor)
+    ASSERT_TRUE(GridMapTestAccess::accept(map,packet(sensor,101900000000LL,1,1,
+        {.55,.05,.05},{1.05,.05,.05}),102000000000LL,400.));
+  ASSERT_TRUE(GridMapTestAccess::eventFusionAt(map,102000000000LL,400000000000LL));
+  const auto previous_counts=GridMapTestAccess::counts(map);
+  const auto previous_drops=GridMapTestAccess::drops(map);
+  const auto previous_new_hit_odds=GridMapTestAccess::raw(map,1.55);
+  ASSERT_LT(previous_new_hit_odds,1.);
+  ASSERT_TRUE(GridMapTestAccess::accept(map,packet(0,102100000000LL,2,1,
+      {.55,.05,.05},{1.55,.05,.05}),102200000000LL,400.4));
+  ASSERT_TRUE(GridMapTestAccess::eventFusionAt(map,102220000000LL,400650000001LL,true));
+  EXPECT_EQ(GridMapTestAccess::pending(map),0);
+  EXPECT_EQ(GridMapTestAccess::counts(map),previous_counts);
+  EXPECT_EQ(GridMapTestAccess::drops(map)[0],previous_drops[0]+1);
+  EXPECT_EQ(GridMapTestAccess::drops(map)[1],previous_drops[1]);
+  EXPECT_EQ(map.integratedRaySourceStamp(0),101900000000LL);
+  EXPECT_EQ(map.integratedRaySourceStamp(1),101900000000LL);
+  EXPECT_EQ(GridMapTestAccess::integratedReceipt(map,0),400000000000LL);
+  EXPECT_EQ(GridMapTestAccess::integratedReceipt(map,1),400000000000LL);
+  EXPECT_EQ(GridMapTestAccess::raw(map,1.55),previous_new_hit_odds);
+  EXPECT_FALSE(map.integratedCloudFreshAt(102220000000LL));
+  EXPECT_EQ(map.getInflateOccupancy({.05,.05,.05},0.),2);
+  EXPECT_EQ(map.observedProofDeadlineNs(),1);
 }
 
 TEST(ProjectedRayExactPair, DefaultConfigurationPreservesAsynchronousSourceFusion) {

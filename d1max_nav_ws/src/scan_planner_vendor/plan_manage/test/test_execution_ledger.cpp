@@ -478,7 +478,8 @@ TEST(ExecutionLedger, UnixBodyAndProgressKeepOriginalNanosecondOrdering) {
 }
 TEST(ExecutionLedger,ExactFreshCandidateEntryRejectionIsOneBoundedReseedNotGeometryRetirement) {
   using A=scan_planner::ExecutionValidatorTestAccess;
-  for(const auto* reason:{"candidate:entry_measured_velocity_off_candidate","candidate:entry_measured_body_not_on_candidate"}) {
+  for(const auto* reason:{"candidate:entry_measured_velocity_off_candidate","candidate:entry_measured_body_not_on_candidate",
+                         "candidate:moving_entry_heading_discontinuity"}) {
     Fixture f;f.ledger.candidate(f.spline,f.proposal);ASSERT_TRUE(f.ledger.commit(f.permit()));
     f.spline.trajectory.traj_id=2;f.ledger.candidate(f.spline,f.proposal);
     w::TrajectoryValidation v;v.version=f.proposal.version;v.trajectory_id=2;v.sequence=50;v.valid=v.whole_curve=true;
@@ -507,7 +508,8 @@ TEST(ExecutionLedger,ExactFreshCandidateEntryRejectionIsOneBoundedReseedNotGeome
 }
 TEST(ExecutionLedger,EntryReseedRejectsWrongTaskProofSourceUnknownAndSuccess) {
   using A=scan_planner::ExecutionValidatorTestAccess;
-  for(int variant=0;variant<17;++variant) {
+  for(const auto* reason:{"candidate:entry_measured_velocity_off_candidate","candidate:moving_entry_heading_discontinuity"})
+  for(int variant=0;variant<19;++variant) {
     Fixture f;f.ledger.candidate(f.spline,f.proposal);ASSERT_TRUE(f.ledger.commit(f.permit()));
     f.spline.trajectory.traj_id=2;f.ledger.candidate(f.spline,f.proposal);
     w::TrajectoryValidation v;v.version=f.proposal.version;v.trajectory_id=2;v.sequence=50;v.valid=v.whole_curve=true;
@@ -518,7 +520,7 @@ TEST(ExecutionLedger,EntryReseedRejectsWrongTaskProofSourceUnknownAndSuccess) {
     if(variant==15)v.frame_id="map";if(variant==16)v.transport_mode="live";
     A::recordWhole(f.ledger,v);
     w::TrajectoryAdmission a;a.sequence=1;a.version=v.version;a.trajectory_id=2;a.validation_sequence=50;
-    a.transport_mode="isolated_mock";a.reason="candidate:entry_measured_velocity_off_candidate";
+    a.transport_mode="isolated_mock";a.reason=reason;
     a.body_source_stamp=rclcpp::Time(10010000000LL);a.checked_at=rclcpp::Time(10020000000LL);
     a.valid_until=rclcpp::Time(10170000000LL);
     if(variant==0)a.version.task_id="other";if(variant==1)++a.version.context_sequence;
@@ -528,6 +530,8 @@ TEST(ExecutionLedger,EntryReseedRejectsWrongTaskProofSourceUnknownAndSuccess) {
     if(variant==7)a.body_source_stamp=rclcpp::Time(10060000000LL);
     if(variant==8)a.valid_until=rclcpp::Time(10025000000LL);
     if(variant==11)a.reason="candidate:unknown_space";if(variant==12)a.accepted=true;
+    if(variant==17)a.reason="moving_entry_heading_discontinuity";
+    if(variant==18)a.reason="candidate:moving_entry_heading_discontinuity_extra";
     EXPECT_FALSE(f.ledger.submitCandidateEntryRejectionAt(a,10025000000LL))<<variant;
     EXPECT_FALSE(f.ledger.consumeFormalReseedAt(10030000000LL))<<variant;
     EXPECT_EQ(f.ledger.committedTrajectory(),1);

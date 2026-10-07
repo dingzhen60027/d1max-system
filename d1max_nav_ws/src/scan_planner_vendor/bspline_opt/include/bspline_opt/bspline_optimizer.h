@@ -7,6 +7,7 @@
 #include <bspline_opt/spline_heading_contract.hpp>
 #include <plan_env/grid_map.h>
 #include <rclcpp/rclcpp.hpp>
+#include <optional>
 #include "bspline_opt/lbfgs.hpp"
 
 // Gradient and elastic band optimization
@@ -55,6 +56,14 @@ namespace scan_planner
     /* main API */
     void setEnvironment(const GridMap::Ptr &env);
     void setParam(rclcpp::Node *node);
+    // Feasibility of a measured XYZ reference is separate from guide cruise.
+    // No parameter changes command authority; clearing restores setParam's
+    // historical limit for every non-isolated/non-guided solve.
+    void setReferenceSpeedLimit(std::optional<double> speed) {
+      if(speed&&(!std::isfinite(*speed)||*speed<=0.||*speed>.5))
+        throw std::invalid_argument("invalid reference derivative speed");
+      max_vel_=speed?*speed:configured_max_vel_;
+    }
     Eigen::MatrixXd BsplineOptimizeTraj(const Eigen::MatrixXd &points, const double &ts,
                                         const int &cost_function, int max_num_id, int max_time_id);
 
@@ -137,6 +146,7 @@ namespace scan_planner
     //
     double dist0_;             // safe distance
     double max_vel_, max_acc_; // dynamic limits
+    double configured_max_vel_{-1.};
 
     int variable_num_;              // optimization variables
     int iter_num_;                  // iteration of the solver

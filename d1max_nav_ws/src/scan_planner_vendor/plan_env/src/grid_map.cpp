@@ -169,6 +169,12 @@ void GridMap::initMap(rclcpp::Node *node)
 
   if(static_prior_&&static_prior_->floorContactEnabled()&&!dynamic_oracle_.enabled())
     throw std::invalid_argument("floor support contact requires complete dynamic oracle veto");
+  load_parameter(node_,"grid_map.dynamic_hit_provenance_enabled",mp_.dynamic_hit_provenance_enabled_,false);
+  if(mp_.dynamic_hit_provenance_enabled_) {
+    if(!dynamicHitProvenanceDomainValid())
+      throw std::invalid_argument("native actor hit identities require sealed isolated static, floor-contact and exact dynamic registry evidence");
+    dynamic_hit_registry_sha256_=dynamic_oracle_.registry();
+  }
 
   mp_.lidar_extrinsic_ <<
       1.0, 0.0, 0.0, -0.01100,
@@ -424,6 +430,11 @@ void GridMap::copyCollisionSnapshotTo(GridMap &out,std::int64_t source_now_ns,
   out.static_prior_revoked_sequence_=static_prior_revoked_sequence_;
   out.static_prior_live_hits_=static_prior_live_hits_;
   out.static_support_floor_witnesses_=static_support_floor_witnesses_;
+  out.dynamic_hit_provenance_=dynamic_hit_provenance_;
+  out.dynamic_hit_registry_sha256_=dynamic_hit_registry_sha256_;
+  out.dynamic_hit_provenance_disabled_=dynamic_hit_provenance_disabled_;
+  out.dynamic_hit_provenance_limit_=dynamic_hit_provenance_limit_;
+  out.observed_raw_failure_.reset();
   out.dynamic_oracle_=dynamic_oracle_; // Original source, receipt, registry and finite bounds.
   out.dynamic_oracle_query_valid_=false;
   out.occupancy_revision_=occupancy_revision_;
@@ -504,17 +515,20 @@ int GridMap::observedRawSnapshotColumnStatus(const Eigen::Vector3i& first,int hi
   if(high_z<first.z())return 2;
   if(collision_cache_clock_ns_==0)beginCollisionQuery();
   const auto state=observedVerticalColumnStatus(first,high_z);
-  if(visited) {
-    if(state==0)*visited=static_cast<std::size_t>(static_cast<std::int64_t>(high_z)-first.z()+1);
-    else {
+  if(state==0) {
+    if(visited)*visited=static_cast<std::size_t>(static_cast<std::int64_t>(high_z)-first.z()+1);
+  } else if(visited||!observed_raw_failure_) {
       // Failed columns are rare. Recover the exact original first-nonzero
       // prefix count from the same cached evidence, without changing time.
       Eigen::Vector3i cell=first;
       for(std::int64_t z=first.z();z<=static_cast<std::int64_t>(high_z);++z) {
-        cell.z()=static_cast<int>(z);++*visited;
-        if(rawCollisionStatus(cell)!=0)break;
+        cell.z()=static_cast<int>(z);if(visited)++*visited;
+        const auto raw_state=rawCollisionStatus(cell);
+        if(raw_state!=0) {
+          if(!observed_raw_failure_)observed_raw_failure_=ObservedRawFailure{cell,raw_state};
+          break;
+        }
       }
-    }
   }
   return state;
 }
@@ -612,7 +626,56 @@ void GridMap::revokeStaticPriorContext(std::uint64_t sequence)
   resetAllMapData(); // No old cloud/context can continue to authorize motion.
 }
 
-void GridMap::recordStaticPriorHit(const Eigen::Vector3i &cell,std::int64_t stamp,double endpoint_z)
+bool GridMap::dynamicHitProvenanceDomainValid() const
+{
+  return mp_.dynamic_hit_provenance_enabled_&&mp_.simulation_collision_clock_&&mp_.validated_static_prior_&&
+      static_prior_&&static_prior_->floorContactEnabled()&&dynamic_oracle_.enabled()&&
+      static_prior_->dynamicRegistryMatches(dynamic_oracle_.registry(),dynamic_oracle_.actorIds());
+}
+
+void GridMap::recordDynamicHitProvenance(const Eigen::Vector3i& cell,std::int64_t stamp,std::uint16_t actor_id)
+{
+  if(!mp_.dynamic_hit_provenance_enabled_||dynamic_hit_provenance_disabled_)return;
+  const std::array<int,3> key{{cell.x(),cell.y(),cell.z()}};
+  if(!dynamicHitProvenanceDomainValid()||dynamic_hit_registry_sha256_!=dynamic_oracle_.registry()) {
+    dynamic_hit_provenance_disabled_=true;dynamic_hit_provenance_.clear();
+    observed_cylinder_cache_.clear();++occupancy_revision_;return;
+  }
+  if(actor_id>dynamic_oracle_.actorCount())actor_id=0;
+  auto found=dynamic_hit_provenance_.find(key);
+  if(found==dynamic_hit_provenance_.end()) {
+    if(dynamic_hit_provenance_.size()>=dynamic_hit_provenance_limit_) {
+      // Losing any hit identity may conceal an unknown/static contradiction.
+      // Exhaustion revokes all exceptions, not only the overflowing cell.
+      dynamic_hit_provenance_disabled_=true;dynamic_hit_provenance_.clear();
+      observed_cylinder_cache_.clear();++occupancy_revision_;return;
+    }
+    const auto raw=isInMap(cell)?scan_planner::diagnoseRawVoxel(md_.occupancy_buffer_[toAddress(cell)],
+        mp_.clamp_min_log_,mp_.min_occupancy_log_,mp_.unknown_flag_):scan_planner::RawVoxelDiagnostic::Outside;
+    if(static_prior_live_hits_.count(key)||raw==scan_planner::RawVoxelDiagnostic::Occupied||
+        raw==scan_planner::RawVoxelDiagnostic::Insufficient||raw==scan_planner::RawVoxelDiagnostic::Outside)actor_id=0;
+    dynamic_hit_provenance_.emplace(key,DynamicHitProvenance{stamp,actor_id});
+  } else {
+    if(found->second.actor_id!=actor_id)found->second.actor_id=0;
+    found->second.stamp=std::max(found->second.stamp,stamp);
+  }
+  observed_cylinder_cache_.clear();++occupancy_revision_;
+}
+
+bool GridMap::retiredDynamicActorHit(const std::array<int,3>& cell) const
+{
+  if(dynamic_hit_provenance_disabled_||!mp_.dynamic_hit_provenance_enabled_||
+      !static_prior_query_lease_valid_||!dynamic_oracle_query_valid_||
+      dynamic_hit_registry_sha256_!=dynamic_oracle_.registry())return false;
+  const auto found=dynamic_hit_provenance_.find(cell);
+  const auto hit=static_prior_live_hits_.find(cell);
+  if(found==dynamic_hit_provenance_.end()||!found->second.actor_id||found->second.stamp<=0||
+      (hit!=static_prior_live_hits_.end()&&hit->second>found->second.stamp)||
+      dynamic_oracle_.sourceNs()<=found->second.stamp)return false;
+  return dynamic_oracle_.actorStatus(found->second.actor_id,cell)==0;
+}
+
+void GridMap::recordStaticPriorHit(const Eigen::Vector3i &cell,std::int64_t stamp,double endpoint_z,std::uint16_t actor_id)
 {
   if(!mp_.validated_static_prior_||!static_prior_||stamp<=0)return;
   const std::array<int,3> key{{cell.x(),cell.y(),cell.z()}};
@@ -627,6 +690,8 @@ void GridMap::recordStaticPriorHit(const Eigen::Vector3i &cell,std::int64_t stam
     // only; its raw laser odds/stamp and every nonfloor hit remain unchanged.
     return;
   }
+  // Every real endpoint reaches this before native cell-vote deduplication.
+  recordDynamicHitProvenance(cell,stamp,actor_id);
   auto found=static_prior_live_hits_.find(key);
   if(found==static_prior_live_hits_.end()) {
     static_prior_live_hits_.emplace(key,stamp);observed_cylinder_cache_.clear();++occupancy_revision_;
@@ -715,10 +780,26 @@ int GridMap::uncachedRawCollisionStatusAtAddress(const Eigen::Vector3i& cell,int
   // status to turn unobserved map contents into measured free cells.
   const int raw=scan_planner::strictRawVoxelStatus(odds,mp_.clamp_min_log_,mp_.min_occupancy_log_);
   const std::array<int,3> key{{cell.x(),cell.y(),cell.z()}};
-  if(prior==1||(raw==1&&prior!=3))return 1; // Support contact is separate from laser FREE.
+  if(prior==1)return 1;
+  if(raw==1&&prior!=3) {
+    // The independent static certificate remains FREE only when all retained
+    // contradictory hits belong to this actor and its newer complete full-Z
+    // reachable geometry is disjoint from the entire closed cell. Laser odds
+    // and original stamps are neither cleared nor refreshed.
+    return prior==0&&retiredDynamicActorHit(key)?0:1;
+  }
   if(mp_.validated_static_prior_) {
     if(!static_prior_query_lease_valid_)return 2;
-    if(static_prior_live_hits_.count(key))return 2;
+    if(static_prior_live_hits_.count(key)) {
+      // A known actor may leave after just one measured hit, before laser
+      // odds reach OCCUPIED. The same independent STATIC FREE argument
+      // applies to that attributed contradiction; arbitrary unknown/weak
+      // evidence without a recorded hit remains on the original path.
+      if(prior==0&&raw==2&&scan_planner::diagnoseRawVoxel(odds,mp_.clamp_min_log_,
+          mp_.min_occupancy_log_,mp_.unknown_flag_)==scan_planner::RawVoxelDiagnostic::Insufficient&&
+          retiredDynamicActorHit(key))return 0;
+      return 2;
+    }
     if(prior==3)return 0; // Certified plane contact, complete actor veto already checked above.
     if(raw==2) {
       const auto category=scan_planner::diagnoseRawVoxel(odds,mp_.clamp_min_log_,mp_.min_occupancy_log_,mp_.unknown_flag_);
@@ -1025,6 +1106,8 @@ const char *GridMap::collisionEvidenceSource(const Eigen::Vector3i &cell,int sta
     if(dynamic)return dynamic==1?"dynamic_oracle_occupied":"dynamic_oracle_reachable_unknown";
   }
   if(static_prior_&&static_prior_context_valid_&&static_prior_->state(key)==1)return "certified_static_occupied";
+  if(state==0&&static_prior_&&static_prior_context_valid_&&static_prior_->state(key)==0&&retiredDynamicActorHit(key))
+    return "certified_static_free"; // Independent certificate selected; original hit history/odds remain visible.
   if(static_prior_live_hits_.count(key))return "live_static_conflict";
   if(state!=0)return state==1?"live_occupied":"unknown";
   if(static_prior_&&static_prior_context_valid_&&static_prior_->state(key)==3)return "certified_flat_floor_support_contact";
@@ -1038,6 +1121,51 @@ const char *GridMap::collisionEvidenceSource(const Eigen::Vector3i &cell,int sta
   if((mp_.simulation_collision_clock_||mp_.validated_static_prior_)&&static_cast<std::size_t>(address)<free_observation_receipts_ns_.size()&&
       (collision_cache_receipt_ns_-free_observation_receipts_ns_[address])*1e-9>=mp_.cloud_pose_max_age_)return "certified_static_free";
   return "live_observed_free";
+}
+
+std::string GridMap::describeObservedRawFailure() const
+{
+  nlohmann::json out={{"first_cell_available",bool(observed_raw_failure_)}};
+  if(!observed_raw_failure_)return out.dump();
+  const auto cell=observed_raw_failure_->cell;
+  const std::array<int,3> key{{cell.x(),cell.y(),cell.z()}};
+  out["index"]=key;out["native_state"]=observed_raw_failure_->state;
+  out["source_query_ns"]=collision_cache_clock_ns_;out["receipt_query_ns"]=collision_cache_receipt_ns_;
+  out["source_deadline_ns"]=collision_cache_deadline_ns_;out["receipt_deadline_ns"]=collision_cache_receipt_deadline_ns_;
+  out["both_ray_source_ns"]=ray_integrated_stamps_;
+  out["both_ray_receipt_ns"]={std::chrono::duration_cast<std::chrono::nanoseconds>(ray_integrated_receipts_[0].time_since_epoch()).count(),
+      std::chrono::duration_cast<std::chrono::nanoseconds>(ray_integrated_receipts_[1].time_since_epoch()).count()};
+  out["dynamic_source_ns"]=dynamic_oracle_.sourceNs();out["dynamic_query_valid"]=dynamic_oracle_query_valid_;
+  out["dynamic_source_deadline_ns"]=dynamic_oracle_.sourceDeadlineNs();
+  out["dynamic_receipt_deadline_ns"]=dynamic_oracle_.receiptDeadlineNs();
+  out["dynamic_hit_provenance_enabled"]=mp_.dynamic_hit_provenance_enabled_;
+  out["dynamic_hit_provenance_disabled"]=dynamic_hit_provenance_disabled_;
+  out["dynamic_registry_sha256"]=dynamic_hit_registry_sha256_;
+  out["static_context_valid"]=static_prior_context_valid_;out["static_query_valid"]=static_prior_query_lease_valid_;
+  out["prior_state"]=static_prior_&&static_prior_context_valid_?static_prior_->state(key):2;
+  const auto hit=static_prior_live_hits_.find(key);
+  out["hit_source_ns"]=hit==static_prior_live_hits_.end()?0:hit->second;
+  const auto identity=dynamic_hit_provenance_.find(key);
+  out["hit_actor_id"]=identity==dynamic_hit_provenance_.end()?0:identity->second.actor_id;
+  out["attributed_hit_source_ns"]=identity==dynamic_hit_provenance_.end()?0:identity->second.stamp;
+  if(identity!=dynamic_hit_provenance_.end()&&identity->second.actor_id>0&&
+      identity->second.actor_id<=dynamic_oracle_.actorCount()) {
+    out["hit_actor_name"]=dynamic_oracle_.actorIds()[identity->second.actor_id-1];
+    out["hit_actor_cell_state"]=dynamic_oracle_query_valid_?dynamic_oracle_.actorStatus(identity->second.actor_id,key):2;
+  }
+  if((cell.array()>=mp_.map_bound_min_idx_.array()).all()&&
+      (cell.array()<=mp_.map_bound_max_idx_.array()).all()) {
+    // Snapshot buffers are immutable throughout this proof. Read original
+    // evidence only; this diagnostic does not perform or renew a query.
+    const int address=const_cast<GridMap*>(this)->toAddress(cell);
+    const auto odds=md_.occupancy_buffer_[address];out["raw_log_odds"]=odds;
+    out["raw_state"]=scan_planner::strictRawVoxelStatus(odds,mp_.clamp_min_log_,mp_.min_occupancy_log_);
+    out["raw_category"]=scan_planner::diagnosticName(scan_planner::diagnoseRawVoxel(
+        odds,mp_.clamp_min_log_,mp_.min_occupancy_log_,mp_.unknown_flag_));
+    out["free_source_ns"]=static_cast<std::size_t>(address)<free_observation_stamps_.size()?free_observation_stamps_[address]:0;
+    out["free_receipt_ns"]=static_cast<std::size_t>(address)<free_observation_receipts_ns_.size()?free_observation_receipts_ns_[address]:0;
+  }
+  return out.dump();
 }
 
 std::string GridMap::describeCollisionLease() const
@@ -1587,7 +1715,8 @@ bool GridMap::raycastProcess()
       {
         if (mp_.use_projected_rays_ && endpoint_is_hit) {
           Eigen::Vector3i cell;posToIndex(pt_w,cell);vox_idx=ray_index.address(cell);
-          recordStaticPriorHit(cell,ray_source_stamp,pt_w.z());
+          const auto actor_id=static_cast<std::size_t>(i)<projected_actor_ids_.size()?projected_actor_ids_[i]:0;
+          recordStaticPriorHit(cell,ray_source_stamp,pt_w.z(),actor_id);
           if(record_ray_diagnostics) {
             scan_planner::RayWitness witness;
             witness.metadata=projected_diagnostics_[i];witness.origin=origin;
@@ -1916,9 +2045,34 @@ bool GridMap::tryProjectedFusion(std::int64_t now_ns,std::chrono::steady_clock::
   // Missing one sensor must still allow its peer to add OCCUPIED evidence;
   // the absent sensor's acquisition stamp remains old and will block motion.
   if(!pair_ready&&(!watchdog||elapsed<ray_integration_period_s_*1.5))return false;
+  std::array<std::optional<PendingRays>,2> awaiting_peer;
+  if(!pair_ready&&mp_.projected_ray_exact_pair_) {
+    bool orphan_due=false;
+    for(std::size_t sensor=0;sensor<2;++sensor)if(pending_rays_[sensor]) {
+      const double wait=std::chrono::duration<double>(now-pending_rays_[sensor]->received).count();
+      // A late first packet must get its own bounded opportunity to meet the
+      // actual same-acquisition peer. Age of the PREVIOUS fusion is not its
+      // waiting time. Reuse the existing 200 ms integration period; retain
+      // the original 250 ms pending drop and 500 ms evidence deadlines.
+      // A due old orphan must not consume an unrelated newly arrived packet.
+      if(wait>=0.&&wait<ray_integration_period_s_) {
+        awaiting_peer[sensor]=std::move(pending_rays_[sensor]);pending_rays_[sensor].reset();
+      } else orphan_due=true; // Invalid/late receipts still take the original drop path.
+    }
+    if(!orphan_due) {
+      for(std::size_t sensor=0;sensor<2;++sensor)
+        if(awaiting_peer[sensor])pending_rays_[sensor]=std::move(awaiting_peer[sensor]);
+      return false;
+    }
+  }
+  const auto restore_waiting=[&]() {
+    for(std::size_t sensor=0;sensor<2;++sensor)
+      if(awaiting_peer[sensor])pending_rays_[sensor]=std::move(awaiting_peer[sensor]);
+  };
   ray_fusion_started_=true;ray_fusion_last_start_=now;
   if(pair>0)ray_fusion_last_pair_stamp_=pair;
-  processProjectedRays(now_ns,now);return true;
+  try {processProjectedRays(now_ns,now);} catch(...) {restore_waiting();throw;}
+  restore_waiting();return true;
 }
 
 std::chrono::nanoseconds GridMap::projectedFusionWakeDelay(std::chrono::steady_clock::time_point now) const
@@ -2110,7 +2264,8 @@ bool GridMap::acceptProjectedRays(const d1max_planning_interfaces::msg::Projecte
       !scan_planner::rayStampFresh(alignment,now_ns,mp_.cloud_pose_max_age_)) {
     ++ray_unattributed_drops_;return false;
   }
-  auto batch=scan_planner::decodeProjectedRays(message.rays,mp_.frame_id_,near_field_diagnostics_.enabled());
+  const auto max_actor_id=dynamicHitProvenanceDomainValid()?dynamic_oracle_.actorCount():0;
+  auto batch=scan_planner::decodeProjectedRays(message.rays,mp_.frame_id_,near_field_diagnostics_.enabled(),max_actor_id);
   if (!batch) { ++ray_unattributed_drops_;return false; }
   const auto sensor=batch->sensor_id;
   for(auto &meta:batch->diagnostics) {
@@ -2140,6 +2295,7 @@ void GridMap::processProjectedRays(std::int64_t now_ns,std::chrono::steady_clock
   beginCollisionQuery();
   md_.proj_points_.clear();md_.proj_origins_.clear();md_.proj_points_cnt=0;
   projected_ray_stamps_.clear();
+  projected_actor_ids_.clear();
   projected_ray_receipts_ns_.clear();
   projected_diagnostics_.clear();
   std::array<std::int64_t,2> included{{0,0}};
@@ -2165,6 +2321,7 @@ void GridMap::processProjectedRays(std::int64_t now_ns,std::chrono::steady_clock
     md_.proj_points_.insert(md_.proj_points_.end(),batch.endpoints.begin(),batch.endpoints.end());
     md_.proj_origins_.insert(md_.proj_origins_.end(),batch.origins.begin(),batch.origins.end());
     projected_ray_stamps_.insert(projected_ray_stamps_.end(),batch.endpoints.size(),batch.stamp_ns);
+    projected_actor_ids_.insert(projected_actor_ids_.end(),batch.actor_ids.begin(),batch.actor_ids.end());
     if(mp_.simulation_collision_clock_||mp_.validated_static_prior_) {
       const auto receipt_ns=std::chrono::duration_cast<std::chrono::nanoseconds>(pending->received.time_since_epoch()).count();
       projected_ray_receipts_ns_.insert(projected_ray_receipts_ns_.end(),batch.endpoints.size(),receipt_ns);

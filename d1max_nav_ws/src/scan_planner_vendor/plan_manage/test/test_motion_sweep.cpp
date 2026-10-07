@@ -544,6 +544,18 @@ TEST(MotionSweep,ExplicitSpotRecordBindsActualReachabilityWithoutRaisingCommandA
   command.angular.z=0.;actual.linear.x=.6001;EXPECT_FALSE(run(m,command,actual,spot,.1).valid);
   actual.linear.x=.35;actual.angular.z=.8001;EXPECT_FALSE(run(m,command,actual,spot,.1).valid);
   auto bad=j;bad.erase("isolated_platform_model");EXPECT_ANY_THROW(load(bad));
+  // The new reference-domain marker independently denies real transport even
+  // after every older fixture discriminator is removed from a valid record.
+  auto physical=j;physical.erase("isolated_platform_model");physical["fixture_only"]=false;
+  physical["transport_mode"]="live";physical["profile"]="general_low_speed";
+  physical["measurements"]["model"]="reaction_braking_reachable_v1";
+  physical["measurements"]["max_speed_mps"]=.3;physical["measurements"]["max_yaw_radps"]=.5;
+  for(const char* key:{"speed_mapping_verified","stop_timing_verified","body_envelope_verified","raw_ray_safety_verified"})
+    physical[key]=true;
+  for(const char* key:{"robot_id","sdk_version","calibration_sha256","robot_profile_sha256","evidence_id"})physical[key]="verified-test-identity";
+  EXPECT_TRUE(load(physical,"live").valid());
+  physical["isolated_full_xyz_reference_model"]=nullptr;
+  EXPECT_ANY_THROW(load(physical,"live"));
   EXPECT_ANY_THROW(load(j,"live"));
   bad=j;bad["fixture_only"]=false;bad["transport_mode"]="live";EXPECT_ANY_THROW(load(bad,"live"));
   for(const auto& pair:std::vector<std::pair<std::string,nlohmann::json>>{

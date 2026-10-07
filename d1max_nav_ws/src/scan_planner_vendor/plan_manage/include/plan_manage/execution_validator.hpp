@@ -167,7 +167,8 @@ public:
       return false;
     }
     if(a.reason!="candidate:entry_measured_body_not_on_candidate"&&
-       a.reason!="candidate:entry_measured_velocity_off_candidate")return false;
+       a.reason!="candidate:entry_measured_velocity_off_candidate"&&
+       a.reason!="candidate:moving_entry_heading_discontinuity")return false;
     if(ns(a.checked_at)>now+20000000LL||now-ns(a.checked_at)>250000000LL||ns(a.valid_until)<=now||
        ns(a.body_source_stamp)>ns(a.checked_at)+20000000LL||now-ns(a.body_source_stamp)>100000000LL||
        ns(a.body_source_stamp)>now+20000000LL||ns(a.body_source_stamp)<=0)return false;
@@ -643,6 +644,10 @@ private:
       if(!grant_||grant_->handoff_id!=g.handoff_id||grant_retired_||grant_applied_||barrier!=prepared_stop_barrier_||
          !fresh||fresh->sequence!=proof->sequence)return;
       motion_proofs_.push_back(out);while(motion_proofs_.size()>32)motion_proofs_.pop_front();}
+    if(!out.valid&&out.reason=="motion_sweep_occupied")RCLCPP_WARN_THROTTLE(node_->get_logger(),*node_->get_clock(),250,
+      "Prepared motion occupied handoff=%lu curve=%ld snapshot=%lu body_source_ns=%ld check_end_ns=%ld first_cell=%s",
+      out.handoff_id,out.trajectory_id,out.map_snapshot_revision,ns(out.body_source_stamp),ns(out.check_end),
+      map.describeObservedRawFailure().c_str());
     motion_pub_->publish(out);
   }
   void checkMotion(GridMap& map,double budget_s=ValidationCycle::motion_budget_s,
@@ -722,10 +727,12 @@ private:
          ns(latest_permit_->valid_until)<=node_->now().nanoseconds())return;
     }
     if(!out.valid)RCLCPP_WARN_THROTTLE(node_->get_logger(),*node_->get_clock(),250,
-      "Motion proof demand=%lu voxels=%zu length=%.3f yaw_bound=%.3f check_ms=%.3f demand_age_ms=%.3f front_age_ms=%.3f rear_age_ms=%.3f queried=%d reason=%s",
+      "Motion proof demand=%lu voxels=%zu length=%.3f yaw_bound=%.3f check_ms=%.3f demand_age_ms=%.3f front_age_ms=%.3f rear_age_ms=%.3f queried=%d reason=%s snapshot=%lu body_source_ns=%ld check_end_ns=%ld first_cell=%s",
       d.sequence,sweep.unique_voxels,sweep.length,sweep.heading_bound,(ns(out.check_end)-ns(out.check_begin))*1e-6,
       (ns(out.check_end)-ns(d.source_stamp))*1e-6,(ns(out.check_end)-map.integratedRaySourceStamp(0))*1e-6,
-      (ns(out.check_end)-map.integratedRaySourceStamp(1))*1e-6,queried,out.reason.c_str());
+      (ns(out.check_end)-map.integratedRaySourceStamp(1))*1e-6,queried,out.reason.c_str(),out.map_snapshot_revision,
+      ns(out.body_source_stamp),ns(out.check_end),queried&&out.reason=="motion_sweep_occupied"?
+        map.describeObservedRawFailure().c_str():"{\"first_cell_available\":false}");
     else RCLCPP_INFO_THROTTLE(node_->get_logger(),*node_->get_clock(),1000,
       "Motion proof demand=%lu snapshot=%lu unique_voxels=%zu check_ms=%.3f source_age_ms=%.3f body_age_ms=%.3f front_age_ms=%.3f rear_age_ms=%.3f lease_ms=%.3f",
       d.sequence,out.map_snapshot_revision,sweep.unique_voxels,(ns(out.check_end)-ns(out.check_begin))*1e-6,

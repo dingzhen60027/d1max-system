@@ -16,6 +16,7 @@
 #include <Eigen/Core>
 #include <Eigen/Geometry>
 #include <bspline_opt/uniform_bspline.h>
+#include <d1max_planning_interfaces/isolated_reference_model.hpp>
 #include "d1max_trajectory_tracker/curve_admission.hpp"
 #include "d1max_trajectory_tracker/source_time.hpp"
 #include "d1max_trajectory_tracker/fixed_bspline_sampler.hpp"
@@ -119,7 +120,40 @@ inline double quadraticPlanarScale(const std::array<Eigen::Vector3d,3>& controls
     if(area!=0.&&((a>=-1e-14&&b>=-1e-14&&c>=-1e-14)||
         (a<=1e-14&&b<=1e-14&&c<=1e-14)))result=0.;
   }
-  return result>1e-12?std::nextafter(std::clamp(result-1e-12,0.,1.),0.):0.;
+  const double original=result>1e-12?std::nextafter(std::clamp(result-1e-12,0.,1.),0.):0.;
+  if(original>0.)return original;
+  // The legacy triangle tolerance can classify a tiny forward cluster as
+  // containing zero. Replace only that zero with a separating certificate:
+  // an exact signed X/Y axis must have positive projection for EVERY nonzero
+  // full-XYZ control. Two outward additions bound ||p_i|| by its L1 norm;
+  // one inward-rounded division bounds the normalized projection below.
+  // For v=sum(B_i*p_i), S=sum(B_i*||p_i||)>=||v||, so an axis certificate L
+  // implies ||v_XY||>=L*S>=L*||v||. No certificate means the original zero.
+  std::array<double,3> norm_upper{};
+  for(std::size_t i=0;i<controls.size();++i) {
+    const auto& p=controls[i];
+    if(p.x()==0.&&p.y()==0.&&p.z()==0.)continue;
+    const double xy_upper=std::nextafter(std::abs(p.x())+std::abs(p.y()),
+      std::numeric_limits<double>::infinity());
+    norm_upper[i]=std::nextafter(xy_upper+std::abs(p.z()),
+      std::numeric_limits<double>::infinity());
+    if(!finite(norm_upper[i])||norm_upper[i]<=0.)return 0.;
+  }
+  double certificate=0.;
+  for(int axis=0;axis<2;++axis)for(const int sign:{-1,1}) {
+    double lower=1.;bool has_control=false,valid=true;
+    for(std::size_t i=0;i<controls.size();++i) {
+      if(norm_upper[i]==0.)continue; // Exact zero controls contribute nothing to S.
+      has_control=true;
+      const double projection=sign>0?controls[i][axis]:-controls[i][axis];
+      if(projection<=0.){valid=false;break;}
+      const double bound=std::nextafter(projection/norm_upper[i],0.);
+      if(!finite(bound)||bound<=0.){valid=false;break;}
+      lower=std::min(lower,bound);
+    }
+    if(valid&&has_control)certificate=std::max(certificate,lower);
+  }
+  return certificate; // A speed-ratio bound, never a heading or motion permission.
 }
 
 // Support-following planar execution still admits the complete XYZ spline.
@@ -196,6 +230,13 @@ struct Config
   std::string session_id, planning_frame{"d1max_loc_odom"}, base_frame{"d1max_loc_base_link"};
   std::string map_version_id, map_frame{"d1max_loc_map"};
   double max_speed{0.30}, max_yaw_rate{0.50};
+  std::optional<d1max_planning_interfaces::IsolatedReferenceModel> isolated_reference_model;
+  double referenceSpeedLimit()const {
+    return isolated_reference_model?isolated_reference_model->referenceSpeed():max_speed;
+  }
+  double measuredTravelSpeedLimit()const {
+    return isolated_reference_model?isolated_reference_model->measuredTravelSpeed():max_speed;
+  }
   double max_acceleration{0.35}, max_yaw_acceleration{0.80};
   double task_timeout{0.75}, odom_timeout{0.40}, trajectory_timeout{5.0};
   double lookahead{0.8}, kp_position{0.8}, kp_yaw{1.5};
@@ -204,6 +245,7 @@ struct Config
   bool require_versioned_identity{true};
   bool require_support_reference{false}; // mandatory in schema-3 execution node
   bool spatial_planar_braking_envelope{false}; // explicit verified-floor opt-in
+  bool spatial_control_lookahead{false}; // original XYZ arc; verified-floor opt-in
   bool external_goal_completion{false};
   double join_limit{.0125}, recovery_span{.6};
   // Shared with BT/SDK from the physically accepted stationary record.
@@ -222,7 +264,9 @@ struct Config
     const auto bound = [](double value, double ceiling) {
       return finite(value) && value > 0.0 && value <= ceiling;
     };
-    if ((spatial_planar_braking_envelope&&!require_support_reference) ||
+    if ((isolated_reference_model&&(!require_support_reference||
+         max_speed>isolated_reference_model->commandSpeed()||max_yaw_rate>isolated_reference_model->commandYaw())) ||
+        ((spatial_planar_braking_envelope||spatial_control_lookahead)&&!require_support_reference) ||
         !bound(max_speed, HARD_PLANAR_SPEED) || !bound(max_yaw_rate, 1.0) ||
         !bound(max_acceleration, 0.8) || !bound(max_yaw_acceleration, 1.5) ||
         !bound(task_timeout, 1.0) || !bound(odom_timeout, 0.5) ||
@@ -426,6 +470,8 @@ struct ControlDiagnostic {
   double projected_curve_time{0.}, lookahead_curve_time{0.}, curve_duration{0.};
   double measured_arc_m{0.}, planar_speed_limit_mps{0.}, measured_xy_speed_mps{0.};
   bool spatial_planar_braking_envelope{false};
+  bool spatial_control_lookahead{false};
+  double lookahead_from_xyz_arc_m{0.},lookahead_target_xyz_arc_m{0.},lookahead_requested_distance_m{0.};
   double planar_acceleration_limit_mps2{0.};
   std::int64_t body_source_stamp_ns{0}, installed_trajectory_start_ns{0};
   Eigen::Vector3d lookahead_position{Eigen::Vector3d::Zero()};
@@ -481,6 +527,9 @@ struct EntryCurveCache {
     if(!finite(now)||!finite(body.stamp)||!sourceFresh(now,body_ns,.1,.02))
       return reject("entry_body_not_fresh");
     if(const auto why=sourceEvidenceFailure(body,now,config))return reject(why);
+    if(config.isolated_reference_model&&(!body.velocity_in_frame.allFinite()||
+       body.velocity_in_frame.stableNorm()>config.measuredTravelSpeedLimit()))
+      return reject("entry_measured_velocity_outside_platform_domain");
     if(body.localization_epoch!=original.identity.localization_epoch||
        body.localization_seed_id!=original.identity.localization_seed_id||
        body.session_id!=original.session_id||body.map_version_id!=original.identity.map_version_id||
@@ -490,7 +539,7 @@ struct EntryCurveCache {
     if(!finite(seed_time)||seed_time<0.||seed_time>duration||!finite(seed_arc)||seed_arc<0.||
        std::abs(curveArcAt(times,arcs,seed_time)-seed_arc)>.01)return reject("entry_proof_curve_domain_invalid");
     const double travel=std::min(config.projection_max_forward_m,
-      config.max_speed*std::max(0.,sourceDeltaSeconds(body_ns,proof_ns))+config.join_limit);
+      config.measuredTravelSpeedLimit()*std::max(0.,sourceDeltaSeconds(body_ns,proof_ns))+config.join_limit);
     const auto p=projectCurveAdmission(*curve_sampler,times,arcs,points,body.position,seed_time,seed_arc,
       std::min(config.projection_backtrack_m,travel),travel,config.join_limit);
     if(!p)return reject("entry_measured_body_not_on_candidate");
@@ -559,11 +608,15 @@ struct PreparedGeometry {
   std::vector<Eigen::Vector3d> original_controls;
   std::vector<double> original_knots;
   std::string frame,point_reference;
-  double max_speed{0.},max_acceleration{0.},max_yaw{0.},height_tolerance{0.};
+  double max_speed{0.},reference_max_speed{0.},measured_travel_max_speed{0.},max_acceleration{0.},max_yaw{0.},height_tolerance{0.};
+  std::string reference_record_sha;
   bool requires_support{false},uses_spatial_planar_envelope{false};
   bool matches(const Config& c,const Trajectory& t)const {
     if(!(identity==t.identity)||generation!=t.generation||trajectory_id!=t.id||frame!=t.frame_id||
-       point_reference!=t.point_reference||max_speed!=c.max_speed||max_acceleration!=c.max_acceleration||
+       point_reference!=t.point_reference||max_speed!=c.max_speed||reference_max_speed!=c.referenceSpeedLimit()||
+       measured_travel_max_speed!=c.measuredTravelSpeedLimit()||
+       reference_record_sha!=(c.isolated_reference_model?c.isolated_reference_model->recordSha():std::string{})||
+       max_acceleration!=c.max_acceleration||
        max_yaw!=c.max_yaw_rate||height_tolerance!=c.goal_height_tolerance||requires_support!=c.require_support_reference||
        uses_spatial_planar_envelope!=c.spatial_planar_braking_envelope||
        original_knots!=t.knots||original_controls.size()!=t.points.size())return false;
@@ -585,6 +638,9 @@ struct PreparedGeometry {
     out->identity=t.identity;out->generation=t.generation;out->trajectory_id=t.id;
     out->original_controls=t.points;out->original_knots=t.knots;out->frame=t.frame_id;out->point_reference=t.point_reference;
     out->max_speed=config.max_speed;out->max_acceleration=config.max_acceleration;out->max_yaw=config.max_yaw_rate;
+    out->reference_max_speed=config.referenceSpeedLimit();
+    out->measured_travel_max_speed=config.measuredTravelSpeedLimit();
+    out->reference_record_sha=config.isolated_reference_model?config.isolated_reference_model->recordSha():std::string{};
     out->height_tolerance=config.goal_height_tolerance;out->requires_support=config.require_support_reference;
     out->uses_spatial_planar_envelope=config.spatial_planar_braking_envelope;
     if(out->uses_spatial_planar_envelope&&!config.require_support_reference) {
@@ -596,7 +652,7 @@ struct PreparedGeometry {
     out->entry=std::move(*entry);
     auto velocity=*out->entry.velocity;
     auto acceleration=std::make_shared<scan_planner::UniformBspline>(velocity.getDerivative());
-    out->derivatives_valid=curveDerivativeBound(velocity,config.max_speed)&&
+    out->derivatives_valid=curveDerivativeBound(velocity,config.referenceSpeedLimit())&&
       curveDerivativeBound(*acceleration,config.max_acceleration);
     out->acceleration=std::move(acceleration);
     if(config.require_support_reference) {
@@ -785,6 +841,7 @@ public:
         !odom.velocity_in_frame.allFinite() || !odom.angular_velocity_in_frame.allFinite() ||
         !odom.orientation.coeffs().allFinite() || std::abs(odom.orientation.norm()-1.)>.001 ||
         odom.planar_speed > HARD_PLANAR_SPEED || odom.planar_speed < 0.0 ||
+        (config_.isolated_reference_model&&odom.velocity_in_frame.stableNorm()>config_.measuredTravelSpeedLimit()) ||
         !sourceFresh(ros_now,source_ns,config_.odom_timeout,.1)) {
       have_odom_ = false;
       hold("invalid_odometry",received);
@@ -903,7 +960,7 @@ public:
       const double source_dt=std::max(0.,sourceDeltaSeconds(originalSourceNs(odom_.source_stamp_ns,odom_.stamp),
         originalSourceNs(trajectory.join_source_stamp_ns,trajectory.join_source_stamp)));
       const double travel=std::min(config_.projection_max_forward_m,
-          config_.max_speed*source_dt+config_.join_limit);
+          config_.measuredTravelSpeedLimit()*source_dt+config_.join_limit);
       const auto projected=projectCurveAdmission(*curve,times,arc,samples,odom_.position,
           join_time,seed_arc,std::min(config_.projection_backtrack_m,travel),travel,config_.join_limit);
       if (!projected) return candidateReject("measured_body_not_on_candidate");
@@ -1014,7 +1071,7 @@ public:
           config_.projection_forward_m+odom_.planar_speed*std::max(0.,source_dt))))return false;
     }
     const auto pos=observed.positionAt(observed.execution_time_);
-    const double look=std::min(duration_,observed.execution_time_+config_.lookahead);
+    const double look=observed.controlLookahead(observed.execution_time_,observed.measured_arc_).time;
     const auto desired=observed.positionAt(look),velocity=observed.velocityAt(look);
     const Eigen::Vector2d world=config_.kp_position*(desired.head<2>()-odom_.position.head<2>())+
       (look<duration_?Eigen::Vector2d(velocity.head<2>()):Eigen::Vector2d::Zero());
@@ -1084,7 +1141,7 @@ public:
       invalidateTrajectory("tracking_error_outside_single_floor_envelope");
       return stop();
     }
-    const double look_time = std::min(duration_, execution_time_ + config_.lookahead);
+    const double look_time = controlLookahead(execution_time_,measured_arc_).time;
     const Eigen::Vector3d desired = positionAt(look_time);
     const Eigen::Vector3d velocity = velocityAt(look_time);
     const Eigen::Vector2d look_error = desired.head<2>() - odom_.position.head<2>();
@@ -1261,6 +1318,8 @@ public:
       join_diagnostic_=trial.join_diagnostic_;
       return false;
     }
+    if(const auto* why=movingEntryControlFailure(trial,trial.execution_time_,now,receipt))
+      return candidateReject(why);
     if(commit) *this=std::move(trial); else candidate_reason_.clear();
     return true;
   }
@@ -1274,13 +1333,16 @@ public:
     if(!trajectory_||!velocity_||!current.have_odom_||current.holding_||
        !sourceFresh(now,originalSourceNs(current.odom_.source_stamp_ns,current.odom_.stamp),.1,.02)||!sourceEvidenceFresh(current.odom_,now))return {};
     const double dt=std::max(0.,current.odom_.stamp-last_projected_stamp_);
-    const double travel=std::min(config_.projection_max_forward_m,config_.max_speed*dt+config_.join_limit);
+    const double travel=std::min(config_.projection_max_forward_m,config_.measuredTravelSpeedLimit()*dt+config_.join_limit);
     const auto p=projectCurveAdmission(*prepared_geometry_->entry.curve_sampler,timeTable(),arcTable(),pointTable(),current.odom_.position,
       execution_time_,measured_arc_,std::min(config_.projection_backtrack_m,travel),travel,config_.join_limit);
     if(!p)return {};
     const auto position=positionAt(p->time),velocity=velocityAt(p->time);
     const double pe=(position-current.odom_.position).norm(),ve=(velocity-current.odom_.velocity_in_frame).norm();
     if(pe>config_.join_limit||ve>.05)return {};
+    if(const auto* why=current.movingEntryControlFailure(*this,p->time,now,receipt)) {
+      candidate_reason_=why;return {};
+    }
     odom_=current.odom_;have_odom_=current.have_odom_;odom_received_=current.odom_received_;
     last_odom_source_stamp_=current.last_odom_source_stamp_;last_output_=current.last_output_;
     accepted_odom_source_ns_=current.accepted_odom_source_ns_;
@@ -1351,7 +1413,12 @@ public:
     out.geometry_available=trajectory_&&velocity_&&prepared_geometry_&&
       prepared_geometry_->entry.curve_sampler&&prepared_geometry_->entry.velocity_sampler;
     if(out.geometry_available) {
-      out.lookahead_curve_time=std::min(duration_,execution_time_+config_.lookahead);
+      const auto look=controlLookahead(execution_time_,measured_arc_);
+      out.lookahead_curve_time=look.time;
+      out.spatial_control_lookahead=config_.spatial_control_lookahead;
+      out.lookahead_from_xyz_arc_m=look.from_arc;
+      out.lookahead_target_xyz_arc_m=look.target_arc;
+      out.lookahead_requested_distance_m=look.requested_distance;
       out.lookahead_position=positionAt(out.lookahead_curve_time);
       out.lookahead_velocity=velocityAt(out.lookahead_curve_time);
       out.planar_speed_limit_mps=prepared_geometry_->planarSpeedLimit(execution_time_,measured_arc_,config_);
@@ -1369,6 +1436,71 @@ public:
   }
 
 private:
+  struct ControlLookahead {double time,from_arc,target_arc,requested_distance;};
+  ControlLookahead controlLookahead(double time,double xyz_arc)const {
+    const auto& times=timeTable();const auto& arcs=arcTable();
+    const double from=std::clamp(xyz_arc,0.,arcs.back());
+    if(!config_.spatial_control_lookahead) {
+      const double look=std::min(duration_,time+config_.lookahead);
+      return {look,from,curveArcAt(times,arcs,look),0.};
+    }
+    // Change only the reference evaluation point. This is the original full
+    // XYZ arc table, not a planar replacement, elapsed-time progress, curve
+    // trimming or a new entry. Current phase/progress, source evidence and the
+    // current local braking/curvature envelope remain untouched.
+    const double distance=config_.max_speed*config_.lookahead;
+    const double target=std::min(arcs.back(),from+distance);
+    // A zero-length terminal span still belongs to the original endpoint.
+    // Use its final parameter so endpoint feed-forward suppression and hold
+    // remain identical to the temporal controller; this does not move phase.
+    if(target>=arcs.back())return {duration_,from,target,distance};
+    const auto it=std::lower_bound(arcs.begin(),arcs.end(),target);
+    if(it==arcs.begin())return {times.front(),from,target,distance};
+    if(it==arcs.end())return {duration_,from,target,distance};
+    const auto i=static_cast<std::size_t>(it-arcs.begin());
+    const double span=arcs[i]-arcs[i-1];
+    const double look=span>0.?times[i-1]+(times[i]-times[i-1])*(target-arcs[i-1])/span:times[i];
+    return {look,from,target,distance};
+  }
+  struct RequestedPlanarControl {double heading_error,forward;};
+  std::optional<RequestedPlanarControl> requestedPlanarControl(double time,const Odom& body)const {
+    if(!trajectory_||!velocity_||!prepared_geometry_)return {};
+    const double look=controlLookahead(time,curveArcAt(timeTable(),arcTable(),time)).time;
+    const auto desired=positionAt(look),velocity=velocityAt(look);
+    const Eigen::Vector2d world=config_.kp_position*(desired.head<2>()-body.position.head<2>())+
+      (look<duration_?Eigen::Vector2d(velocity.head<2>()):Eigen::Vector2d::Zero());
+    if(!desired.allFinite()||!velocity.allFinite()||!world.allFinite())return {};
+    // Use the production controller's same small-vector convention and
+    // heading gate, not a new direction or minimum-speed threshold.
+    const double desired_yaw=world.norm()>1e-5?std::atan2(world.y(),world.x()):body.yaw;
+    const double error=angle(desired_yaw-body.yaw);
+    const double forward=std::abs(error)<=config_.heading_threshold?
+      std::max(0.,std::cos(body.yaw)*world.x()+std::sin(body.yaw)*world.y()):0.;
+    return RequestedPlanarControl{error,forward};
+  }
+  const char* movingEntryControlFailure(const TrackerCore& candidate,double candidate_time,
+      SourceTime now,double receipt)const {
+    // A source-matched XYZ join may still introduce a short reverse entry
+    // from measured body oscillation. A forward-only moving handoff must not
+    // replace an executable incumbent with an immediate heading-gated stop
+    // and turnaround. Stationary/recovery admission can still align to a new
+    // direction through the ordinary swept-command and stationary gates.
+    if(last_output_.forward<=0.||!duplicateControlStateSafe(now,receipt))return nullptr;
+    TrackerCore incumbent=*this;
+    if(last_projected_stamp_<=0.||(odom_.position-last_projected_position_).norm()>1e-6) {
+      const double dt=last_projected_stamp_>0.?odom_.stamp-last_projected_stamp_:0.;
+      if(!incumbent.projectMeasured(std::min(config_.projection_max_forward_m,
+          config_.projection_forward_m+odom_.planar_speed*std::max(0.,dt))))return nullptr;
+    }
+    const auto current=incumbent.requestedPlanarControl(incumbent.execution_time_,odom_);
+    const auto next=candidate.requestedPlanarControl(candidate_time,odom_);
+    if(!current||!next||std::abs(current->heading_error)>config_.heading_threshold||
+       std::abs(next->heading_error)<=config_.heading_threshold)return nullptr;
+    const auto continued=normalForwardStep(current->forward,last_output_.forward,
+      incumbent.prepared_geometry_->planarSpeedLimit(incumbent.execution_time_,incumbent.measured_arc_,config_),
+      incumbent.prepared_geometry_->planarAccelerationLimit(incumbent.execution_time_,config_),receipt-last_step_);
+    return continued&&*continued>0.?"moving_entry_heading_discontinuity":nullptr;
+  }
   Eigen::Vector3d positionAt(double time)const {
     return prepared_geometry_->entry.curve_sampler->evaluateDeBoorT(time);
   }

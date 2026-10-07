@@ -70,6 +70,10 @@ int main(){
  assert(plant.max_speed==.6&&plant.max_yaw==.8&&plant.command_max_speed==.15&&plant.command_max_yaw==.3);
  assert(plant.stop_latency==3.&&plant.stopping_distance==.5);
  assert(!check(spot).valid);assert(!loadMock(spot,"live").valid);
+ // A stripped older marker cannot turn a new isolated reference record into
+ // physical acceptance or a live braking calibration.
+ bad=mock;bad["isolated_full_xyz_reference_model"]={{"schema",1},{"kind","official_spot_physx"}};
+ assert(!check(bad).valid);assert(!loadMock(bad,"live").valid);
  bad=spot;bad["fixture_only"]=false;bad["transport_mode"]="live";
  assert(!check(bad).valid);assert(!loadMock(bad,"live").valid);
  bad=spot;bad.erase("isolated_platform_model");assert(!loadMock(bad).valid);

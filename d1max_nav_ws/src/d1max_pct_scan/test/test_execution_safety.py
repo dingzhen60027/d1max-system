@@ -5,6 +5,28 @@ import pytest
 from d1max_pct_scan.execution_safety import ExecutionSafety
 from d1max_pct_scan.ray_projection import FIELDS, RAY_DTYPE
 
+
+def test_native_actor_ray_schema_keeps_original_safety_source_binding():
+    from d1max_pct_scan.ray_projection import ISAAC_FIELDS,ISAAC_RAY_DTYPE
+    _,_,_,_,front,_=fixture();front=deepcopy(front)
+    old=np.frombuffer(front.rays.data,dtype=RAY_DTYPE)
+    pts=np.zeros(1,dtype=ISAAC_RAY_DTYPE)
+    for name in RAY_DTYPE.names:pts[name]=old[name]
+    pts['isaac_actor_id']=1
+    front.rays.data=pts.tobytes();front.rays.point_step=front.rays.row_step=72
+    front.rays.fields=[N(name=a,offset=b,datatype=c,count=d) for a,b,c,d in ISAAC_FIELDS]
+    ordinary=ExecutionSafety('s','isolated_mock',braking_model_sha256='c'*64)
+    assert not ordinary.on_rays(front,NOW)
+    native=ExecutionSafety('s','isolated_mock',braking_model_sha256='c'*64,maximum_isaac_actor_id=1)
+    assert native.on_rays(front,NOW)
+    assert native.raw[0][-1]==(front.epoch,front.seed_id,front.context_sequence,
+        NOW-100_000_000,NOW-50_000_000)
+    bad=deepcopy(front);bad.projection_sequence+=1;pts['isaac_actor_id']=2;bad.rays.data=pts.tobytes()
+    assert not native.on_rays(bad,NOW)
+    assert not native.on_rays(front,NOW+1_000_000_000)
+    with pytest.raises(ValueError):
+        ExecutionSafety('s','live',braking_model_sha256='c'*64,maximum_isaac_actor_id=1)
+
 NOW=10_000_000_000
 def stamp(ns=NOW): return N(sec=ns//10**9,nanosec=ns%10**9)
 def fixture():

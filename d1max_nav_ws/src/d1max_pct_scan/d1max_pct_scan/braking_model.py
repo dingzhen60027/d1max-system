@@ -50,7 +50,7 @@ def load_model(path,expected_sha256,mode):
     if hashlib.sha256(raw).hexdigest()!=expected_sha256:
         raise ValueError('braking_record_hash_mismatch')
     record=json.loads(raw)
-    if 'isolated_platform_model' in record and mode!='isolated_mock':
+    if ('isolated_platform_model' in record or 'isolated_full_xyz_reference_model' in record) and mode!='isolated_mock':
         raise ValueError('isolated_platform_cannot_authorize_real_robot')
     if mode=='isolated_mock':
         if (record.get('schema_version')!=3 or record.get('transport_mode')!=mode

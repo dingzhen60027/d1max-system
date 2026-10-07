@@ -18,6 +18,23 @@
 
 namespace d1max_trajectory_tracker {
 namespace wire=d1max_planning_interfaces::msg;
+// Geometry-only ACK fact check for the explicitly sealed XYZ measurement
+// domain. Source elapsed time bounds arc search; it never selects a phase.
+inline bool isolatedAppliedEntryValid(const Config& config,const Trajectory& t,double entry_time,
+    const Eigen::Vector3d& measured,const Eigen::Vector3d& actual_velocity,double source_dt) {
+  if(!config.isolated_reference_model||!measured.allFinite()||!actual_velocity.allFinite()||
+      !finite(source_dt)||source_dt<0.||actual_velocity.stableNorm()>config.measuredTravelSpeedLimit()||
+      !t.prepared||!t.prepared->failure.empty()||!t.prepared->derivatives_valid||
+      !t.prepared->matches(config,t))return false;
+  const auto& cache=t.prepared->entry;
+  if(!finite(entry_time)||entry_time<0.||entry_time>cache.duration)return false;
+  const double travel=std::min(config.projection_max_forward_m,
+      config.measuredTravelSpeedLimit()*source_dt+config.join_limit);
+  const double seed_arc=curveArcAt(cache.times,cache.arcs,entry_time);
+  const auto projected=projectCurveAdmission(*cache.curve_sampler,cache.times,cache.arcs,cache.points,
+      measured,entry_time,seed_arc,std::min(config.projection_backtrack_m,travel),travel,config.join_limit);
+  return projected&&(cache.velocity_sampler->evaluateDeBoorT(projected->time)-actual_velocity).norm()<=.05;
+}
 inline double seconds(const builtin_interfaces::msg::Time& s) { return double(s.sec)+double(s.nanosec)*1e-9; }
 inline builtin_interfaces::msg::Time stamp(double t) {
   builtin_interfaces::msg::Time s;
@@ -92,6 +109,9 @@ public:
       bool asynchronous_preparation=false):
     config_(std::move(c)),mode_(std::move(mode)),braking_model_sha256_(std::move(braking_model_sha256)),core_(config_),writer_handoff_(writer_handoff) {
     if(mode_!="live"&&mode_!="isolated_mock") throw std::invalid_argument("explicit execution transport required");
+    if(config_.isolated_reference_model&&(mode_!="isolated_mock"||
+       config_.isolated_reference_model->recordSha()!=braking_model_sha256_))
+      throw std::invalid_argument("isolated_reference_record_transport_mismatch");
     if(asynchronous_preparation)worker_=std::make_unique<PreparationWorker>(
       [](const PreparationRequest& r,const PreparationWorker::Allowed& allowed) {
         // Capture only request-owned immutable input. No core/lease state is
@@ -780,6 +800,10 @@ private:
     scan_planner::UniformBspline curve(points,3,.1);curve.setKnot(knots);const auto velocity=curve.getDerivative();
     const Eigen::Vector3d measured{a.measured_pose.pose.position.x,a.measured_pose.pose.position.y,a.measured_pose.pose.position.z};
     const Eigen::Vector3d actual_velocity{a.measured_twist.linear.x,a.measured_twist.linear.y,a.measured_twist.linear.z};
+    if(config_.isolated_reference_model) {
+      return isolatedAppliedEntryValid(config_,t,entry.curve_time,measured,actual_velocity,
+          sourceDeltaSeconds(timeNs(a.body_source_stamp),timeNs(a.entry_source_stamp)));
+    }
     const double travel=config_.max_speed*std::max(0.,sourceDeltaSeconds(timeNs(a.body_source_stamp),timeNs(a.entry_source_stamp)))+config_.join_limit;
     // Bounded projection around the certified original entry. Neither another
     // branch nor a same-XY floor can be selected by this ACK fact check.

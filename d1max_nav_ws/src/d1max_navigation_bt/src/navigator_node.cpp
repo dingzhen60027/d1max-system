@@ -1159,6 +1159,10 @@ private:
       out["control_epoch"]=current_->execution?current_->execution->controlEpoch():0;
       out["execution_progress_reason"]=current_->execution?current_->execution->progressReason():"";
       out["execution_blocked_age_s"]=current_->execution?current_->execution->blockedAge(sourceNow()):0.;
+      out["execution_progress_credit_samples"]=current_->execution?current_->execution->progressCreditSamples():0;
+      out["execution_last_progress_source_s"]=current_->execution?current_->execution->lastProgressSource():-1.;
+      out["execution_last_admitted_motion_source_s"]=current_->execution?current_->execution->lastAdmittedMotionSource():0.;
+      out["execution_progress_body_source_ns"]=current_->execution?current_->execution->progressBodySourceNs():0;
       out["writer_commit_sequence"]=current_->execution?current_->execution->appliedCommitSequence():0;
       out["handoff_reason"]=current_->execution?current_->execution->handoffReason():"";
       out["handoff_ready_window_s"]=current_->execution?current_->execution->handoffReadyWindow():-1.;

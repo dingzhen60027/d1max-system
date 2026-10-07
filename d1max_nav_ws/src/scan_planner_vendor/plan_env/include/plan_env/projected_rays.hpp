@@ -69,6 +69,9 @@ private:
 // An independent acquisition, never a fused XYZ cloud with an assumed origin.
 struct ProjectedRayBatch {
   std::vector<Eigen::Vector3d> endpoints, origins;
+  // Zero is unattributed/static. Only the explicit sealed simulation decoder
+  // accepts nonzero sorted-registry ordinals; legacy 64-byte rays stay zero.
+  std::vector<std::uint16_t> actor_ids;
   std::int64_t stamp_ns{0};
   std::uint16_t sensor_id{0};
   std::vector<RayDiagnosticMetadata> diagnostics;
@@ -81,12 +84,14 @@ inline bool rayStampFresh(std::int64_t stamp, std::int64_t now, double maximum_a
 // Fixed schema is intentional: do not accidentally reinterpret XYZ-only clouds
 // as independently sourced evidence. All bytes are bounded before reading.
 inline std::optional<ProjectedRayBatch> decodeProjectedRays(
-    const sensor_msgs::msg::PointCloud2 &cloud, const std::string &frame,bool diagnostics=false) {
+    const sensor_msgs::msg::PointCloud2 &cloud, const std::string &frame,bool diagnostics=false,
+    std::uint16_t max_actor_id=0) {
   using F=sensor_msgs::msg::PointField;
   const std::uint64_t count=static_cast<std::uint64_t>(cloud.width)*cloud.height;
-  if (cloud.header.frame_id!=frame || cloud.is_bigendian || cloud.point_step!=64 ||
+  const bool actor_schema=cloud.point_step==72&&max_actor_id>0;
+  if (cloud.header.frame_id!=frame || cloud.is_bigendian || (cloud.point_step!=64&&!actor_schema) ||
       !count || count>kMaxProjectedAcquisitionPoints || static_cast<std::uint64_t>(cloud.row_step)*cloud.height!=cloud.data.size() ||
-      static_cast<std::uint64_t>(cloud.width)*64>cloud.row_step || cloud.data.size()>8U*1024U*1024U ||
+      static_cast<std::uint64_t>(cloud.width)*cloud.point_step>cloud.row_step || cloud.data.size()>8U*1024U*1024U ||
       cloud.header.stamp.sec<0 || cloud.header.stamp.nanosec>=1000000000U) return std::nullopt;
   struct Field {const char *name; std::uint32_t offset; std::uint8_t type;};
   const Field required[]={{"x",0,F::FLOAT32},{"y",4,F::FLOAT32},{"z",8,F::FLOAT32},
@@ -100,6 +105,12 @@ inline std::optional<ProjectedRayBatch> decodeProjectedRays(
     }
     if (matches!=1) return std::nullopt;
   }
+  unsigned actor_fields=0;
+  for(const auto& field:cloud.fields)if(field.name=="isaac_actor_id") {
+    ++actor_fields;
+    if(!actor_schema||field.offset!=64||field.datatype!=F::UINT16||field.count!=1)return std::nullopt;
+  }
+  if(actor_fields!=(actor_schema?1U:0U))return std::nullopt;
   ProjectedRayBatch batch;
   // Optional fields are witnesses, not new admission rules. A missing or bad
   // diagnostic schema must not change which clouds the production map accepts.
@@ -116,10 +127,10 @@ inline std::optional<ProjectedRayBatch> decodeProjectedRays(
     metadata_ok=metadata_ok && matches==1;
   }
   batch.stamp_ns=static_cast<std::int64_t>(cloud.header.stamp.sec)*1000000000LL+cloud.header.stamp.nanosec;
-  batch.endpoints.reserve(count); batch.origins.reserve(count);
+  batch.endpoints.reserve(count); batch.origins.reserve(count);batch.actor_ids.reserve(count);
   if(diagnostics) batch.diagnostics.reserve(count);
   for (std::uint32_t row=0;row<cloud.height;++row) for (std::uint32_t column=0;column<cloud.width;++column) {
-    const auto *bytes=cloud.data.data()+static_cast<std::size_t>(row)*cloud.row_step+column*64;
+    const auto *bytes=cloud.data.data()+static_cast<std::size_t>(row)*cloud.row_step+column*cloud.point_step;
     float xyz[3],origin[3]; std::uint16_t sensor;
     std::memcpy(xyz,bytes,12);std::memcpy(origin,bytes+16,12);std::memcpy(&sensor,bytes+28,2);
     if (sensor>1 || (!batch.origins.empty() && sensor!=batch.sensor_id)) return std::nullopt;
@@ -127,7 +138,10 @@ inline std::optional<ProjectedRayBatch> decodeProjectedRays(
     const Eigen::Vector3d point(xyz[0],xyz[1],xyz[2]), start(origin[0],origin[1],origin[2]);
     if (!point.allFinite() || !start.allFinite() || point.cwiseAbs().maxCoeff()>1000000. ||
         start.cwiseAbs().maxCoeff()>1000000. || (point-start).squaredNorm()<1e-12) return std::nullopt;
-    batch.endpoints.push_back(point);batch.origins.push_back(start);
+    std::uint16_t actor=0;
+    if(actor_schema)std::memcpy(&actor,bytes+64,2);
+    if(actor>max_actor_id)return std::nullopt;
+    batch.endpoints.push_back(point);batch.origins.push_back(start);batch.actor_ids.push_back(actor);
     if(diagnostics) {
       RayDiagnosticMetadata meta;meta.sensor_id=sensor;meta.scan_stamp_ns=batch.stamp_ns;
       if(metadata_ok) {

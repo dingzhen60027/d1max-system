@@ -22,7 +22,11 @@ class DynamicOccupancyOracle {
   static constexpr std::int64_t kMaximumHorizonNs=300000000LL;
   static constexpr std::int64_t kMaximumReachableHorizonNs=8000000000LL;
   struct Context { std::string session,seed; std::uint64_t epoch=0,sequence=0; };
-  struct Region { std::array<int,3> lower,upper; int state=2; };
+  struct Region {
+    std::array<int,3> lower,upper; int state=2;
+    std::uint16_t actor_id=0; // One-based ordinal of the exact sorted registry.
+    bool sphere=false; std::array<double,3> center{}; double radius=0.;
+  };
   void configure(std::string registry,std::string frame,std::vector<std::string> actors,double resolution) {
     if(registry.size()!=64||registry.find_first_not_of("0123456789abcdef")!=std::string::npos||frame.empty()||
         !std::isfinite(resolution)||resolution<=0.||actors.size()>64)
@@ -34,6 +38,8 @@ class DynamicOccupancyOracle {
     enabled_=true;sequence_=seen_sequence_=0;source_ns_=seen_source_ns_=0;context_={};revoke();
   }
   bool enabled() const {return enabled_;}
+  std::uint16_t actorCount() const {return static_cast<std::uint16_t>(actors_.size());}
+  std::vector<std::string> actorIds() const {return {actors_.begin(),actors_.end()};}
   void revoke() {valid_=false;regions_.clear();}
   bool apply(const std::string &payload,const Context &expected,std::int64_t receipt_ns) {
     if(!enabled_)return false;
@@ -89,14 +95,34 @@ class DynamicOccupancyOracle {
         if(!boxes.is_array()||boxes.empty()||boxes.size()>64)throw std::invalid_argument("oracle absent/oversize actor volume");
         for(const auto &box:boxes) {
           Region r;
+          r.actor_id=static_cast<std::uint16_t>(std::distance(actors_.begin(),actors_.find(id))+1);
           if(!box.at("state").is_number_integer())throw std::invalid_argument("oracle state required");
           r.state=box.at("state").get<int>();if(r.state!=1&&r.state!=2)throw std::invalid_argument("oracle cannot certify free");
           const auto &lo=box.at("min"),&hi=box.at("max");
           if(!lo.is_array()||lo.size()!=3||!hi.is_array()||hi.size()!=3)throw std::invalid_argument("oracle malformed region");
+          if(box.contains("enclosure")) {
+            if(box.at("enclosure")!="sphere_v1"||!box.contains("center")||!box.contains("radius"))
+              throw std::invalid_argument("oracle unsupported or incomplete sphere");
+            const auto &center=box.at("center"),&radius=box.at("radius");
+            if(!center.is_array()||center.size()!=3||!radius.is_number())
+              throw std::invalid_argument("oracle malformed sphere");
+            r.radius=radius.get<double>();
+            if(!std::isfinite(r.radius)||r.radius<=0.)throw std::invalid_argument("oracle invalid sphere radius");
+            for(std::size_t d=0;d<3;++d) {
+              if(!center[d].is_number())throw std::invalid_argument("oracle numeric sphere center required");
+              r.center[d]=center[d].get<double>();
+              if(!std::isfinite(r.center[d]))throw std::invalid_argument("oracle invalid sphere center");
+            }
+            r.sphere=true;
+          } else if(box.contains("center")||box.contains("radius")) {
+            throw std::invalid_argument("oracle incomplete sphere declaration");
+          }
           for(std::size_t d=0;d<3;++d) {
             if(!lo[d].is_number()||!hi[d].is_number())throw std::invalid_argument("oracle numeric bounds required");
             const auto a=lo[d].get<double>(),b=hi[d].get<double>();
             if(!std::isfinite(a)||!std::isfinite(b)||a>=b)throw std::invalid_argument("oracle invalid closed bounds");
+            if(r.sphere&&(a!=r.center[d]-r.radius||b!=r.center[d]+r.radius))
+              throw std::invalid_argument("oracle sphere broad phase mismatch");
             const auto lower=std::ceil(a/resolution_-1e-10)-1.;
             const auto upper=std::floor(b/resolution_+1e-10);
             if(lower<std::numeric_limits<int>::min()||upper>std::numeric_limits<int>::max())
@@ -121,14 +147,25 @@ class DynamicOccupancyOracle {
     for(const auto &r:regions_) {
       bool intersects=true;
       for(std::size_t d=0;d<3;++d)if(cell[d]<r.lower[d]||cell[d]>r.upper[d]){intersects=false;break;}
-      if(intersects){if(r.state==1)return 1;state=2;}
+      if(intersects&&(!r.sphere||sphereIntersectsCell(r,cell,3))){if(r.state==1)return 1;state=2;}
     }
     return state; // Zero only means no dynamic veto; callers still need static/live FREE.
+  }
+  int actorStatus(std::uint16_t actor_id,const std::array<int,3>& cell) const {
+    if(!valid_||!actor_id||actor_id>actorCount())return 2;
+    int state=0;
+    for(const auto& r:regions_)if(r.actor_id==actor_id) {
+      bool intersects=true;
+      for(std::size_t d=0;d<3;++d)if(cell[d]<r.lower[d]||cell[d]>r.upper[d]){intersects=false;break;}
+      if(intersects&&(!r.sphere||sphereIntersectsCell(r,cell,3))){if(r.state==1)return 1;state=2;}
+    }
+    return state; // Only withdrawal of this actor's veto, never independent FREE.
   }
   bool intersectsColumnXY(int x,int y) const {
     if(!valid_)return true; // Never a disjointness proof from revoked data.
     for(const auto& r:regions_)
-      if(x>=r.lower[0]&&x<=r.upper[0]&&y>=r.lower[1]&&y<=r.upper[1])return true;
+      if(x>=r.lower[0]&&x<=r.upper[0]&&y>=r.lower[1]&&y<=r.upper[1]&&
+          (!r.sphere||sphereIntersectsCell(r,{x,y,0},2)))return true;
     return false; // Exact closed XY disjointness excludes every Z of this column.
   }
   std::int64_t sourceDeadlineNs() const {
@@ -144,6 +181,25 @@ class DynamicOccupancyOracle {
   const std::string &registry() const {return registry_;}
   std::size_t bytes() const {return regions_.capacity()*sizeof(Region)+payload_.capacity();}
  private:
+  bool sphereIntersectsCell(const Region& r,const std::array<int,3>& cell,std::size_t dimensions) const {
+    long double distance_squared=0.;
+    for(std::size_t d=0;d<dimensions;++d) {
+      // Closed, outward-rounded complete voxel faces. In particular, neither
+      // a center-only test nor an XY-only test may authorize a foot/top cell.
+      const auto low=std::nextafter(static_cast<double>(cell[d])*resolution_,
+          -std::numeric_limits<double>::infinity());
+      const auto high=std::nextafter((static_cast<double>(cell[d])+1.)*resolution_,
+          std::numeric_limits<double>::infinity());
+      const long double gap=std::max({static_cast<long double>(low)-r.center[d],0.L,
+          static_cast<long double>(r.center[d])-high});
+      distance_squared+=gap*gap;
+    }
+    const long double radius_squared=static_cast<long double>(r.radius)*r.radius;
+    const auto scale=static_cast<double>(std::max({1.L,distance_squared,radius_squared}));
+    if(!std::isfinite(scale))return true; // Unsupported numeric range cannot prove disjointness.
+    const long double guard=16.L*(std::nextafter(scale,std::numeric_limits<double>::infinity())-scale);
+    return distance_squared<=radius_squared+guard;
+  }
   bool enabled_=false,valid_=false;
   std::string registry_,frame_,payload_;
   std::set<std::string> actors_;

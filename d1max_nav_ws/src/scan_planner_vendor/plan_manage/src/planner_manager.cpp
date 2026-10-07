@@ -6,6 +6,7 @@
 #include <bspline_opt/trajectory_timing.hpp>
 #include <plan_manage/collision_reference.hpp>
 #include <plan_manage/trajectory_collision.hpp>
+#include <plan_manage/low_speed_entry_fit.hpp>
 
 namespace scan_planner
 {
@@ -68,6 +69,19 @@ namespace scan_planner
     reference_detour_anchor_margin_=get_double("manager.reference_detour_anchor_margin", .5);
     if (!std::isfinite(reference_detour_anchor_margin_) || reference_detour_anchor_margin_<0. ||
         reference_detour_anchor_margin_>2.) throw std::invalid_argument("invalid detour anchor margin");
+    if(!node->has_parameter("manager.fit_low_speed_entry_velocity"))
+      node->declare_parameter<bool>("manager.fit_low_speed_entry_velocity",false);
+    fit_low_speed_entry_velocity_=node->get_parameter("manager.fit_low_speed_entry_velocity").as_bool();
+    const auto get_string=[node](const std::string& name,const std::string& value) {
+      if(!node->has_parameter(name))node->declare_parameter<std::string>(name,value);
+      return node->get_parameter(name).as_string();
+    };
+    const auto reference_record=get_string("fsm.execution_braking_model_record","");
+    if(!reference_record.empty())isolated_reference_model_=
+      d1max_planning_interfaces::IsolatedReferenceModel::load(reference_record,
+        get_string("fsm.execution_braking_model_sha256",""),get_string("fsm.execution_transport_mode","live"));
+    if(isolated_reference_model_&&pp_.max_vel_>isolated_reference_model_->commandSpeed())
+      throw std::invalid_argument("guide_cruise_exceeds_isolated_command_contract");
 
     local_data_.traj_id_ = 0;
     grid_map_.reset(new GridMap);
@@ -111,6 +125,8 @@ namespace scan_planner
     pp_=owner.pp_;
     preview_heading_contract_=owner.preview_heading_contract_;
     reference_detour_anchor_margin_=owner.reference_detour_anchor_margin_;
+    fit_low_speed_entry_velocity_=owner.fit_low_speed_entry_velocity_;
+    isolated_reference_model_=owner.isolated_reference_model_;
     bspline_optimizer_rebound_=std::make_unique<BsplineOptimizer>();
     bspline_optimizer_rebound_->setParam(node_);
     bspline_optimizer_rebound_->a_star_=std::make_shared<AStar>();
@@ -182,11 +198,11 @@ namespace scan_planner
     std::atomic_store(&solve_budget_,budget);
     const auto join=certifyCandidateAdoption(candidate.curve,candidate.solve_body,
         measured_body_pose_,measured_body_velocity_,grid_map_->getResolution(),
-        pp_.max_vel_,pp_.max_acc_,candidate.single_segment,candidate.context_sequence,
+        referenceSpeedLimit(),pp_.max_acc_,candidate.single_segment,candidate.context_sequence,
         budget,current_lease,sources_fresh,[&](double measured_time) {
       return checkWholeTrajectoryCollision(candidate.curve,200000,
           budget->remainingSeconds(),true,measured_time,candidate.heading);
-    });
+    },isolatedReferenceActive()?measuredTravelSpeedLimit():0.);
     std::atomic_store(&solve_budget_,SolveBudget::Ptr{});
     // Checking may consume 100 ms. A fresh map at check START is not a fresh
     // map at publication, and neither source may be renewed by this operation.
@@ -261,6 +277,26 @@ namespace scan_planner
     double ts = (start_pt - local_target_pt).norm() > 0.1 ? pp_.ctrl_pt_dist / pp_.max_vel_ * 1.2 : pp_.ctrl_pt_dist / pp_.max_vel_ * 5; // pp_.ctrl_pt_dist / pp_.max_vel_ is too tense, and will surely exceed the acc/vel limits
     vector<Eigen::Vector3d> point_set, start_end_derivatives;
     const bool guided = !local_reference_.empty();
+    const double reference_speed=referenceSpeedLimit();
+    bspline_optimizer_rebound_->setReferenceSpeedLimit(isolatedReferenceActive()?std::optional<double>{reference_speed}:std::nullopt);
+    if(isolatedReferenceActive()&&(!measured_body_velocity_.allFinite()||
+        measured_body_velocity_.stableNorm()>measuredTravelSpeedLimit())) {
+      last_failure_phase_="failed_dynamics";
+      return false;
+    }
+    // Only local solver BC changes. The worker's original XYZ body pose,
+    // velocity and source remain untouched for adoption and the published raw
+    // join witness. Freshness/frame/position were checked above; the original
+    // adoption, whole-curve proof and all writer/C1 guards still decide use.
+    const auto entry_fit=fitLowSpeedEntryDerivatives(fit_low_speed_entry_velocity_,guided,
+        grid_map_->certifiedSupportFloorZ(),measuredBodySourceNs(measured_body_pose_),
+        start_vel,start_acc,measured_body_velocity_);
+    if(entry_fit.low_speed_fitted) {
+      RCLCPP_DEBUG(node_->get_logger(),
+          "Candidate entry derivative fit: source_ns=%lld boundary_speed=%.9f raw_xyz_speed=%.9f; solver v0/a0=0, raw witness unchanged",
+          static_cast<long long>(measuredBodySourceNs(measured_body_pose_)),start_vel.stableNorm(),measured_body_velocity_.stableNorm());
+      start_vel=entry_fit.solver_velocity;start_acc=entry_fit.solver_acceleration;
+    }
     auto heading_contract=preview_heading_contract_;
     heading_contract.preview_only_enabled=heading_contract.preview_only_enabled && guided;
     heading_contract.measured_yaw=measured_yaw;
@@ -269,11 +305,11 @@ namespace scan_planner
     const CubicMotionBoundary motion_boundary{start_pt,start_vel,start_acc,
         local_target_pt,local_target_vel,Eigen::Vector3d::Zero()};
     if (guided && (!start_vel.allFinite() || !start_acc.allFinite() ||
-        start_vel.norm()>pp_.max_vel_+1e-9 || start_acc.norm()>pp_.max_acc_+1e-9)) {
+        start_vel.norm()>reference_speed+1e-9 || start_acc.norm()>pp_.max_acc_+1e-9)) {
       last_failure_phase_="failed_dynamics";
       RCLCPP_WARN(node_->get_logger(),
           "Initial motion exceeds strict planning limits: speed=%.6f/%.6f acceleration=%.6f/%.6f; braking policy required",
-          start_vel.norm(),pp_.max_vel_,start_acc.norm(),pp_.max_acc_);
+          start_vel.norm(),reference_speed,start_acc.norm(),pp_.max_acc_);
       ++continuous_failures_count_;
       return false;
     }
@@ -529,7 +565,7 @@ namespace scan_planner
 
     /*** STEP 3: REFINE(RE-ALLOCATE TIME) IF NECESSARY ***/
     UniformBspline pos = UniformBspline(ctrl_pts, 3, ts);
-    pos.setPhysicalLimits(pp_.max_vel_, pp_.max_acc_, pp_.feasibility_tolerance_);
+    pos.setPhysicalLimits(reference_speed, pp_.max_acc_, pp_.feasibility_tolerance_);
 
     double ratio;
     bool flag_step_2_success = true;
@@ -554,12 +590,12 @@ namespace scan_planner
           return success;
         };
         const auto timing=refineTimingWithFixedBoundary(pos,motion_boundary,
-            pp_.max_vel_,pp_.max_acc_,refine_interior);
+            reference_speed,pp_.max_acc_,refine_interior);
         flag_step_2_success=timing.success;
         if (!timing.success)
           RCLCPP_WARN(node_->get_logger(),
               "Constrained moving timing rejected: %s refinements=%d v_bound=%.6f/%.6f a_bound=%.6f/%.6f",
-              timing.reason.c_str(),timing.refinements,timing.speed_bound,pp_.max_vel_,
+              timing.reason.c_str(),timing.refinements,timing.speed_bound,reference_speed,
               timing.acceleration_bound,pp_.max_acc_);
       } catch (const std::exception &error) {
         RCLCPP_ERROR(node_->get_logger(),"Invalid moving boundary timing: %s",error.what());
@@ -583,7 +619,7 @@ namespace scan_planner
       try
       {
         const double time_scale = enforceDerivativeBoundsAtStart(
-            pos, pp_.max_vel_, pp_.max_acc_, start_vel,start_acc);
+            pos, reference_speed, pp_.max_acc_, start_vel,start_acc);
         if (time_scale > 1.001)
           RCLCPP_DEBUG(node_->get_logger(), "Reference B-spline time scaled by %.3f", time_scale);
       }
@@ -877,7 +913,7 @@ namespace scan_planner
     UniformBspline acc_traj = vel_traj.getDerivative();
     const double duration = position_traj.getTimeSum();
     const double sample_dt = std::max(0.01, std::min(0.05, duration / 50.0));
-    const double vel_limit = pp_.max_vel_ + pp_.vel_tolerance_;
+    const double vel_limit = referenceSpeedLimit() + pp_.vel_tolerance_;
     const double acc_limit = pp_.max_acc_ + pp_.acc_tolerance_;
 
     for (double t = 0.0; t < duration + 1e-6; t += sample_dt)
