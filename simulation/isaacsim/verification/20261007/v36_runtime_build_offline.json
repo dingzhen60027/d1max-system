@@ -1,0 +1,2435 @@
+{
+  "schema": 1,
+  "kind": "v36_runtime_build_and_offline_regression_evidence",
+  "created_utc": "2026-10-07T07:26:00.154431+00:00",
+  "scope": "Read-only publication of finished build/test logs and small source/header/XML files while formal Kit run was active; no tests/builds/processes were started by this audit.",
+  "formal_navigation_pass": false,
+  "physical_acceptance": false,
+  "formal_run_status_at_publication": "in_progress_not_evaluated_by_this_offline_artifact",
+  "publication": {
+    "repo_artifact_only": true,
+    "candidate_already_sealed_at": "2026-10-07T07:20:11.239101+00:00",
+    "candidate_seal": {
+      "path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v36-campus-crossing/isaac_candidate_integrity.json",
+      "sha256": "e5c2ab090ebe5ea64e279d9d33658fcf3b378746a732fdcdf359cbadced268c3",
+      "bytes": 740037
+    },
+    "candidate_release_descriptor": {
+      "path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v36-campus-crossing/release.json",
+      "sha256": "c34da5426db615e5bda076d1b5da262bec32affee4662ea002e0a622f4ed4b9b",
+      "bytes": 802
+    },
+    "candidate": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v36-campus-crossing",
+    "added_after_candidate_seal": true,
+    "embedded_in_candidate_seal": false,
+    "candidate_or_selector_modified": false,
+    "binary_rehash_scope": "No native binaries, PCD/NPZ/static-prior data, trajectory or full control trace read or rehashed. Candidate seal digest is metadata evidence, not a new whole-candidate integrity verification."
+  },
+  "native_build": {
+    "final_status": "PASS",
+    "final_full_ABI_build_summary": "6 packages finished [2min 56s]; separate planning_interfaces and plan_env installation complete; SDK separately built and installed",
+    "final_logs": [
+      {
+        "path": "/home/eric/wjg/d1max-build-isaac/v36_nav_abi_rebuild.log",
+        "sha256": "2ef2773635c4dbbca2df8e234684b3adb4ec91897b45ed694ee44e43e4d174dd",
+        "bytes": 54127
+      },
+      {
+        "path": "/home/eric/wjg/d1max-build-isaac/v36_interfaces_rebuild_final.log",
+        "sha256": "8bd3be6429972ec17c615ae8531dfd9c304867788b181bd42877bea0ff6e6a68",
+        "bytes": 1037
+      },
+      {
+        "path": "/home/eric/wjg/d1max-build-isaac/v36_plan_env_install_final.log",
+        "sha256": "2b92b8e4edb3cf231ca4a88b7dcc529e05224e81aa04d12d63b85a3f80aea203",
+        "bytes": 3964
+      },
+      {
+        "path": "/home/eric/wjg/d1max-build-isaac/v36_sdk_build.log",
+        "sha256": "3b38295bc985304aa2251db5afaa5bb60ef778d9d37c2b8a57e675fd3ffb9742",
+        "bytes": 17220
+      },
+      {
+        "path": "/home/eric/wjg/d1max-build-isaac/v36_sdk_install.log",
+        "sha256": "6909babb81620b4694769431d7f225d45bab5f5ebc1a0e3853fd85616f90f1dc",
+        "bytes": 2906
+      },
+      {
+        "path": "/home/eric/wjg/d1max-build-isaac/v36_candidate_build.log",
+        "sha256": "59db0bd5c84493f9f35a6363580a97bf9ee73b4a210eca5fc2a799f8ac558272",
+        "bytes": 343
+      }
+    ],
+    "compile_warning_limit": "Final build retains original compiler warnings; no claim of warning-free compilation.",
+    "compiler_cache": {
+      "file": {
+        "path": "/home/eric/wjg/d1max-build-isaac/nav/build/d1max_planning_interfaces/CMakeCache.txt",
+        "sha256": "d750aade70fbd910da5daed2a7fdbe4189a93cc36ca881500e1165fcd8589d19",
+        "bytes": 45985
+      },
+      "fields": {
+        "CMAKE_C_COMPILER": "/usr/bin/gcc-11",
+        "CMAKE_CXX_COMPILER": "/usr/bin/g++-11",
+        "CMAKE_INSTALL_PREFIX": "/home/eric/wjg/d1max-build-isaac/nav/install/d1max_planning_interfaces",
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    },
+    "packaging_failures_preserved": [
+      {
+        "log": {
+          "path": "/home/eric/wjg/d1max-build-isaac/v36_nav_abi_rebuild_first_failed.log",
+          "sha256": "704b086c18ff85891634a659c782ae215bcb4cf1ace97610394fe25ee70db5c6",
+          "bytes": 1913
+        },
+        "failed_package": "d1max_planning_interfaces",
+        "original_reason": "gcc/g++-11 compiler cache change triggered reconfigure; install attempted /usr/local/share/ament_index/resource_index/rosidl_interfaces and could not create it",
+        "correction_scope": "Restore explicit per-package install prefix in isolated build; no privileged installation or runtime semantic relaxation."
+      },
+      {
+        "log": {
+          "path": "/home/eric/wjg/d1max-build-isaac/v36_nav_abi_rebuild_second_failed.log",
+          "sha256": "b956cda04e12dd74dbcfb4be72eff3ff163325dbe6fff5591e0449d26d4d2c2e",
+          "bytes": 13379
+        },
+        "failed_package": "d1max_trajectory_tracker",
+        "original_reason": "d1max_planning_interfaces/isolated_reference_model.hpp not found through Humble rosidl package include root",
+        "correction_scope": "Package header install/export directory changed to include/${PROJECT_NAME}; CMakeLists.txt lines 28-30 export nlohmann_json/OpenSSL; public include spelling and parser/math semantics retained. Exact nested installed and candidate header bytes checked below."
+      }
+    ]
+  },
+  "native_tests": {
+    "ctest_groups_total": 58,
+    "ctest_groups_passed": 58,
+    "saved_xml_testcases_total": 945,
+    "packages": [
+      {
+        "package": "d1max_planning_interfaces",
+        "ctest_groups_passed": 1,
+        "ctest_groups_total": 1,
+        "ctest_log": {
+          "path": "/home/eric/wjg/d1max-build-isaac/v36_interfaces_ctest_final.log",
+          "sha256": "033412ba2fd8eeaf7c8252892c10f0054d4b4e29ba9da8cc299a6e7c9dd92a69",
+          "bytes": 441
+        },
+        "xml_files": [
+          {
+            "path": "/home/eric/wjg/d1max-build-isaac/nav/build/d1max_planning_interfaces/test_results/d1max_planning_interfaces/test_isolated_reference_model.gtest.xml",
+            "sha256": "a98ec3e52efa716b624228a0079f44212bac72abba373e4dba39e110e2ca674b",
+            "bytes": 1977,
+            "root_tag": "testsuites",
+            "root_tests_attribute": "8",
+            "saved_testcases": 8,
+            "failures": 0,
+            "errors": 0,
+            "skipped": 0
+          }
+        ],
+        "saved_xml_testcases": 8,
+        "xml_failures": 0,
+        "xml_errors": 0,
+        "xml_skipped": 0
+      },
+      {
+        "package": "plan_env",
+        "ctest_groups_passed": 8,
+        "ctest_groups_total": 8,
+        "ctest_log": {
+          "path": "/home/eric/wjg/d1max-build-isaac/v36_plan_env_ctest.log",
+          "sha256": "48804c9217de662075a3201d8bd75f76496a1261b61ec57d5ade6e19524bf264",
+          "bytes": 1139
+        },
+        "xml_files": [
+          {
+            "path": "/home/eric/wjg/d1max-build-isaac/nav/build/plan_env/test_results/plan_env/test_dynamic_occupancy_oracle.gtest.xml",
+            "sha256": "ea7bd9ad7118905cc8e7831dc1195ea71706952faac3e407afb64121d17e5017",
+            "bytes": 2483,
+            "root_tag": "testsuites",
+            "root_tests_attribute": "11",
+            "saved_testcases": 11,
+            "failures": 0,
+            "errors": 0,
+            "skipped": 0
+          },
+          {
+            "path": "/home/eric/wjg/d1max-build-isaac/nav/build/plan_env/test_results/plan_env/test_map_context.gtest.xml",
+            "sha256": "ce9ca94fd44d661dc828b2b0da9aff284960df3b8738add3d9957e65380f83c7",
+            "bytes": 5131,
+            "root_tag": "testsuites",
+            "root_tests_attribute": "23",
+            "saved_testcases": 23,
+            "failures": 0,
+            "errors": 0,
+            "skipped": 0
+          },
+          {
+            "path": "/home/eric/wjg/d1max-build-isaac/nav/build/plan_env/test_results/plan_env/test_near_field_diagnostics.gtest.xml",
+            "sha256": "ca8b567ad86770be38dd5d2283d65ce5f9bed7181bec37183d9c6bbd95477535",
+            "bytes": 3674,
+            "root_tag": "testsuites",
+            "root_tests_attribute": "17",
+            "saved_testcases": 17,
+            "failures": 0,
+            "errors": 0,
+            "skipped": 0
+          },
+          {
+            "path": "/home/eric/wjg/d1max-build-isaac/nav/build/plan_env/test_results/plan_env/test_official_resolution.gtest.xml",
+            "sha256": "d4467fbf452dd0c23b9c7175ebc3de8dc2d64f097c309ce5058ad48836a33f74",
+            "bytes": 1077,
+            "root_tag": "testsuites",
+            "root_tests_attribute": "4",
+            "saved_testcases": 4,
+            "failures": 0,
+            "errors": 0,
+            "skipped": 0
+          },
+          {
+            "path": "/home/eric/wjg/d1max-build-isaac/nav/build/plan_env/test_results/plan_env/test_projected_rays.gtest.xml",
+            "sha256": "92c9e2862551b517f2984c03fc4f13f163b6bb482abea9e6ab73871aad672930",
+            "bytes": 28369,
+            "root_tag": "testsuites",
+            "root_tests_attribute": "125",
+            "saved_testcases": 125,
+            "failures": 0,
+            "errors": 0,
+            "skipped": 0
+          },
+          {
+            "path": "/home/eric/wjg/d1max-build-isaac/nav/build/plan_env/test_results/plan_env/test_solve_budget.gtest.xml",
+            "sha256": "a155d4d57f915f546c085d61b0185cbc075683b1d9e2d3984a58a3326fd6c8f7",
+            "bytes": 1218,
+            "root_tag": "testsuites",
+            "root_tests_attribute": "5",
+            "saved_testcases": 5,
+            "failures": 0,
+            "errors": 0,
+            "skipped": 0
+          },
+          {
+            "path": "/home/eric/wjg/d1max-build-isaac/nav/build/plan_env/test_results/plan_env/test_static_occupancy_prior.gtest.xml",
+            "sha256": "53fab2f8bf8935f5159e3ad2496fe5e35be7c3c0a6de076df31659dcb7ef5c53",
+            "bytes": 5436,
+            "root_tag": "testsuites",
+            "root_tests_attribute": "26",
+            "saved_testcases": 26,
+            "failures": 0,
+            "errors": 0,
+            "skipped": 0
+          },
+          {
+            "path": "/home/eric/wjg/d1max-build-isaac/nav/build/plan_env/test_results/plan_env/test_voxel_collision.gtest.xml",
+            "sha256": "c8ed50e73584baad17cd7740f71d06d50314d58fb138245e0a30e4b189ad4510",
+            "bytes": 6425,
+            "root_tag": "testsuites",
+            "root_tests_attribute": "32",
+            "saved_testcases": 32,
+            "failures": 0,
+            "errors": 0,
+            "skipped": 0
+          }
+        ],
+        "saved_xml_testcases": 243,
+        "xml_failures": 0,
+        "xml_errors": 0,
+        "xml_skipped": 0
+      },
+      {
+        "package": "path_searching",
+        "ctest_groups_passed": 4,
+        "ctest_groups_total": 4,
+        "ctest_log": {
+          "path": "/home/eric/wjg/d1max-build-isaac/v36_path_searching_ctest_final.log",
+          "sha256": "494e4d87e1256b2089f72dd722c0acaaca81e82fb6665252de9f6ec1dfe960c6",
+          "bytes": 746
+        },
+        "xml_files": [
+          {
+            "path": "/home/eric/wjg/d1max-build-isaac/nav/build/path_searching/test_results/path_searching/test_internal_search_anchor.gtest.xml",
+            "sha256": "027020d8073a1b31094a531cd10ae306219a12dede0195025b045a9afe97c5fb",
+            "bytes": 1692,
+            "root_tag": "testsuites",
+            "root_tests_attribute": "5",
+            "saved_testcases": 5,
+            "failures": 0,
+            "errors": 0,
+            "skipped": 0
+          },
+          {
+            "path": "/home/eric/wjg/d1max-build-isaac/nav/build/path_searching/test_results/path_searching/test_reference_lattice_connector.gtest.xml",
+            "sha256": "5042b956340d2d43841b6b730b008d55a0e7d862fdcaa1eaec2c3d498eb836a2",
+            "bytes": 1804,
+            "root_tag": "testsuites",
+            "root_tests_attribute": "7",
+            "saved_testcases": 7,
+            "failures": 0,
+            "errors": 0,
+            "skipped": 0
+          },
+          {
+            "path": "/home/eric/wjg/d1max-build-isaac/nav/build/path_searching/test_results/path_searching/test_search_endpoint.gtest.xml",
+            "sha256": "e3fb1ae0cee06fcafaabf6e30ff5cea425edd55dc23cf703eb076af801b46b22",
+            "bytes": 2619,
+            "root_tag": "testsuites",
+            "root_tests_attribute": "12",
+            "saved_testcases": 12,
+            "failures": 0,
+            "errors": 0,
+            "skipped": 0
+          },
+          {
+            "path": "/home/eric/wjg/d1max-build-isaac/nav/build/path_searching/test_results/path_searching/test_search_lattice.gtest.xml",
+            "sha256": "8d16e518d14ec19a3741a25b6d588bd3d1a8f5e82f101b3ed0c3521df69c1f81",
+            "bytes": 1055,
+            "root_tag": "testsuites",
+            "root_tests_attribute": "4",
+            "saved_testcases": 4,
+            "failures": 0,
+            "errors": 0,
+            "skipped": 0
+          }
+        ],
+        "saved_xml_testcases": 28,
+        "xml_failures": 0,
+        "xml_errors": 0,
+        "xml_skipped": 0
+      },
+      {
+        "package": "bspline_opt",
+        "ctest_groups_passed": 4,
+        "ctest_groups_total": 4,
+        "ctest_log": {
+          "path": "/home/eric/wjg/d1max-build-isaac/v36_bspline_opt_ctest_final.log",
+          "sha256": "297dffbf4870f73972f77c30e5bf4afe088db7cf84a89be42494dbb8a12e32b5",
+          "bytes": 721
+        },
+        "xml_files": [
+          {
+            "path": "/home/eric/wjg/d1max-build-isaac/nav/build/bspline_opt/test_results/bspline_opt/test_optimizer_budget.gtest.xml",
+            "sha256": "9a29bdde7584bcd950221d8331dc0af6c348a0b112f062ed5e0ee201c4c5e4c9",
+            "bytes": 687,
+            "root_tag": "testsuites",
+            "root_tests_attribute": "2",
+            "saved_testcases": 2,
+            "failures": 0,
+            "errors": 0,
+            "skipped": 0
+          },
+          {
+            "path": "/home/eric/wjg/d1max-build-isaac/nav/build/bspline_opt/test_results/bspline_opt/test_reference_path.gtest.xml",
+            "sha256": "ba185f2d6eb15d881ea4629da6e2fb68c839f87833623103b3a8a60d1ab12f5e",
+            "bytes": 1230,
+            "root_tag": "testsuites",
+            "root_tests_attribute": "5",
+            "saved_testcases": 5,
+            "failures": 0,
+            "errors": 0,
+            "skipped": 0
+          },
+          {
+            "path": "/home/eric/wjg/d1max-build-isaac/nav/build/bspline_opt/test_results/bspline_opt/test_uniform_bspline.gtest.xml",
+            "sha256": "3a4f7f2d4b5fb0f6f76ff7a3643b04916a5a72a4da9bfead6ffce50b5b0f2e51",
+            "bytes": 3382,
+            "root_tag": "testsuites",
+            "root_tests_attribute": "16",
+            "saved_testcases": 16,
+            "failures": 0,
+            "errors": 0,
+            "skipped": 0
+          },
+          {
+            "path": "/home/eric/wjg/d1max-build-isaac/nav/build/bspline_opt/test_results/bspline_opt/test_whole_spline_collision.gtest.xml",
+            "sha256": "5b34e76f6489fb181acc3c0e344e92b3d7763862fc687a6dd1be37619b040af9",
+            "bytes": 2821,
+            "root_tag": "testsuites",
+            "root_tests_attribute": "12",
+            "saved_testcases": 12,
+            "failures": 0,
+            "errors": 0,
+            "skipped": 0
+          }
+        ],
+        "saved_xml_testcases": 35,
+        "xml_failures": 0,
+        "xml_errors": 0,
+        "xml_skipped": 0
+      },
+      {
+        "package": "d1max_trajectory_tracker",
+        "ctest_groups_passed": 4,
+        "ctest_groups_total": 4,
+        "ctest_log": {
+          "path": "/home/eric/wjg/d1max-build-isaac/v36_d1max_trajectory_tracker_ctest_final.log",
+          "sha256": "5c47a20d63e4d301cf026d3269aa8682d84a4defe4d5482b1fe5ad5ad6b20956",
+          "bytes": 748
+        },
+        "xml_files": [
+          {
+            "path": "/home/eric/wjg/d1max-build-isaac/nav/build/d1max_trajectory_tracker/test_results/d1max_trajectory_tracker/test_fixed_bspline_sampler.gtest.xml",
+            "sha256": "c70c825c982506371dfeac7a1017b947547f674403348e2bec5130a9f7fb0051",
+            "bytes": 2001,
+            "root_tag": "testsuites",
+            "root_tests_attribute": "8",
+            "saved_testcases": 8,
+            "failures": 0,
+            "errors": 0,
+            "skipped": 0
+          },
+          {
+            "path": "/home/eric/wjg/d1max-build-isaac/nav/build/d1max_trajectory_tracker/test_results/d1max_trajectory_tracker/test_navigation_state_contract.gtest.xml",
+            "sha256": "54f2e88223025c1a9ec3ecb13cb3a2bc8b6ded9bf82f838e6a7ff99e60f5cbdb",
+            "bytes": 3308,
+            "root_tag": "testsuites",
+            "root_tests_attribute": "13",
+            "saved_testcases": 13,
+            "failures": 0,
+            "errors": 0,
+            "skipped": 0
+          },
+          {
+            "path": "/home/eric/wjg/d1max-build-isaac/nav/build/d1max_trajectory_tracker/test_results/d1max_trajectory_tracker/test_tracker_core.gtest.xml",
+            "sha256": "f3fc781bf20e9d79004b51f37b2f213607d0bffc281b3b2a9cc01bfffbc06b35",
+            "bytes": 12342,
+            "root_tag": "testsuites",
+            "root_tests_attribute": "61",
+            "saved_testcases": 61,
+            "failures": 0,
+            "errors": 0,
+            "skipped": 0
+          },
+          {
+            "path": "/home/eric/wjg/d1max-build-isaac/nav/build/d1max_trajectory_tracker/test_results/d1max_trajectory_tracker/test_tracker_v2.gtest.xml",
+            "sha256": "397719880900696ae8b5f5a9bafa3d4eaed31794c5aa3bf37fc6172fcd1d8c99",
+            "bytes": 27798,
+            "root_tag": "testsuites",
+            "root_tests_attribute": "120",
+            "saved_testcases": 120,
+            "failures": 0,
+            "errors": 0,
+            "skipped": 0
+          }
+        ],
+        "saved_xml_testcases": 202,
+        "xml_failures": 0,
+        "xml_errors": 0,
+        "xml_skipped": 0
+      },
+      {
+        "package": "d1max_navigation_bt",
+        "ctest_groups_passed": 5,
+        "ctest_groups_total": 5,
+        "ctest_log": {
+          "path": "/home/eric/wjg/d1max-build-isaac/v36_d1max_navigation_bt_ctest_final.log",
+          "sha256": "d1dbf82732c62a15a406a60e01fe5588aef29487f4b02548a14d80032d45049f",
+          "bytes": 855
+        },
+        "xml_files": [
+          {
+            "path": "/home/eric/wjg/d1max-build-isaac/nav/build/d1max_navigation_bt/test_results/d1max_navigation_bt/test_execution_owner.gtest.xml",
+            "sha256": "4297cb3ed084ac70448d0960ead8acebf91764b8c5db38777c28fe83cda449b6",
+            "bytes": 29812,
+            "root_tag": "testsuites",
+            "root_tests_attribute": "138",
+            "saved_testcases": 138,
+            "failures": 0,
+            "errors": 0,
+            "skipped": 0
+          },
+          {
+            "path": "/home/eric/wjg/d1max-build-isaac/nav/build/d1max_navigation_bt/test_results/d1max_navigation_bt/test_initial_pose_transaction.gtest.xml",
+            "sha256": "2e921e5028630e06e97473ffe2eba6d87ed50bdcb356744adbddfc9ef1d90c67",
+            "bytes": 2957,
+            "root_tag": "testsuites",
+            "root_tests_attribute": "12",
+            "saved_testcases": 12,
+            "failures": 0,
+            "errors": 0,
+            "skipped": 0
+          },
+          {
+            "path": "/home/eric/wjg/d1max-build-isaac/nav/build/d1max_navigation_bt/test_results/d1max_navigation_bt/test_navigation_bt.gtest.xml",
+            "sha256": "3d24a43d68b14c786f198494e708d4513234bfadde99389d9531aa8915ce0ebe",
+            "bytes": 9081,
+            "root_tag": "testsuites",
+            "root_tests_attribute": "40",
+            "saved_testcases": 40,
+            "failures": 0,
+            "errors": 0,
+            "skipped": 0
+          },
+          {
+            "path": "/home/eric/wjg/d1max-build-isaac/nav/build/d1max_navigation_bt/test_results/d1max_navigation_bt/test_navigation_bt_runtime.gtest.xml",
+            "sha256": "63c85b988b0bc18d9bc035e0351426ff44a087b1d553c1d26c85d3c1ce67bf51",
+            "bytes": 8433,
+            "root_tag": "testsuites",
+            "root_tests_attribute": "34",
+            "saved_testcases": 34,
+            "failures": 0,
+            "errors": 0,
+            "skipped": 0
+          },
+          {
+            "path": "/home/eric/wjg/d1max-build-isaac/nav/build/d1max_navigation_bt/test_results/d1max_navigation_bt/test_navigation_task_contract.gtest.xml",
+            "sha256": "d94c7db980c0b0a4fde774a6d1ad23bc953c2d93232e864a4d5770e708386e67",
+            "bytes": 5333,
+            "root_tag": "testsuites",
+            "root_tests_attribute": "23",
+            "saved_testcases": 23,
+            "failures": 0,
+            "errors": 0,
+            "skipped": 0
+          }
+        ],
+        "saved_xml_testcases": 247,
+        "xml_failures": 0,
+        "xml_errors": 0,
+        "xml_skipped": 0
+      },
+      {
+        "package": "scan_planner",
+        "ctest_groups_passed": 18,
+        "ctest_groups_total": 18,
+        "ctest_log": {
+          "path": "/home/eric/wjg/d1max-build-isaac/v36_scan_planner_ctest_final.log",
+          "sha256": "866c4ed0c2275c57bd3d822c7e8ce7b0dd5a647831b0c23c4244394866de8f87",
+          "bytes": 2439
+        },
+        "xml_files": [
+          {
+            "path": "/home/eric/wjg/d1max-build-isaac/nav/build/scan_planner/test_results/scan_planner/test_candidate_adoption.gtest.xml",
+            "sha256": "828bc7fc0a6e52bd521c47a52307a1feb9c7a76d9755a7eb9d358140807863c3",
+            "bytes": 4154,
+            "root_tag": "testsuites",
+            "root_tests_attribute": "19",
+            "saved_testcases": 19,
+            "failures": 0,
+            "errors": 0,
+            "skipped": 0
+          },
+          {
+            "path": "/home/eric/wjg/d1max-build-isaac/nav/build/scan_planner/test_results/scan_planner/test_collision_reference.gtest.xml",
+            "sha256": "dc86439390ddda76c9ef0ed47c93d86c05f0a9b40945dfa6b3341026bb9bd09b",
+            "bytes": 1202,
+            "root_tag": "testsuites",
+            "root_tests_attribute": "5",
+            "saved_testcases": 5,
+            "failures": 0,
+            "errors": 0,
+            "skipped": 0
+          },
+          {
+            "path": "/home/eric/wjg/d1max-build-isaac/nav/build/scan_planner/test_results/scan_planner/test_execution_ledger.gtest.xml",
+            "sha256": "462b85dca7110bb74fa29b83a9421c7e635c2fa196fdba02e17aeb07b777ab45",
+            "bytes": 8172,
+            "root_tag": "testsuites",
+            "root_tests_attribute": "39",
+            "saved_testcases": 39,
+            "failures": 0,
+            "errors": 0,
+            "skipped": 0
+          },
+          {
+            "path": "/home/eric/wjg/d1max-build-isaac/nav/build/scan_planner/test_results/scan_planner/test_initial_yaw_native.gtest.xml",
+            "sha256": "be8eba611a1dcc5eff8f4ec21bf702274c84a73af64bb8c25ebb077d1fb3507b",
+            "bytes": 1924,
+            "root_tag": "testsuites",
+            "root_tests_attribute": "7",
+            "saved_testcases": 7,
+            "failures": 0,
+            "errors": 0,
+            "skipped": 0
+          },
+          {
+            "path": "/home/eric/wjg/d1max-build-isaac/nav/build/scan_planner/test_results/scan_planner/test_input_contract.gtest.xml",
+            "sha256": "a46479397e23c4441a30bd76f6ead2b1c7caee8eeadd2580f239ac82a6a1a59f",
+            "bytes": 2551,
+            "root_tag": "testsuites",
+            "root_tests_attribute": "12",
+            "saved_testcases": 12,
+            "failures": 0,
+            "errors": 0,
+            "skipped": 0
+          },
+          {
+            "path": "/home/eric/wjg/d1max-build-isaac/nav/build/scan_planner/test_results/scan_planner/test_local_plan_debug.gtest.xml",
+            "sha256": "4de2ef7015865d1fad44735135b7cb743e88645a0012678668561daf615e9da7",
+            "bytes": 1479,
+            "root_tag": "testsuites",
+            "root_tests_attribute": "6",
+            "saved_testcases": 6,
+            "failures": 0,
+            "errors": 0,
+            "skipped": 0
+          },
+          {
+            "path": "/home/eric/wjg/d1max-build-isaac/nav/build/scan_planner/test_results/scan_planner/test_low_speed_entry_fit.gtest.xml",
+            "sha256": "ba2043f909d8c39e9ff4e38e721cc757ca3b8d1557ea7b49b6e3aefa287706f3",
+            "bytes": 2311,
+            "root_tag": "testsuites",
+            "root_tests_attribute": "10",
+            "saved_testcases": 10,
+            "failures": 0,
+            "errors": 0,
+            "skipped": 0
+          },
+          {
+            "path": "/home/eric/wjg/d1max-build-isaac/nav/build/scan_planner/test_results/scan_planner/test_motion_sweep.gtest.xml",
+            "sha256": "4177ea2c8e109caadfa5afcab1a88293e36ef2481f402902bff8081e86c14b27",
+            "bytes": 7717,
+            "root_tag": "testsuites",
+            "root_tests_attribute": "35",
+            "saved_testcases": 35,
+            "failures": 0,
+            "errors": 0,
+            "skipped": 0
+          },
+          {
+            "path": "/home/eric/wjg/d1max-build-isaac/nav/build/scan_planner/test_results/scan_planner/test_reference_target.gtest.xml",
+            "sha256": "afd24a3df98bae288269a73fea54a631d81dd4bbe68f46dcb9fdc34a6bbfbc16",
+            "bytes": 3471,
+            "root_tag": "testsuites",
+            "root_tests_attribute": "17",
+            "saved_testcases": 17,
+            "failures": 0,
+            "errors": 0,
+            "skipped": 0
+          },
+          {
+            "path": "/home/eric/wjg/d1max-build-isaac/nav/build/scan_planner/test_results/scan_planner/test_test_planner_startup.py.xunit.xml",
+            "sha256": "49d09059da668bed187b8059ea948d2843e876c289c034628ec04ff15c8d69a2",
+            "bytes": 270,
+            "root_tag": "testsuites",
+            "root_tests_attribute": "0",
+            "saved_testcases": 0,
+            "failures": 0,
+            "errors": 0,
+            "skipped": 0
+          },
+          {
+            "path": "/home/eric/wjg/d1max-build-isaac/nav/build/scan_planner/test_results/scan_planner/test_test_waypoint_parameters.py.xunit.xml",
+            "sha256": "5a48991bfa1511b1ffc524cad57f7c6d3149032f00b13e90fca6bb5f92c5a39c",
+            "bytes": 278,
+            "root_tag": "testsuites",
+            "root_tests_attribute": "0",
+            "saved_testcases": 0,
+            "failures": 0,
+            "errors": 0,
+            "skipped": 0
+          },
+          {
+            "path": "/home/eric/wjg/d1max-build-isaac/nav/build/scan_planner/test_results/scan_planner/test_trajectory_collision.gtest.xml",
+            "sha256": "cc81c24d57a759b722ecc74a10b8da6cb47a9dd7b50c729f391fa429f40e6767",
+            "bytes": 5255,
+            "root_tag": "testsuites",
+            "root_tests_attribute": "25",
+            "saved_testcases": 25,
+            "failures": 0,
+            "errors": 0,
+            "skipped": 0
+          },
+          {
+            "path": "/home/eric/wjg/d1max-build-isaac/nav/build/scan_planner/test_results/scan_planner/test_visible_reference_target.gtest.xml",
+            "sha256": "43894630ef002c7978dc84247edc0edf144397a15c8e6c3e431c09a0d90dac25",
+            "bytes": 1741,
+            "root_tag": "testsuites",
+            "root_tests_attribute": "7",
+            "saved_testcases": 7,
+            "failures": 0,
+            "errors": 0,
+            "skipped": 0
+          }
+        ],
+        "saved_xml_testcases": 182,
+        "xml_failures": 0,
+        "xml_errors": 0,
+        "xml_skipped": 0
+      },
+      {
+        "package": "d1max_sdk_bridge",
+        "ctest_groups_passed": 14,
+        "ctest_groups_total": 14,
+        "ctest_log": {
+          "path": "/home/eric/wjg/d1max-build-isaac/v36_sdk_ctest.log",
+          "sha256": "798392943a4fdc09b54add0ab2d628941cd00343fae2ac16ba05be2288cffe51",
+          "bytes": 1803
+        },
+        "xml_files": [],
+        "saved_xml_testcases": 0,
+        "xml_failures": 0,
+        "xml_errors": 0,
+        "xml_skipped": 0
+      }
+    ],
+    "case_count_limits": [
+      "SCAN 18 CTest groups include 5 no-ROS script groups without per-case XML and 2 launch groups with original XML tests=0; saved 182 XML cases cover the compiled gtest subset, not all 18 groups.",
+      "SDK 14 groups are standalone CTest programs with no saved JUnit XML; testcase count is unavailable, not zero tests executed.",
+      "Actor focused 24 cases overlap full plan_env 243 cases and are not added to the aggregate."
+    ],
+    "focused_actor_xml": [
+      {
+        "path": "/home/eric/wjg/d1max-build-isaac/v36_actor_hit_focused.xml",
+        "sha256": "c2c3687e6012e027e58a02084e7c7fef4637f0de89e92a6de178412d33e8755f",
+        "bytes": 5618,
+        "root_tag": "testsuites",
+        "root_tests_attribute": "23",
+        "saved_testcases": 23,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "path": "/home/eric/wjg/d1max-build-isaac/v36_dynamic_actor_focused.xml",
+        "sha256": "5c132c318e31a062e5c2f825f22b6ad2d8c2806e792e8f0239a505a43256ad7c",
+        "bytes": 504,
+        "root_tag": "testsuites",
+        "root_tests_attribute": "1",
+        "saved_testcases": 1,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      }
+    ],
+    "focused_actor_evidence": {
+      "path": "/home/eric/wjg/d1max-system/simulation/isaacsim/verification/20261007/native_actor_hit_provenance_v36_offline.json",
+      "sha256": "12f79943376709585240bdf20e14e9dfc3c703d49db2c128860cdc123ed75748",
+      "bytes": 14763
+    }
+  },
+  "python_tests": {
+    "changed_final": {
+      "passed": 347,
+      "failed": 0,
+      "log": {
+        "path": "/home/eric/wjg/d1max-build-isaac/v36_changed_python_final_pytest.log",
+        "sha256": "01b0a89d3d434c685942971043e93322e08820edcd98ac3137c060f174ff5597",
+        "bytes": 420
+      }
+    },
+    "broad_original": {
+      "passed": 2336,
+      "failed": 17,
+      "skipped": 3,
+      "duration_s": 16.88,
+      "log": {
+        "path": "/home/eric/wjg/d1max-build-isaac/v36_python_full_pytest.log",
+        "sha256": "f7b755791f777aeee4c0ce526df492d7d6195de6a19c5957691bc5fddc7f09f6",
+        "bytes": 68483
+      },
+      "all_failed_sections_first_blocked_by_external_default_map": true,
+      "expected_regex_wrapped_failures": 3,
+      "failed_test_ids": [
+        "d1max_nav_ws/src/d1max_pct_scan/test/test_bt_configuration.py::test_session_seal_includes_exact_xml_and_action_parameters",
+        "d1max_nav_ws/src/d1max_pct_scan/test/test_live_session.py::test_current_map_is_bound_to_original_coordinates",
+        "d1max_nav_ws/src/d1max_pct_scan/test/test_live_session.py::test_extended_perception_budget_propagates_without_relaxing_pose",
+        "d1max_nav_ws/src/d1max_pct_scan/test/test_live_session.py::test_prepare_snapshots_without_any_process_or_connection",
+        "d1max_nav_ws/src/d1max_pct_scan/test/test_live_session.py::test_per_sensor_rays_is_one_explicit_preview_branch",
+        "d1max_nav_ws/src/d1max_pct_scan/test/test_motion_execution.py::test_legacy_motion_preparation_also_refuses_missing_control_contract",
+        "d1max_nav_ws/src/d1max_pct_scan/test/test_motion_execution.py::test_current_per_sensor_profile_remains_preview_only_without_side_effects",
+        "d1max_nav_ws/src/d1max_pct_scan/test/test_navigation_contract.py::test_session_bundle_checks_effective_configs_but_not_camera",
+        "d1max_nav_ws/src/d1max_pct_scan/test/test_navigation_contract.py::test_generated_handoff_cannot_silently_drift[bridge-localization_session_id-previous-session]",
+        "d1max_nav_ws/src/d1max_pct_scan/test/test_navigation_contract.py::test_generated_handoff_cannot_silently_drift[bridge-body_frame-d1max_loc_tracking]",
+        "d1max_nav_ws/src/d1max_pct_scan/test/test_navigation_contract.py::test_generated_handoff_cannot_silently_drift[bridge-body_height-1.1]",
+        "d1max_nav_ws/src/d1max_pct_scan/test/test_navigation_contract.py::test_generated_handoff_cannot_silently_drift[scan-fsm.reference_path_z_offset-1.1]",
+        "d1max_nav_ws/src/d1max_pct_scan/test/test_navigation_contract.py::test_generated_handoff_cannot_silently_drift[scan-grid_map.use_projected_rays-False]",
+        "d1max_nav_ws/src/d1max_pct_scan/test/test_navigation_contract.py::test_generated_handoff_cannot_silently_drift[scan-grid_map.require_localization_context-False]",
+        "d1max_nav_ws/src/d1max_pct_scan/test/test_navigation_contract.py::test_generated_handoff_cannot_silently_drift[scan-grid_map.double_cylinder_radius-0.01]",
+        "d1max_nav_ws/src/d1max_pct_scan/test/test_navigation_contract.py::test_generated_handoff_cannot_silently_drift[global-planning_manifest-/other-map/manifest.json]",
+        "d1max_nav_ws/src/d1max_pct_scan/test/test_official_scan_policy.py::test_official_policy_rejected_before_motion_preparation"
+      ],
+      "read_only_private_audit": {
+        "path": "/home/eric/wjg/d1max-build-isaac/private_v36_broad_pytest_and_pct_height_audit.json",
+        "sha256": "d94e195ab3e9a35e54e4e4a004ecef468e112994e92ca7a5839171938e0bed30",
+        "bytes": 12463
+      },
+      "default_source_git_HEAD": "36dbb98396dd829a79c187f835d4aea211b60e3c",
+      "unchanged_default_source_bytes": [
+        {
+          "path": "/home/eric/wjg/d1max-system/d1max_nav_ws/src/d1max_pct_scan/config/live_visualization.yaml",
+          "worktree_sha256": "e9067613e8fa76d29ad5b14b3dcb3f1be6aa71455465de9efd734a6f734c4690",
+          "git_HEAD_sha256": "e9067613e8fa76d29ad5b14b3dcb3f1be6aa71455465de9efd734a6f734c4690",
+          "equal_to_HEAD": true
+        },
+        {
+          "path": "/home/eric/wjg/d1max-system/d1max_nav_ws/src/d1max_pct_scan/d1max_pct_scan/live_session.py",
+          "worktree_sha256": "2937984864592de8e970630901c816f4ab1692214cc8a56077baad1429417e76",
+          "git_HEAD_sha256": "2937984864592de8e970630901c816f4ab1692214cc8a56077baad1429417e76",
+          "equal_to_HEAD": true
+        },
+        {
+          "path": "/home/eric/wjg/d1max-system/d1max_nav_ws/src/d1max_pct_planner/d1max_pct_planner/paths.py",
+          "worktree_sha256": "1fc5b96b87645c266bbea35417d94d4f55e0c66d4fcfb03238d31077264e07c2",
+          "git_HEAD_sha256": "1fc5b96b87645c266bbea35417d94d4f55e0c66d4fcfb03238d31077264e07c2",
+          "equal_to_HEAD": true
+        }
+      ],
+      "currently_missing_default_map": "/home/eric/智元四足机器人D1 Max二次开发文档资料包v0.1.0/d1max_ros2/map_manager/data/processed/20260923_141005_sc-pgo-0923-crossfloor-structure-v1_2c7218/processed_map.pcd",
+      "environment_limit": "The original broad test run did not save a full environment dump; current absence and unchanged default-source bytes are directly verified. No environment or data paths were changed.",
+      "interpretation": "The 17 named checks did not reach their intended deeper contract assertions; classify as blocked by missing external map fixture, preserve failed result, do not report all tests passed or exclude unknown deeper failures."
+    },
+    "earlier_failures_preserved": [
+      {
+        "log": {
+          "path": "/home/eric/wjg/d1max-build-isaac/v36_python_full_pytest_collection_failed.log",
+          "sha256": "2fd5a7b4578eadcff7b80b64b876b9bd3633b9bc4c0257b53f3051dbab9d287d",
+          "bytes": 2099
+        },
+        "reason": "ModuleNotFoundError tools.pointcloud_preprocessing during collection",
+        "correction": "Repository Python import roots supplied for the later broad run; original collection failure not removed."
+      },
+      {
+        "log": {
+          "path": "/home/eric/wjg/d1max-build-isaac/v36_truth_source_focused_pytest_first_failed.log",
+          "sha256": "240b63b70120073edb2ffc053b64508c925cc1a4119cd525a7140a3c66ab08a1",
+          "bytes": 2948
+        },
+        "reason": "Original full future-shape enclosure assertion failed for actor index 3 at source t=0: actual corner [32.575,8.1,0.0] was below the proposed region min_z=0.4798976864529397 (1 failed, 62 passed). Preserve this geometric failure; do not classify it as an import or external-map failure.",
+        "final_log": {
+          "path": "/home/eric/wjg/d1max-build-isaac/v36_truth_source_focused_pytest.log",
+          "sha256": "6f621a36457cc69a170bd565dc0f461e0f49d58dfa444bc37f666d4d4f4c97a0",
+          "bytes": 180
+        },
+        "final_status": "Later source-truth focused run records 108 passed; the original failed result and later passing run are distinct evidence."
+      }
+    ]
+  },
+  "source_hash_closure": {
+    "scope": "Audited v36 source paths from three existing design artifacts plus current changed source/config/test/build files and SDK acceptance guard; source copies and exported headers are independently byte-hashed. This list is not the entire transitive loader/binary closure.",
+    "files": [
+      {
+        "repo_relative": "d1max_nav_ws/src/d1max_navigation_bt/include/d1max_navigation_bt/execution_owner.hpp",
+        "worktree": {
+          "path": "/home/eric/wjg/d1max-system/d1max_nav_ws/src/d1max_navigation_bt/include/d1max_navigation_bt/execution_owner.hpp",
+          "sha256": "62e876a6520aa699cc48359ae07b7d3acc3fa39b445d9c03fb8ef8752b9810a8",
+          "bytes": 54775
+        },
+        "source_copies": [
+          {
+            "path": "/home/eric/wjg/d1max-build-isaac/nav-source/src/d1max_navigation_bt/include/d1max_navigation_bt/execution_owner.hpp",
+            "sha256": "62e876a6520aa699cc48359ae07b7d3acc3fa39b445d9c03fb8ef8752b9810a8",
+            "bytes": 54775,
+            "equal_to_worktree": true,
+            "candidate_seal_expected_sha256": null,
+            "matches_candidate_seal": null
+          },
+          {
+            "path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v36-campus-crossing/source_snapshot/nav/src/d1max_navigation_bt/include/d1max_navigation_bt/execution_owner.hpp",
+            "sha256": "62e876a6520aa699cc48359ae07b7d3acc3fa39b445d9c03fb8ef8752b9810a8",
+            "bytes": 54775,
+            "equal_to_worktree": true,
+            "candidate_seal_expected_sha256": "62e876a6520aa699cc48359ae07b7d3acc3fa39b445d9c03fb8ef8752b9810a8",
+            "matches_candidate_seal": true
+          }
+        ]
+      },
+      {
+        "repo_relative": "d1max_nav_ws/src/d1max_navigation_bt/src/navigator_node.cpp",
+        "worktree": {
+          "path": "/home/eric/wjg/d1max-system/d1max_nav_ws/src/d1max_navigation_bt/src/navigator_node.cpp",
+          "sha256": "584be77e2a479c31d1ca96b7c02224f8851fa33a6144713290bcdf908a0d671a",
+          "bytes": 76106
+        },
+        "source_copies": [
+          {
+            "path": "/home/eric/wjg/d1max-build-isaac/nav-source/src/d1max_navigation_bt/src/navigator_node.cpp",
+            "sha256": "584be77e2a479c31d1ca96b7c02224f8851fa33a6144713290bcdf908a0d671a",
+            "bytes": 76106,
+            "equal_to_worktree": true,
+            "candidate_seal_expected_sha256": null,
+            "matches_candidate_seal": null
+          },
+          {
+            "path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v36-campus-crossing/source_snapshot/nav/src/d1max_navigation_bt/src/navigator_node.cpp",
+            "sha256": "584be77e2a479c31d1ca96b7c02224f8851fa33a6144713290bcdf908a0d671a",
+            "bytes": 76106,
+            "equal_to_worktree": true,
+            "candidate_seal_expected_sha256": "584be77e2a479c31d1ca96b7c02224f8851fa33a6144713290bcdf908a0d671a",
+            "matches_candidate_seal": true
+          }
+        ]
+      },
+      {
+        "repo_relative": "d1max_nav_ws/src/d1max_pct_scan/d1max_pct_scan/braking_model.py",
+        "worktree": {
+          "path": "/home/eric/wjg/d1max-system/d1max_nav_ws/src/d1max_pct_scan/d1max_pct_scan/braking_model.py",
+          "sha256": "2d25562c3ccdefec917fd604745a87c1096e5b4303e40f041e161c1a8189b753",
+          "bytes": 4704
+        },
+        "source_copies": [
+          {
+            "path": "/home/eric/wjg/d1max-build-isaac/nav-source/src/d1max_pct_scan/d1max_pct_scan/braking_model.py",
+            "sha256": "2d25562c3ccdefec917fd604745a87c1096e5b4303e40f041e161c1a8189b753",
+            "bytes": 4704,
+            "equal_to_worktree": true,
+            "candidate_seal_expected_sha256": null,
+            "matches_candidate_seal": null
+          },
+          {
+            "path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v36-campus-crossing/source_snapshot/nav/src/d1max_pct_scan/d1max_pct_scan/braking_model.py",
+            "sha256": "2d25562c3ccdefec917fd604745a87c1096e5b4303e40f041e161c1a8189b753",
+            "bytes": 4704,
+            "equal_to_worktree": true,
+            "candidate_seal_expected_sha256": "2d25562c3ccdefec917fd604745a87c1096e5b4303e40f041e161c1a8189b753",
+            "matches_candidate_seal": true
+          }
+        ]
+      },
+      {
+        "repo_relative": "d1max_nav_ws/src/d1max_pct_scan/d1max_pct_scan/execution_safety.py",
+        "worktree": {
+          "path": "/home/eric/wjg/d1max-system/d1max_nav_ws/src/d1max_pct_scan/d1max_pct_scan/execution_safety.py",
+          "sha256": "0bc09ad3cede363ecd56df4b17ba1aa44eb3eaa4ca1581665fb112ca25524068",
+          "bytes": 21446
+        },
+        "prior_evidence_sha256": "0bc09ad3cede363ecd56df4b17ba1aa44eb3eaa4ca1581665fb112ca25524068",
+        "source_copies": [
+          {
+            "path": "/home/eric/wjg/d1max-build-isaac/nav-source/src/d1max_pct_scan/d1max_pct_scan/execution_safety.py",
+            "sha256": "0bc09ad3cede363ecd56df4b17ba1aa44eb3eaa4ca1581665fb112ca25524068",
+            "bytes": 21446,
+            "equal_to_worktree": true,
+            "candidate_seal_expected_sha256": null,
+            "matches_candidate_seal": null
+          },
+          {
+            "path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v36-campus-crossing/source_snapshot/nav/src/d1max_pct_scan/d1max_pct_scan/execution_safety.py",
+            "sha256": "0bc09ad3cede363ecd56df4b17ba1aa44eb3eaa4ca1581665fb112ca25524068",
+            "bytes": 21446,
+            "equal_to_worktree": true,
+            "candidate_seal_expected_sha256": "0bc09ad3cede363ecd56df4b17ba1aa44eb3eaa4ca1581665fb112ca25524068",
+            "matches_candidate_seal": true
+          }
+        ],
+        "matches_prior_evidence": true
+      },
+      {
+        "repo_relative": "d1max_nav_ws/src/d1max_pct_scan/d1max_pct_scan/execution_safety_node.py",
+        "worktree": {
+          "path": "/home/eric/wjg/d1max-system/d1max_nav_ws/src/d1max_pct_scan/d1max_pct_scan/execution_safety_node.py",
+          "sha256": "c8d66e021bf04afdf2f0d0fc60a81cb8c007dace4a70a8af95bbd5b7b7498383",
+          "bytes": 6344
+        },
+        "source_copies": [
+          {
+            "path": "/home/eric/wjg/d1max-build-isaac/nav-source/src/d1max_pct_scan/d1max_pct_scan/execution_safety_node.py",
+            "sha256": "c8d66e021bf04afdf2f0d0fc60a81cb8c007dace4a70a8af95bbd5b7b7498383",
+            "bytes": 6344,
+            "equal_to_worktree": true,
+            "candidate_seal_expected_sha256": null,
+            "matches_candidate_seal": null
+          },
+          {
+            "path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v36-campus-crossing/source_snapshot/nav/src/d1max_pct_scan/d1max_pct_scan/execution_safety_node.py",
+            "sha256": "c8d66e021bf04afdf2f0d0fc60a81cb8c007dace4a70a8af95bbd5b7b7498383",
+            "bytes": 6344,
+            "equal_to_worktree": true,
+            "candidate_seal_expected_sha256": "c8d66e021bf04afdf2f0d0fc60a81cb8c007dace4a70a8af95bbd5b7b7498383",
+            "matches_candidate_seal": true
+          }
+        ]
+      },
+      {
+        "repo_relative": "d1max_nav_ws/src/d1max_pct_scan/d1max_pct_scan/perception_ray_projector.py",
+        "worktree": {
+          "path": "/home/eric/wjg/d1max-system/d1max_nav_ws/src/d1max_pct_scan/d1max_pct_scan/perception_ray_projector.py",
+          "sha256": "5778c27b0533d638a6bca5dee3accc2df651971f6e1a75401915138b05857fbb",
+          "bytes": 33353
+        },
+        "source_copies": [
+          {
+            "path": "/home/eric/wjg/d1max-build-isaac/nav-source/src/d1max_pct_scan/d1max_pct_scan/perception_ray_projector.py",
+            "sha256": "5778c27b0533d638a6bca5dee3accc2df651971f6e1a75401915138b05857fbb",
+            "bytes": 33353,
+            "equal_to_worktree": true,
+            "candidate_seal_expected_sha256": null,
+            "matches_candidate_seal": null
+          },
+          {
+            "path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v36-campus-crossing/source_snapshot/nav/src/d1max_pct_scan/d1max_pct_scan/perception_ray_projector.py",
+            "sha256": "5778c27b0533d638a6bca5dee3accc2df651971f6e1a75401915138b05857fbb",
+            "bytes": 33353,
+            "equal_to_worktree": true,
+            "candidate_seal_expected_sha256": "5778c27b0533d638a6bca5dee3accc2df651971f6e1a75401915138b05857fbb",
+            "matches_candidate_seal": true
+          }
+        ]
+      },
+      {
+        "repo_relative": "d1max_nav_ws/src/d1max_pct_scan/d1max_pct_scan/ray_projection.py",
+        "worktree": {
+          "path": "/home/eric/wjg/d1max-system/d1max_nav_ws/src/d1max_pct_scan/d1max_pct_scan/ray_projection.py",
+          "sha256": "6df8eabb07d9059bfc660248ac7be5830aec1c8c9c67b3ff7e2ae70c5c3577d4",
+          "bytes": 32467
+        },
+        "prior_evidence_sha256": "6df8eabb07d9059bfc660248ac7be5830aec1c8c9c67b3ff7e2ae70c5c3577d4",
+        "source_copies": [
+          {
+            "path": "/home/eric/wjg/d1max-build-isaac/nav-source/src/d1max_pct_scan/d1max_pct_scan/ray_projection.py",
+            "sha256": "6df8eabb07d9059bfc660248ac7be5830aec1c8c9c67b3ff7e2ae70c5c3577d4",
+            "bytes": 32467,
+            "equal_to_worktree": true,
+            "candidate_seal_expected_sha256": null,
+            "matches_candidate_seal": null
+          },
+          {
+            "path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v36-campus-crossing/source_snapshot/nav/src/d1max_pct_scan/d1max_pct_scan/ray_projection.py",
+            "sha256": "6df8eabb07d9059bfc660248ac7be5830aec1c8c9c67b3ff7e2ae70c5c3577d4",
+            "bytes": 32467,
+            "equal_to_worktree": true,
+            "candidate_seal_expected_sha256": "6df8eabb07d9059bfc660248ac7be5830aec1c8c9c67b3ff7e2ae70c5c3577d4",
+            "matches_candidate_seal": true
+          }
+        ],
+        "matches_prior_evidence": true
+      },
+      {
+        "repo_relative": "d1max_nav_ws/src/d1max_pct_scan/test/test_braking_model.py",
+        "worktree": {
+          "path": "/home/eric/wjg/d1max-system/d1max_nav_ws/src/d1max_pct_scan/test/test_braking_model.py",
+          "sha256": "e12c57349685ef159bb81b2ae7b51896293dd678912d28c729d63a4dcf80840a",
+          "bytes": 7201
+        },
+        "source_copies": [
+          {
+            "path": "/home/eric/wjg/d1max-build-isaac/nav-source/src/d1max_pct_scan/test/test_braking_model.py",
+            "sha256": "e12c57349685ef159bb81b2ae7b51896293dd678912d28c729d63a4dcf80840a",
+            "bytes": 7201,
+            "equal_to_worktree": true,
+            "candidate_seal_expected_sha256": null,
+            "matches_candidate_seal": null
+          },
+          {
+            "path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v36-campus-crossing/source_snapshot/nav/src/d1max_pct_scan/test/test_braking_model.py",
+            "sha256": "e12c57349685ef159bb81b2ae7b51896293dd678912d28c729d63a4dcf80840a",
+            "bytes": 7201,
+            "equal_to_worktree": true,
+            "candidate_seal_expected_sha256": "e12c57349685ef159bb81b2ae7b51896293dd678912d28c729d63a4dcf80840a",
+            "matches_candidate_seal": true
+          }
+        ]
+      },
+      {
+        "repo_relative": "d1max_nav_ws/src/d1max_pct_scan/test/test_execution_safety.py",
+        "worktree": {
+          "path": "/home/eric/wjg/d1max-system/d1max_nav_ws/src/d1max_pct_scan/test/test_execution_safety.py",
+          "sha256": "23707b31831051db0adf0c842e3754eaf79668195781f8581cc70001577af54e",
+          "bytes": 12764
+        },
+        "source_copies": [
+          {
+            "path": "/home/eric/wjg/d1max-build-isaac/nav-source/src/d1max_pct_scan/test/test_execution_safety.py",
+            "sha256": "23707b31831051db0adf0c842e3754eaf79668195781f8581cc70001577af54e",
+            "bytes": 12764,
+            "equal_to_worktree": true,
+            "candidate_seal_expected_sha256": null,
+            "matches_candidate_seal": null
+          },
+          {
+            "path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v36-campus-crossing/source_snapshot/nav/src/d1max_pct_scan/test/test_execution_safety.py",
+            "sha256": "23707b31831051db0adf0c842e3754eaf79668195781f8581cc70001577af54e",
+            "bytes": 12764,
+            "equal_to_worktree": true,
+            "candidate_seal_expected_sha256": "23707b31831051db0adf0c842e3754eaf79668195781f8581cc70001577af54e",
+            "matches_candidate_seal": true
+          }
+        ]
+      },
+      {
+        "repo_relative": "d1max_nav_ws/src/d1max_planning_interfaces/CMakeLists.txt",
+        "worktree": {
+          "path": "/home/eric/wjg/d1max-system/d1max_nav_ws/src/d1max_planning_interfaces/CMakeLists.txt",
+          "sha256": "f1c8ded879e197bfbb7844e8214f9b3db799f455e602556d2d8cdedf5825190b",
+          "bytes": 1883
+        },
+        "prior_evidence_sha256": "f1c8ded879e197bfbb7844e8214f9b3db799f455e602556d2d8cdedf5825190b",
+        "source_copies": [
+          {
+            "path": "/home/eric/wjg/d1max-build-isaac/nav-source/src/d1max_planning_interfaces/CMakeLists.txt",
+            "sha256": "f1c8ded879e197bfbb7844e8214f9b3db799f455e602556d2d8cdedf5825190b",
+            "bytes": 1883,
+            "equal_to_worktree": true,
+            "candidate_seal_expected_sha256": null,
+            "matches_candidate_seal": null
+          },
+          {
+            "path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v36-campus-crossing/source_snapshot/nav/src/d1max_planning_interfaces/CMakeLists.txt",
+            "sha256": "f1c8ded879e197bfbb7844e8214f9b3db799f455e602556d2d8cdedf5825190b",
+            "bytes": 1883,
+            "equal_to_worktree": true,
+            "candidate_seal_expected_sha256": "f1c8ded879e197bfbb7844e8214f9b3db799f455e602556d2d8cdedf5825190b",
+            "matches_candidate_seal": true
+          }
+        ],
+        "matches_prior_evidence": true
+      },
+      {
+        "repo_relative": "d1max_nav_ws/src/d1max_planning_interfaces/include/d1max_planning_interfaces/isolated_reference_model.hpp",
+        "worktree": {
+          "path": "/home/eric/wjg/d1max-system/d1max_nav_ws/src/d1max_planning_interfaces/include/d1max_planning_interfaces/isolated_reference_model.hpp",
+          "sha256": "07d910e48eff4b8fd493377b6d77aeb59ec5abd380f55d6f18f6e7d0af7bef60",
+          "bytes": 5516
+        },
+        "prior_evidence_sha256": "07d910e48eff4b8fd493377b6d77aeb59ec5abd380f55d6f18f6e7d0af7bef60",
+        "source_copies": [
+          {
+            "path": "/home/eric/wjg/d1max-build-isaac/nav-source/src/d1max_planning_interfaces/include/d1max_planning_interfaces/isolated_reference_model.hpp",
+            "sha256": "07d910e48eff4b8fd493377b6d77aeb59ec5abd380f55d6f18f6e7d0af7bef60",
+            "bytes": 5516,
+            "equal_to_worktree": true,
+            "candidate_seal_expected_sha256": null,
+            "matches_candidate_seal": null
+          },
+          {
+            "path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v36-campus-crossing/source_snapshot/nav/src/d1max_planning_interfaces/include/d1max_planning_interfaces/isolated_reference_model.hpp",
+            "sha256": "07d910e48eff4b8fd493377b6d77aeb59ec5abd380f55d6f18f6e7d0af7bef60",
+            "bytes": 5516,
+            "equal_to_worktree": true,
+            "candidate_seal_expected_sha256": "07d910e48eff4b8fd493377b6d77aeb59ec5abd380f55d6f18f6e7d0af7bef60",
+            "matches_candidate_seal": true
+          }
+        ],
+        "matches_prior_evidence": true
+      },
+      {
+        "repo_relative": "d1max_nav_ws/src/d1max_planning_interfaces/package.xml",
+        "worktree": {
+          "path": "/home/eric/wjg/d1max-system/d1max_nav_ws/src/d1max_planning_interfaces/package.xml",
+          "sha256": "cfdc8755afb820b22b8ded74aa297b09c16ffd1d39501931e06d7669b6c621f4",
+          "bytes": 892
+        },
+        "prior_evidence_sha256": "cfdc8755afb820b22b8ded74aa297b09c16ffd1d39501931e06d7669b6c621f4",
+        "source_copies": [
+          {
+            "path": "/home/eric/wjg/d1max-build-isaac/nav-source/src/d1max_planning_interfaces/package.xml",
+            "sha256": "cfdc8755afb820b22b8ded74aa297b09c16ffd1d39501931e06d7669b6c621f4",
+            "bytes": 892,
+            "equal_to_worktree": true,
+            "candidate_seal_expected_sha256": null,
+            "matches_candidate_seal": null
+          },
+          {
+            "path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v36-campus-crossing/source_snapshot/nav/src/d1max_planning_interfaces/package.xml",
+            "sha256": "cfdc8755afb820b22b8ded74aa297b09c16ffd1d39501931e06d7669b6c621f4",
+            "bytes": 892,
+            "equal_to_worktree": true,
+            "candidate_seal_expected_sha256": "cfdc8755afb820b22b8ded74aa297b09c16ffd1d39501931e06d7669b6c621f4",
+            "matches_candidate_seal": true
+          }
+        ],
+        "matches_prior_evidence": true
+      },
+      {
+        "repo_relative": "d1max_nav_ws/src/d1max_planning_interfaces/test/test_isolated_reference_model.cpp",
+        "worktree": {
+          "path": "/home/eric/wjg/d1max-system/d1max_nav_ws/src/d1max_planning_interfaces/test/test_isolated_reference_model.cpp",
+          "sha256": "6f9c042f53abe4ca3be1bd45a031d6fbf4428dc258875f5c36f5de56d3c21d23",
+          "bytes": 5324
+        },
+        "prior_evidence_sha256": "6f9c042f53abe4ca3be1bd45a031d6fbf4428dc258875f5c36f5de56d3c21d23",
+        "source_copies": [
+          {
+            "path": "/home/eric/wjg/d1max-build-isaac/nav-source/src/d1max_planning_interfaces/test/test_isolated_reference_model.cpp",
+            "sha256": "6f9c042f53abe4ca3be1bd45a031d6fbf4428dc258875f5c36f5de56d3c21d23",
+            "bytes": 5324,
+            "equal_to_worktree": true,
+            "candidate_seal_expected_sha256": null,
+            "matches_candidate_seal": null
+          },
+          {
+            "path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v36-campus-crossing/source_snapshot/nav/src/d1max_planning_interfaces/test/test_isolated_reference_model.cpp",
+            "sha256": "6f9c042f53abe4ca3be1bd45a031d6fbf4428dc258875f5c36f5de56d3c21d23",
+            "bytes": 5324,
+            "equal_to_worktree": true,
+            "candidate_seal_expected_sha256": "6f9c042f53abe4ca3be1bd45a031d6fbf4428dc258875f5c36f5de56d3c21d23",
+            "matches_candidate_seal": true
+          }
+        ],
+        "matches_prior_evidence": true
+      },
+      {
+        "repo_relative": "d1max_nav_ws/src/d1max_trajectory_tracker/CMakeLists.txt",
+        "worktree": {
+          "path": "/home/eric/wjg/d1max-system/d1max_nav_ws/src/d1max_trajectory_tracker/CMakeLists.txt",
+          "sha256": "90ddab3d20572b355f80a3415535255af25484ffc8e5b6691b480ea2f9c18038",
+          "bytes": 2594
+        },
+        "prior_evidence_sha256": "90ddab3d20572b355f80a3415535255af25484ffc8e5b6691b480ea2f9c18038",
+        "source_copies": [
+          {
+            "path": "/home/eric/wjg/d1max-build-isaac/nav-source/src/d1max_trajectory_tracker/CMakeLists.txt",
+            "sha256": "90ddab3d20572b355f80a3415535255af25484ffc8e5b6691b480ea2f9c18038",
+            "bytes": 2594,
+            "equal_to_worktree": true,
+            "candidate_seal_expected_sha256": null,
+            "matches_candidate_seal": null
+          },
+          {
+            "path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v36-campus-crossing/source_snapshot/nav/src/d1max_trajectory_tracker/CMakeLists.txt",
+            "sha256": "90ddab3d20572b355f80a3415535255af25484ffc8e5b6691b480ea2f9c18038",
+            "bytes": 2594,
+            "equal_to_worktree": true,
+            "candidate_seal_expected_sha256": "90ddab3d20572b355f80a3415535255af25484ffc8e5b6691b480ea2f9c18038",
+            "matches_candidate_seal": true
+          }
+        ],
+        "matches_prior_evidence": true
+      },
+      {
+        "repo_relative": "d1max_nav_ws/src/d1max_trajectory_tracker/include/d1max_trajectory_tracker/execution_contract.hpp",
+        "worktree": {
+          "path": "/home/eric/wjg/d1max-system/d1max_nav_ws/src/d1max_trajectory_tracker/include/d1max_trajectory_tracker/execution_contract.hpp",
+          "sha256": "3fe794963cd33fdc611ab03cb1ba68729513a8055ccd342c234828c1ae5b2247",
+          "bytes": 65589
+        },
+        "prior_evidence_sha256": "3fe794963cd33fdc611ab03cb1ba68729513a8055ccd342c234828c1ae5b2247",
+        "source_copies": [
+          {
+            "path": "/home/eric/wjg/d1max-build-isaac/nav-source/src/d1max_trajectory_tracker/include/d1max_trajectory_tracker/execution_contract.hpp",
+            "sha256": "3fe794963cd33fdc611ab03cb1ba68729513a8055ccd342c234828c1ae5b2247",
+            "bytes": 65589,
+            "equal_to_worktree": true,
+            "candidate_seal_expected_sha256": null,
+            "matches_candidate_seal": null
+          },
+          {
+            "path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v36-campus-crossing/source_snapshot/nav/src/d1max_trajectory_tracker/include/d1max_trajectory_tracker/execution_contract.hpp",
+            "sha256": "3fe794963cd33fdc611ab03cb1ba68729513a8055ccd342c234828c1ae5b2247",
+            "bytes": 65589,
+            "equal_to_worktree": true,
+            "candidate_seal_expected_sha256": "3fe794963cd33fdc611ab03cb1ba68729513a8055ccd342c234828c1ae5b2247",
+            "matches_candidate_seal": true
+          }
+        ],
+        "matches_prior_evidence": true
+      },
+      {
+        "repo_relative": "d1max_nav_ws/src/d1max_trajectory_tracker/include/d1max_trajectory_tracker/tracker_core.hpp",
+        "worktree": {
+          "path": "/home/eric/wjg/d1max-system/d1max_nav_ws/src/d1max_trajectory_tracker/include/d1max_trajectory_tracker/tracker_core.hpp",
+          "sha256": "7eed42768212f24a400082f36f52b1d6779760d24b84edc0a1b27d9fc8398a18",
+          "bytes": 98402
+        },
+        "prior_evidence_sha256": "7eed42768212f24a400082f36f52b1d6779760d24b84edc0a1b27d9fc8398a18",
+        "source_copies": [
+          {
+            "path": "/home/eric/wjg/d1max-build-isaac/nav-source/src/d1max_trajectory_tracker/include/d1max_trajectory_tracker/tracker_core.hpp",
+            "sha256": "7eed42768212f24a400082f36f52b1d6779760d24b84edc0a1b27d9fc8398a18",
+            "bytes": 98402,
+            "equal_to_worktree": true,
+            "candidate_seal_expected_sha256": null,
+            "matches_candidate_seal": null
+          },
+          {
+            "path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v36-campus-crossing/source_snapshot/nav/src/d1max_trajectory_tracker/include/d1max_trajectory_tracker/tracker_core.hpp",
+            "sha256": "7eed42768212f24a400082f36f52b1d6779760d24b84edc0a1b27d9fc8398a18",
+            "bytes": 98402,
+            "equal_to_worktree": true,
+            "candidate_seal_expected_sha256": "7eed42768212f24a400082f36f52b1d6779760d24b84edc0a1b27d9fc8398a18",
+            "matches_candidate_seal": true
+          }
+        ],
+        "matches_prior_evidence": true
+      },
+      {
+        "repo_relative": "d1max_nav_ws/src/d1max_trajectory_tracker/package.xml",
+        "worktree": {
+          "path": "/home/eric/wjg/d1max-system/d1max_nav_ws/src/d1max_trajectory_tracker/package.xml",
+          "sha256": "94e31c1d01dde941ccaeee704901290dd49b20794a306c53cae232b2608820fc",
+          "bytes": 788
+        },
+        "prior_evidence_sha256": "94e31c1d01dde941ccaeee704901290dd49b20794a306c53cae232b2608820fc",
+        "source_copies": [
+          {
+            "path": "/home/eric/wjg/d1max-build-isaac/nav-source/src/d1max_trajectory_tracker/package.xml",
+            "sha256": "94e31c1d01dde941ccaeee704901290dd49b20794a306c53cae232b2608820fc",
+            "bytes": 788,
+            "equal_to_worktree": true,
+            "candidate_seal_expected_sha256": null,
+            "matches_candidate_seal": null
+          },
+          {
+            "path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v36-campus-crossing/source_snapshot/nav/src/d1max_trajectory_tracker/package.xml",
+            "sha256": "94e31c1d01dde941ccaeee704901290dd49b20794a306c53cae232b2608820fc",
+            "bytes": 788,
+            "equal_to_worktree": true,
+            "candidate_seal_expected_sha256": "94e31c1d01dde941ccaeee704901290dd49b20794a306c53cae232b2608820fc",
+            "matches_candidate_seal": true
+          }
+        ],
+        "matches_prior_evidence": true
+      },
+      {
+        "repo_relative": "d1max_nav_ws/src/d1max_trajectory_tracker/src/trajectory_tracker.cpp",
+        "worktree": {
+          "path": "/home/eric/wjg/d1max-system/d1max_nav_ws/src/d1max_trajectory_tracker/src/trajectory_tracker.cpp",
+          "sha256": "154dc29520b05f38c4d4742e736f61377c9c068606a993e453d5295fc2a1941e",
+          "bytes": 27252
+        },
+        "prior_evidence_sha256": "154dc29520b05f38c4d4742e736f61377c9c068606a993e453d5295fc2a1941e",
+        "source_copies": [
+          {
+            "path": "/home/eric/wjg/d1max-build-isaac/nav-source/src/d1max_trajectory_tracker/src/trajectory_tracker.cpp",
+            "sha256": "154dc29520b05f38c4d4742e736f61377c9c068606a993e453d5295fc2a1941e",
+            "bytes": 27252,
+            "equal_to_worktree": true,
+            "candidate_seal_expected_sha256": null,
+            "matches_candidate_seal": null
+          },
+          {
+            "path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v36-campus-crossing/source_snapshot/nav/src/d1max_trajectory_tracker/src/trajectory_tracker.cpp",
+            "sha256": "154dc29520b05f38c4d4742e736f61377c9c068606a993e453d5295fc2a1941e",
+            "bytes": 27252,
+            "equal_to_worktree": true,
+            "candidate_seal_expected_sha256": "154dc29520b05f38c4d4742e736f61377c9c068606a993e453d5295fc2a1941e",
+            "matches_candidate_seal": true
+          }
+        ],
+        "matches_prior_evidence": true
+      },
+      {
+        "repo_relative": "d1max_nav_ws/src/d1max_trajectory_tracker/test/test_tracker_core.cpp",
+        "worktree": {
+          "path": "/home/eric/wjg/d1max-system/d1max_nav_ws/src/d1max_trajectory_tracker/test/test_tracker_core.cpp",
+          "sha256": "81fcabbf2049a706053b3530e8508bc19aca9be090d40521f48433f9af7f2a59",
+          "bytes": 50952
+        },
+        "source_copies": [
+          {
+            "path": "/home/eric/wjg/d1max-build-isaac/nav-source/src/d1max_trajectory_tracker/test/test_tracker_core.cpp",
+            "sha256": "81fcabbf2049a706053b3530e8508bc19aca9be090d40521f48433f9af7f2a59",
+            "bytes": 50952,
+            "equal_to_worktree": true,
+            "candidate_seal_expected_sha256": null,
+            "matches_candidate_seal": null
+          },
+          {
+            "path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v36-campus-crossing/source_snapshot/nav/src/d1max_trajectory_tracker/test/test_tracker_core.cpp",
+            "sha256": "81fcabbf2049a706053b3530e8508bc19aca9be090d40521f48433f9af7f2a59",
+            "bytes": 50952,
+            "equal_to_worktree": true,
+            "candidate_seal_expected_sha256": "81fcabbf2049a706053b3530e8508bc19aca9be090d40521f48433f9af7f2a59",
+            "matches_candidate_seal": true
+          }
+        ]
+      },
+      {
+        "repo_relative": "d1max_nav_ws/src/d1max_trajectory_tracker/test/test_tracker_v2.cpp",
+        "worktree": {
+          "path": "/home/eric/wjg/d1max-system/d1max_nav_ws/src/d1max_trajectory_tracker/test/test_tracker_v2.cpp",
+          "sha256": "c8d2c3b06ff46552cb65f80cc2a3f668b8c13129d0a8fd46327212d21e1ed4c7",
+          "bytes": 144448
+        },
+        "prior_evidence_sha256": "c8d2c3b06ff46552cb65f80cc2a3f668b8c13129d0a8fd46327212d21e1ed4c7",
+        "source_copies": [
+          {
+            "path": "/home/eric/wjg/d1max-build-isaac/nav-source/src/d1max_trajectory_tracker/test/test_tracker_v2.cpp",
+            "sha256": "c8d2c3b06ff46552cb65f80cc2a3f668b8c13129d0a8fd46327212d21e1ed4c7",
+            "bytes": 144448,
+            "equal_to_worktree": true,
+            "candidate_seal_expected_sha256": null,
+            "matches_candidate_seal": null
+          },
+          {
+            "path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v36-campus-crossing/source_snapshot/nav/src/d1max_trajectory_tracker/test/test_tracker_v2.cpp",
+            "sha256": "c8d2c3b06ff46552cb65f80cc2a3f668b8c13129d0a8fd46327212d21e1ed4c7",
+            "bytes": 144448,
+            "equal_to_worktree": true,
+            "candidate_seal_expected_sha256": "c8d2c3b06ff46552cb65f80cc2a3f668b8c13129d0a8fd46327212d21e1ed4c7",
+            "matches_candidate_seal": true
+          }
+        ],
+        "matches_prior_evidence": true
+      },
+      {
+        "repo_relative": "d1max_nav_ws/src/scan_planner_vendor/bspline_opt/include/bspline_opt/bspline_optimizer.h",
+        "worktree": {
+          "path": "/home/eric/wjg/d1max-system/d1max_nav_ws/src/scan_planner_vendor/bspline_opt/include/bspline_opt/bspline_optimizer.h",
+          "sha256": "8371d43f4246669a3926864ba78581ce723f5ef674a71de6a1694b0d1e36ea83",
+          "bytes": 8025
+        },
+        "prior_evidence_sha256": "8371d43f4246669a3926864ba78581ce723f5ef674a71de6a1694b0d1e36ea83",
+        "source_copies": [
+          {
+            "path": "/home/eric/wjg/d1max-build-isaac/nav-source/src/scan_planner_vendor/bspline_opt/include/bspline_opt/bspline_optimizer.h",
+            "sha256": "8371d43f4246669a3926864ba78581ce723f5ef674a71de6a1694b0d1e36ea83",
+            "bytes": 8025,
+            "equal_to_worktree": true,
+            "candidate_seal_expected_sha256": null,
+            "matches_candidate_seal": null
+          },
+          {
+            "path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v36-campus-crossing/source_snapshot/nav/src/scan_planner_vendor/bspline_opt/include/bspline_opt/bspline_optimizer.h",
+            "sha256": "8371d43f4246669a3926864ba78581ce723f5ef674a71de6a1694b0d1e36ea83",
+            "bytes": 8025,
+            "equal_to_worktree": true,
+            "candidate_seal_expected_sha256": "8371d43f4246669a3926864ba78581ce723f5ef674a71de6a1694b0d1e36ea83",
+            "matches_candidate_seal": true
+          }
+        ],
+        "matches_prior_evidence": true
+      },
+      {
+        "repo_relative": "d1max_nav_ws/src/scan_planner_vendor/bspline_opt/src/bspline_optimizer.cpp",
+        "worktree": {
+          "path": "/home/eric/wjg/d1max-system/d1max_nav_ws/src/scan_planner_vendor/bspline_opt/src/bspline_optimizer.cpp",
+          "sha256": "6e004377ae9cd97f12e8fc26e2930c15e88fc7af1fcbb3130843bbe6ccf899e9",
+          "bytes": 47121
+        },
+        "prior_evidence_sha256": "6e004377ae9cd97f12e8fc26e2930c15e88fc7af1fcbb3130843bbe6ccf899e9",
+        "source_copies": [
+          {
+            "path": "/home/eric/wjg/d1max-build-isaac/nav-source/src/scan_planner_vendor/bspline_opt/src/bspline_optimizer.cpp",
+            "sha256": "6e004377ae9cd97f12e8fc26e2930c15e88fc7af1fcbb3130843bbe6ccf899e9",
+            "bytes": 47121,
+            "equal_to_worktree": true,
+            "candidate_seal_expected_sha256": null,
+            "matches_candidate_seal": null
+          },
+          {
+            "path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v36-campus-crossing/source_snapshot/nav/src/scan_planner_vendor/bspline_opt/src/bspline_optimizer.cpp",
+            "sha256": "6e004377ae9cd97f12e8fc26e2930c15e88fc7af1fcbb3130843bbe6ccf899e9",
+            "bytes": 47121,
+            "equal_to_worktree": true,
+            "candidate_seal_expected_sha256": "6e004377ae9cd97f12e8fc26e2930c15e88fc7af1fcbb3130843bbe6ccf899e9",
+            "matches_candidate_seal": true
+          }
+        ],
+        "matches_prior_evidence": true
+      },
+      {
+        "repo_relative": "d1max_nav_ws/src/scan_planner_vendor/bspline_opt/test/test_uniform_bspline.cpp",
+        "worktree": {
+          "path": "/home/eric/wjg/d1max-system/d1max_nav_ws/src/scan_planner_vendor/bspline_opt/test/test_uniform_bspline.cpp",
+          "sha256": "d20b96b3f74d8366f2464ea1b34f863efa3e4d3255e81b3cd45f9469d0e59ea3",
+          "bytes": 12747
+        },
+        "prior_evidence_sha256": "d20b96b3f74d8366f2464ea1b34f863efa3e4d3255e81b3cd45f9469d0e59ea3",
+        "source_copies": [
+          {
+            "path": "/home/eric/wjg/d1max-build-isaac/nav-source/src/scan_planner_vendor/bspline_opt/test/test_uniform_bspline.cpp",
+            "sha256": "d20b96b3f74d8366f2464ea1b34f863efa3e4d3255e81b3cd45f9469d0e59ea3",
+            "bytes": 12747,
+            "equal_to_worktree": true,
+            "candidate_seal_expected_sha256": null,
+            "matches_candidate_seal": null
+          },
+          {
+            "path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v36-campus-crossing/source_snapshot/nav/src/scan_planner_vendor/bspline_opt/test/test_uniform_bspline.cpp",
+            "sha256": "d20b96b3f74d8366f2464ea1b34f863efa3e4d3255e81b3cd45f9469d0e59ea3",
+            "bytes": 12747,
+            "equal_to_worktree": true,
+            "candidate_seal_expected_sha256": "d20b96b3f74d8366f2464ea1b34f863efa3e4d3255e81b3cd45f9469d0e59ea3",
+            "matches_candidate_seal": true
+          }
+        ],
+        "matches_prior_evidence": true
+      },
+      {
+        "repo_relative": "d1max_nav_ws/src/scan_planner_vendor/plan_env/include/plan_env/dynamic_occupancy_oracle.hpp",
+        "worktree": {
+          "path": "/home/eric/wjg/d1max-system/d1max_nav_ws/src/scan_planner_vendor/plan_env/include/plan_env/dynamic_occupancy_oracle.hpp",
+          "sha256": "9e43c30836bd8cea4a7d60accf7ebfc35427aa745d46b83747a3dddf4d3c4f8c",
+          "bytes": 12783
+        },
+        "prior_evidence_sha256": "9e43c30836bd8cea4a7d60accf7ebfc35427aa745d46b83747a3dddf4d3c4f8c",
+        "source_copies": [
+          {
+            "path": "/home/eric/wjg/d1max-build-isaac/nav-source/src/scan_planner_vendor/plan_env/include/plan_env/dynamic_occupancy_oracle.hpp",
+            "sha256": "9e43c30836bd8cea4a7d60accf7ebfc35427aa745d46b83747a3dddf4d3c4f8c",
+            "bytes": 12783,
+            "equal_to_worktree": true,
+            "candidate_seal_expected_sha256": null,
+            "matches_candidate_seal": null
+          },
+          {
+            "path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v36-campus-crossing/source_snapshot/nav/src/scan_planner_vendor/plan_env/include/plan_env/dynamic_occupancy_oracle.hpp",
+            "sha256": "9e43c30836bd8cea4a7d60accf7ebfc35427aa745d46b83747a3dddf4d3c4f8c",
+            "bytes": 12783,
+            "equal_to_worktree": true,
+            "candidate_seal_expected_sha256": "9e43c30836bd8cea4a7d60accf7ebfc35427aa745d46b83747a3dddf4d3c4f8c",
+            "matches_candidate_seal": true
+          }
+        ],
+        "matches_prior_evidence": true
+      },
+      {
+        "repo_relative": "d1max_nav_ws/src/scan_planner_vendor/plan_env/include/plan_env/grid_map.h",
+        "worktree": {
+          "path": "/home/eric/wjg/d1max-system/d1max_nav_ws/src/scan_planner_vendor/plan_env/include/plan_env/grid_map.h",
+          "sha256": "88718a0174db3530c66c989e4de0b852a23258418d309725a769fe394761ac6f",
+          "bytes": 35594
+        },
+        "prior_evidence_sha256": "88718a0174db3530c66c989e4de0b852a23258418d309725a769fe394761ac6f",
+        "source_copies": [
+          {
+            "path": "/home/eric/wjg/d1max-build-isaac/nav-source/src/scan_planner_vendor/plan_env/include/plan_env/grid_map.h",
+            "sha256": "88718a0174db3530c66c989e4de0b852a23258418d309725a769fe394761ac6f",
+            "bytes": 35594,
+            "equal_to_worktree": true,
+            "candidate_seal_expected_sha256": null,
+            "matches_candidate_seal": null
+          },
+          {
+            "path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v36-campus-crossing/source_snapshot/nav/src/scan_planner_vendor/plan_env/include/plan_env/grid_map.h",
+            "sha256": "88718a0174db3530c66c989e4de0b852a23258418d309725a769fe394761ac6f",
+            "bytes": 35594,
+            "equal_to_worktree": true,
+            "candidate_seal_expected_sha256": "88718a0174db3530c66c989e4de0b852a23258418d309725a769fe394761ac6f",
+            "matches_candidate_seal": true
+          }
+        ],
+        "matches_prior_evidence": true
+      },
+      {
+        "repo_relative": "d1max_nav_ws/src/scan_planner_vendor/plan_env/include/plan_env/projected_rays.hpp",
+        "worktree": {
+          "path": "/home/eric/wjg/d1max-system/d1max_nav_ws/src/scan_planner_vendor/plan_env/include/plan_env/projected_rays.hpp",
+          "sha256": "d7c1f278ea5d409f50974bab879ad5bdabff9e8c1a0875aa80390455d733c8d3",
+          "bytes": 8308
+        },
+        "prior_evidence_sha256": "d7c1f278ea5d409f50974bab879ad5bdabff9e8c1a0875aa80390455d733c8d3",
+        "source_copies": [
+          {
+            "path": "/home/eric/wjg/d1max-build-isaac/nav-source/src/scan_planner_vendor/plan_env/include/plan_env/projected_rays.hpp",
+            "sha256": "d7c1f278ea5d409f50974bab879ad5bdabff9e8c1a0875aa80390455d733c8d3",
+            "bytes": 8308,
+            "equal_to_worktree": true,
+            "candidate_seal_expected_sha256": null,
+            "matches_candidate_seal": null
+          },
+          {
+            "path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v36-campus-crossing/source_snapshot/nav/src/scan_planner_vendor/plan_env/include/plan_env/projected_rays.hpp",
+            "sha256": "d7c1f278ea5d409f50974bab879ad5bdabff9e8c1a0875aa80390455d733c8d3",
+            "bytes": 8308,
+            "equal_to_worktree": true,
+            "candidate_seal_expected_sha256": "d7c1f278ea5d409f50974bab879ad5bdabff9e8c1a0875aa80390455d733c8d3",
+            "matches_candidate_seal": true
+          }
+        ],
+        "matches_prior_evidence": true
+      },
+      {
+        "repo_relative": "d1max_nav_ws/src/scan_planner_vendor/plan_env/src/grid_map.cpp",
+        "worktree": {
+          "path": "/home/eric/wjg/d1max-system/d1max_nav_ws/src/scan_planner_vendor/plan_env/src/grid_map.cpp",
+          "sha256": "9fe93e37287fbe467387e2797a9d2ea388ed8af95756b0d5008d9f8d37114bee",
+          "bytes": 137485
+        },
+        "prior_evidence_sha256": "9fe93e37287fbe467387e2797a9d2ea388ed8af95756b0d5008d9f8d37114bee",
+        "source_copies": [
+          {
+            "path": "/home/eric/wjg/d1max-build-isaac/nav-source/src/scan_planner_vendor/plan_env/src/grid_map.cpp",
+            "sha256": "9fe93e37287fbe467387e2797a9d2ea388ed8af95756b0d5008d9f8d37114bee",
+            "bytes": 137485,
+            "equal_to_worktree": true,
+            "candidate_seal_expected_sha256": null,
+            "matches_candidate_seal": null
+          },
+          {
+            "path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v36-campus-crossing/source_snapshot/nav/src/scan_planner_vendor/plan_env/src/grid_map.cpp",
+            "sha256": "9fe93e37287fbe467387e2797a9d2ea388ed8af95756b0d5008d9f8d37114bee",
+            "bytes": 137485,
+            "equal_to_worktree": true,
+            "candidate_seal_expected_sha256": "9fe93e37287fbe467387e2797a9d2ea388ed8af95756b0d5008d9f8d37114bee",
+            "matches_candidate_seal": true
+          }
+        ],
+        "matches_prior_evidence": true
+      },
+      {
+        "repo_relative": "d1max_nav_ws/src/scan_planner_vendor/plan_env/test/test_dynamic_occupancy_oracle.cpp",
+        "worktree": {
+          "path": "/home/eric/wjg/d1max-system/d1max_nav_ws/src/scan_planner_vendor/plan_env/test/test_dynamic_occupancy_oracle.cpp",
+          "sha256": "711caa97701c21152062d0419495a3ac765e5cbf8331b8bdb79f05c9cb2c64d0",
+          "bytes": 11340
+        },
+        "prior_evidence_sha256": "711caa97701c21152062d0419495a3ac765e5cbf8331b8bdb79f05c9cb2c64d0",
+        "source_copies": [
+          {
+            "path": "/home/eric/wjg/d1max-build-isaac/nav-source/src/scan_planner_vendor/plan_env/test/test_dynamic_occupancy_oracle.cpp",
+            "sha256": "711caa97701c21152062d0419495a3ac765e5cbf8331b8bdb79f05c9cb2c64d0",
+            "bytes": 11340,
+            "equal_to_worktree": true,
+            "candidate_seal_expected_sha256": null,
+            "matches_candidate_seal": null
+          },
+          {
+            "path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v36-campus-crossing/source_snapshot/nav/src/scan_planner_vendor/plan_env/test/test_dynamic_occupancy_oracle.cpp",
+            "sha256": "711caa97701c21152062d0419495a3ac765e5cbf8331b8bdb79f05c9cb2c64d0",
+            "bytes": 11340,
+            "equal_to_worktree": true,
+            "candidate_seal_expected_sha256": "711caa97701c21152062d0419495a3ac765e5cbf8331b8bdb79f05c9cb2c64d0",
+            "matches_candidate_seal": true
+          }
+        ],
+        "matches_prior_evidence": true
+      },
+      {
+        "repo_relative": "d1max_nav_ws/src/scan_planner_vendor/plan_env/test/test_projected_rays.cpp",
+        "worktree": {
+          "path": "/home/eric/wjg/d1max-system/d1max_nav_ws/src/scan_planner_vendor/plan_env/test/test_projected_rays.cpp",
+          "sha256": "b25a8ef0bdc7edf28f820c0177c13ba2399012ed4106146abc2c4cfedfd79e6e",
+          "bytes": 177310
+        },
+        "prior_evidence_sha256": "b25a8ef0bdc7edf28f820c0177c13ba2399012ed4106146abc2c4cfedfd79e6e",
+        "source_copies": [
+          {
+            "path": "/home/eric/wjg/d1max-build-isaac/nav-source/src/scan_planner_vendor/plan_env/test/test_projected_rays.cpp",
+            "sha256": "b25a8ef0bdc7edf28f820c0177c13ba2399012ed4106146abc2c4cfedfd79e6e",
+            "bytes": 177310,
+            "equal_to_worktree": true,
+            "candidate_seal_expected_sha256": null,
+            "matches_candidate_seal": null
+          },
+          {
+            "path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v36-campus-crossing/source_snapshot/nav/src/scan_planner_vendor/plan_env/test/test_projected_rays.cpp",
+            "sha256": "b25a8ef0bdc7edf28f820c0177c13ba2399012ed4106146abc2c4cfedfd79e6e",
+            "bytes": 177310,
+            "equal_to_worktree": true,
+            "candidate_seal_expected_sha256": "b25a8ef0bdc7edf28f820c0177c13ba2399012ed4106146abc2c4cfedfd79e6e",
+            "matches_candidate_seal": true
+          }
+        ],
+        "matches_prior_evidence": true
+      },
+      {
+        "repo_relative": "d1max_nav_ws/src/scan_planner_vendor/plan_manage/CMakeLists.txt",
+        "worktree": {
+          "path": "/home/eric/wjg/d1max-system/d1max_nav_ws/src/scan_planner_vendor/plan_manage/CMakeLists.txt",
+          "sha256": "ea45141b2d4084ba0796223b95885a84ac3d09f333ec9678b808609887054992",
+          "bytes": 6938
+        },
+        "source_copies": [
+          {
+            "path": "/home/eric/wjg/d1max-build-isaac/nav-source/src/scan_planner_vendor/plan_manage/CMakeLists.txt",
+            "sha256": "ea45141b2d4084ba0796223b95885a84ac3d09f333ec9678b808609887054992",
+            "bytes": 6938,
+            "equal_to_worktree": true,
+            "candidate_seal_expected_sha256": null,
+            "matches_candidate_seal": null
+          },
+          {
+            "path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v36-campus-crossing/source_snapshot/nav/src/scan_planner_vendor/plan_manage/CMakeLists.txt",
+            "sha256": "ea45141b2d4084ba0796223b95885a84ac3d09f333ec9678b808609887054992",
+            "bytes": 6938,
+            "equal_to_worktree": true,
+            "candidate_seal_expected_sha256": "ea45141b2d4084ba0796223b95885a84ac3d09f333ec9678b808609887054992",
+            "matches_candidate_seal": true
+          }
+        ]
+      },
+      {
+        "repo_relative": "d1max_nav_ws/src/scan_planner_vendor/plan_manage/include/plan_manage/candidate_adoption.hpp",
+        "worktree": {
+          "path": "/home/eric/wjg/d1max-system/d1max_nav_ws/src/scan_planner_vendor/plan_manage/include/plan_manage/candidate_adoption.hpp",
+          "sha256": "2edda4aef761d5d9d6b9f99779360a9cd287f35cd53397138dde85e6e343dcc3",
+          "bytes": 7282
+        },
+        "prior_evidence_sha256": "2edda4aef761d5d9d6b9f99779360a9cd287f35cd53397138dde85e6e343dcc3",
+        "source_copies": [
+          {
+            "path": "/home/eric/wjg/d1max-build-isaac/nav-source/src/scan_planner_vendor/plan_manage/include/plan_manage/candidate_adoption.hpp",
+            "sha256": "2edda4aef761d5d9d6b9f99779360a9cd287f35cd53397138dde85e6e343dcc3",
+            "bytes": 7282,
+            "equal_to_worktree": true,
+            "candidate_seal_expected_sha256": null,
+            "matches_candidate_seal": null
+          },
+          {
+            "path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v36-campus-crossing/source_snapshot/nav/src/scan_planner_vendor/plan_manage/include/plan_manage/candidate_adoption.hpp",
+            "sha256": "2edda4aef761d5d9d6b9f99779360a9cd287f35cd53397138dde85e6e343dcc3",
+            "bytes": 7282,
+            "equal_to_worktree": true,
+            "candidate_seal_expected_sha256": "2edda4aef761d5d9d6b9f99779360a9cd287f35cd53397138dde85e6e343dcc3",
+            "matches_candidate_seal": true
+          }
+        ],
+        "matches_prior_evidence": true
+      },
+      {
+        "repo_relative": "d1max_nav_ws/src/scan_planner_vendor/plan_manage/include/plan_manage/execution_validator.hpp",
+        "worktree": {
+          "path": "/home/eric/wjg/d1max-system/d1max_nav_ws/src/scan_planner_vendor/plan_manage/include/plan_manage/execution_validator.hpp",
+          "sha256": "96034659528965d0d1cbff493751bb375ac168b298ae1a6650b2a95052d8389d",
+          "bytes": 69276
+        },
+        "prior_evidence_sha256": "96034659528965d0d1cbff493751bb375ac168b298ae1a6650b2a95052d8389d",
+        "source_copies": [
+          {
+            "path": "/home/eric/wjg/d1max-build-isaac/nav-source/src/scan_planner_vendor/plan_manage/include/plan_manage/execution_validator.hpp",
+            "sha256": "96034659528965d0d1cbff493751bb375ac168b298ae1a6650b2a95052d8389d",
+            "bytes": 69276,
+            "equal_to_worktree": true,
+            "candidate_seal_expected_sha256": null,
+            "matches_candidate_seal": null
+          },
+          {
+            "path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v36-campus-crossing/source_snapshot/nav/src/scan_planner_vendor/plan_manage/include/plan_manage/execution_validator.hpp",
+            "sha256": "96034659528965d0d1cbff493751bb375ac168b298ae1a6650b2a95052d8389d",
+            "bytes": 69276,
+            "equal_to_worktree": true,
+            "candidate_seal_expected_sha256": "96034659528965d0d1cbff493751bb375ac168b298ae1a6650b2a95052d8389d",
+            "matches_candidate_seal": true
+          }
+        ],
+        "matches_prior_evidence": true
+      },
+      {
+        "repo_relative": "d1max_nav_ws/src/scan_planner_vendor/plan_manage/include/plan_manage/planner_manager.h",
+        "worktree": {
+          "path": "/home/eric/wjg/d1max-system/d1max_nav_ws/src/scan_planner_vendor/plan_manage/include/plan_manage/planner_manager.h",
+          "sha256": "8fe92161a27dc0f2b95a654853a1eae8b65f0d46e896c9a9272bdf63a1dcd0c9",
+          "bytes": 9227
+        },
+        "prior_evidence_sha256": "8fe92161a27dc0f2b95a654853a1eae8b65f0d46e896c9a9272bdf63a1dcd0c9",
+        "source_copies": [
+          {
+            "path": "/home/eric/wjg/d1max-build-isaac/nav-source/src/scan_planner_vendor/plan_manage/include/plan_manage/planner_manager.h",
+            "sha256": "8fe92161a27dc0f2b95a654853a1eae8b65f0d46e896c9a9272bdf63a1dcd0c9",
+            "bytes": 9227,
+            "equal_to_worktree": true,
+            "candidate_seal_expected_sha256": null,
+            "matches_candidate_seal": null
+          },
+          {
+            "path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v36-campus-crossing/source_snapshot/nav/src/scan_planner_vendor/plan_manage/include/plan_manage/planner_manager.h",
+            "sha256": "8fe92161a27dc0f2b95a654853a1eae8b65f0d46e896c9a9272bdf63a1dcd0c9",
+            "bytes": 9227,
+            "equal_to_worktree": true,
+            "candidate_seal_expected_sha256": "8fe92161a27dc0f2b95a654853a1eae8b65f0d46e896c9a9272bdf63a1dcd0c9",
+            "matches_candidate_seal": true
+          }
+        ],
+        "matches_prior_evidence": true
+      },
+      {
+        "repo_relative": "d1max_nav_ws/src/scan_planner_vendor/plan_manage/src/motion_sweep.cpp",
+        "worktree": {
+          "path": "/home/eric/wjg/d1max-system/d1max_nav_ws/src/scan_planner_vendor/plan_manage/src/motion_sweep.cpp",
+          "sha256": "8aa65a28c5059e3d9f3110305d1a8366384b3a663993ef7028319343ab7f7e7b",
+          "bytes": 5708
+        },
+        "prior_evidence_sha256": "8aa65a28c5059e3d9f3110305d1a8366384b3a663993ef7028319343ab7f7e7b",
+        "source_copies": [
+          {
+            "path": "/home/eric/wjg/d1max-build-isaac/nav-source/src/scan_planner_vendor/plan_manage/src/motion_sweep.cpp",
+            "sha256": "8aa65a28c5059e3d9f3110305d1a8366384b3a663993ef7028319343ab7f7e7b",
+            "bytes": 5708,
+            "equal_to_worktree": true,
+            "candidate_seal_expected_sha256": null,
+            "matches_candidate_seal": null
+          },
+          {
+            "path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v36-campus-crossing/source_snapshot/nav/src/scan_planner_vendor/plan_manage/src/motion_sweep.cpp",
+            "sha256": "8aa65a28c5059e3d9f3110305d1a8366384b3a663993ef7028319343ab7f7e7b",
+            "bytes": 5708,
+            "equal_to_worktree": true,
+            "candidate_seal_expected_sha256": "8aa65a28c5059e3d9f3110305d1a8366384b3a663993ef7028319343ab7f7e7b",
+            "matches_candidate_seal": true
+          }
+        ],
+        "matches_prior_evidence": true
+      },
+      {
+        "repo_relative": "d1max_nav_ws/src/scan_planner_vendor/plan_manage/src/planner_manager.cpp",
+        "worktree": {
+          "path": "/home/eric/wjg/d1max-system/d1max_nav_ws/src/scan_planner_vendor/plan_manage/src/planner_manager.cpp",
+          "sha256": "c1cc6a468afaef0516e4e887c99cb109b69c98f247bf6bdd7069bf381b26f45c",
+          "bytes": 43083
+        },
+        "prior_evidence_sha256": "c1cc6a468afaef0516e4e887c99cb109b69c98f247bf6bdd7069bf381b26f45c",
+        "source_copies": [
+          {
+            "path": "/home/eric/wjg/d1max-build-isaac/nav-source/src/scan_planner_vendor/plan_manage/src/planner_manager.cpp",
+            "sha256": "c1cc6a468afaef0516e4e887c99cb109b69c98f247bf6bdd7069bf381b26f45c",
+            "bytes": 43083,
+            "equal_to_worktree": true,
+            "candidate_seal_expected_sha256": null,
+            "matches_candidate_seal": null
+          },
+          {
+            "path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v36-campus-crossing/source_snapshot/nav/src/scan_planner_vendor/plan_manage/src/planner_manager.cpp",
+            "sha256": "c1cc6a468afaef0516e4e887c99cb109b69c98f247bf6bdd7069bf381b26f45c",
+            "bytes": 43083,
+            "equal_to_worktree": true,
+            "candidate_seal_expected_sha256": "c1cc6a468afaef0516e4e887c99cb109b69c98f247bf6bdd7069bf381b26f45c",
+            "matches_candidate_seal": true
+          }
+        ],
+        "matches_prior_evidence": true
+      },
+      {
+        "repo_relative": "d1max_nav_ws/src/scan_planner_vendor/plan_manage/test/test_candidate_adoption.cpp",
+        "worktree": {
+          "path": "/home/eric/wjg/d1max-system/d1max_nav_ws/src/scan_planner_vendor/plan_manage/test/test_candidate_adoption.cpp",
+          "sha256": "e0f0382b17061be23385448ec8d1371bab2d86a0def87584ad01dae479ddde7e",
+          "bytes": 11979
+        },
+        "prior_evidence_sha256": "e0f0382b17061be23385448ec8d1371bab2d86a0def87584ad01dae479ddde7e",
+        "source_copies": [
+          {
+            "path": "/home/eric/wjg/d1max-build-isaac/nav-source/src/scan_planner_vendor/plan_manage/test/test_candidate_adoption.cpp",
+            "sha256": "e0f0382b17061be23385448ec8d1371bab2d86a0def87584ad01dae479ddde7e",
+            "bytes": 11979,
+            "equal_to_worktree": true,
+            "candidate_seal_expected_sha256": null,
+            "matches_candidate_seal": null
+          },
+          {
+            "path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v36-campus-crossing/source_snapshot/nav/src/scan_planner_vendor/plan_manage/test/test_candidate_adoption.cpp",
+            "sha256": "e0f0382b17061be23385448ec8d1371bab2d86a0def87584ad01dae479ddde7e",
+            "bytes": 11979,
+            "equal_to_worktree": true,
+            "candidate_seal_expected_sha256": "e0f0382b17061be23385448ec8d1371bab2d86a0def87584ad01dae479ddde7e",
+            "matches_candidate_seal": true
+          }
+        ],
+        "matches_prior_evidence": true
+      },
+      {
+        "repo_relative": "d1max_nav_ws/src/scan_planner_vendor/plan_manage/test/test_execution_ledger.cpp",
+        "worktree": {
+          "path": "/home/eric/wjg/d1max-system/d1max_nav_ws/src/scan_planner_vendor/plan_manage/test/test_execution_ledger.cpp",
+          "sha256": "49b243bcef420f9917d19fa130412066d2fe39e57860eec11d372753bbe38af8",
+          "bytes": 51532
+        },
+        "source_copies": [
+          {
+            "path": "/home/eric/wjg/d1max-build-isaac/nav-source/src/scan_planner_vendor/plan_manage/test/test_execution_ledger.cpp",
+            "sha256": "49b243bcef420f9917d19fa130412066d2fe39e57860eec11d372753bbe38af8",
+            "bytes": 51532,
+            "equal_to_worktree": true,
+            "candidate_seal_expected_sha256": null,
+            "matches_candidate_seal": null
+          },
+          {
+            "path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v36-campus-crossing/source_snapshot/nav/src/scan_planner_vendor/plan_manage/test/test_execution_ledger.cpp",
+            "sha256": "49b243bcef420f9917d19fa130412066d2fe39e57860eec11d372753bbe38af8",
+            "bytes": 51532,
+            "equal_to_worktree": true,
+            "candidate_seal_expected_sha256": "49b243bcef420f9917d19fa130412066d2fe39e57860eec11d372753bbe38af8",
+            "matches_candidate_seal": true
+          }
+        ]
+      },
+      {
+        "repo_relative": "d1max_nav_ws/src/scan_planner_vendor/plan_manage/test/test_motion_sweep.cpp",
+        "worktree": {
+          "path": "/home/eric/wjg/d1max-system/d1max_nav_ws/src/scan_planner_vendor/plan_manage/test/test_motion_sweep.cpp",
+          "sha256": "88e65196f70ba63af35d231704959dba6fa7728cea9a283ec32c368a9c2fffb2",
+          "bytes": 56087
+        },
+        "prior_evidence_sha256": "88e65196f70ba63af35d231704959dba6fa7728cea9a283ec32c368a9c2fffb2",
+        "source_copies": [
+          {
+            "path": "/home/eric/wjg/d1max-build-isaac/nav-source/src/scan_planner_vendor/plan_manage/test/test_motion_sweep.cpp",
+            "sha256": "88e65196f70ba63af35d231704959dba6fa7728cea9a283ec32c368a9c2fffb2",
+            "bytes": 56087,
+            "equal_to_worktree": true,
+            "candidate_seal_expected_sha256": null,
+            "matches_candidate_seal": null
+          },
+          {
+            "path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v36-campus-crossing/source_snapshot/nav/src/scan_planner_vendor/plan_manage/test/test_motion_sweep.cpp",
+            "sha256": "88e65196f70ba63af35d231704959dba6fa7728cea9a283ec32c368a9c2fffb2",
+            "bytes": 56087,
+            "equal_to_worktree": true,
+            "candidate_seal_expected_sha256": "88e65196f70ba63af35d231704959dba6fa7728cea9a283ec32c368a9c2fffb2",
+            "matches_candidate_seal": true
+          }
+        ],
+        "matches_prior_evidence": true
+      },
+      {
+        "repo_relative": "d1max_ros2/sdk_bridge_ws/src/d1max_sdk_bridge/src/execution_acceptance.hpp",
+        "worktree": {
+          "path": "/home/eric/wjg/d1max-system/d1max_ros2/sdk_bridge_ws/src/d1max_sdk_bridge/src/execution_acceptance.hpp",
+          "sha256": "7c101ecb856c46e3a7fa638807bfe24a5802f68d89df98bd0d51da0e0cf7a89c",
+          "bytes": 9333
+        },
+        "source_copies": [
+          {
+            "path": "/home/eric/wjg/d1max-build-isaac/sdk-source/src/d1max_sdk_bridge/src/execution_acceptance.hpp",
+            "sha256": "7c101ecb856c46e3a7fa638807bfe24a5802f68d89df98bd0d51da0e0cf7a89c",
+            "bytes": 9333,
+            "equal_to_worktree": true,
+            "candidate_seal_expected_sha256": null,
+            "matches_candidate_seal": null
+          },
+          {
+            "path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v36-campus-crossing/source_snapshot/sdk/d1max_sdk_bridge/src/execution_acceptance.hpp",
+            "sha256": "7c101ecb856c46e3a7fa638807bfe24a5802f68d89df98bd0d51da0e0cf7a89c",
+            "bytes": 9333,
+            "equal_to_worktree": true,
+            "candidate_seal_expected_sha256": "7c101ecb856c46e3a7fa638807bfe24a5802f68d89df98bd0d51da0e0cf7a89c",
+            "matches_candidate_seal": true
+          }
+        ]
+      },
+      {
+        "repo_relative": "d1max_ros2/sdk_bridge_ws/src/d1max_sdk_bridge/src/test_execution_acceptance.cpp",
+        "worktree": {
+          "path": "/home/eric/wjg/d1max-system/d1max_ros2/sdk_bridge_ws/src/d1max_sdk_bridge/src/test_execution_acceptance.cpp",
+          "sha256": "60c04135148ddd135111fcb7a530df4d63e1c13ce77b9cb0f77f406e13b119bd",
+          "bytes": 8061
+        },
+        "source_copies": [
+          {
+            "path": "/home/eric/wjg/d1max-build-isaac/sdk-source/src/d1max_sdk_bridge/src/test_execution_acceptance.cpp",
+            "sha256": "60c04135148ddd135111fcb7a530df4d63e1c13ce77b9cb0f77f406e13b119bd",
+            "bytes": 8061,
+            "equal_to_worktree": true,
+            "candidate_seal_expected_sha256": null,
+            "matches_candidate_seal": null
+          },
+          {
+            "path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v36-campus-crossing/source_snapshot/sdk/d1max_sdk_bridge/src/test_execution_acceptance.cpp",
+            "sha256": "60c04135148ddd135111fcb7a530df4d63e1c13ce77b9cb0f77f406e13b119bd",
+            "bytes": 8061,
+            "equal_to_worktree": true,
+            "candidate_seal_expected_sha256": "60c04135148ddd135111fcb7a530df4d63e1c13ce77b9cb0f77f406e13b119bd",
+            "matches_candidate_seal": true
+          }
+        ]
+      },
+      {
+        "repo_relative": "simulation/isaacsim/assets/large_quadruped_scene.json",
+        "worktree": {
+          "path": "/home/eric/wjg/d1max-system/simulation/isaacsim/assets/large_quadruped_scene.json",
+          "sha256": "6a27a80438e45d4df6bb311e93668196d470bfb728bc9e96dcbe4bc2941148a2",
+          "bytes": 49054
+        },
+        "source_copies": [
+          {
+            "path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v36-campus-crossing/simulation/assets/large_quadruped_scene.json",
+            "sha256": "6a27a80438e45d4df6bb311e93668196d470bfb728bc9e96dcbe4bc2941148a2",
+            "bytes": 49054,
+            "equal_to_worktree": true,
+            "candidate_seal_expected_sha256": "6a27a80438e45d4df6bb311e93668196d470bfb728bc9e96dcbe4bc2941148a2",
+            "matches_candidate_seal": true
+          }
+        ]
+      },
+      {
+        "repo_relative": "simulation/isaacsim/bridge.py",
+        "worktree": {
+          "path": "/home/eric/wjg/d1max-system/simulation/isaacsim/bridge.py",
+          "sha256": "86ddb9b41a1591878f73c0812c7a56500c6bf61391615e40b5ce6fdd8fef8d14",
+          "bytes": 36442
+        },
+        "prior_evidence_sha256": "86ddb9b41a1591878f73c0812c7a56500c6bf61391615e40b5ce6fdd8fef8d14",
+        "source_copies": [
+          {
+            "path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v36-campus-crossing/simulation/bridge.py",
+            "sha256": "86ddb9b41a1591878f73c0812c7a56500c6bf61391615e40b5ce6fdd8fef8d14",
+            "bytes": 36442,
+            "equal_to_worktree": true,
+            "candidate_seal_expected_sha256": "86ddb9b41a1591878f73c0812c7a56500c6bf61391615e40b5ce6fdd8fef8d14",
+            "matches_candidate_seal": true
+          }
+        ],
+        "matches_prior_evidence": true
+      },
+      {
+        "repo_relative": "simulation/isaacsim/build_candidate.py",
+        "worktree": {
+          "path": "/home/eric/wjg/d1max-system/simulation/isaacsim/build_candidate.py",
+          "sha256": "01f338b010415e649adb22418053ce3df185faae112292519ce0ff4ed6e5767d",
+          "bytes": 10205
+        },
+        "source_copies": [
+          {
+            "path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v36-campus-crossing/simulation/build_candidate.py",
+            "sha256": "01f338b010415e649adb22418053ce3df185faae112292519ce0ff4ed6e5767d",
+            "bytes": 10205,
+            "equal_to_worktree": true,
+            "candidate_seal_expected_sha256": "01f338b010415e649adb22418053ce3df185faae112292519ce0ff4ed6e5767d",
+            "matches_candidate_seal": true
+          }
+        ]
+      },
+      {
+        "repo_relative": "simulation/isaacsim/dynamic_collision.py",
+        "worktree": {
+          "path": "/home/eric/wjg/d1max-system/simulation/isaacsim/dynamic_collision.py",
+          "sha256": "dd0a66a1e1b32e0165d8b653284a8dbe37056fc844ae8aee0d03f7762e8314aa",
+          "bytes": 23566
+        },
+        "prior_evidence_sha256": "dd0a66a1e1b32e0165d8b653284a8dbe37056fc844ae8aee0d03f7762e8314aa",
+        "source_copies": [
+          {
+            "path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v36-campus-crossing/simulation/dynamic_collision.py",
+            "sha256": "dd0a66a1e1b32e0165d8b653284a8dbe37056fc844ae8aee0d03f7762e8314aa",
+            "bytes": 23566,
+            "equal_to_worktree": true,
+            "candidate_seal_expected_sha256": "dd0a66a1e1b32e0165d8b653284a8dbe37056fc844ae8aee0d03f7762e8314aa",
+            "matches_candidate_seal": true
+          }
+        ],
+        "matches_prior_evidence": true
+      },
+      {
+        "repo_relative": "simulation/isaacsim/nav_prepare.py",
+        "worktree": {
+          "path": "/home/eric/wjg/d1max-system/simulation/isaacsim/nav_prepare.py",
+          "sha256": "f7411594b400dbeecf990a1e07ba6e6233fd38723e487efea281e6228c3efaa4",
+          "bytes": 22592
+        },
+        "source_copies": [
+          {
+            "path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v36-campus-crossing/simulation/nav_prepare.py",
+            "sha256": "f7411594b400dbeecf990a1e07ba6e6233fd38723e487efea281e6228c3efaa4",
+            "bytes": 22592,
+            "equal_to_worktree": true,
+            "candidate_seal_expected_sha256": "f7411594b400dbeecf990a1e07ba6e6233fd38723e487efea281e6228c3efaa4",
+            "matches_candidate_seal": true
+          }
+        ]
+      },
+      {
+        "repo_relative": "simulation/isaacsim/protocol.py",
+        "worktree": {
+          "path": "/home/eric/wjg/d1max-system/simulation/isaacsim/protocol.py",
+          "sha256": "adf1a60d48f61ad8dad27636b27b3feac05fc97c55620804919bfa00308530ec",
+          "bytes": 19676
+        },
+        "prior_evidence_sha256": "adf1a60d48f61ad8dad27636b27b3feac05fc97c55620804919bfa00308530ec",
+        "source_copies": [
+          {
+            "path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v36-campus-crossing/simulation/protocol.py",
+            "sha256": "adf1a60d48f61ad8dad27636b27b3feac05fc97c55620804919bfa00308530ec",
+            "bytes": 19676,
+            "equal_to_worktree": true,
+            "candidate_seal_expected_sha256": "adf1a60d48f61ad8dad27636b27b3feac05fc97c55620804919bfa00308530ec",
+            "matches_candidate_seal": true
+          }
+        ],
+        "matches_prior_evidence": true
+      },
+      {
+        "repo_relative": "simulation/isaacsim/quadruped.py",
+        "worktree": {
+          "path": "/home/eric/wjg/d1max-system/simulation/isaacsim/quadruped.py",
+          "sha256": "cba3c49072bd390250eadead4a0cbe839d3d782093037378174ac4eb8a7137d1",
+          "bytes": 34815
+        },
+        "source_copies": [
+          {
+            "path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v36-campus-crossing/simulation/quadruped.py",
+            "sha256": "cba3c49072bd390250eadead4a0cbe839d3d782093037378174ac4eb8a7137d1",
+            "bytes": 34815,
+            "equal_to_worktree": true,
+            "candidate_seal_expected_sha256": "cba3c49072bd390250eadead4a0cbe839d3d782093037378174ac4eb8a7137d1",
+            "matches_candidate_seal": true
+          }
+        ]
+      },
+      {
+        "repo_relative": "simulation/isaacsim/scene.py",
+        "worktree": {
+          "path": "/home/eric/wjg/d1max-system/simulation/isaacsim/scene.py",
+          "sha256": "b31bc0bf78b6b3f07d7601e42a1fa95148c4eebd2493d40206208160d76c9fc4",
+          "bytes": 69493
+        },
+        "prior_evidence_sha256": "b31bc0bf78b6b3f07d7601e42a1fa95148c4eebd2493d40206208160d76c9fc4",
+        "source_copies": [
+          {
+            "path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v36-campus-crossing/simulation/scene.py",
+            "sha256": "b31bc0bf78b6b3f07d7601e42a1fa95148c4eebd2493d40206208160d76c9fc4",
+            "bytes": 69493,
+            "equal_to_worktree": true,
+            "candidate_seal_expected_sha256": "b31bc0bf78b6b3f07d7601e42a1fa95148c4eebd2493d40206208160d76c9fc4",
+            "matches_candidate_seal": true
+          }
+        ],
+        "matches_prior_evidence": true
+      },
+      {
+        "repo_relative": "simulation/isaacsim/smoke.py",
+        "worktree": {
+          "path": "/home/eric/wjg/d1max-system/simulation/isaacsim/smoke.py",
+          "sha256": "569fb020a644d807af783799a88f249ef99b3607fa2f0b84eb5a6a96d51d9955",
+          "bytes": 37760
+        },
+        "source_copies": [
+          {
+            "path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v36-campus-crossing/simulation/smoke.py",
+            "sha256": "569fb020a644d807af783799a88f249ef99b3607fa2f0b84eb5a6a96d51d9955",
+            "bytes": 37760,
+            "equal_to_worktree": true,
+            "candidate_seal_expected_sha256": "569fb020a644d807af783799a88f249ef99b3607fa2f0b84eb5a6a96d51d9955",
+            "matches_candidate_seal": true
+          }
+        ]
+      },
+      {
+        "repo_relative": "simulation/isaacsim/test_dynamic_collision.py",
+        "worktree": {
+          "path": "/home/eric/wjg/d1max-system/simulation/isaacsim/test_dynamic_collision.py",
+          "sha256": "13a1a400ea51d30bf6ffd27742caebf45facf00577d6cbb399395fc5e9e75ee4",
+          "bytes": 10962
+        },
+        "source_copies": [
+          {
+            "path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v36-campus-crossing/simulation/test_dynamic_collision.py",
+            "sha256": "13a1a400ea51d30bf6ffd27742caebf45facf00577d6cbb399395fc5e9e75ee4",
+            "bytes": 10962,
+            "equal_to_worktree": true,
+            "candidate_seal_expected_sha256": "13a1a400ea51d30bf6ffd27742caebf45facf00577d6cbb399395fc5e9e75ee4",
+            "matches_candidate_seal": true
+          }
+        ]
+      },
+      {
+        "repo_relative": "simulation/isaacsim/test_protocol.py",
+        "worktree": {
+          "path": "/home/eric/wjg/d1max-system/simulation/isaacsim/test_protocol.py",
+          "sha256": "ca1b8511aa794df661acb850d2e4aab09d8984d281bfd6d2b9382989c00f6ad7",
+          "bytes": 10603
+        },
+        "source_copies": [
+          {
+            "path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v36-campus-crossing/simulation/test_protocol.py",
+            "sha256": "ca1b8511aa794df661acb850d2e4aab09d8984d281bfd6d2b9382989c00f6ad7",
+            "bytes": 10603,
+            "equal_to_worktree": true,
+            "candidate_seal_expected_sha256": "ca1b8511aa794df661acb850d2e4aab09d8984d281bfd6d2b9382989c00f6ad7",
+            "matches_candidate_seal": true
+          }
+        ]
+      },
+      {
+        "repo_relative": "simulation/isaacsim/test_quadruped.py",
+        "worktree": {
+          "path": "/home/eric/wjg/d1max-system/simulation/isaacsim/test_quadruped.py",
+          "sha256": "50d1576c3b9ce8725bebdf014e1e5d29bd8abade1f158a333ac759b4cd0980fa",
+          "bytes": 15411
+        },
+        "source_copies": [
+          {
+            "path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v36-campus-crossing/simulation/test_quadruped.py",
+            "sha256": "50d1576c3b9ce8725bebdf014e1e5d29bd8abade1f158a333ac759b4cd0980fa",
+            "bytes": 15411,
+            "equal_to_worktree": true,
+            "candidate_seal_expected_sha256": "50d1576c3b9ce8725bebdf014e1e5d29bd8abade1f158a333ac759b4cd0980fa",
+            "matches_candidate_seal": true
+          }
+        ]
+      },
+      {
+        "repo_relative": "simulation/isaacsim/test_scenario_suite.py",
+        "worktree": {
+          "path": "/home/eric/wjg/d1max-system/simulation/isaacsim/test_scenario_suite.py",
+          "sha256": "3d9a31d7f746a31099d66321351bade1ebd5a80366df8ac40be9c4f8429c252f",
+          "bytes": 21120
+        },
+        "source_copies": [
+          {
+            "path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v36-campus-crossing/simulation/test_scenario_suite.py",
+            "sha256": "3d9a31d7f746a31099d66321351bade1ebd5a80366df8ac40be9c4f8429c252f",
+            "bytes": 21120,
+            "equal_to_worktree": true,
+            "candidate_seal_expected_sha256": "3d9a31d7f746a31099d66321351bade1ebd5a80366df8ac40be9c4f8429c252f",
+            "matches_candidate_seal": true
+          }
+        ]
+      },
+      {
+        "repo_relative": "simulation/isaacsim/test_scripted_dynamic_truth.py",
+        "worktree": {
+          "path": "/home/eric/wjg/d1max-system/simulation/isaacsim/test_scripted_dynamic_truth.py",
+          "sha256": "2b22d80869b8011aec1bac263402604d939e4191703927926a0789b63278caf2",
+          "bytes": 4946
+        },
+        "prior_evidence_sha256": "2b22d80869b8011aec1bac263402604d939e4191703927926a0789b63278caf2",
+        "source_copies": [
+          {
+            "path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v36-campus-crossing/simulation/test_scripted_dynamic_truth.py",
+            "sha256": "2b22d80869b8011aec1bac263402604d939e4191703927926a0789b63278caf2",
+            "bytes": 4946,
+            "equal_to_worktree": true,
+            "candidate_seal_expected_sha256": "2b22d80869b8011aec1bac263402604d939e4191703927926a0789b63278caf2",
+            "matches_candidate_seal": true
+          }
+        ],
+        "matches_prior_evidence": true
+      },
+      {
+        "repo_relative": "simulation/isaacsim/test_smoke.py",
+        "worktree": {
+          "path": "/home/eric/wjg/d1max-system/simulation/isaacsim/test_smoke.py",
+          "sha256": "46d4a6ad6a5e0e7cf1de3b843d20c0289f3dcc89d74c7ef2b9f846cab8ad64fb",
+          "bytes": 8631
+        },
+        "source_copies": [
+          {
+            "path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v36-campus-crossing/simulation/test_smoke.py",
+            "sha256": "46d4a6ad6a5e0e7cf1de3b843d20c0289f3dcc89d74c7ef2b9f846cab8ad64fb",
+            "bytes": 8631,
+            "equal_to_worktree": true,
+            "candidate_seal_expected_sha256": "46d4a6ad6a5e0e7cf1de3b843d20c0289f3dcc89d74c7ef2b9f846cab8ad64fb",
+            "matches_candidate_seal": true
+          }
+        ]
+      },
+      {
+        "repo_relative": "simulation/isaacsim/test_truth_map.py",
+        "worktree": {
+          "path": "/home/eric/wjg/d1max-system/simulation/isaacsim/test_truth_map.py",
+          "sha256": "a08714a50ec67f7b8c1fecd77ee3b6499b348d4c2b5fccc135e265a5494f511e",
+          "bytes": 47253
+        },
+        "prior_evidence_sha256": "a08714a50ec67f7b8c1fecd77ee3b6499b348d4c2b5fccc135e265a5494f511e",
+        "source_copies": [
+          {
+            "path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v36-campus-crossing/simulation/test_truth_map.py",
+            "sha256": "a08714a50ec67f7b8c1fecd77ee3b6499b348d4c2b5fccc135e265a5494f511e",
+            "bytes": 47253,
+            "equal_to_worktree": true,
+            "candidate_seal_expected_sha256": "a08714a50ec67f7b8c1fecd77ee3b6499b348d4c2b5fccc135e265a5494f511e",
+            "matches_candidate_seal": true
+          }
+        ],
+        "matches_prior_evidence": true
+      },
+      {
+        "repo_relative": "simulation/isaacsim/truth_map.py",
+        "worktree": {
+          "path": "/home/eric/wjg/d1max-system/simulation/isaacsim/truth_map.py",
+          "sha256": "40ff59bb84b741bb54bda07333ced7220a44a0ff709b90b78b9bb1507750832c",
+          "bytes": 53324
+        },
+        "prior_evidence_sha256": "40ff59bb84b741bb54bda07333ced7220a44a0ff709b90b78b9bb1507750832c",
+        "source_copies": [
+          {
+            "path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v36-campus-crossing/simulation/truth_map.py",
+            "sha256": "40ff59bb84b741bb54bda07333ced7220a44a0ff709b90b78b9bb1507750832c",
+            "bytes": 53324,
+            "equal_to_worktree": true,
+            "candidate_seal_expected_sha256": "40ff59bb84b741bb54bda07333ced7220a44a0ff709b90b78b9bb1507750832c",
+            "matches_candidate_seal": true
+          }
+        ],
+        "matches_prior_evidence": true
+      },
+      {
+        "repo_relative": "simulation/isaacsim/world_builder.py",
+        "worktree": {
+          "path": "/home/eric/wjg/d1max-system/simulation/isaacsim/world_builder.py",
+          "sha256": "e693653309b595da3580627a1c8af977224b0679ac092a0e778f6b0a75ca2fd6",
+          "bytes": 50640
+        },
+        "prior_evidence_sha256": "e693653309b595da3580627a1c8af977224b0679ac092a0e778f6b0a75ca2fd6",
+        "source_copies": [
+          {
+            "path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v36-campus-crossing/simulation/world_builder.py",
+            "sha256": "e693653309b595da3580627a1c8af977224b0679ac092a0e778f6b0a75ca2fd6",
+            "bytes": 50640,
+            "equal_to_worktree": true,
+            "candidate_seal_expected_sha256": "e693653309b595da3580627a1c8af977224b0679ac092a0e778f6b0a75ca2fd6",
+            "matches_candidate_seal": true
+          }
+        ],
+        "matches_prior_evidence": true
+      }
+    ],
+    "installed_headers": [
+      {
+        "repo_relative": "d1max_nav_ws/src/d1max_planning_interfaces/include/d1max_planning_interfaces/isolated_reference_model.hpp",
+        "source": {
+          "path": "/home/eric/wjg/d1max-system/d1max_nav_ws/src/d1max_planning_interfaces/include/d1max_planning_interfaces/isolated_reference_model.hpp",
+          "sha256": "07d910e48eff4b8fd493377b6d77aeb59ec5abd380f55d6f18f6e7d0af7bef60",
+          "bytes": 5516
+        },
+        "installed": {
+          "path": "/home/eric/wjg/d1max-build-isaac/nav/install/d1max_planning_interfaces/include/d1max_planning_interfaces/d1max_planning_interfaces/isolated_reference_model.hpp",
+          "sha256": "07d910e48eff4b8fd493377b6d77aeb59ec5abd380f55d6f18f6e7d0af7bef60",
+          "bytes": 5516
+        },
+        "candidate_installed": {
+          "path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v36-campus-crossing/application/install/d1max_planning_interfaces/include/d1max_planning_interfaces/d1max_planning_interfaces/isolated_reference_model.hpp",
+          "sha256": "07d910e48eff4b8fd493377b6d77aeb59ec5abd380f55d6f18f6e7d0af7bef60",
+          "bytes": 5516
+        },
+        "all_bytes_equal": true,
+        "candidate_seal_expected_sha256": "07d910e48eff4b8fd493377b6d77aeb59ec5abd380f55d6f18f6e7d0af7bef60",
+        "candidate_matches_seal": true
+      },
+      {
+        "repo_relative": "d1max_nav_ws/src/scan_planner_vendor/plan_env/include/plan_env/projected_rays.hpp",
+        "source": {
+          "path": "/home/eric/wjg/d1max-system/d1max_nav_ws/src/scan_planner_vendor/plan_env/include/plan_env/projected_rays.hpp",
+          "sha256": "d7c1f278ea5d409f50974bab879ad5bdabff9e8c1a0875aa80390455d733c8d3",
+          "bytes": 8308
+        },
+        "installed": {
+          "path": "/home/eric/wjg/d1max-build-isaac/nav/install/plan_env/include/plan_env/projected_rays.hpp",
+          "sha256": "d7c1f278ea5d409f50974bab879ad5bdabff9e8c1a0875aa80390455d733c8d3",
+          "bytes": 8308
+        },
+        "candidate_installed": {
+          "path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v36-campus-crossing/application/install/plan_env/include/plan_env/projected_rays.hpp",
+          "sha256": "d7c1f278ea5d409f50974bab879ad5bdabff9e8c1a0875aa80390455d733c8d3",
+          "bytes": 8308
+        },
+        "all_bytes_equal": true,
+        "candidate_seal_expected_sha256": "d7c1f278ea5d409f50974bab879ad5bdabff9e8c1a0875aa80390455d733c8d3",
+        "candidate_matches_seal": true
+      },
+      {
+        "repo_relative": "d1max_nav_ws/src/scan_planner_vendor/plan_env/include/plan_env/dynamic_occupancy_oracle.hpp",
+        "source": {
+          "path": "/home/eric/wjg/d1max-system/d1max_nav_ws/src/scan_planner_vendor/plan_env/include/plan_env/dynamic_occupancy_oracle.hpp",
+          "sha256": "9e43c30836bd8cea4a7d60accf7ebfc35427aa745d46b83747a3dddf4d3c4f8c",
+          "bytes": 12783
+        },
+        "installed": {
+          "path": "/home/eric/wjg/d1max-build-isaac/nav/install/plan_env/include/plan_env/dynamic_occupancy_oracle.hpp",
+          "sha256": "9e43c30836bd8cea4a7d60accf7ebfc35427aa745d46b83747a3dddf4d3c4f8c",
+          "bytes": 12783
+        },
+        "candidate_installed": {
+          "path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v36-campus-crossing/application/install/plan_env/include/plan_env/dynamic_occupancy_oracle.hpp",
+          "sha256": "9e43c30836bd8cea4a7d60accf7ebfc35427aa745d46b83747a3dddf4d3c4f8c",
+          "bytes": 12783
+        },
+        "all_bytes_equal": true,
+        "candidate_seal_expected_sha256": "9e43c30836bd8cea4a7d60accf7ebfc35427aa745d46b83747a3dddf4d3c4f8c",
+        "candidate_matches_seal": true
+      },
+      {
+        "repo_relative": "d1max_nav_ws/src/scan_planner_vendor/plan_env/include/plan_env/grid_map.h",
+        "source": {
+          "path": "/home/eric/wjg/d1max-system/d1max_nav_ws/src/scan_planner_vendor/plan_env/include/plan_env/grid_map.h",
+          "sha256": "88718a0174db3530c66c989e4de0b852a23258418d309725a769fe394761ac6f",
+          "bytes": 35594
+        },
+        "installed": {
+          "path": "/home/eric/wjg/d1max-build-isaac/nav/install/plan_env/include/plan_env/grid_map.h",
+          "sha256": "88718a0174db3530c66c989e4de0b852a23258418d309725a769fe394761ac6f",
+          "bytes": 35594
+        },
+        "candidate_installed": {
+          "path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v36-campus-crossing/application/install/plan_env/include/plan_env/grid_map.h",
+          "sha256": "88718a0174db3530c66c989e4de0b852a23258418d309725a769fe394761ac6f",
+          "bytes": 35594
+        },
+        "all_bytes_equal": true,
+        "candidate_seal_expected_sha256": "88718a0174db3530c66c989e4de0b852a23258418d309725a769fe394761ac6f",
+        "candidate_matches_seal": true
+      },
+      {
+        "repo_relative": "d1max_nav_ws/src/d1max_trajectory_tracker/include/d1max_trajectory_tracker/tracker_core.hpp",
+        "source": {
+          "path": "/home/eric/wjg/d1max-system/d1max_nav_ws/src/d1max_trajectory_tracker/include/d1max_trajectory_tracker/tracker_core.hpp",
+          "sha256": "7eed42768212f24a400082f36f52b1d6779760d24b84edc0a1b27d9fc8398a18",
+          "bytes": 98402
+        },
+        "installed": {
+          "path": "/home/eric/wjg/d1max-build-isaac/nav/install/d1max_trajectory_tracker/include/d1max_trajectory_tracker/tracker_core.hpp",
+          "sha256": "7eed42768212f24a400082f36f52b1d6779760d24b84edc0a1b27d9fc8398a18",
+          "bytes": 98402
+        },
+        "candidate_installed": {
+          "path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v36-campus-crossing/application/install/d1max_trajectory_tracker/include/d1max_trajectory_tracker/tracker_core.hpp",
+          "sha256": "7eed42768212f24a400082f36f52b1d6779760d24b84edc0a1b27d9fc8398a18",
+          "bytes": 98402
+        },
+        "all_bytes_equal": true,
+        "candidate_seal_expected_sha256": "7eed42768212f24a400082f36f52b1d6779760d24b84edc0a1b27d9fc8398a18",
+        "candidate_matches_seal": true
+      },
+      {
+        "repo_relative": "d1max_nav_ws/src/d1max_trajectory_tracker/include/d1max_trajectory_tracker/execution_contract.hpp",
+        "source": {
+          "path": "/home/eric/wjg/d1max-system/d1max_nav_ws/src/d1max_trajectory_tracker/include/d1max_trajectory_tracker/execution_contract.hpp",
+          "sha256": "3fe794963cd33fdc611ab03cb1ba68729513a8055ccd342c234828c1ae5b2247",
+          "bytes": 65589
+        },
+        "installed": {
+          "path": "/home/eric/wjg/d1max-build-isaac/nav/install/d1max_trajectory_tracker/include/d1max_trajectory_tracker/execution_contract.hpp",
+          "sha256": "3fe794963cd33fdc611ab03cb1ba68729513a8055ccd342c234828c1ae5b2247",
+          "bytes": 65589
+        },
+        "candidate_installed": {
+          "path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v36-campus-crossing/application/install/d1max_trajectory_tracker/include/d1max_trajectory_tracker/execution_contract.hpp",
+          "sha256": "3fe794963cd33fdc611ab03cb1ba68729513a8055ccd342c234828c1ae5b2247",
+          "bytes": 65589
+        },
+        "all_bytes_equal": true,
+        "candidate_seal_expected_sha256": "3fe794963cd33fdc611ab03cb1ba68729513a8055ccd342c234828c1ae5b2247",
+        "candidate_matches_seal": true
+      },
+      {
+        "repo_relative": "d1max_nav_ws/src/scan_planner_vendor/plan_manage/include/plan_manage/planner_manager.h",
+        "source": {
+          "path": "/home/eric/wjg/d1max-system/d1max_nav_ws/src/scan_planner_vendor/plan_manage/include/plan_manage/planner_manager.h",
+          "sha256": "8fe92161a27dc0f2b95a654853a1eae8b65f0d46e896c9a9272bdf63a1dcd0c9",
+          "bytes": 9227
+        },
+        "installed": {
+          "path": "/home/eric/wjg/d1max-build-isaac/nav/install/scan_planner/include/plan_manage/planner_manager.h",
+          "sha256": "8fe92161a27dc0f2b95a654853a1eae8b65f0d46e896c9a9272bdf63a1dcd0c9",
+          "bytes": 9227
+        },
+        "candidate_installed": {
+          "path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v36-campus-crossing/application/install/scan_planner/include/plan_manage/planner_manager.h",
+          "sha256": "8fe92161a27dc0f2b95a654853a1eae8b65f0d46e896c9a9272bdf63a1dcd0c9",
+          "bytes": 9227
+        },
+        "all_bytes_equal": true,
+        "candidate_seal_expected_sha256": "8fe92161a27dc0f2b95a654853a1eae8b65f0d46e896c9a9272bdf63a1dcd0c9",
+        "candidate_matches_seal": true
+      },
+      {
+        "repo_relative": "d1max_nav_ws/src/scan_planner_vendor/bspline_opt/include/bspline_opt/bspline_optimizer.h",
+        "source": {
+          "path": "/home/eric/wjg/d1max-system/d1max_nav_ws/src/scan_planner_vendor/bspline_opt/include/bspline_opt/bspline_optimizer.h",
+          "sha256": "8371d43f4246669a3926864ba78581ce723f5ef674a71de6a1694b0d1e36ea83",
+          "bytes": 8025
+        },
+        "installed": {
+          "path": "/home/eric/wjg/d1max-build-isaac/nav/install/bspline_opt/include/bspline_opt/bspline_optimizer.h",
+          "sha256": "8371d43f4246669a3926864ba78581ce723f5ef674a71de6a1694b0d1e36ea83",
+          "bytes": 8025
+        },
+        "candidate_installed": {
+          "path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v36-campus-crossing/application/install/bspline_opt/include/bspline_opt/bspline_optimizer.h",
+          "sha256": "8371d43f4246669a3926864ba78581ce723f5ef674a71de6a1694b0d1e36ea83",
+          "bytes": 8025
+        },
+        "all_bytes_equal": true,
+        "candidate_seal_expected_sha256": "8371d43f4246669a3926864ba78581ce723f5ef674a71de6a1694b0d1e36ea83",
+        "candidate_matches_seal": true
+      }
+    ],
+    "source_manifest_mismatches": [],
+    "copy_mismatches": [],
+    "candidate_seal_mismatches": []
+  },
+  "related_existing_offline_evidence": [
+    {
+      "path": "/home/eric/wjg/d1max-system/simulation/isaacsim/verification/20261007/native_actor_hit_provenance_v36_offline.json",
+      "sha256": "12f79943376709585240bdf20e14e9dfc3c703d49db2c128860cdc123ed75748",
+      "bytes": 14763
+    },
+    {
+      "path": "/home/eric/wjg/d1max-system/simulation/isaacsim/verification/20261007/scripted_actor_future_v36_offline.json",
+      "sha256": "df2859061cb308381a31fb94ad18df47b2c13e742ecdf7ab7510fcff18935438",
+      "bytes": 7893
+    },
+    {
+      "path": "/home/eric/wjg/d1max-system/simulation/isaacsim/verification/20261007/full_xyz_reference_domain_offline_v36.json",
+      "sha256": "fd7bb81cabca4fce9ca525a5639a6c7a957ca9f02f425b9d801a7f9649979244",
+      "bytes": 9267
+    },
+    {
+      "path": "/home/eric/wjg/d1max-system/simulation/isaacsim/verification/20261007/spot_full_xyz_reference_domain_v36.json",
+      "sha256": "1ab7fef769ec0cf186a39f0b72b1d5decd6b2dba99788a1efc61506401d418d3",
+      "bytes": 1482
+    }
+  ],
+  "limits": [
+    "Offline regression/build success is not formal campus navigation success, dynamic encounter, measured stop or hardware acceptance.",
+    "Original external-default map data and test fixture contracts were not changed or fabricated; deeper assertions in those 17 tests remain unexecuted in the failing broad run.",
+    "Candidate is immutable and was not resealed to include this subsequently published evidence file."
+  ]
+}

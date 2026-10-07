@@ -1,0 +1,453 @@
+{
+  "schema": 1,
+  "date": "2026-10-07",
+  "scope": "offline_frozen_source_regression_not_physical_navigation_acceptance",
+  "physical_navigation_acceptance": false,
+  "runtime_source_frozen": true,
+  "source_sha256": {
+    "d1max_nav_ws/src/d1max_trajectory_tracker/include/d1max_trajectory_tracker/tracker_core.hpp": "d9937844f655445e3a3250a67259b17f1bba992bbcdb26766ca4eb4378042b49",
+    "d1max_nav_ws/src/d1max_trajectory_tracker/src/trajectory_tracker.cpp": "52fa9a90977a476e5ba4531efb0e68d96c8b18a25d384dc56a174ef8747bc617",
+    "d1max_nav_ws/src/d1max_trajectory_tracker/test/test_tracker_v2.cpp": "df5855eb454c08232bd9d98bd382e75521402594564b209aaa4acf0619caab4f",
+    "simulation/isaacsim/control_audit.py": "661837f91ab68fabb175a1ae01915ea96e4b8e7a171f0c6cfdd9e3ab34880264",
+    "simulation/isaacsim/test_control_audit.py": "a3c702a37a410d64c2c8d46865fd9ea11d67055124848f9c98d96c4ee7e3509f"
+  },
+  "isolated_source_sync": {
+    "d1max_nav_ws/src/d1max_trajectory_tracker/include/d1max_trajectory_tracker/tracker_core.hpp": {
+      "sha256": "d9937844f655445e3a3250a67259b17f1bba992bbcdb26766ca4eb4378042b49",
+      "matches_frozen_repository_source": true
+    },
+    "d1max_nav_ws/src/d1max_trajectory_tracker/src/trajectory_tracker.cpp": {
+      "sha256": "52fa9a90977a476e5ba4531efb0e68d96c8b18a25d384dc56a174ef8747bc617",
+      "matches_frozen_repository_source": true
+    },
+    "d1max_nav_ws/src/d1max_trajectory_tracker/test/test_tracker_v2.cpp": {
+      "sha256": "df5855eb454c08232bd9d98bd382e75521402594564b209aaa4acf0619caab4f",
+      "matches_frozen_repository_source": true
+    }
+  },
+  "build_scope": "only offline test_tracker_v2 and test_tracker_core targets, single compile job; node/install/formal simulation owned separately by root",
+  "tests": [
+    {
+      "suite": "test_tracker_v2",
+      "tests": 114,
+      "failures": 0,
+      "errors": 0,
+      "xml": "spatial_control_tracker_v2.xml",
+      "xml_sha256": "817050e7b8fd800e7d4b87d91f4ff3a989da539e02952deb72e8a4a8bac3844c",
+      "log": "spatial_control_tracker_v2.log",
+      "log_sha256": "89b80ee01161360cb4d8244a37e41dd29cac18ca678fe06cde0365e48e411eaa"
+    },
+    {
+      "suite": "test_tracker_core",
+      "tests": 57,
+      "failures": 0,
+      "errors": 0,
+      "xml": "spatial_control_tracker_core.xml",
+      "xml_sha256": "585e10b3439edb9a7c326854b7da73110a5847527089e6c670d781cc61e2376a",
+      "log": "spatial_control_tracker_core.log",
+      "log_sha256": "63f0ca669a87f5f5f522778e88de86aa4bebb2a2746586e5f86b74624d310c1b"
+    },
+    {
+      "suite": "python3 -m unittest -v test_control_audit",
+      "tests": 12,
+      "failures": 0,
+      "exit_code": 0,
+      "log": "spatial_control_audit_unittest.log",
+      "log_sha256": "475e7b4a3469a454fb5188d8e81f1bad427e7413dda353a2d8e5ddaba40a2669"
+    }
+  ],
+  "change": {
+    "parameter": "spatial_control_lookahead",
+    "default": false,
+    "requires": "require_support_reference plus unchanged verified floor support admission",
+    "distance_formula": "config.max_speed * config.lookahead",
+    "reference_arc": "existing complete XYZ curve arc table, including Z",
+    "measured_phase_and_route_credit": "unchanged; never advanced by lookahead evaluation",
+    "caps_and_admission": "current local curvature/braking, original command/ramp limits, raw XYZ source/C1 join and original complete curve proof unchanged",
+    "endpoint_plateau": "if target arc reaches final arc, evaluate original duration; retain endpoint feed-forward suppression; never rewrite current phase",
+    "shared_control": "step, duplicate-tick safe check, candidate moving heading check and diagnostics use the same helper"
+  },
+  "v32_evidence": {
+    "run": "campus_crossing_v32_001",
+    "original_control_trace_sha256": "3b32ca53700a4fad62ed2ededf95af301d51d237aea5b4571ec3a8c974b3d94a",
+    "original_result": "failed, not changed retrospectively by this offline audit",
+    "exact_curve21_original_wire": {
+      "session_id": "aed2e54367314fdb93b0078cb1073139",
+      "generation": 1,
+      "frame_id": "d1max_loc_odom",
+      "trajectory": {
+        "order": 3,
+        "traj_id": 21,
+        "start_time": {
+          "sec": 1791348500,
+          "nanosec": 266945592
+        },
+        "knots": [
+          -7.036619677942245,
+          -4.69107978529483,
+          -2.345539892647415,
+          0.0,
+          2.345539892647415,
+          4.69107978529483,
+          7.036619677942245,
+          9.38215957058966,
+          11.727699463237077,
+          14.073239355884493,
+          16.41877924853191,
+          18.764319141179325,
+          21.10985903382674,
+          23.455398926474157,
+          25.800938819121573,
+          28.14647871176899,
+          30.492018604416405,
+          32.83755849706382
+        ],
+        "pos_pts": [
+          {
+            "x": -7.907934414428759,
+            "y": -5.024316829503006,
+            "z": 0.4647770089134252
+          },
+          {
+            "x": -7.903770446777344,
+            "y": -5.024347305297852,
+            "z": 0.48240694403648376
+          },
+          {
+            "x": -7.899606479125929,
+            "y": -5.0243777810926975,
+            "z": 0.5000368791595423
+          },
+          {
+            "x": -7.829025524135243,
+            "y": -5.024273502951778,
+            "z": 0.5333972638083483
+          },
+          {
+            "x": -7.667332895332643,
+            "y": -5.024036208695234,
+            "z": 0.5142537168430978
+          },
+          {
+            "x": -7.418231753535922,
+            "y": -5.023653974884898,
+            "z": 0.5221175393921205
+          },
+          {
+            "x": -7.104426057094434,
+            "y": -5.023196513773388,
+            "z": 0.5192777920609564
+          },
+          {
+            "x": -6.762237803033336,
+            "y": -5.0226609878448425,
+            "z": 0.5202349559010571
+          },
+          {
+            "x": -6.435496613210593,
+            "y": -5.022163554391532,
+            "z": 0.5199260637142652
+          },
+          {
+            "x": -6.168623079004357,
+            "y": -5.021747257685324,
+            "z": 0.5200224081870802
+          },
+          {
+            "x": -5.99436363877358,
+            "y": -5.021481491926568,
+            "z": 0.519994148377172
+          },
+          {
+            "x": -5.920657606436189,
+            "y": -5.021366695036822,
+            "z": 0.52
+          },
+          {
+            "x": -5.920657606436189,
+            "y": -5.021366695036822,
+            "z": 0.52
+          },
+          {
+            "x": -5.920657606436189,
+            "y": -5.021366695036822,
+            "z": 0.52
+          }
+        ],
+        "yaw_pts": [],
+        "yaw_dt": 0.0
+      },
+      "schema_version": 2,
+      "point_reference": "body_center",
+      "task_id": "aed2e54367314fdb93b0078cb1073139.1",
+      "route_id": "aed2e54367314fdb93b0078cb1073139.1:295f6fa67dfe23deac9fbb39b8691590c7bc592b6d8c4ff19f5d50711f725f60",
+      "route_hash": "295f6fa67dfe23deac9fbb39b8691590c7bc592b6d8c4ff19f5d50711f725f60",
+      "map_version_id": "c080acb006e63c782dc81e23798bd2a64d5dbaacd53f3147e87c3425cf31c84e",
+      "segment_id": "floor",
+      "segment_kind": "floor",
+      "required_mode": "general",
+      "anchor_revision": 1,
+      "map_geometry_revision": 1,
+      "anchor_id": "e91092e142904de00c1daa8bfd2e0a9fb2204bbf8140fc29b6aa8a99a4bb8594",
+      "context_sequence": 1,
+      "localization_epoch": 1,
+      "localization_seed_id": "isaac-ea83571d-77bc-45de-8e68-0db06237ae8b",
+      "valid_start_time": 0.0,
+      "valid_start_arc_length": 0.0,
+      "join_source_stamp": {
+        "sec": 1791348500,
+        "nanosec": 264945592
+      },
+      "join_pose": {
+        "position": {
+          "x": -7.90370512008667,
+          "y": -5.024351119995117,
+          "z": 0.4824090898036957
+        },
+        "orientation": {
+          "x": -0.0017644050376887635,
+          "y": 0.0015225808468759187,
+          "z": -0.014379408084845922,
+          "w": 0.9998938949936425
+        }
+      },
+      "join_twist": {
+        "linear": {
+          "x": 0.0018016621470451355,
+          "y": -8.550328857381821e-06,
+          "z": 0.007522887084633111
+        },
+        "angular": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0
+        }
+      },
+      "join_acceleration": {
+        "linear": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0
+        },
+        "angular": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0
+        }
+      },
+      "join_acceleration_valid": false
+    },
+    "same_raw_body_curve21": {
+      "id": 21,
+      "u": 0.006008710643375313,
+      "body_xyz": [
+        -7.903589248657227,
+        -5.024343013763428,
+        0.48241183161735535
+      ],
+      "temporal_lead_velocity_xyz": [
+        0.0034471314801523055,
+        -9.601031451583886e-06,
+        0.007912335364424192
+      ],
+      "temporal_xy_to_xyz_speed_ratio": 0.3994080268779288,
+      "temporal_world_xy": [
+        0.004806222287055701,
+        -2.0683216688272135e-05
+      ],
+      "local_cap": 0.03448031901565758,
+      "spatial_xyz_arc_advance": 0.12,
+      "spatial_lead_time": 4.982758844669522,
+      "spatial_lead_xyz": [
+        -7.798694788375326,
+        -5.024229063212495,
+        0.5251500949111126
+      ],
+      "spatial_lead_velocity_xyz": [
+        0.0543321944495314,
+        7.990466485992502e-05,
+        0.0005090898157982485
+      ],
+      "spatial_world_xy": [
+        0.13824776267505173,
+        0.0001710651056062324
+      ],
+      "spatial_heading_error": 0.02996716995474369,
+      "spatial_forward_requested": 0.1381857977018531,
+      "spatial_forward_clamped_existing_cap": 0.03448031901565758
+    },
+    "comparison_scope": "evaluation on original controls/knots and raw body; offline controller reference only, not physical motion evidence",
+    "counterfactual_selected_curves": [
+      {
+        "id": 10,
+        "u": 0.0630176165601508,
+        "body_xyz": [
+          -7.920201301574707,
+          -5.024044513702393,
+          0.4816106855869293
+        ],
+        "temporal_lead_velocity_xyz": [
+          0.0038158532620330607,
+          3.252820099070713e-05,
+          0.009240817808608175
+        ],
+        "temporal_xy_to_xyz_speed_ratio": 0.38168601849597705,
+        "temporal_world_xy": [
+          0.0043980199329334245,
+          -0.00026800111386542785
+        ],
+        "local_cap": 3.801721603421774e-06,
+        "spatial_xyz_arc_advance": 0.12,
+        "spatial_lead_time": 4.075586257625211,
+        "spatial_lead_xyz": [
+          -7.8178974936463534,
+          -5.0242191193431545,
+          0.5260472674436956
+        ],
+        "spatial_lead_velocity_xyz": [
+          0.06654599119128693,
+          0.0001137569747170992,
+          -0.0022447806450015236
+        ],
+        "spatial_world_xy": [
+          0.14838903753396981,
+          -2.5927537892406666e-05
+        ],
+        "spatial_heading_error": 0.04886499812670575,
+        "spatial_forward_requested": 0.14821191426075678,
+        "spatial_forward_clamped_existing_cap": 3.801721603421774e-06
+      },
+      {
+        "id": 12,
+        "u": 0.0,
+        "body_xyz": [
+          -7.920300006866455,
+          -5.024107933044434,
+          0.4814012050628662
+        ],
+        "temporal_lead_velocity_xyz": [
+          0.0013777675123132589,
+          -0.00019180851361993436,
+          0.007118032343177991
+        ],
+        "temporal_xy_to_xyz_speed_ratio": 0.19179865327082143,
+        "temporal_world_xy": [
+          0.0015612298964721313,
+          -0.00029800822228507885
+        ],
+        "local_cap": 0.0007815841927221125,
+        "spatial_xyz_arc_advance": 0.12,
+        "spatial_lead_time": 5.091213678690324,
+        "spatial_lead_xyz": [
+          -7.817861834337345,
+          -5.024605980546591,
+          0.5257791000321008
+        ],
+        "spatial_lead_velocity_xyz": [
+          0.055365351005373944,
+          7.120216052341178e-05,
+          5.915584329682015e-05
+        ],
+        "spatial_world_xy": [
+          0.13731588902866224,
+          -0.00032723584120235316
+        ],
+        "spatial_heading_error": 0.049948621941947824,
+        "spatial_forward_requested": 0.13714502177600726,
+        "spatial_forward_clamped_existing_cap": 0.0007815841927221125
+      },
+      {
+        "id": 19,
+        "u": 0.029633712265326722,
+        "body_xyz": [
+          -7.908762454986572,
+          -5.024938583374023,
+          0.4818125069141388
+        ],
+        "temporal_lead_velocity_xyz": [
+          0.0062681063002899854,
+          0.0002947439525803191,
+          0.008712225906853166
+        ],
+        "temporal_xy_to_xyz_speed_ratio": 0.5844414836469788,
+        "temporal_world_xy": [
+          0.009359248900245518,
+          0.0004728091696554487
+        ],
+        "local_cap": 0.060665151859117604,
+        "spatial_xyz_arc_advance": 0.12,
+        "spatial_lead_time": 4.886857734684686,
+        "spatial_lead_xyz": [
+          -7.8022063519764755,
+          -5.023990320423475,
+          0.5248491343006585
+        ],
+        "spatial_lead_velocity_xyz": [
+          0.052368039033056056,
+          7.575877970336108e-05,
+          0.0011033777030492122
+        ],
+        "spatial_world_xy": [
+          0.1376129214411335,
+          0.000834369140142255
+        ],
+        "spatial_heading_error": 0.05089202082811939,
+        "spatial_forward_requested": 0.13743727747892526,
+        "spatial_forward_clamped_existing_cap": 0.060665151859117604
+      },
+      {
+        "id": 21,
+        "u": 0.006008710643375313,
+        "body_xyz": [
+          -7.903589248657227,
+          -5.024343013763428,
+          0.48241183161735535
+        ],
+        "temporal_lead_velocity_xyz": [
+          0.0034471314801523055,
+          -9.601031451583886e-06,
+          0.007912335364424192
+        ],
+        "temporal_xy_to_xyz_speed_ratio": 0.3994080268779288,
+        "temporal_world_xy": [
+          0.004806222287055701,
+          -2.0683216688272135e-05
+        ],
+        "local_cap": 0.03448031901565758,
+        "spatial_xyz_arc_advance": 0.12,
+        "spatial_lead_time": 4.982758844669522,
+        "spatial_lead_xyz": [
+          -7.798694788375326,
+          -5.024229063212495,
+          0.5251500949111126
+        ],
+        "spatial_lead_velocity_xyz": [
+          0.0543321944495314,
+          7.990466485992502e-05,
+          0.0005090898157982485
+        ],
+        "spatial_world_xy": [
+          0.13824776267505173,
+          0.0001710651056062324
+        ],
+        "spatial_heading_error": 0.02996716995474369,
+        "spatial_forward_requested": 0.1381857977018531,
+        "spatial_forward_clamped_existing_cap": 0.03448031901565758
+      }
+    ]
+  },
+  "regressions": [
+    "literal complete v32 curve21 temporal vs full XYZ spatial reference; equal current cap and measured phase; unchanged acceleration ramp",
+    "default false, no support configuration rejected, pure vertical zero planar authority, degenerate geometry rejected",
+    "existing heading threshold on legacy braking profile; curved XYZ loop retains original spatial braking cap",
+    "terminal constant-arc tail evaluates original endpoint without moving phase",
+    "literal v32 curve10 near XY cusp retains original tiny spatial braking cap despite stronger request",
+    "all existing 109 v2 and 57 core tests retained"
+  ],
+  "limitations": [
+    "No formal physical v33 result or silk-smooth navigation acceptance is implied by these tests.",
+    "Recorded v32 raw Z/reference-height bias and measured gait/curve dynamics remain independent platform calibration issues.",
+    "A separate existing conservative quadraticPlanarScale near-collinear floating triangle can yield zero cap on a constructed straight rotated fixture; this implementation does not change that envelope. The heading test isolates that existing restriction and is not evidence all combined-profile entrances are viable.",
+    "Original v31 did not record full curve geometry; this tool leaves exact curve evidence pending rather than synthesizing controls."
+  ]
+}

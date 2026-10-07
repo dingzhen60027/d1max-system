@@ -1,0 +1,157 @@
+{
+  "finding": "Original native proof invalidation follows original front-ray steady expiry and precedes tracker zero output and owner HOLD; dynamic oracle and static context are valid in that same captured query.",
+  "interpretation_limits": [
+    "lease is read from the original query cache before diagnostic occupancy re-query; subsequent evidence dump is not causal input",
+    "captured query_source_ns combines source and conservative steady advancement, not a later measured body source",
+    "receipt intervals are original monotonic wall clocks and are not multiplied or divided by simulation real-time factor",
+    "applied output reason is inherited from lastDemand; here original tracker reason and original invalid proof independently establish the stop cause",
+    "No sensor lease, UNKNOWN semantics, command authority, acceptance criterion, runtime source or executable was modified."
+  ],
+  "kind": "v34_original_curve_proof_expiry_causal_audit",
+  "original_captured_query_lease": {
+    "check_end_source_ns": 1791351288473382391,
+    "curve": 14,
+    "front_receipt_age_ms": 516.998792,
+    "front_receipt_expired": true,
+    "front_receipt_original_limit_ms": 500.0,
+    "lease": {
+      "barrier_ns": 1791351261191382391,
+      "both_ray_receipt_ns": [
+        1197953099972595,
+        1197953182837920
+      ],
+      "both_ray_source_ns": [
+        1791351288291382391,
+        1791351288291382391
+      ],
+      "cached_prior_lease_valid": false,
+      "context_sequence": 1,
+      "dynamic_oracle_enabled": true,
+      "dynamic_oracle_query_valid": true,
+      "dynamic_oracle_reachable_until_ns": 1791351294473382391,
+      "dynamic_oracle_registry_sha256": "be6813e188ff52611e04611682ce21bf303633099a61d7649d6b2e9712a478a6",
+      "dynamic_oracle_sequence": 1752,
+      "dynamic_oracle_source_ns": 1791351288473382391,
+      "epoch": 1,
+      "flat_support_contact_enabled": true,
+      "kind": "captured_collision_query_lease",
+      "policy": "validated_static_prior_with_dynamic_oracle_double_cylinder",
+      "query_receipt_ns": 1197953616971387,
+      "query_source_ns": 1791351288477994051,
+      "ray_clock_fault": false,
+      "receipt_deadline_ns": 1,
+      "seed_id": "isaac-a77b1961-5bad-473b-b297-0be21a933546",
+      "session_id": "6e5e5b990862498a88d5a12a8166abd3",
+      "source_deadline_ns": 1,
+      "static_prior_context_valid": true,
+      "static_prior_geometry_sha256": "b1de214d7b3dc3e0dec7207aba9c9675d7cc090a4c877c390b49c327ecd99a6e",
+      "static_prior_loaded": true,
+      "static_prior_manifest_sha256": "17af5102f750b2b977e36ce0e43acd7a0eb82088295c786b20462b1681e6408d",
+      "static_prior_map_version": "cdfabac40c98001f2fe0d9858b1ae79fc8c0c143c1c654f075dea130bd1267e5"
+    },
+    "log_line": 965,
+    "ray_source_age_at_captured_conservative_query_ms": 186.61166,
+    "ray_source_age_at_original_check_ms": 182.0,
+    "rear_receipt_age_ms": 434.133467,
+    "snapshot": 2996093
+  },
+  "original_causal_events": [
+    {
+      "body_source_stamp": {
+        "nanosec": 473382391,
+        "sec": 1791351288
+      },
+      "check_begin": {
+        "nanosec": 473382391,
+        "sec": 1791351288
+      },
+      "check_end": {
+        "nanosec": 473382391,
+        "sec": 1791351288
+      },
+      "front_ray_source_stamp": {
+        "nanosec": 291382391,
+        "sec": 1791351288
+      },
+      "kind": "trajectory_validation",
+      "line": 30579,
+      "rear_ray_source_stamp": {
+        "nanosec": 291382391,
+        "sec": 1791351288
+      },
+      "reason": "source_expired_during_check",
+      "receipt_monotonic_ns": 1197953617583678,
+      "scene_source_s": 29.2,
+      "sequence": 5903,
+      "source_clock_ns": 1791351288473382391,
+      "trajectory_id": 14,
+      "valid": false,
+      "valid_until": {
+        "nanosec": 1,
+        "sec": 0
+      }
+    },
+    {
+      "kind": "tracker",
+      "line": 30584,
+      "reason": "permission_or_native_proof_expired",
+      "receipt_monotonic_ns": 1197953625128894,
+      "scene_source_s": 29.2,
+      "source_clock_ns": 1791351288473382391,
+      "trajectory_id": 14
+    },
+    {
+      "body_source_stamp": {
+        "nanosec": 473382391,
+        "sec": 1791351288
+      },
+      "kind": "applied",
+      "line": 30592,
+      "reason": "permission_or_native_proof_expired",
+      "receipt_monotonic_ns": 1197953664880158,
+      "scene_source_s": 29.2,
+      "sequence": 5382,
+      "source_clock_ns": 1791351288473382391,
+      "trajectory_id": 14,
+      "valid_until": {
+        "nanosec": 573382391,
+        "sec": 1791351288
+      },
+      "validation_sequence": 5900,
+      "velocity": {
+        "angular": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0
+        },
+        "linear": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0
+        }
+      }
+    },
+    {
+      "allowed": false,
+      "kind": "permit",
+      "line": 30597,
+      "reason": "waiting_current_collision_and_tracker_proof",
+      "receipt_monotonic_ns": 1197953682869318,
+      "scene_source_s": 29.218,
+      "sequence": 1203,
+      "source_clock_ns": 1791351288491382391,
+      "trajectory_id": 14,
+      "valid_until": {
+        "nanosec": 741382391,
+        "sec": 1791351288
+      },
+      "validation_sequence": 5900
+    }
+  ],
+  "run": "/home/eric/wjg/d1max-build-isaac/runs/campus_crossing_v34_001",
+  "scan_log_sha256": "d309451c7944a4224857ca3dd30c9efcbbed806183a1a89e500c3e31a5be66b2",
+  "scene_anchor_source_ns": 1791351259273382391,
+  "schema": 1,
+  "source_scope": "read_only_original_immutable_run; no navigation acceptance claim",
+  "trace_sha256": "5a95611977236f2c5b0390eb02615cb3b97afe414ac8938fcffe822047f3cef6"
+}

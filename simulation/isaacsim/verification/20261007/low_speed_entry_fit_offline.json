@@ -1,0 +1,67 @@
+{
+  "schema": 1,
+  "date": "2026-10-07",
+  "scope": "offline_candidate_generation_math_and_existing_native_adoption_regression",
+  "physical_navigation_acceptance": false,
+  "source_frozen": true,
+  "source_root": "d1max_nav_ws/src/scan_planner_vendor/plan_manage",
+  "source_sha256": {
+    "CMakeLists.txt": "ea45141b2d4084ba0796223b95885a84ac3d09f333ec9678b808609887054992",
+    "src/planner_manager.cpp": "f45dc92686d48875c4eac2ce16968b9ab98fe9f79fa660e97d3e81bb31690628",
+    "include/plan_manage/planner_manager.h": "5fcabaf0eaf9139155a5413a5aad3d5d4f438f963120f88900e7d8b608b9137b",
+    "include/plan_manage/low_speed_entry_fit.hpp": "8ac5729a0833534531030df3fab79373da9309f822e811b425e12cc09e4b4d78",
+    "test/test_low_speed_entry_fit.cpp": "3d3f9bc2a0a47496ab44e352714731d20efc4d17574068e5866a55d5fe18b8db"
+  },
+  "isolated_nav_source_hashes_match": true,
+  "parameter": {
+    "name": "manager.fit_low_speed_entry_velocity",
+    "default": false
+  },
+  "eligibility": [
+    "explicit opt-in",
+    "guided local reference",
+    "finite certifiedSupportFloorZ from the original GridMap snapshot",
+    "original measured source ns > 0; existing measuredBodyYaw source-age/frame/position gate passes before selection",
+    "both incoming solver velocity and original worker measured velocity finite, complete XYZ std::hypot norm <= 0.03 m/s",
+    "incoming acceleration finite and every component exactly zero; nonzero values including 1e-300 preserve old boundary"
+  ],
+  "effect": "Only local-by-value solver initial velocity/acceleration become zero. Original raw body pose, raw velocity/source and current adoption witness remain unchanged. This is curve selection inside the existing 0.05 m/s C1 tolerance, not a stationary certificate or permission.",
+  "unchanged": [
+    "initial measured XYZ position",
+    "future original XYZ reference including Z",
+    "manager.max_vel / max_acc, command max speed / yaw / ramp",
+    "candidate_adoption measured velocity/source and .05 C1 checks",
+    "TaggedBspline join_twist remains original measured velocity; acceleration_valid remains the old source value, with no invented C2 evidence",
+    "full-curve collision and map/body source gates",
+    "moving vs stationary writer CAS, motion sweep, stop and execution leases",
+    "actual measured progress and owner route credits"
+  ],
+  "tests": {
+    "target": "test_low_speed_entry_fit",
+    "tests": 10,
+    "failures": 0,
+    "errors": 0,
+    "xml": "low_speed_entry_fit.xml",
+    "xml_sha256": "b76d6c22677063971a09936cd997456b81c59161bdc566d2b450287db8f880c4",
+    "log": "low_speed_entry_fit.log",
+    "log_sha256": "d8b137ebdb899366a21e1c9c198fcfc490ad6efbf212f73d97094e298ce273d9",
+    "build": "existing isolated scan_planner CMake offline test target, --parallel 1; no node/install/ROS/Kit"
+  },
+  "meaningful_regressions": [
+    "full-XYZ low boundary chooses zero without mutating inputs",
+    "disabled / non-guided / absent or nonfinite floor preserves old boundary",
+    "missing or negative original source denies fitting",
+    "either full XYZ norm above .03 denies, including low XY / high Z",
+    "exact .03 eligible, next floating value above .03 denied, no minimum speed introduced",
+    "every nonzero incoming acceleration including a subnormal-scale value retains exact old boundary",
+    "nonfinite data never converted to plausible zero",
+    "real fixed-boundary 3D cubic preserves original start Z .481 and future Z .52; original native adoption returns raw vz .007 and original ns, acceleration_valid=false",
+    "latest raw velocity .051 rejected by original .05 C1 guard",
+    "whole-curve collision rejection and a one-nanosecond final source change each deny adoption"
+  ],
+  "limitations": [
+    "This implementation makes no claim that low measured velocity proves rest.",
+    "It does not repair high-speed gait / XYZ derivative .15 contract incompatibility; norm > .03 uses the old exact boundary.",
+    "No formal v34 result, continuous navigation success or physical acceptance is claimed by these offline tests."
+  ]
+}

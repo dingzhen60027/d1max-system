@@ -1,0 +1,1614 @@
+{
+  "cold_park_pose_and_native_velocity_equal_across_three_runs": true,
+  "complete_shape_containment": {
+    "immutable_geometry_replay_source": {
+      "dynamic_collision.py": {
+        "path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/monotone_v2_full_20261007_001/source_snapshot/dynamic_collision.py",
+        "sha256": "6e887d01118fcb32b71bf9161720b8b2eb028804e9fed572f636aa2dafa96da6"
+      },
+      "quadruped.py": {
+        "path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/monotone_v2_full_20261007_001/source_snapshot/quadruped.py",
+        "sha256": "cba3c49072bd390250eadead4a0cbe839d3d782093037378174ac4eb8a7137d1"
+      },
+      "runtime_geometry.py": {
+        "path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/monotone_v2_full_20261007_001/source_snapshot/runtime_geometry.py",
+        "sha256": "9a5b4e3860fd310a5468393914ef749c11e1bd1f47554b54c60e094ecaa293b6"
+      }
+    },
+    "new_above_589_replay_failures": [],
+    "original_above_55_replay_failures": [],
+    "phase_statistics": [
+      {
+        "phase": "park",
+        "same_source_snapshots": 900,
+        "shape_minimum_world_z_m": {
+          "maximum": -8.035451173782349e-06,
+          "mean": -8.543150292501376e-06,
+          "median": -8.571892976760864e-06,
+          "minimum": -8.825212717056274e-06,
+          "p01": -8.765608072280884e-06,
+          "p10": -8.691102266311646e-06,
+          "p90": -8.34837555885315e-06,
+          "p99": -8.139461278908536e-06,
+          "samples": 900
+        },
+        "shape_top_minus_actual_body_z_m": {
+          "maximum": 0.07522935148028176,
+          "mean": 0.07471700116661939,
+          "median": 0.07513599399100351,
+          "minimum": 0.07225465892612726,
+          "p01": 0.07226573806334793,
+          "p10": 0.07333863821808259,
+          "p90": 0.0752271637728527,
+          "p99": 0.07522892882016115,
+          "samples": 900
+        },
+        "source_first_ns": 2002000000,
+        "source_last_ns": 19982000000,
+        "total_registered_shapes": 11700
+      },
+      {
+        "phase": "low_after_park",
+        "same_source_snapshots": 1000,
+        "shape_minimum_world_z_m": {
+          "maximum": 0.0003729723393917084,
+          "mean": -1.2828566133974498e-05,
+          "median": -1.4562159776687622e-05,
+          "minimum": -0.00018310919404029152,
+          "p01": -3.225281834602356e-05,
+          "p10": -2.5276094675057148e-05,
+          "p90": -7.513165473937988e-06,
+          "p99": 2.661667764186774e-05,
+          "samples": 1000
+        },
+        "shape_top_minus_actual_body_z_m": {
+          "maximum": 0.09225463743424311,
+          "mean": 0.0770819539392068,
+          "median": 0.07632229418836195,
+          "minimum": 0.07021578212138846,
+          "p01": 0.0706381681936894,
+          "p10": 0.07204065702609322,
+          "p90": 0.08376431591327449,
+          "p99": 0.08971288548768981,
+          "samples": 1000
+        },
+        "source_first_ns": 20002000000,
+        "source_last_ns": 39982000000,
+        "total_registered_shapes": 13000
+      },
+      {
+        "phase": "stop_after_park",
+        "same_source_snapshots": 250,
+        "shape_minimum_world_z_m": {
+          "maximum": -1.0285526514046406e-05,
+          "mean": -1.1611342430112748e-05,
+          "median": -1.1339783668518066e-05,
+          "minimum": -2.0537525415420532e-05,
+          "p01": -1.8929168581959185e-05,
+          "p10": -1.229792833328247e-05,
+          "p90": -1.0672211647033692e-05,
+          "p99": -1.0370984673500061e-05,
+          "samples": 250
+        },
+        "shape_top_minus_actual_body_z_m": {
+          "maximum": 0.0811987248804541,
+          "mean": 0.07458113892366881,
+          "median": 0.07392214985368334,
+          "minimum": 0.07367477088277408,
+          "p01": 0.07367614790610444,
+          "p10": 0.07369780352078194,
+          "p90": 0.07679256138711472,
+          "p99": 0.08005151503003319,
+          "samples": 250
+        },
+        "source_first_ns": 40002000000,
+        "source_last_ns": 44982000000,
+        "total_registered_shapes": 3250
+      },
+      {
+        "phase": "walk",
+        "same_source_snapshots": 400,
+        "shape_minimum_world_z_m": {
+          "maximum": 0.00040417537093162537,
+          "mean": -1.2544188648460735e-05,
+          "median": -1.803785562514912e-05,
+          "minimum": -0.0001797713339328766,
+          "p01": -4.56366688013008e-05,
+          "p10": -2.860799431800842e-05,
+          "p90": -3.974884748458861e-06,
+          "p99": 0.0002924931049346992,
+          "samples": 400
+        },
+        "shape_top_minus_actual_body_z_m": {
+          "maximum": 0.08771576572658668,
+          "mean": 0.07534187632338657,
+          "median": 0.07414317867469739,
+          "minimum": 0.07012180611524943,
+          "p01": 0.07061387565770198,
+          "p10": 0.07199028523103339,
+          "p90": 0.08139895423327978,
+          "p99": 0.08675620899512117,
+          "samples": 400
+        },
+        "source_first_ns": 45002000000,
+        "source_last_ns": 52982000000,
+        "total_registered_shapes": 5200
+      },
+      {
+        "phase": "stop_walk",
+        "same_source_snapshots": 250,
+        "shape_minimum_world_z_m": {
+          "maximum": -6.604939699166035e-06,
+          "mean": -1.168054342269681e-05,
+          "median": -8.769333362575876e-06,
+          "minimum": -0.0004429854452610016,
+          "p01": -2.8942376375194827e-05,
+          "p10": -1.1006742715834876e-05,
+          "p90": -7.603317499153828e-06,
+          "p99": -7.017925381653523e-06,
+          "samples": 250
+        },
+        "shape_top_minus_actual_body_z_m": {
+          "maximum": 0.07775118069052855,
+          "mean": 0.07405843407354114,
+          "median": 0.07418680738345318,
+          "minimum": 0.07014072495755275,
+          "p01": 0.07133808719132555,
+          "p10": 0.07308421009324764,
+          "p90": 0.07426913374309857,
+          "p99": 0.07736156685011077,
+          "samples": 250
+        },
+        "source_first_ns": 53002000000,
+        "source_last_ns": 57982000000,
+        "total_registered_shapes": 3250
+      },
+      {
+        "phase": "low_after_walk",
+        "same_source_snapshots": 1000,
+        "shape_minimum_world_z_m": {
+          "maximum": 0.00035629794001579285,
+          "mean": -1.3368546962736504e-05,
+          "median": -1.548975706100464e-05,
+          "minimum": -0.00023140385746955872,
+          "p01": -3.7437081336975025e-05,
+          "p10": -2.476051449775696e-05,
+          "p90": -8.133798837661047e-06,
+          "p99": 9.926185011863425e-06,
+          "samples": 1000
+        },
+        "shape_top_minus_actual_body_z_m": {
+          "maximum": 0.09273580762961231,
+          "mean": 0.07871617832310077,
+          "median": 0.07741158864048764,
+          "minimum": 0.07041139600144286,
+          "p01": 0.07103099657711415,
+          "p10": 0.07222636272762364,
+          "p90": 0.0869353079540978,
+          "p99": 0.09125556366800398,
+          "samples": 1000
+        },
+        "source_first_ns": 58002000000,
+        "source_last_ns": 77982000000,
+        "total_registered_shapes": 13000
+      },
+      {
+        "phase": "stop_after_walk",
+        "same_source_snapshots": 250,
+        "shape_minimum_world_z_m": {
+          "maximum": -8.586794137954712e-06,
+          "mean": -1.1551499366758561e-05,
+          "median": -1.0639429092403757e-05,
+          "minimum": -3.415718674659729e-05,
+          "p01": -3.020040690898895e-05,
+          "p10": -1.2670457363128661e-05,
+          "p90": -9.334832429885865e-06,
+          "p99": -8.71315598487854e-06,
+          "samples": 250
+        },
+        "shape_top_minus_actual_body_z_m": {
+          "maximum": 0.07712310364639541,
+          "mean": 0.07353848121256054,
+          "median": 0.07361920423932372,
+          "minimum": 0.07049436636781026,
+          "p01": 0.07126883104734617,
+          "p10": 0.07289053423005995,
+          "p90": 0.07368842148071525,
+          "p99": 0.07669271434079687,
+          "samples": 250
+        },
+        "source_first_ns": 78002000000,
+        "source_last_ns": 82982000000,
+        "total_registered_shapes": 3250
+      },
+      {
+        "phase": "tiny_after_walk",
+        "same_source_snapshots": 1000,
+        "shape_minimum_world_z_m": {
+          "maximum": -5.9641897678305855e-06,
+          "mean": -7.524743676183672e-06,
+          "median": -7.487833499904978e-06,
+          "minimum": -9.927898645394062e-06,
+          "p01": -9.041428565979004e-06,
+          "p10": -8.311122655861591e-06,
+          "p90": -6.820261478417827e-06,
+          "p99": -6.403550505638123e-06,
+          "samples": 1000
+        },
+        "shape_top_minus_actual_body_z_m": {
+          "maximum": 0.08081200520533138,
+          "mean": 0.0769495365173262,
+          "median": 0.07673855583458739,
+          "minimum": 0.07343145902090908,
+          "p01": 0.07355093745263094,
+          "p10": 0.07456553106103794,
+          "p90": 0.07977927496750711,
+          "p99": 0.08070522925984042,
+          "samples": 1000
+        },
+        "source_first_ns": 83002000000,
+        "source_last_ns": 102982000000,
+        "total_registered_shapes": 13000
+      },
+      {
+        "phase": "stop_tiny",
+        "same_source_snapshots": 250,
+        "shape_minimum_world_z_m": {
+          "maximum": -5.5767595767905465e-06,
+          "mean": -8.106410503385648e-06,
+          "median": -8.191913366317749e-06,
+          "minimum": -1.3355165719985962e-05,
+          "p01": -1.2115389108657836e-05,
+          "p10": -8.863210678100585e-06,
+          "p90": -6.9305300712578515e-06,
+          "p99": -5.795583128925739e-06,
+          "samples": 250
+        },
+        "shape_top_minus_actual_body_z_m": {
+          "maximum": 0.08082396920603219,
+          "mean": 0.07438123234311578,
+          "median": 0.07355181936806227,
+          "minimum": 0.07340990963833605,
+          "p01": 0.07341038067230378,
+          "p10": 0.07341663530212936,
+          "p90": 0.07700482450142501,
+          "p99": 0.0802924272345384,
+          "samples": 250
+        },
+        "source_first_ns": 103002000000,
+        "source_last_ns": 107982000000,
+        "total_registered_shapes": 3250
+      }
+    ],
+    "producer_caveat": "The full-run original producer summary retained 5300 invalid_body_position type rejections from NumPy scalars under strict validation. This replay uses unchanged serialized raw numeric pose values decoded as Python floats; it does not erase or relabel those original failures.",
+    "raw_run": "/home/eric/wjg/d1max-build-isaac/quadruped-research/monotone_v2_full_20261007_001",
+    "registry_shape_count": 13,
+    "registry_source": "the same path/type registry reconstructed from authorized_colliders exactly as the original probe does",
+    "same_source_snapshots": 5300,
+    "scope": "Offline replay only establishes exact measured full-primitive containment, not live static/dynamic collision safety, fresh leases, or future unsupported postures.",
+    "shape_minimum_world_z_m": -0.0004429854452610016,
+    "shape_top_minus_actual_body_maximum_m": 0.09273580762961231,
+    "skip_startup_rule": "source_ns >= 2000000000, after initial spawn settling",
+    "total_actual_shape_readings": 68900
+  },
+  "date_local": "2026-10-07",
+  "historical_metadata_caveat": "world_builder.observed_standing_body_z_range_m [.478,.544] is a historical broad range including gait, not the measured source 10-20 s cold-standing range above.",
+  "interpretation": [
+    "The measured .52 walking median does not establish .52 cold stance; separate actual stance and gait domains.",
+    "The official plant receives vx/wz and cannot directly execute a requested positive vz. A nominal initial Z mismatch may consume 3D curve timing while tiny XY demand cannot start real gait. Height calibration removes this artificial mismatch but is not a causal proof that the entire deadlock is fixed.",
+    "If gait-dependent Z still dominates the trajectory domain, evaluate a platform-specific model of controllable forward/yaw motion with measured full-Z support/volume bounds. Do not erase Z, fabricate velocity, bypass collision evidence, or impose a minimum high-level speed.",
+    "Cold position is stable while native raw world vz is around +.00744 m/s. Both measurements are retained as recorded; no derivative substitution or fabricated zero vz is used."
+  ],
+  "kind": "official_spot_physx_cold_stand_reference_calibration_readonly_evidence_v1",
+  "new_candidate_physx_navigation_validated": false,
+  "physical_acceptance": false,
+  "reference_calibration": {
+    "limits": "A cold stand reference is not an actual-body pose replacement. Walking and post-walk standing heights vary; this parameter-only hypothesis requires new original-framework navigation validation.",
+    "measured_cold_stand_median_m": 0.48074474930763245,
+    "new_above_body_m": 0.589,
+    "new_offline_bottom_z_offset_m": -0.481,
+    "new_planned_absolute_upper_m": 1.0699999999999998,
+    "new_reference_minus_measured_m": 0.00025525069236753684,
+    "new_rounded_reference_height_m": 0.481,
+    "old_above_body_m": 0.55,
+    "old_planned_absolute_upper_m": 1.07,
+    "old_reference_height_m": 0.52,
+    "old_reference_minus_measured_m": 0.03925525069236757,
+    "reason": "Match the ground-to-body reference to the measured stable cold stance and remove its artificial 39.255 mm startup rise. Increasing above by the nominal height reduction preserves the previous planned absolute upper 1.07 m; it does not shrink real collision solids.",
+    "source_defaults_observed": {
+      "body_reference_height": 0.481,
+      "initial_spawn_height_m": 0.8,
+      "navigation_envelope": {
+        "above_body_m": 0.589,
+        "length_m": 1.25,
+        "width_m": 0.9
+      },
+      "offline_collision_envelope": {
+        "bottom_z_offset_m": -0.481,
+        "radius_m": 0.65,
+        "top_z_offset_m": 0.589
+      }
+    }
+  },
+  "reproducibility": {
+    "artifact_writer": "json.dumps(report, indent=2, sort_keys=True, allow_nan=False) plus one newline",
+    "calculation_python": "import collections, hashlib, importlib.util, json, math, re, statistics, sys\nfrom pathlib import Path\nimport numpy as np\nBASE = Path('/home/eric/wjg/d1max-build-isaac/quadruped-research')\nREPO = Path('/home/eric/wjg/d1max-system')\nRUN_NAMES = ('monotone_v2_short_20261007_001', 'monotone_v2_full_20261007_001', 'nonlinear_v1_short_20261007_001')\nFORMAL = Path('/home/eric/wjg/d1max-build-isaac/runs/campus_crossing_v32_001')\ndef sha(p):\n    h = hashlib.sha256()\n    with Path(p).open('rb') as f:\n        for chunk in iter(lambda: f.read(1024*1024), b''): h.update(chunk)\n    return h.hexdigest()\ndef stat(values):\n    a = np.asarray(values, dtype=float)\n    return dict(samples=len(a), minimum=float(a.min()), median=float(np.median(a)), maximum=float(a.max()), mean=float(a.mean()), p01=float(np.percentile(a,1)), p10=float(np.percentile(a,10)), p90=float(np.percentile(a,90)), p99=float(np.percentile(a,99)))\nraw_rows = {}\nruns = []\nfor name in RUN_NAMES:\n    directory = BASE/name\n    rows = [json.loads(l) for l in (directory/'trajectory.jsonl').open()]\n    raw_rows[name] = rows\n    cold = [r for r in rows if r['phase']=='park' and 10_000_000_000 <= r['source_ns'] <= 20_000_000_000]\n    assert len(cold)==5001 and all(r['command']==[0.,0.] for r in cold)\n    assert cold[0]['source_ns']==10_000_000_000 and cold[-1]['source_ns']==20_000_000_000\n    assert all(b['source_ns']-a['source_ns']==2_000_000 for a,b in zip(cold,cold[1:]))\n    metadata = json.loads((directory/'quadruped_asset_metadata.json').read_text())\n    files = {f: dict(path=str(directory/f), bytes=(directory/f).stat().st_size, sha256=sha(directory/f)) for f in ('trajectory.jsonl','policy_joints_geometry.jsonl','quadruped_asset_metadata.json')}\n    original_summary = None\n    if (directory/'summary.json').is_file():\n        s=json.loads((directory/'summary.json').read_text())\n        files['summary.json']=dict(path=str(directory/'summary.json'),bytes=(directory/'summary.json').stat().st_size,sha256=sha(directory/'summary.json'))\n        failures=s.get('certificate_failures',[])\n        original_summary=dict(path=str(directory/'summary.json'),all_motion_phases_passed=s.get('all_motion_phases_passed'),certificate_failure_count=len(failures))\n    phases=[]\n    for phase in dict.fromkeys(r['phase'] for r in rows):\n        selected=[r for r in rows if r['phase']==phase]\n        phases.append(dict(phase=phase,source_first_ns=selected[0]['source_ns'],source_last_ns=selected[-1]['source_ns'],samples=len(selected),command_vx=selected[0]['command'][0],command_wz=selected[0]['command'][1],body_z_m=stat([r['position'][2] for r in selected]),native_world_vz_mps=stat([r['linear_velocity'][2] for r in selected])))\n    runs.append(dict(name=name,directory=str(directory),files=files,mode=metadata['velocity_feedback']['mode'],physics_frequency_hz=metadata['physics_frequency_hz'],policy_frequency_hz=metadata['policy_frequency_hz'],actual_registered_shape_count=len(metadata['authorized_colliders']),original_summary=original_summary,cold_stand=dict(phase='park',source_first_ns=cold[0]['source_ns'],source_last_ns=cold[-1]['source_ns'],window='inclusive source 10.000000000 to 20.000000000 seconds; zero command',body_z_m=stat([r['position'][2] for r in cold]),native_world_vz_mps=stat([r['linear_velocity'][2] for r in cold])),phase_statistics=phases))\ncold_vectors=[]\nfor name in RUN_NAMES:\n    cold_vectors.append([(r['source_ns'],r['position'],r['quaternion_wxyz'],r['linear_velocity'],r['angular_velocity']) for r in raw_rows[name] if r['phase']=='park' and 10_000_000_000<=r['source_ns']<=20_000_000_000])\nassert cold_vectors[0]==cold_vectors[1]==cold_vectors[2]\nfull_directory=BASE/RUN_NAMES[1]\nfull=raw_rows[RUN_NAMES[1]]\nby_ns={r['source_ns']:r for r in full}\nmetadata=json.loads((full_directory/'quadruped_asset_metadata.json').read_text())\nregistry=dict(root=metadata['root_path'],colliders=[dict(path=r['path'],type=r['shape']['type']) for r in metadata['authorized_colliders']])\n# Use the immutable source snapshot from the actual experiment, not current live source.\nsnapshot=full_directory/'source_snapshot'\nsys.path.insert(0,str(snapshot))\nfrom runtime_geometry import body_certificate\nshape_phases=collections.defaultdict(list)\ncertificate_errors={'.55':[],'.589':[]}\nshape_records=0\nfor line in (full_directory/'policy_joints_geometry.jsonl').open():\n    s=json.loads(line)\n    if s['source_ns']<2_000_000_000: continue\n    body=by_ns[s['source_ns']]\n    assert body['phase']==s['phase'] and len(s['colliders'])==13\n    assert {c['path'] for c in s['colliders']}=={c['path'] for c in registry['colliders']}\n    q=body['quaternion_wxyz']\n    pose=[*body['position'],q[1],q[2],q[3],q[0]]\n    for above,label in ((.55,'.55'),(.589,'.589')):\n        envelope=dict(radius=.6078651750202781,offset=.3125,above=above,support_floor_z=0.,support_penetration_m=.02)\n        try: body_certificate(s['colliders'],pose,registry,envelope,s['source_ns'])\n        except Exception as e: certificate_errors[label].append(dict(source_ns=s['source_ns'],reason=str(e)))\n    shape_phases[s['phase']].append(dict(source_ns=s['source_ns'],registered_shapes=13,top_minus_body=max(c['aabb_max'][2] for c in s['colliders'])-body['position'][2],minimum_world_z=min(c['aabb_min'][2] for c in s['colliders'])))\n    shape_records+=1\nshape_statistics=[]\nfor phase,values in shape_phases.items():\n    shape_statistics.append(dict(phase=phase,same_source_snapshots=len(values),total_registered_shapes=13*len(values),source_first_ns=values[0]['source_ns'],source_last_ns=values[-1]['source_ns'],shape_top_minus_actual_body_z_m=stat([v['top_minus_body'] for v in values]),shape_minimum_world_z_m=stat([v['minimum_world_z'] for v in values])))\nall_shapes=[v for values in shape_phases.values() for v in values]\nassert shape_records==5300 and not any(certificate_errors.values())\nformal_session=json.loads((FORMAL/'session.json').read_text())\nbraking=json.loads((FORMAL/'braking_model.json').read_text())\nmeasurements=braking['measurements']\nreaction=float(measurements['reaction_bound_s'])\ntracking=float(measurements['tracking_error_bound_m'])\n# Literal SupportReference bound from continuous_reference_node.py:360; retained as uncertainty even on this flat floor.\nslope=.15\nstep=.025\nresolution=.05\nfloor_lower=-.02\nassert reaction==.67 and tracking==.1\nproof_records=[]\nfor line_number,line in enumerate((FORMAL/'scan.log').open(),1):\n    if 'Motion proof demand=' not in line: continue\n    m=re.search(r'Motion proof demand=(\\d+) snapshot=(\\d+) unique_voxels=(\\d+)',line)\n    if m: proof_records.append(dict(scan_log_line=line_number,demand_id=int(m[1]),snapshot_id=int(m[2]),unique_voxels=int(m[3])))\nassert len(proof_records)==16\ncounts=[r['unique_voxels'] for r in proof_records]\nassert all(n%24==0 for n in counts)\ncolumns_max=max(counts)//24\nassert columns_max==6783\nlayer_phases=[]\nfor phase in dict.fromkeys(r['phase'] for r in full):\n    values=[r for r in full if r['phase']==phase and r['source_ns']>=2_000_000_000]\n    def layers(r,above):\n        max_z=r['position'][2]+math.tan(slope)*step+tracking+abs(r['linear_velocity'][2])*reaction+above\n        return math.floor(max_z/resolution)-math.floor(floor_lower/resolution)+1\n    old=[layers(r,.55) for r in values]\n    new=[layers(r,.589) for r in values]\n    layer_phases.append(dict(phase=phase,samples=len(values),old_z_layers=stat(old),new_z_layers=stat(new),new_maximum_cells_if_same_6783_xy_columns=columns_max*max(new)))\nmaximum_layers=max(v['new_z_layers']['maximum'] for v in layer_phases)\nassert maximum_layers==29\nnew_h=.481\nold_h=.52\nnew_above=.589\nsources={}\nfor file in ('world_builder.py','nav_prepare.py','runtime_geometry.py','prepare_world.py','scenario_suite.py','truth_map.py'):\n    path=REPO/'simulation/isaacsim'/file\n    sources[file]=dict(path=str(path),sha256=sha(path))\nfor key,relative in (('motion_sweep.hpp','d1max_nav_ws/src/scan_planner_vendor/plan_manage/include/plan_manage/motion_sweep.hpp'),('grid_map.cpp','d1max_nav_ws/src/scan_planner_vendor/plan_env/src/grid_map.cpp'),('continuous_reference.py','d1max_nav_ws/src/d1max_pct_scan/d1max_pct_scan/continuous_reference.py'),('continuous_reference_node.py','d1max_nav_ws/src/d1max_pct_scan/d1max_pct_scan/continuous_reference_node.py')):\n    path=REPO/relative;sources[key]=dict(path=str(path),sha256=sha(path))\n# Current parent implementation is inspected but never mutated by this calculation.\nspec=importlib.util.spec_from_file_location('cold_calibration_world_builder',REPO/'simulation/isaacsim/world_builder.py')\nmodule=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)\nrobot=module.create_large_world()['robot']\nassert robot['body_reference_height']==new_h\nassert robot['navigation_envelope']['above_body_m']==new_above\nassert robot['offline_collision_envelope']['bottom_z_offset_m']==-new_h\nassert robot['offline_collision_envelope']['top_z_offset_m']==new_above\nreport=dict(schema=1,kind='official_spot_physx_cold_stand_reference_calibration_readonly_evidence_v1',date_local='2026-10-07',timezone='Asia/Shanghai',physical_acceptance=False,new_candidate_physx_navigation_validated=False,scope='offline exact-source raw PhysX analysis and same-footprint arithmetic; no SimulationApp, ROS, build, new plant run, or source mutation',runs=runs,cold_park_pose_and_native_velocity_equal_across_three_runs=True,\n    reference_calibration=dict(old_reference_height_m=old_h,measured_cold_stand_median_m=runs[0]['cold_stand']['body_z_m']['median'],new_rounded_reference_height_m=new_h,old_reference_minus_measured_m=old_h-runs[0]['cold_stand']['body_z_m']['median'],new_reference_minus_measured_m=new_h-runs[0]['cold_stand']['body_z_m']['median'],new_above_body_m=new_above,old_above_body_m=.55,old_planned_absolute_upper_m=old_h+.55,new_planned_absolute_upper_m=new_h+new_above,new_offline_bottom_z_offset_m=-new_h,source_defaults_observed=dict(body_reference_height=robot['body_reference_height'],navigation_envelope=robot['navigation_envelope'],offline_collision_envelope=robot['offline_collision_envelope'],initial_spawn_height_m=robot['initial_spawn_height_m']),reason='Match the ground-to-body reference to the measured stable cold stance and remove its artificial 39.255 mm startup rise. Increasing above by the nominal height reduction preserves the previous planned absolute upper 1.07 m; it does not shrink real collision solids.',limits='A cold stand reference is not an actual-body pose replacement. Walking and post-walk standing heights vary; this parameter-only hypothesis requires new original-framework navigation validation.'),\n    complete_shape_containment=dict(raw_run=str(full_directory),same_source_snapshots=shape_records,total_actual_shape_readings=13*shape_records,registry_shape_count=13,registry_source='the same path/type registry reconstructed from authorized_colliders exactly as the original probe does',skip_startup_rule='source_ns >= 2000000000, after initial spawn settling',shape_top_minus_actual_body_maximum_m=max(v['top_minus_body'] for v in all_shapes),shape_minimum_world_z_m=min(v['minimum_world_z'] for v in all_shapes),original_above_55_replay_failures=certificate_errors['.55'],new_above_589_replay_failures=certificate_errors['.589'],immutable_geometry_replay_source={f:dict(path=str(snapshot/f),sha256=sha(snapshot/f)) for f in ('runtime_geometry.py','quadruped.py','dynamic_collision.py')},phase_statistics=shape_statistics,scope='Offline replay only establishes exact measured full-primitive containment, not live static/dynamic collision safety, fresh leases, or future unsupported postures.',producer_caveat='The full-run original producer summary retained 5300 invalid_body_position type rejections from NumPy scalars under strict validation. This replay uses unchanged serialized raw numeric pose values decoded as Python floats; it does not erase or relabel those original failures.'),\n    sweep_budget=dict(formal_run=str(FORMAL),formal_inputs={f:dict(path=str(FORMAL/f),sha256=sha(FORMAL/f)) for f in ('scan.log','session.json','braking_model.json')},original_successful_motion_proof_records=proof_records,original_observed_unique_voxels=stat(counts),original_cold_z_layers=24,original_xy_columns_inferred_maximum=columns_max,original_layer_inference='24 layers from the original formula applied to stable cold raw z/vz; the 16 logged complete cell counts are all divisible by 24. The arithmetic assumes the original footprint is unchanged.',parameters=dict(voxel_resolution_m=resolution,floor_lower_world_z_m=floor_lower,reaction_s=reaction,tracking_error_m=tracking,support_max_slope_rad=slope,support_sample_step_m=step,unchanged_maximum_cells=200000),formula='max_z = actual_body_z + tan(.15)*.025 + .10 + abs(native_world_vz)*.67 + above; z_layers = floor(max_z/.05)-floor(-.02/.05)+1; estimated cells = unchanged_xy_columns*z_layers',cold_same_footprint_cells_range=[min(counts)//24*25,max(counts)//24*25],new_largest_raw_component_z_layers=int(maximum_layers),same_footprint_maximum_cells=columns_max*int(maximum_layers),same_footprint_remaining_cells=200000-columns_max*int(maximum_layers),same_footprint_remaining_fraction=(200000-columns_max*int(maximum_layers))/200000,maximum_allowed_xy_columns_at_29_layers=200000//29,phase_statistics=layer_phases,new_run_or_collision_proof=False,qualification='196707 is arithmetic replay using 29 actual component-derived Z layers and the previously observed 6783 XY columns. It is NOT a new candidate runtime result or proof that all headings, reference extents, wall-clock budgets, or live leases pass. The original 200000-cell and time limits remain enforced.'),\n    semantic_invariants=['Actual PhysX pose, quaternion, all three velocity components and IMU remain original measurements.','All 13 complete official registered solids, their affine transforms, XY dimensions, and primitive identities remain unchanged.','Authorized certified floor-contact lower plane remains floor-.02; capsules and non-support body shapes retain strict above-plane checks.','Nominal ground-to-body height is applied exactly once; original ground/support XYZ are not flattened.','Navigation command caps .15 m/s and .30 rad/s, measured reachable caps .60 m/s and .80 rad/s, original full-norm STOP and leases remain unchanged.','Spawn clearance stays .80 m and static-prior actual height tolerance stays .12 m.','The larger above .589 preserves nominal planned absolute top; no minimum high-level vx or body teleport is introduced.'],\n    source_impact=[dict(path=sources['continuous_reference.py']['path'],lines=[227,334],meaning='subtract h from actual body for ground projection; add h to immutable ground XYZ for body reference'),dict(path=sources['nav_prepare.py']['path'],lines=[76,123,126,135,136,152,180,196,202,203,216],meaning='height/profile/calibration identity, reflected kernel, static expected body height and bridge attestation parameters propagate together'),dict(path=sources['runtime_geometry.py']['path'],lines=[74,75,76],meaning='lower support slab derives from actual body height, and complete measured primitive corners are certified'),dict(path=sources['grid_map.cpp']['path'],lines=[847,849,857],meaning='strict curve query uses fixed certified floor lower bound and full above bound'),dict(path=sources['motion_sweep.hpp']['path'],lines=[116,117,180,185,186,187,188,211],meaning='only vx/wz actuated demand; actual Z reaction padding and full support slab remain; 200000-cell bound preserved')],\n    source_hashes_at_evidence_creation=sources,\n    required_fresh_sealing=['Fresh scene config and scenario suite configuration/source-code digest.','Fresh prepared/corroborated stage and complete static/robot/dynamic registrations; preserve original actual solids.','Rebuild or re-attest static prior manifest with the new spec/stage provenance; collider/grid/bin content hashes may legitimately remain equal.','Fresh fixture profile and body-height calibration ID plus scan/reference/BT/session parameters.','Recompute session input hashes, candidate/runtime bundle identity and validation reports.','Use a fresh session/context/clock anchor and private collision caches; do not reuse old permits, proof leases or handoff identities.'],\n    interpretation=['The measured .52 walking median does not establish .52 cold stance; separate actual stance and gait domains.','The official plant receives vx/wz and cannot directly execute a requested positive vz. A nominal initial Z mismatch may consume 3D curve timing while tiny XY demand cannot start real gait. Height calibration removes this artificial mismatch but is not a causal proof that the entire deadlock is fixed.','If gait-dependent Z still dominates the trajectory domain, evaluate a platform-specific model of controllable forward/yaw motion with measured full-Z support/volume bounds. Do not erase Z, fabricate velocity, bypass collision evidence, or impose a minimum high-level speed.','Cold position is stable while native raw world vz is around +.00744 m/s. Both measurements are retained as recorded; no derivative substitution or fabricated zero vz is used.'],\n    historical_metadata_caveat='world_builder.observed_standing_body_z_range_m [.478,.544] is a historical broad range including gait, not the measured source 10-20 s cold-standing range above.')\n",
+    "calculation_python_sha256": "d6f74fc758ce49c53ac9e8e6a4f19bb8eb249ca2087354bfec2c4c949171e331",
+    "instructions": "Run this Python code with NumPy available and the immutable raw directories present. It creates report in memory, imports only pure recorded geometry modules, and never initializes Isaac/ROS. Inspect source_hashes and raw hashes before comparing a reproduction; live defaults may later change.",
+    "percentile_method": "NumPy percentile default linear interpolation; actual numerical arrays remain unmodified"
+  },
+  "required_fresh_sealing": [
+    "Fresh scene config and scenario suite configuration/source-code digest.",
+    "Fresh prepared/corroborated stage and complete static/robot/dynamic registrations; preserve original actual solids.",
+    "Rebuild or re-attest static prior manifest with the new spec/stage provenance; collider/grid/bin content hashes may legitimately remain equal.",
+    "Fresh fixture profile and body-height calibration ID plus scan/reference/BT/session parameters.",
+    "Recompute session input hashes, candidate/runtime bundle identity and validation reports.",
+    "Use a fresh session/context/clock anchor and private collision caches; do not reuse old permits, proof leases or handoff identities."
+  ],
+  "runs": [
+    {
+      "actual_registered_shape_count": 13,
+      "cold_stand": {
+        "body_z_m": {
+          "maximum": 0.48079636693000793,
+          "mean": 0.4807515987704406,
+          "median": 0.48074474930763245,
+          "minimum": 0.4807393252849579,
+          "p01": 0.4807395339012146,
+          "p10": 0.4807398319244385,
+          "p90": 0.4807761013507843,
+          "p99": 0.4807944595813751,
+          "samples": 5001
+        },
+        "native_world_vz_mps": {
+          "maximum": 0.007465361151844263,
+          "mean": 0.00744654676528531,
+          "median": 0.0074474201537668705,
+          "minimum": 0.007419143337756395,
+          "p01": 0.007426840718835592,
+          "p10": 0.007436209823936224,
+          "p90": 0.0074551897123456,
+          "p99": 0.00746016763150692,
+          "samples": 5001
+        },
+        "phase": "park",
+        "source_first_ns": 10000000000,
+        "source_last_ns": 20000000000,
+        "window": "inclusive source 10.000000000 to 20.000000000 seconds; zero command"
+      },
+      "directory": "/home/eric/wjg/d1max-build-isaac/quadruped-research/monotone_v2_short_20261007_001",
+      "files": {
+        "policy_joints_geometry.jsonl": {
+          "bytes": 21154102,
+          "path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/monotone_v2_short_20261007_001/policy_joints_geometry.jsonl",
+          "sha256": "c918f10b7ed5c87a41d47e0eb01f470d3a92aa07a0ef75a6e546ee6ac58e0ba1"
+        },
+        "quadruped_asset_metadata.json": {
+          "bytes": 15465,
+          "path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/monotone_v2_short_20261007_001/quadruped_asset_metadata.json",
+          "sha256": "f4bd649f120134216dcb22071b0da105f9bd7f182f4a7f68b6aa18076ddf824a"
+        },
+        "trajectory.jsonl": {
+          "bytes": 13713342,
+          "path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/monotone_v2_short_20261007_001/trajectory.jsonl",
+          "sha256": "8c70d237944a3523fcab964e5be39b17a00683157fe82909f4bc704c2d29e495"
+        }
+      },
+      "mode": "spot_monotone_measured_v2",
+      "name": "monotone_v2_short_20261007_001",
+      "original_summary": null,
+      "phase_statistics": [
+        {
+          "body_z_m": {
+            "maximum": 0.7925322651863098,
+            "mean": 0.4822010566413403,
+            "median": 0.4807831197977066,
+            "minimum": 0.41367843747138977,
+            "p01": 0.43674958884716036,
+            "p10": 0.480739951133728,
+            "p90": 0.48155810832977297,
+            "p99": 0.5414424198865898,
+            "samples": 10000
+          },
+          "command_vx": 0.0,
+          "command_wz": 0.0,
+          "native_world_vz_mps": {
+            "maximum": 0.24191707372665405,
+            "mean": -0.008185730254882947,
+            "median": 0.007439235923811793,
+            "minimum": -1.7293576002120972,
+            "p01": -0.912525463104248,
+            "p10": 0.007229053741320967,
+            "p90": 0.007457061763852834,
+            "p99": 0.17462618887424494,
+            "samples": 10000
+          },
+          "phase": "park",
+          "samples": 10000,
+          "source_first_ns": 2000000,
+          "source_last_ns": 20000000000
+        },
+        {
+          "body_z_m": {
+            "maximum": 0.5390963554382324,
+            "mean": 0.4996790721938014,
+            "median": 0.49524594843387604,
+            "minimum": 0.4744323790073395,
+            "p01": 0.47652837723493574,
+            "p10": 0.4814639866352081,
+            "p90": 0.5249318778514862,
+            "p99": 0.5371396893262863,
+            "samples": 4000
+          },
+          "command_vx": 0.075,
+          "command_wz": 0.0,
+          "native_world_vz_mps": {
+            "maximum": 0.19977819919586182,
+            "mean": 0.009302949315321257,
+            "median": 0.00799215491861105,
+            "minimum": -0.17951026558876038,
+            "p01": -0.1658386641740799,
+            "p10": -0.08180724158883093,
+            "p90": 0.09883428961038589,
+            "p99": 0.19258561283349973,
+            "samples": 4000
+          },
+          "phase": "low_after_park",
+          "samples": 4000,
+          "source_first_ns": 20002000000,
+          "source_last_ns": 28000000000
+        },
+        {
+          "body_z_m": {
+            "maximum": 0.4960463345050812,
+            "mean": 0.49211904208660123,
+            "median": 0.49180497229099274,
+            "minimum": 0.4910467863082886,
+            "p01": 0.4910562887787819,
+            "p10": 0.4911496162414551,
+            "p90": 0.49313453733921053,
+            "p99": 0.49601271122694013,
+            "samples": 2500
+          },
+          "command_vx": 0.0,
+          "command_wz": 0.0,
+          "native_world_vz_mps": {
+            "maximum": 0.009840983897447586,
+            "mean": 0.006432824902439279,
+            "median": 0.006996172713115811,
+            "minimum": -0.004630215000361204,
+            "p01": -0.004229644052684307,
+            "p10": 0.006404948653653264,
+            "p90": 0.0072227463126182554,
+            "p99": 0.007868771627545356,
+            "samples": 2500
+          },
+          "phase": "stop_after_park",
+          "samples": 2500,
+          "source_first_ns": 28002000000,
+          "source_last_ns": 33000000000
+        },
+        {
+          "body_z_m": {
+            "maximum": 0.541815996170044,
+            "mean": 0.5190273064747453,
+            "median": 0.5207066237926483,
+            "minimum": 0.4908366799354553,
+            "p01": 0.49096918940544126,
+            "p10": 0.4975812554359436,
+            "p90": 0.5338503956794739,
+            "p99": 0.540889368057251,
+            "samples": 4000
+          },
+          "command_vx": 0.15,
+          "command_wz": 0.0,
+          "native_world_vz_mps": {
+            "maximum": 0.250150203704834,
+            "mean": 0.011243418973949247,
+            "median": 0.016485166735947132,
+            "minimum": -0.20549297332763672,
+            "p01": -0.17655050113797188,
+            "p10": -0.11502962186932564,
+            "p90": 0.13613017201423644,
+            "p99": 0.2413115060329437,
+            "samples": 4000
+          },
+          "phase": "walk",
+          "samples": 4000,
+          "source_first_ns": 33002000000,
+          "source_last_ns": 41000000000
+        },
+        {
+          "body_z_m": {
+            "maximum": 0.5263465642929077,
+            "mean": 0.4903743576645851,
+            "median": 0.48889465630054474,
+            "minimum": 0.4876093864440918,
+            "p01": 0.48762943476438525,
+            "p10": 0.48780844211578367,
+            "p90": 0.4906795084476471,
+            "p99": 0.5253712779283524,
+            "samples": 2500
+          },
+          "command_vx": 0.0,
+          "command_wz": 0.0,
+          "native_world_vz_mps": {
+            "maximum": 0.09288864582777023,
+            "mean": 0.0005084603423252702,
+            "median": 0.006750484695658088,
+            "minimum": -0.19147451221942902,
+            "p01": -0.1839389096200466,
+            "p10": 0.005542648676782847,
+            "p90": 0.0070533896796405315,
+            "p99": 0.04886014699935793,
+            "samples": 2500
+          },
+          "phase": "stop_walk",
+          "samples": 2500,
+          "source_first_ns": 41002000000,
+          "source_last_ns": 46000000000
+        }
+      ],
+      "physics_frequency_hz": 500,
+      "policy_frequency_hz": 50
+    },
+    {
+      "actual_registered_shape_count": 13,
+      "cold_stand": {
+        "body_z_m": {
+          "maximum": 0.48079636693000793,
+          "mean": 0.4807515987704406,
+          "median": 0.48074474930763245,
+          "minimum": 0.4807393252849579,
+          "p01": 0.4807395339012146,
+          "p10": 0.4807398319244385,
+          "p90": 0.4807761013507843,
+          "p99": 0.4807944595813751,
+          "samples": 5001
+        },
+        "native_world_vz_mps": {
+          "maximum": 0.007465361151844263,
+          "mean": 0.00744654676528531,
+          "median": 0.0074474201537668705,
+          "minimum": 0.007419143337756395,
+          "p01": 0.007426840718835592,
+          "p10": 0.007436209823936224,
+          "p90": 0.0074551897123456,
+          "p99": 0.00746016763150692,
+          "samples": 5001
+        },
+        "phase": "park",
+        "source_first_ns": 10000000000,
+        "source_last_ns": 20000000000,
+        "window": "inclusive source 10.000000000 to 20.000000000 seconds; zero command"
+      },
+      "directory": "/home/eric/wjg/d1max-build-isaac/quadruped-research/monotone_v2_full_20261007_001",
+      "files": {
+        "policy_joints_geometry.jsonl": {
+          "bytes": 49490974,
+          "path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/monotone_v2_full_20261007_001/policy_joints_geometry.jsonl",
+          "sha256": "b0489057509079adf2c9c1a02b35aad4c077f90f8faf797e66f2dd7ca69aca79"
+        },
+        "quadruped_asset_metadata.json": {
+          "bytes": 15465,
+          "path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/monotone_v2_full_20261007_001/quadruped_asset_metadata.json",
+          "sha256": "f4bd649f120134216dcb22071b0da105f9bd7f182f4a7f68b6aa18076ddf824a"
+        },
+        "summary.json": {
+          "bytes": 475133,
+          "path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/monotone_v2_full_20261007_001/summary.json",
+          "sha256": "9995423349d568dcaaf9c8dafc93a98c1c356d7266288857296005795d3f0a4d"
+        },
+        "trajectory.jsonl": {
+          "bytes": 32143439,
+          "path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/monotone_v2_full_20261007_001/trajectory.jsonl",
+          "sha256": "56acccfe4b15bf0fd458c391150c6d16859ee20f6f36580ca2297a1cb6c67e2c"
+        }
+      },
+      "mode": "spot_monotone_measured_v2",
+      "name": "monotone_v2_full_20261007_001",
+      "original_summary": {
+        "all_motion_phases_passed": false,
+        "certificate_failure_count": 5300,
+        "path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/monotone_v2_full_20261007_001/summary.json"
+      },
+      "phase_statistics": [
+        {
+          "body_z_m": {
+            "maximum": 0.7925322651863098,
+            "mean": 0.4822010566413403,
+            "median": 0.4807831197977066,
+            "minimum": 0.41367843747138977,
+            "p01": 0.43674958884716036,
+            "p10": 0.480739951133728,
+            "p90": 0.48155810832977297,
+            "p99": 0.5414424198865898,
+            "samples": 10000
+          },
+          "command_vx": 0.0,
+          "command_wz": 0.0,
+          "native_world_vz_mps": {
+            "maximum": 0.24191707372665405,
+            "mean": -0.008185730254882947,
+            "median": 0.007439235923811793,
+            "minimum": -1.7293576002120972,
+            "p01": -0.912525463104248,
+            "p10": 0.007229053741320967,
+            "p90": 0.007457061763852834,
+            "p99": 0.17462618887424494,
+            "samples": 10000
+          },
+          "phase": "park",
+          "samples": 10000,
+          "source_first_ns": 2000000,
+          "source_last_ns": 20000000000
+        },
+        {
+          "body_z_m": {
+            "maximum": 0.5390963554382324,
+            "mean": 0.5048985703468323,
+            "median": 0.49925222992897034,
+            "minimum": 0.4744323790073395,
+            "p01": 0.47958630323410034,
+            "p10": 0.48179110884666443,
+            "p90": 0.5260053873062134,
+            "p99": 0.5370393151044845,
+            "samples": 10000
+          },
+          "command_vx": 0.075,
+          "command_wz": 0.0,
+          "native_world_vz_mps": {
+            "maximum": 0.23336970806121826,
+            "mean": 0.008075458416368838,
+            "median": 0.009811683092266321,
+            "minimum": -0.20048746466636658,
+            "p01": -0.16627766102552413,
+            "p10": -0.08971467539668083,
+            "p90": 0.09880921542644501,
+            "p99": 0.1991150300204754,
+            "samples": 10000
+          },
+          "phase": "low_after_park",
+          "samples": 10000,
+          "source_first_ns": 20002000000,
+          "source_last_ns": 40000000000
+        },
+        {
+          "body_z_m": {
+            "maximum": 0.4945701062679291,
+            "mean": 0.4903649938225746,
+            "median": 0.49006980657577515,
+            "minimum": 0.48924729228019714,
+            "p01": 0.48925774842500686,
+            "p10": 0.48935930132865907,
+            "p90": 0.4913839727640152,
+            "p99": 0.4945217192173004,
+            "samples": 2500
+          },
+          "command_vx": 0.0,
+          "command_wz": 0.0,
+          "native_world_vz_mps": {
+            "maximum": 0.010046998038887978,
+            "mean": 0.006372927027809055,
+            "median": 0.006978204939514399,
+            "minimum": -0.006093509029597044,
+            "p01": -0.005674595790915191,
+            "p10": 0.006427477579563856,
+            "p90": 0.007199549442157149,
+            "p99": 0.008295415230095384,
+            "samples": 2500
+          },
+          "phase": "stop_after_park",
+          "samples": 2500,
+          "source_first_ns": 40002000000,
+          "source_last_ns": 45000000000
+        },
+        {
+          "body_z_m": {
+            "maximum": 0.5419544577598572,
+            "mean": 0.5185240441337228,
+            "median": 0.5210690498352051,
+            "minimum": 0.48906680941581726,
+            "p01": 0.4892017287015915,
+            "p10": 0.4969334214925766,
+            "p90": 0.5340918600559235,
+            "p99": 0.540830773115158,
+            "samples": 4000
+          },
+          "command_vx": 0.15,
+          "command_wz": 0.0,
+          "native_world_vz_mps": {
+            "maximum": 0.2307613492012024,
+            "mean": 0.0126070664279232,
+            "median": 0.01782222557812929,
+            "minimum": -0.19879715144634247,
+            "p01": -0.15390364438295365,
+            "p10": -0.11731660440564155,
+            "p90": 0.1268077775835991,
+            "p99": 0.21001767039298996,
+            "samples": 4000
+          },
+          "phase": "walk",
+          "samples": 4000,
+          "source_first_ns": 45002000000,
+          "source_last_ns": 53000000000
+        },
+        {
+          "body_z_m": {
+            "maximum": 0.538592517375946,
+            "mean": 0.4932223287940025,
+            "median": 0.48917466402053833,
+            "minimum": 0.4879915416240692,
+            "p01": 0.48800750970840456,
+            "p10": 0.48817431926727295,
+            "p90": 0.5158220529556274,
+            "p99": 0.5373594361543655,
+            "samples": 2500
+          },
+          "command_vx": 0.0,
+          "command_wz": 0.0,
+          "native_world_vz_mps": {
+            "maximum": 0.1417301744222641,
+            "mean": -0.0012775977824814617,
+            "median": 0.006794520188122988,
+            "minimum": -0.18047995865345,
+            "p01": -0.17214979499578476,
+            "p10": -0.00931385764852166,
+            "p90": 0.009376985859125843,
+            "p99": 0.09162118442356562,
+            "samples": 2500
+          },
+          "phase": "stop_walk",
+          "samples": 2500,
+          "source_first_ns": 53002000000,
+          "source_last_ns": 58000000000
+        },
+        {
+          "body_z_m": {
+            "maximum": 0.5388397574424744,
+            "mean": 0.504804624658823,
+            "median": 0.4970382899045944,
+            "minimum": 0.4830229878425598,
+            "p01": 0.4869117075204849,
+            "p10": 0.48933668434619904,
+            "p90": 0.5262397348880767,
+            "p99": 0.5370833230018616,
+            "samples": 10000
+          },
+          "command_vx": 0.075,
+          "command_wz": 0.0,
+          "native_world_vz_mps": {
+            "maximum": 0.23338854312896729,
+            "mean": 0.009070135692953408,
+            "median": 0.010872372426092625,
+            "minimum": -0.1684952825307846,
+            "p01": -0.15268709018826485,
+            "p10": -0.08686151951551438,
+            "p90": 0.09411276280879981,
+            "p99": 0.20927549853920965,
+            "samples": 10000
+          },
+          "phase": "low_after_walk",
+          "samples": 10000,
+          "source_first_ns": 58002000000,
+          "source_last_ns": 78000000000
+        },
+        {
+          "body_z_m": {
+            "maximum": 0.5260266661643982,
+            "mean": 0.4918025467514992,
+            "median": 0.48952165246009827,
+            "minimum": 0.4884587526321411,
+            "p01": 0.4884749886393547,
+            "p10": 0.4886210381984711,
+            "p90": 0.49117258489131926,
+            "p99": 0.524856019616127,
+            "samples": 2500
+          },
+          "command_vx": 0.0,
+          "command_wz": 0.0,
+          "native_world_vz_mps": {
+            "maximum": 0.08557537198066711,
+            "mean": 0.0008089080034871586,
+            "median": 0.006864719558507204,
+            "minimum": -0.19145511090755463,
+            "p01": -0.18244971379637717,
+            "p10": 0.005379573721438646,
+            "p90": 0.007136678509414196,
+            "p99": 0.07407878749072536,
+            "samples": 2500
+          },
+          "phase": "stop_after_walk",
+          "samples": 2500,
+          "source_first_ns": 78002000000,
+          "source_last_ns": 83000000000
+        },
+        {
+          "body_z_m": {
+            "maximum": 0.4884580075740814,
+            "mean": 0.48769546902179717,
+            "median": 0.4876106530427933,
+            "minimum": 0.4874820411205292,
+            "p01": 0.4874833822250366,
+            "p10": 0.48749151825904846,
+            "p90": 0.4880710273981094,
+            "p99": 0.488340440094471,
+            "samples": 10000
+          },
+          "command_vx": 0.01,
+          "command_wz": 0.0,
+          "native_world_vz_mps": {
+            "maximum": 0.00851444061845541,
+            "mean": 0.007409895035345108,
+            "median": 0.007424216950312257,
+            "minimum": 0.004760781303048134,
+            "p01": 0.007178725660778582,
+            "p10": 0.007278504781424999,
+            "p90": 0.007527702394872904,
+            "p99": 0.007915900982916358,
+            "samples": 10000
+          },
+          "phase": "tiny_after_walk",
+          "samples": 10000,
+          "source_first_ns": 83002000000,
+          "source_last_ns": 103000000000
+        },
+        {
+          "body_z_m": {
+            "maximum": 0.4889799952507019,
+            "mean": 0.4875997923374176,
+            "median": 0.4874812066555023,
+            "minimum": 0.4874459505081177,
+            "p01": 0.4874461889266968,
+            "p10": 0.48744896054267883,
+            "p90": 0.4877738684415817,
+            "p99": 0.48894224971532824,
+            "samples": 2500
+          },
+          "command_vx": 0.0,
+          "command_wz": 0.0,
+          "native_world_vz_mps": {
+            "maximum": 0.016943112015724182,
+            "mean": 0.007343240684783086,
+            "median": 0.0074273403733968735,
+            "minimum": 0.0011770137352868915,
+            "p01": 0.0014539691142272204,
+            "p10": 0.007028011092916131,
+            "p90": 0.0074789529666304585,
+            "p99": 0.015924705024808642,
+            "samples": 2500
+          },
+          "phase": "stop_tiny",
+          "samples": 2500,
+          "source_first_ns": 103002000000,
+          "source_last_ns": 108000000000
+        }
+      ],
+      "physics_frequency_hz": 500,
+      "policy_frequency_hz": 50
+    },
+    {
+      "actual_registered_shape_count": 13,
+      "cold_stand": {
+        "body_z_m": {
+          "maximum": 0.48079636693000793,
+          "mean": 0.4807515987704406,
+          "median": 0.48074474930763245,
+          "minimum": 0.4807393252849579,
+          "p01": 0.4807395339012146,
+          "p10": 0.4807398319244385,
+          "p90": 0.4807761013507843,
+          "p99": 0.4807944595813751,
+          "samples": 5001
+        },
+        "native_world_vz_mps": {
+          "maximum": 0.007465361151844263,
+          "mean": 0.00744654676528531,
+          "median": 0.0074474201537668705,
+          "minimum": 0.007419143337756395,
+          "p01": 0.007426840718835592,
+          "p10": 0.007436209823936224,
+          "p90": 0.0074551897123456,
+          "p99": 0.00746016763150692,
+          "samples": 5001
+        },
+        "phase": "park",
+        "source_first_ns": 10000000000,
+        "source_last_ns": 20000000000,
+        "window": "inclusive source 10.000000000 to 20.000000000 seconds; zero command"
+      },
+      "directory": "/home/eric/wjg/d1max-build-isaac/quadruped-research/nonlinear_v1_short_20261007_001",
+      "files": {
+        "policy_joints_geometry.jsonl": {
+          "bytes": 21151067,
+          "path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/nonlinear_v1_short_20261007_001/policy_joints_geometry.jsonl",
+          "sha256": "3801860667f6c657b3c455626096778a3d9fbfa44bc07e22751d33bbda621c47"
+        },
+        "quadruped_asset_metadata.json": {
+          "bytes": 15438,
+          "path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/nonlinear_v1_short_20261007_001/quadruped_asset_metadata.json",
+          "sha256": "f8eb9a6eb0e9363832299dadc9543b41f949578cb93ad74f19dd99d7461e9c2a"
+        },
+        "summary.json": {
+          "bytes": 21471,
+          "path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/nonlinear_v1_short_20261007_001/summary.json",
+          "sha256": "8ee3df72131c9a8e15da5d936a7f528790decb94570720fa618e10c34e4f930f"
+        },
+        "trajectory.jsonl": {
+          "bytes": 13716419,
+          "path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/nonlinear_v1_short_20261007_001/trajectory.jsonl",
+          "sha256": "e1d9008434fc11451e925b21962088efc066166b7714e6185e4f2c4320e6c60b"
+        }
+      },
+      "mode": "spot_nonlinear_measured_v1",
+      "name": "nonlinear_v1_short_20261007_001",
+      "original_summary": {
+        "all_motion_phases_passed": true,
+        "certificate_failure_count": 0,
+        "path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/nonlinear_v1_short_20261007_001/summary.json"
+      },
+      "phase_statistics": [
+        {
+          "body_z_m": {
+            "maximum": 0.7925322651863098,
+            "mean": 0.4822010566413403,
+            "median": 0.4807831197977066,
+            "minimum": 0.41367843747138977,
+            "p01": 0.43674958884716036,
+            "p10": 0.480739951133728,
+            "p90": 0.48155810832977297,
+            "p99": 0.5414424198865898,
+            "samples": 10000
+          },
+          "command_vx": 0.0,
+          "command_wz": 0.0,
+          "native_world_vz_mps": {
+            "maximum": 0.24191707372665405,
+            "mean": -0.008185730254882947,
+            "median": 0.007439235923811793,
+            "minimum": -1.7293576002120972,
+            "p01": -0.912525463104248,
+            "p10": 0.007229053741320967,
+            "p90": 0.007457061763852834,
+            "p99": 0.17462618887424494,
+            "samples": 10000
+          },
+          "phase": "park",
+          "samples": 10000,
+          "source_first_ns": 2000000,
+          "source_last_ns": 20000000000
+        },
+        {
+          "body_z_m": {
+            "maximum": 0.5388689637184143,
+            "mean": 0.5028430446758866,
+            "median": 0.5008884072303772,
+            "minimum": 0.4747943878173828,
+            "p01": 0.4766368120908737,
+            "p10": 0.48178780972957613,
+            "p90": 0.525510060787201,
+            "p99": 0.536001152396202,
+            "samples": 4000
+          },
+          "command_vx": 0.075,
+          "command_wz": 0.0,
+          "native_world_vz_mps": {
+            "maximum": 0.20316211879253387,
+            "mean": 0.009321811151969086,
+            "median": 0.011498007457703352,
+            "minimum": -0.19929079711437225,
+            "p01": -0.168760923743248,
+            "p10": -0.08827629163861274,
+            "p90": 0.0974502608180046,
+            "p99": 0.18410235673189163,
+            "samples": 4000
+          },
+          "phase": "low_after_park",
+          "samples": 4000,
+          "source_first_ns": 20002000000,
+          "source_last_ns": 28000000000
+        },
+        {
+          "body_z_m": {
+            "maximum": 0.49618929624557495,
+            "mean": 0.491360729944706,
+            "median": 0.4910493791103363,
+            "minimum": 0.4902782738208771,
+            "p01": 0.49028825283050537,
+            "p10": 0.4903822988271713,
+            "p90": 0.4923275262117386,
+            "p99": 0.496093310713768,
+            "samples": 2500
+          },
+          "command_vx": 0.0,
+          "command_wz": 0.0,
+          "native_world_vz_mps": {
+            "maximum": 0.01066732220351696,
+            "mean": 0.006254428468440892,
+            "median": 0.006998051190748811,
+            "minimum": -0.00854955893009901,
+            "p01": -0.008114895913749934,
+            "p10": 0.006434146407991647,
+            "p90": 0.007227800134569406,
+            "p99": 0.008500405075028536,
+            "samples": 2500
+          },
+          "phase": "stop_after_park",
+          "samples": 2500,
+          "source_first_ns": 28002000000,
+          "source_last_ns": 33000000000
+        },
+        {
+          "body_z_m": {
+            "maximum": 0.5405948758125305,
+            "mean": 0.5198681817352772,
+            "median": 0.52150097489357,
+            "minimum": 0.4901461601257324,
+            "p01": 0.49026296645402906,
+            "p10": 0.4978686660528183,
+            "p90": 0.5344840526580811,
+            "p99": 0.5398167043924331,
+            "samples": 4000
+          },
+          "command_vx": 0.15,
+          "command_wz": 0.0,
+          "native_world_vz_mps": {
+            "maximum": 0.24553163349628448,
+            "mean": 0.01093929826350677,
+            "median": 0.015182961709797382,
+            "minimum": -0.1947656273841858,
+            "p01": -0.16850567266345023,
+            "p10": -0.11851744800806045,
+            "p90": 0.13980275690555571,
+            "p99": 0.23580611661076534,
+            "samples": 4000
+          },
+          "phase": "walk",
+          "samples": 4000,
+          "source_first_ns": 33002000000,
+          "source_last_ns": 41000000000
+        },
+        {
+          "body_z_m": {
+            "maximum": 0.5257074236869812,
+            "mean": 0.4912858190059662,
+            "median": 0.48953188955783844,
+            "minimum": 0.48828718066215515,
+            "p01": 0.48830460757017136,
+            "p10": 0.48847553730010984,
+            "p90": 0.4913261950016022,
+            "p99": 0.5247326701879501,
+            "samples": 2500
+          },
+          "command_vx": 0.0,
+          "command_wz": 0.0,
+          "native_world_vz_mps": {
+            "maximum": 0.08319000899791718,
+            "mean": 0.0012624800732766743,
+            "median": 0.006776387570425868,
+            "minimum": -0.18409624695777893,
+            "p01": -0.1764911660552025,
+            "p10": 0.005543607659637928,
+            "p90": 0.007078553177416324,
+            "p99": 0.07204993940889824,
+            "samples": 2500
+          },
+          "phase": "stop_walk",
+          "samples": 2500,
+          "source_first_ns": 41002000000,
+          "source_last_ns": 46000000000
+        }
+      ],
+      "physics_frequency_hz": 500,
+      "policy_frequency_hz": 50
+    }
+  ],
+  "schema": 1,
+  "scope": "offline exact-source raw PhysX analysis and same-footprint arithmetic; no SimulationApp, ROS, build, new plant run, or source mutation",
+  "semantic_invariants": [
+    "Actual PhysX pose, quaternion, all three velocity components and IMU remain original measurements.",
+    "All 13 complete official registered solids, their affine transforms, XY dimensions, and primitive identities remain unchanged.",
+    "Authorized certified floor-contact lower plane remains floor-.02; capsules and non-support body shapes retain strict above-plane checks.",
+    "Nominal ground-to-body height is applied exactly once; original ground/support XYZ are not flattened.",
+    "Navigation command caps .15 m/s and .30 rad/s, measured reachable caps .60 m/s and .80 rad/s, original full-norm STOP and leases remain unchanged.",
+    "Spawn clearance stays .80 m and static-prior actual height tolerance stays .12 m.",
+    "The larger above .589 preserves nominal planned absolute top; no minimum high-level vx or body teleport is introduced."
+  ],
+  "source_hashes_at_evidence_creation": {
+    "continuous_reference.py": {
+      "path": "/home/eric/wjg/d1max-system/d1max_nav_ws/src/d1max_pct_scan/d1max_pct_scan/continuous_reference.py",
+      "sha256": "3640cbe13f42046395c027958d70a4b759eb4ab5284d3f1dfe6464741afe3119"
+    },
+    "continuous_reference_node.py": {
+      "path": "/home/eric/wjg/d1max-system/d1max_nav_ws/src/d1max_pct_scan/d1max_pct_scan/continuous_reference_node.py",
+      "sha256": "4fe6c47ee7f8ee20c6e1d2f2b1c60e27fca2f96e7b897cac37da5c31bf2735f0"
+    },
+    "grid_map.cpp": {
+      "path": "/home/eric/wjg/d1max-system/d1max_nav_ws/src/scan_planner_vendor/plan_env/src/grid_map.cpp",
+      "sha256": "0270a8a926f60ccd7ca8d3872bae82d18801282dc7ad0476f2ecd5def4ee54cb"
+    },
+    "motion_sweep.hpp": {
+      "path": "/home/eric/wjg/d1max-system/d1max_nav_ws/src/scan_planner_vendor/plan_manage/include/plan_manage/motion_sweep.hpp",
+      "sha256": "7f49e45a6bf1606b8eac357a1d1c220d2eef35061538d724edd93b8c1ddc98e8"
+    },
+    "nav_prepare.py": {
+      "path": "/home/eric/wjg/d1max-system/simulation/isaacsim/nav_prepare.py",
+      "sha256": "4f7d2591dd14fa2223a78ad7d1e5cfb391584b1e9d028a24f6219255d3b85379"
+    },
+    "prepare_world.py": {
+      "path": "/home/eric/wjg/d1max-system/simulation/isaacsim/prepare_world.py",
+      "sha256": "fff9ec11f6cf32fec5cdf1a5c857b3ac46150ccd97354a9362921413e0dc632a"
+    },
+    "runtime_geometry.py": {
+      "path": "/home/eric/wjg/d1max-system/simulation/isaacsim/runtime_geometry.py",
+      "sha256": "9a5b4e3860fd310a5468393914ef749c11e1bd1f47554b54c60e094ecaa293b6"
+    },
+    "scenario_suite.py": {
+      "path": "/home/eric/wjg/d1max-system/simulation/isaacsim/scenario_suite.py",
+      "sha256": "4206dd4f3cff3f9dfa1a1931f3e22a67803eac4a3eab6052773efdb81ee3d256"
+    },
+    "truth_map.py": {
+      "path": "/home/eric/wjg/d1max-system/simulation/isaacsim/truth_map.py",
+      "sha256": "81fe26ae061b32cc4eeecc73eef9ec8f705386c45f6049a2108c6bc8555b6baa"
+    },
+    "world_builder.py": {
+      "path": "/home/eric/wjg/d1max-system/simulation/isaacsim/world_builder.py",
+      "sha256": "0bbb37f5ebd97dc6bda5562dc0480c6f5f6901eb1fcf283ecd74fd75922680ed"
+    }
+  },
+  "source_impact": [
+    {
+      "lines": [
+        227,
+        334
+      ],
+      "meaning": "subtract h from actual body for ground projection; add h to immutable ground XYZ for body reference",
+      "path": "/home/eric/wjg/d1max-system/d1max_nav_ws/src/d1max_pct_scan/d1max_pct_scan/continuous_reference.py"
+    },
+    {
+      "lines": [
+        76,
+        123,
+        126,
+        135,
+        136,
+        152,
+        180,
+        196,
+        202,
+        203,
+        216
+      ],
+      "meaning": "height/profile/calibration identity, reflected kernel, static expected body height and bridge attestation parameters propagate together",
+      "path": "/home/eric/wjg/d1max-system/simulation/isaacsim/nav_prepare.py"
+    },
+    {
+      "lines": [
+        74,
+        75,
+        76
+      ],
+      "meaning": "lower support slab derives from actual body height, and complete measured primitive corners are certified",
+      "path": "/home/eric/wjg/d1max-system/simulation/isaacsim/runtime_geometry.py"
+    },
+    {
+      "lines": [
+        847,
+        849,
+        857
+      ],
+      "meaning": "strict curve query uses fixed certified floor lower bound and full above bound",
+      "path": "/home/eric/wjg/d1max-system/d1max_nav_ws/src/scan_planner_vendor/plan_env/src/grid_map.cpp"
+    },
+    {
+      "lines": [
+        116,
+        117,
+        180,
+        185,
+        186,
+        187,
+        188,
+        211
+      ],
+      "meaning": "only vx/wz actuated demand; actual Z reaction padding and full support slab remain; 200000-cell bound preserved",
+      "path": "/home/eric/wjg/d1max-system/d1max_nav_ws/src/scan_planner_vendor/plan_manage/include/plan_manage/motion_sweep.hpp"
+    }
+  ],
+  "sweep_budget": {
+    "cold_same_footprint_cells_range": [
+      169400,
+      169575
+    ],
+    "formal_inputs": {
+      "braking_model.json": {
+        "path": "/home/eric/wjg/d1max-build-isaac/runs/campus_crossing_v32_001/braking_model.json",
+        "sha256": "01765ff4e2df4d6c4c484f8599da597ffce5d3a18371b54acb2efbee69c98ff5"
+      },
+      "scan.log": {
+        "path": "/home/eric/wjg/d1max-build-isaac/runs/campus_crossing_v32_001/scan.log",
+        "sha256": "49b607c60f1625beb3f43b0b1a4dc123ea1c38fde8f17a5eebbb56d004174e28"
+      },
+      "session.json": {
+        "path": "/home/eric/wjg/d1max-build-isaac/runs/campus_crossing_v32_001/session.json",
+        "sha256": "080a8485b677eb72649dc4ea3691fd72819f55e6bd11b2d14b4d255b1f7c65c4"
+      }
+    },
+    "formal_run": "/home/eric/wjg/d1max-build-isaac/runs/campus_crossing_v32_001",
+    "formula": "max_z = actual_body_z + tan(.15)*.025 + .10 + abs(native_world_vz)*.67 + above; z_layers = floor(max_z/.05)-floor(-.02/.05)+1; estimated cells = unchanged_xy_columns*z_layers",
+    "maximum_allowed_xy_columns_at_29_layers": 6896,
+    "new_largest_raw_component_z_layers": 29,
+    "new_run_or_collision_proof": false,
+    "original_cold_z_layers": 24,
+    "original_layer_inference": "24 layers from the original formula applied to stable cold raw z/vz; the 16 logged complete cell counts are all divisible by 24. The arithmetic assumes the original footprint is unchanged.",
+    "original_observed_unique_voxels": {
+      "maximum": 162792.0,
+      "mean": 162714.0,
+      "median": 162720.0,
+      "minimum": 162624.0,
+      "p01": 162627.6,
+      "p10": 162660.0,
+      "p90": 162780.0,
+      "p99": 162792.0,
+      "samples": 16
+    },
+    "original_successful_motion_proof_records": [
+      {
+        "demand_id": 227,
+        "scan_log_line": 20,
+        "snapshot_id": 419535,
+        "unique_voxels": 162744
+      },
+      {
+        "demand_id": 288,
+        "scan_log_line": 35,
+        "snapshot_id": 456143,
+        "unique_voxels": 162720
+      },
+      {
+        "demand_id": 348,
+        "scan_log_line": 52,
+        "snapshot_id": 458120,
+        "unique_voxels": 162720
+      },
+      {
+        "demand_id": 407,
+        "scan_log_line": 66,
+        "snapshot_id": 458992,
+        "unique_voxels": 162696
+      },
+      {
+        "demand_id": 467,
+        "scan_log_line": 73,
+        "snapshot_id": 460036,
+        "unique_voxels": 162696
+      },
+      {
+        "demand_id": 2858,
+        "scan_log_line": 668,
+        "snapshot_id": 494308,
+        "unique_voxels": 162720
+      },
+      {
+        "demand_id": 2920,
+        "scan_log_line": 682,
+        "snapshot_id": 496857,
+        "unique_voxels": 162792
+      },
+      {
+        "demand_id": 2981,
+        "scan_log_line": 696,
+        "snapshot_id": 523021,
+        "unique_voxels": 162792
+      },
+      {
+        "demand_id": 3042,
+        "scan_log_line": 710,
+        "snapshot_id": 526788,
+        "unique_voxels": 162672
+      },
+      {
+        "demand_id": 3102,
+        "scan_log_line": 723,
+        "snapshot_id": 530554,
+        "unique_voxels": 162768
+      },
+      {
+        "demand_id": 3164,
+        "scan_log_line": 736,
+        "snapshot_id": 532767,
+        "unique_voxels": 162648
+      },
+      {
+        "demand_id": 3267,
+        "scan_log_line": 751,
+        "snapshot_id": 562742,
+        "unique_voxels": 162624
+      },
+      {
+        "demand_id": 3327,
+        "scan_log_line": 767,
+        "snapshot_id": 569593,
+        "unique_voxels": 162696
+      },
+      {
+        "demand_id": 3390,
+        "scan_log_line": 780,
+        "snapshot_id": 574214,
+        "unique_voxels": 162744
+      },
+      {
+        "demand_id": 3451,
+        "scan_log_line": 792,
+        "snapshot_id": 578703,
+        "unique_voxels": 162672
+      },
+      {
+        "demand_id": 3511,
+        "scan_log_line": 807,
+        "snapshot_id": 580468,
+        "unique_voxels": 162720
+      }
+    ],
+    "original_xy_columns_inferred_maximum": 6783,
+    "parameters": {
+      "floor_lower_world_z_m": -0.02,
+      "reaction_s": 0.67,
+      "support_max_slope_rad": 0.15,
+      "support_sample_step_m": 0.025,
+      "tracking_error_m": 0.1,
+      "unchanged_maximum_cells": 200000,
+      "voxel_resolution_m": 0.05
+    },
+    "phase_statistics": [
+      {
+        "new_maximum_cells_if_same_6783_xy_columns": 169575,
+        "new_z_layers": {
+          "maximum": 25.0,
+          "mean": 25.0,
+          "median": 25.0,
+          "minimum": 25.0,
+          "p01": 25.0,
+          "p10": 25.0,
+          "p90": 25.0,
+          "p99": 25.0,
+          "samples": 9001
+        },
+        "old_z_layers": {
+          "maximum": 24.0,
+          "mean": 24.0,
+          "median": 24.0,
+          "minimum": 24.0,
+          "p01": 24.0,
+          "p10": 24.0,
+          "p90": 24.0,
+          "p99": 24.0,
+          "samples": 9001
+        },
+        "phase": "park",
+        "samples": 9001
+      },
+      {
+        "new_maximum_cells_if_same_6783_xy_columns": 196707,
+        "new_z_layers": {
+          "maximum": 29.0,
+          "mean": 26.0294,
+          "median": 26.0,
+          "minimum": 25.0,
+          "p01": 25.0,
+          "p10": 25.0,
+          "p90": 28.0,
+          "p99": 28.0,
+          "samples": 10000
+        },
+        "old_z_layers": {
+          "maximum": 28.0,
+          "mean": 25.4069,
+          "median": 25.0,
+          "minimum": 24.0,
+          "p01": 24.0,
+          "p10": 24.0,
+          "p90": 27.0,
+          "p99": 28.0,
+          "samples": 10000
+        },
+        "phase": "low_after_park",
+        "samples": 10000
+      },
+      {
+        "new_maximum_cells_if_same_6783_xy_columns": 169575,
+        "new_z_layers": {
+          "maximum": 25.0,
+          "mean": 25.0,
+          "median": 25.0,
+          "minimum": 25.0,
+          "p01": 25.0,
+          "p10": 25.0,
+          "p90": 25.0,
+          "p99": 25.0,
+          "samples": 2500
+        },
+        "old_z_layers": {
+          "maximum": 25.0,
+          "mean": 24.08,
+          "median": 24.0,
+          "minimum": 24.0,
+          "p01": 24.0,
+          "p10": 24.0,
+          "p90": 24.0,
+          "p99": 25.0,
+          "samples": 2500
+        },
+        "phase": "stop_after_park",
+        "samples": 2500
+      },
+      {
+        "new_maximum_cells_if_same_6783_xy_columns": 196707,
+        "new_z_layers": {
+          "maximum": 29.0,
+          "mean": 26.793,
+          "median": 27.0,
+          "minimum": 25.0,
+          "p01": 25.0,
+          "p10": 26.0,
+          "p90": 28.0,
+          "p99": 28.0,
+          "samples": 4000
+        },
+        "old_z_layers": {
+          "maximum": 28.0,
+          "mean": 25.96075,
+          "median": 26.0,
+          "minimum": 24.0,
+          "p01": 24.0,
+          "p10": 25.0,
+          "p90": 27.0,
+          "p99": 28.0,
+          "samples": 4000
+        },
+        "phase": "walk",
+        "samples": 4000
+      },
+      {
+        "new_maximum_cells_if_same_6783_xy_columns": 189924,
+        "new_z_layers": {
+          "maximum": 28.0,
+          "mean": 25.3012,
+          "median": 25.0,
+          "minimum": 25.0,
+          "p01": 25.0,
+          "p10": 25.0,
+          "p90": 27.0,
+          "p99": 28.0,
+          "samples": 2500
+        },
+        "old_z_layers": {
+          "maximum": 27.0,
+          "mean": 24.3824,
+          "median": 24.0,
+          "minimum": 24.0,
+          "p01": 24.0,
+          "p10": 24.0,
+          "p90": 26.0,
+          "p99": 27.0,
+          "samples": 2500
+        },
+        "phase": "stop_walk",
+        "samples": 2500
+      },
+      {
+        "new_maximum_cells_if_same_6783_xy_columns": 196707,
+        "new_z_layers": {
+          "maximum": 29.0,
+          "mean": 25.9144,
+          "median": 26.0,
+          "minimum": 25.0,
+          "p01": 25.0,
+          "p10": 25.0,
+          "p90": 27.0,
+          "p99": 28.01000000000022,
+          "samples": 10000
+        },
+        "old_z_layers": {
+          "maximum": 28.0,
+          "mean": 25.4019,
+          "median": 25.0,
+          "minimum": 24.0,
+          "p01": 24.0,
+          "p10": 25.0,
+          "p90": 27.0,
+          "p99": 28.0,
+          "samples": 10000
+        },
+        "phase": "low_after_walk",
+        "samples": 10000
+      },
+      {
+        "new_maximum_cells_if_same_6783_xy_columns": 189924,
+        "new_z_layers": {
+          "maximum": 28.0,
+          "mean": 25.1848,
+          "median": 25.0,
+          "minimum": 25.0,
+          "p01": 25.0,
+          "p10": 25.0,
+          "p90": 25.0,
+          "p99": 28.0,
+          "samples": 2500
+        },
+        "old_z_layers": {
+          "maximum": 27.0,
+          "mean": 24.262,
+          "median": 24.0,
+          "minimum": 24.0,
+          "p01": 24.0,
+          "p10": 24.0,
+          "p90": 25.0,
+          "p99": 27.0,
+          "samples": 2500
+        },
+        "phase": "stop_after_walk",
+        "samples": 2500
+      },
+      {
+        "new_maximum_cells_if_same_6783_xy_columns": 169575,
+        "new_z_layers": {
+          "maximum": 25.0,
+          "mean": 25.0,
+          "median": 25.0,
+          "minimum": 25.0,
+          "p01": 25.0,
+          "p10": 25.0,
+          "p90": 25.0,
+          "p99": 25.0,
+          "samples": 10000
+        },
+        "old_z_layers": {
+          "maximum": 24.0,
+          "mean": 24.0,
+          "median": 24.0,
+          "minimum": 24.0,
+          "p01": 24.0,
+          "p10": 24.0,
+          "p90": 24.0,
+          "p99": 24.0,
+          "samples": 10000
+        },
+        "phase": "tiny_after_walk",
+        "samples": 10000
+      },
+      {
+        "new_maximum_cells_if_same_6783_xy_columns": 169575,
+        "new_z_layers": {
+          "maximum": 25.0,
+          "mean": 25.0,
+          "median": 25.0,
+          "minimum": 25.0,
+          "p01": 25.0,
+          "p10": 25.0,
+          "p90": 25.0,
+          "p99": 25.0,
+          "samples": 2500
+        },
+        "old_z_layers": {
+          "maximum": 25.0,
+          "mean": 24.0248,
+          "median": 24.0,
+          "minimum": 24.0,
+          "p01": 24.0,
+          "p10": 24.0,
+          "p90": 24.0,
+          "p99": 25.0,
+          "samples": 2500
+        },
+        "phase": "stop_tiny",
+        "samples": 2500
+      }
+    ],
+    "qualification": "196707 is arithmetic replay using 29 actual component-derived Z layers and the previously observed 6783 XY columns. It is NOT a new candidate runtime result or proof that all headings, reference extents, wall-clock budgets, or live leases pass. The original 200000-cell and time limits remain enforced.",
+    "same_footprint_maximum_cells": 196707,
+    "same_footprint_remaining_cells": 3293,
+    "same_footprint_remaining_fraction": 0.016465
+  },
+  "timezone": "Asia/Shanghai"
+}

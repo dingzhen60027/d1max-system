@@ -1,0 +1,352 @@
+{
+  "schema": 1,
+  "kind": "native_actor_hit_provenance_offline_v36",
+  "created_utc": "2026-10-07T07:15:04.168260+00:00",
+  "formal_navigation_pass": false,
+  "source_files": [
+    {
+      "path": "d1max_nav_ws/src/scan_planner_vendor/plan_env/include/plan_env/projected_rays.hpp",
+      "sha256": "d7c1f278ea5d409f50974bab879ad5bdabff9e8c1a0875aa80390455d733c8d3"
+    },
+    {
+      "path": "d1max_nav_ws/src/scan_planner_vendor/plan_env/include/plan_env/dynamic_occupancy_oracle.hpp",
+      "sha256": "9e43c30836bd8cea4a7d60accf7ebfc35427aa745d46b83747a3dddf4d3c4f8c"
+    },
+    {
+      "path": "d1max_nav_ws/src/scan_planner_vendor/plan_env/include/plan_env/grid_map.h",
+      "sha256": "88718a0174db3530c66c989e4de0b852a23258418d309725a769fe394761ac6f"
+    },
+    {
+      "path": "d1max_nav_ws/src/scan_planner_vendor/plan_env/src/grid_map.cpp",
+      "sha256": "9fe93e37287fbe467387e2797a9d2ea388ed8af95756b0d5008d9f8d37114bee"
+    },
+    {
+      "path": "d1max_nav_ws/src/scan_planner_vendor/plan_env/test/test_projected_rays.cpp",
+      "sha256": "b25a8ef0bdc7edf28f820c0177c13ba2399012ed4106146abc2c4cfedfd79e6e"
+    },
+    {
+      "path": "d1max_nav_ws/src/scan_planner_vendor/plan_env/test/test_dynamic_occupancy_oracle.cpp",
+      "sha256": "711caa97701c21152062d0419495a3ac765e5cbf8331b8bdb79f05c9cb2c64d0"
+    },
+    {
+      "path": "d1max_nav_ws/src/scan_planner_vendor/plan_manage/include/plan_manage/execution_validator.hpp",
+      "sha256": "96034659528965d0d1cbff493751bb375ac168b298ae1a6650b2a95052d8389d"
+    }
+  ],
+  "verification": {
+    "command": "cmake --build nav/build/plan_env --parallel 1; ctest --test-dir nav/build/plan_env --output-on-failure -j1",
+    "runtime": "memory-only native tests; no ROS node, executor or Kit",
+    "installed_by_this_agent": false,
+    "ctest_groups_passed": 8,
+    "ctest_groups_total": 8,
+    "gtest_cases_total": 243,
+    "gtest_failures_errors": 0,
+    "groups": [
+      {
+        "group": "test_dynamic_occupancy_oracle.gtest",
+        "tests": 11,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "evidence": {
+          "local_path": "/home/eric/wjg/d1max-build-isaac/nav/build/plan_env/test_results/plan_env/test_dynamic_occupancy_oracle.gtest.xml",
+          "sha256": "ea7bd9ad7118905cc8e7831dc1195ea71706952faac3e407afb64121d17e5017",
+          "size_bytes": 2483
+        }
+      },
+      {
+        "group": "test_map_context.gtest",
+        "tests": 23,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "evidence": {
+          "local_path": "/home/eric/wjg/d1max-build-isaac/nav/build/plan_env/test_results/plan_env/test_map_context.gtest.xml",
+          "sha256": "ce9ca94fd44d661dc828b2b0da9aff284960df3b8738add3d9957e65380f83c7",
+          "size_bytes": 5131
+        }
+      },
+      {
+        "group": "test_near_field_diagnostics.gtest",
+        "tests": 17,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "evidence": {
+          "local_path": "/home/eric/wjg/d1max-build-isaac/nav/build/plan_env/test_results/plan_env/test_near_field_diagnostics.gtest.xml",
+          "sha256": "ca8b567ad86770be38dd5d2283d65ce5f9bed7181bec37183d9c6bbd95477535",
+          "size_bytes": 3674
+        }
+      },
+      {
+        "group": "test_official_resolution.gtest",
+        "tests": 4,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "evidence": {
+          "local_path": "/home/eric/wjg/d1max-build-isaac/nav/build/plan_env/test_results/plan_env/test_official_resolution.gtest.xml",
+          "sha256": "d4467fbf452dd0c23b9c7175ebc3de8dc2d64f097c309ce5058ad48836a33f74",
+          "size_bytes": 1077
+        }
+      },
+      {
+        "group": "test_projected_rays.gtest",
+        "tests": 125,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "evidence": {
+          "local_path": "/home/eric/wjg/d1max-build-isaac/nav/build/plan_env/test_results/plan_env/test_projected_rays.gtest.xml",
+          "sha256": "92c9e2862551b517f2984c03fc4f13f163b6bb482abea9e6ab73871aad672930",
+          "size_bytes": 28369
+        }
+      },
+      {
+        "group": "test_solve_budget.gtest",
+        "tests": 5,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "evidence": {
+          "local_path": "/home/eric/wjg/d1max-build-isaac/nav/build/plan_env/test_results/plan_env/test_solve_budget.gtest.xml",
+          "sha256": "a155d4d57f915f546c085d61b0185cbc075683b1d9e2d3984a58a3326fd6c8f7",
+          "size_bytes": 1218
+        }
+      },
+      {
+        "group": "test_static_occupancy_prior.gtest",
+        "tests": 26,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "evidence": {
+          "local_path": "/home/eric/wjg/d1max-build-isaac/nav/build/plan_env/test_results/plan_env/test_static_occupancy_prior.gtest.xml",
+          "sha256": "53fab2f8bf8935f5159e3ad2496fe5e35be7c3c0a6de076df31659dcb7ef5c53",
+          "size_bytes": 5436
+        }
+      },
+      {
+        "group": "test_voxel_collision.gtest",
+        "tests": 32,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "evidence": {
+          "local_path": "/home/eric/wjg/d1max-build-isaac/nav/build/plan_env/test_results/plan_env/test_voxel_collision.gtest.xml",
+          "sha256": "c8ed50e73584baad17cd7740f71d06d50314d58fb138245e0a30e4b189ad4510",
+          "size_bytes": 6425
+        }
+      }
+    ],
+    "focused_cases_total": 24,
+    "focused_cases": [
+      {
+        "name": "ActorRaySchema.LegacyBytesStayUnattributedAnd72RequiresExplicitBound",
+        "seconds": 0.0,
+        "passed": true
+      },
+      {
+        "name": "ActorRaySchema.MalformedFieldUnknownActorAndUnsupportedStrideRejectEntireCloud",
+        "seconds": 0.0,
+        "passed": true
+      },
+      {
+        "name": "ActorHitProvenance.NewerCompleteDisjointActorUsesStaticFreeWithoutRewritingRawEvidence",
+        "seconds": 0.005,
+        "passed": true
+      },
+      {
+        "name": "ActorHitProvenance.ActorUnknownAndTwoActorsInSameNativeDeduplicatedCellPoisonAllHistory",
+        "seconds": 0.003,
+        "passed": true
+      },
+      {
+        "name": "ActorHitProvenance.UnknownOlderSourceStillPoisonsAndNewHitLaterThanOracleIsOccupied",
+        "seconds": 0.003,
+        "passed": true
+      },
+      {
+        "name": "ActorHitProvenance.LaterActorHitCannotBorrowOlderOracleAndFreshOracleRevalidates",
+        "seconds": 0.003,
+        "passed": true
+      },
+      {
+        "name": "ActorHitProvenance.EqualSourceOracleCannotRetireEvenAttributedDisjointOccupiedHit",
+        "seconds": 0.003,
+        "passed": true
+      },
+      {
+        "name": "ActorHitProvenance.FullClosedVoxelBoundaryAndFutureUpperZStillVetoRetirement",
+        "seconds": 0.003,
+        "passed": true
+      },
+      {
+        "name": "ActorHitProvenance.TaggedWeakMayUseStaticWhileLegacyAndDisabledSchemaStayRejected",
+        "seconds": 0.003,
+        "passed": true
+      },
+      {
+        "name": "ActorHitProvenance.FeatureOffOldUntaggedHistoryAndLostContextCannotRetireOccupied",
+        "seconds": 0.002,
+        "passed": true
+      },
+      {
+        "name": "ActorHitProvenance.BoundedMetadataOverflowRevokesAllPrivilegesAndPersistsAcrossReset",
+        "seconds": 0.003,
+        "passed": true
+      },
+      {
+        "name": "ActorHitProvenance.SnapshotIdentitySourceRollbackAndFirstOccupiedEvidenceRemainOriginal",
+        "seconds": 0.004,
+        "passed": true
+      },
+      {
+        "name": "WeakActorHitProvenance.ProductionSingleRealHitRemainsWeakAndOnlyUsesIndependentStaticEvidence",
+        "seconds": 0.004,
+        "passed": true
+      },
+      {
+        "name": "WeakActorHitProvenance.UnknownDeduplicatedLegacyAndOlderHitPoisonWeakActorHistory",
+        "seconds": 0.002,
+        "passed": true
+      },
+      {
+        "name": "WeakActorHitProvenance.OlderUnattributedHitAndFeatureOffRevokeWeakQualification",
+        "seconds": 0.002,
+        "passed": true
+      },
+      {
+        "name": "WeakActorHitProvenance.Original64ByteWeakHitCannotBeRelabeledByLaterActorProvenance",
+        "seconds": 0.003,
+        "passed": true
+      },
+      {
+        "name": "WeakActorHitProvenance.EqualAndOlderOracleNeverRetireWeakHitsAndDuplicateNeverRenewsEitherDeadline",
+        "seconds": 0.003,
+        "passed": true
+      },
+      {
+        "name": "WeakActorHitProvenance.NewWeakHitLaterThanOracleWaitsForStrictlyNewerCompleteEvidence",
+        "seconds": 0.003,
+        "passed": true
+      },
+      {
+        "name": "WeakActorHitProvenance.FullClosedFutureCellFacesAndUpperZVetoWeakRetirement",
+        "seconds": 0.003,
+        "passed": true
+      },
+      {
+        "name": "WeakActorHitProvenance.OverflowAndRevokedStaticContextKeepWeakHistoryBlocked",
+        "seconds": 0.003,
+        "passed": true
+      },
+      {
+        "name": "WeakActorHitProvenanceRegistry.ValidDifferentActorsAndUncertifiedStaticCellsDoNotUseException",
+        "seconds": 0.006,
+        "passed": true
+      },
+      {
+        "name": "WeakActorHitProvenanceSnapshot.ImmutablePositiveSnapshotDoesNotAcquireLaterUnknownHitOrFreshLease",
+        "seconds": 0.003,
+        "passed": true
+      },
+      {
+        "name": "ActorHitProvenanceRegistry.TwoValidActorsUnknownRegistryAndEmptyRegistryStayFailClosed",
+        "seconds": 0.003,
+        "passed": true
+      },
+      {
+        "name": "DynamicOracleTest.SortedActorOrdinalQueriesAllRegionsAndFullZWithoutConferringFree",
+        "seconds": 0.0,
+        "passed": true
+      }
+    ],
+    "build_logs": [
+      {
+        "local_path": "/home/eric/wjg/d1max-build-isaac/v36_plan_env_build.log",
+        "sha256": "50bfb364597fac68e81ea1f4763b646a7fea9a86efc98ce82f03979044b9071b",
+        "size_bytes": 9068
+      },
+      {
+        "local_path": "/home/eric/wjg/d1max-build-isaac/v36_plan_env_strict_source_build.log",
+        "sha256": "961afbac1bf6998cceced609c7b9de839aea48ca17f6d3e8d6dea38ef14808af",
+        "size_bytes": 7419
+      },
+      {
+        "local_path": "/home/eric/wjg/d1max-build-isaac/v36_plan_env_weak_actor_build.log",
+        "sha256": "0d9b819c2ed82b6b3247a236a12f39d936971c082351265367c069cc0935bb1a",
+        "size_bytes": 7421
+      },
+      {
+        "local_path": "/home/eric/wjg/d1max-build-isaac/v36_plan_env_weak_final_test_build.log",
+        "sha256": "401a44bc77886dfacbb335b612ad185a42850347fdfbc001b8114b6ac182e20f",
+        "size_bytes": 3325
+      },
+      {
+        "local_path": "/home/eric/wjg/d1max-build-isaac/v36_plan_env_ctest.log",
+        "sha256": "48804c9217de662075a3201d8bd75f76496a1261b61ec57d5ade6e19524bf264",
+        "size_bytes": 1139
+      }
+    ],
+    "independent_read_only_review": {
+      "reviewer": "framework_audit",
+      "conclusion": "No new blocker in schema, before-dedup sticky history, strict newer-source full-XYZ actor retirement, or narrow weak-hit predicate.",
+      "scope": "Native code and test review only; not formal navigation or physical proof."
+    }
+  },
+  "contract": {
+    "default_enabled": false,
+    "parameter": "grid_map.dynamic_hit_provenance_enabled",
+    "enable_domain": [
+      "isolated Isaac simulation collision clock",
+      "hash-validated static prior",
+      "certified flat floor-contact contract",
+      "enabled complete dynamic oracle",
+      "exact sorted actor IDs and registry hash matching static manifest"
+    ],
+    "point_schema": {
+      "legacy": {
+        "point_step": 64,
+        "actor_id": 0,
+        "default_decode": "only this schema"
+      },
+      "opt_in": {
+        "point_step": 72,
+        "field": "isaac_actor_id",
+        "offset": 64,
+        "type": "UINT16",
+        "count": 1,
+        "ordinals": "0 unknown/static; 1..N exact sorted sealed actor registry; empty N uses64",
+        "malformed": "reject entire cloud"
+      }
+    },
+    "query_exception": "Only certified prior FREE plus native raw OCCUPIED, or raw2 exactly ObservedInsufficient with a real static-prior conflict recorded: every retained conflicting real hit must have the same nonzero actor ordinal; fresh complete oracle source must be STRICTLY GREATER THAN latest original hit source; the entire closed XYZ cell must be disjoint from all regions of that actor. This chooses existing static FREE evidence; it does not create laser FREE.",
+    "history": "Record every real unclipped endpoint before native per-cell vote deduplication. Any unknown/static or different-actor hit permanently poisons qualification, including older source hits. Sliding and context reset do not relabel history.",
+    "resource": "Maximum100000 sparse world-cell identities; estimated map-node bytes plus registry-string storage count toward native snapshot memory. Overflow permanently revokes all actor-hit exceptions and retains raw/static contradictions.",
+    "unchanged": [
+      "raw laser odds",
+      "original hit/free/source/receipt stamps",
+      "default asynchronous sensor contract",
+      "v35 exact-pair watchdog scheduling",
+      "0.25s pending drop",
+      "0.2s fusion period",
+      "0.3s watchdog age",
+      "0.5s original ray source/receipt lease",
+      "0.2s dynamic source/receipt age",
+      "complete original reachable horizon",
+      "whole3D geometry",
+      "200000 actual swept voxel limit",
+      "existing time budgets"
+    ],
+    "diagnostic": "First original raw swept failure cell, raw odds/category, prior state, hit source/actor attribution, captured query/source/receipt deadlines and actor oracle source are appended to bounded existing validation warnings. No message IDL changes. A permitted retired-actor cell is labeled certified_static_free; original raw category, odds and hit timestamps remain inspectable. Only exact motion_sweep_occupied publishes a first-OCC detail; paths failing before a raw query report unavailable."
+  },
+  "limits": [
+    "Fixture-only trusted native hit-prim labeling; not a real robot sensor classifier.",
+    "Unattributed/static or legacy hits, arbitrary weak/UNKNOWN cells without complete attributed real-hit history, mixed-actor history, expired/mismatched or equal/older oracle source, later hits, and resource overflow cannot use this exception.",
+    "No raw map cell or static hit history is deleted by the actor query exception.",
+    "v35 did not serialize its first OCC voxel or per-hit actor identity; this patch cannot retroactively prove which old actor caused that failure.",
+    "Full ABI rebuild/install and a new formal original-Action run remain required."
+  ],
+  "scope_change_from_initial_v36_freeze": "Strict source ordering was tightened from >= to >. The same independent static certificate now covers exact actor-only real-hit ObservedInsufficient cells; arbitrary UNKNOWN or weak evidence remains blocked."
+}

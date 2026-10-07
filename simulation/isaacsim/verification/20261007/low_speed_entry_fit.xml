@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites tests="10" failures="0" disabled="0" errors="0" time="0" timestamp="2026-10-07T13:29:16" name="AllTests">
+  <testsuite name="LowSpeedEntryFit" tests="10" failures="0" disabled="0" errors="0" time="0" timestamp="2026-10-07T13:29:16">
+    <testcase name="CandidateDerivativeChoiceDoesNotModifyOriginalXYZBoundaryInputs" status="run" result="completed" time="0" timestamp="2026-10-07T13:29:16" classname="LowSpeedEntryFit" />
+    <testcase name="DefaultsAndUncertifiedNonGuidedFloorPreserveOriginalBoundary" status="run" result="completed" time="0" timestamp="2026-10-07T13:29:16" classname="LowSpeedEntryFit" />
+    <testcase name="OriginalMeasurementSourceIsRequired" status="run" result="completed" time="0" timestamp="2026-10-07T13:29:16" classname="LowSpeedEntryFit" />
+    <testcase name="UsesFullXYZNormForBothIncomingAndOriginalMeasuredVelocity" status="run" result="completed" time="0" timestamp="2026-10-07T13:29:16" classname="LowSpeedEntryFit" />
+    <testcase name="ExistingLowSpeedBoundaryHasNoNewToleranceOrMinimumSpeed" status="run" result="completed" time="0" timestamp="2026-10-07T13:29:16" classname="LowSpeedEntryFit" />
+    <testcase name="EveryNonzeroAccelerationBoundaryRetainsItsOldDerivativeEvenWhenTiny" status="run" result="completed" time="0" timestamp="2026-10-07T13:29:16" classname="LowSpeedEntryFit" />
+    <testcase name="NonfiniteInputsAreNeverConvertedToPlausibleZeroMeasurements" status="run" result="completed" time="0" timestamp="2026-10-07T13:29:16" classname="LowSpeedEntryFit" />
+    <testcase name="FullXYZFixedBoundaryKeepsStartAndFutureZAndPublishesOriginalRawJoin" status="run" result="completed" time="0" timestamp="2026-10-07T13:29:16" classname="LowSpeedEntryFit" />
+    <testcase name="NativeAdoptionStillRejectsLatestVelocityOutsideOriginalC1Tolerance" status="run" result="completed" time="0" timestamp="2026-10-07T13:29:16" classname="LowSpeedEntryFit" />
+    <testcase name="ChoosingZeroBoundaryNeverBypassesWholeCurveCollisionOrFinalSourceGate" status="run" result="completed" time="0" timestamp="2026-10-07T13:29:16" classname="LowSpeedEntryFit" />
+  </testsuite>
+</testsuites>

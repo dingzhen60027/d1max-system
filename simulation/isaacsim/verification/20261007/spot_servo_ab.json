@@ -1,0 +1,705 @@
+{
+  "schema": 1,
+  "scope": "isolated_official_Spot_PhysX_servo_components; no_navigation_Action_or_hardware_acceptance",
+  "recording": false,
+  "highlevel_command_limit_mps": 0.15,
+  "policy_input_limits": [
+    0.3,
+    0.5
+  ],
+  "original_zero_stop": {
+    "full_linear_norm_mps": 0.03,
+    "full_angular_norm_radps": 0.05,
+    "continuous_source_ns": 1000000000,
+    "completion_deadline_s": 3.0
+  },
+  "new_mode": "spot_monotone_measured_v2",
+  "new_mode_base_mapping": "u0(vx)=2*vx; odd, strictly_monotone, bounded_slope_2, u0(0)=0",
+  "gain_status": "candidate_authority_ratio_gain; measured_evidence_only_at_reported_demands_and_histories; not_a_universal_inverse",
+  "formal_original_crossing_acceptance": "pending",
+  "runs": [
+    {
+      "id": "monotone_v2_short_20261007_001",
+      "mode": "spot_monotone_measured_v2",
+      "schedule": [
+        {
+          "phase": "park",
+          "physics_frames": 10000,
+          "source_seconds": 20.0,
+          "desired_vx_mps": 0.0,
+          "desired_wz_radps": 0.0
+        },
+        {
+          "phase": "low_after_park",
+          "physics_frames": 4000,
+          "source_seconds": 8.0,
+          "desired_vx_mps": 0.075,
+          "desired_wz_radps": 0.0
+        },
+        {
+          "phase": "stop_after_park",
+          "physics_frames": 2500,
+          "source_seconds": 5.0,
+          "desired_vx_mps": 0.0,
+          "desired_wz_radps": 0.0
+        },
+        {
+          "phase": "walk",
+          "physics_frames": 4000,
+          "source_seconds": 8.0,
+          "desired_vx_mps": 0.15,
+          "desired_wz_radps": 0.0
+        },
+        {
+          "phase": "stop_walk",
+          "physics_frames": 2500,
+          "source_seconds": 5.0,
+          "desired_vx_mps": 0.0,
+          "desired_wz_radps": 0.0
+        }
+      ],
+      "phases": {
+        "low_after_park": {
+          "frames": 4000,
+          "command_vx": 0.075,
+          "duration_s": 8.0,
+          "displacement_xyz_m": [
+            0.5964641943573952,
+            0.006341621279716492,
+            0.01526641845703125
+          ],
+          "xy_distance_m": 0.6313878514105038,
+          "last_velocity_window_s": 8.0,
+          "last_mean_body_vx_mps": 0.07436935888794298,
+          "max_full_linear_speed_mps": 0.28889710872409696,
+          "max_abs_body_yaw_radps": 0.13653160452096244,
+          "foot_flight_samples_50hz": {
+            "fl": 58,
+            "fr": 75,
+            "hl": 72,
+            "hr": 65
+          },
+          "original_stop_1s_completed_elapsed_s": null,
+          "lasting_displacement_after_zero_xyz_m": [
+            0.5434612408280373,
+            0.00769461877644062,
+            0.010307788848876953
+          ],
+          "measured_speed_tracking_passed": true,
+          "lasting_forward_progress_passed": true,
+          "real_footflight_passed": true
+        },
+        "stop_after_park": {
+          "frames": 2500,
+          "command_vx": 0.0,
+          "duration_s": 5.0,
+          "displacement_xyz_m": [
+            -0.05302470922470093,
+            0.0013570096343755722,
+            -0.004963696002960205
+          ],
+          "xy_distance_m": 0.05323305525633757,
+          "last_velocity_window_s": 5.0,
+          "last_mean_body_vx_mps": -0.010680702760829941,
+          "max_full_linear_speed_mps": 0.067956571678903,
+          "max_abs_body_yaw_radps": 0.031695406479621706,
+          "foot_flight_samples_50hz": {
+            "fl": 0,
+            "fr": 0,
+            "hl": 0,
+            "hr": 0
+          },
+          "original_stop_1s_completed_elapsed_s": 1.69
+        },
+        "walk": {
+          "frames": 4000,
+          "command_vx": 0.15,
+          "duration_s": 8.0,
+          "displacement_xyz_m": [
+            1.334397792816162,
+            0.06560520455241203,
+            0.03109031915664673
+          ],
+          "xy_distance_m": 1.3590768184594495,
+          "last_velocity_window_s": 8.0,
+          "last_mean_body_vx_mps": 0.16621318819825928,
+          "max_full_linear_speed_mps": 0.43961262349819286,
+          "max_abs_body_yaw_radps": 0.1254631461376906,
+          "foot_flight_samples_50hz": {
+            "fl": 144,
+            "fr": 174,
+            "hl": 174,
+            "hr": 154
+          },
+          "original_stop_1s_completed_elapsed_s": null,
+          "lasting_displacement_after_zero_xyz_m": [
+            1.3390854597091675,
+            0.05573534220457077,
+            -0.0034363269805908203
+          ],
+          "measured_speed_tracking_passed": true,
+          "lasting_forward_progress_passed": true,
+          "real_footflight_passed": true
+        },
+        "stop_walk": {
+          "frames": 2500,
+          "command_vx": 0.0,
+          "duration_s": 5.0,
+          "displacement_xyz_m": [
+            0.004394054412841797,
+            -0.009855866432189941,
+            -0.03469270467758179
+          ],
+          "xy_distance_m": 0.030027136977989595,
+          "last_velocity_window_s": 5.0,
+          "last_mean_body_vx_mps": 0.0007305625793267197,
+          "max_full_linear_speed_mps": 0.1956382919027517,
+          "max_abs_body_yaw_radps": 0.12447743506114561,
+          "foot_flight_samples_50hz": {
+            "fl": 0,
+            "fr": 4,
+            "hl": 5,
+            "hr": 0
+          },
+          "original_stop_1s_completed_elapsed_s": 1.53
+        }
+      },
+      "observability": "actual_12_joint_positions_and_velocities, official_policy_action_memory, actual_13_primitive_transforms_50Hz; actual_body_velocities_500Hz",
+      "evidence": {
+        "trajectory.jsonl": {
+          "path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/monotone_v2_short_20261007_001/trajectory.jsonl",
+          "sha256": "8c70d237944a3523fcab964e5be39b17a00683157fe82909f4bc704c2d29e495"
+        },
+        "policy_joints_geometry.jsonl": {
+          "path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/monotone_v2_short_20261007_001/policy_joints_geometry.jsonl",
+          "sha256": "c918f10b7ed5c87a41d47e0eb01f470d3a92aa07a0ef75a6e546ee6ac58e0ba1"
+        },
+        "analysis.json": {
+          "path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/monotone_v2_short_20261007_001/analysis.json",
+          "sha256": "9b591207f3c84a9cbfa16dd8bd242ee02d89fed95c7355a37cc19ed03cd40776"
+        }
+      },
+      "actual_reach_bounds_after_original_2s_settle": {
+        "max_full_linear_norm_mps": 0.43961262349819286,
+        "max_abs_body_yaw_radps": 0.13653160452096244,
+        "max_body_tilt_rad": 0.05334632748481914,
+        "pass_speed_yaw": true
+      },
+      "producer_summary_status": "all23000_physics_frames_completed; summary_serialization_failed_numpy_bool; explicit_offline_analysis_retains_original_raw",
+      "body_certificate_status": {
+        "source": "serialized_actual_same_source_pose_and13_primitives_replay",
+        "samples": 2200,
+        "failures": []
+      }
+    },
+    {
+      "id": "monotone_v2_full_20261007_001",
+      "mode": "spot_monotone_measured_v2",
+      "schedule": [
+        {
+          "phase": "park",
+          "physics_frames": 10000,
+          "source_seconds": 20.0,
+          "desired_vx_mps": 0.0,
+          "desired_wz_radps": 0.0
+        },
+        {
+          "phase": "low_after_park",
+          "physics_frames": 10000,
+          "source_seconds": 20.0,
+          "desired_vx_mps": 0.075,
+          "desired_wz_radps": 0.0
+        },
+        {
+          "phase": "stop_after_park",
+          "physics_frames": 2500,
+          "source_seconds": 5.0,
+          "desired_vx_mps": 0.0,
+          "desired_wz_radps": 0.0
+        },
+        {
+          "phase": "walk",
+          "physics_frames": 4000,
+          "source_seconds": 8.0,
+          "desired_vx_mps": 0.15,
+          "desired_wz_radps": 0.0
+        },
+        {
+          "phase": "stop_walk",
+          "physics_frames": 2500,
+          "source_seconds": 5.0,
+          "desired_vx_mps": 0.0,
+          "desired_wz_radps": 0.0
+        },
+        {
+          "phase": "low_after_walk",
+          "physics_frames": 10000,
+          "source_seconds": 20.0,
+          "desired_vx_mps": 0.075,
+          "desired_wz_radps": 0.0
+        },
+        {
+          "phase": "stop_after_walk",
+          "physics_frames": 2500,
+          "source_seconds": 5.0,
+          "desired_vx_mps": 0.0,
+          "desired_wz_radps": 0.0
+        },
+        {
+          "phase": "tiny_after_walk",
+          "physics_frames": 10000,
+          "source_seconds": 20.0,
+          "desired_vx_mps": 0.01,
+          "desired_wz_radps": 0.0
+        },
+        {
+          "phase": "stop_tiny",
+          "physics_frames": 2500,
+          "source_seconds": 5.0,
+          "desired_vx_mps": 0.0,
+          "desired_wz_radps": 0.0
+        }
+      ],
+      "phases": {
+        "low_after_park": {
+          "frames": 10000,
+          "command_vx": 0.075,
+          "duration_s": 20.0,
+          "displacement_xyz_m": [
+            1.5104204192757607,
+            0.12861796654760838,
+            0.013788580894470215
+          ],
+          "xy_distance_m": 1.5968044198778206,
+          "last_velocity_window_s": 10.0,
+          "last_mean_body_vx_mps": 0.07647648421347546,
+          "max_full_linear_speed_mps": 0.3523800969700871,
+          "max_abs_body_yaw_radps": 0.13653160452096244,
+          "foot_flight_samples_50hz": {
+            "fl": 169,
+            "fr": 217,
+            "hl": 214,
+            "hr": 188
+          },
+          "original_stop_1s_completed_elapsed_s": null,
+          "lasting_displacement_after_zero_xyz_m": [
+            1.4612685218453407,
+            0.12836536951363087,
+            0.008508294820785522
+          ],
+          "measured_speed_tracking_passed": true,
+          "lasting_forward_progress_passed": true,
+          "real_footflight_passed": true
+        },
+        "stop_after_park": {
+          "frames": 2500,
+          "command_vx": 0.0,
+          "duration_s": 5.0,
+          "displacement_xyz_m": [
+            -0.049175143241882324,
+            -0.0002494901418685913,
+            -0.005285739898681641
+          ],
+          "xy_distance_m": 0.04939683947906974,
+          "last_velocity_window_s": 5.0,
+          "last_mean_body_vx_mps": -0.00991748425777064,
+          "max_full_linear_speed_mps": 0.0621618771025792,
+          "max_abs_body_yaw_radps": 0.036843335375215815,
+          "foot_flight_samples_50hz": {
+            "fl": 0,
+            "fr": 0,
+            "hl": 0,
+            "hr": 0
+          },
+          "original_stop_1s_completed_elapsed_s": 1.618
+        },
+        "walk": {
+          "frames": 4000,
+          "command_vx": 0.15,
+          "duration_s": 8.0,
+          "displacement_xyz_m": [
+            1.342267632484436,
+            0.0841047391295433,
+            0.04208967089653015
+          ],
+          "xy_distance_m": 1.3662139128524389,
+          "last_velocity_window_s": 8.0,
+          "last_mean_body_vx_mps": 0.1670916851685149,
+          "max_full_linear_speed_mps": 0.4169075905403151,
+          "max_abs_body_yaw_radps": 0.12561090490217675,
+          "foot_flight_samples_50hz": {
+            "fl": 138,
+            "fr": 160,
+            "hl": 160,
+            "hr": 152
+          },
+          "original_stop_1s_completed_elapsed_s": null,
+          "lasting_displacement_after_zero_xyz_m": [
+            1.3900107145309448,
+            0.08257599920034409,
+            -0.0012546181678771973
+          ],
+          "measured_speed_tracking_passed": true,
+          "lasting_forward_progress_passed": true,
+          "real_footflight_passed": true
+        },
+        "stop_walk": {
+          "frames": 2500,
+          "command_vx": 0.0,
+          "duration_s": 5.0,
+          "displacement_xyz_m": [
+            0.04735922813415527,
+            -0.001561090350151062,
+            -0.04361346364021301
+          ],
+          "xy_distance_m": 0.06782304989914649,
+          "last_velocity_window_s": 5.0,
+          "last_mean_body_vx_mps": 0.009340050787066866,
+          "max_full_linear_speed_mps": 0.25438797169939315,
+          "max_abs_body_yaw_radps": 0.14126061047690303,
+          "foot_flight_samples_50hz": {
+            "fl": 5,
+            "fr": 17,
+            "hl": 17,
+            "hr": 5
+          },
+          "original_stop_1s_completed_elapsed_s": 1.748
+        },
+        "low_after_walk": {
+          "frames": 10000,
+          "command_vx": 0.075,
+          "duration_s": 20.0,
+          "displacement_xyz_m": [
+            1.4302177429199219,
+            0.23849716782569885,
+            0.03361022472381592
+          ],
+          "xy_distance_m": 1.5497408249659357,
+          "last_velocity_window_s": 10.0,
+          "last_mean_body_vx_mps": 0.08071965627135788,
+          "max_full_linear_speed_mps": 0.4717668836507363,
+          "max_abs_body_yaw_radps": 0.1424710068025244,
+          "foot_flight_samples_50hz": {
+            "fl": 167,
+            "fr": 197,
+            "hl": 196,
+            "hr": 185
+          },
+          "original_stop_1s_completed_elapsed_s": null,
+          "lasting_displacement_after_zero_xyz_m": [
+            1.4418845176696777,
+            0.2299066185951233,
+            0.0004686117172241211
+          ],
+          "measured_speed_tracking_passed": true,
+          "lasting_forward_progress_passed": true,
+          "real_footflight_passed": true
+        },
+        "stop_after_walk": {
+          "frames": 2500,
+          "command_vx": 0.0,
+          "duration_s": 5.0,
+          "displacement_xyz_m": [
+            0.011446952819824219,
+            -0.008634835481643677,
+            -0.032982587814331055
+          ],
+          "xy_distance_m": 0.0324649652469648,
+          "last_velocity_window_s": 5.0,
+          "last_mean_body_vx_mps": 0.0021275626878151433,
+          "max_full_linear_speed_mps": 0.1958224269635854,
+          "max_abs_body_yaw_radps": 0.10770330261181163,
+          "foot_flight_samples_50hz": {
+            "fl": 0,
+            "fr": 12,
+            "hl": 12,
+            "hr": 0
+          },
+          "original_stop_1s_completed_elapsed_s": 1.656
+        },
+        "tiny_after_walk": {
+          "frames": 10000,
+          "command_vx": 0.01,
+          "duration_s": 20.0,
+          "displacement_xyz_m": [
+            0.05686140060424805,
+            -0.00993436574935913,
+            -0.0005246102809906006
+          ],
+          "xy_distance_m": 0.057796342045882715,
+          "last_velocity_window_s": 10.0,
+          "last_mean_body_vx_mps": 0.0024003160077412664,
+          "max_full_linear_speed_mps": 0.015247961064629556,
+          "max_abs_body_yaw_radps": 0.008191420345035985,
+          "foot_flight_samples_50hz": {
+            "fl": 0,
+            "fr": 0,
+            "hl": 0,
+            "hr": 0
+          },
+          "original_stop_1s_completed_elapsed_s": null,
+          "lasting_displacement_after_zero_xyz_m": [
+            -0.002891063690185547,
+            0.00010526180267333984,
+            -0.0009639263153076172
+          ],
+          "measured_speed_tracking_passed": true,
+          "lasting_forward_progress_passed": false,
+          "real_footflight_passed": false
+        },
+        "stop_tiny": {
+          "frames": 2500,
+          "command_vx": 0.0,
+          "duration_s": 5.0,
+          "displacement_xyz_m": [
+            -0.05975532531738281,
+            0.010039865970611572,
+            -0.0004399418830871582
+          ],
+          "xy_distance_m": 0.06082969182975918,
+          "last_velocity_window_s": 5.0,
+          "last_mean_body_vx_mps": -0.012181385473497768,
+          "max_full_linear_speed_mps": 0.07956829984523309,
+          "max_abs_body_yaw_radps": 0.0031877635778740435,
+          "foot_flight_samples_50hz": {
+            "fl": 0,
+            "fr": 0,
+            "hl": 0,
+            "hr": 0
+          },
+          "original_stop_1s_completed_elapsed_s": 1.82
+        }
+      },
+      "observability": "actual_12_joint_positions_and_velocities, official_policy_action_memory, actual_13_primitive_transforms_50Hz; actual_body_velocities_500Hz",
+      "evidence": {
+        "trajectory.jsonl": {
+          "path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/monotone_v2_full_20261007_001/trajectory.jsonl",
+          "sha256": "56acccfe4b15bf0fd458c391150c6d16859ee20f6f36580ca2297a1cb6c67e2c"
+        },
+        "policy_joints_geometry.jsonl": {
+          "path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/monotone_v2_full_20261007_001/policy_joints_geometry.jsonl",
+          "sha256": "b0489057509079adf2c9c1a02b35aad4c077f90f8faf797e66f2dd7ca69aca79"
+        },
+        "summary.json": {
+          "path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/monotone_v2_full_20261007_001/summary.json",
+          "sha256": "9995423349d568dcaaf9c8dafc93a98c1c356d7266288857296005795d3f0a4d"
+        }
+      },
+      "actual_reach_bounds_after_original_2s_settle": {
+        "max_full_linear_norm_mps": 0.4717668836507363,
+        "max_abs_body_yaw_radps": 0.1424710068025244,
+        "max_body_tilt_rad": 0.05409436447729448,
+        "pass_speed_yaw": true
+      },
+      "producer_certificate_status": {
+        "rejected_numpy_scalar_input_count": 5300,
+        "reasons": [
+          "invalid_body_position"
+        ],
+        "geometry_clearance_failure_claimed": false
+      },
+      "body_certificate_status": {
+        "source": "same_run_immutable_source_snapshot_certificate_replay_of_serialized_actual_witness",
+        "samples": 5300,
+        "failures": []
+      },
+      "all_motion_phases_passed": false,
+      "analysis_evidence": {
+        "path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/monotone_v2_full_20261007_001/analysis.json",
+        "sha256": "a4d281991fddde1ad1c225d56370c466dd9f291a1fa246cb394d727b27207f48"
+      }
+    },
+    {
+      "id": "nonlinear_v1_short_20261007_001",
+      "mode": "spot_nonlinear_measured_v1",
+      "schedule": [
+        {
+          "phase": "park",
+          "physics_frames": 10000,
+          "source_seconds": 20.0,
+          "desired_vx_mps": 0.0,
+          "desired_wz_radps": 0.0
+        },
+        {
+          "phase": "low_after_park",
+          "physics_frames": 4000,
+          "source_seconds": 8.0,
+          "desired_vx_mps": 0.075,
+          "desired_wz_radps": 0.0
+        },
+        {
+          "phase": "stop_after_park",
+          "physics_frames": 2500,
+          "source_seconds": 5.0,
+          "desired_vx_mps": 0.0,
+          "desired_wz_radps": 0.0
+        },
+        {
+          "phase": "walk",
+          "physics_frames": 4000,
+          "source_seconds": 8.0,
+          "desired_vx_mps": 0.15,
+          "desired_wz_radps": 0.0
+        },
+        {
+          "phase": "stop_walk",
+          "physics_frames": 2500,
+          "source_seconds": 5.0,
+          "desired_vx_mps": 0.0,
+          "desired_wz_radps": 0.0
+        }
+      ],
+      "phases": {
+        "low_after_park": {
+          "frames": 4000,
+          "command_vx": 0.075,
+          "duration_s": 8.0,
+          "displacement_xyz_m": [
+            0.6725161895155907,
+            0.017204058822244406,
+            0.015404880046844482
+          ],
+          "xy_distance_m": 0.7027727425498284,
+          "last_velocity_window_s": 8.0,
+          "last_mean_body_vx_mps": 0.08376432849395099,
+          "max_full_linear_speed_mps": 0.2993737354644685,
+          "max_abs_body_yaw_radps": 0.1404311150164658,
+          "foot_flight_samples_50hz": {
+            "fl": 54,
+            "fr": 76,
+            "hl": 74,
+            "hr": 67
+          },
+          "original_stop_1s_completed_elapsed_s": null,
+          "lasting_displacement_after_zero_xyz_m": [
+            0.6229314431548119,
+            0.01722726132720709,
+            0.009539425373077393
+          ],
+          "measured_speed_tracking_passed": true,
+          "lasting_forward_progress_passed": true,
+          "real_footflight_passed": true
+        },
+        "stop_after_park": {
+          "frames": 2500,
+          "command_vx": 0.0,
+          "duration_s": 5.0,
+          "displacement_xyz_m": [
+            -0.04960435628890991,
+            2.5543849915266037e-05,
+            -0.005872160196304321
+          ],
+          "xy_distance_m": 0.049767351858772305,
+          "last_velocity_window_s": 5.0,
+          "last_mean_body_vx_mps": -0.009989658031663145,
+          "max_full_linear_speed_mps": 0.06489793587435025,
+          "max_abs_body_yaw_radps": 0.03642321982331098,
+          "foot_flight_samples_50hz": {
+            "fl": 0,
+            "fr": 0,
+            "hl": 0,
+            "hr": 0
+          },
+          "original_stop_1s_completed_elapsed_s": 1.622
+        },
+        "walk": {
+          "frames": 4000,
+          "command_vx": 0.15,
+          "duration_s": 8.0,
+          "displacement_xyz_m": [
+            1.30784410238266,
+            0.026600774843245745,
+            0.02879202365875244
+          ],
+          "xy_distance_m": 1.3245135884152064,
+          "last_velocity_window_s": 8.0,
+          "last_mean_body_vx_mps": 0.16295815262748495,
+          "max_full_linear_speed_mps": 0.38296358382072165,
+          "max_abs_body_yaw_radps": 0.11920267818236596,
+          "foot_flight_samples_50hz": {
+            "fl": 143,
+            "fr": 171,
+            "hl": 171,
+            "hr": 153
+          },
+          "original_stop_1s_completed_elapsed_s": null,
+          "lasting_displacement_after_zero_xyz_m": [
+            1.319027602672577,
+            0.014659639913588762,
+            -0.00199010968208313
+          ],
+          "measured_speed_tracking_passed": true,
+          "lasting_forward_progress_passed": true,
+          "real_footflight_passed": true
+        },
+        "stop_walk": {
+          "frames": 2500,
+          "command_vx": 0.0,
+          "duration_s": 5.0,
+          "displacement_xyz_m": [
+            0.010886192321777344,
+            -0.011965157464146614,
+            -0.030825525522232056
+          ],
+          "xy_distance_m": 0.036541941071245816,
+          "last_velocity_window_s": 5.0,
+          "last_mean_body_vx_mps": 0.0019964392113207643,
+          "max_full_linear_speed_mps": 0.19153175173047282,
+          "max_abs_body_yaw_radps": 0.12774131212092274,
+          "foot_flight_samples_50hz": {
+            "fl": 0,
+            "fr": 7,
+            "hl": 7,
+            "hr": 0
+          },
+          "original_stop_1s_completed_elapsed_s": 1.628
+        }
+      },
+      "observability": "actual_12_joint_positions_and_velocities, official_policy_action_memory, actual_13_primitive_transforms_50Hz; actual_body_velocities_500Hz",
+      "evidence": {
+        "trajectory.jsonl": {
+          "path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/nonlinear_v1_short_20261007_001/trajectory.jsonl",
+          "sha256": "e1d9008434fc11451e925b21962088efc066166b7714e6185e4f2c4320e6c60b"
+        },
+        "policy_joints_geometry.jsonl": {
+          "path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/nonlinear_v1_short_20261007_001/policy_joints_geometry.jsonl",
+          "sha256": "3801860667f6c657b3c455626096778a3d9fbfa44bc07e22751d33bbda621c47"
+        },
+        "summary.json": {
+          "path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/nonlinear_v1_short_20261007_001/summary.json",
+          "sha256": "8ee3df72131c9a8e15da5d936a7f528790decb94570720fa618e10c34e4f930f"
+        }
+      },
+      "actual_reach_bounds_after_original_2s_settle": {
+        "max_full_linear_norm_mps": 0.38296358382072165,
+        "max_abs_body_yaw_radps": 0.1404311150164658,
+        "max_body_tilt_rad": 0.05325297676985277,
+        "pass_speed_yaw": true
+      },
+      "body_certificate_status": {
+        "source": "runtime_actual_same_source_certificate",
+        "failures": []
+      },
+      "all_motion_phases_passed": true
+    }
+  ],
+  "controlled_comparison": {
+    "first_park_10000_actual_physics_frames_literal_equal": true,
+    "equal_frames": 10000,
+    "identical_schedule_short": true,
+    "both_old_and_new_modes_short_schedule_motion_and_stop_passed": true,
+    "causal_conclusion": "old_FF_nonmonotonicity_and_51x_zero_gain_are_mathematical_defects; straight_schedule_AB_does_not_reproduce_v31_handoff_yaw_stance_failure_or_establish_FF_as_sole_failure_cause"
+  },
+  "limitations": [
+    "v2 .01mps for20s produced nofootflight; 5s_zero_recovered_all_forward_displacement; lasting_x=-.002891063690185547m, so tiny_speed_motion_failed",
+    "v2 .075 and .15 tested motion/stop support is limited to these histories; original_full_navigation_Action still required",
+    "No command floor, expired_authority_extension, root_pose/velocity writes, joint_state teleports, model_bound widening or video recording",
+    "The next causal experiment should replay the originalcross0_35s_same_source_vx_wz_schedule_and_joint_policy_observability, retaining_original_heading_and_history"
+  ],
+  "official_alternative_candidate": {
+    "model": "IsaacSim6 official UnitreeGo2 matchingPhysX USD/physx_policy.pt/physx_env.yaml",
+    "evidence": "Official docs and installed Go2FlatTerrainPolicy list matched PhysX policy; no low_speed_physical_superiority_measured",
+    "docs": "https://docs.isaacsim.omniverse.nvidia.com/6.0.0/robot_simulation/ext_isaacsim_robot_policy_example.html",
+    "integration_scope": "new asset_manifest, exact actual collider identity/geometry/envelope,self_filter,sensor_mounts,profile,dynamic/truth_map_contracts andnewcalibration plusformalnavigation; not a policy-file swap"
+  }
+}

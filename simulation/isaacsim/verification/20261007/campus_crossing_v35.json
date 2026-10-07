@@ -1,0 +1,2232 @@
+{
+  "schema": 1,
+  "date_local": "2026-10-07",
+  "timezone": "Asia/Shanghai",
+  "scope": "Original crossing_blocker Action and immutable v35 candidate. Read-only complete-stream offline control/sensor audits after original graph retired; no new physics run, command, lease, route credit or runtime mutation. Not hardware or localization acceptance.",
+  "accepted": false,
+  "run": "/home/eric/wjg/d1max-build-isaac/runs/campus_crossing_v35_001",
+  "candidate": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v35-campus-crossing",
+  "case_id": "crossing_blocker",
+  "source_status": "FAILED",
+  "original_action": {
+    "success": false,
+    "reason": "execution_blocked_timeout:actual_command_blocked:motion_sweep_occupied",
+    "retirement_confirmed": true,
+    "physical_stop_confirmed": false
+  },
+  "action_status": 6,
+  "measured_cumulative_xy_distance_m": 5.7062487924382905,
+  "measured_final_position": [
+    -2.643645763397217,
+    -4.9893670082092285,
+    0.488254576921463
+  ],
+  "measured_max_full_xyz_speed_mps": 0.48905959685208217,
+  "measured_xy_goal_error_m": 10.643651074570133,
+  "source_origin_ns": 1791353820302824927,
+  "configured_phase_observation_budget_s": 281.0,
+  "phase_observation_budget_is_not_actual_runtime": true,
+  "actual_action_observation_source_elapsed_s": 110.56,
+  "implemented_fixture": {
+    "body_reference_height_m": 0.481,
+    "body_envelope": {
+      "radius": 0.6078651750202781,
+      "offset": 0.3125,
+      "above": 0.589,
+      "support_floor_z": 0.0,
+      "support_penetration_m": 0.02
+    },
+    "velocity_feedback_mode": "spot_monotone_measured_v2",
+    "spatial_control_lookahead": true,
+    "spatial_control_parameter_default": false,
+    "fit_low_speed_entry_velocity": true,
+    "fit_low_speed_parameter_default": false,
+    "low_speed_curve_fit_scope": "Explicit guided certified-support simulation opt-in: both original full XYZ incoming and measured speeds <=.03m/s, zero incoming acceleration; only local solver boundary changes. Original measured pose/twist/source, raw join witness and .05 C1 adoption remain.",
+    "original_command_max_speed_mps": 0.15,
+    "original_command_max_yaw_radps": 0.3,
+    "physics_hz": 500,
+    "policy_hz": 50,
+    "state_hz": 50,
+    "lidar_hz_per_sensor": 10,
+    "imu_native_hz": 500,
+    "imu_output_hz": 100,
+    "same_source_acquisition_begin_witnesses_hz": 10,
+    "complete_registered_robot_primitives": 13,
+    "physics_usd_pose_writeback_readback": true,
+    "physics_usd_velocity_writeback": {
+      "requested": false,
+      "original": true,
+      "readback": false
+    },
+    "physics_cpu_threads": {
+      "requested": null,
+      "original": 8,
+      "readback": 8
+    },
+    "late_exact_pair_watchdog": "A newly arrived first packet receives its own bounded original 200 ms integration opportunity; original 250 ms pending drop and 500 ms evidence deadlines retained. Missing-peer actual hit still denies paired FREE; old due orphan cannot consume unrelated newly arrived packet.",
+    "changes_are_not_single_factor_physical_AB": true
+  },
+  "original_owner_progress_credit": {
+    "trace_records": 100541,
+    "raw_bt_progress_records": 3180,
+    "distinct_owner_credit_fact_events": 2445,
+    "recorded_execution_identity_credit_values": [
+      {
+        "execution_id": "",
+        "control_epoch": 0,
+        "count": 0
+      },
+      {
+        "execution_id": "97409720d9d34036aae9c33281e5148d.1:execution",
+        "control_epoch": 1,
+        "count": 157
+      }
+    ],
+    "all_recorded_credit_counts_zero": false,
+    "final_credit_count": 157,
+    "confirmed_fixed_route_arc_m": 5.285179166691633,
+    "measured_fixed_route_arc_m": 5.277163081212207,
+    "fixed_route_domains": [
+      {
+        "first_source_ns": 1791353823982824927,
+        "last_source_ns": 1791353851922824927,
+        "first_xyz": [
+          -7.92087459564209,
+          -5.024521827697754,
+          0.48104768991470337
+        ],
+        "last_xyz": [
+          -6.013192653656006,
+          -5.025488376617432,
+          0.4857659339904785
+        ],
+        "first_confirmed_arc_m": 0.0,
+        "last_confirmed_arc_m": 1.9075670338859285,
+        "first_measured_arc_m": 0.0,
+        "last_measured_arc_m": 1.9075670338859285,
+        "confirmed_arc_net_m": 1.9075670338859285,
+        "measured_arc_net_m": 1.9075670338859285,
+        "displacement_scope": "original_odom_body_pose_with_fixed_route_identity_and_anchor",
+        "cumulative_xy_m": 2.0012339049480574,
+        "cumulative_xyz_m": 2.283447457130057,
+        "net_xy_m": 1.9076821868426121,
+        "net_xyz_m": 1.90768802161773
+      },
+      {
+        "first_source_ns": 1791353851922824927,
+        "last_source_ns": 1791353857102824927,
+        "first_xyz": [
+          -6.013192653656006,
+          -5.025488376617432,
+          0.4857659339904785
+        ],
+        "last_xyz": [
+          -5.211987495422363,
+          -4.995311737060547,
+          0.49215826392173767
+        ],
+        "first_confirmed_arc_m": 1.9075670338859285,
+        "last_confirmed_arc_m": 2.708817645606115,
+        "first_measured_arc_m": 1.9075670338859285,
+        "last_measured_arc_m": 2.708817645606115,
+        "confirmed_arc_net_m": 0.8012506117201865,
+        "measured_arc_net_m": 0.8012506117201865,
+        "displacement_scope": "original_odom_body_pose_with_fixed_route_identity_and_anchor",
+        "cumulative_xy_m": 0.830639643101394,
+        "cumulative_xyz_m": 0.9310143805004272,
+        "net_xy_m": 0.8017732442250379,
+        "net_xyz_m": 0.8017987260136377
+      },
+      {
+        "first_source_ns": 1791353857102824927,
+        "last_source_ns": 1791353860922824927,
+        "first_xyz": [
+          -5.211987495422363,
+          -4.995311737060547,
+          0.49215826392173767
+        ],
+        "last_xyz": [
+          -4.683873653411865,
+          -4.99202299118042,
+          0.49759817123413086
+        ],
+        "first_confirmed_arc_m": 2.708817645606115,
+        "last_confirmed_arc_m": 3.2369359201901493,
+        "first_measured_arc_m": 2.708817645606115,
+        "last_measured_arc_m": 3.2369359201901493,
+        "confirmed_arc_net_m": 0.5281182745840343,
+        "measured_arc_net_m": 0.5281182745840343,
+        "displacement_scope": "original_odom_body_pose_with_fixed_route_identity_and_anchor",
+        "cumulative_xy_m": 0.5585431022126128,
+        "cumulative_xyz_m": 0.6591797508565823,
+        "net_xy_m": 0.5281240819850515,
+        "net_xyz_m": 0.5281520979453938
+      },
+      {
+        "first_source_ns": 1791353860922824927,
+        "last_source_ns": 1791353894322824927,
+        "first_xyz": [
+          -4.683873653411865,
+          -4.99202299118042,
+          0.49759817123413086
+        ],
+        "last_xyz": [
+          -3.245927572250366,
+          -5.013575553894043,
+          0.4872380495071411
+        ],
+        "first_confirmed_arc_m": 3.2369359201901493,
+        "last_confirmed_arc_m": 4.684512086920636,
+        "first_measured_arc_m": 3.2369359201901493,
+        "last_measured_arc_m": 4.674847161506339,
+        "confirmed_arc_net_m": 1.4475761667304865,
+        "measured_arc_net_m": 1.4379112413161894,
+        "displacement_scope": "original_odom_body_pose_with_fixed_route_identity_and_anchor",
+        "cumulative_xy_m": 1.5755873512597252,
+        "cumulative_xyz_m": 1.8360204021111828,
+        "net_xy_m": 1.4381075916937638,
+        "net_xyz_m": 1.43814490834875
+      },
+      {
+        "first_source_ns": 1791353894322824927,
+        "last_source_ns": 1791353929842824927,
+        "first_xyz": [
+          -3.245927572250366,
+          -5.013575553894043,
+          0.4872380495071411
+        ],
+        "last_xyz": [
+          -2.643648147583008,
+          -4.989377975463867,
+          0.4882536232471466
+        ],
+        "first_confirmed_arc_m": 4.684512086920636,
+        "last_confirmed_arc_m": 5.285179166691633,
+        "first_measured_arc_m": 4.674847161506339,
+        "last_measured_arc_m": 5.277163081212207,
+        "confirmed_arc_net_m": 0.6006670797709974,
+        "measured_arc_net_m": 0.6023159197058678,
+        "displacement_scope": "original_odom_body_pose_with_fixed_route_identity_and_anchor",
+        "cumulative_xy_m": 0.7356707737630256,
+        "cumulative_xyz_m": 0.853164827032131,
+        "net_xy_m": 0.6027653176647847,
+        "net_xyz_m": 0.6027661732127559
+      }
+    ],
+    "interpretation": "Count fields are original recorded owner credit values, not invented credits or observation counts. Original route identity/anchor changes split five domains; do not concatenate differently anchored body poses as a single invented progress domain."
+  },
+  "observed_control": {
+    "trace_kind_counts": {
+      "bt_progress": 3180,
+      "demand": 12522,
+      "tracking_progress": 12522,
+      "tracker": 7762,
+      "safety": 318,
+      "permit": 3185,
+      "reference_proposal": 6,
+      "native_spline": 62,
+      "trajectory_validation": 19359,
+      "geometry_receipt": 14094,
+      "route_progress": 6357,
+      "applied": 6361,
+      "safe_demand": 7228,
+      "commit_ack": 161,
+      "motion_validation": 6865,
+      "handoff_grant": 559
+    },
+    "complete_curve_identities": 62,
+    "conflicting_curve_identities": 0,
+    "conflicting_original_body_source_count": 0,
+    "pending_counts": {},
+    "resolved_full_curve_lookahead_sample_count": {
+      "lookahead_position_evaluation_residual_xyz": 7456,
+      "lookahead_velocity_evaluation_residual_xyz": 7456
+    },
+    "max_abs_original_CPP_full_XYZ_lookahead_replay_residual": {
+      "lookahead_position_evaluation_residual_xyz": 0,
+      "lookahead_velocity_evaluation_residual_xyz": 0
+    },
+    "replay_pending_evidence": {},
+    "max_planar_cap_actual_record": {
+      "trace_line": 540,
+      "source_clock_ns": 1791353823982824927,
+      "reason": "geometry_only_no_motion_permission",
+      "trajectory_id": 1,
+      "planar_speed_limit_mps": 0.1483156616904063,
+      "control_diagnostic": {
+        "before_trajectory_start": false,
+        "body_present": true,
+        "body_source_stamp_ns": 1791353823982824927,
+        "curve_duration": 25.521177526680944,
+        "duplicate_source": false,
+        "geometry_available": true,
+        "installed_trajectory_start_ns": 1791353823942824927,
+        "lookahead_curve_time": 5.197812198739773,
+        "lookahead_from_xyz_arc_m": 0.0,
+        "lookahead_position": [
+          -7.80085730195553,
+          -5.0242497634740495,
+          0.4809864005799845
+        ],
+        "lookahead_requested_distance_m": 0.12,
+        "lookahead_target_xyz_arc_m": 0.12,
+        "lookahead_velocity": [
+          0.06213206847827661,
+          -2.5678552454454004e-05,
+          3.0011657316031913e-06
+        ],
+        "measured_arc_m": 0.0,
+        "measured_xy_speed_mps": 0.0003918073062990819,
+        "planar_acceleration_limit_mps2": 0.34606987727761473,
+        "planar_speed_limit_mps": 0.1483156616904063,
+        "previous_step_source_ns": 0,
+        "projected_curve_time": 0.0,
+        "receipt_interval_s": 0.0,
+        "source_interval_s": 0.0,
+        "spatial_control_lookahead": true,
+        "spatial_planar_braking_envelope": true,
+        "step_seen": false,
+        "step_source_ns": 0,
+        "step_trajectory_id": -1,
+        "step_trajectory_start_ns": 0
+      }
+    },
+    "cap_is_not_motion_authority": true,
+    "continuous_nonzero_writer_episodes": 30,
+    "original_applied_source_stamp_episode_span_s": {
+      "count": 30,
+      "min": 0.0,
+      "median": 0.51,
+      "max": 8.7,
+      "total_observed_nonzero_span_s": 36.736
+    },
+    "observer_source_clock_episode_span_s": {
+      "count": 30,
+      "min": 0.02,
+      "median": 0.5,
+      "max": 8.7,
+      "total_observed_nonzero_span_s": 36.696
+    },
+    "episode_scope": "Original observed writer states; duration from first to last consecutive nonzero sample, never proof of authority between samples. Continuous nonzero remains one episode across trajectory IDs. Handoff keyed by exact original handoff ID; applied true wins, otherwise final ACK reason; initial ACK separately counted.",
+    "episodes": [
+      {
+        "first_trace_line": 587,
+        "first_source_ns": 1791353824022824927,
+        "first_receipt_ns": 1200400070054819,
+        "first_observer_source_clock_ns": 1791353824042824927,
+        "samples": 108,
+        "trajectory_ids": [
+          1
+        ],
+        "max_abs_vx_mps": 0.1483156616904063,
+        "max_abs_wz_radps": 0.3,
+        "last_trace_line": 2104,
+        "last_source_ns": 1791353825982824927,
+        "last_receipt_ns": 1200405420332539,
+        "last_observer_source_clock_ns": 1791353825982824927,
+        "source_duration_s": 1.96,
+        "observer_source_clock_duration_s": 1.94,
+        "last_active_receipt_duration_s": 5.35027772,
+        "until_next_zero_receipt_s": 5.400318839,
+        "end_reason": "permission_or_native_proof_expired"
+      },
+      {
+        "first_trace_line": 2164,
+        "first_source_ns": 1791353826062824927,
+        "first_receipt_ns": 1200405670491980,
+        "first_observer_source_clock_ns": 1791353826062824927,
+        "samples": 35,
+        "trajectory_ids": [
+          1
+        ],
+        "max_abs_vx_mps": 0.1483156616904063,
+        "max_abs_wz_radps": 0.03513536369285865,
+        "last_trace_line": 2644,
+        "last_source_ns": 1791353826622824927,
+        "last_receipt_ns": 1200407370442565,
+        "last_observer_source_clock_ns": 1791353826622824927,
+        "source_duration_s": 0.56,
+        "observer_source_clock_duration_s": 0.56,
+        "last_active_receipt_duration_s": 1.699950585,
+        "until_next_zero_receipt_s": 1.749663754,
+        "end_reason": "source_clock_paused_command_expired"
+      },
+      {
+        "first_trace_line": 2672,
+        "first_source_ns": 1791353826642824927,
+        "first_receipt_ns": 1200407470673053,
+        "first_observer_source_clock_ns": 1791353826662824927,
+        "samples": 81,
+        "trajectory_ids": [
+          1
+        ],
+        "max_abs_vx_mps": 0.1483156616904063,
+        "max_abs_wz_radps": 0.10242678092184825,
+        "last_trace_line": 3837,
+        "last_source_ns": 1791353828002824927,
+        "last_receipt_ns": 1200411470467656,
+        "last_observer_source_clock_ns": 1791353828002824927,
+        "source_duration_s": 1.36,
+        "observer_source_clock_duration_s": 1.34,
+        "last_active_receipt_duration_s": 3.999794603,
+        "until_next_zero_receipt_s": 4.049480891,
+        "end_reason": "tracking"
+      },
+      {
+        "first_trace_line": 19548,
+        "first_source_ns": 1791353844220824927,
+        "first_receipt_ns": 1200464122269700,
+        "first_observer_source_clock_ns": 1791353844222824927,
+        "samples": 240,
+        "trajectory_ids": [
+          6,
+          7
+        ],
+        "max_abs_vx_mps": 0.1483156616904063,
+        "max_abs_wz_radps": 0.27069491058213935,
+        "last_trace_line": 23144,
+        "last_source_ns": 1791353848420824927,
+        "last_receipt_ns": 1200476071742873,
+        "last_observer_source_clock_ns": 1791353848422824927,
+        "source_duration_s": 4.2,
+        "observer_source_clock_duration_s": 4.2,
+        "last_active_receipt_duration_s": 11.949473173,
+        "until_next_zero_receipt_s": 11.999058864,
+        "end_reason": "source_clock_paused_command_expired"
+      },
+      {
+        "first_trace_line": 23193,
+        "first_source_ns": 1791353848462824927,
+        "first_receipt_ns": 1200476221283500,
+        "first_observer_source_clock_ns": 1791353848482824927,
+        "samples": 78,
+        "trajectory_ids": [
+          7
+        ],
+        "max_abs_vx_mps": 0.1483156616904063,
+        "max_abs_wz_radps": 0.18366603083167765,
+        "last_trace_line": 24410,
+        "last_source_ns": 1791353849822824927,
+        "last_receipt_ns": 1200480071396996,
+        "last_observer_source_clock_ns": 1791353849822824927,
+        "source_duration_s": 1.36,
+        "observer_source_clock_duration_s": 1.34,
+        "last_active_receipt_duration_s": 3.850113496,
+        "until_next_zero_receipt_s": 3.900444254,
+        "end_reason": "source_clock_paused_command_expired"
+      },
+      {
+        "first_trace_line": 24440,
+        "first_source_ns": 1791353849842824927,
+        "first_receipt_ns": 1200480171490028,
+        "first_observer_source_clock_ns": 1791353849862824927,
+        "samples": 95,
+        "trajectory_ids": [
+          7
+        ],
+        "max_abs_vx_mps": 0.1483156616904063,
+        "max_abs_wz_radps": 0.24551974061528942,
+        "last_trace_line": 25952,
+        "last_source_ns": 1791353851462824927,
+        "last_receipt_ns": 1200484871925250,
+        "last_observer_source_clock_ns": 1791353851482824927,
+        "source_duration_s": 1.62,
+        "observer_source_clock_duration_s": 1.62,
+        "last_active_receipt_duration_s": 4.700435222,
+        "until_next_zero_receipt_s": 4.749855313,
+        "end_reason": "waiting_trajectory_clock"
+      },
+      {
+        "first_trace_line": 26460,
+        "first_source_ns": 1791353851922824927,
+        "first_receipt_ns": 1200486171779010,
+        "first_observer_source_clock_ns": 1791353851922824927,
+        "samples": 501,
+        "trajectory_ids": [
+          16,
+          19
+        ],
+        "max_abs_vx_mps": 0.1483156616904063,
+        "max_abs_wz_radps": 0.21554000056441894,
+        "last_trace_line": 34030,
+        "last_source_ns": 1791353860622824927,
+        "last_receipt_ns": 1200511171955164,
+        "last_observer_source_clock_ns": 1791353860622824927,
+        "source_duration_s": 8.7,
+        "observer_source_clock_duration_s": 8.7,
+        "last_active_receipt_duration_s": 25.000176154,
+        "until_next_zero_receipt_s": 25.050608801,
+        "end_reason": "source_clock_paused_command_expired"
+      },
+      {
+        "first_trace_line": 34059,
+        "first_source_ns": 1791353860662824927,
+        "first_receipt_ns": 1200511273751820,
+        "first_observer_source_clock_ns": 1791353860662824927,
+        "samples": 338,
+        "trajectory_ids": [
+          19,
+          21
+        ],
+        "max_abs_vx_mps": 0.1483156616904063,
+        "max_abs_wz_radps": 0.2521072657200427,
+        "last_trace_line": 39159,
+        "last_source_ns": 1791353866582824927,
+        "last_receipt_ns": 1200528122911615,
+        "last_observer_source_clock_ns": 1791353866602824927,
+        "source_duration_s": 5.92,
+        "observer_source_clock_duration_s": 5.94,
+        "last_active_receipt_duration_s": 16.849159795,
+        "until_next_zero_receipt_s": 16.898928793,
+        "end_reason": "safety_hold:native_swept_collision_proof_missing_or_revoked"
+      },
+      {
+        "first_trace_line": 39193,
+        "first_source_ns": 1791353866622824927,
+        "first_receipt_ns": 1200528222701699,
+        "first_observer_source_clock_ns": 1791353866622824927,
+        "samples": 53,
+        "trajectory_ids": [
+          21
+        ],
+        "max_abs_vx_mps": 0.1483156616904063,
+        "max_abs_wz_radps": 0.25132944497935195,
+        "last_trace_line": 39971,
+        "last_source_ns": 1791353867520824927,
+        "last_receipt_ns": 1200530822838007,
+        "last_observer_source_clock_ns": 1791353867522824927,
+        "source_duration_s": 0.898,
+        "observer_source_clock_duration_s": 0.9,
+        "last_active_receipt_duration_s": 2.600136308,
+        "until_next_zero_receipt_s": 2.650005344,
+        "end_reason": "source_clock_paused_command_expired"
+      },
+      {
+        "first_trace_line": 40015,
+        "first_source_ns": 1791353867582824927,
+        "first_receipt_ns": 1200530972529636,
+        "first_observer_source_clock_ns": 1791353867582824927,
+        "samples": 63,
+        "trajectory_ids": [
+          21
+        ],
+        "max_abs_vx_mps": 0.1483156616904063,
+        "max_abs_wz_radps": 0.22983492242379885,
+        "last_trace_line": 41009,
+        "last_source_ns": 1791353868720824927,
+        "last_receipt_ns": 1200534072928286,
+        "last_observer_source_clock_ns": 1791353868722824927,
+        "source_duration_s": 1.138,
+        "observer_source_clock_duration_s": 1.14,
+        "last_active_receipt_duration_s": 3.10039865,
+        "until_next_zero_receipt_s": 3.151064825,
+        "end_reason": "source_clock_paused_command_expired"
+      },
+      {
+        "first_trace_line": 41040,
+        "first_source_ns": 1791353868742824927,
+        "first_receipt_ns": 1200534172939362,
+        "first_observer_source_clock_ns": 1791353868762824927,
+        "samples": 46,
+        "trajectory_ids": [
+          21
+        ],
+        "max_abs_vx_mps": 0.1483156616904063,
+        "max_abs_wz_radps": 0.08891897266914794,
+        "last_trace_line": 41743,
+        "last_source_ns": 1791353869542824927,
+        "last_receipt_ns": 1200536422607976,
+        "last_observer_source_clock_ns": 1791353869562824927,
+        "source_duration_s": 0.8,
+        "observer_source_clock_duration_s": 0.8,
+        "last_active_receipt_duration_s": 2.249668614,
+        "until_next_zero_receipt_s": 2.299601525,
+        "end_reason": "source_clock_paused_command_expired"
+      },
+      {
+        "first_trace_line": 41845,
+        "first_source_ns": 1791353869662824927,
+        "first_receipt_ns": 1200536723619562,
+        "first_observer_source_clock_ns": 1791353869662824927,
+        "samples": 168,
+        "trajectory_ids": [
+          21
+        ],
+        "max_abs_vx_mps": 0.1483156616904063,
+        "max_abs_wz_radps": 0.18858399732481423,
+        "last_trace_line": 44430,
+        "last_source_ns": 1791353872602824927,
+        "last_receipt_ns": 1200545072803365,
+        "last_observer_source_clock_ns": 1791353872602824927,
+        "source_duration_s": 2.94,
+        "observer_source_clock_duration_s": 2.94,
+        "last_active_receipt_duration_s": 8.349183803,
+        "until_next_zero_receipt_s": 8.399277913,
+        "end_reason": "tracking"
+      },
+      {
+        "first_trace_line": 44497,
+        "first_source_ns": 1791353872642824927,
+        "first_receipt_ns": 1200545273102184,
+        "first_observer_source_clock_ns": 1791353872682824927,
+        "samples": 53,
+        "trajectory_ids": [
+          21
+        ],
+        "max_abs_vx_mps": 0.1483156616904063,
+        "max_abs_wz_radps": 0.11227630998287084,
+        "last_trace_line": 45334,
+        "last_source_ns": 1791353873602824927,
+        "last_receipt_ns": 1200547873087484,
+        "last_observer_source_clock_ns": 1791353873602824927,
+        "source_duration_s": 0.96,
+        "observer_source_clock_duration_s": 0.92,
+        "last_active_receipt_duration_s": 2.5999853,
+        "until_next_zero_receipt_s": 2.649757451,
+        "end_reason": "tracking"
+      },
+      {
+        "first_trace_line": 63587,
+        "first_source_ns": 1791353894302824927,
+        "first_receipt_ns": 1200607224064068,
+        "first_observer_source_clock_ns": 1791353894302824927,
+        "samples": 2,
+        "trajectory_ids": [
+          21,
+          44
+        ],
+        "max_abs_vx_mps": 0.1483156616904063,
+        "max_abs_wz_radps": 0.22696295944165704,
+        "last_trace_line": 63601,
+        "last_source_ns": 1791353894302824927,
+        "last_receipt_ns": 1200607275049025,
+        "last_observer_source_clock_ns": 1791353894322824927,
+        "source_duration_s": 0.0,
+        "observer_source_clock_duration_s": 0.02,
+        "last_active_receipt_duration_s": 0.050984957,
+        "until_next_zero_receipt_s": 0.100984931,
+        "end_reason": "source_clock_paused_command_expired"
+      },
+      {
+        "first_trace_line": 63647,
+        "first_source_ns": 1791353894342824927,
+        "first_receipt_ns": 1200607424175784,
+        "first_observer_source_clock_ns": 1791353894362824927,
+        "samples": 36,
+        "trajectory_ids": [
+          44
+        ],
+        "max_abs_vx_mps": 0.1483156616904063,
+        "max_abs_wz_radps": 0.19372374354796182,
+        "last_trace_line": 64092,
+        "last_source_ns": 1791353894882824927,
+        "last_receipt_ns": 1200609174371747,
+        "last_observer_source_clock_ns": 1791353894882824927,
+        "source_duration_s": 0.54,
+        "observer_source_clock_duration_s": 0.52,
+        "last_active_receipt_duration_s": 1.750195963,
+        "until_next_zero_receipt_s": 1.800015071,
+        "end_reason": "tracking"
+      },
+      {
+        "first_trace_line": 64163,
+        "first_source_ns": 1791353894942824927,
+        "first_receipt_ns": 1200609424900784,
+        "first_observer_source_clock_ns": 1791353894962824927,
+        "samples": 3,
+        "trajectory_ids": [
+          44
+        ],
+        "max_abs_vx_mps": 0.08998426275867812,
+        "max_abs_wz_radps": 0.06543247179911083,
+        "last_trace_line": 64185,
+        "last_source_ns": 1791353894982824927,
+        "last_receipt_ns": 1200609524133722,
+        "last_observer_source_clock_ns": 1791353894982824927,
+        "source_duration_s": 0.04,
+        "observer_source_clock_duration_s": 0.02,
+        "last_active_receipt_duration_s": 0.099232938,
+        "until_next_zero_receipt_s": 0.149457283,
+        "end_reason": "permission_or_native_proof_expired"
+      },
+      {
+        "first_trace_line": 64223,
+        "first_source_ns": 1791353895022824927,
+        "first_receipt_ns": 1200609623757006,
+        "first_observer_source_clock_ns": 1791353895022824927,
+        "samples": 6,
+        "trajectory_ids": [
+          44
+        ],
+        "max_abs_vx_mps": 0.08306392832209979,
+        "max_abs_wz_radps": 0.05471770611236083,
+        "last_trace_line": 64286,
+        "last_source_ns": 1791353895102824927,
+        "last_receipt_ns": 1200609874428293,
+        "last_observer_source_clock_ns": 1791353895120824927,
+        "source_duration_s": 0.08,
+        "observer_source_clock_duration_s": 0.098,
+        "last_active_receipt_duration_s": 0.250671287,
+        "until_next_zero_receipt_s": 0.300152432,
+        "end_reason": "permission_or_native_proof_expired"
+      },
+      {
+        "first_trace_line": 64345,
+        "first_source_ns": 1791353895142824927,
+        "first_receipt_ns": 1200610024282631,
+        "first_observer_source_clock_ns": 1791353895162824927,
+        "samples": 5,
+        "trajectory_ids": [
+          46
+        ],
+        "max_abs_vx_mps": 0.04552306624652223,
+        "max_abs_wz_radps": 0.15798515938222407,
+        "last_trace_line": 64393,
+        "last_source_ns": 1791353895222824927,
+        "last_receipt_ns": 1200610224439113,
+        "last_observer_source_clock_ns": 1791353895222824927,
+        "source_duration_s": 0.08,
+        "observer_source_clock_duration_s": 0.06,
+        "last_active_receipt_duration_s": 0.200156482,
+        "until_next_zero_receipt_s": 0.250755805,
+        "end_reason": "source_clock_paused_command_expired"
+      },
+      {
+        "first_trace_line": 64422,
+        "first_source_ns": 1791353895242824927,
+        "first_receipt_ns": 1200610324311818,
+        "first_observer_source_clock_ns": 1791353895262824927,
+        "samples": 22,
+        "trajectory_ids": [
+          46
+        ],
+        "max_abs_vx_mps": 0.07363285871198313,
+        "max_abs_wz_radps": 0.3,
+        "last_trace_line": 64670,
+        "last_source_ns": 1791353895582824927,
+        "last_receipt_ns": 1200611375191541,
+        "last_observer_source_clock_ns": 1791353895582824927,
+        "source_duration_s": 0.34,
+        "observer_source_clock_duration_s": 0.32,
+        "last_active_receipt_duration_s": 1.050879723,
+        "until_next_zero_receipt_s": 1.099512058,
+        "end_reason": "permission_or_native_proof_expired"
+      },
+      {
+        "first_trace_line": 64752,
+        "first_source_ns": 1791353895642824927,
+        "first_receipt_ns": 1200611675649285,
+        "first_observer_source_clock_ns": 1791353895662824927,
+        "samples": 3,
+        "trajectory_ids": [
+          46
+        ],
+        "max_abs_vx_mps": 0.032286801181750244,
+        "max_abs_wz_radps": 0.11201607920229437,
+        "last_trace_line": 64774,
+        "last_source_ns": 1791353895682824927,
+        "last_receipt_ns": 1200611774240045,
+        "last_observer_source_clock_ns": 1791353895702824927,
+        "source_duration_s": 0.04,
+        "observer_source_clock_duration_s": 0.04,
+        "last_active_receipt_duration_s": 0.09859076,
+        "until_next_zero_receipt_s": 0.148522902,
+        "end_reason": "permission_or_native_proof_expired"
+      },
+      {
+        "first_trace_line": 64809,
+        "first_source_ns": 1791353895722824927,
+        "first_receipt_ns": 1200611874292580,
+        "first_observer_source_clock_ns": 1791353895722824927,
+        "samples": 20,
+        "trajectory_ids": [
+          46
+        ],
+        "max_abs_vx_mps": 0.1448288435478097,
+        "max_abs_wz_radps": 0.3,
+        "last_trace_line": 65045,
+        "last_source_ns": 1791353896002824927,
+        "last_receipt_ns": 1200612824417414,
+        "last_observer_source_clock_ns": 1791353896022824927,
+        "source_duration_s": 0.28,
+        "observer_source_clock_duration_s": 0.3,
+        "last_active_receipt_duration_s": 0.950124834,
+        "until_next_zero_receipt_s": 1.000054171,
+        "end_reason": "waiting_trajectory_clock"
+      },
+      {
+        "first_trace_line": 65076,
+        "first_source_ns": 1791353896042824927,
+        "first_receipt_ns": 1200612924358494,
+        "first_observer_source_clock_ns": 1791353896042824927,
+        "samples": 18,
+        "trajectory_ids": [
+          46
+        ],
+        "max_abs_vx_mps": 0.1483156616904063,
+        "max_abs_wz_radps": 0.3,
+        "last_trace_line": 65303,
+        "last_source_ns": 1791353896302824927,
+        "last_receipt_ns": 1200613774551300,
+        "last_observer_source_clock_ns": 1791353896322824927,
+        "source_duration_s": 0.26,
+        "observer_source_clock_duration_s": 0.28,
+        "last_active_receipt_duration_s": 0.850192806,
+        "until_next_zero_receipt_s": 0.900451113,
+        "end_reason": "source_clock_paused_command_expired"
+      },
+      {
+        "first_trace_line": 65346,
+        "first_source_ns": 1791353896342824927,
+        "first_receipt_ns": 1200613924074596,
+        "first_observer_source_clock_ns": 1791353896362824927,
+        "samples": 23,
+        "trajectory_ids": [
+          46
+        ],
+        "max_abs_vx_mps": 0.1483156616904063,
+        "max_abs_wz_radps": 0.3,
+        "last_trace_line": 65646,
+        "last_source_ns": 1791353896702824927,
+        "last_receipt_ns": 1200615024359257,
+        "last_observer_source_clock_ns": 1791353896702824927,
+        "source_duration_s": 0.36,
+        "observer_source_clock_duration_s": 0.34,
+        "last_active_receipt_duration_s": 1.100284661,
+        "until_next_zero_receipt_s": 1.151145958,
+        "end_reason": "tracking"
+      },
+      {
+        "first_trace_line": 65675,
+        "first_source_ns": 1791353896722824927,
+        "first_receipt_ns": 1200615124605602,
+        "first_observer_source_clock_ns": 1791353896722824927,
+        "samples": 19,
+        "trajectory_ids": [
+          46
+        ],
+        "max_abs_vx_mps": 0.1483156616904063,
+        "max_abs_wz_radps": 0.22985385529824856,
+        "last_trace_line": 65905,
+        "last_source_ns": 1791353897002824927,
+        "last_receipt_ns": 1200616025096154,
+        "last_observer_source_clock_ns": 1791353897020824927,
+        "source_duration_s": 0.28,
+        "observer_source_clock_duration_s": 0.298,
+        "last_active_receipt_duration_s": 0.900490552,
+        "until_next_zero_receipt_s": 0.949719399,
+        "end_reason": "waiting_trajectory_clock"
+      },
+      {
+        "first_trace_line": 65941,
+        "first_source_ns": 1791353897042824927,
+        "first_receipt_ns": 1200616124516659,
+        "first_observer_source_clock_ns": 1791353897042824927,
+        "samples": 5,
+        "trajectory_ids": [
+          46
+        ],
+        "max_abs_vx_mps": 0.06229789692926341,
+        "max_abs_wz_radps": 0.04799528792500496,
+        "last_trace_line": 66001,
+        "last_source_ns": 1791353897102824927,
+        "last_receipt_ns": 1200616325240558,
+        "last_observer_source_clock_ns": 1791353897122824927,
+        "source_duration_s": 0.06,
+        "observer_source_clock_duration_s": 0.08,
+        "last_active_receipt_duration_s": 0.200723899,
+        "until_next_zero_receipt_s": 0.249815569,
+        "end_reason": "permission_or_native_proof_expired"
+      },
+      {
+        "first_trace_line": 66028,
+        "first_source_ns": 1791353897142824927,
+        "first_receipt_ns": 1200616424030088,
+        "first_observer_source_clock_ns": 1791353897142824927,
+        "samples": 57,
+        "trajectory_ids": [
+          46
+        ],
+        "max_abs_vx_mps": 0.1483156616904063,
+        "max_abs_wz_radps": 0.11505913163787246,
+        "last_trace_line": 66770,
+        "last_source_ns": 1791353897982824927,
+        "last_receipt_ns": 1200619224452558,
+        "last_observer_source_clock_ns": 1791353898002824927,
+        "source_duration_s": 0.84,
+        "observer_source_clock_duration_s": 0.86,
+        "last_active_receipt_duration_s": 2.80042247,
+        "until_next_zero_receipt_s": 2.85021076,
+        "end_reason": "permission_or_native_proof_expired"
+      },
+      {
+        "first_trace_line": 66820,
+        "first_source_ns": 1791353898042824927,
+        "first_receipt_ns": 1200619374645521,
+        "first_observer_source_clock_ns": 1791353898042824927,
+        "samples": 30,
+        "trajectory_ids": [
+          46
+        ],
+        "max_abs_vx_mps": 0.1483156616904063,
+        "max_abs_wz_radps": 0.08639008040171683,
+        "last_trace_line": 67261,
+        "last_source_ns": 1791353898522824927,
+        "last_receipt_ns": 1200620824595883,
+        "last_observer_source_clock_ns": 1791353898522824927,
+        "source_duration_s": 0.48,
+        "observer_source_clock_duration_s": 0.48,
+        "last_active_receipt_duration_s": 1.449950362,
+        "until_next_zero_receipt_s": 1.49983427,
+        "end_reason": "source_clock_paused_command_expired"
+      },
+      {
+        "first_trace_line": 67289,
+        "first_source_ns": 1791353898542824927,
+        "first_receipt_ns": 1200620924298773,
+        "first_observer_source_clock_ns": 1791353898562824927,
+        "samples": 24,
+        "trajectory_ids": [
+          46
+        ],
+        "max_abs_vx_mps": 0.1483156616904063,
+        "max_abs_wz_radps": 0.08322366233881213,
+        "last_trace_line": 67623,
+        "last_source_ns": 1791353898922824927,
+        "last_receipt_ns": 1200622075529814,
+        "last_observer_source_clock_ns": 1791353898922824927,
+        "source_duration_s": 0.38,
+        "observer_source_clock_duration_s": 0.36,
+        "last_active_receipt_duration_s": 1.151231041,
+        "until_next_zero_receipt_s": 1.201944241,
+        "end_reason": "source_clock_paused_command_expired"
+      },
+      {
+        "first_trace_line": 67654,
+        "first_source_ns": 1791353898942824927,
+        "first_receipt_ns": 1200622174433217,
+        "first_observer_source_clock_ns": 1791353898962824927,
+        "samples": 16,
+        "trajectory_ids": [
+          46
+        ],
+        "max_abs_vx_mps": 0.1483156616904063,
+        "max_abs_wz_radps": 0.058158475607088235,
+        "last_trace_line": 67874,
+        "last_source_ns": 1791353899182824927,
+        "last_receipt_ns": 1200622925173303,
+        "last_observer_source_clock_ns": 1791353899202824927,
+        "source_duration_s": 0.24,
+        "observer_source_clock_duration_s": 0.24,
+        "last_active_receipt_duration_s": 0.750740086,
+        "until_next_zero_receipt_s": 0.800292889,
+        "end_reason": "safety_hold:native_swept_collision_proof_missing_or_revoked"
+      },
+      {
+        "first_trace_line": 67928,
+        "first_source_ns": 1791353899242824927,
+        "first_receipt_ns": 1200623074399191,
+        "first_observer_source_clock_ns": 1791353899242824927,
+        "samples": 3,
+        "trajectory_ids": [
+          46
+        ],
+        "max_abs_vx_mps": 0.02768735860227283,
+        "max_abs_wz_radps": 0.04769594122147368,
+        "last_trace_line": 67955,
+        "last_source_ns": 1791353899262824927,
+        "last_receipt_ns": 1200623174707998,
+        "last_observer_source_clock_ns": 1791353899282824927,
+        "source_duration_s": 0.02,
+        "observer_source_clock_duration_s": 0.04,
+        "last_active_receipt_duration_s": 0.100308807,
+        "until_next_zero_receipt_s": 0.149814824,
+        "end_reason": "safety_hold:command_sweep_rejected:motion_sweep_unknown_or_expired"
+      }
+    ],
+    "tracker_reason_observation_counts": {
+      "waiting_execution_permission": 92,
+      "geometry_only_no_motion_permission": 5,
+      "waiting_trajectory_clock": 1027,
+      "tracking": 2552,
+      "permission_or_native_proof_expired": 3227,
+      "source_clock_paused_command_expired": 29,
+      "stationary_reentry_waiting_writer": 82,
+      "handoff_retired_or_applied_uncertain": 51,
+      "local_segment_finished_waiting_replan": 33,
+      "turn_first_decelerating": 664
+    },
+    "handoff": {
+      "unique_grants": 65,
+      "successful": 7,
+      "rejected": 58,
+      "no_ack": 0,
+      "reject_reasons": {
+        "handoff_deadline_expired": 45,
+        "owner_handoff_withdrawn:waiting_writer_handoff_outcome": 9,
+        "owner_hold_or_phase_barrier": 3,
+        "execution_blocked_timeout:actual_command_blocked:motion_sweep_occupied": 1
+      },
+      "successful_initial_ack_count": 1,
+      "ack_observations": 161,
+      "outcomes": [
+        {
+          "handoff_id": "97409720d9d34036aae9c33281e5148d.1:execution:handoff:1",
+          "grant_sequence": 1,
+          "state": "rejected",
+          "final_ack_reason": "handoff_deadline_expired",
+          "ack_observations": 1
+        },
+        {
+          "handoff_id": "97409720d9d34036aae9c33281e5148d.1:execution:handoff:2",
+          "grant_sequence": 2,
+          "state": "rejected",
+          "final_ack_reason": "handoff_deadline_expired",
+          "ack_observations": 1
+        },
+        {
+          "handoff_id": "97409720d9d34036aae9c33281e5148d.1:execution:handoff:3",
+          "grant_sequence": 3,
+          "state": "rejected",
+          "final_ack_reason": "handoff_deadline_expired",
+          "ack_observations": 1
+        },
+        {
+          "handoff_id": "97409720d9d34036aae9c33281e5148d.1:execution:handoff:4",
+          "grant_sequence": 4,
+          "state": "rejected",
+          "final_ack_reason": "handoff_deadline_expired",
+          "ack_observations": 1
+        },
+        {
+          "handoff_id": "97409720d9d34036aae9c33281e5148d.1:execution:handoff:5",
+          "grant_sequence": 5,
+          "state": "rejected",
+          "final_ack_reason": "handoff_deadline_expired",
+          "ack_observations": 1
+        },
+        {
+          "handoff_id": "97409720d9d34036aae9c33281e5148d.1:execution:handoff:6",
+          "grant_sequence": 6,
+          "state": "rejected",
+          "final_ack_reason": "handoff_deadline_expired",
+          "ack_observations": 1
+        },
+        {
+          "handoff_id": "97409720d9d34036aae9c33281e5148d.1:execution:handoff:7",
+          "grant_sequence": 7,
+          "state": "rejected",
+          "final_ack_reason": "owner_handoff_withdrawn:waiting_writer_handoff_outcome",
+          "ack_observations": 1
+        },
+        {
+          "handoff_id": "97409720d9d34036aae9c33281e5148d.1:execution:handoff:8",
+          "grant_sequence": 8,
+          "state": "rejected",
+          "final_ack_reason": "handoff_deadline_expired",
+          "ack_observations": 1
+        },
+        {
+          "handoff_id": "97409720d9d34036aae9c33281e5148d.1:execution:handoff:9",
+          "grant_sequence": 9,
+          "state": "successful",
+          "final_ack_reason": "writer_software_commit_not_physical_confirmation",
+          "ack_observations": 1
+        },
+        {
+          "handoff_id": "97409720d9d34036aae9c33281e5148d.1:execution:handoff:10",
+          "grant_sequence": 10,
+          "state": "successful",
+          "final_ack_reason": "writer_software_commit_not_physical_confirmation",
+          "ack_observations": 1
+        },
+        {
+          "handoff_id": "97409720d9d34036aae9c33281e5148d.1:execution:handoff:11",
+          "grant_sequence": 11,
+          "state": "successful",
+          "final_ack_reason": "writer_software_commit_not_physical_confirmation",
+          "ack_observations": 1
+        },
+        {
+          "handoff_id": "97409720d9d34036aae9c33281e5148d.1:execution:handoff:12",
+          "grant_sequence": 12,
+          "state": "successful",
+          "final_ack_reason": "writer_software_commit_not_physical_confirmation",
+          "ack_observations": 1
+        },
+        {
+          "handoff_id": "97409720d9d34036aae9c33281e5148d.1:execution:handoff:13",
+          "grant_sequence": 13,
+          "state": "successful",
+          "final_ack_reason": "writer_software_commit_not_physical_confirmation",
+          "ack_observations": 1
+        },
+        {
+          "handoff_id": "97409720d9d34036aae9c33281e5148d.1:execution:handoff:14",
+          "grant_sequence": 14,
+          "state": "rejected",
+          "final_ack_reason": "handoff_deadline_expired",
+          "ack_observations": 1
+        },
+        {
+          "handoff_id": "97409720d9d34036aae9c33281e5148d.1:execution:handoff:15",
+          "grant_sequence": 15,
+          "state": "rejected",
+          "final_ack_reason": "owner_hold_or_phase_barrier",
+          "ack_observations": 1
+        },
+        {
+          "handoff_id": "97409720d9d34036aae9c33281e5148d.1:execution:handoff:16",
+          "grant_sequence": 16,
+          "state": "rejected",
+          "final_ack_reason": "handoff_deadline_expired",
+          "ack_observations": 1
+        },
+        {
+          "handoff_id": "97409720d9d34036aae9c33281e5148d.1:execution:handoff:17",
+          "grant_sequence": 17,
+          "state": "rejected",
+          "final_ack_reason": "handoff_deadline_expired",
+          "ack_observations": 1
+        },
+        {
+          "handoff_id": "97409720d9d34036aae9c33281e5148d.1:execution:handoff:18",
+          "grant_sequence": 18,
+          "state": "rejected",
+          "final_ack_reason": "owner_hold_or_phase_barrier",
+          "ack_observations": 1
+        },
+        {
+          "handoff_id": "97409720d9d34036aae9c33281e5148d.1:execution:handoff:19",
+          "grant_sequence": 19,
+          "state": "successful",
+          "final_ack_reason": "writer_software_commit_not_physical_confirmation",
+          "ack_observations": 1
+        },
+        {
+          "handoff_id": "97409720d9d34036aae9c33281e5148d.1:execution:handoff:20",
+          "grant_sequence": 20,
+          "state": "successful",
+          "final_ack_reason": "writer_software_commit_not_physical_confirmation",
+          "ack_observations": 1
+        },
+        {
+          "handoff_id": "97409720d9d34036aae9c33281e5148d.1:execution:handoff:21",
+          "grant_sequence": 21,
+          "state": "rejected",
+          "final_ack_reason": "handoff_deadline_expired",
+          "ack_observations": 1
+        },
+        {
+          "handoff_id": "97409720d9d34036aae9c33281e5148d.1:execution:handoff:22",
+          "grant_sequence": 22,
+          "state": "rejected",
+          "final_ack_reason": "owner_handoff_withdrawn:waiting_writer_handoff_outcome",
+          "ack_observations": 1
+        },
+        {
+          "handoff_id": "97409720d9d34036aae9c33281e5148d.1:execution:handoff:23",
+          "grant_sequence": 23,
+          "state": "rejected",
+          "final_ack_reason": "handoff_deadline_expired",
+          "ack_observations": 1
+        },
+        {
+          "handoff_id": "97409720d9d34036aae9c33281e5148d.1:execution:handoff:24",
+          "grant_sequence": 24,
+          "state": "rejected",
+          "final_ack_reason": "owner_handoff_withdrawn:waiting_writer_handoff_outcome",
+          "ack_observations": 1
+        },
+        {
+          "handoff_id": "97409720d9d34036aae9c33281e5148d.1:execution:handoff:25",
+          "grant_sequence": 25,
+          "state": "rejected",
+          "final_ack_reason": "handoff_deadline_expired",
+          "ack_observations": 1
+        },
+        {
+          "handoff_id": "97409720d9d34036aae9c33281e5148d.1:execution:handoff:26",
+          "grant_sequence": 26,
+          "state": "rejected",
+          "final_ack_reason": "handoff_deadline_expired",
+          "ack_observations": 1
+        },
+        {
+          "handoff_id": "97409720d9d34036aae9c33281e5148d.1:execution:handoff:27",
+          "grant_sequence": 27,
+          "state": "rejected",
+          "final_ack_reason": "handoff_deadline_expired",
+          "ack_observations": 1
+        },
+        {
+          "handoff_id": "97409720d9d34036aae9c33281e5148d.1:execution:handoff:28",
+          "grant_sequence": 28,
+          "state": "rejected",
+          "final_ack_reason": "handoff_deadline_expired",
+          "ack_observations": 1
+        },
+        {
+          "handoff_id": "97409720d9d34036aae9c33281e5148d.1:execution:handoff:29",
+          "grant_sequence": 29,
+          "state": "rejected",
+          "final_ack_reason": "handoff_deadline_expired",
+          "ack_observations": 1
+        },
+        {
+          "handoff_id": "97409720d9d34036aae9c33281e5148d.1:execution:handoff:30",
+          "grant_sequence": 30,
+          "state": "rejected",
+          "final_ack_reason": "owner_handoff_withdrawn:waiting_writer_handoff_outcome",
+          "ack_observations": 1
+        },
+        {
+          "handoff_id": "97409720d9d34036aae9c33281e5148d.1:execution:handoff:31",
+          "grant_sequence": 31,
+          "state": "rejected",
+          "final_ack_reason": "handoff_deadline_expired",
+          "ack_observations": 1
+        },
+        {
+          "handoff_id": "97409720d9d34036aae9c33281e5148d.1:execution:handoff:32",
+          "grant_sequence": 32,
+          "state": "rejected",
+          "final_ack_reason": "handoff_deadline_expired",
+          "ack_observations": 1
+        },
+        {
+          "handoff_id": "97409720d9d34036aae9c33281e5148d.1:execution:handoff:33",
+          "grant_sequence": 33,
+          "state": "rejected",
+          "final_ack_reason": "handoff_deadline_expired",
+          "ack_observations": 1
+        },
+        {
+          "handoff_id": "97409720d9d34036aae9c33281e5148d.1:execution:handoff:34",
+          "grant_sequence": 34,
+          "state": "rejected",
+          "final_ack_reason": "handoff_deadline_expired",
+          "ack_observations": 1
+        },
+        {
+          "handoff_id": "97409720d9d34036aae9c33281e5148d.1:execution:handoff:35",
+          "grant_sequence": 35,
+          "state": "rejected",
+          "final_ack_reason": "handoff_deadline_expired",
+          "ack_observations": 1
+        },
+        {
+          "handoff_id": "97409720d9d34036aae9c33281e5148d.1:execution:handoff:36",
+          "grant_sequence": 36,
+          "state": "rejected",
+          "final_ack_reason": "handoff_deadline_expired",
+          "ack_observations": 1
+        },
+        {
+          "handoff_id": "97409720d9d34036aae9c33281e5148d.1:execution:handoff:37",
+          "grant_sequence": 37,
+          "state": "rejected",
+          "final_ack_reason": "handoff_deadline_expired",
+          "ack_observations": 1
+        },
+        {
+          "handoff_id": "97409720d9d34036aae9c33281e5148d.1:execution:handoff:38",
+          "grant_sequence": 38,
+          "state": "rejected",
+          "final_ack_reason": "owner_handoff_withdrawn:waiting_writer_handoff_outcome",
+          "ack_observations": 1
+        },
+        {
+          "handoff_id": "97409720d9d34036aae9c33281e5148d.1:execution:handoff:39",
+          "grant_sequence": 39,
+          "state": "rejected",
+          "final_ack_reason": "handoff_deadline_expired",
+          "ack_observations": 1
+        },
+        {
+          "handoff_id": "97409720d9d34036aae9c33281e5148d.1:execution:handoff:40",
+          "grant_sequence": 40,
+          "state": "rejected",
+          "final_ack_reason": "owner_handoff_withdrawn:waiting_writer_handoff_outcome",
+          "ack_observations": 1
+        },
+        {
+          "handoff_id": "97409720d9d34036aae9c33281e5148d.1:execution:handoff:41",
+          "grant_sequence": 41,
+          "state": "rejected",
+          "final_ack_reason": "handoff_deadline_expired",
+          "ack_observations": 1
+        },
+        {
+          "handoff_id": "97409720d9d34036aae9c33281e5148d.1:execution:handoff:42",
+          "grant_sequence": 42,
+          "state": "rejected",
+          "final_ack_reason": "owner_handoff_withdrawn:waiting_writer_handoff_outcome",
+          "ack_observations": 1
+        },
+        {
+          "handoff_id": "97409720d9d34036aae9c33281e5148d.1:execution:handoff:43",
+          "grant_sequence": 43,
+          "state": "rejected",
+          "final_ack_reason": "handoff_deadline_expired",
+          "ack_observations": 1
+        },
+        {
+          "handoff_id": "97409720d9d34036aae9c33281e5148d.1:execution:handoff:44",
+          "grant_sequence": 44,
+          "state": "rejected",
+          "final_ack_reason": "handoff_deadline_expired",
+          "ack_observations": 1
+        },
+        {
+          "handoff_id": "97409720d9d34036aae9c33281e5148d.1:execution:handoff:45",
+          "grant_sequence": 45,
+          "state": "rejected",
+          "final_ack_reason": "handoff_deadline_expired",
+          "ack_observations": 1
+        },
+        {
+          "handoff_id": "97409720d9d34036aae9c33281e5148d.1:execution:handoff:46",
+          "grant_sequence": 46,
+          "state": "rejected",
+          "final_ack_reason": "handoff_deadline_expired",
+          "ack_observations": 1
+        },
+        {
+          "handoff_id": "97409720d9d34036aae9c33281e5148d.1:execution:handoff:47",
+          "grant_sequence": 47,
+          "state": "rejected",
+          "final_ack_reason": "handoff_deadline_expired",
+          "ack_observations": 1
+        },
+        {
+          "handoff_id": "97409720d9d34036aae9c33281e5148d.1:execution:handoff:48",
+          "grant_sequence": 48,
+          "state": "rejected",
+          "final_ack_reason": "owner_hold_or_phase_barrier",
+          "ack_observations": 1
+        },
+        {
+          "handoff_id": "97409720d9d34036aae9c33281e5148d.1:execution:handoff:49",
+          "grant_sequence": 49,
+          "state": "rejected",
+          "final_ack_reason": "handoff_deadline_expired",
+          "ack_observations": 1
+        },
+        {
+          "handoff_id": "97409720d9d34036aae9c33281e5148d.1:execution:handoff:50",
+          "grant_sequence": 50,
+          "state": "rejected",
+          "final_ack_reason": "handoff_deadline_expired",
+          "ack_observations": 1
+        },
+        {
+          "handoff_id": "97409720d9d34036aae9c33281e5148d.1:execution:handoff:51",
+          "grant_sequence": 51,
+          "state": "rejected",
+          "final_ack_reason": "owner_handoff_withdrawn:waiting_writer_handoff_outcome",
+          "ack_observations": 1
+        },
+        {
+          "handoff_id": "97409720d9d34036aae9c33281e5148d.1:execution:handoff:52",
+          "grant_sequence": 52,
+          "state": "rejected",
+          "final_ack_reason": "handoff_deadline_expired",
+          "ack_observations": 1
+        },
+        {
+          "handoff_id": "97409720d9d34036aae9c33281e5148d.1:execution:handoff:53",
+          "grant_sequence": 53,
+          "state": "rejected",
+          "final_ack_reason": "handoff_deadline_expired",
+          "ack_observations": 1
+        },
+        {
+          "handoff_id": "97409720d9d34036aae9c33281e5148d.1:execution:handoff:54",
+          "grant_sequence": 54,
+          "state": "rejected",
+          "final_ack_reason": "owner_handoff_withdrawn:waiting_writer_handoff_outcome",
+          "ack_observations": 1
+        },
+        {
+          "handoff_id": "97409720d9d34036aae9c33281e5148d.1:execution:handoff:55",
+          "grant_sequence": 55,
+          "state": "rejected",
+          "final_ack_reason": "handoff_deadline_expired",
+          "ack_observations": 1
+        },
+        {
+          "handoff_id": "97409720d9d34036aae9c33281e5148d.1:execution:handoff:56",
+          "grant_sequence": 56,
+          "state": "rejected",
+          "final_ack_reason": "handoff_deadline_expired",
+          "ack_observations": 1
+        },
+        {
+          "handoff_id": "97409720d9d34036aae9c33281e5148d.1:execution:handoff:57",
+          "grant_sequence": 57,
+          "state": "rejected",
+          "final_ack_reason": "handoff_deadline_expired",
+          "ack_observations": 1
+        },
+        {
+          "handoff_id": "97409720d9d34036aae9c33281e5148d.1:execution:handoff:58",
+          "grant_sequence": 58,
+          "state": "rejected",
+          "final_ack_reason": "handoff_deadline_expired",
+          "ack_observations": 1
+        },
+        {
+          "handoff_id": "97409720d9d34036aae9c33281e5148d.1:execution:handoff:59",
+          "grant_sequence": 59,
+          "state": "rejected",
+          "final_ack_reason": "handoff_deadline_expired",
+          "ack_observations": 1
+        },
+        {
+          "handoff_id": "97409720d9d34036aae9c33281e5148d.1:execution:handoff:60",
+          "grant_sequence": 60,
+          "state": "rejected",
+          "final_ack_reason": "handoff_deadline_expired",
+          "ack_observations": 1
+        },
+        {
+          "handoff_id": "97409720d9d34036aae9c33281e5148d.1:execution:handoff:61",
+          "grant_sequence": 61,
+          "state": "rejected",
+          "final_ack_reason": "handoff_deadline_expired",
+          "ack_observations": 1
+        },
+        {
+          "handoff_id": "97409720d9d34036aae9c33281e5148d.1:execution:handoff:62",
+          "grant_sequence": 62,
+          "state": "rejected",
+          "final_ack_reason": "handoff_deadline_expired",
+          "ack_observations": 1
+        },
+        {
+          "handoff_id": "97409720d9d34036aae9c33281e5148d.1:execution:handoff:63",
+          "grant_sequence": 63,
+          "state": "rejected",
+          "final_ack_reason": "handoff_deadline_expired",
+          "ack_observations": 1
+        },
+        {
+          "handoff_id": "97409720d9d34036aae9c33281e5148d.1:execution:handoff:64",
+          "grant_sequence": 64,
+          "state": "rejected",
+          "final_ack_reason": "handoff_deadline_expired",
+          "ack_observations": 1
+        },
+        {
+          "handoff_id": "97409720d9d34036aae9c33281e5148d.1:execution:handoff:65",
+          "grant_sequence": 65,
+          "state": "rejected",
+          "final_ack_reason": "execution_blocked_timeout:actual_command_blocked:motion_sweep_occupied",
+          "ack_observations": 96
+        }
+      ]
+    },
+    "interpretation": "Progress and longer continuous writer intervals appeared, but proof validity and handoff outcomes still interrupted execution. A recorded reason is an original gate observation, not a unique diagnosis of all failures; multiple fixture/runtime changes separate this run from v34."
+  },
+  "stop": {
+    "execution_id": "97409720d9d34036aae9c33281e5148d.1:execution",
+    "stop_submitted": true,
+    "measured_stop_confirmed": true,
+    "physical_acceptance_verified": false,
+    "stationary_samples": 211,
+    "measured_linear_mps": 0.007447834228726071,
+    "measured_angular_radps": 0.0002167465773160693,
+    "reason": "execution_blocked_timeout:actual_command_blocked:motion_sweep_occupied"
+  },
+  "measured_stationary": true,
+  "imu_exact_source_match": true,
+  "phase_IMU_matching_evidence": {
+    "matched": true,
+    "state_count": 6784,
+    "captured_state_count": 6784,
+    "fence_source_stamp_ns": 1791353933342824927,
+    "missing_imu_source_stamps_ns": [],
+    "receipt_wait_budget_s": 1.0,
+    "receipt_wait_elapsed_s": 0.003785640001296997,
+    "fence_elapsed_s": 328.31859037303366
+  },
+  "body_height_consistent": true,
+  "measured_body_z_range_m": [
+    0.47995731234550476,
+    0.5429773926734924
+  ],
+  "whole_body_attestation": true,
+  "phase_frozen_body_attestation": {
+    "required": true,
+    "verified": true,
+    "body_envelope_verified_samples": 6795,
+    "body_envelope_failures": 0,
+    "body_envelope_registry_sha256": "e68b27ca3e0a30c3bdbaeb43414ae4a19674f9661adb167cc6bd0e38ab6ebc76",
+    "observed_measured_state_count": 6784,
+    "scope": "same_source_actual_whole_body_envelope_attestation; not_complete_contact_or_collision_acceptance"
+  },
+  "final_bridge_attestation": {
+    "body_envelope_verified_samples": 6907,
+    "body_envelope_failures": 0,
+    "body_envelope_registry_sha256": "e68b27ca3e0a30c3bdbaeb43414ae4a19674f9661adb167cc6bd0e38ab6ebc76",
+    "measured_state_samples": 6907,
+    "last_sim_time_ns": 115118000000,
+    "ray_scans": [
+      1151,
+      1151
+    ],
+    "incomplete_scans_dropped": 0,
+    "native_imu_samples": 11512,
+    "fault": ""
+  },
+  "final_physics_body_attestation": {
+    "required": true,
+    "verified_samples": 6910,
+    "failures": 0,
+    "envelope": {
+      "radius": 0.6078651750202781,
+      "offset": 0.3125,
+      "above": 0.589,
+      "support_floor_z": 0.0,
+      "support_penetration_m": 0.02
+    }
+  },
+  "collision_audit": {
+    "schema": 1,
+    "scope": "sampled_actual_link_geometry_static_and_actor",
+    "completed": true,
+    "continuous_collision_proof": false,
+    "separation_method": "strict_closed_AABB_separation_of_actual_transformed_primitives",
+    "numerical_outward_margin_m": 1e-06,
+    "floor_contact_scope": "excluded_explicit_support_plane_requires_separate_contact_certificate",
+    "robot_kind": "official_spot_physx",
+    "session_id": "97409720d9d34036aae9c33281e5148d",
+    "spec_sha256": "5f829896d4f1e4ef1275114ed1fb4be971d68cd27f1ad230da4c7098b71da62f",
+    "spec_canonical_sha256": "47f5087441463e0ffdfad390e9175191ee25c5e9b472532962f7ed6945aa4cbe",
+    "trajectory_sha256": "04afa4977edaa9165b16d8f4f0b9328803c79368859a50d22b3a86f02e0a8973",
+    "robot_collision_registry_sha256": "e68b27ca3e0a30c3bdbaeb43414ae4a19674f9661adb167cc6bd0e38ab6ebc76",
+    "actor_collision_registry_sha256": "be6813e188ff52611e04611682ce21bf303633099a61d7649d6b2e9712a478a6",
+    "actor_ids": [
+      "plaza_person"
+    ],
+    "sample_count": 6910,
+    "trajectory_sample_count": 6910,
+    "trajectory_sources_all_audited": true,
+    "source_begin_ns": 1791353820020824927,
+    "source_end_ns": 1791353935162824927,
+    "max_source_sampling_gap_ns": 20000000,
+    "actual_actor_encounter": {
+      "schema": 1,
+      "rule": "measured_primitive_center_approach_near_depart_v1",
+      "source": "actual_registered_link_and_actor_geometry",
+      "scope": "sampled_same_step_primitive_center_proximity_only",
+      "completed": true,
+      "required_actor_ids": [
+        "plaza_person"
+      ],
+      "contract_sha256": "32fdb8ca3a3198cd0b6c79b6134cb1224203ce98181ff8c8077d48dcad367f7f",
+      "observed": false,
+      "actors": [
+        {
+          "actor_id": "plaza_person",
+          "observed": false,
+          "witnesses": []
+        }
+      ],
+      "truncated_actor_ids": [],
+      "maximum_source_sampling_gap_ns": 20000000,
+      "source_begin_ns": 1791353820020824927,
+      "source_end_ns": 1791353935162824927,
+      "source_anchor_ns": 1791353820002824927,
+      "session_id": "97409720d9d34036aae9c33281e5148d",
+      "scene_sha256": "5f829896d4f1e4ef1275114ed1fb4be971d68cd27f1ad230da4c7098b71da62f",
+      "robot_collision_registry_sha256": "e68b27ca3e0a30c3bdbaeb43414ae4a19674f9661adb167cc6bd0e38ab6ebc76",
+      "actor_collision_registry_sha256": "be6813e188ff52611e04611682ce21bf303633099a61d7649d6b2e9712a478a6",
+      "observation_status": "completed",
+      "limitations": [
+        "sampled_proximity_only",
+        "not_route_blocking_or_yield_or_contact_evidence",
+        "caller_binds_actual_snapshots_to_same_physics_step"
+      ]
+    },
+    "non_floor_static_penetration_count": 0,
+    "dynamic_penetration_count": 0,
+    "possible_overlap_counts": {
+      "static": 0,
+      "dynamic": 0
+    },
+    "possible_overlap_sample_counts": {
+      "static": 0,
+      "dynamic": 0
+    },
+    "checked_pair_counts": {
+      "static": 7725380,
+      "dynamic": 179660
+    },
+    "possible_overlap_examples": [],
+    "min_static_separation_lower_bound_m": 2.7833324595779345,
+    "min_actor_separation_lower_bound_m": 1.9265897027437013,
+    "faults": [],
+    "limitations": [
+      "sampled_times_only",
+      "AABB_overlap_is_unresolved_not_measured_penetration",
+      "encounter_is_sampled_proximity_only",
+      "caller_binds_snapshots_to_same_physics_step"
+    ]
+  },
+  "navigation_shutdown": {
+    "request_accepted": true,
+    "software_retired": true,
+    "physical_stop_confirmed": false,
+    "reason": "software_retired_not_physical_stop",
+    "elapsed_s": 0.1267250720411539,
+    "session_id": "97409720d9d34036aae9c33281e5148d",
+    "recorded_at_unix": 1791354179.960309
+  },
+  "overall_clean_shutdown": false,
+  "child_exit_codes": {
+    "isaac_bridge": 0,
+    "isaac_sim": -15,
+    "navigation": 0,
+    "smoke": 1
+  },
+  "wall_seconds": 357.4911677038763,
+  "independent_evaluation": {
+    "schema": 1,
+    "kind": "isolated_isaac_scenario_evaluation_v1",
+    "case_id": "crossing_blocker",
+    "configuration_sha256": "609d1c32f6c05f683bf207143b20e3438737d667dacf3c3571e7e9cc84ef4073",
+    "session": "/home/eric/wjg/d1max-build-isaac/runs/campus_crossing_v35_001",
+    "status": "failed",
+    "passed": false,
+    "checks": [
+      {
+        "name": "sealed_same_scene",
+        "status": "passed",
+        "reason": "",
+        "evidence": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v35-campus-crossing/simulation/assets/scene_config.json"
+      },
+      {
+        "name": "single_session_ordered_actions",
+        "status": "failed",
+        "reason": "original_smoke_phase_failed:0",
+        "evidence": null
+      },
+      {
+        "name": "phase_000_action_stop_source",
+        "status": "failed",
+        "reason": "original_action_or_measured_stop_failed",
+        "evidence": "/home/eric/wjg/d1max-build-isaac/runs/campus_crossing_v35_001/scenario_suite/phase_000_report.json"
+      },
+      {
+        "name": "phase_000_test_source_budget",
+        "status": "passed",
+        "reason": "",
+        "evidence": {
+          "source_elapsed_s": 110.56,
+          "applied_source_budget_s": 281.0,
+          "sealed_phase_source_budget_s": 281
+        }
+      },
+      {
+        "name": "phase_000_goal",
+        "status": "failed",
+        "reason": "",
+        "evidence": {
+          "measured_xy_error_m": 10.643651074570133
+        }
+      },
+      {
+        "name": "fresh_ordered_task_identities_and_source_deadline",
+        "status": "passed",
+        "reason": "",
+        "evidence": null
+      },
+      {
+        "name": "actual_link_static_and_actor_collision",
+        "status": "passed",
+        "reason": "",
+        "evidence": "/home/eric/wjg/d1max-build-isaac/runs/campus_crossing_v35_001/physics/collision_audit.json"
+      },
+      {
+        "name": "intended_dynamic_encounter_observed",
+        "status": "failed",
+        "reason": "intended_sampled_proximity_encounter_not_exercised_during_original_action_interval",
+        "evidence": {
+          "collision_audit_sha256": "5c9ac6be3b46cc12395c6fb5c8005ffe5372b40b32ed9a360d441f025bc06319",
+          "source": "actual_registered_link_and_actor_geometry",
+          "scope": "sampled_same_step_primitive_center_proximity_only",
+          "selected_exact_pair_witnesses": []
+        }
+      },
+      {
+        "name": "owned_graph_retirement",
+        "status": "failed",
+        "reason": "Navigation test failed; inspect smoke.log and its original reports",
+        "evidence": "/home/eric/wjg/d1max-build-isaac/runs/campus_crossing_v35_001/run_summary.json"
+      }
+    ],
+    "physical_robot_acceptance": false,
+    "collision_scope": "sampled_actual_geometry_only_when_bound_evidence_present",
+    "continuous_collision_certificate": false,
+    "localization_validation": false
+  },
+  "original_run_performance": {
+    "physics_frames": 57580,
+    "physics_hz": 500.0,
+    "timing": {
+      "measured_state_samples": 6910,
+      "measured_state_wall_seconds": 333.88682728796266,
+      "measured_state_sim_seconds": 115.14200000000001,
+      "wall_seconds_per_sim_second": 2.8997831137896046,
+      "realtime_factor": 0.34485337722142334,
+      "state_wall_hz": 20.6926402461553,
+      "longest_state_wall_gap_s": 0.25121447001583874,
+      "longest_rays_wall_gap_s": [
+        0.4723976971581578,
+        0.47096016397699714
+      ]
+    },
+    "phase_timings": {
+      "receive_command": {
+        "count": 28790,
+        "total_wall_s": 1.2207091723103076,
+        "max_wall_s": 0.0008637150749564171
+      },
+      "physics_only_two_steps": {
+        "count": 28790,
+        "total_wall_s": 256.6868696338497,
+        "max_wall_s": 0.2340992649551481
+      },
+      "measured_state_and_udp": {
+        "count": 5758,
+        "total_wall_s": 47.79442382301204,
+        "max_wall_s": 0.01974445697851479
+      },
+      "dual_cloud_filter_pack_and_udp": {
+        "count": 1152,
+        "total_wall_s": 22.715540220262483,
+        "max_wall_s": 0.037003763020038605
+      }
+    },
+    "physics_callback_timings": {},
+    "physics_cpu_threads": {
+      "requested": null,
+      "original": 8,
+      "readback": 8
+    },
+    "physics_usd_state_writeback": {
+      "readback": true
+    },
+    "physics_usd_velocity_writeback": {
+      "requested": false,
+      "original": true,
+      "readback": false
+    },
+    "ray_phase_timings": {
+      "native_frame_and_array": {
+        "count": 2304,
+        "total_wall_s": 0.20044730580411851,
+        "max_wall_s": 0.0005676900036633015
+      },
+      "exact_self_and_depth_filter": {
+        "count": 2304,
+        "total_wall_s": 21.609786502085626,
+        "max_wall_s": 0.019496955210343003
+      },
+      "binary_pack_and_udp": {
+        "count": 2304,
+        "total_wall_s": 0.6886682223994285,
+        "max_wall_s": 0.0010406840592622757
+      },
+      "first_scan_evidence_save": {
+        "count": 2,
+        "total_wall_s": 0.0012520239688456059,
+        "max_wall_s": 0.0007349739316850901
+      }
+    },
+    "static_geometry_attestation": {
+      "expected_sha256": "b1de214d7b3dc3e0dec7207aba9c9675d7cc090a4c877c390b49c327ecd99a6e",
+      "cadence": "every actual body state; source timestamp unchanged",
+      "count": 6910,
+      "faults": 0,
+      "fault_latched": false,
+      "last_sha256": "b1de214d7b3dc3e0dec7207aba9c9675d7cc090a4c877c390b49c327ecd99a6e",
+      "last_fault": "",
+      "total_wall_s": 0.03292465419508517,
+      "max_wall_s": 0.013950195861980319,
+      "full_stage_audits": 1,
+      "notice_timings": {},
+      "cache_hits": 6909
+    },
+    "lidar_acquisition_mode": "full native snapshot on each real 10 Hz acquisition step",
+    "lidar_pose_phase": "actual physics BEGIN witness; original native wrapper END retained",
+    "body_state_cadence": "50 Hz plus real 10 Hz acquisition BEGIN witnesses",
+    "recording_render": {
+      "enabled": true,
+      "requested_fps": 0.0,
+      "effective_fps": 20.0,
+      "cadence": "playing: real source clock; paused: wall clock; render calls are not completed GPU-frame counts",
+      "render_calls": 0,
+      "max_render_wall_s": 0.0,
+      "render_failed": false,
+      "render_advanced_physics_frames": 0,
+      "transform_sync": "native PhysX to USD"
+    }
+  },
+  "original_native_sensors": {
+    "native_lidar_captures_per_sensor": 1152,
+    "scans_per_sensor": [
+      1152,
+      1152
+    ],
+    "native_floor_hit_audit": {
+      "scans": 2304,
+      "native_floor_hits": 5712883,
+      "max_abs_error_m": 3.929568429317243e-06,
+      "sealed_error_bound_m": 0.0002,
+      "raw_endpoints_and_source_times_preserved": true
+    },
+    "imu": {
+      "model": "Isaac 6 PhysX experimental IMUSensor",
+      "configured_hz": 100,
+      "physics_hz": 500.0,
+      "native_samples": 57580,
+      "native_measured_source_hz": 499.99999899703016,
+      "output_sampling": "select real native readings; retain their measured timestamps",
+      "measured_source_hz": 100.00173654370168,
+      "samples": 11517,
+      "invalid_reads": 0,
+      "duplicate_reads_skipped": 0,
+      "native_rate_samples_skipped": 46063,
+      "source_start_time": 2000074,
+      "source_end_time": 115160000305,
+      "include_gravity": true,
+      "first_reading": {
+        "sequence": 0,
+        "sim_time_ns": 2000074,
+        "absolute_sensor_time": 2.0220000743865967,
+        "orientation_xyzw": [
+          -0.0027567893266677856,
+          -0.0016362143214792013,
+          -0.012627596035599709,
+          0.9999151229858398
+        ],
+        "angular_velocity": [
+          0.0009737959480844438,
+          0.004798039328306913,
+          -0.02029031328856945
+        ],
+        "linear_acceleration": [
+          0.013066675513982773,
+          -0.05668681114912033,
+          9.821635246276855
+        ]
+      },
+      "last_reading": {
+        "sequence": 11516,
+        "sim_time_ns": 115160000305,
+        "absolute_sensor_time": 117.18000030517578,
+        "orientation_xyzw": [
+          0.00031026062788441777,
+          0.00411261385306716,
+          -0.1032019779086113,
+          0.9946518540382385
+        ],
+        "angular_velocity": [
+          0.0004993448383174837,
+          3.9627757359994575e-05,
+          -3.1160874641500413e-05
+        ],
+        "linear_acceleration": [
+          -0.07742568105459213,
+          0.004944862797856331,
+          9.829985618591309
+        ]
+      },
+      "acceleration_mean": [
+        -0.08889759163054985,
+        -0.010375502821795281,
+        9.810828018884045
+      ],
+      "acceleration_min": [
+        -4.947439193725586,
+        -3.191763162612915,
+        -12.31540298461914
+      ],
+      "acceleration_max": [
+        7.168484210968018,
+        4.615769863128662,
+        15.705885887145996
+      ],
+      "angular_velocity_mean": [
+        0.00012137883662878044,
+        0.00012230234647636658,
+        -0.0016949414068464712
+      ],
+      "angular_velocity_min": [
+        -0.5140964984893799,
+        -0.37233367562294006,
+        -0.368848979473114
+      ],
+      "angular_velocity_max": [
+        0.6313648819923401,
+        0.2804333567619324,
+        0.45498964190483093
+      ]
+    },
+    "independent_raw_phase_audit": {
+      "body_raw_samples": 6910,
+      "imu_raw_output_samples": 11517,
+      "native_f32_stamp_nearest_original_2ms_tick_max_abs_residual_ns": 3784,
+      "unique_orientation_values": 11517,
+      "orientation_value_changes": 11516,
+      "actual_BEGIN_to_native_IMU_END_orientation_error_rad": {
+        "count": 673,
+        "min": 0.0,
+        "median": 0.0,
+        "max": 6.664001874625056e-08
+      },
+      "same_tick_world_gyro_in_original_IMU_frame_error_radps": {
+        "count": 3820,
+        "min": 4.215910696992167e-13,
+        "median": 1.4677263542455924e-10,
+        "max": 2.514509852147031e-08
+      },
+      "native_LiDAR_END_minus_actual_BEGIN_ns": {
+        "count": 2304,
+        "min": 2000001,
+        "median": 2002734.5,
+        "max": 2005468
+      },
+      "floor_rows": 2304,
+      "body_actual_net_xy_displacement_m": 5.282589653763502,
+      "scope": "Original raw IMU quaternion and stamps retained. Nearest 2ms tick is a unique offline association only, never restamped/interpolated. Native IMU orientation has actual BEGIN transform and native END stamp; original IMU frame used for gyro."
+    },
+    "phase_association_scope": "Only retained exact same native physics ticks / original capture BEGIN+2ms END are compared. 673 orientation and 3820 gyro matches do not assert all native500Hz readings were stored. Unique nearest 2ms association is offline only, raw ns unchanged."
+  },
+  "last_bounded_unknown_capture": {
+    "public_copy": "v35_live_unknown_bounded_capture.json",
+    "original": {
+      "path": "/home/eric/wjg/d1max-build-isaac/v35_live_unknown_bounded_capture.json",
+      "sha256": "7d68060b7a35355fa01c32a4097447d98e09bdfc6a8a0266e06961bd41891ccf",
+      "bytes": 9485
+    },
+    "public_copy_sha256": "7d68060b7a35355fa01c32a4097447d98e09bdfc6a8a0266e06961bd41891ccf",
+    "scope": "Original source/receipt lease, original actor sample and full six-second sphere/closed-voxel calculation preserved in the byte-for-byte copied public artifact. This curve query is separate from final actual-command motion_sweep_occupied blocker. It is not a whole-run causality proof.",
+    "original_query_scene_s": 105.163163284,
+    "original_actor_scene_s": 105.14,
+    "original_combined_receipt_remaining_ms": 172.49648499999998,
+    "original_combined_source_remaining_ms": 176.836716,
+    "conclusion": "This original query has equal integrated ray sources, valid static context and live dynamic oracle, with no first-cell live hit conflict; the full closed first voxel intersects the same-source conservative full-horizon reachable sphere. UNKNOWN is a genuine dynamic reach veto under the current contract, not evidence of actual current actor-body collision and not evidence that all failures have this cause."
+  },
+  "offline_validation": {
+    "plan_env_ctest_groups": 8,
+    "plan_env_failed": 0,
+    "projected_rays_gtest_cases": 102,
+    "projected_rays_failed": 0,
+    "scan_planner_ctest_groups": 17,
+    "scan_planner_failed": 0,
+    "python_cases": 254,
+    "python_failed": 0,
+    "scope": "Existing completed regression logs only; no rebuild/tests run for this publication, and pass does not override formal failed Action. Prior failed copy/build/test logs preserved."
+  },
+  "remaining_analysis": [
+    "Resolve final original actual_command motion_sweep_occupied and prove sustained original authority/successful handoff; final current command blocker and bounded curve UNKNOWN are distinct observations.",
+    "Whole six-second dynamic reach union remains conservative. Do not mark UNKNOWN FREE or relax deadline/registered shape/physical STOP to force continuation.",
+    "Original adoption full XYZ C1 witnesses/curvature limit may reject candidates, but current evidence does not establish a sole C1, servo or dynamic-UNKNOWN failure cause.",
+    "Intended sampled actor encounter observed=false; zero sampled static/dynamic AABB overlap is not a continuous collision or contact certificate.",
+    "RTF .344853 does not remove all source/receipt/permission expiry; official500Hz pose preserved and only velocity USD copy removed, with raw phase checks.",
+    "Physical robot acceptance false, groundtruth fixture is not Faster-LIO localization validation; clean_shutdown false and original physical_stop_confirmed false remain.",
+    "Only crossing_blocker retested in v35; prior selected v31 candidate unchanged, four other campus cases remain unexecuted."
+  ],
+  "offline_audit_attempts": {
+    "evaluation_exit_code": 1,
+    "evaluation_exit_code_meaning": "Original failed scenario, report successfully produced.",
+    "first_control_audit_cli_error": "--session initially passed directory; IsADirectoryError before output opened. Original failure log retained, corrected command passes actual session.json and reads entire trace.",
+    "corrected_control_audit_exit_code": 0
+  },
+  "reproduction_python": {
+    "bursts_and_handoff": "import json, statistics, math\nfrom pathlib import Path\nfrom collections import Counter, defaultdict\n\ndef audit(trace):\n counts=Counter(); tracker=Counter(); join=Counter(); current=None; episodes=[]; grants={};acks=defaultdict(list);credit=Counter();cap=None;source_backwards=[]; previous=None\n def close(reason, stop_receipt=None):\n  nonlocal current\n  if current is None:return\n  current['source_duration_s']=(current['last_source_ns']-current['first_source_ns'])/1e9\n  current['observer_source_clock_duration_s']=(current['last_observer_source_clock_ns']-current['first_observer_source_clock_ns'])/1e9\n  current['last_active_receipt_duration_s']=(current['last_receipt_ns']-current['first_receipt_ns'])/1e9\n  current['until_next_zero_receipt_s']=None if stop_receipt is None else (stop_receipt-current['first_receipt_ns'])/1e9\n  current['end_reason']=reason;episodes.append(current);current=None\n with trace.open() as f:\n  for line,s in enumerate(f,1):\n   r=json.loads(s);k=r['kind'];d=r['data'];counts[k]+=1\n   if k=='tracker':\n    tracker[d.get('reason','')]+=1;jd=d.get('join_diagnostic',{});join[jd.get('reason','')]+=1\n    v=d.get('control_diagnostic',{}).get('planar_speed_limit_mps',0)\n    if cap is None or v>cap['planar_speed_limit_mps']:cap={'trace_line':line,'source_clock_ns':r['source_clock_ns'],'reason':d.get('reason'),'trajectory_id':d.get('trajectory_id'),'planar_speed_limit_mps':v,'control_diagnostic':d.get('control_diagnostic',{})}\n   elif k=='bt_progress' and 'execution_progress_credit_samples' in d:credit[(d.get('execution_id'),d.get('control_epoch'))]=max(credit[(d.get('execution_id'),d.get('control_epoch'))],d['execution_progress_credit_samples'])\n   elif k=='handoff_grant':grants[d.get('handoff_id')]=d\n   elif k=='commit_ack':acks[d.get('handoff_id','')].append(d)\n   elif k=='applied':\n    source=d['source_stamp_ns'];receipt=r['receipt_monotonic_ns'];vel=d['velocity'];active=not d.get('hold',True) and any(abs(v)>1e-12 for v in vel)\n    if previous is not None and source<previous:source_backwards.append({'line':line,'previous':previous,'source':source})\n    previous=source\n    if not active:close(d.get('reason'),receipt);continue\n    if current is None:current={'first_trace_line':line,'first_source_ns':source,'first_receipt_ns':receipt,'first_observer_source_clock_ns':r['source_clock_ns'],'samples':0,'trajectory_ids':[],'max_abs_vx_mps':0,'max_abs_wz_radps':0}\n    current.update(last_trace_line=line,last_source_ns=source,last_receipt_ns=receipt,last_observer_source_clock_ns=r['source_clock_ns'])\n    current['samples']+=1\n    if d.get('trajectory_id') not in current['trajectory_ids']:current['trajectory_ids'].append(d.get('trajectory_id'))\n    current['max_abs_vx_mps']=max(current['max_abs_vx_mps'],abs(vel[0]));current['max_abs_wz_radps']=max(current['max_abs_wz_radps'],abs(vel[1]))\n close('end_of_trace')\n handoff={'unique_grants':len(grants),'successful':0,'rejected':0,'no_ack':0,'reject_reasons':Counter(),'successful_initial_ack_count':sum(d.get('applied') is True for d in acks.get('',[])),'ack_observations':sum(map(len,acks.values())),'outcomes':[]}\n for id,g in grants.items():\n  ds=acks.get(id,[]);good=[d for d in ds if d.get('applied') is True]\n  if good:state='successful';handoff['successful']+=1;reason=good[-1].get('reason')\n  elif ds:state='rejected';handoff['rejected']+=1;reason=ds[-1].get('reason');handoff['reject_reasons'][reason]+=1\n  else:state='no_ack';handoff['no_ack']+=1;reason=None\n  handoff['outcomes'].append({'handoff_id':id,'grant_sequence':g.get('sequence'),'state':state,'final_ack_reason':reason,'ack_observations':len(ds)})\n spans=[e['source_duration_s'] for e in episodes];observed=[e['observer_source_clock_duration_s'] for e in episodes]\n return {'trace_kind_counts':dict(counts),'tracker_reason_counts':dict(tracker),'join_diagnostic_observation_reason_counts':dict(join),'owner_credit_max_recorded_values':[{'execution_id':id,'control_epoch':epoch,'credit_count':c} for (id,epoch),c in credit.items()],'max_planar_cap':cap,'writer_episodes':episodes,'writer_episode_source_duration_s':{'count':len(spans),'min':min(spans),'median':statistics.median(spans),'max':max(spans),'total_observed_nonzero_span_s':sum(spans)},'observer_episode_source_clock_duration_s':{'count':len(observed),'min':min(observed),'median':statistics.median(observed),'max':max(observed),'total_observed_nonzero_span_s':sum(observed)},'writer_source_backwards':source_backwards,'handoff':handoff,'scope':'Original observed writer states; duration from first to last consecutive nonzero sample, never proof of authority between samples. Continuous nonzero remains one episode across trajectory IDs. Handoff keyed by exact original handoff ID; applied true wins, otherwise final ACK reason; initial ACK separately counted.'}\nif __name__=='__main__':\n base=Path('/home/eric/wjg/d1max-build-isaac')\n for version in ['v34','v35']:\n  o=audit(base/f'runs/campus_crossing_{version}_001/scenario_suite/phase_000_trace.jsonl')\n  out=base/f'{version}_control_bursts_independent_audit.json';out.write_text(json.dumps(o,ensure_ascii=False,indent=2)+'\\n')\n  print(version,{k:o[k] for k in ['writer_episode_source_duration_s','observer_episode_source_clock_duration_s','owner_credit_max_recorded_values','tracker_reason_counts','join_diagnostic_observation_reason_counts']},'handoff',{k:v for k,v in o['handoff'].items() if k!='outcomes'},'sourceback',len(o['writer_source_backwards']))\n",
+    "sensor_phase": "import json, statistics, math\nfrom pathlib import Path\nimport numpy as np\n\ndef rows(path):\n with path.open() as f:return [json.loads(s) for s in f]\ndef rotation_xyzw(q):\n q=np.asarray(q,dtype=float);q=q/np.linalg.norm(q);x,y,z,w=q\n return np.array([[1-2*(y*y+z*z),2*(x*y-z*w),2*(x*z+y*w)],[2*(x*y+z*w),1-2*(x*x+z*z),2*(y*z-x*w)],[2*(x*z-y*w),2*(y*z+x*w),1-2*(x*x+y*y)]])\ndef stats(v):return {'count':len(v),'min':min(v),'median':statistics.median(v),'max':max(v)}\ndef audit(directory):\n body=rows(directory/'trajectory.jsonl');imu=rows(directory/'imu_readings.jsonl')\n keyed={round(r['sim_time_ns']/2_000_000)*2_000_000:r for r in imu};assert len(keyed)==len(imu)\n residual=max(abs(r['sim_time_ns']-round(r['sim_time_ns']/2_000_000)*2_000_000) for r in imu);assert residual<1_000_000\n phase=[];gyro=[]\n for b in body:\n  i=keyed.get(b['sim_time_ns'])\n  if i is not None:\n   predicted=rotation_xyzw(i['orientation_xyzw']).T@np.asarray(b['angular_velocity_world']);gyro.append(float(np.linalg.norm(predicted-np.asarray(i['angular_velocity']))))\n  if b['sim_time_ns']%100_000_000!=18_000_000:continue\n  i=keyed.get(b['sim_time_ns']+2_000_000)\n  if i is None:continue\n  qb=np.asarray(b['pose'][3:]);qi=np.asarray(i['orientation_xyzw']);dot=abs(float((qb/np.linalg.norm(qb))@(qi/np.linalg.norm(qi))));phase.append(float(2*np.arccos(min(1.,dot))))\n begin_end=[];floorrows=0\n for f in rows(directory/'floor_hit_audit.jsonl'):\n  floorrows+=1;begin_end.append(f['native_scan_time_ns']-f['acquisition_begin_ns'])\n return {'body_raw_samples':len(body),'imu_raw_output_samples':len(imu),'native_f32_stamp_nearest_original_2ms_tick_max_abs_residual_ns':residual,'unique_orientation_values':len({tuple(r['orientation_xyzw']) for r in imu}),'orientation_value_changes':sum(a['orientation_xyzw']!=b['orientation_xyzw'] for a,b in zip(imu,imu[1:])),'actual_BEGIN_to_native_IMU_END_orientation_error_rad':stats(phase),'same_tick_world_gyro_in_original_IMU_frame_error_radps':stats(gyro),'native_LiDAR_END_minus_actual_BEGIN_ns':stats(begin_end),'floor_rows':floorrows,'body_actual_net_xy_displacement_m':math.dist(body[0]['pose'][:2],body[-1]['pose'][:2]),'scope':'Original raw IMU quaternion and stamps retained. Nearest 2ms tick is a unique offline association only, never restamped/interpolated. Native IMU orientation has actual BEGIN transform and native END stamp; original IMU frame used for gyro.'}\nif __name__=='__main__':\n b=Path('/home/eric/wjg/d1max-build-isaac');o=audit(b/'runs/campus_crossing_v35_001/physics');(b/'v35_sensor_phase_audit.json').write_text(json.dumps(o,ensure_ascii=False,indent=2)+'\\n');print(json.dumps(o,ensure_ascii=False))\n"
+  },
+  "evidence_sha256": {
+    "runs/campus_crossing_v35_001/scenario_suite/phase_000_report.json": {
+      "path": "/home/eric/wjg/d1max-build-isaac/runs/campus_crossing_v35_001/scenario_suite/phase_000_report.json",
+      "sha256": "b242f0c9f6f83628437de684267afc06e5a484eeecbd4437c7dcbfc8f0e839b5",
+      "bytes": 9217906
+    },
+    "runs/campus_crossing_v35_001/scenario_suite/phase_000_trace.jsonl": {
+      "path": "/home/eric/wjg/d1max-build-isaac/runs/campus_crossing_v35_001/scenario_suite/phase_000_trace.jsonl",
+      "sha256": "4ce4ab6f7e92c03562370de5319864da51247a0e4e4c45a013be633d1720943e",
+      "bytes": 181123970
+    },
+    "runs/campus_crossing_v35_001/scenario_suite/execution.json": {
+      "path": "/home/eric/wjg/d1max-build-isaac/runs/campus_crossing_v35_001/scenario_suite/execution.json",
+      "sha256": "0c3059f2fa2e372f5f6cfac0b7f0921d13eb99436f2db6b0f44cf7705f2a4971",
+      "bytes": 1515
+    },
+    "runs/campus_crossing_v35_001/physics/summary.json": {
+      "path": "/home/eric/wjg/d1max-build-isaac/runs/campus_crossing_v35_001/physics/summary.json",
+      "sha256": "c48443c32eef02094d326ca241974a517be1e783d362f3871f1642d40ea4a79a",
+      "bytes": 27824
+    },
+    "runs/campus_crossing_v35_001/physics/trajectory.jsonl": {
+      "path": "/home/eric/wjg/d1max-build-isaac/runs/campus_crossing_v35_001/physics/trajectory.jsonl",
+      "sha256": "04afa4977edaa9165b16d8f4f0b9328803c79368859a50d22b3a86f02e0a8973",
+      "bytes": 15195813
+    },
+    "runs/campus_crossing_v35_001/physics/robot_link_readings.jsonl": {
+      "path": "/home/eric/wjg/d1max-build-isaac/runs/campus_crossing_v35_001/physics/robot_link_readings.jsonl",
+      "sha256": "eb4c88dc247500a437de5ed028712324203d77b52a23bb469a94bdf333073c8b",
+      "bytes": 53847156
+    },
+    "runs/campus_crossing_v35_001/physics/imu_readings.jsonl": {
+      "path": "/home/eric/wjg/d1max-build-isaac/runs/campus_crossing_v35_001/physics/imu_readings.jsonl",
+      "sha256": "7659479dc5b4c79a87a1de5029a3be3af81b5362085e346c81b3ba984363b920",
+      "bytes": 4139810
+    },
+    "runs/campus_crossing_v35_001/physics/floor_hit_audit.jsonl": {
+      "path": "/home/eric/wjg/d1max-build-isaac/runs/campus_crossing_v35_001/physics/floor_hit_audit.jsonl",
+      "sha256": "48edd4ec0070452b592172ab89e9cf753d0c25e0ee2cf1dd77582031bafa6a7e",
+      "bytes": 610096
+    },
+    "runs/campus_crossing_v35_001/physics/collision_audit.json": {
+      "path": "/home/eric/wjg/d1max-build-isaac/runs/campus_crossing_v35_001/physics/collision_audit.json",
+      "sha256": "5c9ac6be3b46cc12395c6fb5c8005ffe5372b40b32ed9a360d441f025bc06319",
+      "bytes": 3218
+    },
+    "runs/campus_crossing_v35_001/physics/quadruped_asset_metadata.json": {
+      "path": "/home/eric/wjg/d1max-build-isaac/runs/campus_crossing_v35_001/physics/quadruped_asset_metadata.json",
+      "sha256": "9373e6f65506cf7d1efc5056ba0c44690cce1d2e0ed563af827000cfc529aa6e",
+      "bytes": 15617
+    },
+    "runs/campus_crossing_v35_001/run_summary.json": {
+      "path": "/home/eric/wjg/d1max-build-isaac/runs/campus_crossing_v35_001/run_summary.json",
+      "sha256": "b52805baf2466d648519aa32bf02da9963805990e53ee734f0ed0d3667263805",
+      "bytes": 895
+    },
+    "runs/campus_crossing_v35_001/shutdown.json": {
+      "path": "/home/eric/wjg/d1max-build-isaac/runs/campus_crossing_v35_001/shutdown.json",
+      "sha256": "38a30378ef441b0cccbd4550dc28d0f9a98d1eab64843ea0b8096183ebe7a721",
+      "bytes": 273
+    },
+    "runs/campus_crossing_v35_001/isaac_bridge_status.json": {
+      "path": "/home/eric/wjg/d1max-build-isaac/runs/campus_crossing_v35_001/isaac_bridge_status.json",
+      "sha256": "9ad623b962e4e465be7fe62e02488287755a1b6e70618704f8a1f040835f9c7e",
+      "bytes": 1492
+    },
+    "runs/campus_crossing_v35_001/session.json": {
+      "path": "/home/eric/wjg/d1max-build-isaac/runs/campus_crossing_v35_001/session.json",
+      "sha256": "b38dab52e8e5f03ff9eb492145056ac26fe2ff90b1d8765d72d32533c995e8d9",
+      "bytes": 13783
+    },
+    "runs/campus_crossing_v35_001/tracker.yaml": {
+      "path": "/home/eric/wjg/d1max-build-isaac/runs/campus_crossing_v35_001/tracker.yaml",
+      "sha256": "a1efb9a320065836cafd5aa1a4ba94dd94ca1d086a8720ef34d21171398196de",
+      "bytes": 1432
+    },
+    "runs/campus_crossing_v35_001/scan.yaml": {
+      "path": "/home/eric/wjg/d1max-build-isaac/runs/campus_crossing_v35_001/scan.yaml",
+      "sha256": "8745c95207b16ec458709335e53a1279586a41f4304369364d86dbcbebe988a8",
+      "bytes": 4924
+    },
+    "runs/campus_crossing_v35_001/quadruped_fixture_profile.yaml": {
+      "path": "/home/eric/wjg/d1max-build-isaac/runs/campus_crossing_v35_001/quadruped_fixture_profile.yaml",
+      "sha256": "c1b1a28574ec8fcee1a62648db9c9efbab49bbaf0d714aab885559e6d092958a",
+      "bytes": 773
+    },
+    "runs/campus_crossing_v35_001/runtime_inputs.json": {
+      "path": "/home/eric/wjg/d1max-build-isaac/runs/campus_crossing_v35_001/runtime_inputs.json",
+      "sha256": "bbb65972d4661900da65953ee8aab82131921f03f29dfb34899a2e52293195c7",
+      "bytes": 311149
+    },
+    "runs/campus_crossing_v35_001/braking_model.json": {
+      "path": "/home/eric/wjg/d1max-build-isaac/runs/campus_crossing_v35_001/braking_model.json",
+      "sha256": "9cdde7718efceec7242ea17568a45b81675c169b359152d51648861d676a61ac",
+      "bytes": 1512
+    },
+    "runs/campus_crossing_v35_001/scan.log": {
+      "path": "/home/eric/wjg/d1max-build-isaac/runs/campus_crossing_v35_001/scan.log",
+      "sha256": "1ff6d27f0c733e317c489d51ea433e755fd397a58e9dd6d1b37c37ff807bf9ae",
+      "bytes": 2070098
+    },
+    "runs/campus_crossing_v35_001/isaac_sim.log": {
+      "path": "/home/eric/wjg/d1max-build-isaac/runs/campus_crossing_v35_001/isaac_sim.log",
+      "sha256": "61a098e87c708d4ac70532a9af16aa7e8d1fee460503ec11c89ff01ec57fe5f2",
+      "bytes": 21744
+    },
+    "runs/campus_crossing_v35_001/smoke.log": {
+      "path": "/home/eric/wjg/d1max-build-isaac/runs/campus_crossing_v35_001/smoke.log",
+      "sha256": "fb50550f125ca9268ab157923d3885ed00b12ae8d71ae775fbb8ae597a7c8baf",
+      "bytes": 202
+    },
+    "campus_crossing_v35_evaluation.json": {
+      "path": "/home/eric/wjg/d1max-build-isaac/campus_crossing_v35_evaluation.json",
+      "sha256": "bd1f50756993a77b78a74699fd0d9bc377ccfcb53bbb07de7523e1d04639c634",
+      "bytes": 2738
+    },
+    "v35_control_summary.json": {
+      "path": "/home/eric/wjg/d1max-build-isaac/v35_control_summary.json",
+      "sha256": "487ec4130edbdf70b8fde721d7718bcbf2ec61e205e8604ead71e34d445e2af8",
+      "bytes": 6225
+    },
+    "v35_control_events.jsonl": {
+      "path": "/home/eric/wjg/d1max-build-isaac/v35_control_events.jsonl",
+      "sha256": "28747fdf3b18d6e4c856611cd6611f89c86fa347270f3b38e11706f833728b19",
+      "bytes": 51661065
+    },
+    "v35_control_bursts_independent_audit.json": {
+      "path": "/home/eric/wjg/d1max-build-isaac/v35_control_bursts_independent_audit.json",
+      "sha256": "65effccf014bb3c52fda59689432d8001960202cf53e2e60c6aba46557486867",
+      "bytes": 43304
+    },
+    "v35_control_bursts_audit.py": {
+      "path": "/home/eric/wjg/d1max-build-isaac/v35_control_bursts_audit.py",
+      "sha256": "b81946c05dbe4973dfac931235f7be25d22179559cc4607db187a892f5578873",
+      "bytes": 5440
+    },
+    "v35_sensor_phase_audit.json": {
+      "path": "/home/eric/wjg/d1max-build-isaac/v35_sensor_phase_audit.json",
+      "sha256": "3646121a41610e7e3089768a81103328fbeb1ee866da99c6c0d580c5fc72a168",
+      "bytes": 1026
+    },
+    "v35_sensor_phase_audit.py": {
+      "path": "/home/eric/wjg/d1max-build-isaac/v35_sensor_phase_audit.py",
+      "sha256": "8eea61a3077686dc53fc8678e408d5c1f42841e7d028faebe827d153eeaa2646",
+      "bytes": 2640
+    },
+    "v35_live_unknown_bounded_capture.json": {
+      "path": "/home/eric/wjg/d1max-build-isaac/v35_live_unknown_bounded_capture.json",
+      "sha256": "7d68060b7a35355fa01c32a4097447d98e09bdfc6a8a0266e06961bd41891ccf",
+      "bytes": 9485
+    },
+    "v35_plan_env_ctest.log": {
+      "path": "/home/eric/wjg/d1max-build-isaac/v35_plan_env_ctest.log",
+      "sha256": "29eb6e54885479703822f2fd9ad6236bb35c5492bf67c8a20231f23023f8f5ee",
+      "bytes": 1139
+    },
+    "v35_scan_ctest.log": {
+      "path": "/home/eric/wjg/d1max-build-isaac/v35_scan_ctest.log",
+      "sha256": "c591e0802d74c2fd5d0c06b21f0af2e21d1362d838b934e11f5e0e47d4998256",
+      "bytes": 2315
+    },
+    "v35_python_pytest.log": {
+      "path": "/home/eric/wjg/d1max-build-isaac/v35_python_pytest.log",
+      "sha256": "f73e3d0523a463b32184f303f5087604932b8007f77e89a54873a2a55eeaa990",
+      "bytes": 340
+    },
+    "v35_exact_pair_watchdog.diff": {
+      "path": "/home/eric/wjg/d1max-build-isaac/v35_exact_pair_watchdog.diff",
+      "sha256": "170be30834610c760a12ca0beedff3b1e1f20f47dcb1e71265dafcb065276ddd",
+      "bytes": 11043
+    },
+    "nav_fix_v35_plan_env_build.log": {
+      "path": "/home/eric/wjg/d1max-build-isaac/nav_fix_v35_plan_env_build.log",
+      "sha256": "061c5f4efe2bfe2855df0e5d9fc60553a8f31e8392ab8970f675bcf3f8c40b38",
+      "bytes": 3999
+    },
+    "nav_fix_v35_plan_env_retest_build.log": {
+      "path": "/home/eric/wjg/d1max-build-isaac/nav_fix_v35_plan_env_retest_build.log",
+      "sha256": "3f4e4147d1a7c1c3a66b94626c164b0fae3a03175bdb1649dcb4738ae3d5e076",
+      "bytes": 3735
+    },
+    "nav_fix_v35_scan_relink.log": {
+      "path": "/home/eric/wjg/d1max-build-isaac/nav_fix_v35_scan_relink.log",
+      "sha256": "a05f5d3b894d53b8461313796030230c27d854e52b7d633b2999839652b9839d",
+      "bytes": 1593
+    },
+    "campus_v35_prepare.log": {
+      "path": "/home/eric/wjg/d1max-build-isaac/campus_v35_prepare.log",
+      "sha256": "314bce8b70cd8bdebf473d25e66ee7b3e6b5b3142cf8d09710d189967bcb2c68",
+      "bytes": 865
+    },
+    "campus_v35_crossing_candidate.log": {
+      "path": "/home/eric/wjg/d1max-build-isaac/campus_v35_crossing_candidate.log",
+      "sha256": "2db507c57b68eaf362942ac1738119c8e1e7c21c745bf7125bdd0799bdb8f0d2",
+      "bytes": 343
+    },
+    "campus_v35_crossing_run.log": {
+      "path": "/home/eric/wjg/d1max-build-isaac/campus_v35_crossing_run.log",
+      "sha256": "4cfe595cc4479ec76ae23466c8c6585a721a35789c8007b52291633289695b82",
+      "bytes": 5422
+    },
+    "v35_plan_env_ctest_copy_failed.log": {
+      "path": "/home/eric/wjg/d1max-build-isaac/v35_plan_env_ctest_copy_failed.log",
+      "sha256": "9c67c293a45d0ed783048be25ca66e266c3b79c2dc8d2afbda0a01a6be22c566",
+      "bytes": 1139
+    },
+    "v35_plan_env_ctest_first_failed.log": {
+      "path": "/home/eric/wjg/d1max-build-isaac/v35_plan_env_ctest_first_failed.log",
+      "sha256": "b2edae5282a115cc858bcd15c197849a674b69f15099b08df020850aa6912de4",
+      "bytes": 24950
+    },
+    "nav_fix_v35_plan_env_build_copy_failed.log": {
+      "path": "/home/eric/wjg/d1max-build-isaac/nav_fix_v35_plan_env_build_copy_failed.log",
+      "sha256": "809fe88c9be8f0437e5116d8db956d7c4e9ff2e097f2d6eb806ddb4d7e510cd8",
+      "bytes": 945
+    },
+    "v35_control_audit_cli.log": {
+      "path": "/home/eric/wjg/d1max-build-isaac/v35_control_audit_cli.log",
+      "sha256": "e71bd475b36e6da864d5fb653b8e068fac6b73f6d6b5d418a1f30dbddede148b",
+      "bytes": 888
+    },
+    "v35_control_audit_fixed_cli.log": {
+      "path": "/home/eric/wjg/d1max-build-isaac/v35_control_audit_fixed_cli.log",
+      "sha256": "605fad3c6217e2df05eaaa500c6392ca6d5c9761624a62f6e31e88d5baf21e01",
+      "bytes": 5201
+    },
+    "v35_evaluation_cli.log": {
+      "path": "/home/eric/wjg/d1max-build-isaac/v35_evaluation_cli.log",
+      "sha256": "bd1f50756993a77b78a74699fd0d9bc377ccfcb53bbb07de7523e1d04639c634",
+      "bytes": 2738
+    },
+    "isaac-candidate-v35-campus-crossing/isaac_candidate_integrity.json": {
+      "path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v35-campus-crossing/isaac_candidate_integrity.json",
+      "sha256": "46ff9818a1b02714edaf21ab10c962fa0a22d708cd7fe6023f04be70c5f4468f",
+      "bytes": 735470
+    },
+    "isaac-candidate-v35-campus-crossing/simulation/assets/scene_config.json": {
+      "path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v35-campus-crossing/simulation/assets/scene_config.json",
+      "sha256": "5f829896d4f1e4ef1275114ed1fb4be971d68cd27f1ad230da4c7098b71da62f",
+      "bytes": 58202
+    },
+    "isaac-candidate-v35-campus-crossing/simulation/scene.py": {
+      "path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v35-campus-crossing/simulation/scene.py",
+      "sha256": "c02ab593fdd42d070b417ef61cc99883170e8282c32b505eee2291fda4a92920",
+      "bytes": 68686
+    },
+    "isaac-candidate-v35-campus-crossing/simulation/quadruped.py": {
+      "path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v35-campus-crossing/simulation/quadruped.py",
+      "sha256": "cba3c49072bd390250eadead4a0cbe839d3d782093037378174ac4eb8a7137d1",
+      "bytes": 34815
+    },
+    "isaac-candidate-v35-campus-crossing/simulation/runtime_geometry.py": {
+      "path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v35-campus-crossing/simulation/runtime_geometry.py",
+      "sha256": "9a5b4e3860fd310a5468393914ef749c11e1bd1f47554b54c60e094ecaa293b6",
+      "bytes": 3943
+    },
+    "isaac-candidate-v35-campus-crossing/simulation/bridge.py": {
+      "path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v35-campus-crossing/simulation/bridge.py",
+      "sha256": "9526ae8ef605813db8cae8436083f7762d0ea7cea7595202023e6649430bbc0d",
+      "bytes": 35419
+    },
+    "isaac-candidate-v35-campus-crossing/application/install/d1max_trajectory_tracker/lib/d1max_trajectory_tracker/trajectory_tracker": {
+      "path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v35-campus-crossing/application/install/d1max_trajectory_tracker/lib/d1max_trajectory_tracker/trajectory_tracker",
+      "sha256": "5042784ea8a715e3579741ae19ee90da06965937823bacacbff23b22e00f96fc",
+      "bytes": 4388712
+    },
+    "isaac-candidate-v35-campus-crossing/application/install/scan_planner/lib/scan_planner/scan_planner_node": {
+      "path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v35-campus-crossing/application/install/scan_planner/lib/scan_planner/scan_planner_node",
+      "sha256": "a75a0146b520a955903f8653bf38e12b36ca5c98fa9557794fc861ce521ade26",
+      "bytes": 8966976
+    },
+    "isaac-candidate-v35-campus-crossing/source_snapshot/nav/src/scan_planner_vendor/plan_env/src/grid_map.cpp": {
+      "path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v35-campus-crossing/source_snapshot/nav/src/scan_planner_vendor/plan_env/src/grid_map.cpp",
+      "sha256": "fb6f8a718fe05df9faf16a1ee4c61a6f438eb5c0fcf1543db0c91daee699e268",
+      "bytes": 128887
+    }
+  },
+  "missing_optional_evidence_paths": []
+}

@@ -1,0 +1,510 @@
+{
+  "tests": 61,
+  "failures": 0,
+  "disabled": 0,
+  "errors": 0,
+  "timestamp": "2026-10-07T14:48:00Z",
+  "time": "0.109s",
+  "name": "AllTests",
+  "testsuites": [
+    {
+      "name": "Tracker",
+      "tests": 61,
+      "failures": 0,
+      "disabled": 0,
+      "errors": 0,
+      "timestamp": "2026-10-07T14:48:00Z",
+      "time": "0.109s",
+      "testsuite": [
+        {
+          "name": "DoesNotStartWithoutExplicitTask",
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-07T14:48:00Z",
+          "time": "0s",
+          "classname": "Tracker"
+        },
+        {
+          "name": "RuntimeRequiresVersionedControlContractEvenIfStandalone",
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-07T14:48:00Z",
+          "time": "0s",
+          "classname": "Tracker"
+        },
+        {
+          "name": "OutOfOrderAndDuplicateOdomCannotRewindOrRefreshSource",
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-07T14:48:00Z",
+          "time": "0.001s",
+          "classname": "Tracker"
+        },
+        {
+          "name": "LegacyMapCorrectionChangesCommandWithoutPhysicalMotion",
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-07T14:48:00Z",
+          "time": "0.002s",
+          "classname": "Tracker"
+        },
+        {
+          "name": "UsesVendorCurveAndOutputsBoundedSI",
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-07T14:48:00Z",
+          "time": "0.001s",
+          "classname": "Tracker"
+        },
+        {
+          "name": "ControlDiagnosticsDistinguishClockBranchesAndDoNotAdvanceTheController",
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-07T14:48:00Z",
+          "time": "0.001s",
+          "classname": "Tracker"
+        },
+        {
+          "name": "AcceptedRouteYawToleranceRangeIsNotSilentlyRejectedAtAlignment",
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-07T14:48:00Z",
+          "time": "0.003s",
+          "classname": "Tracker"
+        },
+        {
+          "name": "SessionGenerationAndIdAreEnforced",
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-07T14:48:00Z",
+          "time": "0.001s",
+          "classname": "Tracker"
+        },
+        {
+          "name": "EmptyInvalidOrWrongFrameCandidateDoesNotWithdrawIncumbent",
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-07T14:48:00Z",
+          "time": "0.004s",
+          "classname": "Tracker"
+        },
+        {
+          "name": "CandidateDiagnosticsSeparateFormatClockAndGeometryWithoutChangingAdmission",
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-07T14:48:00Z",
+          "time": "0s",
+          "classname": "Tracker"
+        },
+        {
+          "name": "ExpiredPendingCandidateDoesNotWithdrawOrRestampAcceptedCurve",
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-07T14:48:00Z",
+          "time": "0.001s",
+          "classname": "Tracker"
+        },
+        {
+          "name": "OdomFramesQuaternionAndSpeedCannotBypassSafety",
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-07T14:48:00Z",
+          "time": "0.002s",
+          "classname": "Tracker"
+        },
+        {
+          "name": "StaleOdometryStopsAndRevokesCurrentTrajectory",
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-07T14:48:00Z",
+          "time": "0.001s",
+          "classname": "Tracker"
+        },
+        {
+          "name": "HeartbeatTimeoutCannotResumeSameGeneration",
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-07T14:48:00Z",
+          "time": "0s",
+          "classname": "Tracker"
+        },
+        {
+          "name": "CancelCannotResumeSameGeneration",
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-07T14:48:00Z",
+          "time": "0.001s",
+          "classname": "Tracker"
+        },
+        {
+          "name": "InvalidMutableHeartbeatIsNotAccepted",
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-07T14:48:00Z",
+          "time": "0s",
+          "classname": "Tracker"
+        },
+        {
+          "name": "RotatesAndFreezesBeforeForwardMotion",
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-07T14:48:00Z",
+          "time": "0.001s",
+          "classname": "Tracker"
+        },
+        {
+          "name": "OccupiedForwardTurnRequestsControlledStopBeforePureMeasuredTurn",
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-07T14:48:00Z",
+          "time": "0.001s",
+          "classname": "Tracker"
+        },
+        {
+          "name": "TurnFirstNeedsDistinctMeasuredAlignmentSamplesAndHasHysteresis",
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-07T14:48:00Z",
+          "time": "0.001s",
+          "classname": "Tracker"
+        },
+        {
+          "name": "TurnRestUsesRecordLimitsAndFreshMovingSampleRestartsDuration",
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-07T14:48:00Z",
+          "time": "0.003s",
+          "classname": "Tracker"
+        },
+        {
+          "name": "TurnRestSampleMinimumCannotBeSatisfiedByTimerOrReplayedSource",
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-07T14:48:00Z",
+          "time": "0.002s",
+          "classname": "Tracker"
+        },
+        {
+          "name": "WrongOldZeroFeedbackCannotRequestManeuverAndStaleBodyCannotTurn",
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-07T14:48:00Z",
+          "time": "0s",
+          "classname": "Tracker"
+        },
+        {
+          "name": "SameTaskCandidateAndTemporaryProofHoldDoNotResetTurnPhase",
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-07T14:48:00Z",
+          "time": "0.001s",
+          "classname": "Tracker"
+        },
+        {
+          "name": "OccupiedAlignedEntryWaitsWithoutRepeatedForwardAndRetainsTask",
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-07T14:48:00Z",
+          "time": "0.002s",
+          "classname": "Tracker"
+        },
+        {
+          "name": "OccupiedInPlaceAlignTurnWaitsForAnotherEntryInsteadOfRepeatingIt",
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-07T14:48:00Z",
+          "time": "0.002s",
+          "classname": "Tracker"
+        },
+        {
+          "name": "InPlaceTurnFeedbackOutsideAligningCannotRequestManeuver",
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-07T14:48:00Z",
+          "time": "0s",
+          "classname": "Tracker"
+        },
+        {
+          "name": "OnlyAdmittedReplacementCanRetryBlockedEntryAndStillMustStopAndAlign",
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-07T14:48:00Z",
+          "time": "0.002s",
+          "classname": "Tracker"
+        },
+        {
+          "name": "RealProgressAfterAlignedEntryDistinguishesANewObstacle",
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-07T14:48:00Z",
+          "time": "0.002s",
+          "classname": "Tracker"
+        },
+        {
+          "name": "RealSplineCurvatureConstrainsForwardSpeedWithoutGuessingLateralAcceleration",
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-07T14:48:00Z",
+          "time": "0s",
+          "classname": "Tracker"
+        },
+        {
+          "name": "FutureBendIsReachedThroughBrakingEnvelopeNotWholeCurveMinimum",
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-07T14:48:00Z",
+          "time": "0s",
+          "classname": "Tracker"
+        },
+        {
+          "name": "SpatialPlanarProfileRequiresSupportAndDefaultsToLegacy",
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-07T14:48:00Z",
+          "time": "0s",
+          "classname": "Tracker"
+        },
+        {
+          "name": "QuadraticPlanarDirectionBoundCoversInteriorAndZeroSpeedEnds",
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-07T14:48:00Z",
+          "time": "0.001s",
+          "classname": "Tracker"
+        },
+        {
+          "name": "QuadraticForwardClusterHasStrictSeparatingBoundDespiteLegacyTriangleTolerance",
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-07T14:48:00Z",
+          "time": "0.001s",
+          "classname": "Tracker"
+        },
+        {
+          "name": "QuadraticSeparatingWitnessCoversNearCollinearDirectionAndAllSignedAxes",
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-07T14:48:00Z",
+          "time": "0.005s",
+          "classname": "Tracker"
+        },
+        {
+          "name": "QuadraticWitnessCannotAuthorizeVerticalOpposedCuspOrInventZeroControlMotion",
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-07T14:48:00Z",
+          "time": "0.001s",
+          "classname": "Tracker"
+        },
+        {
+          "name": "QuadraticWitnessKeepsExistingPositiveResultAndFailsClosedAtNumericExtremes",
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-07T14:48:00Z",
+          "time": "0.001s",
+          "classname": "Tracker"
+        },
+        {
+          "name": "SpatialPlanarBrakingUsesLocalHorizontalTravelAndPreservesVerticalZeros",
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-07T14:48:00Z",
+          "time": "0s",
+          "classname": "Tracker"
+        },
+        {
+          "name": "SlopedCurvedSpatialProfileKeepsLocalSpeedYawAndBrakingBounds",
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-07T14:48:00Z",
+          "time": "0.001s",
+          "classname": "Tracker"
+        },
+        {
+          "name": "BrakingEnvelopeCannotBorrowVerticalDistanceOrIgnoreCloseTurn",
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-07T14:48:00Z",
+          "time": "0s",
+          "classname": "Tracker"
+        },
+        {
+          "name": "NormalCurvatureControlNeverHardClipsThroughTheAccelerationLimit",
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-07T14:48:00Z",
+          "time": "0s",
+          "classname": "Tracker"
+        },
+        {
+          "name": "PoseJumpIntoUnreachableCurveSpeedRequestsExplicitStopAndPreservesAppliedGeometry",
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-07T14:48:00Z",
+          "time": "0.002s",
+          "classname": "Tracker"
+        },
+        {
+          "name": "DoesNotChaseAPlanInADifferentHeightOrFarAway",
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-07T14:48:00Z",
+          "time": "0.001s",
+          "classname": "Tracker"
+        },
+        {
+          "name": "GoalCompletionStopsAndRemainsTerminal",
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-07T14:48:00Z",
+          "time": "0.001s",
+          "classname": "Tracker"
+        },
+        {
+          "name": "TrajectoryLeaseStopsEvenWithFreshTaskAndOdom",
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-07T14:48:00Z",
+          "time": "0.001s",
+          "classname": "Tracker"
+        },
+        {
+          "name": "ClockJumpStopsInsteadOfExtrapolating",
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-07T14:48:00Z",
+          "time": "0s",
+          "classname": "Tracker"
+        },
+        {
+          "name": "PausedRosClockCannotKeepAdvancingAPlan",
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-07T14:48:00Z",
+          "time": "0.001s",
+          "classname": "Tracker"
+        },
+        {
+          "name": "FutureTrajectoryDoesNotExecuteEarly",
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-07T14:48:00Z",
+          "time": "0s",
+          "classname": "Tracker"
+        },
+        {
+          "name": "ConfigurationCannotRelaxHardCeiling",
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-07T14:48:00Z",
+          "time": "0s",
+          "classname": "Tracker"
+        },
+        {
+          "name": "StationaryRecordThresholdsAreBoundedAndStricterValuesRemainValid",
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-07T14:48:00Z",
+          "time": "0s",
+          "classname": "Tracker"
+        },
+        {
+          "name": "SameXYOnAnotherFloorDoesNotCompleteOrResume",
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-07T14:48:00Z",
+          "time": "0s",
+          "classname": "Tracker"
+        },
+        {
+          "name": "GoalRequiresHeightToleranceWithinSingleFloorEnvelope",
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-07T14:48:00Z",
+          "time": "0s",
+          "classname": "Tracker"
+        },
+        {
+          "name": "GoalThresholdsMatchMeasuredReferenceXYZCompletion",
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-07T14:48:00Z",
+          "time": "0s",
+          "classname": "Tracker"
+        },
+        {
+          "name": "ReplansCannotMoveTheSingleFloorHeightAnchor",
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-07T14:48:00Z",
+          "time": "0.002s",
+          "classname": "Tracker"
+        },
+        {
+          "name": "EntireSplineHeightHullIsCheckedBeforeExecution",
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-07T14:48:00Z",
+          "time": "0s",
+          "classname": "Tracker"
+        },
+        {
+          "name": "IdealSingleFloorClosedLoopReachesGoalWithoutRobot",
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-07T14:48:00Z",
+          "time": "0.006s",
+          "classname": "Tracker"
+        },
+        {
+          "name": "LocalEndpointIsNotTheGlobalGoal",
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-07T14:48:00Z",
+          "time": "0.007s",
+          "classname": "Tracker"
+        },
+        {
+          "name": "ValidReplanPreservesLinearAndAngularAccelerationHistory",
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-07T14:48:00Z",
+          "time": "0.002s",
+          "classname": "Tracker"
+        },
+        {
+          "name": "InvalidCandidateRetainsEstablishedCurveAndLimiter",
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-07T14:48:00Z",
+          "time": "0s",
+          "classname": "Tracker"
+        },
+        {
+          "name": "ForwardOnlyControllerSteersTowardBothSidesOfParallelPath",
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-07T14:48:00Z",
+          "time": "0.003s",
+          "classname": "Tracker"
+        },
+        {
+          "name": "ParallelOffsetsConvergeWithReplansAndBoundedForwardOnlyCommands",
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-07T14:48:00Z",
+          "time": "0.038s",
+          "classname": "Tracker"
+        },
+        {
+          "name": "BoundedSpatialSearchDoesNotJumpToDistantSplineEnd",
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-07T14:48:00Z",
+          "time": "0s",
+          "classname": "Tracker"
+        }
+      ]
+    }
+  ]
+}

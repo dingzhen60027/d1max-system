@@ -1,0 +1,305 @@
+{
+  "schema": 1,
+  "kind": "native_rigid_body_root_hit_component_audit_v37",
+  "created_utc": "2026-10-07T07:40:19.412769+00:00",
+  "formal_navigation_pass": false,
+  "physical_acceptance": false,
+  "scope": "Independent 10-source-second zero-command PhysX component probe and offline exact-identity decoding comparison only; no ROS/navigation proof replay, no modification of stored rays or clocks.",
+  "component_probe": {
+    "evidence": [
+      {
+        "local_path": "/home/eric/wjg/d1max-build-isaac/component-native-hit-v37_001/probe_manifest.json",
+        "sha256": "9e5c837cb559846c73e75139100a5326bb7494e9abc1d474953909463fcbf9fa",
+        "size_bytes": 4522
+      },
+      {
+        "local_path": "/home/eric/wjg/d1max-build-isaac/component-native-hit-v37_001/probe_scene.json",
+        "sha256": "a0daa1e5275367f1cf82fe71a2e89c0f1fd9fededacfc1a5adf32d46deecd5cb",
+        "size_bytes": 57441
+      },
+      {
+        "local_path": "/home/eric/wjg/d1max-build-isaac/component-native-hit-v37_001/physics/native_hit_identity_audit.jsonl",
+        "sha256": "ac7a9aee8a111af4ad73da6504fa9651f5661c7ea3afaa1265c8262425f9f248",
+        "size_bytes": 271023
+      },
+      {
+        "local_path": "/home/eric/wjg/d1max-build-isaac/component-native-hit-v37_001/physics/summary.json",
+        "sha256": "fdd82c5d61dbfb98771ca8f06534f6c7cd1187da2fb16957b3eccd052fc69916",
+        "size_bytes": 27523
+      }
+    ],
+    "source_duration_s": 10.0,
+    "requested_spawn_xyz_yaw": [
+      -1.28,
+      -4.935,
+      0.8,
+      -0.33
+    ],
+    "actual_initial_position": [
+      -1.2162013053894043,
+      -4.98162317276001,
+      0.4816788136959076
+    ],
+    "actor_trajectory_changed": false,
+    "commands_received": 0,
+    "physics_frames": 5000,
+    "registry_sha256": "d3590a0200f358e1ad82a62a10705ac636fb3e30f65edcc46a4e484e509004d8",
+    "actor_ids": [
+      "plaza_person"
+    ],
+    "registered_root": "/World/Dynamic/plaza_person",
+    "registered_leaves": [
+      "/World/Dynamic/plaza_person/body",
+      "/World/Dynamic/plaza_person/head"
+    ],
+    "native_capture_rows": 200,
+    "by_sensor": {
+      "0": {
+        "scans": 100,
+        "original_points": 835726,
+        "original_actor_root_hits": 963,
+        "all_original_tags_zero": true,
+        "scans_containing_exact_actor_root": 100,
+        "first_capture_ns": 18000000,
+        "last_capture_ns": 9918000000
+      },
+      "1": {
+        "scans": 100,
+        "original_points": 835818,
+        "original_actor_root_hits": 915,
+        "all_original_tags_zero": true,
+        "scans_containing_exact_actor_root": 100,
+        "first_capture_ns": 18000000,
+        "last_capture_ns": 9918000000
+      }
+    },
+    "first_original_capture": {
+      "line": 1,
+      "sensor_id": 0,
+      "acquisition_begin_ns": 18000000,
+      "native_frame_time_ns": 20000001,
+      "original_actor_root_hits": 5,
+      "point_count": 8358,
+      "original_actor_id_counts": [
+        [
+          0,
+          8358
+        ]
+      ]
+    },
+    "old_mapper_source_sha256": "dd0a66a1e1b32e0165d8b653284a8dbe37056fc844ae8aee0d03f7762e8314aa"
+  },
+  "offline_comparison": [
+    {
+      "sensor_id": 0,
+      "evidence": {
+        "local_path": "/home/eric/wjg/d1max-build-isaac/component-native-hit-v37_001/physics/last_scan_0.npz",
+        "sha256": "2ec0553c0c4264787a8e63c5f51522a94d280eb085a0be692274f72f5521feea",
+        "size_bytes": 1807986
+      },
+      "capture_ns": 9918000000,
+      "original_actor_id_counts": [
+        [
+          0,
+          8358
+        ]
+      ],
+      "offline_corrected_counts": [
+        [
+          0,
+          8340
+        ],
+        [
+          1,
+          18
+        ]
+      ],
+      "changed_indices": 18,
+      "all_changes_match_exact_enrolled_root": true,
+      "other_paths_still_zero": true
+    },
+    {
+      "sensor_id": 1,
+      "evidence": {
+        "local_path": "/home/eric/wjg/d1max-build-isaac/component-native-hit-v37_001/physics/last_scan_1.npz",
+        "sha256": "99574004f3a0284c29ec5b380e4a9ca5606bee9591b15e4a180b11a5695b17d1",
+        "size_bytes": 1808202
+      },
+      "capture_ns": 9918000000,
+      "original_actor_id_counts": [
+        [
+          0,
+          8359
+        ]
+      ],
+      "offline_corrected_counts": [
+        [
+          0,
+          8341
+        ],
+        [
+          1,
+          18
+        ]
+      ],
+      "changed_indices": 18,
+      "all_changes_match_exact_enrolled_root": true,
+      "other_paths_still_zero": true
+    }
+  ],
+  "exact_negative_inputs_checked": {
+    "paths": [
+      "/World/Dynamic/plaza_person/",
+      "/World/Dynamic/plaza_person_other",
+      "/World/Dynamic/plaza_person/unlisted",
+      "/World/Dynamic",
+      "/World/Dynamic/unregistered",
+      "/World/Indoor/wall",
+      "",
+      "/World/Dynamic/plaza_person/body/unknown"
+    ],
+    "actor_ids": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ]
+  },
+  "source_files": [
+    {
+      "path": "simulation/isaacsim/dynamic_collision.py",
+      "sha256": "07098c9debe51cb43bd0308234a085fcc206f4dccafd8d9cb5c4af890ff16045"
+    },
+    {
+      "path": "simulation/isaacsim/test_scripted_dynamic_truth.py",
+      "sha256": "178254a9513e229cec762bb5136079a1971b160a9819f48076da7bf269272150"
+    },
+    {
+      "path": "simulation/isaacsim/scene.py",
+      "sha256": "bf06cc683bdb210bc3b911cc6cae3069b22842449a21e53bc464ffd2293e5984"
+    },
+    {
+      "path": "simulation/isaacsim/truth_map.py",
+      "sha256": "40ff59bb84b741bb54bda07333ced7220a44a0ff709b90b78b9bb1507750832c"
+    }
+  ],
+  "native_v36_source_files_unchanged": [
+    {
+      "path": "d1max_nav_ws/src/scan_planner_vendor/plan_env/include/plan_env/projected_rays.hpp",
+      "sha256": "d7c1f278ea5d409f50974bab879ad5bdabff9e8c1a0875aa80390455d733c8d3"
+    },
+    {
+      "path": "d1max_nav_ws/src/scan_planner_vendor/plan_env/include/plan_env/dynamic_occupancy_oracle.hpp",
+      "sha256": "9e43c30836bd8cea4a7d60accf7ebfc35427aa745d46b83747a3dddf4d3c4f8c"
+    },
+    {
+      "path": "d1max_nav_ws/src/scan_planner_vendor/plan_env/include/plan_env/grid_map.h",
+      "sha256": "88718a0174db3530c66c989e4de0b852a23258418d309725a769fe394761ac6f"
+    },
+    {
+      "path": "d1max_nav_ws/src/scan_planner_vendor/plan_env/src/grid_map.cpp",
+      "sha256": "9fe93e37287fbe467387e2797a9d2ea388ed8af95756b0d5008d9f8d37114bee"
+    },
+    {
+      "path": "d1max_nav_ws/src/scan_planner_vendor/plan_env/test/test_projected_rays.cpp",
+      "sha256": "b25a8ef0bdc7edf28f820c0177c13ba2399012ed4106146abc2c4cfedfd79e6e"
+    },
+    {
+      "path": "d1max_nav_ws/src/scan_planner_vendor/plan_env/test/test_dynamic_occupancy_oracle.cpp",
+      "sha256": "711caa97701c21152062d0419495a3ac765e5cbf8331b8bdb79f05c9cb2c64d0"
+    },
+    {
+      "path": "d1max_nav_ws/src/scan_planner_vendor/plan_manage/include/plan_manage/execution_validator.hpp",
+      "sha256": "96034659528965d0d1cbff493751bb375ac168b298ae1a6650b2a95052d8389d"
+    }
+  ],
+  "safety_review": {
+    "blockers_found": false,
+    "qualification": "Only exact enrolled rigid-body root or exact collider leaf maps to its existing sorted actor ordinal. Full stage audit must reject every unregistered/enabled/reparented collider and all registered actor shapes remain covered by the same complete six-second future geometry and original source/receipt deadlines.",
+    "unchanged": [
+      "72-byte schema and exact registry digest",
+      "strictly newer complete oracle requirement",
+      "full closed XYZ disjoint-cell predicate",
+      "raw HIT/MISS/log-odds/source/receipt stamps",
+      "mixed/unattributed provenance remains blocking",
+      "default production mode disabled"
+    ],
+    "reviewed_test_functions": [
+      "test_original_native_prim_identity_never_uses_nearby_xyz_or_namespace_guess",
+      "test_native_rigid_body_roots_have_exact_distinct_ordinals_and_no_prefix_aliases",
+      "test_native_rigid_body_root_or_leaf_identity_collision_rejects_ambiguous_registry"
+    ],
+    "pytest_run_by_this_agent": false
+  },
+  "v36_original_failure": {
+    "run_local_path": "/home/eric/wjg/d1max-build-isaac/runs/campus_crossing_v36_001",
+    "result": "execution_blocked_timeout:waiting_current_collision_and_tracker_proof",
+    "formal_navigation_pass": false,
+    "first_native_remaining_curve_occupied": {
+      "trace_line": 55460,
+      "curve": 136,
+      "sequence": 10034,
+      "source_ns": 1791357746092648397,
+      "simulation_source_ns": 64500000000
+    },
+    "original_reference_evidence_lines": [
+      2678,
+      3372
+    ],
+    "cells": [
+      {
+        "index": [
+          -6,
+          -98,
+          13
+        ],
+        "prior_state": 0,
+        "raw_category": "occupied",
+        "raw_log_odds_rounded": 1.517,
+        "hit_source_ns": 1791357745010648397,
+        "last_miss_source_ns": 1791357745210648397,
+        "hit_capture_sim_time_ns": 63418000000,
+        "same_source_actor_position": [
+          0.0,
+          -4.927032947540283,
+          0.0
+        ]
+      },
+      {
+        "index": [
+          -6,
+          -104,
+          13
+        ],
+        "prior_state": 0,
+        "raw_category": "observed_insufficient",
+        "raw_log_odds_rounded": -1.065,
+        "hit_source_ns": 1791357745310648397,
+        "last_miss_source_ns": 1791357745610648397,
+        "hit_capture_sim_time_ns": 63718000000,
+        "same_source_actor_position": [
+          0.0,
+          -5.221109867095947,
+          0.0
+        ]
+      }
+    ],
+    "terminal_reference_query_source_ns": 1791357767052648397,
+    "sealed_six_second_script_eval_both_cells_disjoint_at_sim_time_ns": [
+      64500000000,
+      85460000000
+    ],
+    "historical_tag_attribution_limit": "V36 did not persist native hit prims or the actorID/feature-disabled fields for these two curve/reference failure cells. Its motion-sweep OCC diagnostics did not trigger. This component probe confirms the native root/leaf API mismatch; it cannot retroactively relabel the original V36 hit bytes or prove the exact historical per-cell poisoning/overflow state.",
+    "miss_only_poison_excluded": "With original p_min=.12/p_miss=.3 and initialization clamp_min-.01, the first pure MISS clamps directly to strong FREE; subsequent pure MISS remains FREE. Every real HIT records provenance before dedup and odds update. Pure MISS before first real HIT does not generate Insufficient in the original normal ray path."
+  },
+  "limitations": [
+    "Component zero-command probe is not formal navigation acceptance.",
+    "New mapper must be selected in a fresh immutable candidate; old failed runs and saved all-zero tags are unchanged.",
+    "An unregistered or ambiguous identity never gains retirement eligibility.",
+    "Sparse provenance overflow and any fixed-domain revocation still disable retirement; the original V36 failure did not record these flags."
+  ]
+}

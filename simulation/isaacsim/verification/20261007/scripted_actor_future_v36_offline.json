@@ -1,0 +1,104 @@
+{
+  "schema": 1,
+  "kind": "sealed_scripted_actor_future_geometry_offline_audit",
+  "status": "source_frozen_offline_tests_passed",
+  "runtime_navigation_acceptance_claim": false,
+  "physical_acceptance_claim": false,
+  "scope": "actor-only enforced sealed isolated simulation fixture; not a prediction model for unconstrained humans or hardware",
+  "mathematical_domain": {
+    "script": "sealed_c1_smoothstep_kinematic_v1",
+    "source_scope": "isolated_simulation_enforced_kinematic_script",
+    "interpolation": "Each XYZ coordinate is monotone on every C1 smoothstep segment; extrema therefore occur at endpoints or intervening waypoint boundaries.",
+    "enumeration": "Both full-horizon interval endpoints, start/end parking transitions, every interior waypoint and every loop seam are enclosed; loop endpoints agree in XYZ/yaw and parking occurs at complete periods.",
+    "reachable_horizon_ns": 6000000000,
+    "horizon_reduced": false,
+    "complete_future_geometry": "Every registered full shape uses all-yaw XY enclosure, original full-Z shape extents and outward-rounded closed AABBs.",
+    "actual_pose_error_bound_m": 0.0001,
+    "actual_tilt_error_bound_rad": 1e-06,
+    "geometry_margin_m": 0.02,
+    "tilt_padding_formula": "2 * complete pivot-relative shape_radius * sin(actual_tilt_error_bound_rad/2)",
+    "future_padding": "The actual same-step measured XYZ is included and both temporal interval ends extend by one original physics dt.",
+    "quaternion": "Finite same-step native quaternion must have squared norm within 1e-6 of one; normalized tilt and actual measured XYZ deviations are independently enforced.",
+    "unscripted_actor": "Retains original full XYZ speed/acceleration reachable sphere; no future script is inferred from current pose or heading."
+  },
+  "physics_and_identity": {
+    "fixture_physics_hz": 500,
+    "sealed_physics_dt_ns": 2000000,
+    "actor_updater": "Unique scene.py pre_step order=-1 callback writes world_builder.update_actors using original SimulationManager time relative to source_start_time plus actual step_dt.",
+    "config_identity": "Scene bytes are checked against session scene SHA; actor registry includes original trajectory, future contract, shapes and start/end domain in its canonical SHA.",
+    "native_measurements": "Same-step actual PhysX root pose/quaternion/velocity are retained; source stamp is anchor plus original simulation source, not receipt time.",
+    "native_ray_phase": "Original capture BEGIN retained; native END must be one sealed physical step later within original dt/10 tolerance or bridge faults.",
+    "oracle_context": "Original session/epoch/seed/context sequence/registry identity, complete actor set and original dynamic sequence fences remain.",
+    "message_ttl_ns": 300000000,
+    "configured_dynamic_source_and_receipt_age_ns": 200000000,
+    "clock_deadlines_extended": false
+  },
+  "stage_invariants": {
+    "applies_only_to_scripted_motion_marker": true,
+    "actor_root_order": [
+      "xformOp:translate",
+      "xformOp:rotateZ"
+    ],
+    "actor_root_forbidden": [
+      "inverse operations",
+      "resetXformStack",
+      "extra ordered operations",
+      "reordered operations",
+      "root pose time samples",
+      "root order time samples"
+    ],
+    "parent_to_world": "Exact identity; no tolerance that could introduce an unsealed future displacement.",
+    "ancestor_time_samples": "No authored time samples on any ancestor attribute through World.",
+    "generic_actor_domain_unchanged": true,
+    "counterexample": "A parent rotation about the current actor position preserves its actual current XYZ but redirects the next local scripted translation. Reordered root rotateZ/translate also agrees at yaw zero and then changes future XYZ. Both revoke the geometry certificate."
+  },
+  "hit_provenance_chain_review": {
+    "native_identity": "Only exact registered collision shape prim paths receive a sorted registry actor ordinal; parent, unknown child, static or missing paths remain zero.",
+    "wire": "Optional 72-byte Isaac ray layout adds uint16 actor ordinal at byte64; original 3D endpoint/origin/time/source-index/ring fields are retained. Default/live original 64-byte layout remains strict.",
+    "projection": "Structured wire bytes are copied before only original XYZ/origins are transformed; actor ordinal and original source metadata are preserved.",
+    "safety": "72-byte layout is opt-in isolated_mock only and actor ordinals are bounded by the sealed registry.",
+    "native_collision": "Original complete dynamic oracle veto executes first. Native retained ray odds and stamps are not cleared or refreshed; only independently certified static FREE plus exact unpoisoned actor attribution and a strictly newer full closed-voxel-disjoint oracle may retire an actor contradiction.",
+    "no_formal_provenance_or_navigation_acceptance_claim": true
+  },
+  "verification": {
+    "command": "python3 -m pytest -q simulation/isaacsim/test_truth_map.py simulation/isaacsim/test_scripted_dynamic_truth.py",
+    "tests": 55,
+    "passed": 55,
+    "failed": 0,
+    "skipped": 0,
+    "truth_map_tests": 46,
+    "future_script_tests": 9,
+    "elapsed_s": 1.39,
+    "openusd": "Actual pxr-backed source-stage tests ran; no Kit/ROS/native build/install invoked.",
+    "original_tool_stdout": ".......................................................                  [100%]\n55 passed in 1.39s\n",
+    "original_tool_stdout_sha256": "d3602fa1d8a7ff975f7497f47b7dea33bd316c058f25ce413a0553202d385760",
+    "fixture_correction": "World time samples were already rejected by the earlier static-collider guard. The new regression explicitly checks the scripted-actor helper and preserves the original whole-stage rejection reason.",
+    "coverage": [
+      "original USD positive and normal actor update notice caching",
+      "current-pose-preserving parent pivot changes future trajectory",
+      "parent and World time samples",
+      "root extra/inverse/reset/reordered/order-time/pose-time cases",
+      "generic actor parent-transform legacy domain",
+      "full six-second continuous shape enclosure through turns/loop seams/parking",
+      "actual pose/tilt/missing-source revocation",
+      "exact native prim attribution"
+    ]
+  },
+  "limitations": [
+    "The source proof relies on this sealed fixture kinematic updater; it grants no constrained intent to a generic or freely moving person.",
+    "Offline USD/mathematical tests do not establish a formal navigation pass or physical acceptance.",
+    "Native full-scene actor-hit provenance, current model-domain ABI and actual navigation must be validated by the root-owned immutable candidate run."
+  ],
+  "source_hashes": {
+    "simulation/isaacsim/truth_map.py": "40ff59bb84b741bb54bda07333ced7220a44a0ff709b90b78b9bb1507750832c",
+    "simulation/isaacsim/test_truth_map.py": "a08714a50ec67f7b8c1fecd77ee3b6499b348d4c2b5fccc135e265a5494f511e",
+    "simulation/isaacsim/dynamic_collision.py": "dd0a66a1e1b32e0165d8b653284a8dbe37056fc844ae8aee0d03f7762e8314aa",
+    "simulation/isaacsim/world_builder.py": "e693653309b595da3580627a1c8af977224b0679ac092a0e778f6b0a75ca2fd6",
+    "simulation/isaacsim/test_scripted_dynamic_truth.py": "2b22d80869b8011aec1bac263402604d939e4191703927926a0789b63278caf2",
+    "simulation/isaacsim/scene.py": "b31bc0bf78b6b3f07d7601e42a1fa95148c4eebd2493d40206208160d76c9fc4",
+    "simulation/isaacsim/bridge.py": "86ddb9b41a1591878f73c0812c7a56500c6bf61391615e40b5ce6fdd8fef8d14",
+    "simulation/isaacsim/protocol.py": "adf1a60d48f61ad8dad27636b27b3feac05fc97c55620804919bfa00308530ec",
+    "d1max_nav_ws/src/d1max_pct_scan/d1max_pct_scan/ray_projection.py": "6df8eabb07d9059bfc660248ac7be5830aec1c8c9c67b3ff7e2ae70c5c3577d4",
+    "d1max_nav_ws/src/d1max_pct_scan/d1max_pct_scan/execution_safety.py": "0bc09ad3cede363ecd56df4b17ba1aa44eb3eaa4ca1581665fb112ca25524068"
+  }
+}

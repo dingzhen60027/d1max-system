@@ -1,0 +1,44 @@
+{
+  "schema": 1,
+  "kind": "isolated_spot_full_xyz_reference_admission_domain_v1",
+  "scope": "isolated_simulation_only",
+  "reference_max_speed_mps": 0.5,
+  "measured_travel_max_speed_mps": 0.5,
+  "observed_max_full_xyz_speed_mps": 0.48905959685208217,
+  "source_samples": 6910,
+  "peak_original_sample": {
+    "sim_time_ns": 4940000000,
+    "linear_velocity_world": [
+      0.46444621682167053,
+      0.14957551658153534,
+      -0.03310839459300041
+    ],
+    "pose": [
+      -7.793302059173584,
+      -5.004960536956787,
+      0.5070357322692871,
+      -0.013104403391480446,
+      0.016049526631832123,
+      -0.000712862703949213,
+      0.9997850656509399
+    ]
+  },
+  "sources": {
+    "/home/eric/wjg/d1max-build-isaac/runs/campus_crossing_v35_001/physics/trajectory.jsonl": "04afa4977edaa9165b16d8f4f0b9328803c79368859a50d22b3a86f02e0a8973"
+  },
+  "command_max_speed_mps": 0.15,
+  "command_max_yaw_radps": 0.3,
+  "guide_cruise_mps": 0.15,
+  "c1_full_xyz_velocity_error_limit_mps": 0.05,
+  "reference_acceleration_bound_mps2": 0.35,
+  "meaning": "Bounded admission domain, not a sampled estimate of a guaranteed future plant speed. Every source outside .50 is rejected unchanged.",
+  "unchanged": [
+    "original raw XYZ velocity and native source time",
+    "complete curve geometry and collision proof",
+    "measured progress/arc",
+    "command speed, yaw and slew limits",
+    "owner/SDK authority"
+  ],
+  "physical_acceptance": false,
+  "formal_navigation_pass": false
+}

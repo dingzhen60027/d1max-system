@@ -1,0 +1,86 @@
+{
+  "tests": 8,
+  "failures": 0,
+  "disabled": 0,
+  "errors": 0,
+  "timestamp": "2026-10-07T14:40:54Z",
+  "time": "0.003s",
+  "name": "AllTests",
+  "testsuites": [
+    {
+      "name": "IsolatedReferenceModel",
+      "tests": 8,
+      "failures": 0,
+      "disabled": 0,
+      "errors": 0,
+      "timestamp": "2026-10-07T14:40:54Z",
+      "time": "0.003s",
+      "testsuite": [
+        {
+          "name": "SeparateReferenceTravelAndCommandFields",
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-07T14:40:54Z",
+          "time": "0s",
+          "classname": "IsolatedReferenceModel"
+        },
+        {
+          "name": "AbsentMarkerKeepsLegacyInsteadOfPlanarReachInference",
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-07T14:40:54Z",
+          "time": "0s",
+          "classname": "IsolatedReferenceModel"
+        },
+        {
+          "name": "LiveOrUnsealedFixtureCannotEnableModel",
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-07T14:40:54Z",
+          "time": "0s",
+          "classname": "IsolatedReferenceModel"
+        },
+        {
+          "name": "MarkersRequireExactKindScopeIntegerSchemaAndKeys",
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-07T14:40:54Z",
+          "time": "0s",
+          "classname": "IsolatedReferenceModel"
+        },
+        {
+          "name": "NumericDomainDoesNotReusePointSixPlanarReach",
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-07T14:40:54Z",
+          "time": "0.001s",
+          "classname": "IsolatedReferenceModel"
+        },
+        {
+          "name": "ObservedEvidenceMustFitBothIndependentDomains",
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-07T14:40:54Z",
+          "time": "0s",
+          "classname": "IsolatedReferenceModel"
+        },
+        {
+          "name": "OriginalPlatformMeasurementAndCommandClosureRemainExact",
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-07T14:40:54Z",
+          "time": "0s",
+          "classname": "IsolatedReferenceModel"
+        },
+        {
+          "name": "LoaderChecksOriginalBytesHashAndBoundedAbsolutePath",
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-07T14:40:54Z",
+          "time": "0.002s",
+          "classname": "IsolatedReferenceModel"
+        }
+      ]
+    }
+  ]
+}

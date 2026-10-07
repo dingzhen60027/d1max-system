@@ -1,0 +1,98 @@
+{
+  "schema": 1,
+  "scope": "actual_original_crossing_action_v32_failed; physical_robot_acceptance_false",
+  "accepted": false,
+  "run": "/home/eric/wjg/d1max-build-isaac/runs/campus_crossing_v32_001",
+  "candidate": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v32-campus-crossing",
+  "source_status": "v32_immutable_candidate; preserve_failed_run_before_spatial_lookahead_fix",
+  "test_inputs": "same_original_crossing_static_geometry_actors_3D_lidar_IMU_500Hz_physics; sphere_v1_and_monotone_servo_v2_and_moving_entry_direction_gate",
+  "original_action": {
+    "success": false,
+    "reason": "execution_blocked_timeout:waiting_measured_motion_progress",
+    "retirement_confirmed": true,
+    "physical_stop_confirmed": false
+  },
+  "action_status": 6,
+  "measured_cumulative_xy_distance_m": 0.05664909496034493,
+  "measured_final_position": [
+    -7.918491363525391,
+    -5.023500919342041,
+    0.48196834325790405
+  ],
+  "source_origin_ns": 1791348467564945592,
+  "stop": {
+    "execution_id": "aed2e54367314fdb93b0078cb1073139.1:execution",
+    "stop_submitted": true,
+    "measured_stop_confirmed": true,
+    "physical_acceptance_verified": false,
+    "stationary_samples": 213,
+    "measured_linear_mps": 0.007393745494972836,
+    "measured_angular_radps": 0.0006068539922648831,
+    "reason": "execution_blocked_timeout:waiting_measured_motion_progress"
+  },
+  "imu_exact_source_match": true,
+  "whole_body_attestation": true,
+  "navigation_shutdown": {
+    "request_accepted": true,
+    "software_retired": true,
+    "physical_stop_confirmed": false,
+    "reason": "software_retired_not_physical_stop",
+    "elapsed_s": 0.17428378900513053,
+    "session_id": "aed2e54367314fdb93b0078cb1073139",
+    "recorded_at_unix": 1791348598.035774
+  },
+  "overall_clean_shutdown": false,
+  "independent_evaluation": "/home/eric/wjg/d1max-build-isaac/campus_crossing_v32_evaluation.json",
+  "post_free_window": {
+    "original_simulation_seconds": [
+      22,
+      34
+    ],
+    "samples": 721,
+    "command_vx_min_median_max": [
+      0.0,
+      0.003958090948616086,
+      0.009858395319168338
+    ],
+    "policy_vx_min_median_max": [
+      -0.0008815712062641978,
+      0.012934382073581219,
+      0.036528706550598145
+    ],
+    "net_xy_m": [
+      0.015897274017333984,
+      0.0003409385681152344
+    ],
+    "zero_command_sample_fraction": 0.18169209431345354,
+    "interpretation": "Original measured route credit remained0. Reference requests predominantly lie in unvalidated/unresponsive tiny-speed regime, despite successful curve ACKs. Geometry/proof success is not physical progress."
+  },
+  "hypotheses_for_next_candidate": [
+    "Measured-progress-only curve parameter plus fixed temporal lookahead can remain near low-speed entry indefinitely; full exact curve audit required for causal claims.",
+    "Configured body reference .52m differs from actual stable Spot stand around.481m; pending calibration/influence audit; never rewrite measuredZ."
+  ],
+  "evidence_sha256": {
+    "runs/campus_crossing_v32_001/scenario_suite/phase_000_report.json": "dad9b8b94d5787cec762e4b9dada854875f4eee4183cb66c1773c716bab10e0d",
+    "runs/campus_crossing_v32_001/scenario_suite/phase_000_trace.jsonl": "3b32ca53700a4fad62ed2ededf95af301d51d237aea5b4571ec3a8c974b3d94a",
+    "runs/campus_crossing_v32_001/physics/trajectory.jsonl": "470e55dd13d838abd27d74bdd959b93393d389a18ceea079631d16afad345e70",
+    "runs/campus_crossing_v32_001/physics/collision_audit.json": "bffc5aee2db60e8f27089aa57c01410f17efb0e0e56ef6d76a08888d75d55845",
+    "runs/campus_crossing_v32_001/run_summary.json": "9b2ebbc56d44d1b5589ba1c42df7ff399e7ab6030ea7472e43efdf4f47f5f49a",
+    "campus_crossing_v32_evaluation.json": "f5dca05106c53499a920c3338862277027d760faabee17dfcfdced606208c442",
+    "nav_fix_v32_build.log": "cc177a42ea284934920c554bdf298338f0d41ab897a15c298c8c79bdc1044fa2",
+    "nav_fix_v32_wrapper_rebuild.log": "48ebc813bb180a0a8206b30c72de2fed837834efddcb299c04c61e5cc6124678",
+    "v32_plan_env_ctest.log": "c4970c462a958e055ee77db1e3f4b93a01fe0c46ec2d8e9309a2e6348da6d133",
+    "v32_scan_planner_ctest.log": "e47ac6f00fd8386f72e81c07eb27ef54003cd945cf729abd7c66af67f807c1f4",
+    "v32_tracker_ctest.log": "4ae068d340464f2ba7aae71ae6ec0fc5eaabe5bc2392b24b5e8c4fb068bea0bd",
+    "v32_bt_ctest.log": "36f266a96419955c7b69daa6925ef08295748a907a946aba00027add1a8029f6"
+  },
+  "offline_validation": {
+    "python_cases": 242,
+    "python_failed": 0,
+    "native_ctest_groups": 32,
+    "native_failed": 0,
+    "native_launch_tests_excluded": [
+      "test_planner_startup",
+      "test_waypoint_parameters"
+    ],
+    "initial_wrapper_build_failure": "CMake compiler cache reset lost isolated install prefix; clean-cache explicit prefix rebuild passed; native core build passed."
+  }
+}

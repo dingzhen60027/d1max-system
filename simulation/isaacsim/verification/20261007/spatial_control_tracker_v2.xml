@@ -1,0 +1,141 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites tests="114" failures="0" disabled="0" errors="0" time="0.179" timestamp="2026-10-07T13:10:52" name="AllTests">
+  <testsuite name="TrackerV2" tests="31" failures="0" disabled="0" errors="0" time="0.011" timestamp="2026-10-07T13:10:52">
+    <testcase name="LegacyInputsCannotManufactureControlIdentity" status="run" result="completed" time="0" timestamp="2026-10-07T13:10:52" classname="TrackerV2" />
+    <testcase name="MissingOrDifferentMapGeometryRevisionCannotEnterTheAdmittedCurve" status="run" result="completed" time="0" timestamp="2026-10-07T13:10:52" classname="TrackerV2" />
+    <testcase name="PredictedStateHeadersDoNotManufactureIndependentTurnRestSamples" status="run" result="completed" time="0" timestamp="2026-10-07T13:10:52" classname="TrackerV2" />
+    <testcase name="WrongEpochOdometryInvalidatesWholeTask" status="run" result="completed" time="0" timestamp="2026-10-07T13:10:52" classname="TrackerV2" />
+    <testcase name="RetiredExpiredAndDuplicateObservationsCannotStopNewTaskOrRenewItsBody" status="run" result="completed" time="0" timestamp="2026-10-07T13:10:52" classname="TrackerV2" />
+    <testcase name="RetiredEpochWithNewerTimestampCannotCancelRelocalizedTask" status="run" result="completed" time="0" timestamp="2026-10-07T13:10:52" classname="TrackerV2" />
+    <testcase name="FreshEvidenceFaultCannotBeClearedByOlderValidPacket" status="run" result="completed" time="0.001" timestamp="2026-10-07T13:10:52" classname="TrackerV2" />
+    <testcase name="NewEpochWithResetClockRevokesInsteadOfHidingBehindPriorSourceFloor" status="run" result="completed" time="0" timestamp="2026-10-07T13:10:52" classname="TrackerV2" />
+    <testcase name="ForeignAndFutureFaultsCannotPoisonNextExpectedSource" status="run" result="completed" time="0" timestamp="2026-10-07T13:10:52" classname="TrackerV2" />
+    <testcase name="NewerForeignSessionMapOrSchemaDoesNotStopFreshTrajectoryOrEraseMeasuredProgress" status="run" result="completed" time="0" timestamp="2026-10-07T13:10:52" classname="TrackerV2" />
+    <testcase name="MatchingXYZProgressUsesRealSourceTimeNotControlTicks" status="run" result="completed" time="0" timestamp="2026-10-07T13:10:52" classname="TrackerV2" />
+    <testcase name="SmallPhysicalBacktrackPreservesOnlyCommittedHighWater" status="run" result="completed" time="0" timestamp="2026-10-07T13:10:52" classname="TrackerV2" />
+    <testcase name="VerticalMeasurementIsNotLostByXYProjection" status="run" result="completed" time="0" timestamp="2026-10-07T13:10:52" classname="TrackerV2" />
+    <testcase name="DifferentSegmentOrAnchorNeverReplacesCurve" status="run" result="completed" time="0.001" timestamp="2026-10-07T13:10:52" classname="TrackerV2" />
+    <testcase name="HigherIdCannotHideOlderSolveOrDistantJoin" status="run" result="completed" time="0" timestamp="2026-10-07T13:10:52" classname="TrackerV2" />
+    <testcase name="ValidReplacementPreservesLimiterAndDoesNotInventGlobalProgress" status="run" result="completed" time="0" timestamp="2026-10-07T13:10:52" classname="TrackerV2" />
+    <testcase name="CancelNeedsSameIdentityNotMerelyMatchingGeneration" status="run" result="completed" time="0" timestamp="2026-10-07T13:10:52" classname="TrackerV2" />
+    <testcase name="FreshPublishStampCannotLeaseOldOrFutureMeasurementEvidence" status="run" result="completed" time="0.001" timestamp="2026-10-07T13:10:52" classname="TrackerV2" />
+    <testcase name="FreshBodyStateCannotHideReorderedInputs" status="run" result="completed" time="0" timestamp="2026-10-07T13:10:52" classname="TrackerV2" />
+    <testcase name="SourceEvidenceExpiresWithoutAnyNewCallback" status="run" result="completed" time="0" timestamp="2026-10-07T13:10:52" classname="TrackerV2" />
+    <testcase name="MovingBodyAdmitsMeasuredNonzeroCurveParameterWithoutRestarting" status="run" result="completed" time="0" timestamp="2026-10-07T13:10:52" classname="TrackerV2" />
+    <testcase name="DeliveryTimeDoesNotAdvanceAStationaryJoin" status="run" result="completed" time="0.001" timestamp="2026-10-07T13:10:52" classname="TrackerV2" />
+    <testcase name="InvalidHandoffProofNeverReplacesIncumbent" status="run" result="completed" time="0.001" timestamp="2026-10-07T13:10:52" classname="TrackerV2" />
+    <testcase name="MatchingPositionCannotHideVelocityMismatchOrUnboundedCurveDynamics" status="run" result="completed" time="0" timestamp="2026-10-07T13:10:52" classname="TrackerV2" />
+    <testcase name="ActualVendorCurveAllowsDistantBendButRejectsUnbrakeableEntryWithoutResettingLimiter" status="run" result="completed" time="0.001" timestamp="2026-10-07T13:10:52" classname="TrackerV2" />
+    <testcase name="HandoffCannotJumpPastBoundedArcWindowOrOntoOtherFloor" status="run" result="completed" time="0" timestamp="2026-10-07T13:10:52" classname="TrackerV2" />
+    <testcase name="VerifiedFloorSpatialProfileDoesNotFlattenOrGloballyThrottleXYZCurve" status="run" result="completed" time="0.002" timestamp="2026-10-07T13:10:52" classname="TrackerV2" />
+    <testcase name="RemainingDomainIncludesMeasuredBacktrackingNotHighWaterCutoff" status="run" result="completed" time="0" timestamp="2026-10-07T13:10:52" classname="TrackerV2" />
+    <testcase name="LocalEndpointRetainsFreshMeasuredCurveWhileSuccessorIsOnlyPrepared" status="run" result="completed" time="0.002" timestamp="2026-10-07T13:10:52" classname="TrackerV2" />
+    <testcase name="RecoverableSourceGapRetainsCurveAndNeedsDistinctSamplesOverPointSixSeconds" status="run" result="completed" time="0" timestamp="2026-10-07T13:10:52" classname="TrackerV2" />
+    <testcase name="SupportRelativeHeightAllowsVerifiedCorridorButNotCrossFloorSupport" status="run" result="completed" time="0.001" timestamp="2026-10-07T13:10:52" classname="TrackerV2" />
+  </testsuite>
+  <testsuite name="TrackerJoinDiagnostic" tests="2" failures="0" disabled="0" errors="0" time="0" timestamp="2026-10-07T13:10:52">
+    <testcase name="EveryEvidencePredicateReportsItsOriginalReasonWithoutChangingVerdict" status="run" result="completed" time="0" timestamp="2026-10-07T13:10:52" classname="TrackerJoinDiagnostic" />
+    <testcase name="FailedTrialPreservesOriginalFineNanosecondEvidenceAndSafeIncumbent" status="run" result="completed" time="0" timestamp="2026-10-07T13:10:52" classname="TrackerJoinDiagnostic" />
+  </testsuite>
+  <testsuite name="TrackerMovingEntry" tests="5" failures="0" disabled="0" errors="0" time="0.043" timestamp="2026-10-07T13:10:52">
+    <testcase name="ReverseMeasuredPrefixReproducesTurnaroundButCannotReplaceMovingIncumbent" status="run" result="completed" time="0.006" timestamp="2026-10-07T13:10:52" classname="TrackerMovingEntry" />
+    <testcase name="ExistingHeadingThresholdAllowsContinuousDirectionAndRejectsOnlyItsOtherSide" status="run" result="completed" time="0.018" timestamp="2026-10-07T13:10:52" classname="TrackerMovingEntry" />
+    <testcase name="ZeroOutputMayAlignButPositiveNearZeroOutputDoesNotInventAMovingThreshold" status="run" result="completed" time="0.012" timestamp="2026-10-07T13:10:52" classname="TrackerMovingEntry" />
+    <testcase name="PreparedEntryRechecksDirectionAfterIncumbentResumesWithoutPromotingGeometry" status="run" result="completed" time="0.003" timestamp="2026-10-07T13:10:52" classname="TrackerMovingEntry" />
+    <testcase name="IncumbentAlreadyOutsideHeadingGateCannotClaimContinuousForwardEntry" status="run" result="completed" time="0.004" timestamp="2026-10-07T13:10:52" classname="TrackerMovingEntry" />
+  </testsuite>
+  <testsuite name="TrackerSpatialLookahead" tests="5" failures="0" disabled="0" errors="0" time="0.019" timestamp="2026-10-07T13:10:52">
+    <testcase name="ExactV32XYZCurveRequestsForwardWithoutAdvancingMeasuredPhaseOrRaisingItsCap" status="run" result="completed" time="0.005" timestamp="2026-10-07T13:10:52" classname="TrackerSpatialLookahead" />
+    <testcase name="DefaultRequiresVerifiedFloorAndPureVerticalHasNoPlanarAuthority" status="run" result="completed" time="0" timestamp="2026-10-07T13:10:52" classname="TrackerSpatialLookahead" />
+    <testcase name="OriginalCurvatureAndMovingHeadingGuardsStillConstrainAForwardLookPoint" status="run" result="completed" time="0.01" timestamp="2026-10-07T13:10:52" classname="TrackerSpatialLookahead" />
+    <testcase name="TerminalZeroArcSpanKeepsEndpointFeedForwardAndOriginalMeasuredPhase" status="run" result="completed" time="0.001" timestamp="2026-10-07T13:10:52" classname="TrackerSpatialLookahead" />
+    <testcase name="RecordedNearCuspKeepsFullXYZAndItsOriginalTinyBrakingCap" status="run" result="completed" time="0.003" timestamp="2026-10-07T13:10:52" classname="TrackerSpatialLookahead" />
+  </testsuite>
+  <testsuite name="TrackerGeometryReceipt" tests="4" failures="0" disabled="0" errors="0" time="0.001" timestamp="2026-10-07T13:10:52">
+    <testcase name="PreparationAndUnconnectedFreshBodyCannotClaimSoftwareInstallation" status="run" result="completed" time="0" timestamp="2026-10-07T13:10:52" classname="TrackerGeometryReceipt" />
+    <testcase name="InstalledFactsStayFixedAcrossProofRenewalHoldingAndRepeatedBody" status="run" result="completed" time="0" timestamp="2026-10-07T13:10:52" classname="TrackerGeometryReceipt" />
+    <testcase name="MotionFencePreservesActualInstallationAndCannotBorrowMovingHandoff" status="run" result="completed" time="0.001" timestamp="2026-10-07T13:10:52" classname="TrackerGeometryReceipt" />
+    <testcase name="UnixOriginalBodyFactsAreExactAtInstallationAndDoNotRenewWithTimer" status="run" result="completed" time="0" timestamp="2026-10-07T13:10:52" classname="TrackerGeometryReceipt" />
+  </testsuite>
+  <testsuite name="TrackerEntryReobservation" tests="3" failures="0" disabled="0" errors="0" time="0.001" timestamp="2026-10-07T13:10:52">
+    <testcase name="FreshWholeProofUsesActualNewBoundaryNotAnExpiredWorkerSample" status="run" result="completed" time="0" timestamp="2026-10-07T13:10:52" classname="TrackerEntryReobservation" />
+    <testcase name="CurrentMeasurementAndFiniteNativeDomainRemainStrict" status="run" result="completed" time="0" timestamp="2026-10-07T13:10:52" classname="TrackerEntryReobservation" />
+    <testcase name="StaleOrNegativeWholeProofCannotRefreshEntry" status="run" result="completed" time="0.001" timestamp="2026-10-07T13:10:52" classname="TrackerEntryReobservation" />
+  </testsuite>
+  <testsuite name="TrackerWriterCAS" tests="10" failures="0" disabled="0" errors="0" time="0.047" timestamp="2026-10-07T13:10:52">
+    <testcase name="InitialAckBindsActualInstallationNotLatestIntentAndCannotRollback" status="run" result="completed" time="0.001" timestamp="2026-10-07T13:10:52" classname="TrackerWriterCAS" />
+    <testcase name="InitialFactRequiresSignedLeaseAndRealInstallationButAcceptsExpiredReceiptTime" status="run" result="completed" time="0.001" timestamp="2026-10-07T13:10:52" classname="TrackerWriterCAS" />
+    <testcase name="ConditionalGrantNeverChangesIncumbentBeforeActualWriterFact" status="run" result="completed" time="0.001" timestamp="2026-10-07T13:10:52" classname="TrackerWriterCAS" />
+    <testcase name="FixedGrantRejectsOverwriteAndPreparationUsesActualMovingBoundary" status="run" result="completed" time="0.001" timestamp="2026-10-07T13:10:52" classname="TrackerWriterCAS" />
+    <testcase name="PreparedExpiryCopiesOriginalFineNanosecondCapsWithoutRoundTrip" status="run" result="completed" time="0.002" timestamp="2026-10-07T13:10:52" classname="TrackerWriterCAS" />
+    <testcase name="LateAppliedFactMovesIdentityForwardAndHoldsWithoutRollback" status="run" result="completed" time="0.001" timestamp="2026-10-07T13:10:52" classname="TrackerWriterCAS" />
+    <testcase name="NegativeFactReleasesSlotButLateAppliedTombstoneCannotResume" status="run" result="completed" time="0" timestamp="2026-10-07T13:10:52" classname="TrackerWriterCAS" />
+    <testcase name="SameReferenceDifferentCurveNegativeFactResolvesOnlyExactUnchangedWriter" status="run" result="completed" time="0.001" timestamp="2026-10-07T13:10:52" classname="TrackerWriterCAS" />
+    <testcase name="WrongAppliedOwnerOrChangedCommandNeverReplacesGeometry" status="run" result="completed" time="0.005" timestamp="2026-10-07T13:10:52" classname="TrackerWriterCAS" />
+    <testcase name="StationaryReentryRequiresOriginalSdkWitnessAndNewCurveProofNotOldProof" status="run" result="completed" time="0.034" timestamp="2026-10-07T13:10:52" classname="TrackerWriterCAS" />
+  </testsuite>
+  <testsuite name="TrackerTimeContract" tests="7" failures="0" disabled="0" errors="0" time="0.001" timestamp="2026-10-07T13:10:52">
+    <testcase name="RealUnixLeaseFactsRemainExactAndCanOnlyCapFreshDeadline" status="run" result="completed" time="0" timestamp="2026-10-07T13:10:52" classname="TrackerTimeContract" />
+    <testcase name="V10EqualUnixSourceIsAdmittedAndTrueFutureNanosecondIsRejected" status="run" result="completed" time="0" timestamp="2026-10-07T13:10:52" classname="TrackerTimeContract" />
+    <testcase name="IntegerFreshnessUsesOriginalLimitsAtNanosecondBoundary" status="run" result="completed" time="0" timestamp="2026-10-07T13:10:52" classname="TrackerTimeContract" />
+    <testcase name="OriginalNanosecondOrderingDoesNotCollapseAdjacentBodySources" status="run" result="completed" time="0" timestamp="2026-10-07T13:10:52" classname="TrackerTimeContract" />
+    <testcase name="ExactUnixClockFlowsThroughPrepareCommitDemandAndInstallation" status="run" result="completed" time="0" timestamp="2026-10-07T13:10:52" classname="TrackerTimeContract" />
+    <testcase name="WholeCurveProofAbsoluteExpiryDoesNotGainOneNanosecond" status="run" result="completed" time="0" timestamp="2026-10-07T13:10:52" classname="TrackerTimeContract" />
+    <testcase name="PreparedDemandAndAdmissionKeepActualClockNanoseconds" status="run" result="completed" time="0.001" timestamp="2026-10-07T13:10:52" classname="TrackerTimeContract" />
+  </testsuite>
+  <testsuite name="TrackerExecution" tests="25" failures="0" disabled="0" errors="0" time="0.034" timestamp="2026-10-07T13:10:52">
+    <testcase name="CandidatePreparationDoesNotActivateBeforeMatchingOwnerCommit" status="run" result="completed" time="0" timestamp="2026-10-07T13:10:52" classname="TrackerExecution" />
+    <testcase name="NewCandidateCannotBeActivatedWithPredecessorAdmissionAndProof" status="run" result="completed" time="0.001" timestamp="2026-10-07T13:10:52" classname="TrackerExecution" />
+    <testcase name="GeometryOnlyCommitNeverProducesMotionAndCanLaterAuthorize" status="run" result="completed" time="0" timestamp="2026-10-07T13:10:52" classname="TrackerExecution" />
+    <testcase name="ArmingHeartbeatDoesNotEraseCommittedGeometryOrNeedOldAdmission" status="run" result="completed" time="0.001" timestamp="2026-10-07T13:10:52" classname="TrackerExecution" />
+    <testcase name="ProofGapStopsImmediatelyButDoesNotInventOdometryRecoveryDelay" status="run" result="completed" time="0" timestamp="2026-10-07T13:10:52" classname="TrackerExecution" />
+    <testcase name="ThirtySecondStationaryPreviewCanExecuteOnlyWithCurrentExactProof" status="run" result="completed" time="0.008" timestamp="2026-10-07T13:10:52" classname="TrackerExecution" />
+    <testcase name="NativeUnknownExpiredProofWrongOwnerAndMockLeakCannotCommit" status="run" result="completed" time="0.002" timestamp="2026-10-07T13:10:52" classname="TrackerExecution" />
+    <testcase name="FreshNextProofDoesNotRevokeStillFreshLeasedPredecessor" status="run" result="completed" time="0" timestamp="2026-10-07T13:10:52" classname="TrackerExecution" />
+    <testcase name="TwoHundredMillisecondProofRefreshDoesNotWaitForOwnerHeartbeat" status="run" result="completed" time="0.001" timestamp="2026-10-07T13:10:52" classname="TrackerExecution" />
+    <testcase name="ProofFloorCannotBorrowForeignGeometryOrCrossLatestInvalidFence" status="run" result="completed" time="0.002" timestamp="2026-10-07T13:10:52" classname="TrackerExecution" />
+    <testcase name="FreshCollisionProofCannotRenewAuthorityOrResumeHoldingPhase" status="run" result="completed" time="0" timestamp="2026-10-07T13:10:52" classname="TrackerExecution" />
+    <testcase name="OwnerCanCommitAdmittedProofWhenNextValidSequenceArrivesFirst" status="run" result="completed" time="0.001" timestamp="2026-10-07T13:10:52" classname="TrackerExecution" />
+    <testcase name="MissingSupportAndStairSemanticsNeverBecomeFlatFloorByDefault" status="run" result="completed" time="0.002" timestamp="2026-10-07T13:10:52" classname="TrackerExecution" />
+    <testcase name="RemainingProofIsOnlyForCommittedCurveAndRecomputesArcCoverage" status="run" result="completed" time="0.001" timestamp="2026-10-07T13:10:52" classname="TrackerExecution" />
+    <testcase name="OlderFreshHeartbeatCanUseExactProofHistoryButNeverMaskNewInvalid" status="run" result="completed" time="0.001" timestamp="2026-10-07T13:10:52" classname="TrackerExecution" />
+    <testcase name="GeometryPreviewProjectsOnlyNewMeasuredPositionWhileDemandStaysZero" status="run" result="completed" time="0" timestamp="2026-10-07T13:10:52" classname="TrackerExecution" />
+    <testcase name="ControlDeadlineDoesNotFreezeThePriorCollisionSnapshotsDeadline" status="run" result="completed" time="0.001" timestamp="2026-10-07T13:10:52" classname="TrackerExecution" />
+    <testcase name="IndependentControlDeadlineNeverExtendsOriginalOwnerLease" status="run" result="completed" time="0.001" timestamp="2026-10-07T13:10:52" classname="TrackerExecution" />
+    <testcase name="OnlyOwnExactFreshBlockedForwardTurnCanRequestDifferentManeuver" status="run" result="completed" time="0" timestamp="2026-10-07T13:10:52" classname="TrackerExecution" />
+    <testcase name="UnknownStaleForeignOrMutatedSweepCannotRequestTurn" status="run" result="completed" time="0.008" timestamp="2026-10-07T13:10:52" classname="TrackerExecution" />
+    <testcase name="NeverGeneratedOrRevokedDemandCannotRequestTurn" status="run" result="completed" time="0" timestamp="2026-10-07T13:10:52" classname="TrackerExecution" />
+    <testcase name="BlockedEntryReportsExactOriginalSweepOnceWithoutRestampingOrAuthority" status="run" result="completed" time="0.001" timestamp="2026-10-07T13:10:52" classname="TrackerExecution" />
+    <testcase name="OccupiedInPlaceAlignTurnReportsBlockedEntryInsteadOfRepeatingIt" status="run" result="completed" time="0.001" timestamp="2026-10-07T13:10:52" classname="TrackerExecution" />
+    <testcase name="NewerProposalCannotRedatePreparedCurveTask" status="run" result="completed" time="0.001" timestamp="2026-10-07T13:10:52" classname="TrackerExecution" />
+    <testcase name="FailedCommitStillFollowsOwnerLeaseForSuccessorProposal" status="run" result="completed" time="0.001" timestamp="2026-10-07T13:10:52" classname="TrackerExecution" />
+  </testsuite>
+  <testsuite name="TrackerSpatialBudget" tests="4" failures="0" disabled="0" errors="0" time="0.003" timestamp="2026-10-07T13:10:52">
+    <testcase name="FlatSlopeAndReversedOrRotatedTravelUseTheSameSpatialLimit" status="run" result="completed" time="0" timestamp="2026-10-07T13:10:52" classname="TrackerSpatialBudget" />
+    <testcase name="UndefinedAndVerticalDirectionsCannotBecomeFlatGround" status="run" result="completed" time="0" timestamp="2026-10-07T13:10:52" classname="TrackerSpatialBudget" />
+    <testcase name="ProductionCurveControllerPreservesTrueVerticalVelocityAndAcceleration" status="run" result="completed" time="0.003" timestamp="2026-10-07T13:10:52" classname="TrackerSpatialBudget" />
+    <testcase name="UncommittedCandidateCannotChangeTheIncumbentBudgetOrLimiter" status="run" result="completed" time="0" timestamp="2026-10-07T13:10:52" classname="TrackerSpatialBudget" />
+  </testsuite>
+  <testsuite name="TrackerPreparationWorker" tests="9" failures="0" disabled="0" errors="0" time="0.012" timestamp="2026-10-07T13:10:52">
+    <testcase name="LatestPendingIsBoundedAndOldCompletionCannotWin" status="run" result="completed" time="0.002" timestamp="2026-10-07T13:10:52" classname="TrackerPreparationWorker" />
+    <testcase name="CancelNeverQueuesBehindBuildAndRetiredResultCannotReturn" status="run" result="completed" time="0.001" timestamp="2026-10-07T13:10:52" classname="TrackerPreparationWorker" />
+    <testcase name="ExceptionsBecomeFailedCompletionNotSharedControllerMutation" status="run" result="completed" time="0.001" timestamp="2026-10-07T13:10:52" classname="TrackerPreparationWorker" />
+    <testcase name="ProductionGeometryPreparesOffOwnerButOnlyExactPermitCommits" status="run" result="completed" time="0.001" timestamp="2026-10-07T13:10:52" classname="TrackerPreparationWorker" />
+    <testcase name="CancelAndDuplicateCannotInstallRetiredCandidateOrMutateCachedCurve" status="run" result="completed" time="0.001" timestamp="2026-10-07T13:10:52" classname="TrackerPreparationWorker" />
+    <testcase name="CachedGeometryCannotBeReusedForMutatedShapeOrRelaxedConfiguration" status="run" result="completed" time="0.001" timestamp="2026-10-07T13:10:52" classname="TrackerPreparationWorker" />
+    <testcase name="CachedSupportCannotAuthorizeDifferentEvidenceWithReusedHash" status="run" result="completed" time="0" timestamp="2026-10-07T13:10:52" classname="TrackerPreparationWorker" />
+    <testcase name="RejectedCandidatePreservesIncumbentAndWorkerNeverPredictsActualEntry" status="run" result="completed" time="0.004" timestamp="2026-10-07T13:10:52" classname="TrackerPreparationWorker" />
+    <testcase name="FreshContextResetRetiresPreparedCandidateAndPriorPermit" status="run" result="completed" time="0.001" timestamp="2026-10-07T13:10:52" classname="TrackerPreparationWorker" />
+  </testsuite>
+  <testsuite name="TrackerDuplicateTick" tests="9" failures="0" disabled="0" errors="0" time="0.007" timestamp="2026-10-07T13:10:52">
+    <testcase name="Skips20msTimersWithoutNewDemandOrLimiterResetAndResumesContinuously" status="run" result="completed" time="0.001" timestamp="2026-10-07T13:10:52" classname="TrackerDuplicateTick" />
+    <testcase name="OriginalDemandExpiresBySteadyReceiptAndSameSourceCannotRenewIt" status="run" result="completed" time="0" timestamp="2026-10-07T13:10:52" classname="TrackerDuplicateTick" />
+    <testcase name="OriginalTwoMicrosecondCurveProofIsNotRenewedByLongerNewProof" status="run" result="completed" time="0.001" timestamp="2026-10-07T13:10:52" classname="TrackerDuplicateTick" />
+    <testcase name="NewMatchingShorterProofAndPermitPermanentlyShortenOriginalLease" status="run" result="completed" time="0" timestamp="2026-10-07T13:10:52" classname="TrackerDuplicateTick" />
+    <testcase name="ExactOwnMotionProofOnlyShortensAndNeverRefreshesEmissionReceipt" status="run" result="completed" time="0.001" timestamp="2026-10-07T13:10:52" classname="TrackerDuplicateTick" />
+    <testcase name="RevocationInvalidProofHoldingAndNewBodyFaultCannotBeSkipped" status="run" result="completed" time="0.001" timestamp="2026-10-07T13:10:52" classname="TrackerDuplicateTick" />
+    <testcase name="ChangedAuthorityAndControlPhaseRequireOrdinaryControlPath" status="run" result="completed" time="0.002" timestamp="2026-10-07T13:10:52" classname="TrackerDuplicateTick" />
+    <testcase name="AppliedAckSameNowUsesOriginalPreparedCommandDeadline" status="run" result="completed" time="0.001" timestamp="2026-10-07T13:10:52" classname="TrackerDuplicateTick" />
+    <testcase name="OneNanosecondRegressionAtUnixScaleStopsEvenWhenDoubleCannotDistinguishIt" status="run" result="completed" time="0" timestamp="2026-10-07T13:10:52" classname="TrackerDuplicateTick" />
+  </testsuite>
+</testsuites>

@@ -1,0 +1,335 @@
+{
+  "tests": 35,
+  "failures": 0,
+  "disabled": 0,
+  "errors": 0,
+  "timestamp": "2026-10-07T14:45:02Z",
+  "time": "2.921s",
+  "name": "AllTests",
+  "testsuites": [
+    {
+      "name": "MotionSweep",
+      "tests": 28,
+      "failures": 0,
+      "disabled": 0,
+      "errors": 0,
+      "timestamp": "2026-10-07T14:45:02Z",
+      "time": "2.035s",
+      "testsuite": [
+        {
+          "name": "ActualNativeObservedMapProvesMovingAndTurningReachableEnvelope",
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-07T14:45:02Z",
+          "time": "0.006s",
+          "classname": "MotionSweep"
+        },
+        {
+          "name": "CertifiedFlatContactChecksFullFootSlabAtFixedHeightInCurveAndRawMotion",
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-07T14:45:02Z",
+          "time": "0.038s",
+          "classname": "MotionSweep"
+        },
+        {
+          "name": "FlatContactCertificateRejectsDifferentSupportHeightInsteadOfFollowingGaitZ",
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-07T14:45:02Z",
+          "time": "0.01s",
+          "classname": "MotionSweep"
+        },
+        {
+          "name": "FreshOracleLeaseCannotAuthorizeBrakingBeyondItsActorPredictionDuration",
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-07T14:45:02Z",
+          "time": "0.009s",
+          "classname": "MotionSweep"
+        },
+        {
+          "name": "AsymmetricReflectedEnvelopeDoesNotInventGroundAndCannotMissHeadObstacle",
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-07T14:45:02Z",
+          "time": "0.023s",
+          "classname": "MotionSweep"
+        },
+        {
+          "name": "FailedEnvelopeDiagnosticsSeparateClassesAndUniqueFromRawOverlap",
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-07T14:45:03Z",
+          "time": "0.008s",
+          "classname": "MotionSweep"
+        },
+        {
+          "name": "NewBodyOrNewProofDoesNotRenewOriginalDemandBodyOrExpiredRaySource",
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-07T14:45:03Z",
+          "time": "0s",
+          "classname": "MotionSweep"
+        },
+        {
+          "name": "FreeCurrentBodyAndShortNominalCurveDoNotProveBrakingDistance",
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-07T14:45:03Z",
+          "time": "0.002s",
+          "classname": "MotionSweep"
+        },
+        {
+          "name": "PlanningCorridorIncludesFutureBrakingAndDoesNotReplaceCommandProof",
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-07T14:45:03Z",
+          "time": "0.004s",
+          "classname": "MotionSweep"
+        },
+        {
+          "name": "TurningSweepCoversCylinderRotationAwayFromFreeCurrentPose",
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-07T14:45:03Z",
+          "time": "0.002s",
+          "classname": "MotionSweep"
+        },
+        {
+          "name": "NeverObservedAndInsufficientEvidenceAreNotAssumedFree",
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-07T14:45:03Z",
+          "time": "0.004s",
+          "classname": "MotionSweep"
+        },
+        {
+          "name": "TTLExpiryDoesNotClearOccupancyOrRenewFreeEvidence",
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-07T14:45:03Z",
+          "time": "0.001s",
+          "classname": "MotionSweep"
+        },
+        {
+          "name": "SourceGroundGapWrongFloorOrMissingBodySupportRejects",
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-07T14:45:03Z",
+          "time": "0.003s",
+          "classname": "MotionSweep"
+        },
+        {
+          "name": "DeployedEnvelopeRejectsLowObstacleInsideBrakingSweep",
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-07T14:45:03Z",
+          "time": "0.003s",
+          "classname": "MotionSweep"
+        },
+        {
+          "name": "DeployedEnvelopeDoesNotClaimContactBelowOrAboveProtectedHeight",
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-07T14:45:03Z",
+          "time": "0.005s",
+          "classname": "MotionSweep"
+        },
+        {
+          "name": "DeployedEnvelopeRejectsLowUnknownAndInsufficientEvidence",
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-07T14:45:03Z",
+          "time": "0.004s",
+          "classname": "MotionSweep"
+        },
+        {
+          "name": "DeployedEnvelopeRejectsMissingSupportEvenWhenAllRawVoxelsAreFree",
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-07T14:45:03Z",
+          "time": "0.003s",
+          "classname": "MotionSweep"
+        },
+        {
+          "name": "EitherRawRaySourceIndependentlyCapsCommandEvidenceDeadline",
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-07T14:45:03Z",
+          "time": "0s",
+          "classname": "MotionSweep"
+        },
+        {
+          "name": "BoundsBudgetAndNonForwardCommandFailClosed",
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-07T14:45:03Z",
+          "time": "0.004s",
+          "classname": "MotionSweep"
+        },
+        {
+          "name": "ExactFileBytesAndTransportAreBoundToMeasuredModel",
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-07T14:45:03Z",
+          "time": "0.001s",
+          "classname": "MotionSweep"
+        },
+        {
+          "name": "RecordSourceAgeOverridesLegacyDefaultAndCannotRenewEitherSensor",
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-07T14:45:03Z",
+          "time": "0s",
+          "classname": "MotionSweep"
+        },
+        {
+          "name": "ExplicitSpotRecordBindsActualReachabilityWithoutRaisingCommandAuthority",
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-07T14:45:03Z",
+          "time": "0.01s",
+          "classname": "MotionSweep"
+        },
+        {
+          "name": "SpotFutureGaitFromNearZeroCannotEscapeReactionOrYawEnvelope",
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-07T14:45:03Z",
+          "time": "0.032s",
+          "classname": "MotionSweep"
+        },
+        {
+          "name": "PhysicalSpotEnvelopeRetainsIsotropicReactionFootTopAndBudgetVetoes",
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-07T14:45:03Z",
+          "time": "0.46s",
+          "classname": "MotionSweep"
+        },
+        {
+          "name": "PhysicalSpotRotatedAabbDoesNotConsumeUnqueriedCornerVoxelBudget",
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-07T14:45:03Z",
+          "time": "0.341s",
+          "classname": "MotionSweep"
+        },
+        {
+          "name": "PhysicalSpotTrueInsideVoxelOverflowStillRejectsEntireVolume",
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-07T14:45:03Z",
+          "time": "0.184s",
+          "classname": "MotionSweep"
+        },
+        {
+          "name": "PhysicalSpotRotatedFullVolumeStillFindsFootAndTopLiveObstacles",
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-07T14:45:04Z",
+          "time": "0.429s",
+          "classname": "MotionSweep"
+        },
+        {
+          "name": "PhysicalSpotRotatedCountPassCannotRenewEitherRaySourceOrReceipt",
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-07T14:45:04Z",
+          "time": "0.449s",
+          "classname": "MotionSweep"
+        }
+      ]
+    },
+    {
+      "name": "RawSnapshotColumn",
+      "tests": 5,
+      "failures": 0,
+      "disabled": 0,
+      "errors": 0,
+      "timestamp": "2026-10-07T14:45:04Z",
+      "time": "0.047s",
+      "testsuite": [
+        {
+          "name": "EveryCellAndFirstNonfreeMatchRawQueriesIncludingFootAndTop",
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-07T14:45:04Z",
+          "time": "0.029s",
+          "classname": "RawSnapshotColumn"
+        },
+        {
+          "name": "PublicBatchRequiresPrivateObservedSnapshot",
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-07T14:45:04Z",
+          "time": "0s",
+          "classname": "RawSnapshotColumn"
+        },
+        {
+          "name": "DynamicClosedXYAndAllZVetoMatchFirstNonfreeOrdering",
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-07T14:45:04Z",
+          "time": "0.006s",
+          "classname": "RawSnapshotColumn"
+        },
+        {
+          "name": "OutsideInvalidRangeAndRingAddressReuseNeverBorrowAnotherColumn",
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-07T14:45:05Z",
+          "time": "0.001s",
+          "classname": "RawSnapshotColumn"
+        },
+        {
+          "name": "BatchEndChecksOriginalSourceAndSteadyDeadlinesWithoutRenewal",
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-07T14:45:05Z",
+          "time": "0.011s",
+          "classname": "RawSnapshotColumn"
+        }
+      ]
+    },
+    {
+      "name": "MotionSupportNearest",
+      "tests": 1,
+      "failures": 0,
+      "disabled": 0,
+      "errors": 0,
+      "timestamp": "2026-10-07T14:45:05Z",
+      "time": "0.012s",
+      "testsuite": [
+        {
+          "name": "ExactLegacyBinOrderRandomQueriesTiesAndWorldBounds",
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-07T14:45:05Z",
+          "time": "0.012s",
+          "classname": "MotionSupportNearest"
+        }
+      ]
+    },
+    {
+      "name": "MotionSweepBenchmark",
+      "tests": 1,
+      "failures": 0,
+      "disabled": 0,
+      "errors": 0,
+      "timestamp": "2026-10-07T14:45:05Z",
+      "time": "0.827s",
+      "testsuite": [
+        {
+          "name": "PhysicalSpotColdProofWallP50P95KeepsEveryOriginalCell",
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-07T14:45:05Z",
+          "time": "0.827s",
+          "classname": "MotionSweepBenchmark"
+        }
+      ]
+    }
+  ]
+}

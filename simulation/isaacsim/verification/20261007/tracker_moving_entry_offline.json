@@ -1,0 +1,106 @@
+{
+  "schema": 1,
+  "scope": "offline_tracker_moving_entry_control_continuity",
+  "source_status": "frozen_for_parent_build; no node/install or candidate modification by this agent",
+  "physical_navigation_acceptance": false,
+  "live_robot_acceptance": false,
+  "source_files": {
+    "d1max_nav_ws/src/d1max_trajectory_tracker/include/d1max_trajectory_tracker/tracker_core.hpp": {
+      "sha256": "d116faa85be0755793fe67fccfe51990b950987fddc2b57a207584ddbf716645",
+      "matching_build_copy": true
+    },
+    "d1max_nav_ws/src/d1max_trajectory_tracker/test/test_tracker_v2.cpp": {
+      "sha256": "524e460c895d6dfc8622845155c319c62f0bb049a25e7cebe7887bd94c66843e",
+      "matching_build_copy": true
+    }
+  },
+  "tests": {
+    "v2": {
+      "tests": 109,
+      "failures": 0,
+      "errors": 0,
+      "xml": "moving_entry_tracker_v2.xml",
+      "xml_sha256": "ee167f05d5cbac4ecef3e63e55b8a13879a9b9d2b172636c54bd23188970e10f",
+      "timestamp": "2026-10-07T12:31:33",
+      "log": "moving_entry_tracker_v2.log",
+      "log_sha256": "36a2cabbbe1dda9e63aa94c9d2d4c1478ff3286adbc5b78ad9774faf1987bc53"
+    },
+    "core": {
+      "tests": 57,
+      "failures": 0,
+      "errors": 0,
+      "xml": "moving_entry_tracker_core.xml",
+      "xml_sha256": "3a9fdd07905856717cde49b04af0ed9446f4cc312f2d735c71f932f9e197e237",
+      "timestamp": "2026-10-07T12:29:59",
+      "log": "moving_entry_tracker_core.log",
+      "log_sha256": "ef47f6a0010ad25b0407bcaa89ee6a115779e4e2f2c8d8c3997319250cca9cf8"
+    }
+  },
+  "total_tests": 166,
+  "offline_build_targets": [
+    "test_tracker_v2",
+    "test_tracker_core"
+  ],
+  "implementation": {
+    "initial_admission": "tracker_core.hpp:1264",
+    "latest_prepared_entry": "tracker_core.hpp:1286",
+    "helper": "tracker_core.hpp:1393",
+    "rejection_reason": "candidate:moving_entry_heading_discontinuity",
+    "criterion": "Positive previous writer output, existing incumbent guards and bounded full-XYZ projection, incumbent lookahead heading inside original heading_threshold, candidate lookahead heading outside it, and original normalForwardStep can continue positive incumbent output. Reject candidate; retain incumbent and output history.",
+    "stationary_behavior": "zero previous output may accept turn entry through unchanged normal stationary/sweep protections",
+    "geometry": "original XYZ controls, knots, source pose/twist and .05 XYZ join preserved",
+    "unchanged": "command hard bounds, source/deadline/lease gates, floor support, collision proofs and UNKNOWN semantics"
+  },
+  "regression_tests": [
+    "ReverseMeasuredPrefixReproducesTurnaroundButCannotReplaceMovingIncumbent",
+    "ExistingHeadingThresholdAllowsContinuousDirectionAndRejectsOnlyItsOtherSide",
+    "ZeroOutputMayAlignButPositiveNearZeroOutputDoesNotInventAMovingThreshold",
+    "PreparedEntryRechecksDirectionAfterIncumbentResumesWithoutPromotingGeometry",
+    "IncumbentAlreadyOutsideHeadingGateCannotClaimContinuousForwardEntry"
+  ],
+  "counterexample_evidence": {
+    "run": "campus_crossing_v31_001",
+    "curve": 11,
+    "source_elapsed_s": 28.8,
+    "measured_boundary_xyz_velocity_mps": [
+      -0.0108,
+      0.00171,
+      0.00612
+    ],
+    "recorded_controller_world_xy_mps": [
+      -0.014675347,
+      0.002665742
+    ],
+    "actual_yaw_rad": -0.310830224,
+    "controller_yaw_error_rad": -3.010450834,
+    "limitation": "Original v31 did not record complete control points/knots. Tests reproduce the evidenced reverse-prefix/upward-XYZ/later-forward shape, not an invented exact historical spline."
+  },
+  "old_run_dynamic_gate_frequency": {
+    "v30": {
+      "run": "/home/eric/wjg/d1max-build-isaac/runs/campus_crossing_v30_001",
+      "scan_log_sha256": "b92c77da424baa633fa671d522e4d00fbd731f4836b473fbffe19f2543ef64ff",
+      "strict_initial_motion_warning_count": 91,
+      "warn_full_xyz_speed_min_mps": 0.150672,
+      "warn_full_xyz_speed_max_mps": 0.400458,
+      "literal_guided_start_dynamic_state_invalid_count": 0,
+      "start_boundary_log_count": 181,
+      "count_scope": "literal current scan.log events; no claim all planning attempts or independent failure episodes were recorded"
+    },
+    "v31": {
+      "run": "/home/eric/wjg/d1max-build-isaac/runs/campus_crossing_v31_001",
+      "scan_log_sha256": "0cdff371f2984bb04d670c75e0e75df2cceb5ca773c53b9ab761cbb0bb8fb17f",
+      "strict_initial_motion_warning_count": 0,
+      "warn_full_xyz_speed_min_mps": null,
+      "warn_full_xyz_speed_max_mps": null,
+      "literal_guided_start_dynamic_state_invalid_count": 0,
+      "start_boundary_log_count": 19,
+      "count_scope": "literal current scan.log events; no claim all planning attempts or independent failure episodes were recorded"
+    }
+  },
+  "unresolved_next_stage": {
+    "planner_constraint": "planner_manager.cpp:271-278,532,557,880-895 use manager.max_vel=.15 and max_acc=.35 for raw full-XYZ start state and entire curve; .15 is also navigation command authority",
+    "tracker_constraint": "tracker_core.hpp:599-600 and895 still bound full-XYZ curve derivatives with config.max_speed=.15 and max_acceleration=.35;497,893,910,1285 require raw measured full-XYZ velocity join within .05",
+    "conclusion": "Changing only manager/optimization max_vel to .6 would not make tracker accept faster derivatives and would not prove a phase-matched C1 join. Sealed actual reachable .6/.8 is a conservative motion reach bound, not a calibration of instantaneous body acceleration or a guaranteed realizable navigation curve. Preserve raw data and commands; design and verify a separate actual-model curve dynamic contract before changing limits.",
+    "causal_scope": "v30 strict-start gate occurred91 times; v31 had0, so it cannot explain v31 curve11 reverse handoff by itself. New heading gate blocks one demonstrated loss of forward continuity and does not claim all physical progress failures fixed."
+  }
+}

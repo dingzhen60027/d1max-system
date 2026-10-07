@@ -1,0 +1,196 @@
+{
+  "schema": 1,
+  "kind": "v35_original_unknown_bounded_tail_capture",
+  "recorded_at_utc": "2026-10-07T06:25:07.468134+00:00",
+  "scope": "Only bounded last200 scan log lines and a logarithmic lookup of the exact original actor-source measurement; no full trace replay, no build/test/runtime mutation.",
+  "run_local_path": "/home/eric/wjg/d1max-build-isaac/runs/campus_crossing_v35_001",
+  "clock_anchor_ns": 1791353820002824927,
+  "original_captured_log_line": "[WARN] [1791354156.413122006] [d1max.live_planning.scan.scan_planner_node]: Execution unknown diagnostic_after_failure curve=57 snapshot=3425541 query_index=676 state=2 query_xyz=[-1.386788126,-5.014216924,0.480993828] query_yaw=-0.002405468 final_reason=unknown_or_unobserved check_end_ns=1791353925142824927 valid_until_ns=1791353925338434647 lease={\"barrier_ns\":1791353822682824927,\"both_ray_receipt_ns\":[1200695084437777,1200695146836516],\"both_ray_source_ns\":[1791353925020824927,1791353925020824927],\"cached_prior_lease_valid\":true,\"context_sequence\":1,\"dynamic_oracle_enabled\":true,\"dynamic_oracle_query_valid\":true,\"dynamic_oracle_reachable_until_ns\":1791353931142824927,\"dynamic_oracle_registry_sha256\":\"be6813e188ff52611e04611682ce21bf303633099a61d7649d6b2e9712a478a6\",\"dynamic_oracle_sequence\":6309,\"dynamic_oracle_source_ns\":1791353925142824927,\"epoch\":1,\"flat_support_contact_enabled\":true,\"kind\":\"captured_collision_query_lease\",\"policy\":\"validated_static_prior_with_dynamic_oracle_double_cylinder\",\"query_receipt_ns\":1200695355876977,\"query_source_ns\":1791353925165988211,\"ray_clock_fault\":false,\"receipt_deadline_ns\":1200695528373462,\"seed_id\":\"isaac-fd18c85a-95de-4552-81ec-a04bc5be63e7\",\"session_id\":\"97409720d9d34036aae9c33281e5148d\",\"source_deadline_ns\":1791353925342824927,\"static_prior_context_valid\":true,\"static_prior_geometry_sha256\":\"b1de214d7b3dc3e0dec7207aba9c9675d7cc090a4c877c390b49c327ecd99a6e\",\"static_prior_loaded\":true,\"static_prior_manifest_sha256\":\"06d227f1a36746da6123760da0600a3f54391e25f73a1498505a9eba112bec9a\",\"static_prior_map_version\":\"c2eb4e6bb15a22d6517a8eb172ecfb562ebda7b790c3622b082057ae8c9ab746\"} evidence=query_policy=validated_static_prior_with_dynamic_oracle_double_cylinder evidence_counts=strict_with_free_expiry free=23571 occupied=0 unknown=4 outside=0 raw_overlap=[23571,0,4,0] unique_voxels=[18810,0,4,0] body_z=[0.09999,1.07] never_observed=883 observed_insufficient=277 stale_free=3 source_query_ns=1791353925166077665 front_source_ns=1791353925020824927 rear_source_ns=1791353925020824927 front_age_ms=145.3 rear_age_ms=145.3 prior_context_valid=1 certified_static_free=17176 certified_static_occupied=0 live_observed_free=0 live_static_conflict=0 prior_map_version=c2eb4e6bb15a22d6517a8eb172ecfb562ebda7b790c3622b082057ae8c9ab746 prior_manifest_sha256=06d227f1a36746da6123760da0600a3f54391e25f73a1498505a9eba112bec9a oldest_free_source_ns=1791353868720824927 oldest_free_age_ms=5.645e+04 unknown_cell=(-0.825,-4.425,-0.025) first_cell_evidence={index:[-17,-89,-1],raw_log_odds:1.467,raw_category:occupied,raw_state:1,prior_state:3,hit_source_ns:0,free_source_ns:0,free_receipt_ns:0} ray_witness=disabled",
+  "original_captured_lease": {
+    "barrier_ns": 1791353822682824927,
+    "both_ray_receipt_ns": [
+      1200695084437777,
+      1200695146836516
+    ],
+    "both_ray_source_ns": [
+      1791353925020824927,
+      1791353925020824927
+    ],
+    "cached_prior_lease_valid": true,
+    "context_sequence": 1,
+    "dynamic_oracle_enabled": true,
+    "dynamic_oracle_query_valid": true,
+    "dynamic_oracle_reachable_until_ns": 1791353931142824927,
+    "dynamic_oracle_registry_sha256": "be6813e188ff52611e04611682ce21bf303633099a61d7649d6b2e9712a478a6",
+    "dynamic_oracle_sequence": 6309,
+    "dynamic_oracle_source_ns": 1791353925142824927,
+    "epoch": 1,
+    "flat_support_contact_enabled": true,
+    "kind": "captured_collision_query_lease",
+    "policy": "validated_static_prior_with_dynamic_oracle_double_cylinder",
+    "query_receipt_ns": 1200695355876977,
+    "query_source_ns": 1791353925165988211,
+    "ray_clock_fault": false,
+    "receipt_deadline_ns": 1200695528373462,
+    "seed_id": "isaac-fd18c85a-95de-4552-81ec-a04bc5be63e7",
+    "session_id": "97409720d9d34036aae9c33281e5148d",
+    "source_deadline_ns": 1791353925342824927,
+    "static_prior_context_valid": true,
+    "static_prior_geometry_sha256": "b1de214d7b3dc3e0dec7207aba9c9675d7cc090a4c877c390b49c327ecd99a6e",
+    "static_prior_loaded": true,
+    "static_prior_manifest_sha256": "06d227f1a36746da6123760da0600a3f54391e25f73a1498505a9eba112bec9a",
+    "static_prior_map_version": "c2eb4e6bb15a22d6517a8eb172ecfb562ebda7b790c3622b082057ae8c9ab746"
+  },
+  "original_query_scene_s": 105.163163284,
+  "original_actor_scene_s": 105.14,
+  "source_age_ms": {
+    "front": 145.163284,
+    "rear": 145.163284,
+    "dynamic": 23.163283999999997
+  },
+  "receipt_ray_age_ms": [
+    271.43919999999997,
+    209.040461
+  ],
+  "original_combined_receipt_remaining_ms": 172.49648499999998,
+  "original_combined_source_remaining_ms": 176.836716,
+  "exact_original_actor_sample": {
+    "sim_time_ns": 105140000000,
+    "registry_sha256": "be6813e188ff52611e04611682ce21bf303633099a61d7649d6b2e9712a478a6",
+    "samples": {
+      "plaza_person": {
+        "present": true,
+        "position": [
+          0.0,
+          3.5896716117858887,
+          0.0
+        ],
+        "orientation_xyzw": [
+          0.0,
+          0.0,
+          0.7071068286895752,
+          0.7071068286895752
+        ],
+        "linear_velocity": [
+          0.0,
+          0.9456872344017029,
+          0.0
+        ]
+      }
+    }
+  },
+  "actor_registry": [
+    {
+      "id": "plaza_person",
+      "path": "/World/Dynamic/plaza_person",
+      "shapes": [
+        {
+          "id": "body",
+          "path": "/World/Dynamic/plaza_person/body",
+          "type": "cylinder",
+          "center": [
+            0.0,
+            0.0,
+            0.8
+          ],
+          "radius": 0.28,
+          "height": 1.6,
+          "axis": "Z"
+        },
+        {
+          "id": "head",
+          "path": "/World/Dynamic/plaza_person/head",
+          "type": "cylinder",
+          "center": [
+            0.0,
+            0.0,
+            1.7
+          ],
+          "radius": 0.17,
+          "height": 0.2,
+          "axis": "Z"
+        }
+      ],
+      "max_linear_speed_mps": 1.0325,
+      "max_linear_acceleration_mps2": 0.10125
+    }
+  ],
+  "actor_registry_sha256": "be6813e188ff52611e04611682ce21bf303633099a61d7649d6b2e9712a478a6",
+  "reachable_horizon_ns": 6000000000,
+  "cell": [
+    -17,
+    -89,
+    -1
+  ],
+  "first_cell_evidence_original_string": "{index:[-17,-89,-1],raw_log_odds:1.467,raw_category:occupied,raw_state:1,prior_state:3,hit_source_ns:0,free_source_ns:0,free_receipt_ns:0}",
+  "sphere_full_xyz_checks": [
+    {
+      "actor_id": "plaza_person",
+      "measured_sample": {
+        "present": true,
+        "position": [
+          0.0,
+          3.5896716117858887,
+          0.0
+        ],
+        "orientation_xyzw": [
+          0.0,
+          0.0,
+          0.7071068286895752,
+          0.7071068286895752
+        ],
+        "linear_velocity": [
+          0.0,
+          0.9456872344017029,
+          0.0
+        ]
+      },
+      "region": {
+        "state": 2,
+        "min": [
+          -8.030984581432342,
+          -4.441312969646454,
+          -8.030984581432342
+        ],
+        "max": [
+          8.030984581432342,
+          11.620656193218231,
+          8.030984581432342
+        ],
+        "enclosure": "sphere_v1",
+        "center": [
+          0.0,
+          3.5896716117858887,
+          0.0
+        ],
+        "radius": 8.030984581432342
+      },
+      "full_voxel_closed_aabb_min": [
+        -0.8500000000000001,
+        -4.45,
+        -0.05
+      ],
+      "full_voxel_closed_aabb_max": [
+        -0.8,
+        -4.4,
+        0.0
+      ],
+      "sphere_voxel_min_distance_m": 8.029623432277338,
+      "sphere_voxel_intersects": true,
+      "actual_actor_world_aabb_is_not_the_reachable_ball": true
+    }
+  ],
+  "conclusion": "This original query has equal integrated ray sources, valid static context and live dynamic oracle, with no first-cell live hit conflict; the full closed first voxel intersects the same-source conservative full-horizon reachable sphere. UNKNOWN is a genuine dynamic reach veto under the current contract, not evidence of actual current actor-body collision and not evidence that all failures have this cause.",
+  "limitations": [
+    "Original captured lease belongs to the original last collision query; expanded evidence after failure has its own later diagnostic query clock.",
+    "No reconstruction of the full curve or every queried body voxel is claimed.",
+    "No ray/oracle lease extension, smaller reachable bound, UNKNOWN clearing or formal navigation success is claimed."
+  ],
+  "source_binding": {
+    "sealed_scene_config_path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v35-campus-crossing/simulation/assets/scene_config.json",
+    "sealed_scene_sha256": "5f829896d4f1e4ef1275114ed1fb4be971d68cd27f1ad230da4c7098b71da62f",
+    "expected_sealed_scene_sha256": "5f829896d4f1e4ef1275114ed1fb4be971d68cd27f1ad230da4c7098b71da62f",
+    "dynamic_collision_path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v35-campus-crossing/simulation/dynamic_collision.py",
+    "dynamic_collision_sha256": "e320bc985c2f38a9a4497dac1679bcbf5fc830be5a378ffa959b07ef6e21b90a"
+  }
+}

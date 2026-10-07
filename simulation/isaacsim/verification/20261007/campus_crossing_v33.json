@@ -1,0 +1,409 @@
+{
+  "schema": 1,
+  "date_local": "2026-10-07",
+  "timezone": "Asia/Shanghai",
+  "scope": "actual_original_crossing_Action_v33_failed; no_physical_robot_acceptance",
+  "accepted": false,
+  "run": "/home/eric/wjg/d1max-build-isaac/runs/campus_crossing_v33_001",
+  "candidate": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v33-campus-crossing",
+  "source_status": "immutable_v33_candidate_and_original_failed_run; no_retroactive_acceptance",
+  "original_action": {
+    "success": false,
+    "reason": "execution_blocked_timeout:waiting_current_collision_and_tracker_proof",
+    "retirement_confirmed": true,
+    "physical_stop_confirmed": false
+  },
+  "action_status": 6,
+  "measured_cumulative_xy_distance_m": 0.01389962892316062,
+  "measured_final_position": [
+    -7.917491912841797,
+    -5.022634029388428,
+    0.4825126528739929
+  ],
+  "source_origin_ns": 1791350053116246284,
+  "configured_phase_observation_budget_s": 281.0,
+  "phase_observation_budget_is_not_actual_runtime": true,
+  "implemented_fixture": {
+    "body_reference_height_m": 0.481,
+    "body_envelope": {
+      "radius": 0.6078651750202781,
+      "offset": 0.3125,
+      "above": 0.589,
+      "support_floor_z": 0.0,
+      "support_penetration_m": 0.02
+    },
+    "velocity_feedback_mode": "spot_monotone_measured_v2",
+    "spatial_control_lookahead": true,
+    "spatial_control_parameter_default": false,
+    "spatial_mode_scope": "explicit verified-support simulation quadruped opt-in; original full XYZ arc and caps",
+    "original_command_max_speed_mps": 0.15,
+    "original_command_max_yaw_radps": 0.3
+  },
+  "original_owner_progress_credit": {
+    "trace_records": 34472,
+    "owner_observations": 1239,
+    "groups": [
+      {
+        "execution_id": "",
+        "control_epoch": 0,
+        "records": 1,
+        "observed_credit_values": [
+          0
+        ]
+      },
+      {
+        "execution_id": "b7ab39d0ac104ac9b4f330a4c6f5f8ed.1:execution",
+        "control_epoch": 1,
+        "records": 1238,
+        "observed_credit_values": [
+          0
+        ]
+      }
+    ],
+    "all_recorded_credit_counts_zero": true,
+    "interpretation": "Original owner counts only; never infer route credit from XY travel, gait, candidate ACK, writer software commit or a lookahead evaluation."
+  },
+  "stop": {
+    "execution_id": "b7ab39d0ac104ac9b4f330a4c6f5f8ed.1:execution",
+    "stop_submitted": true,
+    "measured_stop_confirmed": true,
+    "physical_acceptance_verified": false,
+    "stationary_samples": 211,
+    "measured_linear_mps": 0.007535815033854241,
+    "measured_angular_radps": 0.0009928411223475875,
+    "reason": "execution_blocked_timeout:waiting_current_collision_and_tracker_proof"
+  },
+  "measured_stationary": true,
+  "imu_exact_source_match": true,
+  "body_height_consistent": true,
+  "measured_body_z_range_m": [
+    0.4811147451400757,
+    0.48256033658981323
+  ],
+  "whole_body_attestation": true,
+  "phase_frozen_body_attestation": {
+    "required": true,
+    "verified": true,
+    "body_envelope_verified_samples": 2214,
+    "body_envelope_failures": 0,
+    "body_envelope_registry_sha256": "e68b27ca3e0a30c3bdbaeb43414ae4a19674f9661adb167cc6bd0e38ab6ebc76",
+    "observed_measured_state_count": 2198,
+    "scope": "same_source_actual_whole_body_envelope_attestation; not_complete_contact_or_collision_acceptance"
+  },
+  "final_bridge_attestation": {
+    "body_envelope_verified_samples": 2295,
+    "body_envelope_failures": 0,
+    "last_sim_time_ns": 38240000000,
+    "fault": "",
+    "scope": "Final bridge-status collection is later than the phase-frozen report; do not add the two counts or imply identical windows."
+  },
+  "collision_audit": {
+    "completed": true,
+    "sample_count": 2300,
+    "trajectory_sample_count": 2300,
+    "trajectory_sources_all_audited": true,
+    "source_begin_ns": 1791350052794246284,
+    "source_end_ns": 1791350091096246284,
+    "max_source_sampling_gap_ns": 20000000,
+    "possible_overlap_counts": {
+      "static": 0,
+      "dynamic": 0
+    },
+    "non_floor_static_penetration_count": 0,
+    "dynamic_penetration_count": 0,
+    "minimum_static_separation_lower_bound_m": 2.844625208112124,
+    "minimum_actor_separation_lower_bound_m": 7.2107623230760955,
+    "actual_actor_encounter_observed": false,
+    "faults": [],
+    "continuous_collision_proof": false,
+    "scope": "sampled_actual_link_geometry_static_and_actor"
+  },
+  "navigation_shutdown": {
+    "request_accepted": true,
+    "software_retired": true,
+    "physical_stop_confirmed": false,
+    "reason": "software_retired_not_physical_stop",
+    "elapsed_s": 0.10314952302724123,
+    "session_id": "b7ab39d0ac104ac9b4f330a4c6f5f8ed",
+    "recorded_at_unix": 1791350219.127731
+  },
+  "overall_clean_shutdown": false,
+  "child_exit_codes": {
+    "isaac_bridge": 0,
+    "isaac_sim": -15,
+    "navigation": 0,
+    "smoke": 1
+  },
+  "wall_seconds": 164.04899785900488,
+  "independent_evaluation": {
+    "path": "/home/eric/wjg/d1max-build-isaac/campus_crossing_v33_evaluation.json",
+    "status": "failed",
+    "passed": false,
+    "checks": [
+      {
+        "name": "sealed_same_scene",
+        "status": "passed",
+        "reason": "",
+        "evidence": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v33-campus-crossing/simulation/assets/scene_config.json"
+      },
+      {
+        "name": "single_session_ordered_actions",
+        "status": "failed",
+        "reason": "original_smoke_phase_failed:0",
+        "evidence": null
+      },
+      {
+        "name": "phase_000_action_stop_source",
+        "status": "failed",
+        "reason": "original_action_or_measured_stop_failed",
+        "evidence": "/home/eric/wjg/d1max-build-isaac/runs/campus_crossing_v33_001/scenario_suite/phase_000_report.json"
+      },
+      {
+        "name": "phase_000_test_source_budget",
+        "status": "passed",
+        "reason": "",
+        "evidence": {
+          "source_elapsed_s": 34.14,
+          "applied_source_budget_s": 281.0,
+          "sealed_phase_source_budget_s": 281
+        }
+      },
+      {
+        "name": "phase_000_goal",
+        "status": "failed",
+        "reason": "",
+        "evidence": {
+          "measured_xy_error_m": 15.917508005170607
+        }
+      },
+      {
+        "name": "fresh_ordered_task_identities_and_source_deadline",
+        "status": "passed",
+        "reason": "",
+        "evidence": null
+      },
+      {
+        "name": "actual_link_static_and_actor_collision",
+        "status": "passed",
+        "reason": "",
+        "evidence": "/home/eric/wjg/d1max-build-isaac/runs/campus_crossing_v33_001/physics/collision_audit.json"
+      },
+      {
+        "name": "intended_dynamic_encounter_observed",
+        "status": "failed",
+        "reason": "intended_sampled_proximity_encounter_not_exercised_during_original_action_interval",
+        "evidence": {
+          "collision_audit_sha256": "bcd92c759c5f27f6ba1b9a6e0ce631249bd8e8cdeab4436a8fa29024c88e5386",
+          "source": "actual_registered_link_and_actor_geometry",
+          "scope": "sampled_same_step_primitive_center_proximity_only",
+          "selected_exact_pair_witnesses": []
+        }
+      },
+      {
+        "name": "owned_graph_retirement",
+        "status": "failed",
+        "reason": "Navigation test failed; inspect smoke.log and its original reports",
+        "evidence": "/home/eric/wjg/d1max-build-isaac/runs/campus_crossing_v33_001/run_summary.json"
+      }
+    ],
+    "continuous_collision_certificate": false
+  },
+  "observed_spatial_control": {
+    "spatial_mode_true_tracker_records": 2008,
+    "curve13_actual_record": {
+      "trace_line": 26061,
+      "source_clock_ns": 1791350080516246284,
+      "receipt_monotonic_ns": 1196723179877763,
+      "trajectory_id": 13,
+      "recorded_reason": "tracking",
+      "actual_control_diagnostic": {
+        "before_trajectory_start": false,
+        "body_present": true,
+        "body_source_stamp_ns": 1791350080516246284,
+        "curve_duration": 25.78622894601064,
+        "duplicate_source": false,
+        "geometry_available": true,
+        "installed_trajectory_start_ns": 1791350080216246284,
+        "lookahead_curve_time": 5.101382769972975,
+        "lookahead_from_xyz_arc_m": 6.021633543633044e-06,
+        "lookahead_position": [
+          -7.806179055917948,
+          -5.022304574326158,
+          0.4773456648463639
+        ],
+        "lookahead_requested_distance_m": 0.12,
+        "lookahead_target_xyz_arc_m": 0.12000602163354362,
+        "lookahead_velocity": [
+          0.05924240021729227,
+          1.703764914780551e-05,
+          -0.0003006989505008284
+        ],
+        "measured_arc_m": 6.021633543633044e-06,
+        "measured_xy_speed_mps": 9.449753489668502e-05,
+        "planar_acceleration_limit_mps2": 0.004199099746634122,
+        "planar_speed_limit_mps": 0.00012598121229760059,
+        "previous_step_source_ns": 1791350080496246284,
+        "projected_curve_time": 0.0008138605096148128,
+        "receipt_interval_s": 0.020064414013177156,
+        "source_interval_s": 0.02,
+        "spatial_control_lookahead": true,
+        "spatial_planar_braking_envelope": true,
+        "step_seen": true,
+        "step_source_ns": 1791350080516246284,
+        "step_trajectory_id": 13,
+        "step_trajectory_start_ns": 1791350080216246284
+      }
+    },
+    "conclusion": "Actual .12 m XYZ spatial lookahead is active and evaluates curve13 at about5.10138s with lookahead_vx .0592424, but the ORIGINAL local planar cap remains .0001259812123m/s at measured XY speed9.44975e-5m/s. This directly records failure to start sustained motion; it does not establish the full remaining root cause."
+  },
+  "remaining_analysis": {
+    "status": "pending_full_curve_and_current_proof_causal_audit",
+    "questions": [
+      "Why does the original current-phase/local planar cap remain microscopic after nominal-height calibration and spatial reference evaluation?",
+      "Separate local acceleration/braking/curvature/XY-to-XYZ feasibility from actual fresh collision/tracker proof gates and zero authority periods.",
+      "Verify any next correction through the same original Action and complete real geometry, preserving command limits, actual XYZ, STOP, contact/actor evidence and leases."
+    ],
+    "not_proven": [
+      "v33 end-to-end success",
+      "low-speed universal policy calibration",
+      "dynamic encounter or successful yielding",
+      "continuous collision freedom",
+      "physical SDK/hardware stopping"
+    ]
+  },
+  "offline_validation": {
+    "tracker_native_ctest_groups": 4,
+    "tracker_native_failed": 0,
+    "tracker_native_groups": [
+      "test_fixed_bspline_sampler",
+      "test_tracker_core",
+      "test_tracker_v2",
+      "test_navigation_state_contract"
+    ],
+    "python_cases": 254,
+    "python_failed": 0,
+    "compiled_tracker_binary": {
+      "path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v33-campus-crossing/application/install/d1max_trajectory_tracker/lib/d1max_trajectory_tracker/trajectory_tracker",
+      "sha256": "27e1804126fa7613b03697d42d336bffde39849b23e84d186c2b18a3ec3a5f7f",
+      "bytes": 4388712
+    },
+    "scope": "Build and regression passes do not override the actual failed Action."
+  },
+  "evidence_sha256": {
+    "runs/campus_crossing_v33_001/scenario_suite/phase_000_report.json": {
+      "path": "/home/eric/wjg/d1max-build-isaac/runs/campus_crossing_v33_001/scenario_suite/phase_000_report.json",
+      "sha256": "a453842b463d080aa2a8b3eba0ff479c7e069652e97964201d4fcf6392d6c60c",
+      "bytes": 3053092
+    },
+    "runs/campus_crossing_v33_001/scenario_suite/phase_000_trace.jsonl": {
+      "path": "/home/eric/wjg/d1max-build-isaac/runs/campus_crossing_v33_001/scenario_suite/phase_000_trace.jsonl",
+      "sha256": "71461a99ab7538b390e13e73d590df83efd36579f32f0d24d9d10b0712ed973b",
+      "bytes": 58288469
+    },
+    "runs/campus_crossing_v33_001/physics/trajectory.jsonl": {
+      "path": "/home/eric/wjg/d1max-build-isaac/runs/campus_crossing_v33_001/physics/trajectory.jsonl",
+      "sha256": "91b99713cd4d732f356c4ee7a4f6d27df63bf8943dbc1ce89e189059dc0b3c5c",
+      "bytes": 5066394
+    },
+    "runs/campus_crossing_v33_001/physics/collision_audit.json": {
+      "path": "/home/eric/wjg/d1max-build-isaac/runs/campus_crossing_v33_001/physics/collision_audit.json",
+      "sha256": "bcd92c759c5f27f6ba1b9a6e0ce631249bd8e8cdeab4436a8fa29024c88e5386",
+      "bytes": 3216
+    },
+    "runs/campus_crossing_v33_001/physics/floor_hit_audit.jsonl": {
+      "path": "/home/eric/wjg/d1max-build-isaac/runs/campus_crossing_v33_001/physics/floor_hit_audit.jsonl",
+      "sha256": "6089c8b3e051caa07f7ea8fcf86512ffd819ee18ab3abd9305e7e8f60a892498",
+      "bytes": 202555
+    },
+    "runs/campus_crossing_v33_001/run_summary.json": {
+      "path": "/home/eric/wjg/d1max-build-isaac/runs/campus_crossing_v33_001/run_summary.json",
+      "sha256": "a39a9ba23a149ce46dabc0652dec3b80e424708f3ca26e1b9442e1210e7d4438",
+      "bytes": 897
+    },
+    "runs/campus_crossing_v33_001/shutdown.json": {
+      "path": "/home/eric/wjg/d1max-build-isaac/runs/campus_crossing_v33_001/shutdown.json",
+      "sha256": "b792b333511554901db0cd487a817f6fb178fd8a7bb9847f52ab0aa889146918",
+      "bytes": 274
+    },
+    "runs/campus_crossing_v33_001/isaac_bridge_status.json": {
+      "path": "/home/eric/wjg/d1max-build-isaac/runs/campus_crossing_v33_001/isaac_bridge_status.json",
+      "sha256": "8bed0a513f67281b174a65ea37b3a3b8d31e0350e2c17307fac346b662de9a62",
+      "bytes": 1481
+    },
+    "runs/campus_crossing_v33_001/session.json": {
+      "path": "/home/eric/wjg/d1max-build-isaac/runs/campus_crossing_v33_001/session.json",
+      "sha256": "089837ae9930deda7d06e6d878c45cfaf78a3d9ca9e91f0497ca0d03d7739892",
+      "bytes": 13783
+    },
+    "runs/campus_crossing_v33_001/tracker.yaml": {
+      "path": "/home/eric/wjg/d1max-build-isaac/runs/campus_crossing_v33_001/tracker.yaml",
+      "sha256": "be079851180c1868c06404619fc9e7776d84bebd2a579c00f7eab10511788a27",
+      "bytes": 1432
+    },
+    "runs/campus_crossing_v33_001/quadruped_fixture_profile.yaml": {
+      "path": "/home/eric/wjg/d1max-build-isaac/runs/campus_crossing_v33_001/quadruped_fixture_profile.yaml",
+      "sha256": "2df15f5532de7d8d49a2e83b6a315732f0f12665655f3138f69bfff18e06b097",
+      "bytes": 773
+    },
+    "runs/campus_crossing_v33_001/scan.log": {
+      "path": "/home/eric/wjg/d1max-build-isaac/runs/campus_crossing_v33_001/scan.log",
+      "sha256": "1824544a492c97328dafba96494d71487fcb3e7c0e77d0391a7d5f978009de82",
+      "bytes": 535660
+    },
+    "runs/campus_crossing_v33_001/tracker.log": {
+      "path": "/home/eric/wjg/d1max-build-isaac/runs/campus_crossing_v33_001/tracker.log",
+      "sha256": "48c3243ee3ede1a9bd716f0cb758589dd9248bc59bb6efb0574483a66f837c2c",
+      "bytes": 197
+    },
+    "runs/campus_crossing_v33_001/navigation.log": {
+      "path": "/home/eric/wjg/d1max-build-isaac/runs/campus_crossing_v33_001/navigation.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "campus_crossing_v33_evaluation.json": {
+      "path": "/home/eric/wjg/d1max-build-isaac/campus_crossing_v33_evaluation.json",
+      "sha256": "2ee6428696d4b1be010d4c0c529377cd8f9b76c5901b0dc89a215674c2ea1e2e",
+      "bytes": 2737
+    },
+    "v33_tracker_ctest.log": {
+      "path": "/home/eric/wjg/d1max-build-isaac/v33_tracker_ctest.log",
+      "sha256": "4b5191b117b7701ebcd87c1604b934a87182d16b0e95f1654d7f0d9684caf39e",
+      "bytes": 748
+    },
+    "v33_python_pytest.log": {
+      "path": "/home/eric/wjg/d1max-build-isaac/v33_python_pytest.log",
+      "sha256": "a3e17e5bc406bd2002ef5205fb38fab8455b2e3dbe61fcbc7dfdb6c861bbb7c2",
+      "bytes": 340
+    },
+    "nav_fix_v33_tracker_build.log": {
+      "path": "/home/eric/wjg/d1max-build-isaac/nav_fix_v33_tracker_build.log",
+      "sha256": "7c1a1a2e8af25125b6aa203fc0d6d360421d9b819fb6280f346c1d60d7da104a",
+      "bytes": 5098
+    },
+    "campus_v33_crossing_candidate.log": {
+      "path": "/home/eric/wjg/d1max-build-isaac/campus_v33_crossing_candidate.log",
+      "sha256": "a0ae4e660553bb5c57e97b3488bcb31a17be00e93e456f5460e45ac728191021",
+      "bytes": 343
+    },
+    "isaac-candidate-v33-campus-crossing/isaac_candidate_integrity.json": {
+      "path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v33-campus-crossing/isaac_candidate_integrity.json",
+      "sha256": "b9efb064fb59aaff95e5270fcfde6392012d6aa50f19b200be1653261afce9a9",
+      "bytes": 733105
+    },
+    "isaac-candidate-v33-campus-crossing/simulation/assets/scene_config.json": {
+      "path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v33-campus-crossing/simulation/assets/scene_config.json",
+      "sha256": "1c4fcc8219251a3a00a73f95b4eee59c4f02b288e752e6044c86426bd2dfb1cd",
+      "bytes": 58165
+    },
+    "isaac-candidate-v33-campus-crossing/application/install/d1max_trajectory_tracker/lib/d1max_trajectory_tracker/trajectory_tracker": {
+      "path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v33-campus-crossing/application/install/d1max_trajectory_tracker/lib/d1max_trajectory_tracker/trajectory_tracker",
+      "sha256": "27e1804126fa7613b03697d42d336bffde39849b23e84d186c2b18a3ec3a5f7f",
+      "bytes": 4388712
+    }
+  },
+  "derivation": {
+    "owner_credit": "Stream original phase_000_trace.jsonl and group kind=bt_progress data.execution_progress_credit_samples by original execution_id/control_epoch.",
+    "actual_control_example": "Original tracker trace line26061, trajectory_id13, reason tracking. Retain the complete recorded control_diagnostic verbatim; no offline curve output replaces a measured/control record.",
+    "sampling_scope": "Collision audit, phase-frozen bridge, final bridge and observer have distinct stated windows and counts; no synthetic interpolation or state replacement."
+  }
+}

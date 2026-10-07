@@ -1,0 +1,185 @@
+{
+  "tests": 19,
+  "failures": 0,
+  "disabled": 0,
+  "errors": 0,
+  "timestamp": "2026-10-07T14:44:41Z",
+  "time": "0.037s",
+  "name": "AllTests",
+  "testsuites": [
+    {
+      "name": "CandidateAdoption",
+      "tests": 18,
+      "failures": 0,
+      "disabled": 0,
+      "errors": 0,
+      "timestamp": "2026-10-07T14:44:41Z",
+      "time": "0.034s",
+      "testsuite": [
+        {
+          "name": "MovingNineCentimetersJoinsOriginalCurveInsteadOfTZero",
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-07T14:44:41Z",
+          "time": "0.002s",
+          "classname": "CandidateAdoption"
+        },
+        {
+          "name": "UnixSourceOrderAndElapsedBoundUseOriginalNanoseconds",
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-07T14:44:41Z",
+          "time": "0.001s",
+          "classname": "CandidateAdoption"
+        },
+        {
+          "name": "IndependentXyzReferenceAndTravelKeepRawZAndMeasuredEntry",
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-07T14:44:41Z",
+          "time": "0s",
+          "classname": "CandidateAdoption"
+        },
+        {
+          "name": "ExpandedReferenceDomainStillRequiresOriginalXyzC1AndSourceLease",
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-07T14:44:41Z",
+          "time": "0s",
+          "classname": "CandidateAdoption"
+        },
+        {
+          "name": "IndependentTravelDoesNotReplaceWholeCurveCollisionOrFinalSourceGate",
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-07T14:44:41Z",
+          "time": "0.001s",
+          "classname": "CandidateAdoption"
+        },
+        {
+          "name": "NanosecondBodyChangeInvalidatesSourceLeaseAcrossFullCheck",
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-07T14:44:41Z",
+          "time": "0s",
+          "classname": "CandidateAdoption"
+        },
+        {
+          "name": "StationaryInputCannotAdvanceWithClock",
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-07T14:44:41Z",
+          "time": "0.012s",
+          "classname": "CandidateAdoption"
+        },
+        {
+          "name": "WrongFloorFarLateralAndWrongVelocityCannotJoin",
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-07T14:44:41Z",
+          "time": "0.001s",
+          "classname": "CandidateAdoption"
+        },
+        {
+          "name": "EntryCannotSkipSemanticSegmentBoundaryOrContext",
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-07T14:44:41Z",
+          "time": "0s",
+          "classname": "CandidateAdoption"
+        },
+        {
+          "name": "ArcWindowRejectsLaterOverlappingBranchDespiteNearbyXYZ",
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-07T14:44:41Z",
+          "time": "0.001s",
+          "classname": "CandidateAdoption"
+        },
+        {
+          "name": "RegressedOrOverBudgetSourceCannotLicenseProjection",
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-07T14:44:41Z",
+          "time": "0s",
+          "classname": "CandidateAdoption"
+        },
+        {
+          "name": "RealNativeOccupiedAndUnknownRemainderStillBlock",
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-07T14:44:41Z",
+          "time": "0.002s",
+          "classname": "CandidateAdoption"
+        },
+        {
+          "name": "CollisionBehindEntryIsStillCheckedConservatively",
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-07T14:44:41Z",
+          "time": "0s",
+          "classname": "CandidateAdoption"
+        },
+        {
+          "name": "FullCurveVelocityAndAccelerationBoundsAreNotRelaxed",
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-07T14:44:41Z",
+          "time": "0s",
+          "classname": "CandidateAdoption"
+        },
+        {
+          "name": "FreshAtStartButExpiredMapAtEndCannotCommit",
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-07T14:44:41Z",
+          "time": "0.002s",
+          "classname": "CandidateAdoption"
+        },
+        {
+          "name": "FreshAtStartButExpiredBodyAtEndCannotCommit",
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-07T14:44:41Z",
+          "time": "0.002s",
+          "classname": "CandidateAdoption"
+        },
+        {
+          "name": "SourceContextRevisionAndBodyReplacementDuringCheckCannotCommit",
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-07T14:44:41Z",
+          "time": "0.007s",
+          "classname": "CandidateAdoption"
+        },
+        {
+          "name": "CanceledOrFourHundredMillisecondLateCheckCannotCommit",
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-07T14:44:41Z",
+          "time": "0.003s",
+          "classname": "CandidateAdoption"
+        }
+      ]
+    },
+    {
+      "name": "WorkerLifecycle",
+      "tests": 1,
+      "failures": 0,
+      "disabled": 0,
+      "errors": 0,
+      "timestamp": "2026-10-07T14:44:41Z",
+      "time": "0.002s",
+      "testsuite": [
+        {
+          "name": "ActualSnapshotLeaseReleasedOnNormalAndExceptionalWorkerExit",
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-07T14:44:41Z",
+          "time": "0.002s",
+          "classname": "WorkerLifecycle"
+        }
+      ]
+    }
+  ]
+}

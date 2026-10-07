@@ -1,0 +1,1686 @@
+{
+  "schema": 1,
+  "date_local": "2026-10-07",
+  "timezone": "Asia/Shanghai",
+  "scope": "independent_offline_performance_and_native_sensor_semantics_audit; no_new_navigation_or_hardware_acceptance",
+  "overall_sensor_preserving_writeback_experiment_passed": false,
+  "profiles": {
+    "physics_profile_v34_sealed": {
+      "physics_frames": 5000,
+      "physics_hz": 500.0,
+      "timing": {
+        "measured_state_samples": 600,
+        "measured_state_wall_seconds": 39.29520956799388,
+        "measured_state_sim_seconds": 9.982000000000001,
+        "wall_seconds_per_sim_second": 3.9366068491278177,
+        "realtime_factor": 0.25402587515732156,
+        "state_wall_hz": 15.243588381009378,
+        "longest_state_wall_gap_s": 0.22735452093183994,
+        "longest_rays_wall_gap_s": [
+          0.5216631130315363,
+          0.5225070379674435
+        ]
+      },
+      "phase_timings": {
+        "receive_command": {
+          "count": 2500,
+          "total_wall_s": 0.10948679829016328,
+          "max_wall_s": 0.0004920689389109612
+        },
+        "physics_only_two_steps": {
+          "count": 2500,
+          "total_wall_s": 33.16440967982635,
+          "max_wall_s": 0.2192803102079779
+        },
+        "measured_state_and_udp": {
+          "count": 500,
+          "total_wall_s": 3.864502888638526,
+          "max_wall_s": 0.01758467499166727
+        },
+        "dual_cloud_filter_pack_and_udp": {
+          "count": 100,
+          "total_wall_s": 1.8441303768195212,
+          "max_wall_s": 0.03376563196070492
+        }
+      },
+      "physics_callback_timings": {
+        "official_policy": {
+          "count": 6000,
+          "total_wall_s": 1.6777432847302407,
+          "max_wall_s": 0.03167054592631757
+        },
+        "dynamic_actor_updates": {
+          "count": 5000,
+          "total_wall_s": 2.165217039640993,
+          "max_wall_s": 0.0014507460873574018
+        },
+        "command_expiry": {
+          "count": 5000,
+          "total_wall_s": 0.23958446341566741,
+          "max_wall_s": 0.0002479478716850281
+        },
+        "native_lidar_gate_and_begin_witness": {
+          "count": 5000,
+          "total_wall_s": 1.3214609706774354,
+          "max_wall_s": 0.18222292000427842
+        },
+        "native_imu": {
+          "count": 5000,
+          "total_wall_s": 0.33393689012154937,
+          "max_wall_s": 0.0007549861911684275
+        }
+      },
+      "physics_cpu_threads": null,
+      "physics_usd_state_writeback": null,
+      "native_floor_hit_audit": {
+        "scans": 200,
+        "native_floor_hits": 490552,
+        "max_abs_error_m": 2.0970337256120963e-06,
+        "sealed_error_bound_m": 0.0002,
+        "raw_endpoints_and_source_times_preserved": true
+      },
+      "body_envelope_attestation": {
+        "required": true,
+        "verified_samples": 600,
+        "failures": 0,
+        "envelope": {
+          "radius": 0.6078651750202781,
+          "offset": 0.3125,
+          "above": 0.589,
+          "support_floor_z": 0.0,
+          "support_penetration_m": 0.02
+        }
+      },
+      "static_geometry_attestation": {
+        "expected_sha256": "b1de214d7b3dc3e0dec7207aba9c9675d7cc090a4c877c390b49c327ecd99a6e",
+        "cadence": "every actual body state; source timestamp unchanged",
+        "count": 600,
+        "faults": 0,
+        "fault_latched": false,
+        "last_sha256": "b1de214d7b3dc3e0dec7207aba9c9675d7cc090a4c877c390b49c327ecd99a6e",
+        "last_fault": "",
+        "total_wall_s": 0.01684182113967836,
+        "max_wall_s": 0.015189252095296979,
+        "full_stage_audits": 1,
+        "cache_hits": 599
+      },
+      "scans_per_sensor": [
+        100,
+        100
+      ],
+      "native_lidar_captures_per_sensor": 100,
+      "imu_source_summary": {
+        "configured_hz": 100,
+        "physics_hz": 500.0,
+        "native_samples": 5000,
+        "native_measured_source_hz": 499.99998079615995,
+        "measured_source_hz": 100.02000015926384,
+        "samples": 1001,
+        "invalid_reads": 0,
+        "duplicate_reads_skipped": 0,
+        "native_rate_samples_skipped": 3999,
+        "source_start_time": 2000074,
+        "source_end_time": 10000000458
+      }
+    },
+    "physics_profile_cpu0": {
+      "physics_frames": 5000,
+      "physics_hz": 500.0,
+      "timing": {
+        "measured_state_samples": 600,
+        "measured_state_wall_seconds": 35.80463540996425,
+        "measured_state_sim_seconds": 9.982000000000001,
+        "wall_seconds_per_sim_second": 3.5869199969910084,
+        "realtime_factor": 0.27879071761814567,
+        "state_wall_hz": 16.729677404655302,
+        "longest_state_wall_gap_s": 0.3559203278273344,
+        "longest_rays_wall_gap_s": [
+          0.7194761340506375,
+          0.71712491591461
+        ]
+      },
+      "phase_timings": {
+        "receive_command": {
+          "count": 2500,
+          "total_wall_s": 0.1044042301364243,
+          "max_wall_s": 0.00011825584806501865
+        },
+        "physics_only_two_steps": {
+          "count": 2500,
+          "total_wall_s": 29.497741381637752,
+          "max_wall_s": 0.1276514360215515
+        },
+        "measured_state_and_udp": {
+          "count": 500,
+          "total_wall_s": 4.1229967451654375,
+          "max_wall_s": 0.2443990190513432
+        },
+        "dual_cloud_filter_pack_and_udp": {
+          "count": 100,
+          "total_wall_s": 1.85554508282803,
+          "max_wall_s": 0.04177059489302337
+        }
+      },
+      "physics_callback_timings": {
+        "official_policy": {
+          "count": 6000,
+          "total_wall_s": 1.7365499606821686,
+          "max_wall_s": 0.02936302893795073
+        },
+        "dynamic_actor_updates": {
+          "count": 5000,
+          "total_wall_s": 2.0466288526076823,
+          "max_wall_s": 0.001237367046996951
+        },
+        "command_expiry": {
+          "count": 5000,
+          "total_wall_s": 0.23705118079669774,
+          "max_wall_s": 0.00012084213085472584
+        },
+        "native_lidar_gate_and_begin_witness": {
+          "count": 5000,
+          "total_wall_s": 1.1938076426740736,
+          "max_wall_s": 0.07376889092847705
+        },
+        "native_imu": {
+          "count": 5000,
+          "total_wall_s": 0.3096355141606182,
+          "max_wall_s": 0.00043906597420573235
+        }
+      },
+      "physics_cpu_threads": {
+        "requested": 0,
+        "original": 8,
+        "readback": 0
+      },
+      "physics_usd_state_writeback": null,
+      "native_floor_hit_audit": {
+        "scans": 200,
+        "native_floor_hits": 490552,
+        "max_abs_error_m": 2.0970337256120963e-06,
+        "sealed_error_bound_m": 0.0002,
+        "raw_endpoints_and_source_times_preserved": true
+      },
+      "body_envelope_attestation": {
+        "required": true,
+        "verified_samples": 600,
+        "failures": 0,
+        "envelope": {
+          "radius": 0.6078651750202781,
+          "offset": 0.3125,
+          "above": 0.589,
+          "support_floor_z": 0.0,
+          "support_penetration_m": 0.02
+        }
+      },
+      "static_geometry_attestation": {
+        "expected_sha256": "b1de214d7b3dc3e0dec7207aba9c9675d7cc090a4c877c390b49c327ecd99a6e",
+        "cadence": "every actual body state; source timestamp unchanged",
+        "count": 600,
+        "faults": 0,
+        "fault_latched": false,
+        "last_sha256": "b1de214d7b3dc3e0dec7207aba9c9675d7cc090a4c877c390b49c327ecd99a6e",
+        "last_fault": "",
+        "total_wall_s": 0.05093655898235738,
+        "max_wall_s": 0.049210950965061784,
+        "full_stage_audits": 1,
+        "cache_hits": 599
+      },
+      "scans_per_sensor": [
+        100,
+        100
+      ],
+      "native_lidar_captures_per_sensor": 100,
+      "imu_source_summary": {
+        "configured_hz": 100,
+        "physics_hz": 500.0,
+        "native_samples": 5000,
+        "native_measured_source_hz": 499.99998079615995,
+        "measured_source_hz": 100.02000015926384,
+        "samples": 1001,
+        "invalid_reads": 0,
+        "duplicate_reads_skipped": 0,
+        "native_rate_samples_skipped": 3999,
+        "source_start_time": 2000074,
+        "source_end_time": 10000000458
+      }
+    },
+    "physics_profile_notices": {
+      "physics_frames": 5000,
+      "physics_hz": 500.0,
+      "timing": {
+        "measured_state_samples": 600,
+        "measured_state_wall_seconds": 39.44674761313945,
+        "measured_state_sim_seconds": 9.982000000000001,
+        "wall_seconds_per_sim_second": 3.951787979677364,
+        "realtime_factor": 0.2530500130934765,
+        "state_wall_hz": 15.18502883620441,
+        "longest_state_wall_gap_s": 0.2863451740704477,
+        "longest_rays_wall_gap_s": [
+          0.592183741973713,
+          0.5914750921074301
+        ]
+      },
+      "phase_timings": {
+        "receive_command": {
+          "count": 2500,
+          "total_wall_s": 0.10537222749553621,
+          "max_wall_s": 0.00021314597688615322
+        },
+        "physics_only_two_steps": {
+          "count": 2500,
+          "total_wall_s": 33.072546233190224,
+          "max_wall_s": 0.056569495936855674
+        },
+        "physics_two_steps_without_native_capture": {
+          "count": 2400,
+          "total_wall_s": 29.724266961682588,
+          "max_wall_s": 0.029504887061193585
+        },
+        "physics_two_steps_with_native_capture": {
+          "count": 100,
+          "total_wall_s": 3.3788460025098175,
+          "max_wall_s": 0.05658302782103419
+        },
+        "measured_state_and_udp": {
+          "count": 500,
+          "total_wall_s": 4.056972909485921,
+          "max_wall_s": 0.21805755700916052
+        },
+        "dual_cloud_filter_pack_and_udp": {
+          "count": 100,
+          "total_wall_s": 1.8645334725733846,
+          "max_wall_s": 0.032109596068039536
+        }
+      },
+      "physics_callback_timings": {
+        "official_policy": {
+          "count": 6000,
+          "total_wall_s": 1.675693056313321,
+          "max_wall_s": 0.028563548112288117
+        },
+        "dynamic_actor_updates": {
+          "count": 5000,
+          "total_wall_s": 2.214108041021973,
+          "max_wall_s": 0.0018280940130352974
+        },
+        "command_expiry": {
+          "count": 5000,
+          "total_wall_s": 0.24306686013005674,
+          "max_wall_s": 0.00025216001085937023
+        },
+        "native_lidar_gate_and_begin_witness": {
+          "count": 5000,
+          "total_wall_s": 1.190946686314419,
+          "max_wall_s": 0.022924257209524512
+        },
+        "native_imu": {
+          "count": 5000,
+          "total_wall_s": 0.33469299180433154,
+          "max_wall_s": 0.00047385995276272297
+        }
+      },
+      "physics_cpu_threads": {
+        "requested": null,
+        "original": 8,
+        "readback": 8
+      },
+      "physics_usd_state_writeback": null,
+      "native_floor_hit_audit": {
+        "scans": 200,
+        "native_floor_hits": 490552,
+        "max_abs_error_m": 2.0970337256120963e-06,
+        "sealed_error_bound_m": 0.0002,
+        "raw_endpoints_and_source_times_preserved": true
+      },
+      "body_envelope_attestation": {
+        "required": true,
+        "verified_samples": 600,
+        "failures": 0,
+        "envelope": {
+          "radius": 0.6078651750202781,
+          "offset": 0.3125,
+          "above": 0.589,
+          "support_floor_z": 0.0,
+          "support_penetration_m": 0.02
+        }
+      },
+      "static_geometry_attestation": {
+        "expected_sha256": "b1de214d7b3dc3e0dec7207aba9c9675d7cc090a4c877c390b49c327ecd99a6e",
+        "cadence": "every actual body state; source timestamp unchanged",
+        "count": 600,
+        "faults": 0,
+        "fault_latched": false,
+        "last_sha256": "b1de214d7b3dc3e0dec7207aba9c9675d7cc090a4c877c390b49c327ecd99a6e",
+        "last_fault": "",
+        "total_wall_s": 0.01624268712475896,
+        "max_wall_s": 0.014582463074475527,
+        "full_stage_audits": 1,
+        "notice_timings": {
+          "usd_objects_changed": {
+            "count": 10902,
+            "total_wall_s": 9.79318466829136,
+            "max_wall_s": 0.005422248039394617
+          }
+        },
+        "cache_hits": 599
+      },
+      "scans_per_sensor": [
+        100,
+        100
+      ],
+      "native_lidar_captures_per_sensor": 100,
+      "imu_source_summary": {
+        "configured_hz": 100,
+        "physics_hz": 500.0,
+        "native_samples": 5000,
+        "native_measured_source_hz": 499.99998079615995,
+        "measured_source_hz": 100.02000015926384,
+        "samples": 1001,
+        "invalid_reads": 0,
+        "duplicate_reads_skipped": 0,
+        "native_rate_samples_skipped": 3999,
+        "source_start_time": 2000074,
+        "source_end_time": 10000000458
+      }
+    },
+    "physics_profile_tensor_only": {
+      "physics_frames": 10,
+      "physics_hz": 500.0,
+      "timing": {
+        "measured_state_samples": 2,
+        "measured_state_wall_seconds": 0.02166463015601039,
+        "measured_state_sim_seconds": 0.002,
+        "wall_seconds_per_sim_second": 10.832315078005195,
+        "realtime_factor": 0.09231636938169206,
+        "state_wall_hz": 46.15818469084603,
+        "longest_state_wall_gap_s": 0.02166463015601039,
+        "longest_rays_wall_gap_s": [
+          0.0,
+          0.0
+        ]
+      },
+      "phase_timings": {
+        "receive_command": {
+          "count": 5,
+          "total_wall_s": 0.00017452077008783817,
+          "max_wall_s": 4.992191679775715e-05
+        },
+        "physics_only_two_steps": {
+          "count": 5,
+          "total_wall_s": 0.07115352479740977,
+          "max_wall_s": 0.044073357013985515
+        },
+        "physics_two_steps_without_native_capture": {
+          "count": 4,
+          "total_wall_s": 0.02710128528997302,
+          "max_wall_s": 0.0089834900572896
+        },
+        "physics_two_steps_with_native_capture": {
+          "count": 1,
+          "total_wall_s": 0.04408136918209493,
+          "max_wall_s": 0.04408136918209493
+        },
+        "measured_state_and_udp": {
+          "count": 1,
+          "total_wall_s": 0.00692115887068212,
+          "max_wall_s": 0.00692115887068212
+        }
+      },
+      "physics_callback_timings": {
+        "official_policy": {
+          "count": 1010,
+          "total_wall_s": 0.29417980555444956,
+          "max_wall_s": 0.028318795142695308
+        },
+        "dynamic_actor_updates": {
+          "count": 10,
+          "total_wall_s": 0.0028824482578784227,
+          "max_wall_s": 0.0004304370377212763
+        },
+        "command_expiry": {
+          "count": 10,
+          "total_wall_s": 2.267514355480671e-05,
+          "max_wall_s": 3.563007339835167e-06
+        },
+        "native_lidar_gate_and_begin_witness": {
+          "count": 10,
+          "total_wall_s": 0.027790159918367863,
+          "max_wall_s": 0.026303320890292525
+        },
+        "native_imu": {
+          "count": 10,
+          "total_wall_s": 0.0006956008728593588,
+          "max_wall_s": 0.0002245709765702486
+        }
+      },
+      "physics_cpu_threads": {
+        "requested": null,
+        "original": 8,
+        "readback": 8
+      },
+      "physics_usd_state_writeback": {
+        "requested": false,
+        "original": true,
+        "readback": false
+      },
+      "native_floor_hit_audit": {
+        "scans": 0,
+        "native_floor_hits": 0,
+        "max_abs_error_m": 0.0,
+        "sealed_error_bound_m": 0.0002,
+        "raw_endpoints_and_source_times_preserved": true
+      },
+      "body_envelope_attestation": {
+        "required": true,
+        "verified_samples": 2,
+        "failures": 0,
+        "envelope": {
+          "radius": 0.6078651750202781,
+          "offset": 0.3125,
+          "above": 0.589,
+          "support_floor_z": 0.0,
+          "support_penetration_m": 0.02
+        }
+      },
+      "static_geometry_attestation": {
+        "expected_sha256": "b1de214d7b3dc3e0dec7207aba9c9675d7cc090a4c877c390b49c327ecd99a6e",
+        "cadence": "every actual body state; source timestamp unchanged",
+        "count": 2,
+        "faults": 0,
+        "fault_latched": true,
+        "last_sha256": "b1de214d7b3dc3e0dec7207aba9c9675d7cc090a4c877c390b49c327ecd99a6e",
+        "last_fault": "",
+        "total_wall_s": 0.016777381068095565,
+        "max_wall_s": 0.01677264808677137,
+        "full_stage_audits": 1,
+        "notice_timings": {
+          "usd_objects_changed": {
+            "count": 25,
+            "total_wall_s": 0.00920400908216834,
+            "max_wall_s": 0.0020412812009453773
+          }
+        },
+        "cache_hits": 1
+      },
+      "scans_per_sensor": [
+        0,
+        0
+      ],
+      "native_lidar_captures_per_sensor": 1,
+      "imu_source_summary": {
+        "configured_hz": 100,
+        "physics_hz": 500.0,
+        "native_samples": 10,
+        "native_measured_source_hz": 500.0031111304692,
+        "measured_source_hz": 111.1118024734376,
+        "samples": 3,
+        "invalid_reads": 0,
+        "duplicate_reads_skipped": 0,
+        "native_rate_samples_skipped": 7,
+        "source_start_time": 2000074,
+        "source_end_time": 19999962
+      },
+      "whole_sensor_preservation_status": "FAILED"
+    },
+    "physics_profile_capture_writeback": {
+      "physics_frames": 5000,
+      "physics_hz": 500.0,
+      "timing": {
+        "measured_state_samples": 600,
+        "measured_state_wall_seconds": 26.702018231153488,
+        "measured_state_sim_seconds": 9.982000000000001,
+        "wall_seconds_per_sim_second": 2.6750168534515613,
+        "realtime_factor": 0.37382942044260575,
+        "state_wall_hz": 22.432761254770668,
+        "longest_state_wall_gap_s": 0.22563350503332913,
+        "longest_rays_wall_gap_s": [
+          0.462506280047819,
+          0.4611929450184107
+        ]
+      },
+      "phase_timings": {
+        "receive_command": {
+          "count": 2500,
+          "total_wall_s": 0.08811427233740687,
+          "max_wall_s": 0.00024830386973917484
+        },
+        "physics_only_two_steps": {
+          "count": 2500,
+          "total_wall_s": 20.868955952348188,
+          "max_wall_s": 0.08040393888950348
+        },
+        "physics_two_steps_without_native_capture": {
+          "count": 2400,
+          "total_wall_s": 16.525657781166956,
+          "max_wall_s": 0.016794666182249784
+        },
+        "physics_two_steps_with_native_capture": {
+          "count": 100,
+          "total_wall_s": 4.360015933169052,
+          "max_wall_s": 0.08041657786816359
+        },
+        "measured_state_and_udp": {
+          "count": 500,
+          "total_wall_s": 3.727582350373268,
+          "max_wall_s": 0.17900780006311834
+        },
+        "dual_cloud_filter_pack_and_udp": {
+          "count": 100,
+          "total_wall_s": 1.730532934423536,
+          "max_wall_s": 0.03393189492635429
+        }
+      },
+      "physics_callback_timings": {
+        "official_policy": {
+          "count": 6000,
+          "total_wall_s": 1.544645983260125,
+          "max_wall_s": 0.030726140830665827
+        },
+        "dynamic_actor_updates": {
+          "count": 5000,
+          "total_wall_s": 1.6311321130488068,
+          "max_wall_s": 0.0009816139936447144
+        },
+        "command_expiry": {
+          "count": 5000,
+          "total_wall_s": 0.011673612520098686,
+          "max_wall_s": 4.558195360004902e-05
+        },
+        "native_lidar_gate_and_begin_witness": {
+          "count": 5000,
+          "total_wall_s": 2.8342133332043886,
+          "max_wall_s": 0.056788221932947636
+        },
+        "native_imu": {
+          "count": 5000,
+          "total_wall_s": 0.29626493505202234,
+          "max_wall_s": 0.0005250899121165276
+        }
+      },
+      "physics_cpu_threads": {
+        "requested": null,
+        "original": 8,
+        "readback": 8
+      },
+      "physics_usd_state_writeback": {
+        "requested": false,
+        "original": true,
+        "readback": false
+      },
+      "native_floor_hit_audit": {
+        "scans": 200,
+        "native_floor_hits": 499003,
+        "max_abs_error_m": 5.024197572756073e-06,
+        "sealed_error_bound_m": 0.0002,
+        "raw_endpoints_and_source_times_preserved": true
+      },
+      "body_envelope_attestation": {
+        "required": true,
+        "verified_samples": 600,
+        "failures": 0,
+        "envelope": {
+          "radius": 0.6078651750202781,
+          "offset": 0.3125,
+          "above": 0.589,
+          "support_floor_z": 0.0,
+          "support_penetration_m": 0.02
+        }
+      },
+      "static_geometry_attestation": {
+        "expected_sha256": "b1de214d7b3dc3e0dec7207aba9c9675d7cc090a4c877c390b49c327ecd99a6e",
+        "cadence": "every actual body state; source timestamp unchanged",
+        "count": 600,
+        "faults": 0,
+        "fault_latched": false,
+        "last_sha256": "b1de214d7b3dc3e0dec7207aba9c9675d7cc090a4c877c390b49c327ecd99a6e",
+        "last_fault": "",
+        "total_wall_s": 1.6253686335403472,
+        "max_wall_s": 0.04072181088849902,
+        "full_stage_audits": 100,
+        "notice_timings": {
+          "usd_objects_changed": {
+            "count": 11002,
+            "total_wall_s": 4.8979827703442425,
+            "max_wall_s": 0.003081589937210083
+          }
+        },
+        "cache_hits": 500
+      },
+      "scans_per_sensor": [
+        100,
+        100
+      ],
+      "native_lidar_captures_per_sensor": 100,
+      "imu_source_summary": {
+        "configured_hz": 100,
+        "physics_hz": 500.0,
+        "native_samples": 5000,
+        "native_measured_source_hz": 499.99998079615995,
+        "measured_source_hz": 100.02000015926384,
+        "samples": 1001,
+        "invalid_reads": 0,
+        "duplicate_reads_skipped": 0,
+        "native_rate_samples_skipped": 3999,
+        "source_start_time": 2000074,
+        "source_end_time": 10000000458
+      },
+      "whole_sensor_preservation_status": "FAILED"
+    },
+    "physics_profile_enrolled_writeback": {
+      "physics_frames": 5000,
+      "physics_hz": 500.0,
+      "timing": {
+        "measured_state_samples": 600,
+        "measured_state_wall_seconds": 23.721182224806398,
+        "measured_state_sim_seconds": 9.982000000000001,
+        "wall_seconds_per_sim_second": 2.3763957348032854,
+        "realtime_factor": 0.4208053336212449,
+        "state_wall_hz": 25.25169253046741,
+        "longest_state_wall_gap_s": 0.23632403300143778,
+        "longest_rays_wall_gap_s": [
+          0.41777083091437817,
+          0.41779735893942416
+        ]
+      },
+      "phase_timings": {
+        "receive_command": {
+          "count": 2500,
+          "total_wall_s": 0.084175891475752,
+          "max_wall_s": 0.00011855806224048138
+        },
+        "physics_only_two_steps": {
+          "count": 2500,
+          "total_wall_s": 18.244649842148647,
+          "max_wall_s": 0.218017159961164
+        },
+        "physics_two_steps_without_native_capture": {
+          "count": 2400,
+          "total_wall_s": 15.454379639821127,
+          "max_wall_s": 0.014329195022583008
+        },
+        "physics_two_steps_with_native_capture": {
+          "count": 100,
+          "total_wall_s": 2.8063887904863805,
+          "max_wall_s": 0.2180251961108297
+        },
+        "measured_state_and_udp": {
+          "count": 500,
+          "total_wall_s": 3.4256748473271728,
+          "max_wall_s": 0.014659467851743102
+        },
+        "dual_cloud_filter_pack_and_udp": {
+          "count": 100,
+          "total_wall_s": 1.6676374981179833,
+          "max_wall_s": 0.026895149843767285
+        }
+      },
+      "physics_callback_timings": {
+        "official_policy": {
+          "count": 6000,
+          "total_wall_s": 1.4567824262194335,
+          "max_wall_s": 0.033211868023499846
+        },
+        "dynamic_actor_updates": {
+          "count": 5000,
+          "total_wall_s": 1.5034031949471682,
+          "max_wall_s": 0.0007768198847770691
+        },
+        "command_expiry": {
+          "count": 5000,
+          "total_wall_s": 0.010574976447969675,
+          "max_wall_s": 2.2137071937322617e-05
+        },
+        "native_lidar_gate_and_begin_witness": {
+          "count": 5000,
+          "total_wall_s": 1.3399231673683971,
+          "max_wall_s": 0.20321149798110127
+        },
+        "native_imu": {
+          "count": 5000,
+          "total_wall_s": 0.29666306148283184,
+          "max_wall_s": 0.0012565020006150007
+        }
+      },
+      "physics_cpu_threads": {
+        "requested": null,
+        "original": 8,
+        "readback": 8
+      },
+      "physics_usd_state_writeback": {
+        "requested": false,
+        "original": true,
+        "readback": false
+      },
+      "native_floor_hit_audit": {
+        "scans": 200,
+        "native_floor_hits": 499003,
+        "max_abs_error_m": 5.024197572756073e-06,
+        "sealed_error_bound_m": 0.0002,
+        "raw_endpoints_and_source_times_preserved": true
+      },
+      "body_envelope_attestation": {
+        "required": true,
+        "verified_samples": 600,
+        "failures": 0,
+        "envelope": {
+          "radius": 0.6078651750202781,
+          "offset": 0.3125,
+          "above": 0.589,
+          "support_floor_z": 0.0,
+          "support_penetration_m": 0.02
+        }
+      },
+      "static_geometry_attestation": {
+        "expected_sha256": "b1de214d7b3dc3e0dec7207aba9c9675d7cc090a4c877c390b49c327ecd99a6e",
+        "cadence": "every actual body state; source timestamp unchanged",
+        "count": 600,
+        "faults": 0,
+        "fault_latched": false,
+        "last_sha256": "b1de214d7b3dc3e0dec7207aba9c9675d7cc090a4c877c390b49c327ecd99a6e",
+        "last_fault": "",
+        "total_wall_s": 0.015295329969376326,
+        "max_wall_s": 0.013844487955793738,
+        "full_stage_audits": 1,
+        "notice_timings": {
+          "usd_objects_changed": {
+            "count": 11002,
+            "total_wall_s": 4.551717130932957,
+            "max_wall_s": 0.002440514974296093
+          }
+        },
+        "cache_hits": 599
+      },
+      "scans_per_sensor": [
+        100,
+        100
+      ],
+      "native_lidar_captures_per_sensor": 100,
+      "imu_source_summary": {
+        "configured_hz": 100,
+        "physics_hz": 500.0,
+        "native_samples": 5000,
+        "native_measured_source_hz": 499.99998079615995,
+        "measured_source_hz": 100.02000015926384,
+        "samples": 1001,
+        "invalid_reads": 0,
+        "duplicate_reads_skipped": 0,
+        "native_rate_samples_skipped": 3999,
+        "source_start_time": 2000074,
+        "source_end_time": 10000000458
+      },
+      "whole_sensor_preservation_status": "FAILED"
+    },
+    "physics_profile_no_velocity": {
+      "physics_frames": 5000,
+      "physics_hz": 500.0,
+      "timing": {
+        "measured_state_samples": 600,
+        "measured_state_wall_seconds": 24.160300947958604,
+        "measured_state_sim_seconds": 9.982000000000001,
+        "wall_seconds_per_sim_second": 2.4203867910196957,
+        "realtime_factor": 0.4131571051826413,
+        "state_wall_hz": 24.792737527990596,
+        "longest_state_wall_gap_s": 0.23446430801413953,
+        "longest_rays_wall_gap_s": [
+          0.4511188850738108,
+          0.45085911615751684
+        ]
+      },
+      "phase_timings": {
+        "receive_command": {
+          "count": 2500,
+          "total_wall_s": 0.08756331447511911,
+          "max_wall_s": 0.00012825801968574524
+        },
+        "physics_only_two_steps": {
+          "count": 2500,
+          "total_wall_s": 18.796060805674642,
+          "max_wall_s": 0.22103334893472493
+        },
+        "physics_two_steps_without_native_capture": {
+          "count": 2400,
+          "total_wall_s": 16.060270486865193,
+          "max_wall_s": 0.015756825916469097
+        },
+        "physics_two_steps_with_native_capture": {
+          "count": 100,
+          "total_wall_s": 2.754994322778657,
+          "max_wall_s": 0.2210393468849361
+        },
+        "measured_state_and_udp": {
+          "count": 500,
+          "total_wall_s": 3.3556807574350387,
+          "max_wall_s": 0.014809269923716784
+        },
+        "dual_cloud_filter_pack_and_udp": {
+          "count": 100,
+          "total_wall_s": 1.6326321077067405,
+          "max_wall_s": 0.023209356935694814
+        }
+      },
+      "physics_callback_timings": {
+        "official_policy": {
+          "count": 6000,
+          "total_wall_s": 1.4231011955998838,
+          "max_wall_s": 0.02761407010257244
+        },
+        "dynamic_actor_updates": {
+          "count": 5000,
+          "total_wall_s": 1.4609790942631662,
+          "max_wall_s": 0.0008667490910738707
+        },
+        "command_expiry": {
+          "count": 5000,
+          "total_wall_s": 0.011137777008116245,
+          "max_wall_s": 0.000196739099919796
+        },
+        "native_lidar_gate_and_begin_witness": {
+          "count": 5000,
+          "total_wall_s": 1.2196707867551595,
+          "max_wall_s": 0.2059341489803046
+        },
+        "native_imu": {
+          "count": 5000,
+          "total_wall_s": 0.2817114223726094,
+          "max_wall_s": 0.0003418140113353729
+        }
+      },
+      "physics_cpu_threads": {
+        "requested": null,
+        "original": 8,
+        "readback": 8
+      },
+      "physics_usd_state_writeback": {
+        "requested": null,
+        "original": true,
+        "readback": true
+      },
+      "physics_usd_velocity_writeback": {
+        "requested": false,
+        "original": true,
+        "readback": false
+      },
+      "native_floor_hit_audit": {
+        "scans": 200,
+        "native_floor_hits": 499003,
+        "max_abs_error_m": 5.024197572756073e-06,
+        "sealed_error_bound_m": 0.0002,
+        "raw_endpoints_and_source_times_preserved": true
+      },
+      "body_envelope_attestation": {
+        "required": true,
+        "verified_samples": 600,
+        "failures": 0,
+        "envelope": {
+          "radius": 0.6078651750202781,
+          "offset": 0.3125,
+          "above": 0.589,
+          "support_floor_z": 0.0,
+          "support_penetration_m": 0.02
+        }
+      },
+      "static_geometry_attestation": {
+        "expected_sha256": "b1de214d7b3dc3e0dec7207aba9c9675d7cc090a4c877c390b49c327ecd99a6e",
+        "cadence": "every actual body state; source timestamp unchanged",
+        "count": 600,
+        "faults": 0,
+        "fault_latched": false,
+        "last_sha256": "b1de214d7b3dc3e0dec7207aba9c9675d7cc090a4c877c390b49c327ecd99a6e",
+        "last_fault": "",
+        "total_wall_s": 0.017514838138595223,
+        "max_wall_s": 0.016051860060542822,
+        "full_stage_audits": 1,
+        "notice_timings": {
+          "usd_objects_changed": {
+            "count": 10902,
+            "total_wall_s": 3.263237808132544,
+            "max_wall_s": 0.0016251171473413706
+          }
+        },
+        "cache_hits": 599
+      },
+      "scans_per_sensor": [
+        100,
+        100
+      ],
+      "native_lidar_captures_per_sensor": 100,
+      "imu_source_summary": {
+        "configured_hz": 100,
+        "physics_hz": 500.0,
+        "native_samples": 5000,
+        "native_measured_source_hz": 499.99998079615995,
+        "measured_source_hz": 100.02000015926384,
+        "samples": 1001,
+        "invalid_reads": 0,
+        "duplicate_reads_skipped": 0,
+        "native_rate_samples_skipped": 3999,
+        "source_start_time": 2000074,
+        "source_end_time": 10000000458
+      },
+      "whole_sensor_preservation_status": "COMPONENT_RAW_SOURCE_AND_ORIGINAL_NATIVE_PHASE_CHECKS_PASSED; no_navigation_acceptance"
+    }
+  },
+  "experiment_outcomes": {
+    "cpu_threads_zero": "Not selected: one bounded run RTF .2787907, ray wall gap .719476s still exceeds original .5s receipt; not a universal threading conclusion.",
+    "tensor_only": "FAIL after10steps: native_floor_endpoint_error_exceeds_sealed_bound; zero complete scans. Original guard correctly rejected stale USD sensor pose.",
+    "capture_writeback": "Partial: actual .075m/s gait, full13body and raw floor/end-source checks passed; native IMU orientation/coordinate frame freshness FAIL.",
+    "enrolled_writeback": "Partial: full_audits reduced100->1 and RTF .4208053; raw gait identical to capture run. Same native IMU orientation/coordinate frame freshness FAIL.",
+    "navigation": "All listed runs are bounded components without original ROS navigation/Action. No v35 or system navigation pass.",
+    "velocity_only_writeback": "COMPONENT ORIGINAL-PHASE CHECKS PASSED: UPDATE_TO_USD true keeps500Hz actual Pose transforms; only USD velocity publication false. Original native500->100Hz IMU stamps, all600raw body/link/policy rows and full13geometry preserved; IMU1001orientation values and100BEGIN/END actualphase checks passed. Original v35 Action remains untested here."
+  },
+  "notice_accounting": {
+    "explicit_verify_vs_listener": "The earlier .016s/.0209s counters measure StageGeometryVerifier.verify only. They exclude its ObjectsChanged listener invoked during USD changes inside other timers.",
+    "notice_profile_total_wall_s": 9.79318466829136,
+    "notice_profile_count": 10902,
+    "additivity": "Notice callback timings are nested inside physics/actor/other callbacks. Never sum them with enclosing totals or call all native residual pure solver."
+  },
+  "imu_native_source_and_freshness": {
+    "configured_original_mount_and_filters": {
+      "model": "Isaac 6 PhysX experimental IMUSensor",
+      "native_frequency_hz": 500,
+      "frequency_hz": 100,
+      "origin": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "orientation_wxyz": [
+        1.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "include_gravity": true,
+      "linear_acceleration_filter_size": 1,
+      "angular_velocity_filter_size": 1,
+      "orientation_filter_size": 1,
+      "output_sampling": "real physics-step readings retain native source time"
+    },
+    "comparisons": {
+      "physics_profile_notices": {
+        "body_samples": 600,
+        "imu_output_samples": 1001,
+        "same_physics_tick_body_matches": 500,
+        "native_f32_stamp_nearest_tick_max_abs_residual_ns": 458,
+        "unique_orientation_values": 1001,
+        "orientation_value_changes": 1000,
+        "first_orientation_change_source_ns": [
+          9999971,
+          19999962,
+          29999952,
+          39999943,
+          49999933,
+          59999924,
+          69999914,
+          79999905
+        ],
+        "orientation_error_rad": {
+          "min": 5.07515262541963e-07,
+          "median": 4.896745978762737e-06,
+          "max": 4.126858769924327e-05
+        },
+        "body_frame_angular_velocity_error_radps": {
+          "min": 1.4748532927360088e-11,
+          "median": 1.2728161553452088e-09,
+          "max": 2.9129196628721298e-08
+        },
+        "worst_orientation_example": {
+          "body_source_ns": 20000000,
+          "native_imu_source_ns": 19999962,
+          "original_body_pose": [
+            -7.926105976104736,
+            -5.022728443145752,
+            0.48178738355636597,
+            -0.0027424737345427275,
+            -0.0015902380691841245,
+            -0.012830349616706371,
+            0.999912679195404
+          ],
+          "original_world_angular_velocity": [
+            0.001257135416381061,
+            0.004416396375745535,
+            -0.020132355391979218
+          ],
+          "original_imu": {
+            "sequence": 2,
+            "sim_time_ns": 19999962,
+            "absolute_sensor_time": 2.0399999618530273,
+            "orientation_xyzw": [
+              -0.0027438232209533453,
+              -0.0015946178464218974,
+              -0.012810232117772102,
+              0.9999129176139832
+            ],
+            "angular_velocity": [
+              0.0010779983131214976,
+              0.004556743893772364,
+              -0.020111456513404846
+            ],
+            "linear_acceleration": [
+              0.004563216120004654,
+              -0.05110429227352142,
+              9.760355949401855
+            ]
+          },
+          "orientation_error_rad": 4.126858769924327e-05,
+          "angular_error_radps": 8.499049536549521e-09
+        }
+      },
+      "physics_profile_capture_writeback": {
+        "body_samples": 600,
+        "imu_output_samples": 1001,
+        "same_physics_tick_body_matches": 500,
+        "native_f32_stamp_nearest_tick_max_abs_residual_ns": 458,
+        "unique_orientation_values": 101,
+        "orientation_value_changes": 100,
+        "first_orientation_change_source_ns": [
+          19999962,
+          120000105,
+          220000010,
+          319999914,
+          420000057,
+          519999962,
+          620000105,
+          720000010
+        ],
+        "orientation_error_rad": {
+          "min": 3.0477475802067328e-05,
+          "median": 0.0017272565537836302,
+          "max": 0.0216715048394373
+        },
+        "body_frame_angular_velocity_error_radps": {
+          "min": 3.3206459761107245e-09,
+          "median": 2.8811021248329272e-06,
+          "max": 0.006422586669156321
+        },
+        "worst_orientation_example": {
+          "body_source_ns": 9900000000,
+          "native_imu_source_ns": 9900000076,
+          "original_body_pose": [
+            -7.164807319641113,
+            -4.9111504554748535,
+            0.5309335589408875,
+            -0.0037555727176368237,
+            0.001481418963521719,
+            0.007588203530758619,
+            0.9999631643295288
+          ],
+          "original_world_angular_velocity": [
+            0.22529049217700958,
+            0.08477623015642166,
+            0.020161490887403488
+          ],
+          "original_imu": {
+            "sequence": 990,
+            "sim_time_ns": 9900000076,
+            "absolute_sensor_time": 11.920000076293945,
+            "orientation_xyzw": [
+              -0.0144058708101511,
+              -0.0002881879627238959,
+              0.0066694593988358974,
+              0.9998739957809448
+            ],
+            "angular_velocity": [
+              0.22640953958034515,
+              0.08114972710609436,
+              0.022421909496188164
+            ],
+            "linear_acceleration": [
+              -0.4985724985599518,
+              -0.5243394374847412,
+              9.620803833007812
+            ]
+          },
+          "orientation_error_rad": 0.0216715048394373,
+          "angular_error_radps": 0.0009718944864580066
+        }
+      },
+      "physics_profile_enrolled_writeback": {
+        "body_samples": 600,
+        "imu_output_samples": 1001,
+        "same_physics_tick_body_matches": 500,
+        "native_f32_stamp_nearest_tick_max_abs_residual_ns": 458,
+        "unique_orientation_values": 101,
+        "orientation_value_changes": 100,
+        "first_orientation_change_source_ns": [
+          19999962,
+          120000105,
+          220000010,
+          319999914,
+          420000057,
+          519999962,
+          620000105,
+          720000010
+        ],
+        "orientation_error_rad": {
+          "min": 3.0477475802067328e-05,
+          "median": 0.0017272565537836302,
+          "max": 0.0216715048394373
+        },
+        "body_frame_angular_velocity_error_radps": {
+          "min": 3.3206459761107245e-09,
+          "median": 2.8811021248329272e-06,
+          "max": 0.006422586669156321
+        },
+        "worst_orientation_example": {
+          "body_source_ns": 9900000000,
+          "native_imu_source_ns": 9900000076,
+          "original_body_pose": [
+            -7.164807319641113,
+            -4.9111504554748535,
+            0.5309335589408875,
+            -0.0037555727176368237,
+            0.001481418963521719,
+            0.007588203530758619,
+            0.9999631643295288
+          ],
+          "original_world_angular_velocity": [
+            0.22529049217700958,
+            0.08477623015642166,
+            0.020161490887403488
+          ],
+          "original_imu": {
+            "sequence": 990,
+            "sim_time_ns": 9900000076,
+            "absolute_sensor_time": 11.920000076293945,
+            "orientation_xyzw": [
+              -0.0144058708101511,
+              -0.0002881879627238959,
+              0.0066694593988358974,
+              0.9998739957809448
+            ],
+            "angular_velocity": [
+              0.22640953958034515,
+              0.08114972710609436,
+              0.022421909496188164
+            ],
+            "linear_acceleration": [
+              -0.4985724985599518,
+              -0.5243394374847412,
+              9.620803833007812
+            ]
+          },
+          "orientation_error_rad": 0.0216715048394373,
+          "angular_error_radps": 0.0009718944864580066
+        }
+      },
+      "physics_profile_no_velocity": {
+        "body_samples": 600,
+        "imu_output_samples": 1001,
+        "same_physics_tick_body_matches": 500,
+        "native_f32_stamp_nearest_tick_max_abs_residual_ns": 458,
+        "unique_orientation_values": 1001,
+        "orientation_value_changes": 1000,
+        "first_orientation_change_source_ns": [
+          9999971,
+          19999962,
+          29999952,
+          39999943,
+          49999933,
+          59999924,
+          69999914,
+          79999905
+        ],
+        "orientation_error_rad": {
+          "min": 2.953879249868427e-05,
+          "median": 8.791667761967504e-05,
+          "max": 0.0012029358493022698
+        },
+        "body_frame_angular_velocity_error_radps": {
+          "min": 5.161257004147169e-10,
+          "median": 4.692626686872321e-08,
+          "max": 6.0323248246756944e-05
+        },
+        "worst_orientation_example": {
+          "body_source_ns": 6700000000,
+          "native_imu_source_ns": 6700000267,
+          "original_body_pose": [
+            -7.407289981842041,
+            -4.933861255645752,
+            0.5356941223144531,
+            -0.008164308965206146,
+            -0.0006401061546057463,
+            0.01006411574780941,
+            0.9999158978462219
+          ],
+          "original_world_angular_velocity": [
+            0.5756162405014038,
+            0.1892998367547989,
+            0.022661447525024414
+          ],
+          "original_imu": {
+            "sequence": 670,
+            "sim_time_ns": 6700000267,
+            "absolute_sensor_time": 8.720000267028809,
+            "orientation_xyzw": [
+              -0.008739449083805084,
+              -0.0008142705191858113,
+              0.010039184242486954,
+              0.9999111294746399
+            ],
+            "angular_velocity": [
+              0.5793355703353882,
+              0.17728811502456665,
+              0.024924982339143753
+            ],
+            "linear_acceleration": [
+              -1.6556670665740967,
+              -0.30239617824554443,
+              10.97154426574707
+            ]
+          },
+          "orientation_error_rad": 0.0012029358493022698,
+          "angular_error_radps": 9.83022648860111e-06
+        }
+      }
+    },
+    "diagnostic_pairing": "Unique nearest500Hz tick only, native f32 stamp residual <=458ns; no data interpolation, source replacement or sensor-field overwrite.",
+    "actual_source_cadence_preserved": true,
+    "orientation_freshness_preserved": false,
+    "baseline_scope": "notices baseline is a park component; capture/enrolled are walking .075 components. Error comparison is a freshness control, not an identical-command policy performance A/B.",
+    "conclusion": "Native100Hz output stamps and500Hz native read counts continue, but orientation values change only100times in10s after USD publication at20,120,220...ms. They do not represent the same actual body transform at the intervening physical ticks. Body-frame angular coordinates also mismatch. Velocity-only writeback restores every100Hz orientation change. The original native orientation is a BEGIN transform with an END timestamp:100 directly saved BEGIN bundles match IMU END within5.16e-8rad, while500same-END body comparisons show the expected2ms pose lag rather than a10Hz stall. Original native gyro coordinates match fresh same-tick world angular velocity in the sensor supplied frame to1.69e-8rad/s."
+  },
+  "gait_and_geometry": {
+    "raw_body_link_bundle_pose_literal_equal": true,
+    "capture_vs_enrolled_full_trajectory_literal_equal": true,
+    "body_samples": 600,
+    "complete13colliders_every_sample": true,
+    "actual_world_displacement_from_first_record_m": [
+      0.774505615234375,
+      0.11302757263183594,
+      0.038256168365478516
+    ],
+    "body_z_min_max_m": [
+      0.4806823432445526,
+      0.5386242270469666
+    ],
+    "measured_four_foot_clearance": {
+      "/World/Spot/fl_foot/collisions/mesh_0": {
+        "sampled_bottom_min_m": -0.00040842965245246887,
+        "sampled_bottom_max_m": 0.08122489973902702,
+        "samples_above_10mm": 96,
+        "air_contact_threshold_transitions": 12
+      },
+      "/World/Spot/fr_foot/collisions/mesh_0": {
+        "sampled_bottom_min_m": -2.6959925889968872e-05,
+        "sampled_bottom_max_m": 0.06913315877318382,
+        "samples_above_10mm": 101,
+        "air_contact_threshold_transitions": 11
+      },
+      "/World/Spot/hl_foot/collisions/mesh_0": {
+        "sampled_bottom_min_m": -2.4475157260894775e-06,
+        "sampled_bottom_max_m": 0.07182420417666435,
+        "samples_above_10mm": 99,
+        "air_contact_threshold_transitions": 11
+      },
+      "/World/Spot/hr_foot/collisions/mesh_0": {
+        "sampled_bottom_min_m": -1.1537224054336548e-05,
+        "sampled_bottom_max_m": 0.05491979047656059,
+        "samples_above_10mm": 104,
+        "air_contact_threshold_transitions": 12
+      }
+    },
+    "ten_mm_scope": "Descriptive sampled air/contact contrast, not a new navigation/stop threshold or continuous-contact proof.",
+    "actual_12joint_position_range_movement_rad": [
+      0.2307138666510582,
+      0.4139474406838417,
+      0.2922345697879791,
+      0.2498943731188774,
+      0.5804865658283234,
+      0.34091633558273315,
+      0.3001379370689392,
+      0.2970935106277466,
+      0.34203577041625977,
+      0.4636920690536499,
+      0.557159423828125,
+      0.3114809989929199
+    ],
+    "plant_counter_minus_actual_source_tick_values": [
+      1000
+    ],
+    "actuation_source_audit": "Current inspected quadruped/scene runtime uses official dof position targets. No runtime root pose or velocity setter found. update_transformations publishes simulated PhysX transforms to USD; raw files alone are not a complete hidden-call trace.",
+    "no_navigation_route_credit_inference": true
+  },
+  "lidar_phase_and_floor": {
+    "original_raw_scan_rows": 200,
+    "original_native_floor_hits": 499003,
+    "sealed_bound_m": 0.0002,
+    "max_abs_floor_error_m": 5.024197572756073e-06,
+    "native_END_minus_actual_BEGIN_ns": [
+      2000001,
+      2000471
+    ],
+    "interpretation": "Original2ms BEGIN/END phase plus native f32 timestamp rounding; raw source/endpoints unchanged. This check does not validate IMU transform freshness."
+  },
+  "official_native_imu_source": {
+    "path": "/home/eric/isaacsim/exts/isaacsim.sensors.experimental.physics/include/isaacsim/sensors/experimental/physics/IImuSensor.h",
+    "sha256": "1b1f28d5d257d8e4ee551c4ab74186bd712f1b27362baadc75461153d2a9d99f",
+    "declaration": "IImuSensor.h:31–46: angular/acceleration local sensor frame, orientation world frame. :70–76: IPrimDataReader for rigid body velocity, Pose.h for sensor world transform; plugin processes physical substeps.",
+    "inference": "Matches observed fresh native velocity timestamps but stale USD-derived sensor orientation and local coordinate transform; native C++ implementation is binary and not fully inspectable."
+  },
+  "reproduction_python": "# Offline only; original stored sensor and body timestamps are never changed.\n# Identity IMU mount and filter sizes 1 are verified in original sealed config.\n# Associate a native f32 timestamp only with its uniquely nearest original\n# 2 ms tick; measured max residual 458 ns is far below a half-tick. Do not\n# interpolate pose or substitute this diagnostic key into published records.\ndef rotation_xyzw(q):\n    q=np.asarray(q,dtype=float);q=q/np.linalg.norm(q);x,y,z,w=q\n    return np.array([[1-2*(y*y+z*z),2*(x*y-z*w),2*(x*z+y*w)],\n      [2*(x*y+z*w),1-2*(x*x+z*z),2*(y*z-x*w)],\n      [2*(x*z-y*w),2*(y*z+x*w),1-2*(x*x+y*y)]])\ndef audit(directory):\n    body=rows(directory/'trajectory.jsonl')\n    imu=rows(directory/'imu_readings.jsonl')\n    keyed={round(r['sim_time_ns']/2_000_000)*2_000_000:r for r in imu}\n    assert len(keyed)==len(imu)\n    residual=max(abs(r['sim_time_ns']-round(r['sim_time_ns']/2_000_000)*2_000_000) for r in imu)\n    assert residual<1_000_000\n    matched=[]\n    for b in body:\n      i=keyed.get(b['sim_time_ns'])\n      if i is None:continue\n      qb=np.asarray(b['pose'][3:],dtype=float);qi=np.asarray(i['orientation_xyzw'],dtype=float)\n      dot=abs(float((qb/np.linalg.norm(qb))@(qi/np.linalg.norm(qi))))\n      qe=float(2*np.arccos(min(1.,dot)))\n      predicted=rotation_xyzw(qb).T@np.asarray(b['angular_velocity_world'])\n      we=float(np.linalg.norm(predicted-np.asarray(i['angular_velocity'])))\n      matched.append((qe,we,b,i))\n    def stats(v):return dict(min=min(v),median=statistics.median(v),max=max(v))\n    changes=[r['sim_time_ns'] for n,r in enumerate(imu) if n and r['orientation_xyzw']!=imu[n-1]['orientation_xyzw']]\n    worst=max(matched,key=lambda r:r[0])\n    return dict(body_samples=len(body),imu_output_samples=len(imu),same_physics_tick_body_matches=len(matched),\n      native_f32_stamp_nearest_tick_max_abs_residual_ns=residual,\n      unique_orientation_values=len({tuple(r['orientation_xyzw']) for r in imu}),\n      orientation_value_changes=len(changes),first_orientation_change_source_ns=changes[:8],\n      orientation_error_rad=stats([r[0] for r in matched]),\n      body_frame_angular_velocity_error_radps=stats([r[1] for r in matched]),\n      worst_orientation_example=dict(body_source_ns=worst[2]['sim_time_ns'],native_imu_source_ns=worst[3]['sim_time_ns'],\n        original_body_pose=worst[2]['pose'],original_world_angular_velocity=worst[2]['angular_velocity_world'],\n        original_imu=worst[3],orientation_error_rad=worst[0],angular_error_radps=worst[1]))\n\ndef audit_imu_phase(directory, reference_directory):\n    body=rows(directory/'trajectory.jsonl');imu=rows(directory/'imu_readings.jsonl')\n    ref_body=rows(reference_directory/'trajectory.jsonl');ref_imu=rows(reference_directory/'imu_readings.jsonl')\n    keyed={round(r['sim_time_ns']/2_000_000)*2_000_000:r for r in imu}\n    phase=[];gyro=[]\n    for b in body:\n      i=keyed.get(b['sim_time_ns'])\n      if i is not None:\n        predicted=rotation_xyzw(i['orientation_xyzw']).T@np.asarray(b['angular_velocity_world'])\n        gyro.append(float(np.linalg.norm(predicted-np.asarray(i['angular_velocity']))))\n      if b['sim_time_ns']%100_000_000!=18_000_000:continue\n      i=keyed.get(b['sim_time_ns']+2_000_000)\n      if i is None:continue\n      qb=np.asarray(b['pose'][3:]);qi=np.asarray(i['orientation_xyzw'])\n      dot=abs(float((qb/np.linalg.norm(qb))@(qi/np.linalg.norm(qi))))\n      phase.append(float(2*np.arccos(min(1.,dot))))\n    capture=[(x,y) for x,y in zip(imu,ref_imu)\n      if round(x['sim_time_ns']/2_000_000)*2_000_000%100_000_000==20_000_000]\n    return dict(actual_BEGIN_to_native_IMU_END_matches=len(phase),\n      orientation_BEGIN_END_error_rad=dict(min=min(phase),median=statistics.median(phase),max=max(phase)),\n      same_tick_world_gyro_rotated_by_original_IMU_frame_matches=len(gyro),\n      gyro_in_original_IMU_frame_error_radps=dict(min=min(gyro),median=statistics.median(gyro),max=max(gyro)),\n      complete_raw_body_trajectory_literal_equal_to_reference=body==ref_body,\n      original_IMU_source_ns_array_literal_equal_to_reference=[r['sim_time_ns'] for r in imu]==[r['sim_time_ns'] for r in ref_imu],\n      capture_tick_records=len(capture),capture_tick_orientation_literal_equal=sum(x['orientation_xyzw']==y['orientation_xyzw'] for x,y in capture),\n      capture_tick_gyro_literal_equal=sum(x['angular_velocity']==y['angular_velocity'] for x,y in capture),\n      scope='Native orientation uses the original actual BEGIN transform and native END stamp; compare original phase, not demand post-step body quaternion equality or restamp.')\n",
+  "evidence_sha256": {
+    "physics_profile_v34_sealed/summary.json": {
+      "path": "/home/eric/wjg/d1max-build-isaac/physics_profile_v34_sealed/summary.json",
+      "sha256": "1670c755211bc4d16e49b2bcfcf485abdfe8f2309eaa7c5f459abd1d73d5cea5",
+      "bytes": 28239
+    },
+    "physics_profile_v34_sealed/component.log": {
+      "path": "/home/eric/wjg/d1max-build-isaac/physics_profile_v34_sealed/component.log",
+      "sha256": "4e3991ef38f8ae18d006573f6079c1b3a58f896c1576410864ec6bfbdb117da3",
+      "bytes": 21747
+    },
+    "physics_profile_v34_sealed/trajectory.jsonl": {
+      "path": "/home/eric/wjg/d1max-build-isaac/physics_profile_v34_sealed/trajectory.jsonl",
+      "sha256": "f555d6d6e68cc77d41334c2996877286e223886332267ce30c5f64e83d272cb2",
+      "bytes": 1317377
+    },
+    "physics_profile_v34_sealed/imu_readings.jsonl": {
+      "path": "/home/eric/wjg/d1max-build-isaac/physics_profile_v34_sealed/imu_readings.jsonl",
+      "sha256": "2cf30b087d7e4f000e05a168f27c915ddecfd0faf34b1d8bcad3b279ccb3b7c2",
+      "bytes": 362706
+    },
+    "physics_profile_v34_sealed/robot_link_readings.jsonl": {
+      "path": "/home/eric/wjg/d1max-build-isaac/physics_profile_v34_sealed/robot_link_readings.jsonl",
+      "sha256": "c918910356c083f7610d6dc22dc62a7215199ebe7ad28e40227712967b3b383d",
+      "bytes": 4643390
+    },
+    "physics_profile_v34_sealed/floor_hit_audit.jsonl": {
+      "path": "/home/eric/wjg/d1max-build-isaac/physics_profile_v34_sealed/floor_hit_audit.jsonl",
+      "sha256": "a4c350e8d0c19e6a1011f60c1b38e43d76b8b6f8b13e9018f316f6ee6665fc09",
+      "bytes": 52256
+    },
+    "physics_profile_v34_sealed/collision_audit.json": {
+      "path": "/home/eric/wjg/d1max-build-isaac/physics_profile_v34_sealed/collision_audit.json",
+      "sha256": "1138d9b6bffd4b49f25de89437177b3fa0ccf2f70134199c7085fea4ad29bbca",
+      "bytes": 3164
+    },
+    "physics_profile_v34_sealed/quadruped_asset_metadata.json": {
+      "path": "/home/eric/wjg/d1max-build-isaac/physics_profile_v34_sealed/quadruped_asset_metadata.json",
+      "sha256": "95d1ccd3e0d24c94276033b50f4526dedee22d05811b511c00355c36ad72910a",
+      "bytes": 15617
+    },
+    "physics_profile_cpu0/summary.json": {
+      "path": "/home/eric/wjg/d1max-build-isaac/physics_profile_cpu0/summary.json",
+      "sha256": "2e5ec97b9a69779429224caff50d25a8b0374d02ccad594e67a3b31ff7a81ad9",
+      "bytes": 28323
+    },
+    "physics_profile_cpu0/component.log": {
+      "path": "/home/eric/wjg/d1max-build-isaac/physics_profile_cpu0/component.log",
+      "sha256": "b9421acaa9bf16b905ff83ce4189cf346cc4b301d646050d387c4259eb9c5642",
+      "bytes": 21743
+    },
+    "physics_profile_cpu0/trajectory.jsonl": {
+      "path": "/home/eric/wjg/d1max-build-isaac/physics_profile_cpu0/trajectory.jsonl",
+      "sha256": "f555d6d6e68cc77d41334c2996877286e223886332267ce30c5f64e83d272cb2",
+      "bytes": 1317377
+    },
+    "physics_profile_cpu0/imu_readings.jsonl": {
+      "path": "/home/eric/wjg/d1max-build-isaac/physics_profile_cpu0/imu_readings.jsonl",
+      "sha256": "2cf30b087d7e4f000e05a168f27c915ddecfd0faf34b1d8bcad3b279ccb3b7c2",
+      "bytes": 362706
+    },
+    "physics_profile_cpu0/robot_link_readings.jsonl": {
+      "path": "/home/eric/wjg/d1max-build-isaac/physics_profile_cpu0/robot_link_readings.jsonl",
+      "sha256": "c918910356c083f7610d6dc22dc62a7215199ebe7ad28e40227712967b3b383d",
+      "bytes": 4643390
+    },
+    "physics_profile_cpu0/floor_hit_audit.jsonl": {
+      "path": "/home/eric/wjg/d1max-build-isaac/physics_profile_cpu0/floor_hit_audit.jsonl",
+      "sha256": "a4c350e8d0c19e6a1011f60c1b38e43d76b8b6f8b13e9018f316f6ee6665fc09",
+      "bytes": 52256
+    },
+    "physics_profile_cpu0/collision_audit.json": {
+      "path": "/home/eric/wjg/d1max-build-isaac/physics_profile_cpu0/collision_audit.json",
+      "sha256": "b23bdbf290b20b06f1dd126651ff374ba79988bb7ee1b67d66a70d950f956d64",
+      "bytes": 3164
+    },
+    "physics_profile_cpu0/quadruped_asset_metadata.json": {
+      "path": "/home/eric/wjg/d1max-build-isaac/physics_profile_cpu0/quadruped_asset_metadata.json",
+      "sha256": "95d1ccd3e0d24c94276033b50f4526dedee22d05811b511c00355c36ad72910a",
+      "bytes": 15617
+    },
+    "physics_profile_notices/summary.json": {
+      "path": "/home/eric/wjg/d1max-build-isaac/physics_profile_notices/summary.json",
+      "sha256": "6d020811d976802c32c9bed48632eb4beee430f239286155bbe43dd558ecf521",
+      "bytes": 28829
+    },
+    "physics_profile_notices/component.log": {
+      "path": "/home/eric/wjg/d1max-build-isaac/physics_profile_notices/component.log",
+      "sha256": "103e84dbe4ce63b8dd70c43e525449f360370375d9bbb3aa1ebd92ff655b16b1",
+      "bytes": 21750
+    },
+    "physics_profile_notices/trajectory.jsonl": {
+      "path": "/home/eric/wjg/d1max-build-isaac/physics_profile_notices/trajectory.jsonl",
+      "sha256": "f555d6d6e68cc77d41334c2996877286e223886332267ce30c5f64e83d272cb2",
+      "bytes": 1317377
+    },
+    "physics_profile_notices/imu_readings.jsonl": {
+      "path": "/home/eric/wjg/d1max-build-isaac/physics_profile_notices/imu_readings.jsonl",
+      "sha256": "2cf30b087d7e4f000e05a168f27c915ddecfd0faf34b1d8bcad3b279ccb3b7c2",
+      "bytes": 362706
+    },
+    "physics_profile_notices/robot_link_readings.jsonl": {
+      "path": "/home/eric/wjg/d1max-build-isaac/physics_profile_notices/robot_link_readings.jsonl",
+      "sha256": "c918910356c083f7610d6dc22dc62a7215199ebe7ad28e40227712967b3b383d",
+      "bytes": 4643390
+    },
+    "physics_profile_notices/floor_hit_audit.jsonl": {
+      "path": "/home/eric/wjg/d1max-build-isaac/physics_profile_notices/floor_hit_audit.jsonl",
+      "sha256": "a4c350e8d0c19e6a1011f60c1b38e43d76b8b6f8b13e9018f316f6ee6665fc09",
+      "bytes": 52256
+    },
+    "physics_profile_notices/collision_audit.json": {
+      "path": "/home/eric/wjg/d1max-build-isaac/physics_profile_notices/collision_audit.json",
+      "sha256": "2dc3f9c47bedeb96a8ca473283d7e3c4e03e89e06734b6f7b0273d063654890c",
+      "bytes": 3164
+    },
+    "physics_profile_notices/quadruped_asset_metadata.json": {
+      "path": "/home/eric/wjg/d1max-build-isaac/physics_profile_notices/quadruped_asset_metadata.json",
+      "sha256": "95d1ccd3e0d24c94276033b50f4526dedee22d05811b511c00355c36ad72910a",
+      "bytes": 15617
+    },
+    "physics_profile_tensor_only/summary.json": {
+      "path": "/home/eric/wjg/d1max-build-isaac/physics_profile_tensor_only/summary.json",
+      "sha256": "3adf506d294e0f11b1466dced2c694b88d4a22b31454086c8b571d7c6938f8d3",
+      "bytes": 25153
+    },
+    "physics_profile_tensor_only/component.log": {
+      "path": "/home/eric/wjg/d1max-build-isaac/physics_profile_tensor_only/component.log",
+      "sha256": "4713f8b7bef1be3e1b60b5d4f50114a6a12fa5f2665f7cb0b6e659015cb1eb23",
+      "bytes": 22583
+    },
+    "physics_profile_tensor_only/trajectory.jsonl": {
+      "path": "/home/eric/wjg/d1max-build-isaac/physics_profile_tensor_only/trajectory.jsonl",
+      "sha256": "3d4deffea430e3b714fece8034cb28a9c2911f5bdb9dbb67bb691ffd2f4dca67",
+      "bytes": 4336
+    },
+    "physics_profile_tensor_only/imu_readings.jsonl": {
+      "path": "/home/eric/wjg/d1max-build-isaac/physics_profile_tensor_only/imu_readings.jsonl",
+      "sha256": "6a207292215070764c96c28141b68cd2cc4338064f30a21d21493c3ccba03583",
+      "bytes": 854
+    },
+    "physics_profile_tensor_only/robot_link_readings.jsonl": {
+      "path": "/home/eric/wjg/d1max-build-isaac/physics_profile_tensor_only/robot_link_readings.jsonl",
+      "sha256": "d9d1f7ef0be640089fe1731e4345329db6d66b97fb86a4bfff537c971b34f6a2",
+      "bytes": 15474
+    },
+    "physics_profile_tensor_only/floor_hit_audit.jsonl": {
+      "path": "/home/eric/wjg/d1max-build-isaac/physics_profile_tensor_only/floor_hit_audit.jsonl",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "physics_profile_tensor_only/collision_audit.json": {
+      "path": "/home/eric/wjg/d1max-build-isaac/physics_profile_tensor_only/collision_audit.json",
+      "sha256": "631105db05d4b1281774e9021859a4ac0ed45f0973e1887a3eb7e5f622088d82",
+      "bytes": 3153
+    },
+    "physics_profile_tensor_only/quadruped_asset_metadata.json": {
+      "path": "/home/eric/wjg/d1max-build-isaac/physics_profile_tensor_only/quadruped_asset_metadata.json",
+      "sha256": "95d1ccd3e0d24c94276033b50f4526dedee22d05811b511c00355c36ad72910a",
+      "bytes": 15617
+    },
+    "physics_profile_capture_writeback/summary.json": {
+      "path": "/home/eric/wjg/d1max-build-isaac/physics_profile_capture_writeback/summary.json",
+      "sha256": "4c39518a79a0b47880ba9d8e16564dbd7e30f492ab1df6eca53c6e7bbd17dd05",
+      "bytes": 28803
+    },
+    "physics_profile_capture_writeback/component.log": {
+      "path": "/home/eric/wjg/d1max-build-isaac/physics_profile_capture_writeback/component.log",
+      "sha256": "07a8c0ee54373e17ec08c59b5e1eb49dbbb44ead538bb22cb80227ba433ef291",
+      "bytes": 21743
+    },
+    "physics_profile_capture_writeback/trajectory.jsonl": {
+      "path": "/home/eric/wjg/d1max-build-isaac/physics_profile_capture_writeback/trajectory.jsonl",
+      "sha256": "28d37220a80b9bf42ef8265c1a837ba14e7153f11bbbbe370cebb78ac799a772",
+      "bytes": 1303477
+    },
+    "physics_profile_capture_writeback/imu_readings.jsonl": {
+      "path": "/home/eric/wjg/d1max-build-isaac/physics_profile_capture_writeback/imu_readings.jsonl",
+      "sha256": "21fbb2642006ace1747e9f749ee956623e9729939265c93d22404cba83eb55b7",
+      "bytes": 353981
+    },
+    "physics_profile_capture_writeback/robot_link_readings.jsonl": {
+      "path": "/home/eric/wjg/d1max-build-isaac/physics_profile_capture_writeback/robot_link_readings.jsonl",
+      "sha256": "cb2d73392ccee584c0f11b19d72ae0c2f500bb29d6c39c28060e80ea0885e92c",
+      "bytes": 4653835
+    },
+    "physics_profile_capture_writeback/floor_hit_audit.jsonl": {
+      "path": "/home/eric/wjg/d1max-build-isaac/physics_profile_capture_writeback/floor_hit_audit.jsonl",
+      "sha256": "fadc3cf52bacab1534e52d228076aeca134420e9a73f1dbdb3adfc219b3d67b2",
+      "bytes": 52264
+    },
+    "physics_profile_capture_writeback/collision_audit.json": {
+      "path": "/home/eric/wjg/d1max-build-isaac/physics_profile_capture_writeback/collision_audit.json",
+      "sha256": "b35cc3421509a70e5956062fca62dc3bd92a008a8d6f88e708ab26d61fe6a155",
+      "bytes": 3163
+    },
+    "physics_profile_capture_writeback/quadruped_asset_metadata.json": {
+      "path": "/home/eric/wjg/d1max-build-isaac/physics_profile_capture_writeback/quadruped_asset_metadata.json",
+      "sha256": "95d1ccd3e0d24c94276033b50f4526dedee22d05811b511c00355c36ad72910a",
+      "bytes": 15617
+    },
+    "physics_profile_enrolled_writeback/summary.json": {
+      "path": "/home/eric/wjg/d1max-build-isaac/physics_profile_enrolled_writeback/summary.json",
+      "sha256": "374bf52a47e2bfa629c3f5de35bb044d6f77cea8ac2d47406ce4eb0c3b7cb69c",
+      "bytes": 28874
+    },
+    "physics_profile_enrolled_writeback/component.log": {
+      "path": "/home/eric/wjg/d1max-build-isaac/physics_profile_enrolled_writeback/component.log",
+      "sha256": "5ed3c215d3501879aa2311f805df0ff95b31de2e96c817ae12eb1e974fe2490b",
+      "bytes": 21743
+    },
+    "physics_profile_enrolled_writeback/trajectory.jsonl": {
+      "path": "/home/eric/wjg/d1max-build-isaac/physics_profile_enrolled_writeback/trajectory.jsonl",
+      "sha256": "28d37220a80b9bf42ef8265c1a837ba14e7153f11bbbbe370cebb78ac799a772",
+      "bytes": 1303477
+    },
+    "physics_profile_enrolled_writeback/imu_readings.jsonl": {
+      "path": "/home/eric/wjg/d1max-build-isaac/physics_profile_enrolled_writeback/imu_readings.jsonl",
+      "sha256": "75422a4a46a6c82c807b468270357f5d1f550fd6c79e5001cd4dd940dcdd3655",
+      "bytes": 354123
+    },
+    "physics_profile_enrolled_writeback/robot_link_readings.jsonl": {
+      "path": "/home/eric/wjg/d1max-build-isaac/physics_profile_enrolled_writeback/robot_link_readings.jsonl",
+      "sha256": "cb2d73392ccee584c0f11b19d72ae0c2f500bb29d6c39c28060e80ea0885e92c",
+      "bytes": 4653835
+    },
+    "physics_profile_enrolled_writeback/floor_hit_audit.jsonl": {
+      "path": "/home/eric/wjg/d1max-build-isaac/physics_profile_enrolled_writeback/floor_hit_audit.jsonl",
+      "sha256": "fadc3cf52bacab1534e52d228076aeca134420e9a73f1dbdb3adfc219b3d67b2",
+      "bytes": 52264
+    },
+    "physics_profile_enrolled_writeback/collision_audit.json": {
+      "path": "/home/eric/wjg/d1max-build-isaac/physics_profile_enrolled_writeback/collision_audit.json",
+      "sha256": "c77457e06880780a63d5a2bf303ac6e16f7f58df668f50896f31c42bca2abc37",
+      "bytes": 3163
+    },
+    "physics_profile_enrolled_writeback/quadruped_asset_metadata.json": {
+      "path": "/home/eric/wjg/d1max-build-isaac/physics_profile_enrolled_writeback/quadruped_asset_metadata.json",
+      "sha256": "95d1ccd3e0d24c94276033b50f4526dedee22d05811b511c00355c36ad72910a",
+      "bytes": 15617
+    },
+    "isaac-candidate-v34-campus-crossing/simulation/assets/scene_config.json": {
+      "path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v34-campus-crossing/simulation/assets/scene_config.json",
+      "sha256": "6795caccc328bd1b5d0f508b1deb6b267253b1c8ac9379885604414b354c7025",
+      "bytes": 58165
+    },
+    "physics_profile_no_velocity/summary.json": {
+      "path": "/home/eric/wjg/d1max-build-isaac/physics_profile_no_velocity/summary.json",
+      "sha256": "5be308331c2f57fefe858fb0d697217eac2aa4a4f7b7b8632ee62c43b37e6b63",
+      "bytes": 28983
+    },
+    "physics_profile_no_velocity/component.log": {
+      "path": "/home/eric/wjg/d1max-build-isaac/physics_profile_no_velocity/component.log",
+      "sha256": "1ffefc39b727038809106af4dac01c5c0ba7db5d632103476ed34e3af00fc72b",
+      "bytes": 21743
+    },
+    "physics_profile_no_velocity/trajectory.jsonl": {
+      "path": "/home/eric/wjg/d1max-build-isaac/physics_profile_no_velocity/trajectory.jsonl",
+      "sha256": "28d37220a80b9bf42ef8265c1a837ba14e7153f11bbbbe370cebb78ac799a772",
+      "bytes": 1303477
+    },
+    "physics_profile_no_velocity/imu_readings.jsonl": {
+      "path": "/home/eric/wjg/d1max-build-isaac/physics_profile_no_velocity/imu_readings.jsonl",
+      "sha256": "703efc692a3aebbb191ffd11c6b4dea49bff04a8e1d6d86e1cb208bb0490fb23",
+      "bytes": 354079
+    },
+    "physics_profile_no_velocity/robot_link_readings.jsonl": {
+      "path": "/home/eric/wjg/d1max-build-isaac/physics_profile_no_velocity/robot_link_readings.jsonl",
+      "sha256": "cb2d73392ccee584c0f11b19d72ae0c2f500bb29d6c39c28060e80ea0885e92c",
+      "bytes": 4653835
+    },
+    "physics_profile_no_velocity/floor_hit_audit.jsonl": {
+      "path": "/home/eric/wjg/d1max-build-isaac/physics_profile_no_velocity/floor_hit_audit.jsonl",
+      "sha256": "fadc3cf52bacab1534e52d228076aeca134420e9a73f1dbdb3adfc219b3d67b2",
+      "bytes": 52264
+    },
+    "physics_profile_no_velocity/collision_audit.json": {
+      "path": "/home/eric/wjg/d1max-build-isaac/physics_profile_no_velocity/collision_audit.json",
+      "sha256": "a95aae290f6899ee3fd874b73c6c9fb2df10a76020c3473b5dc2d43075e1dc3f",
+      "bytes": 3163
+    },
+    "physics_profile_no_velocity/quadruped_asset_metadata.json": {
+      "path": "/home/eric/wjg/d1max-build-isaac/physics_profile_no_velocity/quadruped_asset_metadata.json",
+      "sha256": "95d1ccd3e0d24c94276033b50f4526dedee22d05811b511c00355c36ad72910a",
+      "bytes": 15617
+    }
+  },
+  "required_next_checks": [
+    "Keep original per-substep native IMU physical pose and frame semantics; do not substitute body truth into sensor output or restamp readings.",
+    "Profile notice handler independently while preserving invalidation for arbitrary original collider/shape/identity changes.",
+    "Any performance selection needs same raw XYZ/full13geometry/500Hz physics/50Hz officialpolicy/10Hz dualLiDAR/native500->100Hz IMU contracts and fresh original Action validation."
+  ],
+  "pose_writeback_disabled_experiments_passed": false,
+  "selected_whole_sensor_performance_configuration": "physics_profile_no_velocity is component-eligible; root selection and fresh sealed v35 navigation are separate",
+  "next_velocity_only_writeback_probe": "completed; independently checked; original Action validation still required",
+  "velocity_only_writeback_independent_phase_audit": {
+    "actual_BEGIN_to_native_IMU_END_matches": 100,
+    "orientation_BEGIN_END_error_rad": {
+      "min": 0.0,
+      "median": 0.0,
+      "max": 5.16191365590357e-08
+    },
+    "same_tick_world_gyro_rotated_by_original_IMU_frame_matches": 500,
+    "gyro_in_original_IMU_frame_error_radps": {
+      "min": 4.296933444996421e-11,
+      "median": 9.572948360691585e-10,
+      "max": 1.6925493813462735e-08
+    },
+    "complete_raw_body_trajectory_literal_equal_to_reference": true,
+    "original_IMU_source_ns_array_literal_equal_to_reference": true,
+    "capture_tick_records": 100,
+    "capture_tick_orientation_literal_equal": 100,
+    "capture_tick_gyro_literal_equal": 100,
+    "scope": "Native orientation uses the original actual BEGIN transform and native END stamp; compare original phase, not demand post-step body quaternion equality or restamp.",
+    "complete_raw_13shape_link_rows_literal_equal_to_reference": true,
+    "independent_offline_full13primitive_body_certificate_replay": {
+      "samples": 600,
+      "failures": 0,
+      "uses_original_envelope_and_registry": true,
+      "scope": "Pure offline replay of actual13shape world matrices; not continuous collision or navigation proof."
+    }
+  },
+  "aggregate_failure_scope": "Both pose-writeback-disabled attempts failed whole-sensor freshness; aggregate false does not describe the separately qualified velocity-only profile."
+}

@@ -1,0 +1,150 @@
+{
+  "tests": 16,
+  "failures": 0,
+  "disabled": 0,
+  "errors": 0,
+  "timestamp": "2026-10-07T14:47:52Z",
+  "time": "0.007s",
+  "name": "AllTests",
+  "testsuites": [
+    {
+      "name": "UniformBspline",
+      "tests": 16,
+      "failures": 0,
+      "disabled": 0,
+      "errors": 0,
+      "timestamp": "2026-10-07T14:47:52Z",
+      "time": "0.007s",
+      "testsuite": [
+        {
+          "name": "EvaluatesLinearControlPoints",
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-07T14:47:52Z",
+          "time": "0s",
+          "classname": "UniformBspline"
+        },
+        {
+          "name": "DerivativeMatchesLinearSlope",
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-07T14:47:52Z",
+          "time": "0s",
+          "classname": "UniformBspline"
+        },
+        {
+          "name": "AffineTimeScalingPreservesCurveAndScalesAllDerivatives",
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-07T14:47:52Z",
+          "time": "0.001s",
+          "classname": "UniformBspline"
+        },
+        {
+          "name": "NormRetimingHandlesDiagonalAndEndpointAccelerationWithoutLooserLimits",
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-07T14:47:52Z",
+          "time": "0.001s",
+          "classname": "UniformBspline"
+        },
+        {
+          "name": "StationaryBoundaryRetimingPreservesBentGeometry",
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-07T14:47:52Z",
+          "time": "0s",
+          "classname": "UniformBspline"
+        },
+        {
+          "name": "MovingBoundaryCannotBeSilentlySlowedOrMutated",
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-07T14:47:52Z",
+          "time": "0s",
+          "classname": "UniformBspline"
+        },
+        {
+          "name": "MovingBoundaryMustMatchEvenWhenNoRetimingIsNeeded",
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-07T14:47:52Z",
+          "time": "0s",
+          "classname": "UniformBspline"
+        },
+        {
+          "name": "ConstrainedFitPreservesFullMeasuredPositionVelocityAcceleration",
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-07T14:47:52Z",
+          "time": "0.001s",
+          "classname": "UniformBspline"
+        },
+        {
+          "name": "MovingTimingFindsStrictLimitsWithoutErasingSmallInitialMotion",
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-07T14:47:52Z",
+          "time": "0s",
+          "classname": "UniformBspline"
+        },
+        {
+          "name": "MovingTimingRejectsInfeasibleInitialSpeedWithoutCallingSolver",
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-07T14:47:52Z",
+          "time": "0s",
+          "classname": "UniformBspline"
+        },
+        {
+          "name": "MovingTimingUsesNormNotPerAxisToRejectInitialBoundary",
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-07T14:47:52Z",
+          "time": "0.001s",
+          "classname": "UniformBspline"
+        },
+        {
+          "name": "MovingTimingDoesNotAcceptOptimizerBoundaryMutation",
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-07T14:47:52Z",
+          "time": "0s",
+          "classname": "UniformBspline"
+        },
+        {
+          "name": "MovingTimingFailureAndIterationBudgetLeaveCandidateIntact",
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-07T14:47:52Z",
+          "time": "0s",
+          "classname": "UniformBspline"
+        },
+        {
+          "name": "MovingTimingRetainsTrueHalfMeterPerSecondStartUnderPointSixLimit",
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-07T14:47:52Z",
+          "time": "0.001s",
+          "classname": "UniformBspline"
+        },
+        {
+          "name": "FullXyzReferenceDomainAloneDoesNotGuaranteeFlatGuideFixedBoundaryFeasibility",
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-07T14:47:52Z",
+          "time": "0.001s",
+          "classname": "UniformBspline"
+        },
+        {
+          "name": "SeparateXyzDomainAdmitsFeasibleCurveWithoutChangingGuideCruise",
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-10-07T14:47:52Z",
+          "time": "0.001s",
+          "classname": "UniformBspline"
+        }
+      ]
+    }
+  ]
+}

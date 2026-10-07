@@ -1,0 +1,146 @@
+{
+  "schema": 1,
+  "kind": "isolated_full_xyz_reference_contract_offline_verification",
+  "status": "source_frozen_offline_tests_passed",
+  "runtime_acceptance_claim": false,
+  "physical_acceptance_claim": false,
+  "domain": {
+    "transport": "isolated_mock",
+    "fixture_only": true,
+    "kind": "official_spot_physx",
+    "reference_xyz_speed_mps": 0.5,
+    "measured_xyz_source_travel_speed_mps": 0.5,
+    "observed_xyz_speed_mps": 0.48905959685208217,
+    "evidence": "simulation/isaacsim/verification/20261007/spot_full_xyz_reference_domain_v36.json",
+    "evidence_sha256": "1ab7fef769ec0cf186a39f0b72b1d5decd6b2dba99788a1efc61506401d418d3",
+    "interpretation": "explicit admission reject domain; sample maximum is not a future physical plant bound"
+  },
+  "unchanged": {
+    "guide_cruise_mps": 0.15,
+    "command_xy_mps": 0.15,
+    "command_yaw_radps": 0.3,
+    "command_acceleration_mps2": 0.35,
+    "command_yaw_acceleration_radps2": 0.8,
+    "reference_acceleration_mps2": 0.35,
+    "full_xyz_C1_error_mps": 0.05,
+    "join_distance_m": 0.0125,
+    "original_source_and_receipt_deadlines": true,
+    "full_xyz_geometry_and_raw_measurements": true,
+    "whole_curve_collision_and_support_proof": true,
+    "future_braking_Z_model": true
+  },
+  "parameters": {
+    "planner": "reuse fsm.execution_braking_model_record / sha256 / execution_transport_mode",
+    "tracker": "execution_braking_model_record plus existing execution_braking_model_sha256 / transport_mode",
+    "arbitrary_numeric_relaxation_parameter_added": false
+  },
+  "changes": [
+    "strict shared original-record-byte SHA parser and exact isolated platform/reference markers",
+    "guide/seed cruise remains separate from native reference BC/optimizer/fixed-BC timing/final derivative domain",
+    "native and tracker measured admission/refresh travel uses independent fullXYZ source-time arc domain",
+    "writer ACK uses bounded original XYZ arc projection rather than dividing travel by command cruise",
+    "actual measurement above the explicit isolated .50 domain is rejected; default measurements retain existing hard bound",
+    "new marker independently rejects native real transport without changing braking geometry"
+  ],
+  "limitations": [
+    "latest physical XYZ C1 must still match within .05; varying gait phase may reject a moving candidate",
+    "reference speed cap does not command vertical motion or predict future gait; future physical Z proof is unchanged",
+    "negative regression retains flat-guide/high-vz fixed-boundary timing failure; a wider domain alone does not manufacture a feasible curve",
+    "no navigation pass, hardware acceptance, installed binary, or complete runtime ABI build claimed by these offline tests"
+  ],
+  "verification": {
+    "scratch_directory": "/home/eric/wjg/d1max-build-isaac/reference-domain-offline-v36",
+    "gtest_total": 259,
+    "gtest_results": [
+      {
+        "artifact": "simulation/isaacsim/verification/20261007/full_xyz_reference_domain_v36_tests/shared_parser_tests.json",
+        "sha256": "d3c7e937b713c616d5bcc8afe2a14942d0cf869cd007cb2cbcb63219aee8f2cc",
+        "tests": 8,
+        "failures": 0
+      },
+      {
+        "artifact": "simulation/isaacsim/verification/20261007/full_xyz_reference_domain_v36_tests/test_candidate_adoption_tests.json",
+        "sha256": "3af896ad1bf360383eddcbaf1c3ef455d9341b93c89ae6b95329bca79ab96826",
+        "tests": 19,
+        "failures": 0
+      },
+      {
+        "artifact": "simulation/isaacsim/verification/20261007/full_xyz_reference_domain_v36_tests/test_motion_sweep_tests.json",
+        "sha256": "b57c7a42832e2e0ab57fef5691de121bc43557968dd894339c0fff0175b27680",
+        "tests": 35,
+        "failures": 0
+      },
+      {
+        "artifact": "simulation/isaacsim/verification/20261007/full_xyz_reference_domain_v36_tests/test_tracker_core_tests.json",
+        "sha256": "1d154077dad95995247408e45fad69fdf3505929d24cb63887078158ea28bdfb",
+        "tests": 61,
+        "failures": 0
+      },
+      {
+        "artifact": "simulation/isaacsim/verification/20261007/full_xyz_reference_domain_v36_tests/test_tracker_v2_tests.json",
+        "sha256": "0b73af384e547c044d6c2fca102a969e776dfa17f0aa3f126527bc2c68a3c73c",
+        "tests": 120,
+        "failures": 0
+      },
+      {
+        "artifact": "simulation/isaacsim/verification/20261007/full_xyz_reference_domain_v36_tests/test_uniform_bspline_tests.json",
+        "sha256": "5144ec74d4d4f75522f1702bd2fbe06563879258a1912b1cd4d58543badc0c1f",
+        "tests": 16,
+        "failures": 0
+      }
+    ],
+    "production_cpp_syntax": [
+      {
+        "source": "/home/eric/wjg/d1max-system/d1max_nav_ws/src/scan_planner_vendor/plan_manage/src/planner_manager.cpp",
+        "exit_code": 0
+      },
+      {
+        "source": "/home/eric/wjg/d1max-system/d1max_nav_ws/src/scan_planner_vendor/bspline_opt/src/bspline_optimizer.cpp",
+        "exit_code": 0
+      },
+      {
+        "source": "/home/eric/wjg/d1max-system/d1max_nav_ws/src/d1max_trajectory_tracker/src/trajectory_tracker.cpp",
+        "exit_code": 0
+      }
+    ],
+    "link_scope": "focused standalone J1 compilation of current test/header sources against existing unchanged UniformBspline/GridMap mathematical implementations; complete new runtime ABI build remains required",
+    "interface_header_install_correction": {
+      "cause": "Humble rosidl imported targets export include/d1max_planning_interfaces before the package include root",
+      "install_destination": "include/${PROJECT_NAME}",
+      "export_include_directory": "include/${PROJECT_NAME}",
+      "public_include": "d1max_planning_interfaces/isolated_reference_model.hpp",
+      "source_test_include_unchanged": true,
+      "offline_tests_rerun": false,
+      "full_install_build_owner": "root",
+      "claim": "packaging-only correction; existing 259 mathematical/parser tests retained; installed header availability requires root full ABI build"
+    }
+  },
+  "required_build_order": [
+    "d1max_planning_interfaces (export shared header/OpenSSL/nlohmann and gtest)",
+    "bspline_opt (optimizer class layout and feasibility setter changed)",
+    "scan_planner (manager plus BrakingModel live guard; link rebuilt optimizer)",
+    "d1max_trajectory_tracker (shared parser/core/protocol/node)",
+    "SDK bridge separately after root-owned acceptance guard change"
+  ],
+  "source_hashes": {
+    "d1max_nav_ws/src/d1max_planning_interfaces/include/d1max_planning_interfaces/isolated_reference_model.hpp": "07d910e48eff4b8fd493377b6d77aeb59ec5abd380f55d6f18f6e7d0af7bef60",
+    "d1max_nav_ws/src/d1max_planning_interfaces/test/test_isolated_reference_model.cpp": "6f9c042f53abe4ca3be1bd45a031d6fbf4428dc258875f5c36f5de56d3c21d23",
+    "d1max_nav_ws/src/d1max_planning_interfaces/CMakeLists.txt": "f1c8ded879e197bfbb7844e8214f9b3db799f455e602556d2d8cdedf5825190b",
+    "d1max_nav_ws/src/d1max_planning_interfaces/package.xml": "cfdc8755afb820b22b8ded74aa297b09c16ffd1d39501931e06d7669b6c621f4",
+    "d1max_nav_ws/src/scan_planner_vendor/plan_manage/include/plan_manage/planner_manager.h": "8fe92161a27dc0f2b95a654853a1eae8b65f0d46e896c9a9272bdf63a1dcd0c9",
+    "d1max_nav_ws/src/scan_planner_vendor/plan_manage/src/planner_manager.cpp": "c1cc6a468afaef0516e4e887c99cb109b69c98f247bf6bdd7069bf381b26f45c",
+    "d1max_nav_ws/src/scan_planner_vendor/plan_manage/include/plan_manage/candidate_adoption.hpp": "2edda4aef761d5d9d6b9f99779360a9cd287f35cd53397138dde85e6e343dcc3",
+    "d1max_nav_ws/src/scan_planner_vendor/plan_manage/test/test_candidate_adoption.cpp": "e0f0382b17061be23385448ec8d1371bab2d86a0def87584ad01dae479ddde7e",
+    "d1max_nav_ws/src/scan_planner_vendor/plan_manage/src/motion_sweep.cpp": "8aa65a28c5059e3d9f3110305d1a8366384b3a663993ef7028319343ab7f7e7b",
+    "d1max_nav_ws/src/scan_planner_vendor/plan_manage/test/test_motion_sweep.cpp": "88e65196f70ba63af35d231704959dba6fa7728cea9a283ec32c368a9c2fffb2",
+    "d1max_nav_ws/src/scan_planner_vendor/bspline_opt/include/bspline_opt/bspline_optimizer.h": "8371d43f4246669a3926864ba78581ce723f5ef674a71de6a1694b0d1e36ea83",
+    "d1max_nav_ws/src/scan_planner_vendor/bspline_opt/src/bspline_optimizer.cpp": "6e004377ae9cd97f12e8fc26e2930c15e88fc7af1fcbb3130843bbe6ccf899e9",
+    "d1max_nav_ws/src/scan_planner_vendor/bspline_opt/test/test_uniform_bspline.cpp": "d20b96b3f74d8366f2464ea1b34f863efa3e4d3255e81b3cd45f9469d0e59ea3",
+    "d1max_nav_ws/src/d1max_trajectory_tracker/include/d1max_trajectory_tracker/tracker_core.hpp": "7eed42768212f24a400082f36f52b1d6779760d24b84edc0a1b27d9fc8398a18",
+    "d1max_nav_ws/src/d1max_trajectory_tracker/include/d1max_trajectory_tracker/execution_contract.hpp": "3fe794963cd33fdc611ab03cb1ba68729513a8055ccd342c234828c1ae5b2247",
+    "d1max_nav_ws/src/d1max_trajectory_tracker/src/trajectory_tracker.cpp": "154dc29520b05f38c4d4742e736f61377c9c068606a993e453d5295fc2a1941e",
+    "d1max_nav_ws/src/d1max_trajectory_tracker/test/test_tracker_v2.cpp": "c8d2c3b06ff46552cb65f80cc2a3f668b8c13129d0a8fd46327212d21e1ed4c7",
+    "d1max_nav_ws/src/d1max_trajectory_tracker/CMakeLists.txt": "90ddab3d20572b355f80a3415535255af25484ffc8e5b6691b480ea2f9c18038",
+    "d1max_nav_ws/src/d1max_trajectory_tracker/package.xml": "94e31c1d01dde941ccaeee704901290dd49b20794a306c53cae232b2608820fc"
+  }
+}

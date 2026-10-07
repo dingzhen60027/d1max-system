@@ -1,0 +1,942 @@
+{
+  "schema": 1,
+  "date_local": "2026-10-07",
+  "timezone": "Asia/Shanghai",
+  "scope": "actual_original_crossing_Action_v34_failed; component_performance_profile_is_not_navigation_acceptance",
+  "accepted": false,
+  "run": "/home/eric/wjg/d1max-build-isaac/runs/campus_crossing_v34_001",
+  "candidate": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v34-campus-crossing",
+  "source_status": "immutable_v34_candidate_and_original_failed_run; no_retroactive_acceptance",
+  "original_action": {
+    "success": false,
+    "reason": "execution_blocked_timeout:waiting_current_collision_and_tracker_proof",
+    "retirement_confirmed": true,
+    "physical_stop_confirmed": false
+  },
+  "action_status": 6,
+  "measured_cumulative_xy_distance_m": 0.21559656450163317,
+  "measured_final_position": [
+    -7.917606830596924,
+    -5.022872447967529,
+    0.4823998212814331
+  ],
+  "measured_max_full_xyz_speed_mps": 0.0978495924552634,
+  "source_origin_ns": 1791351259591382391,
+  "configured_phase_observation_budget_s": 281.0,
+  "phase_observation_budget_is_not_actual_runtime": true,
+  "implemented_fixture": {
+    "body_reference_height_m": 0.481,
+    "body_envelope": {
+      "radius": 0.6078651750202781,
+      "offset": 0.3125,
+      "above": 0.589,
+      "support_floor_z": 0.0,
+      "support_penetration_m": 0.02
+    },
+    "velocity_feedback_mode": "spot_monotone_measured_v2",
+    "spatial_control_lookahead": true,
+    "spatial_control_parameter_default": false,
+    "fit_low_speed_entry_velocity": true,
+    "fit_low_speed_parameter_default": false,
+    "low_speed_curve_fit_scope": "Explicit guided certified-support simulation opt-in: both original full XYZ incoming and measured speeds <=.03m/s, zero incoming acceleration; only local solver boundary changes. Original measured pose/twist/source, raw join witness and .05 C1 adoption remain.",
+    "original_command_max_speed_mps": 0.15,
+    "original_command_max_yaw_radps": 0.3,
+    "physics_hz": 500,
+    "policy_hz": 50,
+    "state_hz": 50,
+    "lidar_hz_per_sensor": 10,
+    "imu_native_hz": 500,
+    "imu_output_hz": 100,
+    "same_source_acquisition_begin_witnesses_hz": 10,
+    "complete_registered_robot_primitives": 13
+  },
+  "original_owner_progress_credit": {
+    "trace_records": 37472,
+    "owner_observations": 1358,
+    "execution_identity_credit_values": [
+      {
+        "execution_id": "",
+        "control_epoch": 0,
+        "count": 0
+      },
+      {
+        "execution_id": "6e5e5b990862498a88d5a12a8166abd3.1:execution",
+        "control_epoch": 1,
+        "count": 0
+      }
+    ],
+    "all_recorded_credit_counts_zero": true,
+    "interpretation": "Original owner credit values only. Travel, sampled net arc, writer commit and gait do not create route credit.",
+    "provenance": "v34_control_summary.json events.owner_progress_credit_fact and recorded_owner_credit_counts from the whole 37472-record original trace; count fields in the identity table are recorded credit values, not observation counts."
+  },
+  "observed_control": {
+    "max_planar_cap_actual_record": {
+      "trace_line": 674,
+      "source_clock_ns": 1791351262291382391,
+      "receipt_monotonic_ns": 1197845182977544,
+      "trajectory_id": 1,
+      "reason": "geometry_only_no_motion_permission",
+      "planar_speed_limit_mps": 0.1483156616904063,
+      "control_diagnostic": {
+        "before_trajectory_start": false,
+        "body_present": true,
+        "body_source_stamp_ns": 1791351262291382391,
+        "curve_duration": 25.727645348517186,
+        "duplicate_source": false,
+        "geometry_available": true,
+        "installed_trajectory_start_ns": 1791351262233382391,
+        "lookahead_curve_time": 5.266326722043991,
+        "lookahead_from_xyz_arc_m": 0.0,
+        "lookahead_position": [
+          -7.8004784011206905,
+          -5.024150411836244,
+          0.48095446612864623
+        ],
+        "lookahead_requested_distance_m": 0.12,
+        "lookahead_target_xyz_arc_m": 0.12,
+        "lookahead_velocity": [
+          0.061509771009637504,
+          0.00015356035338815583,
+          1.158585415260596e-05
+        ],
+        "measured_arc_m": 0.0,
+        "measured_xy_speed_mps": 0.00033412011894716893,
+        "planar_acceleration_limit_mps2": 0.34606987727761473,
+        "planar_speed_limit_mps": 0.1483156616904063,
+        "previous_step_source_ns": 0,
+        "projected_curve_time": 0.0,
+        "receipt_interval_s": 0.0,
+        "source_interval_s": 0.0,
+        "spatial_control_lookahead": true,
+        "spatial_planar_braking_envelope": true,
+        "step_seen": false,
+        "step_source_ns": 0,
+        "step_trajectory_id": -1,
+        "step_trajectory_start_ns": 0
+      }
+    },
+    "cap_restored_is_not_motion_authority": true,
+    "applied_nonzero_episodes": 87,
+    "sampled_applied_episode_source_duration_s": {
+      "min": 0.0,
+      "median": 0.040000000000000036,
+      "max": 0.14000000000000057
+    },
+    "episode_scope": "Consecutive observed writer states; source-time spans are sampled and do not prove every independent gate remained valid between ticks.",
+    "tracker_step_reason_counts": {
+      "waiting_execution_permission": 77,
+      "geometry_only_no_motion_permission": 5,
+      "tracking": 357,
+      "permission_or_native_proof_expired": 1423,
+      "waiting_trajectory_clock": 118,
+      "source_clock_paused_command_expired": 27,
+      "task_heartbeat_stale": 3,
+      "handoff_retired_or_applied_uncertain": 225,
+      "stationary_reentry_waiting_writer": 117
+    },
+    "handoff_counts": {
+      "total_grants": 30,
+      "successful": 12,
+      "rejects": 18,
+      "reject_reasons": {
+        "owner_hold_or_phase_barrier": 7,
+        "handoff_deadline_expired": 11
+      },
+      "note": "Initial writer ACK is separate; total successful ACKs including initial is 13."
+    },
+    "command_windows_scene22_30": {
+      "permit": {
+        "count_overlapping_scene_22_30": 41,
+        "source_duration_s": {
+          "n": 41,
+          "min": 0.019999999999999574,
+          "median": 0.060000000000002274,
+          "max": 0.16000000000000014
+        },
+        "receipt_duration_s": {
+          "n": 41,
+          "min": 0.099564181,
+          "median": 0.299704447,
+          "max": 0.599986487
+        },
+        "interpretation": "Observed consecutive publisher states; writer hold interval is sampled by ticks, and allowed permit does not guarantee all independent proof gates remain valid between samples."
+      },
+      "applied": {
+        "count_overlapping_scene_22_30": 42,
+        "source_duration_s": {
+          "n": 42,
+          "min": 0.0,
+          "median": 0.03999999999999915,
+          "max": 0.10000000000000142
+        },
+        "receipt_duration_s": {
+          "n": 42,
+          "min": 0.04884357,
+          "median": 0.1502711135,
+          "max": 0.399839722
+        },
+        "interpretation": "Observed consecutive publisher states; writer hold interval is sampled by ticks, and allowed permit does not guarantee all independent proof gates remain valid between samples."
+      }
+    },
+    "interpretation": "Local geometric cap recovered to .1483156617m/s, but actual writer demand remained fragmented and repeated latest negative/expired native proofs withdrew authority. This is not a universal low-level gait or high-speed XYZ C1 failure diagnosis.",
+    "reproduce_cap_and_episodes": "Read complete phase_000_trace.jsonl; select kind==tracker, data.control_diagnostic.planar_speed_limit_mps, retain argmax trace line/source/reason. Read original control-audit-v34/applied_episodes.json; count 87 rows and compute min/median/max source_duration_s. No reconstructed commands, physics timestamps or owner credit changes."
+  },
+  "stop": {
+    "execution_id": "6e5e5b990862498a88d5a12a8166abd3.1:execution",
+    "stop_submitted": true,
+    "measured_stop_confirmed": true,
+    "physical_acceptance_verified": false,
+    "stationary_samples": 210,
+    "measured_linear_mps": 0.007455074546779277,
+    "measured_angular_radps": 0.0007964535491106152,
+    "reason": "execution_blocked_timeout:waiting_current_collision_and_tracker_proof"
+  },
+  "measured_stationary": true,
+  "imu_exact_source_match": true,
+  "body_height_consistent": true,
+  "measured_body_z_range_m": [
+    0.4810035526752472,
+    0.48405662178993225
+  ],
+  "whole_body_attestation": true,
+  "phase_frozen_body_attestation": {
+    "required": true,
+    "verified": true,
+    "body_envelope_verified_samples": 2189,
+    "body_envelope_failures": 0,
+    "body_envelope_registry_sha256": "e68b27ca3e0a30c3bdbaeb43414ae4a19674f9661adb167cc6bd0e38ab6ebc76",
+    "observed_measured_state_count": 2179,
+    "scope": "same_source_actual_whole_body_envelope_attestation; not_complete_contact_or_collision_acceptance"
+  },
+  "final_bridge_attestation": {
+    "body_envelope_verified_samples": 2277,
+    "body_envelope_failures": 0,
+    "last_sim_time_ns": 37940000000,
+    "fault": "",
+    "scope": "Later than phase-frozen bridge report; never add these counts or imply identical windows."
+  },
+  "collision_audit": {
+    "completed": true,
+    "sample_count": 2282,
+    "trajectory_sample_count": 2282,
+    "trajectory_sources_all_audited": true,
+    "source_begin_ns": 1791351259291382391,
+    "source_end_ns": 1791351297293382391,
+    "max_source_sampling_gap_ns": 20000000,
+    "possible_overlap_counts": {
+      "static": 0,
+      "dynamic": 0
+    },
+    "non_floor_static_penetration_count": 0,
+    "dynamic_penetration_count": 0,
+    "min_static_separation_lower_bound_m": 2.84300385627655,
+    "min_actor_separation_lower_bound_m": 7.210365605988677,
+    "faults": [],
+    "continuous_collision_proof": false,
+    "scope": "sampled_actual_link_geometry_static_and_actor",
+    "actual_actor_encounter": {
+      "schema": 1,
+      "rule": "measured_primitive_center_approach_near_depart_v1",
+      "source": "actual_registered_link_and_actor_geometry",
+      "scope": "sampled_same_step_primitive_center_proximity_only",
+      "completed": true,
+      "required_actor_ids": [
+        "plaza_person"
+      ],
+      "contract_sha256": "32fdb8ca3a3198cd0b6c79b6134cb1224203ce98181ff8c8077d48dcad367f7f",
+      "observed": false,
+      "actors": [
+        {
+          "actor_id": "plaza_person",
+          "observed": false,
+          "witnesses": []
+        }
+      ],
+      "truncated_actor_ids": [],
+      "maximum_source_sampling_gap_ns": 20000000,
+      "source_begin_ns": 1791351259291382391,
+      "source_end_ns": 1791351297293382391,
+      "source_anchor_ns": 1791351259273382391,
+      "session_id": "6e5e5b990862498a88d5a12a8166abd3",
+      "scene_sha256": "6795caccc328bd1b5d0f508b1deb6b267253b1c8ac9379885604414b354c7025",
+      "robot_collision_registry_sha256": "e68b27ca3e0a30c3bdbaeb43414ae4a19674f9661adb167cc6bd0e38ab6ebc76",
+      "actor_collision_registry_sha256": "be6813e188ff52611e04611682ce21bf303633099a61d7649d6b2e9712a478a6",
+      "observation_status": "completed",
+      "limitations": [
+        "sampled_proximity_only",
+        "not_route_blocking_or_yield_or_contact_evidence",
+        "caller_binds_actual_snapshots_to_same_physics_step"
+      ]
+    }
+  },
+  "navigation_shutdown": {
+    "request_accepted": true,
+    "software_retired": true,
+    "physical_stop_confirmed": false,
+    "reason": "software_retired_not_physical_stop",
+    "elapsed_s": 0.1419666998554021,
+    "session_id": "6e5e5b990862498a88d5a12a8166abd3",
+    "recorded_at_unix": 1791351443.8430793
+  },
+  "overall_clean_shutdown": false,
+  "child_exit_codes": {
+    "isaac_bridge": 0,
+    "isaac_sim": -15,
+    "navigation": 0,
+    "smoke": 1
+  },
+  "wall_seconds": 181.3332944039721,
+  "independent_evaluation": {
+    "path": "/home/eric/wjg/d1max-build-isaac/campus_crossing_v34_evaluation.json",
+    "status": "failed",
+    "passed": false,
+    "checks": [
+      {
+        "name": "sealed_same_scene",
+        "status": "passed",
+        "reason": "",
+        "evidence": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v34-campus-crossing/simulation/assets/scene_config.json"
+      },
+      {
+        "name": "single_session_ordered_actions",
+        "status": "failed",
+        "reason": "original_smoke_phase_failed:0",
+        "evidence": null
+      },
+      {
+        "name": "phase_000_action_stop_source",
+        "status": "failed",
+        "reason": "original_action_or_measured_stop_failed",
+        "evidence": "/home/eric/wjg/d1max-build-isaac/runs/campus_crossing_v34_001/scenario_suite/phase_000_report.json"
+      },
+      {
+        "name": "phase_000_test_source_budget",
+        "status": "passed",
+        "reason": "",
+        "evidence": {
+          "source_elapsed_s": 33.802,
+          "applied_source_budget_s": 281.0,
+          "sealed_phase_source_budget_s": 281
+        }
+      },
+      {
+        "name": "phase_000_goal",
+        "status": "failed",
+        "reason": "",
+        "evidence": {
+          "measured_xy_error_m": 15.917623263613883
+        }
+      },
+      {
+        "name": "fresh_ordered_task_identities_and_source_deadline",
+        "status": "passed",
+        "reason": "",
+        "evidence": null
+      },
+      {
+        "name": "actual_link_static_and_actor_collision",
+        "status": "passed",
+        "reason": "",
+        "evidence": "/home/eric/wjg/d1max-build-isaac/runs/campus_crossing_v34_001/physics/collision_audit.json"
+      },
+      {
+        "name": "intended_dynamic_encounter_observed",
+        "status": "failed",
+        "reason": "intended_sampled_proximity_encounter_not_exercised_during_original_action_interval",
+        "evidence": {
+          "collision_audit_sha256": "a4a9120ff1d0adfafd0fe4f2bf3c821f2c6b57303704b4ff927ca11775112914",
+          "source": "actual_registered_link_and_actor_geometry",
+          "scope": "sampled_same_step_primitive_center_proximity_only",
+          "selected_exact_pair_witnesses": []
+        }
+      },
+      {
+        "name": "owned_graph_retirement",
+        "status": "failed",
+        "reason": "Navigation test failed; inspect smoke.log and its original reports",
+        "evidence": "/home/eric/wjg/d1max-build-isaac/runs/campus_crossing_v34_001/run_summary.json"
+      }
+    ],
+    "continuous_collision_certificate": false
+  },
+  "original_run_performance": {
+    "timing": {
+      "measured_state_samples": 2282,
+      "measured_state_wall_seconds": 154.5228565428406,
+      "measured_state_sim_seconds": 38.002,
+      "wall_seconds_per_sim_second": 4.0661769523404185,
+      "realtime_factor": 0.24593125476854072,
+      "state_wall_hz": 14.761570236488643,
+      "longest_state_wall_gap_s": 0.2577644339762628,
+      "longest_rays_wall_gap_s": [
+        0.5985457149799913,
+        0.5948733361437917
+      ]
+    },
+    "phase_timings": {
+      "receive_command": {
+        "count": 9505,
+        "total_wall_s": 0.49610673054121435,
+        "max_wall_s": 0.0004256779793649912
+      },
+      "physics_only_two_steps": {
+        "count": 9505,
+        "total_wall_s": 128.22490466502495,
+        "max_wall_s": 0.2143692709505558
+      },
+      "measured_state_and_udp": {
+        "count": 1901,
+        "total_wall_s": 16.27398979756981,
+        "max_wall_s": 0.01877004513517022
+      },
+      "dual_cloud_filter_pack_and_udp": {
+        "count": 381,
+        "total_wall_s": 7.638984541874379,
+        "max_wall_s": 0.03493264620192349
+      }
+    },
+    "ray_phase_timings": {
+      "native_frame_and_array": {
+        "count": 762,
+        "total_wall_s": 0.06859441171400249,
+        "max_wall_s": 0.0003566818777471781
+      },
+      "exact_self_and_depth_filter": {
+        "count": 762,
+        "total_wall_s": 7.254209332400933,
+        "max_wall_s": 0.01748164789751172
+      },
+      "binary_pack_and_udp": {
+        "count": 762,
+        "total_wall_s": 0.23839135095477104,
+        "max_wall_s": 0.0014399071224033833
+      },
+      "first_scan_evidence_save": {
+        "count": 2,
+        "total_wall_s": 0.0011633180547505617,
+        "max_wall_s": 0.0006638071499764919
+      }
+    },
+    "static_geometry_attestation": {
+      "expected_sha256": "b1de214d7b3dc3e0dec7207aba9c9675d7cc090a4c877c390b49c327ecd99a6e",
+      "cadence": "every actual body state; source timestamp unchanged",
+      "count": 2282,
+      "faults": 0,
+      "fault_latched": false,
+      "last_sha256": "b1de214d7b3dc3e0dec7207aba9c9675d7cc090a4c877c390b49c327ecd99a6e",
+      "last_fault": "",
+      "total_wall_s": 0.020903143333271146,
+      "max_wall_s": 0.01406836905516684,
+      "full_stage_audits": 1,
+      "cache_hits": 2281
+    },
+    "render_calls": 0,
+    "interpretation": "physics_only_two_steps includes native physics, callback work and actual LiDAR acquisition BEGIN emit_state; it is not a pure PhysX kernel timer. Main-loop state timer excludes BEGIN witnesses."
+  },
+  "original_proof_lease_audit": {
+    "path": "/home/eric/wjg/d1max-build-isaac/v34_scan_proof_lease_audit.json",
+    "diagnostic_clock_semantics": "Lease captures original check LAST collision-query clock, not whole-check START; describeCollisionLease before describeInflateOccupancy refresh. Fields may show a still-positive tiny remainder at final query, then expire before finish.",
+    "lease_records": 203,
+    "lease_classification": {
+      "dynamic_query_invalid_unseparated_cause": 2,
+      "no_deadline_exhaustion_in_last_capture": 179,
+      "ray_receipt_at_or_after_500ms": 22
+    },
+    "post22_lease_classification": {
+      "no_deadline_exhaustion_in_last_capture": 23,
+      "ray_receipt_at_or_after_500ms": 10
+    },
+    "post22_examples": [
+      {
+        "line": 1051,
+        "curve": 16,
+        "reason": "source_expired_during_check",
+        "source_s": 31.627940733,
+        "query_index": 780,
+        "ray_source_age_ms": [
+          209.940733,
+          209.940733
+        ],
+        "ray_receipt_age_ms": [
+          499.997722,
+          442.454403
+        ],
+        "dynamic_source_age_ms": 47.940733,
+        "dynamic_valid": true,
+        "prior_lease_valid": true,
+        "source_remaining_ms": 152.059267,
+        "receipt_remaining_ms": 0.002278,
+        "classification": [
+          "no_deadline_exhaustion_in_last_capture"
+        ]
+      },
+      {
+        "line": 1055,
+        "curve": 16,
+        "reason": "source_expired_during_check",
+        "source_s": 31.852929697,
+        "query_index": 1,
+        "ray_source_age_ms": [
+          234.929697,
+          234.929697
+        ],
+        "ray_receipt_age_ms": [
+          513.338049,
+          436.539028
+        ],
+        "dynamic_source_age_ms": 72.929697,
+        "dynamic_valid": true,
+        "prior_lease_valid": false,
+        "source_remaining_ms": null,
+        "receipt_remaining_ms": null,
+        "classification": [
+          "ray_receipt_at_or_after_500ms"
+        ]
+      },
+      {
+        "line": 1069,
+        "curve": 17,
+        "reason": "source_expired_during_check",
+        "source_s": 32.435412673,
+        "query_index": 1110,
+        "ray_source_age_ms": [
+          217.412673,
+          217.412673
+        ],
+        "ray_receipt_age_ms": [
+          499.994605,
+          433.093492
+        ],
+        "dynamic_source_age_ms": 55.412673,
+        "dynamic_valid": true,
+        "prior_lease_valid": true,
+        "source_remaining_ms": 144.587327,
+        "receipt_remaining_ms": 0.005395,
+        "classification": [
+          "no_deadline_exhaustion_in_last_capture"
+        ]
+      },
+      {
+        "line": 1072,
+        "curve": 17,
+        "reason": "source_expired_during_check",
+        "source_s": 32.635621493,
+        "query_index": 475,
+        "ray_source_age_ms": [
+          217.621493,
+          217.621493
+        ],
+        "ray_receipt_age_ms": [
+          499.992453,
+          448.080085
+        ],
+        "dynamic_source_age_ms": 17.621493,
+        "dynamic_valid": true,
+        "prior_lease_valid": true,
+        "source_remaining_ms": 182.378507,
+        "receipt_remaining_ms": 0.007547,
+        "classification": [
+          "no_deadline_exhaustion_in_last_capture"
+        ]
+      },
+      {
+        "line": 1075,
+        "curve": 17,
+        "reason": "source_expired_during_check",
+        "source_s": 32.939184522,
+        "query_index": 1,
+        "ray_source_age_ms": [
+          221.184522,
+          221.184522
+        ],
+        "ray_receipt_age_ms": [
+          500.240773,
+          442.262985
+        ],
+        "dynamic_source_age_ms": 59.184522,
+        "dynamic_valid": true,
+        "prior_lease_valid": false,
+        "source_remaining_ms": null,
+        "receipt_remaining_ms": null,
+        "classification": [
+          "ray_receipt_at_or_after_500ms"
+        ]
+      }
+    ],
+    "check_cost_ms": {
+      "unknown_or_unobserved": {
+        "ms": {
+          "count": 213,
+          "min": 0.21,
+          "median": 0.768,
+          "p95": 21.864,
+          "max": 30.033
+        },
+        "queries": {
+          "count": 213,
+          "min": 1,
+          "median": 1,
+          "p95": 1062,
+          "max": 1244
+        }
+      },
+      "curve_check_budget_exhausted": {
+        "ms": {
+          "count": 15,
+          "min": 27.78,
+          "median": 30.787,
+          "p95": 33.07,
+          "max": 33.07
+        },
+        "queries": {
+          "count": 15,
+          "min": 1013,
+          "median": 1116,
+          "p95": 1247,
+          "max": 1247
+        }
+      },
+      "measured_projection_or_connection_invalid": {
+        "ms": {
+          "count": 2,
+          "min": 0.0,
+          "median": 0.0,
+          "p95": 0.0,
+          "max": 0.0
+        },
+        "queries": {
+          "count": 2,
+          "min": 0,
+          "median": 0.0,
+          "p95": 0,
+          "max": 0
+        }
+      }
+    },
+    "interpretation": "Last-query captures with tiny positive receipt remainder can expire before whole-check finish. 500ms ray receipt and all other original deadlines remain vetoes; diagnostic classification is not authority or permission to extend leases."
+  },
+  "component_performance_baseline": {
+    "path": "/home/eric/wjg/d1max-build-isaac/physics_profile_v34_sealed",
+    "bounded_physics_steps": 5000,
+    "timing": {
+      "measured_state_samples": 600,
+      "measured_state_wall_seconds": 39.29520956799388,
+      "measured_state_sim_seconds": 9.982000000000001,
+      "wall_seconds_per_sim_second": 3.9366068491278177,
+      "realtime_factor": 0.25402587515732156,
+      "state_wall_hz": 15.243588381009378,
+      "longest_state_wall_gap_s": 0.22735452093183994,
+      "longest_rays_wall_gap_s": [
+        0.5216631130315363,
+        0.5225070379674435
+      ]
+    },
+    "phase_timings": {
+      "receive_command": {
+        "count": 2500,
+        "total_wall_s": 0.10948679829016328,
+        "max_wall_s": 0.0004920689389109612
+      },
+      "physics_only_two_steps": {
+        "count": 2500,
+        "total_wall_s": 33.16440967982635,
+        "max_wall_s": 0.2192803102079779
+      },
+      "measured_state_and_udp": {
+        "count": 500,
+        "total_wall_s": 3.864502888638526,
+        "max_wall_s": 0.01758467499166727
+      },
+      "dual_cloud_filter_pack_and_udp": {
+        "count": 100,
+        "total_wall_s": 1.8441303768195212,
+        "max_wall_s": 0.03376563196070492
+      }
+    },
+    "physics_callback_timings": {
+      "official_policy": {
+        "count": 6000,
+        "total_wall_s": 1.6777432847302407,
+        "max_wall_s": 0.03167054592631757
+      },
+      "dynamic_actor_updates": {
+        "count": 5000,
+        "total_wall_s": 2.165217039640993,
+        "max_wall_s": 0.0014507460873574018
+      },
+      "command_expiry": {
+        "count": 5000,
+        "total_wall_s": 0.23958446341566741,
+        "max_wall_s": 0.0002479478716850281
+      },
+      "native_lidar_gate_and_begin_witness": {
+        "count": 5000,
+        "total_wall_s": 1.3214609706774354,
+        "max_wall_s": 0.18222292000427842
+      },
+      "native_imu": {
+        "count": 5000,
+        "total_wall_s": 0.33393689012154937,
+        "max_wall_s": 0.0007549861911684275
+      }
+    },
+    "native_and_uninstrumented_lower_bound_wall_s": 27.426467031240463,
+    "lower_bound_formula": "physics_only_two_steps.total_wall_s - sum(all measured Python callback totals)",
+    "lower_bound_scope": "Conservative accounting lower bound: official policy total includes 1000 settling ticks outside main-loop physics timer. Other callback totals cover 5000 measured ticks. Residual includes native sensor/plugin work and uninstrumented wrappers, not only solver.",
+    "static_geometry_attestation": {
+      "expected_sha256": "b1de214d7b3dc3e0dec7207aba9c9675d7cc090a4c877c390b49c327ecd99a6e",
+      "cadence": "every actual body state; source timestamp unchanged",
+      "count": 600,
+      "faults": 0,
+      "fault_latched": false,
+      "last_sha256": "b1de214d7b3dc3e0dec7207aba9c9675d7cc090a4c877c390b49c327ecd99a6e",
+      "last_fault": "",
+      "total_wall_s": 0.01684182113967836,
+      "max_wall_s": 0.015189252095296979,
+      "full_stage_audits": 1,
+      "cache_hits": 599
+    },
+    "first_attempt_failed": {
+      "path": "/home/eric/wjg/d1max-build-isaac/physics_profile_v34_baseline/component.log",
+      "failure": "KeyError:'wheel_radius'; unsealed scenario omitted runtime registry; not a performance baseline"
+    },
+    "cpu_thread_AB_status": "pending_at_this_v34_evidence_freeze; no_v35_or_navigation_acceptance_claim",
+    "performance_reference": {
+      "title": "Isaac Sim 6.0.1 Performance Optimization Handbook",
+      "url": "https://docs.isaacsim.omniverse.nvidia.com/6.0.1/reference_material/sim_performance_optimization_handbook.html#physics-simulation-optimizations",
+      "claim": "PhysX numThreads=0 executes synchronously on the main thread and may improve simple CPU scenes; requires bounded workload A/B, not a guarantee."
+    }
+  },
+  "performance_audit_findings": [
+    "The installed RotatingLidarPhysX pause/resume only change Python _pause booleans. Repeated calls are redundant but do not explain the measured native residual.",
+    "RangeSensor enabled is declared in the installed USD schema as sensor enable/disable; binary native implementation unavailable. Python frame timestamps alone do not prove disabled-step native raycasts stop.",
+    "get_num_cols_ticked is exposed, but its Python doc says generally useful for nonzero rotation. Current rotationRate=0 needs native profiling or an independently validated counter, not an unsupported get_sequence_number Python call.",
+    "Original v34 fabric disabled and render_calls=0. Explicit StageGeometryVerifier.verify cost only .020903s/2282samples, but this timer excludes its USD ObjectsChanged listener; subsequent notice profile measured10902callbacks/9.793185s per10source seconds. Do not infer total static-verifier cost negligible or pure native solver from the residual.",
+    "Original exact_self_and_depth_filter timing includes full native getPrimData vector<string> copies, floor audit, and 13 primitive self tests; sub-timers are needed before assigning all cost to NumPy.",
+    "Both native LiDARs reuse one actual BEGIN bundle. Exact per-bundle primitive inverse/scale metric or AABB broadphase caching can retain nonuniform affine solids and original .002 self margin; no cross-source pose cache or invented FREE.",
+    "PhysX CPU thread-count A/B is an execution-performance experiment with unchanged 500Hz physics, official policy, native sensors and complete actual witness geometry. Actual settings must be logged; carb/TBB24 are not evidence of actual PhysX thread count."
+  ],
+  "offline_validation": {
+    "tracker_native_ctest_groups": 4,
+    "tracker_native_failed": 0,
+    "scan_planner_native_ctest_groups": 16,
+    "scan_planner_native_failed": 0,
+    "python_cases": 254,
+    "python_failed": 0,
+    "scope": "Regression passes do not override original failed Action."
+  },
+  "remaining_analysis": {
+    "status": "performance_and_proof_freshness_remediation_pending_fresh_formal_run",
+    "not_proven": [
+      "v34 goal completion",
+      "v35 end-to-end success",
+      "successful dynamic encounter or yielding",
+      "continuous collision freedom",
+      "physical SDK/hardware stopping"
+    ],
+    "invariants": [
+      "500Hz original physics",
+      "official matching policy and 12 joint actuation",
+      "two complete native 3D LiDARs at10Hz",
+      "native500Hz IMU with original100Hz selected outputs",
+      "50Hz raw body states plus original10Hz BEGIN witnesses",
+      "all13 actual primitives and raw XYZ",
+      "original .15/.3 command authority",
+      "original lease/deadline/source/receipt gates and true STOP"
+    ]
+  },
+  "evidence_sha256": {
+    "runs/campus_crossing_v34_001/scenario_suite/phase_000_report.json": {
+      "path": "/home/eric/wjg/d1max-build-isaac/runs/campus_crossing_v34_001/scenario_suite/phase_000_report.json",
+      "sha256": "ac6872fb0ce283543dec75fca5a565d56ada5cbff62985cbc68fb45b7817029e",
+      "bytes": 3017241
+    },
+    "runs/campus_crossing_v34_001/scenario_suite/phase_000_trace.jsonl": {
+      "path": "/home/eric/wjg/d1max-build-isaac/runs/campus_crossing_v34_001/scenario_suite/phase_000_trace.jsonl",
+      "sha256": "5a95611977236f2c5b0390eb02615cb3b97afe414ac8938fcffe822047f3cef6",
+      "bytes": 62776183
+    },
+    "runs/campus_crossing_v34_001/physics/summary.json": {
+      "path": "/home/eric/wjg/d1max-build-isaac/runs/campus_crossing_v34_001/physics/summary.json",
+      "sha256": "4d6a0ca1d8bc1709e151f5d99e6a5e76f494911d66d6edc0da5e784f25b3ebb1",
+      "bytes": 27488
+    },
+    "runs/campus_crossing_v34_001/physics/trajectory.jsonl": {
+      "path": "/home/eric/wjg/d1max-build-isaac/runs/campus_crossing_v34_001/physics/trajectory.jsonl",
+      "sha256": "3dc4625c7f786cb6c2bd1eeb91322dbdb1dd1bf786e563b5eb8fb2264da38025",
+      "bytes": 5016167
+    },
+    "runs/campus_crossing_v34_001/physics/robot_link_readings.jsonl": {
+      "path": "/home/eric/wjg/d1max-build-isaac/runs/campus_crossing_v34_001/physics/robot_link_readings.jsonl",
+      "sha256": "ee3d9373bff9c356e0684ce805be6bec88d177e772ea3a43026e98498b4a9535",
+      "bytes": 17771026
+    },
+    "runs/campus_crossing_v34_001/physics/collision_audit.json": {
+      "path": "/home/eric/wjg/d1max-build-isaac/runs/campus_crossing_v34_001/physics/collision_audit.json",
+      "sha256": "a4a9120ff1d0adfafd0fe4f2bf3c821f2c6b57303704b4ff927ca11775112914",
+      "bytes": 3214
+    },
+    "runs/campus_crossing_v34_001/physics/floor_hit_audit.jsonl": {
+      "path": "/home/eric/wjg/d1max-build-isaac/runs/campus_crossing_v34_001/physics/floor_hit_audit.jsonl",
+      "sha256": "b18a6556d59499053833b37543502f7c8e3af5325d75692124ec386136479403",
+      "bytes": 200937
+    },
+    "runs/campus_crossing_v34_001/run_summary.json": {
+      "path": "/home/eric/wjg/d1max-build-isaac/runs/campus_crossing_v34_001/run_summary.json",
+      "sha256": "55bb8b8e64345da87167a6d7417ff0292f161201b795320e710bc3a2341ed63a",
+      "bytes": 896
+    },
+    "runs/campus_crossing_v34_001/shutdown.json": {
+      "path": "/home/eric/wjg/d1max-build-isaac/runs/campus_crossing_v34_001/shutdown.json",
+      "sha256": "9a05323b0e765d2103a83f0b3a50ab936d7d5400947a0067285e48d9c2f592fe",
+      "bytes": 274
+    },
+    "runs/campus_crossing_v34_001/isaac_bridge_status.json": {
+      "path": "/home/eric/wjg/d1max-build-isaac/runs/campus_crossing_v34_001/isaac_bridge_status.json",
+      "sha256": "65e3c3328bc4349dd92b0c2db624198cc4f8090181f915ca8bfdbb0cae6bf87a",
+      "bytes": 1481
+    },
+    "runs/campus_crossing_v34_001/session.json": {
+      "path": "/home/eric/wjg/d1max-build-isaac/runs/campus_crossing_v34_001/session.json",
+      "sha256": "e9cb678be290a14a4fb472ea780f1de71ab1713ef20f88aee2caef37aa37ee4e",
+      "bytes": 13783
+    },
+    "runs/campus_crossing_v34_001/tracker.yaml": {
+      "path": "/home/eric/wjg/d1max-build-isaac/runs/campus_crossing_v34_001/tracker.yaml",
+      "sha256": "6bd30f4c856ca11278cb67195214f6e937a064217136a7657b521e7d9ab74083",
+      "bytes": 1432
+    },
+    "runs/campus_crossing_v34_001/quadruped_fixture_profile.yaml": {
+      "path": "/home/eric/wjg/d1max-build-isaac/runs/campus_crossing_v34_001/quadruped_fixture_profile.yaml",
+      "sha256": "125eedd622d508c7445aaac59e772e4445f451a1686a0b6c59ab08ef4dc6cf4a",
+      "bytes": 773
+    },
+    "runs/campus_crossing_v34_001/scan.log": {
+      "path": "/home/eric/wjg/d1max-build-isaac/runs/campus_crossing_v34_001/scan.log",
+      "sha256": "d309451c7944a4224857ca3dd30c9efcbbed806183a1a89e500c3e31a5be66b2",
+      "bytes": 684462
+    },
+    "runs/campus_crossing_v34_001/isaac_sim.log": {
+      "path": "/home/eric/wjg/d1max-build-isaac/runs/campus_crossing_v34_001/isaac_sim.log",
+      "sha256": "f6370b58fbd3f184cba6fe0eacef6abec9c82a957ca64d6766b85b7c949f1bcb",
+      "bytes": 21751
+    },
+    "campus_crossing_v34_evaluation.json": {
+      "path": "/home/eric/wjg/d1max-build-isaac/campus_crossing_v34_evaluation.json",
+      "sha256": "130c2aca83054ea354b2b785d3e5eff04c250fba58c6e97f3bfb588df5e6efdc",
+      "bytes": 2738
+    },
+    "v34_control_summary.json": {
+      "path": "/home/eric/wjg/d1max-build-isaac/v34_control_summary.json",
+      "sha256": "5968c01aa47da5643ecec47ce48b0ec5815741c23749c7fc7f290c4140cb27f1",
+      "bytes": 2709
+    },
+    "v34_scan_proof_lease_audit.json": {
+      "path": "/home/eric/wjg/d1max-build-isaac/v34_scan_proof_lease_audit.json",
+      "sha256": "b122e238a6c1e6d3c81370aadcede147b188111cb22ca8f574dc8ea9ba1fbd4c",
+      "bytes": 456447
+    },
+    "control-audit-v34/control_chain_audit_v34.json": {
+      "path": "/home/eric/wjg/d1max-build-isaac/control-audit-v34/control_chain_audit_v34.json",
+      "sha256": "939bfd6241cf75f003f59a5490ef7404adb08cded1033050e3a48334f7998327",
+      "bytes": 18604
+    },
+    "control-audit-v34/applied_episodes.json": {
+      "path": "/home/eric/wjg/d1max-build-isaac/control-audit-v34/applied_episodes.json",
+      "sha256": "66d2b0ed10dbfe927c18bff2b59a230c15e12e358a70fa3aa3c4c59c12e9945a",
+      "bytes": 20462
+    },
+    "v34_tracker_ctest.log": {
+      "path": "/home/eric/wjg/d1max-build-isaac/v34_tracker_ctest.log",
+      "sha256": "3df1d7c122fc6e9b97abf2b10464c63da7d8acad26bf5a37deddef1855b01836",
+      "bytes": 748
+    },
+    "v34_scan_planner_ctest.log": {
+      "path": "/home/eric/wjg/d1max-build-isaac/v34_scan_planner_ctest.log",
+      "sha256": "99badf9f7fbb02bb8fc890d715e5315ce2d6467be3959ac1073de6d7c7d83b23",
+      "bytes": 2148
+    },
+    "v34_python_pytest.log": {
+      "path": "/home/eric/wjg/d1max-build-isaac/v34_python_pytest.log",
+      "sha256": "97cf77f6c1c715e6d3657fd2f80ef2e6a67e6f9236b85a8179af209c8fb2943f",
+      "bytes": 341
+    },
+    "nav_fix_v34_scan_build.log": {
+      "path": "/home/eric/wjg/d1max-build-isaac/nav_fix_v34_scan_build.log",
+      "sha256": "4b43f92dc247642546051cf73c2af86d1f2873ef92fb95f875c992fc68f710cf",
+      "bytes": 8125
+    },
+    "campus_v34_crossing_candidate.log": {
+      "path": "/home/eric/wjg/d1max-build-isaac/campus_v34_crossing_candidate.log",
+      "sha256": "4f73af6be98795fa8f9fae8b81c6bc96943a72891817e8d0e52b80c812728c3a",
+      "bytes": 343
+    },
+    "campus_v34_crossing_run.log": {
+      "path": "/home/eric/wjg/d1max-build-isaac/campus_v34_crossing_run.log",
+      "sha256": "68b85452b1d0b147cc3015cbafad08d3f467b2b05240a1a8512c71fa4a445f4f",
+      "bytes": 5422
+    },
+    "isaac-candidate-v34-campus-crossing/isaac_candidate_integrity.json": {
+      "path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v34-campus-crossing/isaac_candidate_integrity.json",
+      "sha256": "2d3429b7f284a92e99bf105cded5bf1a581baab8fff817867b0b9e5f29b0c4c9",
+      "bytes": 734835
+    },
+    "isaac-candidate-v34-campus-crossing/simulation/assets/scene_config.json": {
+      "path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v34-campus-crossing/simulation/assets/scene_config.json",
+      "sha256": "6795caccc328bd1b5d0f508b1deb6b267253b1c8ac9379885604414b354c7025",
+      "bytes": 58165
+    },
+    "isaac-candidate-v34-campus-crossing/application/install/d1max_trajectory_tracker/lib/d1max_trajectory_tracker/trajectory_tracker": {
+      "path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v34-campus-crossing/application/install/d1max_trajectory_tracker/lib/d1max_trajectory_tracker/trajectory_tracker",
+      "sha256": "5042784ea8a715e3579741ae19ee90da06965937823bacacbff23b22e00f96fc",
+      "bytes": 4388712
+    },
+    "isaac-candidate-v34-campus-crossing/application/install/scan_planner/lib/scan_planner/scan_planner_node": {
+      "path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v34-campus-crossing/application/install/scan_planner/lib/scan_planner/scan_planner_node",
+      "sha256": "072137774ca06108c2aa3dba6a145676be604d3e9349e4b236c9b29c7dd1a9a7",
+      "bytes": 8966720
+    },
+    "physics_profile_v34_sealed/summary.json": {
+      "path": "/home/eric/wjg/d1max-build-isaac/physics_profile_v34_sealed/summary.json",
+      "sha256": "1670c755211bc4d16e49b2bcfcf485abdfe8f2309eaa7c5f459abd1d73d5cea5",
+      "bytes": 28239
+    },
+    "physics_profile_v34_sealed/component.log": {
+      "path": "/home/eric/wjg/d1max-build-isaac/physics_profile_v34_sealed/component.log",
+      "sha256": "4e3991ef38f8ae18d006573f6079c1b3a58f896c1576410864ec6bfbdb117da3",
+      "bytes": 21747
+    },
+    "physics_profile_v34_sealed/collision_audit.json": {
+      "path": "/home/eric/wjg/d1max-build-isaac/physics_profile_v34_sealed/collision_audit.json",
+      "sha256": "1138d9b6bffd4b49f25de89437177b3fa0ccf2f70134199c7085fea4ad29bbca",
+      "bytes": 3164
+    },
+    "physics_profile_v34_baseline/component.log": {
+      "path": "/home/eric/wjg/d1max-build-isaac/physics_profile_v34_baseline/component.log",
+      "sha256": "4e2e7baabaef9d79c4dda92153ad511e1c5fab05ff1905c08c3d525f7e8eed6b",
+      "bytes": 23372
+    },
+    "runs/campus_crossing_v34_001/physics/imu_readings.jsonl": {
+      "path": "/home/eric/wjg/d1max-build-isaac/runs/campus_crossing_v34_001/physics/imu_readings.jsonl",
+      "sha256": "bf64719f17b520210c03b807641e0d5c84bebdf7afedd41f3cca70561b414125",
+      "bytes": 1382124
+    },
+    "runs/campus_crossing_v34_001/scan.yaml": {
+      "path": "/home/eric/wjg/d1max-build-isaac/runs/campus_crossing_v34_001/scan.yaml",
+      "sha256": "a6fd18f65eee676077a7cfe121b53d379232001672bfd55de538e5bf8944a854",
+      "bytes": 4924
+    },
+    "runs/campus_crossing_v34_001/runtime_inputs.json": {
+      "path": "/home/eric/wjg/d1max-build-isaac/runs/campus_crossing_v34_001/runtime_inputs.json",
+      "sha256": "50fd3ef645087e41932eb401615db7270c1d263bf621f9deb468661650339ba8",
+      "bytes": 311149
+    },
+    "runs/campus_crossing_v34_001/braking_model.json": {
+      "path": "/home/eric/wjg/d1max-build-isaac/runs/campus_crossing_v34_001/braking_model.json",
+      "sha256": "276c40e1637da689a7086a5afed4689d0b812d47cb3e5d6c171019a072ba2e83",
+      "bytes": 1512
+    }
+  },
+  "missing_optional_evidence_paths": [],
+  "subsequent_component_sensor_audit": "physics_performance_writeback_audit.json; pose-writeback-disabled component experiments whole-sensor FAILED despite actual gait, fullbody and LiDAR floor subchecks. These later experiments do not alter original v34 failed evidence."
+}

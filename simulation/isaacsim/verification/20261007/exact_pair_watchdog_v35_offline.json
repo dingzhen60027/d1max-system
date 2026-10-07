@@ -1,0 +1,453 @@
+{
+  "schema": 1,
+  "kind": "exact_pair_watchdog_v35_offline_regression",
+  "recorded_at_utc": "2026-10-07T06:17:37.788178+00:00",
+  "scope": {
+    "mode": "offline native memory-only map integration and package regression",
+    "formal_navigation_pass": false,
+    "physical_navigation_pass": false,
+    "selected_runtime_release_claim": false,
+    "recording_claim": false,
+    "limitation": "Results do not establish smooth navigation, end-to-end perception freshness or success of the original crossing Action. Runtime performance settings and IMU acceptance are separate evidence."
+  },
+  "problem": {
+    "confirmed_code_cause": "The exact-pair watchdog previously used age since the preceding fusion to consume a newly received orphan before its real same-acquisition peer could arrive. Integrated front/rear mismatch cannot prove current paired FREE.",
+    "runtime_evidence_scope": "v34 trace showed real integrated mismatches and original receipt-expired negative proofs; it did not persist per-fusion pending timelines, so attribution of every individual mismatch to this ordering remains an inference."
+  },
+  "implementation": {
+    "owned_runtime_file": "d1max_nav_ws/src/scan_planner_vendor/plan_env/src/grid_map.cpp",
+    "function": "GridMap::tryProjectedFusion",
+    "source_line_start": 1895,
+    "source_line_end": 1946,
+    "exact_pair_only": true,
+    "default_async_path_unchanged": true,
+    "behavior": "Keep each young exact-pair orphan pending for its own existing 200ms fusion period; a due old orphan follows original conservative processing/drop while the other young packet is restored with its original payload and receipt. Complete exact pair still requires equal original acquisition and both independently newer stamps.",
+    "no_synthetic_free_or_source_restamp": true,
+    "original_guards_preserved": {
+      "fusion_start_to_start_min_seconds": 0.2,
+      "watchdog_since_last_fusion_min_seconds": 0.3,
+      "pending_true_receipt_drop_if_age_greater_than_seconds": 0.25,
+      "source_and_true_receipt_evidence_max_seconds": 0.5,
+      "same_source_exact_pair_required_for_fixture_free": true,
+      "single_source_actual_occupied_evidence_retained": true,
+      "geometry_voxel_odds_lease_budgets_unchanged": true
+    }
+  },
+  "sources": [
+    {
+      "repo_relative_path": "d1max_nav_ws/src/scan_planner_vendor/plan_env/src/grid_map.cpp",
+      "sha256": "fb6f8a718fe05df9faf16a1ee4c61a6f438eb5c0fcf1543db0c91daee699e268",
+      "isolated_source_path": "/home/eric/wjg/d1max-build-isaac/nav-source/src/scan_planner_vendor/plan_env/src/grid_map.cpp",
+      "isolated_source_byte_identical": true
+    },
+    {
+      "repo_relative_path": "d1max_nav_ws/src/scan_planner_vendor/plan_env/include/plan_env/grid_map.h",
+      "sha256": "e3c4310e399810676dc9f384e47cf1a4d5ba197dca6c7329fcc28d3c91e82b41",
+      "isolated_source_path": "/home/eric/wjg/d1max-build-isaac/nav-source/src/scan_planner_vendor/plan_env/include/plan_env/grid_map.h",
+      "isolated_source_byte_identical": true
+    },
+    {
+      "repo_relative_path": "d1max_nav_ws/src/scan_planner_vendor/plan_env/test/test_projected_rays.cpp",
+      "sha256": "14f82eb0f10a00dc5e7a975290abb6f471e40f43464afefb7b8676d674822028",
+      "isolated_source_path": "/home/eric/wjg/d1max-build-isaac/nav-source/src/scan_planner_vendor/plan_env/test/test_projected_rays.cpp",
+      "isolated_source_byte_identical": true
+    }
+  ],
+  "focused_suite": {
+    "actual_xml": {
+      "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/nav/build/plan_env/test_results/plan_env/test_projected_rays.gtest.xml",
+      "bytes": 22707,
+      "sha256": "5f34d37a593a4f6aac6e3fd514ad0491dd779906b096cb871b8252a511d3c77a",
+      "mtime_utc": "2026-10-07T06:14:10.420952+00:00",
+      "availability": "local evidence; not a public download URL"
+    },
+    "xml_timestamp_timezone": "not specified by gtest; retain original string without assigning UTC",
+    "actual_suite_attributes": {
+      "name": "ProjectedRayExactPair",
+      "tests": "9",
+      "failures": "0",
+      "disabled": "0",
+      "errors": "0",
+      "time": "0.014",
+      "timestamp": "2026-10-07T14:14:10"
+    },
+    "actual_cases": [
+      {
+        "name": "NewFrontAndOlderRearWaitForActualSameAcquisition",
+        "status": "run",
+        "result": "completed",
+        "time": "0.002",
+        "timestamp": "2026-10-07T14:14:10",
+        "classname": "plan_env.ProjectedRayExactPair",
+        "passed": true
+      },
+      {
+        "name": "MismatchedWatchdogAddsActualObstacleWithoutCurrentProofOrPriorFree",
+        "status": "run",
+        "result": "completed",
+        "time": "0.001",
+        "timestamp": "2026-10-07T14:14:10",
+        "classname": "plan_env.ProjectedRayExactPair",
+        "passed": true
+      },
+      {
+        "name": "SourceAndTrueReceiptExpireAtOriginalDeadlinesWithoutTimerRenewal",
+        "status": "run",
+        "result": "completed",
+        "time": "0.003",
+        "timestamp": "2026-10-07T14:14:10",
+        "classname": "plan_env.ProjectedRayExactPair",
+        "passed": true
+      },
+      {
+        "name": "DueWatchdogRevokesPreviouslyCachedPairedFreeAfterMismatchedIntegration",
+        "status": "run",
+        "result": "completed",
+        "time": "0.001",
+        "timestamp": "2026-10-07T14:14:10",
+        "classname": "plan_env.ProjectedRayExactPair",
+        "passed": true
+      },
+      {
+        "name": "LateFrontAfterOldFusionGetsOwnWaitForNinetyMillisecondPeer",
+        "status": "run",
+        "result": "completed",
+        "time": "0.001",
+        "timestamp": "2026-10-07T14:14:10",
+        "classname": "plan_env.ProjectedRayExactPair",
+        "passed": true
+      },
+      {
+        "name": "MissingPeerDueOrphanStillAddsActualHitAndRevokesPairedFree",
+        "status": "run",
+        "result": "completed",
+        "time": "0.001",
+        "timestamp": "2026-10-07T14:14:10",
+        "classname": "plan_env.ProjectedRayExactPair",
+        "passed": true
+      },
+      {
+        "name": "DueOldOrphanDoesNotConsumeOrRestampNewUnmatchedPeer",
+        "status": "run",
+        "result": "completed",
+        "time": "0.002",
+        "timestamp": "2026-10-07T14:14:10",
+        "classname": "plan_env.ProjectedRayExactPair",
+        "passed": true
+      },
+      {
+        "name": "LateWatchdogPastOriginalPendingDeadlineDropsWithoutRenewingEvidence",
+        "status": "run",
+        "result": "completed",
+        "time": "0.001",
+        "timestamp": "2026-10-07T14:14:10",
+        "classname": "plan_env.ProjectedRayExactPair",
+        "passed": true
+      },
+      {
+        "name": "DefaultConfigurationPreservesAsynchronousSourceFusion",
+        "status": "run",
+        "result": "completed",
+        "time": "0.002",
+        "timestamp": "2026-10-07T14:14:10",
+        "classname": "plan_env.ProjectedRayExactPair",
+        "passed": true
+      }
+    ]
+  },
+  "plan_env": {
+    "ctest_groups_passed": 8,
+    "ctest_groups_total": 8,
+    "actual_gtest_cases_total": 219,
+    "failures": 0,
+    "errors": 0,
+    "xml_groups": [
+      {
+        "file": "test_dynamic_occupancy_oracle.gtest.xml",
+        "tests": "10",
+        "failures": "0",
+        "disabled": "0",
+        "errors": "0",
+        "time": "0.001",
+        "timestamp": "2026-10-07T14:14:10",
+        "name": "AllTests",
+        "evidence": {
+          "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/nav/build/plan_env/test_results/plan_env/test_dynamic_occupancy_oracle.gtest.xml",
+          "bytes": 2278,
+          "sha256": "a1d07e18eebc953a902473cf63bbc7cda3a3e9438fac4054e0411d84d947bb1c",
+          "mtime_utc": "2026-10-07T06:14:10.515954+00:00",
+          "availability": "local evidence; not a public download URL"
+        }
+      },
+      {
+        "file": "test_map_context.gtest.xml",
+        "tests": "23",
+        "failures": "0",
+        "disabled": "0",
+        "errors": "0",
+        "time": "0.001",
+        "timestamp": "2026-10-07T14:14:09",
+        "name": "AllTests",
+        "evidence": {
+          "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/nav/build/plan_env/test_results/plan_env/test_map_context.gtest.xml",
+          "bytes": 5123,
+          "sha256": "7d4797d79ddea4ee7e4bb59201e97d116bf25c948ee7961834e7531e471851bf",
+          "mtime_utc": "2026-10-07T06:14:09.993944+00:00",
+          "availability": "local evidence; not a public download URL"
+        }
+      },
+      {
+        "file": "test_near_field_diagnostics.gtest.xml",
+        "tests": "17",
+        "failures": "0",
+        "disabled": "0",
+        "errors": "0",
+        "time": "0",
+        "timestamp": "2026-10-07T14:14:09",
+        "name": "AllTests",
+        "evidence": {
+          "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/nav/build/plan_env/test_results/plan_env/test_near_field_diagnostics.gtest.xml",
+          "bytes": 3674,
+          "sha256": "142019b7a7ae206d2bbe0b78b8aa572f5e9d5c4b00f6abe7d3a887b4604987e3",
+          "mtime_utc": "2026-10-07T06:14:09.895942+00:00",
+          "availability": "local evidence; not a public download URL"
+        }
+      },
+      {
+        "file": "test_official_resolution.gtest.xml",
+        "tests": "4",
+        "failures": "0",
+        "disabled": "0",
+        "errors": "0",
+        "time": "0.017",
+        "timestamp": "2026-10-07T14:14:10",
+        "name": "AllTests",
+        "evidence": {
+          "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/nav/build/plan_env/test_results/plan_env/test_official_resolution.gtest.xml",
+          "bytes": 1069,
+          "sha256": "e36dc2ee56e23b0940d1ed31b04a9f3a16e079065635d05add88e647e1271e16",
+          "mtime_utc": "2026-10-07T06:14:10.626956+00:00",
+          "availability": "local evidence; not a public download URL"
+        }
+      },
+      {
+        "file": "test_projected_rays.gtest.xml",
+        "tests": "102",
+        "failures": "0",
+        "disabled": "0",
+        "errors": "0",
+        "time": "0.338",
+        "timestamp": "2026-10-07T14:14:10",
+        "name": "AllTests",
+        "evidence": {
+          "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/nav/build/plan_env/test_results/plan_env/test_projected_rays.gtest.xml",
+          "bytes": 22707,
+          "sha256": "5f34d37a593a4f6aac6e3fd514ad0491dd779906b096cb871b8252a511d3c77a",
+          "mtime_utc": "2026-10-07T06:14:10.420952+00:00",
+          "availability": "local evidence; not a public download URL"
+        }
+      },
+      {
+        "file": "test_solve_budget.gtest.xml",
+        "tests": "5",
+        "failures": "0",
+        "disabled": "0",
+        "errors": "0",
+        "time": "0",
+        "timestamp": "2026-10-07T14:14:09",
+        "name": "AllTests",
+        "evidence": {
+          "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/nav/build/plan_env/test_results/plan_env/test_solve_budget.gtest.xml",
+          "bytes": 1218,
+          "sha256": "8092dc177ade5a0af17b69a81b00df892bfd7dc1ec327b1c5f3b4c5efb18b334",
+          "mtime_utc": "2026-10-07T06:14:09.774940+00:00",
+          "availability": "local evidence; not a public download URL"
+        }
+      },
+      {
+        "file": "test_static_occupancy_prior.gtest.xml",
+        "tests": "26",
+        "failures": "0",
+        "disabled": "0",
+        "errors": "0",
+        "time": "0.006",
+        "timestamp": "2026-10-07T14:14:10",
+        "name": "AllTests",
+        "evidence": {
+          "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/nav/build/plan_env/test_results/plan_env/test_static_occupancy_prior.gtest.xml",
+          "bytes": 5432,
+          "sha256": "7c5b64dea9fa63f4c9c8a58afbd57a4b920f94d0d6440e21ed97631c8689e87e",
+          "mtime_utc": "2026-10-07T06:14:10.473953+00:00",
+          "availability": "local evidence; not a public download URL"
+        }
+      },
+      {
+        "file": "test_voxel_collision.gtest.xml",
+        "tests": "32",
+        "failures": "0",
+        "disabled": "0",
+        "errors": "0",
+        "time": "0.026",
+        "timestamp": "2026-10-07T14:14:09",
+        "name": "AllTests",
+        "evidence": {
+          "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/nav/build/plan_env/test_results/plan_env/test_voxel_collision.gtest.xml",
+          "bytes": 6421,
+          "sha256": "f393bb1c58e9709fd347553aed40a713018020c7f19df6abd3bf65d1549e33f3",
+          "mtime_utc": "2026-10-07T06:14:09.847941+00:00",
+          "availability": "local evidence; not a public download URL"
+        }
+      }
+    ]
+  },
+  "scan_planner": {
+    "ctest_groups_passed": 17,
+    "ctest_groups_total": 17,
+    "gtest_groups": 11,
+    "launch_test_groups": 1,
+    "actual_ctest_total_wall_seconds": 5.85,
+    "log_evidence": {
+      "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/v35_scan_ctest.log",
+      "bytes": 2315,
+      "sha256": "c591e0802d74c2fd5d0c06b21f0af2e21d1362d838b934e11f5e0e47d4998256",
+      "mtime_utc": "2026-10-07T06:14:29.181298+00:00",
+      "availability": "local evidence; not a public download URL"
+    },
+    "scope": "Package tests include offline tests and the existing startup launch test; this is not formal navigation."
+  },
+  "python_fixture_tests": {
+    "passed": 254,
+    "actual_wall_seconds": 9.51,
+    "log_evidence": {
+      "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/v35_python_pytest.log",
+      "bytes": 340,
+      "sha256": "f73e3d0523a463b32184f303f5087604932b8007f77e89a54873a2a55eeaa990",
+      "mtime_utc": "2026-10-07T06:10:23.678846+00:00",
+      "availability": "local evidence; not a public download URL"
+    }
+  },
+  "initial_failed_fixture_run": {
+    "original_result": {
+      "projected_rays_tests": 102,
+      "passed": 99,
+      "failures": 3,
+      "errors": 0,
+      "plan_env_groups_passed": 7,
+      "plan_env_groups_total": 8
+    },
+    "private_original_log": {
+      "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/v35_plan_env_ctest_first_failed.log",
+      "bytes": 24950,
+      "sha256": "b2edae5282a115cc858bcd15c197849a674b69f15099b08df020850aa6912de4",
+      "mtime_utc": "2026-10-07T06:09:05.326468+00:00",
+      "availability": "local evidence; not a public download URL"
+    },
+    "original_failed_test_source_sha256_from_pre_correction_freeze": "31a2f31fddf128a29788a1a07b88b005c1c10dbe3af0cf8acaff0d97c48594d1",
+    "hash_provenance": "Previously reported source freeze; failed source file was replaced by the corrected version before the fresh rebuild. Original failed log remains local.",
+    "failed_cases": [
+      {
+        "test": "LateFrontAfterOldFusionGetsOwnWaitForNinetyMillisecondPeer",
+        "initial_result": "failed",
+        "failure_text_from_private_original_log": "/home/eric/wjg/d1max-build-isaac/nav-source/src/scan_planner_vendor/plan_env/test/test_projected_rays.cpp:1331: Failure\nExpected equality of these values:\n  map.observedProofDeadlineNs()\n    Which is: 102130000000\n  102500000000LL\n    Which is: 102500000000",
+        "fixture_cause": "Expected source-only 102500000000 but the unchanged proof-scope context/receipt lease limits the original combined deadline to 102130000000.",
+        "correction": "Derive the exact minimum from old/new actual integrated source stamps, old/new true receipts and unchanged configured 500ms cap; assert both the derived 102130000000 and actual deadline."
+      },
+      {
+        "test": "MissingPeerDueOrphanStillAddsActualHitAndRevokesPairedFree",
+        "initial_result": "failed",
+        "failure_text_from_private_original_log": "/home/eric/wjg/d1max-build-isaac/nav-source/src/scan_planner_vendor/plan_env/test/test_projected_rays.cpp:1352: Failure\nExpected equality of these values:\n  GridMapTestAccess::status(map,{25,0,0})\n    Which is: -1\n  1",
+        "fixture_cause": "Fixture queried cell [25,0,0] outside the configured centered 40^3 map; actual -1 was an outside-map status, not a watchdog failure.",
+        "correction": "Use actual new endpoint [1.55,.05,.05] at in-map cell [15,0,0], old paired endpoint [1.05,.05,.05] at cell [10,0,0]; assert new cell not previously occupied, then actual new OCC and revoked FREE."
+      },
+      {
+        "test": "DueOldOrphanDoesNotConsumeOrRestampNewUnmatchedPeer",
+        "initial_result": "failed",
+        "failure_text_from_private_original_log": "/home/eric/wjg/d1max-build-isaac/nav-source/src/scan_planner_vendor/plan_env/test/test_projected_rays.cpp:1372: Failure\nExpected equality of these values:\n  GridMapTestAccess::status(map,{25,0,0})\n    Which is: -1\n  1",
+        "fixture_cause": "Fixture queried cell [25,0,0] outside the configured centered 40^3 map; actual -1 was an outside-map status, not a watchdog failure.",
+        "correction": "Use distinct old cell10/new cell15 endpoints inside map; verify due old orphan supplies actual new hit while young unmatched peer retains exact original packet receipt."
+      }
+    ],
+    "additional_passed_test_strengthened": {
+      "test": "LateWatchdogPastOriginalPendingDeadlineDropsWithoutRenewingEvidence",
+      "reason": "Its previous endpoint at2.55 was outside map and could make a negative raw-threshold assertion uninformative.",
+      "fix": "Use distinct in-map old cell10/new cell15, require exact unchanged raw odds at new cell, front drop count +1/rear drop unchanged, no integration increase and unchanged original source stamps/receipts."
+    },
+    "runtime_changed_to_make_tests_pass": false
+  },
+  "independent_review": {
+    "reviewer": "/root/framework_audit",
+    "method": "Read-only code review via team message; no build or mutation by reviewer",
+    "reviewed_stage": "Runtime scheduling implementation before test-fixture corrections",
+    "result": "No new safety blocker",
+    "reported_checks": [
+      "Young packet is moved out and restored without rewriting source, payload or actual receipt.",
+      "Due orphan retains the original 250ms pending drop/source guard.",
+      "Mismatched integration gives cloud stamp0, expired proof1 and invalid prior FREE.",
+      "Default asynchronous and complete exact-pair paths remain unchanged.",
+      "Recovery requires a genuinely received same-source peer; no previous positive proof fallback."
+    ],
+    "limitation": "Agent review does not replace actual end-to-end formal tests."
+  },
+  "build_install_evidence": {
+    "plan_env_install": {
+      "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/v35_plan_env_install.log",
+      "bytes": 3964,
+      "sha256": "04d226738aaecf9a46ba321c458bd093aefe7c8a334c25d7e56f43c10b7314c2",
+      "mtime_utc": "2026-10-07T06:14:10.643956+00:00",
+      "availability": "local evidence; not a public download URL"
+    },
+    "scan_planner_install_and_node_relink": {
+      "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/v35_scan_install.log",
+      "bytes": 6344,
+      "sha256": "c2f389402ac2d89e51544bb6016727f17c3084d7d912d95d349e81ab7ff4135a",
+      "mtime_utc": "2026-10-07T06:14:23.325190+00:00",
+      "availability": "local evidence; not a public download URL"
+    },
+    "verification": "Fresh source/test byte identity with isolated nav-source verified above; install logs explicitly show libplan_env.a and scan_planner_node installation. Successful package tests recorded from actual XML/ctest.",
+    "root_reported_fresh_native_build_success": true
+  },
+  "logs": {
+    "v35_plan_env_ctest.log": {
+      "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/v35_plan_env_ctest.log",
+      "bytes": 1139,
+      "sha256": "29eb6e54885479703822f2fd9ad6236bb35c5492bf67c8a20231f23023f8f5ee",
+      "mtime_utc": "2026-10-07T06:14:10.632956+00:00",
+      "availability": "local evidence; not a public download URL"
+    },
+    "v35_plan_env_ctest_first_failed.log": {
+      "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/v35_plan_env_ctest_first_failed.log",
+      "bytes": 24950,
+      "sha256": "b2edae5282a115cc858bcd15c197849a674b69f15099b08df020850aa6912de4",
+      "mtime_utc": "2026-10-07T06:09:05.326468+00:00",
+      "availability": "local evidence; not a public download URL"
+    },
+    "v35_plan_env_install.log": {
+      "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/v35_plan_env_install.log",
+      "bytes": 3964,
+      "sha256": "04d226738aaecf9a46ba321c458bd093aefe7c8a334c25d7e56f43c10b7314c2",
+      "mtime_utc": "2026-10-07T06:14:10.643956+00:00",
+      "availability": "local evidence; not a public download URL"
+    },
+    "v35_scan_ctest.log": {
+      "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/v35_scan_ctest.log",
+      "bytes": 2315,
+      "sha256": "c591e0802d74c2fd5d0c06b21f0af2e21d1362d838b934e11f5e0e47d4998256",
+      "mtime_utc": "2026-10-07T06:14:29.181298+00:00",
+      "availability": "local evidence; not a public download URL"
+    },
+    "v35_scan_install.log": {
+      "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/v35_scan_install.log",
+      "bytes": 6344,
+      "sha256": "c2f389402ac2d89e51544bb6016727f17c3084d7d912d95d349e81ab7ff4135a",
+      "mtime_utc": "2026-10-07T06:14:23.325190+00:00",
+      "availability": "local evidence; not a public download URL"
+    },
+    "v35_python_pytest.log": {
+      "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/v35_python_pytest.log",
+      "bytes": 340,
+      "sha256": "f73e3d0523a463b32184f303f5087604932b8007f77e89a54873a2a55eeaa990",
+      "mtime_utc": "2026-10-07T06:10:23.678846+00:00",
+      "availability": "local evidence; not a public download URL"
+    }
+  }
+}

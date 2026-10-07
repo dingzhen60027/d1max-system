@@ -1,0 +1,204 @@
+{
+  "schema": 1,
+  "kind": "tracker_zero_only_signed_axis_l1_witness_offline_verification",
+  "date": "2026-10-07",
+  "source_frozen": true,
+  "runtime_acceptance": false,
+  "physical_navigation_acceptance": false,
+  "source_hashes_sha256": {
+    "d1max_nav_ws/src/d1max_trajectory_tracker/include/d1max_trajectory_tracker/tracker_core.hpp": "79e073c1a6b91eb5aafc9852db23694abd8a29ee291c0e8d490f89b3d162d220",
+    "d1max_nav_ws/src/d1max_trajectory_tracker/test/test_tracker_core.cpp": "81fcabbf2049a706053b3530e8508bc19aca9be090d40521f48433f9af7f2a59"
+  },
+  "test_evidence": {
+    "suite": "Tracker",
+    "tests": 61,
+    "failures": 0,
+    "errors": 0,
+    "disabled": 0,
+    "elapsed_seconds": 0.006,
+    "timestamp_as_reported": "2026-10-07T13:22:41",
+    "timestamp_timezone": "Not specified by GoogleTest XML; preserved verbatim.",
+    "xml_relative_path": "axis_witness_tracker_core.xml",
+    "xml_sha256": "a58b0ecf3da4e1ca943e23f499389c0daa5fe7ed5fea3863dfa24a34549226a5",
+    "original_local_xml_path": "/home/eric/wjg/d1max-build-isaac/axis_witness_tracker_core.xml",
+    "published_xml_byte_identical": true,
+    "scope": "Focused native test_tracker_core; no ROS init or Kit participant.",
+    "build_command": "cmake --build /home/eric/wjg/d1max-build-isaac/nav/build/d1max_trajectory_tracker --target test_tracker_core --parallel 1",
+    "test_command": "/home/eric/wjg/d1max-build-isaac/nav/build/d1max_trajectory_tracker/test_tracker_core --gtest_output=xml:/home/eric/wjg/d1max-build-isaac/axis_witness_tracker_core.xml",
+    "runtime_environment": "/opt/ros/humble/setup.bash and existing isolated nav/install/setup.bash were sourced for library resolution; no ROS graph was started."
+  },
+  "counterexample": {
+    "native_regression": "Tracker.QuadraticForwardClusterHasStrictSeparatingBoundDespiteLegacyTriangleTolerance",
+    "raw_xyz_controls": [
+      [
+        0.03,
+        0.0,
+        0.0
+      ],
+      [
+        0.03,
+        3e-17,
+        6e-10
+      ],
+      [
+        0.03,
+        -3e-17,
+        9e-10
+      ]
+    ],
+    "raw_xyz_control_hex": [
+      [
+        "0x1.eb851eb851eb8p-6",
+        "0x0.0p+0",
+        "0x0.0p+0"
+      ],
+      [
+        "0x1.eb851eb851eb8p-6",
+        "0x1.14b37f4b51f71p-55",
+        "0x1.49da7e361ce4cp-31"
+      ],
+      [
+        "0x1.eb851eb851eb8p-6",
+        "-0x1.14b37f4b51f71p-55",
+        "0x1.eec7bd512b572p-31"
+      ]
+    ],
+    "diagnostic_numbers_provenance": "Python scalar IEEE binary64 reproduction of scaled sqrt normalization; not a native logger dump. Native XML separately proves the C++ regression assertions passed.",
+    "normalized_xy": [
+      [
+        1.0,
+        0.0
+      ],
+      [
+        0.9999999999999998,
+        9.999999999999999e-16
+      ],
+      [
+        0.9999999999999996,
+        -9.999999999999997e-16
+      ]
+    ],
+    "normalized_xy_hex": [
+      [
+        "0x1.0000000000000p+0",
+        "0x0.0p+0"
+      ],
+      [
+        "0x1.ffffffffffffep-1",
+        "0x1.203af9ee75615p-50"
+      ],
+      [
+        "0x1.ffffffffffffcp-1",
+        "-0x1.203af9ee75614p-50"
+      ]
+    ],
+    "triangle_area": 6.661338147750938e-31,
+    "triangle_area_hex": "0x1.b05876e5b011fp-101",
+    "side_cross": [
+      9.999999999999999e-16,
+      -1.9999999999999986e-15,
+      9.999999999999997e-16
+    ],
+    "side_cross_hex": [
+      "0x1.203af9ee75615p-50",
+      "-0x1.203af9ee75612p-49",
+      "0x1.203af9ee75614p-50"
+    ],
+    "exact_fraction_side_signs": [
+      1,
+      -1,
+      1
+    ],
+    "legacy_absolute_side_tolerance": 1e-14,
+    "legacy_origin_inside_classification": true,
+    "exact_origin_inside": false,
+    "signed_axis": "+X",
+    "guarded_certificate_lower_bound": 0.9999999699999995,
+    "guarded_certificate_lower_bound_hex": "0x1.fffffefe4d4d2p-1",
+    "per_control_rounding_proof": [
+      {
+        "control": [
+          0.03,
+          0.0,
+          0.0
+        ],
+        "control_hex": [
+          "0x1.eb851eb851eb8p-6",
+          "0x0.0p+0",
+          "0x0.0p+0"
+        ],
+        "norm_l1_upper": 0.030000000000000006,
+        "norm_l1_upper_hex": "0x1.eb851eb851ebap-6",
+        "axis_projection": 0.03,
+        "projection_over_upper_lower": 0.9999999999999997,
+        "lower_hex": "0x1.ffffffffffffdp-1",
+        "exact_fraction_check_upper_squared_ge_xyz_squared": true,
+        "exact_fraction_check_lower_times_upper_le_projection": true
+      },
+      {
+        "control": [
+          0.03,
+          3e-17,
+          6e-10
+        ],
+        "control_hex": [
+          "0x1.eb851eb851eb8p-6",
+          "0x1.14b37f4b51f71p-55",
+          "0x1.49da7e361ce4cp-31"
+        ],
+        "norm_l1_upper": 0.030000000600000038,
+        "norm_l1_upper_hex": "0x1.eb851f5d3f2b5p-6",
+        "axis_projection": 0.03,
+        "projection_over_upper_lower": 0.999999979999999,
+        "lower_hex": "0x1.ffffff5433886p-1",
+        "exact_fraction_check_upper_squared_ge_xyz_squared": true,
+        "exact_fraction_check_lower_times_upper_le_projection": true
+      },
+      {
+        "control": [
+          0.03,
+          -3e-17,
+          9e-10
+        ],
+        "control_hex": [
+          "0x1.eb851eb851eb8p-6",
+          "-0x1.14b37f4b51f71p-55",
+          "0x1.eec7bd512b572p-31"
+        ],
+        "norm_l1_upper": 0.03000000090000004,
+        "norm_l1_upper_hex": "0x1.eb851fafb5caep-6",
+        "axis_projection": 0.03,
+        "projection_over_upper_lower": 0.9999999699999995,
+        "lower_hex": "0x1.fffffefe4d4d2p-1",
+        "exact_fraction_check_upper_squared_ge_xyz_squared": true,
+        "exact_fraction_check_lower_times_upper_le_projection": true
+      }
+    ]
+  },
+  "proof": [
+    "Let v=sum_i B_i p_i for quadratic Bernstein weights B_i>=0 and sum_i B_i=1. Exact zero controls contribute nothing.",
+    "For a signed unit X/Y axis n, require n dot p_i>0 for every nonzero full-XYZ control. No common strictly positive signed axis leaves the old zero unchanged.",
+    "Compute U_i with two positive additions, each rounded outward using nextafter(+infinity). Thus U_i>=||p_i||_1>=||p_i||_2. Nonfinite/overflow upper bounds fail closed.",
+    "Compute l_i=nextafter((n dot p_i)/U_i,0). For finite binary64 arithmetic this is an inward lower bound. Set L=min_i l_i for each valid axis and take the largest valid axis certificate.",
+    "With S=sum_i B_i||p_i||_2>=||v||_2, n dot v_XY>=L*S. Therefore ||v_XY||_2/||v||_2>=L whenever v is nonzero.",
+    "The certificate is a geometric speed-ratio lower bound. It does not grant heading permission, physical rest, motion authority or source freshness."
+  ],
+  "guards_unchanged": [
+    "Fallback is used only when the original final quadraticPlanarScale return is zero; every original positive result, including a real tiny cusp cap, is returned unchanged.",
+    "Nonzero vertical controls, true opposing/cusp hulls, all-zero controls, nonfinite inputs and unrepresentable certificate values remain zero unless an actual common signed axis proves a positive ratio.",
+    "No forced floor, minimum command, body pose change, curve point change, timestamp change, measured progress change, heading gate change, lease change or geometry budget change.",
+    "Config layout and ABI are unchanged by this helper-only fix."
+  ],
+  "native_regressions": [
+    "QuadraticForwardClusterHasStrictSeparatingBoundDespiteLegacyTriangleTolerance",
+    "QuadraticSeparatingWitnessCoversNearCollinearDirectionAndAllSignedAxes",
+    "QuadraticWitnessCannotAuthorizeVerticalOpposedCuspOrInventZeroControlMotion",
+    "QuadraticWitnessKeepsExistingPositiveResultAndFailsClosedAtNumericExtremes"
+  ],
+  "limitations": [
+    "This offline evidence repairs a numerical false-zero possibility; it does not establish smooth or successful physical navigation.",
+    "The immutable v33 formal run did not contain this change. Its reported nonzero cap 0.00012598 is outside the zero-only fallback scope.",
+    "The published source freeze and test XML precede integration into any future immutable runtime candidate. No installed runtime or old candidate was edited by this evidence publication.",
+    "Dense sampled ratio checks are supplementary regression evidence; the common-axis Bernstein inequality supplies the full-interval lower-bound proof."
+  ]
+}
