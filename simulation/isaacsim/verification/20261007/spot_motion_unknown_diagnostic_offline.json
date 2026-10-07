@@ -1,0 +1,47 @@
+{
+  "schema": 1,
+  "scope": "unknown_same_captured_cell_diagnostic_only",
+  "formal_navigation_pass": false,
+  "judgment_modified": false,
+  "geometry_budgets_modified": false,
+  "read_only_snapshot_diagnostic": true,
+  "focused_gtest": {
+    "tests": "36",
+    "failures": "0",
+    "disabled": "0",
+    "errors": "0",
+    "time": "0.823",
+    "timestamp": "2026-10-07T17:44:40",
+    "name": "AllTests"
+  },
+  "artifacts": [
+    {
+      "path": "/home/eric/wjg/d1max-system/d1max_nav_ws/src/scan_planner_vendor/plan_manage/include/plan_manage/execution_validator.hpp",
+      "sha256": "8e37973bf3505f239119b6f2d8771aab89c7cfc4e915953a8d6f1a2a46b73376"
+    },
+    {
+      "path": "/home/eric/wjg/d1max-system/d1max_nav_ws/src/scan_planner_vendor/plan_manage/test/test_motion_sweep.cpp",
+      "sha256": "7354c901a3f05a1a238d9a9d85fd314daa1d49e723dcc21e475cdcf7c56874ed"
+    },
+    {
+      "path": "/home/eric/wjg/d1max-build-isaac/nav/install/scan_planner/include/plan_manage/execution_validator.hpp",
+      "sha256": "8e37973bf3505f239119b6f2d8771aab89c7cfc4e915953a8d6f1a2a46b73376"
+    },
+    {
+      "path": "/home/eric/wjg/d1max-build-isaac/nav/install/scan_planner/lib/scan_planner/scan_planner_node",
+      "sha256": "3ac561b53714f6ae34ecd78837bf13d2528b5d4af50066c56bcfddb4ee9daf7e"
+    },
+    {
+      "path": "/home/eric/wjg/d1max-build-isaac/v40_unknown_diagnostic_build.log",
+      "sha256": "e345bf47e124bb8d1c253ac5745c09eccf7f0c2b6df19b5ec3aa3724b2f4fc4d"
+    },
+    {
+      "path": "/home/eric/wjg/d1max-build-isaac/v40_unknown_diagnostic_ctest.log",
+      "sha256": "e0daff319226ab40ec8bd19f78bb9d94affa6021897a6c6138cd210758be2e24"
+    },
+    {
+      "path": "/home/eric/wjg/d1max-build-isaac/nav/build/scan_planner/test_results/scan_planner/test_motion_sweep.gtest.xml",
+      "sha256": "f058f21a3c603bdf1d129df5a86e067b7dfcc79890ce24f37b5e903f971cdd4a"
+    }
+  ]
+}

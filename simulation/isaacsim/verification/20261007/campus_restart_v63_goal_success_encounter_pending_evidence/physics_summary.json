@@ -1,0 +1,1124 @@
+{
+  "epoch": "978b6072-ef0d-4346-ad7b-9ae8b8131569",
+  "physics_frames": 61580,
+  "physics_hz": 500.0,
+  "initial_position": [
+    -7.926351070404053,
+    -5.022715091705322,
+    0.4817865490913391
+  ],
+  "initial_orientation_wxyz": [
+    0.9999151825904846,
+    -0.002756789093837142,
+    -0.0016362142050638795,
+    -0.012627595104277134
+  ],
+  "final_pose": [
+    7.878705024719238,
+    -4.941021919250488,
+    0.4860476851463318,
+    0.0009435450774617493,
+    0.005485157016664743,
+    -0.10277784615755081,
+    0.9946888089179993
+  ],
+  "final_linear_velocity_world": [
+    -0.0009309276356361806,
+    0.00022313314548227936,
+    0.007112747523933649
+  ],
+  "final_angular_velocity_world": [
+    0.000280887121334672,
+    -0.0002045821602223441,
+    -0.00594992795959115
+  ],
+  "joint_velocities": [
+    0.0012955309357494116,
+    0.002007249277085066,
+    -0.0037580635398626328,
+    -0.005479412153363228,
+    -0.004892897792160511,
+    -0.011020869016647339,
+    -0.010303971357643604,
+    -0.015003826469182968,
+    0.011268680915236473,
+    0.016133926808834076,
+    0.017329681664705276,
+    0.017501721158623695
+  ],
+  "robot_kind": "official_spot_physx",
+  "robot_asset": {
+    "schema": 1,
+    "kind": "official_spot_physx",
+    "source": "NVIDIA Isaac Sim 6.0 matching PhysX Spot model/policy/env",
+    "root_path": "/World/Spot",
+    "body_path": "/World/Spot/body",
+    "articulation_path": "/World/Spot",
+    "physics_dt_s": 0.002,
+    "physics_frequency_hz": 500,
+    "policy_decimation": 10,
+    "policy_frequency_hz": 50,
+    "stall_recovery": {
+      "enabled": true,
+      "isolated_fixture_only": true,
+      "applied_events": 0
+    },
+    "max_linear_speed_mps": 0.23,
+    "max_angular_speed_radps": 0.3,
+    "velocity_feedback": {
+      "enabled": true,
+      "mode": "spot_monotone_measured_v2",
+      "type": "bounded_monotone_measured_body_velocity_PI_v2",
+      "policy_command_limits": [
+        0.38,
+        0.5
+      ],
+      "kp": [
+        0.35,
+        0.5
+      ],
+      "ki": [
+        1.0,
+        0.35
+      ],
+      "integral_limit": [
+        0.25,
+        0.15
+      ],
+      "measurement_lowpass_time_constant_s": 0.05,
+      "nonlinear_linear_feedforward": null,
+      "monotone_linear_policy_mapping": {
+        "gain": 2.0,
+        "formula": "2*vx_des",
+        "bounded_slope": 2.0,
+        "strict_zero": true,
+        "calibration_status": "candidate_gain_not_a_measured_inverse; independent_PhysX_tracking_and_stop_required"
+      },
+      "zero_linear_demand": {
+        "history_decay_time_constant_s": 0.5,
+        "output": "kp_linear*(zero_desired-measured_filtered_vx); forward feedforward and integral excluded",
+        "update_order": "measured_filter,error,integral_proposal,antiwindup,history_decay,output_withdrawal"
+      },
+      "zero_axes_demand": null
+    },
+    "usd_path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v63-campus-v2-lidar25-restart/simulation/robot_assets/Isaac/Robots/BostonDynamics/spot/spot.usd",
+    "policy_path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v63-campus-v2-lidar25-restart/simulation/robot_assets/Isaac/Samples/Policies/Spot_Policies/spot_policy.pt",
+    "env_config_path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v63-campus-v2-lidar25-restart/simulation/robot_assets/Isaac/Samples/Policies/Spot_Policies/spot_env.yaml",
+    "asset_manifest_path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v63-campus-v2-lidar25-restart/simulation/robot_assets/asset_manifest.json",
+    "asset_manifest_sha256": "04a923452835528a228fcaad70971ec2880f47b7b0f0cfc37218623b68e82dec",
+    "assets": [
+      {
+        "path": "Isaac/Robots/BostonDynamics/spot/configuration/spot_robot_schema.usd",
+        "source_url": "https://omniverse-content-production.s3-us-west-2.amazonaws.com/Assets/Isaac/6.0/Isaac/Robots/BostonDynamics/spot/configuration/spot_robot_schema.usd",
+        "size_bytes": 4415,
+        "sha256": "25551cbe48b44c3bada13d8bd7b514fef6b0693f8d01fbdd26894ef33d8e731d"
+      },
+      {
+        "path": "Isaac/Robots/BostonDynamics/spot/materials/black_leg.png",
+        "source_url": "https://omniverse-content-production.s3-us-west-2.amazonaws.com/Assets/Isaac/6.0/Isaac/Robots/BostonDynamics/spot/materials/black_leg.png",
+        "size_bytes": 101692,
+        "sha256": "8a06ec422c8a1951b41a6985aa634cba8e5b85ad4d14ebf917b01bbfd4c7b751"
+      },
+      {
+        "path": "Isaac/Robots/BostonDynamics/spot/materials/body_others.png",
+        "source_url": "https://omniverse-content-production.s3-us-west-2.amazonaws.com/Assets/Isaac/6.0/Isaac/Robots/BostonDynamics/spot/materials/body_others.png",
+        "size_bytes": 348237,
+        "sha256": "9f735c2993f4f72e574d8c899eddb96632c37d7609402a52485442e26e5165bf"
+      },
+      {
+        "path": "Isaac/Robots/BostonDynamics/spot/materials/hip.png",
+        "source_url": "https://omniverse-content-production.s3-us-west-2.amazonaws.com/Assets/Isaac/6.0/Isaac/Robots/BostonDynamics/spot/materials/hip.png",
+        "size_bytes": 240453,
+        "sha256": "41951a0c519f192cedbe700848c6c901e3a39ebca30557d573fe8abb5c1ff329"
+      },
+      {
+        "path": "Isaac/Robots/BostonDynamics/spot/materials/lleg.png",
+        "source_url": "https://omniverse-content-production.s3-us-west-2.amazonaws.com/Assets/Isaac/6.0/Isaac/Robots/BostonDynamics/spot/materials/lleg.png",
+        "size_bytes": 120738,
+        "sha256": "6941033f6ae5687c1f10add8fb6b38bbc30a913192736a86f112702a3d4ef6b5"
+      },
+      {
+        "path": "Isaac/Robots/BostonDynamics/spot/materials/yellow_leg.png",
+        "source_url": "https://omniverse-content-production.s3-us-west-2.amazonaws.com/Assets/Isaac/6.0/Isaac/Robots/BostonDynamics/spot/materials/yellow_leg.png",
+        "size_bytes": 90658,
+        "sha256": "e0282ab9ec181e9ea7be953c3d8b5167241f0350574667b4c4a071e459080205"
+      },
+      {
+        "path": "Isaac/Robots/BostonDynamics/spot/materials/yellow_parts.png",
+        "source_url": "https://omniverse-content-production.s3-us-west-2.amazonaws.com/Assets/Isaac/6.0/Isaac/Robots/BostonDynamics/spot/materials/yellow_parts.png",
+        "size_bytes": 389806,
+        "sha256": "0a2f72a5c1f6fb169cbfd048f1efe29a6bb4a5383fdb509523d1bb0e5e950273"
+      },
+      {
+        "path": "Isaac/Robots/BostonDynamics/spot/spot.usd",
+        "source_url": "https://omniverse-content-production.s3-us-west-2.amazonaws.com/Assets/Isaac/6.0/Isaac/Robots/BostonDynamics/spot/spot.usd",
+        "size_bytes": 3425071,
+        "sha256": "dbe17178d8507aa31a82e8f8582606c2da5694ea8d2e24c77e50f1ff149689cb"
+      },
+      {
+        "path": "Isaac/Samples/Policies/Spot_Policies/spot_env.yaml",
+        "source_url": "https://omniverse-content-production.s3-us-west-2.amazonaws.com/Assets/Isaac/6.0/Isaac/Samples/Policies/Spot_Policies/spot_env.yaml",
+        "size_bytes": 31228,
+        "sha256": "397440818604ca7cf0cb79c6012325f2bba292029ad0c2d5df5fd64b531d2dbc"
+      },
+      {
+        "path": "Isaac/Samples/Policies/Spot_Policies/spot_policy.pt",
+        "source_url": "https://omniverse-content-production.s3-us-west-2.amazonaws.com/Assets/Isaac/6.0/Isaac/Samples/Policies/Spot_Policies/spot_policy.pt",
+        "size_bytes": 775760,
+        "sha256": "d95d675e8b080d5c84a2a2779d165ff7ecd3e34d24b233c083242e615a3d589a"
+      }
+    ],
+    "collider_registry_sha256": "820ed63ffcee317cffefde1e7b4d3cfc149c81e558c8abbab16c104eaca8a90f",
+    "authorized_colliders": [
+      {
+        "path": "/World/Spot/body/collisions/mesh_0",
+        "rigid_body_path": "/World/Spot/body",
+        "collision_enabled": true,
+        "shape": {
+          "type": "Cube",
+          "size": 1.0
+        },
+        "local_matrix": [
+          [
+            0.850000023842,
+            0.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            0.2,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.14,
+            0.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ]
+      },
+      {
+        "path": "/World/Spot/fl_foot/collisions/mesh_0",
+        "rigid_body_path": "/World/Spot/fl_foot",
+        "collision_enabled": true,
+        "shape": {
+          "type": "Sphere",
+          "radius": 0.03500000014901161
+        },
+        "local_matrix": [
+          [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            0.0,
+            1.0,
+            0.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ]
+      },
+      {
+        "path": "/World/Spot/fl_lleg/collisions/mesh_1",
+        "rigid_body_path": "/World/Spot/fl_lleg",
+        "collision_enabled": true,
+        "shape": {
+          "type": "Capsule",
+          "radius": 0.014999999664723873,
+          "height": 0.3499999940395355,
+          "axis": "Z"
+        },
+        "local_matrix": [
+          [
+            0.998987564455,
+            0.0,
+            -0.04498717666,
+            0.010499999858
+          ],
+          [
+            0.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.04498717666,
+            0.0,
+            0.998987564455,
+            -0.15000000596
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ]
+      },
+      {
+        "path": "/World/Spot/fl_uleg/collisions/mesh_0",
+        "rigid_body_path": "/World/Spot/fl_uleg",
+        "collision_enabled": true,
+        "shape": {
+          "type": "Capsule",
+          "radius": 0.035,
+          "height": 0.3,
+          "axis": "Z"
+        },
+        "local_matrix": [
+          [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            0.0,
+            1.0,
+            -0.115000002086
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ]
+      },
+      {
+        "path": "/World/Spot/fr_foot/collisions/mesh_0",
+        "rigid_body_path": "/World/Spot/fr_foot",
+        "collision_enabled": true,
+        "shape": {
+          "type": "Sphere",
+          "radius": 0.03500000014901161
+        },
+        "local_matrix": [
+          [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            0.0,
+            1.0,
+            0.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ]
+      },
+      {
+        "path": "/World/Spot/fr_lleg/collisions/mesh_1",
+        "rigid_body_path": "/World/Spot/fr_lleg",
+        "collision_enabled": true,
+        "shape": {
+          "type": "Capsule",
+          "radius": 0.014999999664723873,
+          "height": 0.3499999940395355,
+          "axis": "Z"
+        },
+        "local_matrix": [
+          [
+            0.998987564455,
+            0.0,
+            -0.04498717666,
+            0.010499999858
+          ],
+          [
+            0.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.04498717666,
+            0.0,
+            0.998987564455,
+            -0.15000000596
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ]
+      },
+      {
+        "path": "/World/Spot/fr_uleg/collisions/mesh_0",
+        "rigid_body_path": "/World/Spot/fr_uleg",
+        "collision_enabled": true,
+        "shape": {
+          "type": "Capsule",
+          "radius": 0.035,
+          "height": 0.3,
+          "axis": "Z"
+        },
+        "local_matrix": [
+          [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            0.0,
+            1.0,
+            -0.115000002086
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ]
+      },
+      {
+        "path": "/World/Spot/hl_foot/collisions/mesh_0",
+        "rigid_body_path": "/World/Spot/hl_foot",
+        "collision_enabled": true,
+        "shape": {
+          "type": "Sphere",
+          "radius": 0.03500000014901161
+        },
+        "local_matrix": [
+          [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            0.0,
+            1.0,
+            0.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ]
+      },
+      {
+        "path": "/World/Spot/hl_lleg/collisions/mesh_1",
+        "rigid_body_path": "/World/Spot/hl_lleg",
+        "collision_enabled": true,
+        "shape": {
+          "type": "Capsule",
+          "radius": 0.014999999664723873,
+          "height": 0.3499999940395355,
+          "axis": "Z"
+        },
+        "local_matrix": [
+          [
+            0.998987564455,
+            0.0,
+            -0.04498717666,
+            0.010499999858
+          ],
+          [
+            0.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.04498717666,
+            0.0,
+            0.998987564455,
+            -0.15000000596
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ]
+      },
+      {
+        "path": "/World/Spot/hl_uleg/collisions/mesh_0",
+        "rigid_body_path": "/World/Spot/hl_uleg",
+        "collision_enabled": true,
+        "shape": {
+          "type": "Capsule",
+          "radius": 0.035,
+          "height": 0.3,
+          "axis": "Z"
+        },
+        "local_matrix": [
+          [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            0.0,
+            1.0,
+            -0.115000002086
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ]
+      },
+      {
+        "path": "/World/Spot/hr_foot/collisions/mesh_0",
+        "rigid_body_path": "/World/Spot/hr_foot",
+        "collision_enabled": true,
+        "shape": {
+          "type": "Sphere",
+          "radius": 0.03500000014901161
+        },
+        "local_matrix": [
+          [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            0.0,
+            1.0,
+            0.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ]
+      },
+      {
+        "path": "/World/Spot/hr_lleg/collisions/mesh_1",
+        "rigid_body_path": "/World/Spot/hr_lleg",
+        "collision_enabled": true,
+        "shape": {
+          "type": "Capsule",
+          "radius": 0.014999999664723873,
+          "height": 0.3499999940395355,
+          "axis": "Z"
+        },
+        "local_matrix": [
+          [
+            0.998987564455,
+            0.0,
+            -0.04498717666,
+            0.010499999858
+          ],
+          [
+            0.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.04498717666,
+            0.0,
+            0.998987564455,
+            -0.15000000596
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ]
+      },
+      {
+        "path": "/World/Spot/hr_uleg/collisions/mesh_0",
+        "rigid_body_path": "/World/Spot/hr_uleg",
+        "collision_enabled": true,
+        "shape": {
+          "type": "Capsule",
+          "radius": 0.035,
+          "height": 0.3,
+          "axis": "Z"
+        },
+        "local_matrix": [
+          [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            0.0,
+            1.0,
+            -0.115000002086
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ]
+      }
+    ],
+    "policy_steps": 62580,
+    "actuator_tensor_readback": {
+      "dof_names": [
+        "fl_hx",
+        "fr_hx",
+        "hl_hx",
+        "hr_hx",
+        "fl_hy",
+        "fr_hy",
+        "hl_hy",
+        "hr_hy",
+        "fl_kn",
+        "fr_kn",
+        "hl_kn",
+        "hr_kn"
+      ],
+      "stiffness": [
+        [
+          60.0,
+          60.0,
+          60.0,
+          60.0,
+          60.0,
+          60.0,
+          60.0,
+          60.0,
+          60.0,
+          60.0,
+          60.0,
+          60.0
+        ]
+      ],
+      "damping": [
+        [
+          1.5,
+          1.5,
+          1.5,
+          1.5,
+          1.5,
+          1.5,
+          1.5,
+          1.5,
+          1.5,
+          1.5,
+          1.5,
+          1.5
+        ]
+      ],
+      "max_efforts": [
+        [
+          45.0,
+          45.0,
+          45.0,
+          45.0,
+          45.0,
+          45.0,
+          45.0,
+          45.0,
+          115.0,
+          115.0,
+          115.0,
+          115.0
+        ]
+      ],
+      "max_velocities": [
+        [
+          100.0,
+          100.0,
+          100.0,
+          100.0,
+          100.0,
+          100.0,
+          100.0,
+          100.0,
+          100.0,
+          100.0,
+          100.0,
+          100.0
+        ]
+      ]
+    },
+    "initial_floor_z_m": 0.0,
+    "initial_collision_floor_clearance_m": 0.10800005421042447,
+    "measured_state": "PhysX_tensor_no_USD_fallback",
+    "motor_model": "official_implicit_PD_deployment_not_DelayedPD_or_RemotizedPD_equivalence",
+    "source_url": "https://docs.isaacsim.omniverse.nvidia.com/6.0.0/robot_simulation/ext_isaacsim_robot_policy_example.html"
+  },
+  "policy_history": {
+    "schema": 1,
+    "kind": "actual_500hz_pre_policy_history",
+    "scene_sha256": "db541949266ee09970c8b60b1cabe5b7bb30f8e51a8372c3cb202efe1b2f6913",
+    "physics_hz": 500,
+    "policy_hz": 50,
+    "source_tick_ns": 2000000,
+    "command_limits": [
+      0.23,
+      0.3
+    ],
+    "actual_source_ticks": 61580,
+    "duration_ns": 123160000000,
+    "first_source_tick": 0,
+    "last_source_tick": 61579,
+    "consecutive_tick_invocations_checked": true,
+    "command_event_count": 8047,
+    "observation_count": 6258,
+    "recovery_count": 0,
+    "component_measurement_count": 61581,
+    "component_last_source_ns": 123160000000,
+    "component_measurements_file": "policy_component_state_500hz.jsonl",
+    "component_measurements_sha256": "59764fa13096b85d7e3d2202f858d1bfc85d49caa338926420aa5408c00dbbf4",
+    "component_measurement_cadence": "every real500Hz BEGIN plus final measured END",
+    "command_events_file": "policy_command_events.jsonl",
+    "command_events_sha256": "a8da52c87e21a56eeb894bb4176827a11306c5eaef602a35a2799914473deef2",
+    "semantics": "actual BEGIN command consumed on every physical tick; sparse exact command/authority changes; no sampled-state reconstruction"
+  },
+  "policy_component": {
+    "enabled": false,
+    "external_udp_disabled": false,
+    "action_memory_experiment": null,
+    "velocity_feedback_experiment": null,
+    "frozen_command_sha256": null,
+    "internal_policy_linear_speed": null,
+    "desired_navigation_linear_speed": null,
+    "internal_policy_motion_frames": 0,
+    "true_zero_begin_source_ns": null,
+    "navigation_authorization": null
+  },
+  "dynamic_actor_count": 6,
+  "dynamic_measurement_samples": 9237,
+  "native_floor_hit_audit": {
+    "scans": 6158,
+    "native_floor_hits": 15287743,
+    "max_abs_error_m": 5.210762371810063e-06,
+    "sealed_error_bound_m": 0.0002,
+    "raw_endpoints_and_source_times_preserved": true
+  },
+  "body_envelope_attestation": {
+    "required": true,
+    "verified_samples": 9237,
+    "failures": 0,
+    "envelope": {
+      "radius": 0.6078651750202781,
+      "offset": 0.3125,
+      "above": 0.589,
+      "support_floor_z": 0.0,
+      "support_penetration_m": 0.02
+    }
+  },
+  "scans_per_sensor": [
+    3079,
+    3079
+  ],
+  "last_hits_per_sensor": [
+    8289,
+    8308
+  ],
+  "first_hits": [
+    {
+      "count": 8356,
+      "body_min": [
+        -32.78787612915039,
+        -34.985267639160156,
+        -0.5358319878578186
+      ],
+      "body_max": [
+        32.50510025024414,
+        33.149085998535156,
+        3.117898464202881
+      ],
+      "raw_cloud_shape": [
+        360,
+        33,
+        3
+      ],
+      "raw_depth_shape": [
+        360,
+        33
+      ],
+      "native_rows": 33,
+      "native_cols": 360,
+      "native_scan_time_ns": 20000001,
+      "native_scan_physics_step": 10,
+      "zenith": [
+        -1.3962633609771729,
+        -1.3089969158172607,
+        -1.2217304706573486,
+        -1.1344640254974365,
+        -1.0471975803375244,
+        -0.9599310755729675,
+        -0.8726646304130554,
+        -0.7853981852531433,
+        -0.6981316804885864,
+        -0.6108652353286743,
+        -0.5235987901687622,
+        -0.4363323152065277,
+        -0.3490658402442932,
+        -0.2617993950843811,
+        -0.1745329201221466,
+        -0.0872664600610733,
+        0.0,
+        0.0872664600610733,
+        0.1745329201221466,
+        0.2617993950843811,
+        0.3490658402442932,
+        0.4363323152065277,
+        0.5235987901687622,
+        0.6108652353286743,
+        0.6981316804885864,
+        0.7853981852531433,
+        0.8726646304130554,
+        0.9599310755729675,
+        1.0471975803375244,
+        1.1344640254974365,
+        1.2217304706573486,
+        1.3089969158172607,
+        1.3962633609771729
+      ]
+    },
+    {
+      "count": 8364,
+      "body_min": [
+        -33.15695571899414,
+        -34.99551773071289,
+        -0.5344263315200806
+      ],
+      "body_max": [
+        32.07481002807617,
+        34.224727630615234,
+        3.11798095703125
+      ],
+      "raw_cloud_shape": [
+        360,
+        33,
+        3
+      ],
+      "raw_depth_shape": [
+        360,
+        33
+      ],
+      "native_rows": 33,
+      "native_cols": 360,
+      "native_scan_time_ns": 20000001,
+      "native_scan_physics_step": 10,
+      "zenith": [
+        -1.3962633609771729,
+        -1.3089969158172607,
+        -1.2217304706573486,
+        -1.1344640254974365,
+        -1.0471975803375244,
+        -0.9599310755729675,
+        -0.8726646304130554,
+        -0.7853981852531433,
+        -0.6981316804885864,
+        -0.6108652353286743,
+        -0.5235987901687622,
+        -0.4363323152065277,
+        -0.3490658402442932,
+        -0.2617993950843811,
+        -0.1745329201221466,
+        -0.0872664600610733,
+        0.0,
+        0.0872664600610733,
+        0.1745329201221466,
+        0.2617993950843811,
+        0.3490658402442932,
+        0.4363323152065277,
+        0.5235987901687622,
+        0.6108652353286743,
+        0.6981316804885864,
+        0.7853981852531433,
+        0.8726646304130554,
+        0.9599310755729675,
+        1.0471975803375244,
+        1.1344640254974365,
+        1.2217304706573486,
+        1.3089969158172607,
+        1.3962633609771729
+      ]
+    }
+  ],
+  "commands_received": 8524,
+  "imu": {
+    "model": "Isaac 6 PhysX experimental IMUSensor",
+    "configured_hz": 100,
+    "physics_hz": 500.0,
+    "native_samples": 61580,
+    "native_measured_source_hz": 499.9999990621803,
+    "output_sampling": "select real native readings; retain their measured timestamps",
+    "measured_source_hz": 100.00162374266897,
+    "samples": 12317,
+    "invalid_reads": 0,
+    "duplicate_reads_skipped": 0,
+    "native_rate_samples_skipped": 49263,
+    "source_start_time": 2000074,
+    "source_end_time": 123160000305,
+    "include_gravity": true,
+    "first_reading": {
+      "sequence": 0,
+      "sim_time_ns": 2000074,
+      "absolute_sensor_time": 2.0220000743865967,
+      "orientation_xyzw": [
+        -0.0027567893266677856,
+        -0.0016362143214792013,
+        -0.012627596035599709,
+        0.9999151229858398
+      ],
+      "angular_velocity": [
+        0.0009737959480844438,
+        0.004798039328306913,
+        -0.02029031328856945
+      ],
+      "linear_acceleration": [
+        0.013066675513982773,
+        -0.05668681114912033,
+        9.821635246276855
+      ]
+    },
+    "last_reading": {
+      "sequence": 12316,
+      "sim_time_ns": 123160000305,
+      "absolute_sensor_time": 125.18000030517578,
+      "orientation_xyzw": [
+        0.0009437194094061852,
+        0.005485276225954294,
+        -0.10277201235294342,
+        0.994689404964447
+      ],
+      "angular_velocity": [
+        0.0003828433982562274,
+        -0.00014729134272783995,
+        -0.005945933982729912
+      ],
+      "linear_acceleration": [
+        -0.10473214834928513,
+        0.008766492828726768,
+        9.799908638000488
+      ]
+    },
+    "acceleration_mean": [
+      -0.08174469847709372,
+      -0.04019595066460044,
+      9.81885451454422
+    ],
+    "acceleration_min": [
+      -4.735641002655029,
+      -3.9532482624053955,
+      -15.80610179901123
+    ],
+    "acceleration_max": [
+      6.053615570068359,
+      4.549401760101318,
+      15.57126235961914
+    ],
+    "angular_velocity_mean": [
+      -1.6734225971097156e-05,
+      0.00017692885111947833,
+      -0.0016759271917554225
+    ],
+    "angular_velocity_min": [
+      -0.525402307510376,
+      -0.44610339403152466,
+      -0.4225377142429352
+    ],
+    "angular_velocity_max": [
+      0.8273382186889648,
+      0.387379914522171,
+      0.4952963590621948
+    ]
+  },
+  "timing": {
+    "measured_state_samples": 9237,
+    "measured_state_wall_seconds": 439.7261229909491,
+    "measured_state_sim_seconds": 123.14200000000001,
+    "wall_seconds_per_sim_second": 3.5708866429889805,
+    "realtime_factor": 0.28004249363764694,
+    "state_wall_hz": 21.00398297280625,
+    "longest_state_wall_gap_s": 0.40470177098177373,
+    "longest_rays_wall_gap_s": [
+      0.7587395759765059,
+      0.7597157661803067
+    ]
+  },
+  "phase_timings": {
+    "receive_command": {
+      "count": 30790,
+      "total_wall_s": 1.1301707979291677,
+      "max_wall_s": 0.005365801975131035
+    },
+    "physics_only_two_steps": {
+      "count": 30790,
+      "total_wall_s": 303.5343419674318,
+      "max_wall_s": 0.2867550340015441
+    },
+    "measured_state_and_udp": {
+      "count": 6158,
+      "total_wall_s": 50.99247501604259,
+      "max_wall_s": 0.07458767597563565
+    },
+    "dual_cloud_filter_pack_and_udp": {
+      "count": 3079,
+      "total_wall_s": 79.61102618719451,
+      "max_wall_s": 0.10670166905038059
+    }
+  },
+  "physics_callback_timings": {},
+  "physics_cpu_threads": {
+    "requested": null,
+    "original": 8,
+    "readback": 8
+  },
+  "physics_usd_state_writeback": {
+    "readback": true
+  },
+  "physics_usd_velocity_writeback": {
+    "requested": false,
+    "original": true,
+    "readback": false
+  },
+  "ray_phase_timings": {
+    "native_frame_and_array": {
+      "count": 6158,
+      "total_wall_s": 0.42906018951907754,
+      "max_wall_s": 0.0022563510574400425
+    },
+    "exact_self_and_depth_filter": {
+      "count": 6158,
+      "total_wall_s": 76.95681824814528,
+      "max_wall_s": 0.051896841963753104
+    },
+    "binary_pack_and_udp": {
+      "count": 6158,
+      "total_wall_s": 1.7518155588768423,
+      "max_wall_s": 0.0012105719652026892
+    },
+    "first_scan_evidence_save": {
+      "count": 2,
+      "total_wall_s": 0.0013031258713454008,
+      "max_wall_s": 0.0007064968813210726
+    }
+  },
+  "static_geometry_attestation": {
+    "expected_sha256": "d7138b0cc540a5e53d8640ef17898a4e13ef48f2f03ed6643f74d07a1178af17",
+    "cadence": "every actual body state; source timestamp unchanged",
+    "count": 9237,
+    "faults": 0,
+    "fault_latched": false,
+    "last_sha256": "d7138b0cc540a5e53d8640ef17898a4e13ef48f2f03ed6643f74d07a1178af17",
+    "last_fault": "",
+    "total_wall_s": 0.018375294748693705,
+    "max_wall_s": 1.302594318985939e-05,
+    "full_stage_audits": 1,
+    "notice_timings": {},
+    "cache_hits": 70817
+  },
+  "native_lidar_captures_per_sensor": 3079,
+  "lidar_acquisition_mode": "full native snapshot on each real 25 Hz acquisition step",
+  "lidar_pose_phase": "actual physics BEGIN witness; original native wrapper END retained",
+  "body_state_cadence": "50 Hz plus real 25 Hz acquisition BEGIN witnesses",
+  "headless_viewport_disabled": true,
+  "viewport_disabled_at_physics_frame": 0,
+  "headless_step_mode": "native physics-only, paced at most 1x after viewport capture",
+  "recording_render": {
+    "enabled": true,
+    "requested_fps": 0.0,
+    "effective_fps": 20.0,
+    "cadence": "playing: real source clock; paused: wall clock; render calls are not completed GPU-frame counts",
+    "render_calls": 0,
+    "max_render_wall_s": 0.0,
+    "render_failed": false,
+    "render_advanced_physics_frames": 0,
+    "transform_sync": "native PhysX to USD"
+  },
+  "commands_rejected": 52,
+  "urdf_usd": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v63-campus-v2-lidar25-restart/simulation/robot_assets/Isaac/Robots/BostonDynamics/spot/spot.usd",
+  "generated_robot_usd_sha256": "dbe17178d8507aa31a82e8f8582606c2da5694ea8d2e24c77e50f1ff149689cb",
+  "calibration_command": [
+    0.0,
+    0.0
+  ]
+}

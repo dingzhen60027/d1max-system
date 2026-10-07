@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites tests="8" failures="0" disabled="0" errors="0" time="0.043" timestamp="2026-10-07T20:36:24" name="AllTests">
+  <testsuite name="FixedBsplineSampler" tests="8" failures="0" disabled="0" errors="0" time="0.043" timestamp="2026-10-07T20:36:24">
+    <testcase name="UniformCubicBitwiseIdenticalIncludingLeftKnotSpansAndClampedEnds" status="run" result="completed" time="0.001" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.FixedBsplineSampler" />
+    <testcase name="NonuniformCubicBitwiseIdenticalAtEveryKnotAndNeighbours" status="run" result="completed" time="0" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.FixedBsplineSampler" />
+    <testcase name="NativeVelocityAndAccelerationDerivativeKnotsPreserved" status="run" result="completed" time="0" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.FixedBsplineSampler" />
+    <testcase name="MaximumAdmittedCurveMatchesNativeAcrossEntireDomain" status="run" result="completed" time="0.042" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.FixedBsplineSampler" />
+    <testcase name="DoesNotRelaxRepeatedClampedOrTooCloseKnotRejection" status="run" result="completed" time="0" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.FixedBsplineSampler" />
+    <testcase name="RejectsNonfiniteOrWrongDimensionAndUnsupportedDegree" status="run" result="completed" time="0" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.FixedBsplineSampler" />
+    <testcase name="ImmutableVendorSnapshotCannotBeChangedByLaterNativeMutation" status="run" result="completed" time="0" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.FixedBsplineSampler" />
+    <testcase name="ExactProjectionAdmissionUsesSameMathAndBoundary" status="run" result="completed" time="0" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.FixedBsplineSampler" />
+  </testsuite>
+</testsuites>

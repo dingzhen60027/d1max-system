@@ -1,0 +1,425 @@
+{
+  "schema": 1,
+  "kind": "isolated_spot_delayed_exact_zero_policy_withdrawal_full_scene_ab",
+  "status": "INPUT_WITHDRAWAL_CONFIRMED_PHYSICS_FAILED",
+  "evidence_integrity_and_input_equality_verified": true,
+  "input_withdrawal_confirmed": true,
+  "physical_acceptance_passed": false,
+  "hardware_acceptance": false,
+  "navigation_acceptance": false,
+  "continuous_collision_claim": false,
+  "default_mode_changed": false,
+  "scope": "One original v59 frozen-command whole-campus delayed-v3 component A/B; both real physical runs retained without raw edits.",
+  "scene_rawbytes_sha256": "cab62b35067fa14dab4da90733c4be3b824aed95b027a7d3345edbc5497f626e",
+  "model_rawbytes_sha256": "0d95d7834f932f7230e99ebd6c5e6c41f5a36311aa358a0fea501c2db1b4c10d",
+  "clock_anchor_ns": 1791378794217157156,
+  "frozen_command_sha256": "6a9d175c01b09708fddf7327c08e7732a7b97790fcb66e320c65e12cf64f466c",
+  "prefix_metadata": {
+    "kind": "original_actual_500hz_source_prefix",
+    "explicit_prefix": true,
+    "original_source_tick_count": 43412,
+    "selected_source_tick_count": 43410,
+    "excluded_tail_tick_count": 2,
+    "source_origin_ns": 0,
+    "excluded_events_count": 1,
+    "timestamps_modified": false,
+    "original_records_modified": false
+  },
+  "excluded_original_tail_ms": 4.0,
+  "intervention": {
+    "source_mode": "spot_monotone_measured_v2",
+    "alternative_mode": "spot_monotone_measured_v3",
+    "activation_source_tick": 36428,
+    "activation_source_s": 72.856,
+    "factor": "Only runtime servo.mode changes at original actual BEGIN; zero-axis integral and policy-input withdrawal. No filter/memory/counter/root/joint reset.",
+    "external_udp_disabled": true,
+    "extra_action_memory_experiment": false,
+    "original_selected_memory_configuration_retained": true,
+    "original_actor_paths_or_times_modified": false,
+    "original_commands_modified": false
+  },
+  "original_v59_kept_failed": true,
+  "comparisons": {
+    "original_v59_to_baseline_begin": {
+      "sample_count": 43410,
+      "fields": [
+        "position",
+        "quaternion_wxyz",
+        "linear_velocity_world",
+        "angular_velocity_world",
+        "official_policy_input",
+        "highlevel_command"
+      ],
+      "all_fields_exactly_equal": true,
+      "different_row_counts_by_field": {
+        "position": 0,
+        "quaternion_wxyz": 0,
+        "linear_velocity_world": 0,
+        "angular_velocity_world": 0,
+        "official_policy_input": 0,
+        "highlevel_command": 0
+      },
+      "first_difference": null
+    },
+    "baseline_to_v3_before_activation": {
+      "sample_count": 36428,
+      "fields": [
+        "position",
+        "quaternion_wxyz",
+        "linear_velocity_world",
+        "angular_velocity_world",
+        "official_policy_input",
+        "highlevel_command"
+      ],
+      "all_fields_exactly_equal": true,
+      "different_row_counts_by_field": {
+        "position": 0,
+        "quaternion_wxyz": 0,
+        "linear_velocity_world": 0,
+        "angular_velocity_world": 0,
+        "official_policy_input": 0,
+        "highlevel_command": 0
+      },
+      "first_difference": null
+    },
+    "all_original_source_BEGIN_commands": {
+      "sample_count": 43410,
+      "fields": [
+        "highlevel_command"
+      ],
+      "all_fields_exactly_equal": true,
+      "different_row_counts_by_field": {
+        "highlevel_command": 0
+      },
+      "first_difference": null,
+      "END_last_consumed_command_exactly_equal": true
+    },
+    "all_actual_actor_packets": {
+      "packet_count": 5210,
+      "full_rows_exactly_equal": true,
+      "first_difference": null,
+      "canonical_baseline_sha256": "f728476fd3bcb193e69834fd9849cc487b4ae15dbd1a56bcd7680c534f0079df",
+      "canonical_alternative_sha256": "f728476fd3bcb193e69834fd9849cc487b4ae15dbd1a56bcd7680c534f0079df",
+      "normalization": "sorted JSON key serialization only; no field omitted or value changed"
+    },
+    "actual_13_link_geometry_before_activation": {
+      "baseline_packet_count": 4371,
+      "alternative_packet_count": 4371,
+      "full_rows_exactly_equal": true,
+      "first_difference": null,
+      "baseline_canonical_sha256": "4c913791ff1d8709b39f83db7d2d44f3d88a6aa8f68f96e169883884ece272e5",
+      "alternative_canonical_sha256": "4c913791ff1d8709b39f83db7d2d44f3d88a6aa8f68f96e169883884ece272e5"
+    }
+  },
+  "results": {
+    "baseline": {
+      "actual_BEGIN_count": 43410,
+      "actual_END_count": 1,
+      "source_inferences_50hz": 4341,
+      "bootstrap_inferences_50hz": 100,
+      "zero_axis_policy_input": {
+        "scope": "consumed original BEGIN ticks from activation through last real step; END is observation only",
+        "begin_checks_by_axis": [
+          6982,
+          6982
+        ],
+        "nonzero_policy_input_on_zero_command_by_axis": [
+          6982,
+          6982
+        ],
+        "every_zero_axis_input_exactly_zero": false,
+        "first_violation_by_axis": [
+          {
+            "source_tick": 36428,
+            "source_ns": 72856000000,
+            "native_physics_tick": 37438,
+            "policy_counter": 37428,
+            "acquisition_phase": "actual_pre_policy_PhysX_BEGIN",
+            "position": [
+              -0.17211224138736725,
+              -4.851107120513916,
+              0.4876893162727356
+            ],
+            "quaternion_wxyz": [
+              0.9827877879142761,
+              -0.00031226850114762783,
+              -0.0006647963309660554,
+              -0.1847367286682129
+            ],
+            "linear_velocity_world": [
+              0.001261505065485835,
+              -0.0003655340406112373,
+              0.006829085759818554
+            ],
+            "angular_velocity_world": [
+              -0.008326001465320587,
+              -0.001350848819129169,
+              0.009453022852540016
+            ],
+            "official_policy_input": [
+              0.017797347158193588,
+              0.0,
+              0.054292190819978714
+            ],
+            "highlevel_command": [
+              0.0,
+              0.0
+            ]
+          },
+          {
+            "source_tick": 36428,
+            "source_ns": 72856000000,
+            "native_physics_tick": 37438,
+            "policy_counter": 37428,
+            "acquisition_phase": "actual_pre_policy_PhysX_BEGIN",
+            "position": [
+              -0.17211224138736725,
+              -4.851107120513916,
+              0.4876893162727356
+            ],
+            "quaternion_wxyz": [
+              0.9827877879142761,
+              -0.00031226850114762783,
+              -0.0006647963309660554,
+              -0.1847367286682129
+            ],
+            "linear_velocity_world": [
+              0.001261505065485835,
+              -0.0003655340406112373,
+              0.006829085759818554
+            ],
+            "angular_velocity_world": [
+              -0.008326001465320587,
+              -0.001350848819129169,
+              0.009453022852540016
+            ],
+            "official_policy_input": [
+              0.017797347158193588,
+              0.0,
+              0.054292190819978714
+            ],
+            "highlevel_command": [
+              0.0,
+              0.0
+            ]
+          }
+        ]
+      },
+      "initial_stop_confirmed": true,
+      "initial_confirmation_latency_s": 1.0,
+      "initial_extra_xy_path_m": 0.0006089960920905477,
+      "initial_extra_yaw_path_rad": 0.003132879829290003,
+      "durable_zero_tail_verified": false,
+      "durable_zero_tail_reason": "recorded_stop_then_zero_tail_motion",
+      "zero_tail_source_duration_s": 13.964,
+      "post_confirmation_motion_sample_count": 1356,
+      "first_post_confirmation_motion_source_s": 82.896,
+      "zero_tail_total_xy_path_m": 1.7012171672673424,
+      "zero_tail_total_absolute_yaw_path_rad": 0.9093784562910102,
+      "max_full_xyz_speed_mps": 1.0646345352085824,
+      "peak_source_s": 83.19800000000001,
+      "max_abs_world_yaw_radps": 0.8869698643684387,
+      "speed_domain_exceeded": true,
+      "yaw_domain_exceeded": true,
+      "first_sampled_dynamic_possible_AABB_overlap_source_s": 82.818,
+      "possible_dynamic_AABB_overlap_pairs": 346,
+      "possible_dynamic_AABB_overlap_samples": 145,
+      "collision_audit_completed": true,
+      "physics_acceptance_passed": false
+    },
+    "alternative": {
+      "actual_BEGIN_count": 43410,
+      "actual_END_count": 1,
+      "source_inferences_50hz": 4341,
+      "bootstrap_inferences_50hz": 100,
+      "zero_axis_policy_input": {
+        "scope": "consumed original BEGIN ticks from activation through last real step; END is observation only",
+        "begin_checks_by_axis": [
+          6982,
+          6982
+        ],
+        "nonzero_policy_input_on_zero_command_by_axis": [
+          0,
+          0
+        ],
+        "every_zero_axis_input_exactly_zero": true,
+        "first_violation_by_axis": [
+          null,
+          null
+        ]
+      },
+      "initial_stop_confirmed": true,
+      "initial_confirmation_latency_s": 1.0,
+      "initial_extra_xy_path_m": 0.003068269826919106,
+      "initial_extra_yaw_path_rad": 0.027782977680325838,
+      "durable_zero_tail_verified": false,
+      "durable_zero_tail_reason": "recorded_stop_then_zero_tail_motion",
+      "zero_tail_source_duration_s": 13.964,
+      "post_confirmation_motion_sample_count": 1790,
+      "first_post_confirmation_motion_source_s": 81.178,
+      "zero_tail_total_xy_path_m": 0.9789934175725925,
+      "zero_tail_total_absolute_yaw_path_rad": 1.0784628448148124,
+      "max_full_xyz_speed_mps": 1.3343624204849402,
+      "peak_source_s": 83.4,
+      "max_abs_world_yaw_radps": 1.377488613128662,
+      "speed_domain_exceeded": true,
+      "yaw_domain_exceeded": true,
+      "first_sampled_dynamic_possible_AABB_overlap_source_s": 82.68,
+      "possible_dynamic_AABB_overlap_pairs": 270,
+      "possible_dynamic_AABB_overlap_samples": 113,
+      "collision_audit_completed": true,
+      "physics_acceptance_passed": false
+    }
+  },
+  "original_bounds": {
+    "reference_measured_travel_platform_admission_mps": 0.65,
+    "world_yaw_radps": 0.8,
+    "stationary_full_linear_norm_mps": 0.03,
+    "stationary_full_angular_norm_radps": 0.05,
+    "stationary_continuous_s": 1.0,
+    "stop_latency_s": 3.0,
+    "stop_confirmation_xy_path_m": 0.5,
+    "stop_confirmation_absolute_yaw_path_rad": 0.4
+  },
+  "interpretation": {
+    "confirmed": "At every one of 6982 actual zero-command BEGIN ticks after activation, both v3 policy axes are exactly zero; baseline both remain nonzero.",
+    "not_confirmed": "Reliable durable physical stop or velocity-domain acceptance. Both runs initially confirm one stationary second and then move again.",
+    "physical_comparison": "v3 full XYZ/yaw peaks are larger in this run. Do not select it as a validated navigation or stopping improvement.",
+    "actor_context": "All 5210 full six-actor packets are identical. First possible AABB overlaps and subsequent motion are measured separately; neither proves contact force or a unique PI/neural cause.",
+    "v3_pre_overlap": "v3 first post-confirmation stationary-norm violation is 81.178s, before its first sampled unresolved actor AABB overlap at82.680s. Sampling and lack of force instrumentation preclude an exclusive cause."
+  },
+  "source_closure": {
+    "launch_manifests_capture_python_source_tree_hash": false,
+    "launch_console_logs_preserved": true,
+    "independent_pre_run_freeze_sha256": "e45b615c293ab0fc16e124b126265c56c8d9873c1a2e23a1131cf1769fae90fb",
+    "post_run_source_byte_closure_sha256": "f26a22cf106fdcf85ca3f38903ec85f3ee92d958dbec96315ba6b4eb0b99b063",
+    "pre_post_shared_source_hashes": [
+      {
+        "path": "/home/eric/wjg/d1max-system/simulation/isaacsim/quadruped.py",
+        "sha256": "46d0bd434d848d5c1e54f47182c386e1058f290b17635c1d29d5805a4f21d798",
+        "pre_post_exact": true
+      },
+      {
+        "path": "/home/eric/wjg/d1max-system/simulation/isaacsim/scene.py",
+        "sha256": "50710ca27178f5b5d9986c89768c3bb0a90d2979c2b6ed6a7fcd34de0127a836",
+        "pre_post_exact": true
+      }
+    ],
+    "geometry_and_stop_math_pre_freeze_record": {
+      "path": "simulation/isaacsim/verification/20261007/query_support_and_zero_tail_offline.json",
+      "sha256": "f72c27b917846245b9662d015022c904a6dc41e371e32cb41f9c0edc2886d690"
+    },
+    "post_candidate_record": {
+      "path": "simulation/isaacsim/verification/20261007/v61_v62_install_and_tests_offline.json",
+      "sha256": "ba2b371980b6c1ecf84cde4e6b5e3baf295929424de12d1265223ae5a43c8d43"
+    },
+    "limits": "Pre/post source-byte snapshots and preserved launch logs are retrospective closure evidence. They do not invent a source-tree hash in either original launch manifest; two actual six-field/actor equality checks stand independently."
+  },
+  "audit_reproduction": {
+    "script_path": "simulation/isaacsim/verification/20261007/spot_zero_policy_withdrawal_ab_evidence/v59_zero_ab_analysis.py",
+    "script_sha256": "c4e58b6f33a05c06869ab5d1297e1f61426d98cc504f85d36bf8958d4c6e6868",
+    "invocation": [
+      "python3",
+      "/home/eric/wjg/d1max-build-isaac/v59_zero_ab_analysis.py",
+      "--session",
+      "/home/eric/wjg/d1max-build-isaac/runs/campus_restart_v59_001",
+      "--baseline",
+      "/home/eric/wjg/d1max-build-isaac/v59_zero_ab_baseline",
+      "--alternative",
+      "/home/eric/wjg/d1max-build-isaac/v59_zero_ab_v3_tick36428",
+      "--frozen",
+      "/home/eric/wjg/d1max-build-isaac/v59_zero_ab_frozen_43410.json",
+      "--output",
+      "/home/eric/wjg/d1max-build-isaac/v59_zero_ab_private_comparison.json"
+    ],
+    "prerequisites": "Original large archived raw streams and source modules with hashes recorded in the copied original private comparison; no Kit or ROS required.",
+    "original_private_result_sha256": "0f4ca9718422ed9277044139195657ac27c2a1acf9ada9cb037032bf6fce4dc5",
+    "normal_navigation_audit_not_called": true,
+    "calibration6000frame_summary_not_called": true
+  },
+  "evidence_files": [
+    {
+      "path": "simulation/isaacsim/verification/20261007/spot_zero_policy_withdrawal_ab_evidence/v59_zero_ab_analysis.py",
+      "original_path": "/home/eric/wjg/d1max-build-isaac/v59_zero_ab_analysis.py",
+      "sha256": "c4e58b6f33a05c06869ab5d1297e1f61426d98cc504f85d36bf8958d4c6e6868",
+      "size_bytes": 28086
+    },
+    {
+      "path": "simulation/isaacsim/verification/20261007/spot_zero_policy_withdrawal_ab_evidence/private_comparison_original.json",
+      "original_path": "/home/eric/wjg/d1max-build-isaac/v59_zero_ab_private_comparison.json",
+      "sha256": "0f4ca9718422ed9277044139195657ac27c2a1acf9ada9cb037032bf6fce4dc5",
+      "size_bytes": 38795
+    },
+    {
+      "path": "simulation/isaacsim/verification/20261007/spot_zero_policy_withdrawal_ab_evidence/original_baseline_equivalence.json",
+      "original_path": "/home/eric/wjg/d1max-build-isaac/v59_zero_ab_original_baseline_equivalence.json",
+      "sha256": "f73cfe44573223ca6107759630a091121b4aa0d20be7523ff346f2204835e6d9",
+      "size_bytes": 464
+    },
+    {
+      "path": "simulation/isaacsim/verification/20261007/spot_zero_policy_withdrawal_ab_evidence/baseline_launch.log",
+      "original_path": "/home/eric/wjg/d1max-build-isaac/v59_zero_ab_baseline.log",
+      "sha256": "9fe9acbf7afc5d651431c07874e46c55edd29e0259a76241b40ed31223755a2b",
+      "size_bytes": 21857
+    },
+    {
+      "path": "simulation/isaacsim/verification/20261007/spot_zero_policy_withdrawal_ab_evidence/v3_launch.log",
+      "original_path": "/home/eric/wjg/d1max-build-isaac/v59_zero_ab_v3_tick36428.log",
+      "sha256": "753eac397692af0ee5f1e5b87ef81e5db5e8c57195f748adbf2d2d3458a03a99",
+      "size_bytes": 21801
+    },
+    {
+      "path": "simulation/isaacsim/verification/20261007/spot_zero_policy_withdrawal_ab_evidence/pre_run_v3_source_freeze.json",
+      "original_path": "/home/eric/wjg/d1max-build-isaac/v59-zero-servo-offline/offline.json",
+      "sha256": "e45b615c293ab0fc16e124b126265c56c8d9873c1a2e23a1131cf1769fae90fb",
+      "size_bytes": 3907
+    },
+    {
+      "path": "simulation/isaacsim/verification/20261007/spot_zero_policy_withdrawal_ab_evidence/post_run_source_byte_closure.json",
+      "original_path": "/home/eric/wjg/d1max-build-isaac/v61_v62_python_source_byte_closure.json",
+      "sha256": "f26a22cf106fdcf85ca3f38903ec85f3ee92d958dbec96315ba6b4eb0b99b063",
+      "size_bytes": 2066
+    },
+    {
+      "path": "simulation/isaacsim/verification/20261007/spot_zero_policy_withdrawal_ab_evidence/baseline_manifest.json",
+      "original_path": "/home/eric/wjg/d1max-build-isaac/v59_zero_ab_baseline/policy_history_manifest.json",
+      "sha256": "f6c888238808c09a1dbafabe9470ac695d8721956dc286c3a75a0bb5033caa68",
+      "size_bytes": 3171
+    },
+    {
+      "path": "simulation/isaacsim/verification/20261007/spot_zero_policy_withdrawal_ab_evidence/baseline_sampled_collision_audit.json",
+      "original_path": "/home/eric/wjg/d1max-build-isaac/v59_zero_ab_baseline/collision_audit.json",
+      "sha256": "ea6904aafdc471790cc5f9c6d864b22a22497ef1b49c1aaef6e850e7b84f65a9",
+      "size_bytes": 16658
+    },
+    {
+      "path": "simulation/isaacsim/verification/20261007/spot_zero_policy_withdrawal_ab_evidence/v3_manifest.json",
+      "original_path": "/home/eric/wjg/d1max-build-isaac/v59_zero_ab_v3_tick36428/policy_history_manifest.json",
+      "sha256": "bf0a9adbf07c14894c4448d926b16d95c03786fdce45ef7aefb66346372d61d7",
+      "size_bytes": 3466
+    },
+    {
+      "path": "simulation/isaacsim/verification/20261007/spot_zero_policy_withdrawal_ab_evidence/v3_sampled_collision_audit.json",
+      "original_path": "/home/eric/wjg/d1max-build-isaac/v59_zero_ab_v3_tick36428/collision_audit.json",
+      "sha256": "1eda489d4ad062dbea1fe2360dc3e947b8a429cbddf52d114ad2eadbf55a0c2b",
+      "size_bytes": 20269
+    },
+    {
+      "path": "simulation/isaacsim/verification/20261007/spot_zero_policy_withdrawal_ab_evidence/raw_hashes_and_scopes.json",
+      "sha256": "e7cdfb6105a4765676cced5be1084a7e9af7fda82a0e3ef45759e7da88f2a2d6",
+      "size_bytes": 2535
+    }
+  ],
+  "follow_up": {
+    "v61_v62": "Built but not physically run or selected; v3 A/B physical failure retained.",
+    "v63_v64": "Separate v2/25Hz formal fixtures; no result inherited from this component comparison."
+  },
+  "limitations": [
+    "One A/B exposure, not a general performance guarantee.",
+    "Exact-zero official input is not a physical STOP certificate.",
+    "The frozen43410 prefix excludes two original ticks/4ms; no synthetic zero or END is substituted.",
+    "No contact forces were recorded.",
+    "Sampled possible AABB overlap is unresolved, not a proven penetration or continuous collision certificate.",
+    "Original v59 remains FAILED; no old scene, model, result or clock is overwritten."
+  ]
+}

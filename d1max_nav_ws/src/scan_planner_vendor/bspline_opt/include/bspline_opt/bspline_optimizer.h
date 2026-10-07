@@ -60,7 +60,10 @@ namespace scan_planner
     // No parameter changes command authority; clearing restores setParam's
     // historical limit for every non-isolated/non-guided solve.
     void setReferenceSpeedLimit(std::optional<double> speed) {
-      if(speed&&(!std::isfinite(*speed)||*speed<=0.||*speed>.5))
+      // The caller supplies this only after validating the same hashed
+      // isolated reference/platform record. This is a derivative domain,
+      // never a guide-cruise or final command limit.
+      if(speed&&(!std::isfinite(*speed)||*speed<=0.||*speed>.65))
         throw std::invalid_argument("invalid reference derivative speed");
       max_vel_=speed?*speed:configured_max_vel_;
     }
@@ -103,6 +106,7 @@ namespace scan_planner
     inline int getOrder(void) { return order_; }
 
   private:
+    friend struct BsplineOptimizerTestAccess;
     GridMap::Ptr grid_map_;
     SolveBudget::Ptr solve_budget_;
     int queryOccupancy(const Eigen::Vector3d &p,double yaw) {

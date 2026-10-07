@@ -163,8 +163,8 @@ def create_large_world(seed=60027):
         actor("plaza_cart", "cart", [(0, 5, -10, 0, math.pi / 2), (35, 5, 15, 0, math.pi / 2), (70, 5, -10, 0, -math.pi / 2)], cart, color=[.2, .65, .72]),
         actor("warehouse_forklift", "forklift", [(0, 32, 9, 0, math.pi / 2), (65, 32, 35, 0, math.pi / 2), (130, 32, 9, 0, -math.pi / 2)], forklift, color=[.95, .65, .1]),
         actor("oncoming_cart", "cart", [(0, 22, -25, 0, math.pi), (40, 2, -25, 0, math.pi)], cart, enabled=False, start=5, loop=False),
-        # Fixed scene-time schedule for the .15m/s demand bound. Earliest
-        # straight-line arrival at the gate is ~47s, before planning delays.
+        # Preserve the original fixed scene-time schedule. At the .23m/s
+        # command cap, 7m nominal travel is ~30.43s before planning delays.
         # A real encounter remains unproven if navigation instead takes a detour.
         actor("door_blocking_cart", "cart", [(0, 18, -25, 0, math.pi), (25, 12, -25, 0, math.pi), (50, 12, -25, 0, math.pi), (75, 18, -25, 0, 0)], cart, enabled=False, start=20, loop=False),
     ]
@@ -174,18 +174,19 @@ def create_large_world(seed=60027):
             item["trajectory"]["waypoints"][-1]["yaw"] = item["trajectory"]["waypoints"][0]["yaw"]
             item["max_yaw_rate_radps"] = max(1.5 * abs(_angle_delta(a["yaw"], b["yaw"])) / (b["time_s"] - a["time_s"]) for a, b in zip(item["trajectory"]["waypoints"], item["trajectory"]["waypoints"][1:]))
     scenarios = [
-        dict(id="long_distance_multi_goal", start=[-44, -4, .52, 0], goals=[[-43.75, 29, .52], [42, 20, .52], [24, -25, .52], [-34, -28, .52], [0, 24, .52]], actor_ids=["plaza_person", "office_person", "plaza_cart", "warehouse_forklift"], timeout_source_s=3600, checks=["all_goals_reached", "no_static_or_actor_collision", "bounded_progress", "stop_at_final_goal"]),
-        dict(id="crossing_blocker", start=[-8, -5, .52, 0], goals=[[8, -5, .52]], actor_ids=["plaza_person"], timeout_source_s=360, checks=["yield_or_verified_detour", "actor_not_teleported", "goal_reached_after_crossing"]),
-        dict(id="narrow_head_on", start=[5, -25, .52, 0], goals=[[20, -25, .52]], actor_ids=["oncoming_cart"], timeout_source_s=600, checks=["yield_or_alternate_route", "no_two_body_overlap_in_gate", "goal_reached"]),
-        dict(id="temporary_door_block", start=[5, -25, .52, 0], goals=[[20, -25, .52]], actor_ids=["door_blocking_cart"], timeout_source_s=600, checks=["blocked_door_not_free", "wait_or_verified_detour", "goal_reached_after_release"]),
-        dict(id="cancel_and_park", start=[-8, -4, .52, 0], goals=[[10, -4, .52]], actor_ids=["plaza_cart"], events=[dict(source_time_s=12, action="cancel_current_task")], timeout_source_s=60, checks=["cancel_terminal_identity", "writer_stop_ack", "measured_stationary_for_2s"]),
-        dict(id="resume_after_block", start=[5, -25, .52, 0], goals=[[20, -25, .52]], actor_ids=["door_blocking_cart"], events=[dict(source_time_s=65, action="cancel_current_task"), dict(source_time_s=110, action="submit_new_task", goal=[20, -25, .52])], timeout_source_s=600, checks=["retired_task_never_resumes", "fresh_task_identity", "goal_reached", "measured_final_stop"]),
+        dict(id="long_distance_multi_goal", start=[-44, -4, .52, 0], goals=[[-43.75, 29, 0.], [42, 20, 0.], [24, -25, 0.], [-34, -28, 0.], [0, 24, 0.]], actor_ids=["plaza_person", "office_person", "plaza_cart", "warehouse_forklift"], timeout_source_s=3600, checks=["all_goals_reached", "no_static_or_actor_collision", "bounded_progress", "stop_at_final_goal"]),
+        dict(id="crossing_blocker", start=[-8, -5, .52, 0], goals=[[8, -5, 0.]], actor_ids=["plaza_person"], timeout_source_s=360, checks=["yield_or_verified_detour", "actor_not_teleported", "goal_reached_after_crossing"]),
+        dict(id="narrow_head_on", start=[5, -25, .52, 0], goals=[[20, -25, 0.]], actor_ids=["oncoming_cart"], timeout_source_s=600, checks=["yield_or_alternate_route", "no_two_body_overlap_in_gate", "goal_reached"]),
+        dict(id="temporary_door_block", start=[5, -25, .52, 0], goals=[[20, -25, 0.]], actor_ids=["door_blocking_cart"], timeout_source_s=600, checks=["blocked_door_not_free", "wait_or_verified_detour", "goal_reached_after_release"]),
+        dict(id="cancel_and_park", start=[-8, -4, .52, 0], goals=[[10, -4, 0.]], actor_ids=["plaza_cart"], events=[dict(source_time_s=12, action="cancel_current_task")], timeout_source_s=60, checks=["cancel_terminal_identity", "writer_stop_ack", "measured_stationary_for_2s"]),
+        dict(id="resume_after_block", start=[5, -25, .52, 0], goals=[[20, -25, 0.]], actor_ids=["door_blocking_cart"], events=[dict(source_time_s=65, action="cancel_current_task"), dict(source_time_s=110, action="submit_new_task", goal=[20, -25, 0.])], timeout_source_s=600, checks=["retired_task_never_resumes", "fresh_task_identity", "goal_reached", "measured_final_stop"]),
     ]
     for item in actors:
         item["scenario_ids"] = [case["id"] for case in scenarios if item["id"] in case["actor_ids"]]
     return dict(schema=1, name="large_quadruped_campus", units="m", seed=seed,
         scope=dict(ground="flat_single_level", floor_id="floor1", stairs_supported=False, cross_level_supported=False, dynamic_free_space="requires_fresh_registered_collision_oracle"),
-        physics=dict(frequency_hz=500., state_frequency_hz=50., usd_velocity_writeback=False),
+        physics=dict(frequency_hz=500., state_frequency_hz=50., usd_velocity_writeback=False,
+                     dynamic_actor_target_backend="native_kinematic_v1"),
         room=dict(x_min=-50., x_max=50., y_min=-40., y_max=40., width=100., depth=80., height=height, wall_thickness=thickness),
         floor=dict(z=0., bounds=[-50., 50., -40., 40.],
             physics_material=dict(schema=1, path="/World/PhysicsMaterials/CampusFloor",
@@ -195,18 +196,23 @@ def create_large_world(seed=60027):
                                   scope="closed_authorized_flat_plane_only; actual_full_leg_registry_and_bounded_dynamic_oracle_required"),
         static_boxes=boxes, doorways=doors,
         robot=dict(name="official_spot", kind="official_spot_physx", body_size=[1.1, .6, .25], body_reference_height=.481,
-                   initial_pose=[-44., -4., .80, 0.], initial_spawn_height_m=.80, goal=[0., 24., .52], max_linear_speed=.15, max_angular_speed=.30,
+                   initial_pose=[-44., -4., .80, 0.], initial_spawn_height_m=.80, goal=[0., 24., 0.], max_linear_speed=.23, max_angular_speed=.30,
+                   policy_input_limits=dict(schema=1, linear=.38, angular=.50),
+                   record_full_physics_history=True,
+                   history_annotation="read-only actual500Hz PhysX BEGIN+finalEND fullXYZ/rotation; original navigation UDP and sole SDK writer unchanged",
+                   stall_recovery=dict(schema=1, enabled=True, isolated_fixture=True),
+                   actor_encounter_profile="isolated_spot_reachable65_3m_exposure_v1",
                    offline_collision_envelope=dict(radius_m=.65, bottom_z_offset_m=-.481, top_z_offset_m=.589),
                    navigation_envelope=dict(length_m=1.25, width_m=.90, above_body_m=.589),
                    body_reference_calibration=dict(scope="isolated_official_Spot_PhysX_cold_stand; not_physical_robot_calibration",
                        measured_cold_stand_median_m=.4807447493, rounded_reference_m=.481,
                        planned_absolute_upper_m=1.07, actual_gait_z="unchanged_raw_PhysX; full_registered_legs_floor_minus_.02_to_actual_body_plus_above"),
                    velocity_feedback_mode="spot_monotone_measured_v2",
-                   full_xyz_reference_model=dict(reference_max_speed_mps=.50, measured_travel_max_speed_mps=.50,
-                       evidence_file="verification/20261007/spot_full_xyz_reference_domain_v36.json",
-                       evidence_sha256="1ab7fef769ec0cf186a39f0b72b1d5decd6b2dba99788a1efc61506401d418d3"),
-                   model_limits=dict(max_linear_speed_mps=.6, max_angular_speed_radps=.8),
-                   speed_limit_scope="navigation_command_0.15mps_0.30radps; isolated_PhysX_reachable_bounds_0.60mps_0.80radps; live_transport_unchanged",
+                   full_xyz_reference_model=dict(reference_max_speed_mps=.65, measured_travel_max_speed_mps=.65,
+                       evidence_file="verification/20261007/spot_velocity_domain_v47_native_navigation.json",
+                       evidence_sha256="44e56925dd1f4b78a4d3994701b1700429e00c3fd7f80b26ddcb86e321b97262"),
+                   model_limits=dict(max_linear_speed_mps=.65, max_angular_speed_radps=.8),
+                   speed_limit_scope="navigation_command_0.23mps_0.30radps; internal_official_policy_cap_0.38mps_0.50radps; isolated_PhysX_engineering_full_XYZ_reference_travel_reachable_0.65mps_0.80radps_yaw; original_live_transport_and_stop_contract_unchanged",
                    body_size_scope="nominal navigation body dimensions; exact loaded official collision registry is authoritative",
                    stance_status="reference_height_from_official_Spot_PhysX_standing_test; offline_envelope_is_conservative_design_only",
                    observed_standing_body_z_range_m=[.478, .544],
@@ -326,9 +332,24 @@ def scenario_spec(spec, identifier):
     return result
 
 
+def dynamic_actor_target_backend(spec):
+    """Select an explicit actuator backend without changing actor source time."""
+    physics = spec.get('physics', {})
+    if not isinstance(physics, dict):
+        raise ValueError('invalid_dynamic_actor_target_backend')
+    selected = physics.get('dynamic_actor_target_backend', 'usd_cached_v1')
+    if type(selected) is not str or selected not in ('usd_cached_v1', 'native_kinematic_v1'):
+        raise ValueError('invalid_dynamic_actor_target_backend')
+    if selected == 'native_kinematic_v1' and spec.get('robot', {}).get('kind') not in (
+            'quadruped', 'official_go2_physx', 'official_spot_physx'):
+        raise ValueError('native_actor_target_requires_quadruped_physics_callback')
+    return selected
+
+
 def validate_world(spec):
     if spec.get("schema") != 1 or type(spec.get("schema")) is not int or spec.get("units") != "m":
         raise ValueError("unsupported_scene_spec")
+    dynamic_actor_target_backend(spec)
     room, floor, roof = spec["room"], spec["floor"], spec["ceiling"]
     bounds = _vector([room["x_min"], room["x_max"], room["y_min"], room["y_max"]], "room_bounds", 4)
     if not (bounds[0] < bounds[1] and bounds[2] < bounds[3]):
@@ -582,9 +603,14 @@ def audit_world(spec):
             if len(collisions) >= 20:
                 break
     report.update(actor_static_collisions=collisions, voxel_budgets=[voxel_budget(spec, r) for r in (.05, .1)], route_checks=[])
+    # Scenario goals name floor locations; find_route retains its separate
+    # body-centre XYZ contract. This fixed-height connectivity check is not a
+    # measured pose, spawn-height conversion or cross-level motion proof.
+    body_z = float(spec["floor"]["z"]) + float(spec["robot"]["body_reference_height"])
     for case in spec["scenarios"]:
-        start, lengths = case["start"][:3], []
-        for goal in case["goals"]:
+        start, lengths = [case["start"][0], case["start"][1], body_z], []
+        for floor_goal in case["goals"]:
+            goal = [floor_goal[0], floor_goal[1], body_z]
             route = find_route(spec, start, goal)
             lengths.append(sum(math.dist(a, b) for a, b in zip(route, route[1:])))
             start = goal
@@ -738,18 +764,104 @@ def author_world(stage, spec, include_floor=True):
     return dict(static_paths=[p["path"] for p in static_primitives(spec)], dynamic_paths=[path for path in registry if path.startswith("/World/Dynamic/")], floor_path="/World/GroundPlane/collisionPlane", camera_paths=[overview["path"], spec["cameras"]["follow"]["path"]])
 
 
-def update_actors(stage, spec, source_time_s):
+def make_actor_updater(stage, spec):
+    """Cache immutable registered actor handles; retain every native target write."""
     from pxr import Gf, UsdGeom
+    handles = []
     for actor in spec.get("dynamic_actors", []):
         if not actor["enabled"]:
             continue
-        pose = actor_pose(actor, source_time_s)
         prim = stage.GetPrimAtPath("/World/Dynamic/" + actor["id"])
         if not prim:
             raise ValueError("missing_registered_actor:" + actor["id"])
         ops = {op.GetOpName(): op for op in UsdGeom.Xformable(prim).GetOrderedXformOps()}
-        ops["xformOp:translate"].Set(Gf.Vec3d(*pose["position"]))
-        ops["xformOp:rotateZ"].Set(math.degrees(pose["yaw"]))
+        handles.append((actor, prim, ops["xformOp:translate"], ops["xformOp:rotateZ"]))
+
+    def update(source_time_s):
+        for actor, prim, translate, rotate in handles:
+            if not prim or not translate or not rotate:
+                raise ValueError("invalid_registered_actor_handle:" + actor["id"])
+            pose = actor_pose(actor, source_time_s)
+            translate.Set(Gf.Vec3d(*pose["position"]))
+            rotate.Set(math.degrees(pose["yaw"]))
+    return update
+
+
+def make_native_actor_updater(stage, spec, dynamic_view, geometry_verifier):
+    """Submit genuine same-step kinematic targets in the sealed world frame.
+
+    This is an explicit isolated scene backend. It never writes robot state or
+    falls back to USD transforms. Original geometry auditing and actual native
+    actor readback remain authoritative; target values are not measurements.
+    """
+    import numpy as np
+    import warp as wp
+    from pxr import UsdGeom, UsdPhysics
+    from isaacsim.core.simulation_manager import SimulationManager
+    from truth_map import _audit_scripted_actor_transform
+    if dynamic_actor_target_backend(spec) != 'native_kinematic_v1':
+        raise ValueError('explicit_native_actor_target_backend_required')
+    if geometry_verifier is None or geometry_verifier.stage is not stage:
+        raise ValueError('native_actor_target_requires_original_geometry_verifier')
+    geometry_digest = geometry_verifier.verify()
+    actors = [a for a in spec.get('dynamic_actors', []) if a['enabled']]
+    expected = {'/World/Dynamic/' + a['id']: a for a in actors}
+    if len(expected) != len(actors):
+        raise ValueError('native_kinematic_registry_mismatch')
+    if dynamic_view is None or not dynamic_view.is_physics_tensor_entity_valid():
+        raise ValueError('invalid_native_kinematic_view')
+    view = dynamic_view._physics_rigid_body_view
+    simulation = SimulationManager._physics_sim_view__warp
+    paths = [str(p) for p in view.prim_paths]
+    if (view.count != len(paths) or len(paths) != len(expected)
+            or len(set(paths)) != len(paths) or set(paths) != set(expected)):
+        raise ValueError('native_kinematic_registry_mismatch')
+    # SimulationManager initializes this very view with subspace roots '/'.
+    # Retain its identity rather than changing shared transforms at runtime.
+    if simulation is None or not simulation.is_valid or view._frontend.device != 'cpu' or not view.check():
+        raise ValueError('native_kinematic_cpu_world_view_required')
+    enrolled = []
+    cache = UsdGeom.XformCache()
+    for path in paths:
+        prim = stage.GetPrimAtPath(path)
+        if (not prim or not prim.HasAPI(UsdPhysics.RigidBodyAPI)
+                or prim.HasAPI(UsdPhysics.ArticulationRootAPI)):
+            raise ValueError('native_kinematic_actor_type_mismatch')
+        rigid = UsdPhysics.RigidBodyAPI(prim)
+        kinematic, enabled = rigid.GetKinematicEnabledAttr(), rigid.GetRigidBodyEnabledAttr()
+        if kinematic.Get() is not True or enabled.Get() is False:
+            raise ValueError('native_kinematic_actor_type_mismatch')
+        # Complete ancestor time-sample/identity and exact root-op guards are
+        # shared with the original future-geometry audit, without masks.
+        _audit_scripted_actor_transform(prim, cache)
+        enrolled.append((expected[path], prim, kinematic, enabled))
+    targets_np = np.empty((len(paths), 7), dtype=np.float32)
+    targets = wp.array(targets_np, dtype=wp.float32, device='cpu', copy=False)
+    indices = wp.array(np.arange(len(paths), dtype=np.uint32), dtype=wp.uint32, device='cpu')
+
+    def update(source_time_s):
+        if (SimulationManager._physics_sim_view__warp is not simulation or not simulation.is_valid
+                or not dynamic_view.is_physics_tensor_entity_valid()
+                or dynamic_view._physics_rigid_body_view is not view or not view.check()):
+            raise ValueError('native_kinematic_actor_view_lost')
+        if geometry_verifier.verify() != geometry_digest:
+            raise ValueError('native_kinematic_geometry_identity_changed')
+        for i, (actor, prim, kinematic, enabled) in enumerate(enrolled):
+            if not prim or kinematic.Get() is not True or enabled.Get() is False:
+                raise ValueError('native_kinematic_actor_type_changed')
+            pose = actor_pose(actor, source_time_s)
+            half = pose['yaw'] * .5
+            targets_np[i] = [*pose['position'], 0., 0., math.sin(half), math.cos(half)]
+        if not np.isfinite(targets_np).all():
+            raise ValueError('nonfinite_native_kinematic_target')
+        view.set_kinematic_targets(targets, indices)
+
+    return update
+
+
+def update_actors(stage, spec, source_time_s):
+    # Retain the standalone utility for callers that do not own a scene lifetime.
+    make_actor_updater(stage, spec)(source_time_s)
 
 
 def update_follow_camera(stage, spec, robot_pose):

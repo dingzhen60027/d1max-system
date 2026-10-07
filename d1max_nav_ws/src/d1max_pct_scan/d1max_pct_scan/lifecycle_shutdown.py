@@ -8,6 +8,32 @@ import math
 import time
 
 
+class OriginalClockSource:
+    """Retain only original /clock integers; a regression is terminal here."""
+    def __init__(self):
+        self.nanoseconds = 0
+        self.fault = ''
+
+    def observe(self, message):
+        if self.fault:
+            return False
+        try:
+            stamp = message.clock
+            if (type(stamp.sec) is not int or not 0 <= stamp.sec <= 2147483647
+                    or type(stamp.nanosec) is not int or not 0 <= stamp.nanosec < 1000000000):
+                return False
+            source = stamp.sec * 1000000000 + stamp.nanosec
+            if source <= 0:
+                return False
+            if source < self.nanoseconds:
+                self.fault = 'clock_regressed'
+                return False
+            self.nanoseconds = source
+            return True
+        except AttributeError:
+            return False
+
+
 def drained_status(value, *, session_id, requested_at, now):
     stamp = value.get('stamp')
     return (value.get('schema') == 2 and value.get('session_id') == session_id
@@ -34,8 +60,10 @@ def drain_task_owner(session_id, *, budget_s=6., use_sim_time=False):
     from std_msgs.msg import String
     from d1max_navigation_bt_interfaces.srv import PrepareTransition
     context, node, executor = Context(), None, None
-    result = dict(request_accepted=False, software_retired=False,
-                  physical_stop_confirmed=False, reason='task_owner_drain_timeout')
+    result = dict(request_sent=False, request_accepted=False, software_retired=False,
+                  physical_stop_confirmed=False, reason='task_owner_drain_timeout',
+                  requested_at=None, requested_source_ns=None,
+                  timeout_stage='clock' if use_sim_time else 'service')
     started = time.monotonic()
     try:
         rclpy.init(context=context)
@@ -44,18 +72,31 @@ def drain_task_owner(session_id, *, budget_s=6., use_sim_time=False):
             parameter_overrides=[Parameter('use_sim_time', value=use_sim_time)])
         executor = SingleThreadedExecutor(context=context)
         executor.add_node(node)
+        original_clock = OriginalClockSource()
+        if use_sim_time:
+            from rosgraph_msgs.msg import Clock
+            # Humble's built-in ROSClock subscription is volatile. This extra
+            # observer receives the publisher's retained ORIGINAL last clock;
+            # it never sets/overrides the node clock or manufactures a tick.
+            clock_subscription = node.create_subscription(Clock, '/clock', original_clock.observe,
+                QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL))
+        def source_ns():
+            if use_sim_time:
+                return 0 if original_clock.fault else original_clock.nanoseconds
+            return node.get_clock().now().nanoseconds
         requested_at = None
         def observe(message):
             try:
                 value = json.loads(message.data)
-                if result['request_accepted'] and requested_at is not None and drained_status(value,
+                if (result['request_accepted'] and requested_at is not None and source_ns() > 0
+                        and drained_status(value,
                         session_id=session_id, requested_at=requested_at,
-                        now=node.get_clock().now().nanoseconds*1e-9):
+                        now=source_ns()*1e-9)):
                     result.update(software_retired=True,
                                   physical_stop_confirmed=value.get('physical_stop_confirmed') is True,
                                   reason=('software_retired_and_physical_stop_confirmed'
                                     if value.get('physical_stop_confirmed') is True
-                                    else 'software_retired_not_physical_stop'))
+                                    else 'software_retired_not_physical_stop'), timeout_stage=None)
             except (ValueError, TypeError, AttributeError):
                 pass
         node.create_subscription(String, '/d1max/live_planning/bt/status', observe,
@@ -63,8 +104,11 @@ def drain_task_owner(session_id, *, budget_s=6., use_sim_time=False):
         client = node.create_client(PrepareTransition, '/d1max/live_planning/bt/prepare_transition')
         future = None
         while time.monotonic()-started < budget_s:
-            source_now = node.get_clock().now().nanoseconds*1e-9
-            if future is None and source_now > 0. and client.service_is_ready():
+            current_source_ns = source_ns()
+            source_now = current_source_ns*1e-9
+            if future is None:
+                result['timeout_stage'] = 'clock' if current_source_ns <= 0 else 'service'
+            if future is None and current_source_ns > 0 and client.service_is_ready():
                 # A new simulation clock starts at zero until its first /clock
                 # callback. Never turn that zero into a barrier which would
                 # admit an inactive latched status from before this request.
@@ -74,13 +118,21 @@ def drain_task_owner(session_id, *, budget_s=6., use_sim_time=False):
                 request.schema_version, request.reason = 2, 'owned_supervisor_shutdown'
                 request.session_id = session_id
                 future = client.call_async(request)
+                result.update(request_sent=True, requested_at=requested_at,
+                              requested_source_ns=current_source_ns, timeout_stage='response')
             executor.spin_once(timeout_sec=.05)
+            if original_clock.fault:
+                result.update(reason='task_owner_drain_clock_regressed', timeout_stage='clock_regressed',
+                              software_retired=False, physical_stop_confirmed=False)
+                break
             if future is not None and future.done() and not result['request_accepted']:
                 response = future.result()
                 if response is None or response.schema_version != 2 or not response.accepted:
                     result['reason'] = 'task_owner_drain_rejected'
+                    result['timeout_stage'] = None
                     break
                 result['request_accepted'] = True
+                result['timeout_stage'] = 'retirement'
                 # ACK means accepted for drain, not that dependencies retired.
             if result['software_retired']:
                 break

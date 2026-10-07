@@ -1,0 +1,80 @@
+{
+  "schema": 1,
+  "passed": true,
+  "case": "goal",
+  "session_id": "40d3d992bfd84b6c83dcba38e19cc829",
+  "test_scope": "original_BT_PCT_SCAN_tracker_safety_mock_writer_PhysX_robot_fixture",
+  "physical_acceptance": false,
+  "localization": "groundtruth_fixture_not_LIO_localization_validation",
+  "goal": [
+    8.0,
+    -5.0,
+    0.0
+  ],
+  "result": {
+    "success": true,
+    "reason": "measured_goal_reached",
+    "retirement_confirmed": true,
+    "physical_stop_confirmed": false
+  },
+  "error": "",
+  "counts": {
+    "measured_state": 7745,
+    "native_imu_received": 10325,
+    "applied_motion": 7022,
+    "stop_report": 7022,
+    "permit": 3493,
+    "commit_ack": 109
+  },
+  "action_result_status": 4,
+  "execution_motion_test": true,
+  "stop": {
+    "execution_id": "40d3d992bfd84b6c83dcba38e19cc829.2:execution",
+    "stop_submitted": true,
+    "measured_stop_confirmed": true,
+    "physical_acceptance_verified": false,
+    "stationary_samples": 282,
+    "measured_linear_mps": 0.007129533487697408,
+    "measured_angular_radps": 0.009568176031917595,
+    "reason": "goal_reached"
+  },
+  "measured_stationary": true,
+  "measured_distance_m": 16.40585428003934,
+  "measured_final_position": [
+    7.8803863525390625,
+    -4.941290855407715,
+    0.4866410195827484
+  ],
+  "measured_max_speed_mps": 0.5961021445942337,
+  "nonzero_applied_count": 4865,
+  "measured_max_full_angular_speed_radps": 0.8352511258647412,
+  "measured_velocity_domain_verified": true,
+  "measured_velocity_domain_evidence": {
+    "required": true,
+    "verified": true,
+    "measured_state_count": 7745,
+    "velocity_sample_count": 7745,
+    "invalid_velocity_sample_count": 0,
+    "measured_max_full_xyz_speed_mps": 0.5961021445942337,
+    "measured_max_full_angular_speed_radps": 0.8352511258647412,
+    "full_angular_norm_is_diagnostic_only": true,
+    "scope": "all_received_state_samples; no_clamping; intervening_500Hz_PhysX_peaks_unobserved",
+    "model_record": "/home/eric/wjg/d1max-build-isaac/runs/campus_restart_v63_001/braking_model.json",
+    "model_record_sha256": "d1ba2821e8a83afd7b9ab8092b8698d221c5b61bb41aaf5633eab31850b89012",
+    "expected_model_record_sha256": "d1ba2821e8a83afd7b9ab8092b8698d221c5b61bb41aaf5633eab31850b89012",
+    "reachable_max_speed_mps": 0.65,
+    "reference_max_speed_mps": 0.65,
+    "measured_travel_max_speed_mps": 0.65,
+    "reference_evidence_sha256": "44e56925dd1f4b78a4d3994701b1700429e00c3fd7f80b26ddcb86e321b97262",
+    "exceeded_domains": [],
+    "reason": "sampled_full_xyz_speed_within_sealed_domains"
+  },
+  "latest_applied": {
+    "vx": 0.0,
+    "wz": 0.0,
+    "hold": true,
+    "reason": "goal_position_reached",
+    "execution_id": "40d3d992bfd84b6c83dcba38e19cc829.2:execution"
+  },
+  "extraction_scope": "Original report leading fields before bt_status; arrays and raw measurement streams not copied."
+}

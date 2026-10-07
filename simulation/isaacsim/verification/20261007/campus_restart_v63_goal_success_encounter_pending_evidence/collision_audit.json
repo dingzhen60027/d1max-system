@@ -1,0 +1,112 @@
+{
+  "schema": 1,
+  "scope": "sampled_actual_link_geometry_static_and_actor",
+  "completed": true,
+  "continuous_collision_proof": false,
+  "separation_method": "strict_closed_AABB_separation_of_actual_transformed_primitives",
+  "numerical_outward_margin_m": 1e-06,
+  "floor_contact_scope": "excluded_explicit_support_plane_requires_separate_contact_certificate",
+  "robot_kind": "official_spot_physx",
+  "session_id": "40d3d992bfd84b6c83dcba38e19cc829",
+  "spec_sha256": "db541949266ee09970c8b60b1cabe5b7bb30f8e51a8372c3cb202efe1b2f6913",
+  "spec_canonical_sha256": "5d66aafd5c31ca97fa98b4dbcfbda77b5d6d9d1ffd5c1f7564b5b8f3715b2b69",
+  "trajectory_sha256": "6ae17ede55f22f344274c4a06db6661e9b20207f8a03af6936b233c7eb195960",
+  "robot_collision_registry_sha256": "e68b27ca3e0a30c3bdbaeb43414ae4a19674f9661adb167cc6bd0e38ab6ebc76",
+  "actor_collision_registry_sha256": "96b092886099b5b2c0904ce86c34d607167c8cee28865d318455c88bc7aea734",
+  "actor_ids": [
+    "door_blocking_cart",
+    "office_person",
+    "oncoming_cart",
+    "plaza_cart",
+    "plaza_person",
+    "warehouse_forklift"
+  ],
+  "sample_count": 9237,
+  "trajectory_sample_count": 9237,
+  "trajectory_sources_all_audited": true,
+  "source_begin_ns": 1791381824791930327,
+  "source_end_ns": 1791381947933930327,
+  "max_source_sampling_gap_ns": 20000000,
+  "actual_actor_encounter": {
+    "schema": 1,
+    "rule": "measured_primitive_center_approach_near_depart_v1",
+    "source": "actual_registered_link_and_actor_geometry",
+    "scope": "sampled_same_step_primitive_center_proximity_only",
+    "completed": false,
+    "required_actor_ids": [
+      "plaza_person"
+    ],
+    "contract_sha256": "02628470adb3accc5cd7d930fb5a44b1a1420d238eb9996c95bbc100ea6b1c49",
+    "observed": null,
+    "actors": [
+      {
+        "actor_id": "plaza_person",
+        "observed": null,
+        "witnesses": []
+      }
+    ],
+    "truncated_actor_ids": [
+      "plaza_person"
+    ],
+    "maximum_source_sampling_gap_ns": 20000000,
+    "source_begin_ns": 1791381824791930327,
+    "source_end_ns": 1791381947933930327,
+    "source_anchor_ns": 1791381824773930327,
+    "session_id": "40d3d992bfd84b6c83dcba38e19cc829",
+    "scene_sha256": "db541949266ee09970c8b60b1cabe5b7bb30f8e51a8372c3cb202efe1b2f6913",
+    "robot_collision_registry_sha256": "e68b27ca3e0a30c3bdbaeb43414ae4a19674f9661adb167cc6bd0e38ab6ebc76",
+    "actor_collision_registry_sha256": "96b092886099b5b2c0904ce86c34d607167c8cee28865d318455c88bc7aea734",
+    "observation_status": "pending",
+    "limitations": [
+      "sampled_proximity_only",
+      "not_route_blocking_or_yield_or_contact_evidence",
+      "caller_binds_actual_snapshots_to_same_physics_step"
+    ],
+    "profile": {
+      "body_envelope": {
+        "above": 0.589,
+        "offset": 0.3125,
+        "radius": 0.6078651750202781,
+        "support_floor_z": 0.0,
+        "support_penetration_m": 0.02
+      },
+      "body_envelope_metadata_sha256": "913fe1289cf8ad86926331d6a1ec815b5051b4752766b3637489656ff1bd169b",
+      "body_reference_height_m": 0.481,
+      "interpretation": "actual_sampled_encounter_exposure_only; not_route_blocking",
+      "kind": "isolated_spot_reachable65_3m_exposure_v1",
+      "measured_travel_max_speed_mps": 0.65,
+      "rationale": "explicit_recalibrated_.65_fixture_sampled_exposure; legacy_.60_profile_and_2m_unchanged",
+      "reachable_max_speed_mps": 0.65,
+      "reachable_max_yaw_radps": 0.8,
+      "reference_max_speed_mps": 0.65,
+      "robot_kind": "official_spot_physx",
+      "runtime_exact_model_and_registered_body_binding_required": true,
+      "schema": 1,
+      "source_reference_evidence_sha256": "44e56925dd1f4b78a4d3994701b1700429e00c3fd7f80b26ddcb86e321b97262"
+    }
+  },
+  "non_floor_static_penetration_count": 0,
+  "dynamic_penetration_count": 0,
+  "possible_overlap_counts": {
+    "static": 0,
+    "dynamic": 0
+  },
+  "possible_overlap_sample_counts": {
+    "static": 0,
+    "dynamic": 0
+  },
+  "checked_pair_counts": {
+    "static": 10326966,
+    "dynamic": 2041377
+  },
+  "possible_overlap_examples": [],
+  "min_static_separation_lower_bound_m": 2.780970647449883,
+  "min_actor_separation_lower_bound_m": 0.6816035285038586,
+  "faults": [],
+  "limitations": [
+    "sampled_times_only",
+    "AABB_overlap_is_unresolved_not_measured_penetration",
+    "encounter_is_sampled_proximity_only",
+    "caller_binds_snapshots_to_same_physics_step"
+  ]
+}

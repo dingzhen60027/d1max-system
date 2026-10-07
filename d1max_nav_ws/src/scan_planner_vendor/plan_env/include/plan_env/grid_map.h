@@ -203,6 +203,8 @@ public:
   std::string describeInflateOccupancy(const Eigen::Vector3d &position,double yaw);
   std::string describeCollisionLease() const;
   std::string describeObservedRawFailure() const;
+  // Fixed-size identity bookkeeping only; never a collision query or lease renewal.
+  std::string describeDynamicHitProvenanceStatus() const;
   scan_planner::CollisionEvidence inspectInflateOccupancy(const Eigen::Vector3d &position,double yaw,bool detailed=false);
   // Offline diagnostic enablement only; no live config or permission changed.
   scan_planner::NearFieldDiagnostics &nearFieldDiagnostics() {return near_field_diagnostics_;}
@@ -357,6 +359,7 @@ public:
         static_prior_live_hits_.size()*(sizeof(decltype(static_prior_live_hits_)::value_type)+4*sizeof(void*))+
         static_support_floor_witnesses_.size()*(sizeof(decltype(static_support_floor_witnesses_)::value_type)+4*sizeof(void*))+
         dynamic_hit_provenance_.size()*(sizeof(decltype(dynamic_hit_provenance_)::value_type)+6*sizeof(void*))+
+        sizeof(dynamic_hit_diagnostics_)+
         dynamic_hit_registry_sha256_.capacity()+
         dynamic_oracle_.bytes();
   }
@@ -492,6 +495,15 @@ private:
   std::string dynamic_hit_registry_sha256_;
   bool dynamic_hit_provenance_disabled_{false};
   std::size_t dynamic_hit_provenance_limit_{100000};
+  enum class DynamicHitDisableReason {None,DomainMismatch,MetadataOverflow};
+  struct DynamicHitDiagnostics {
+    DynamicHitDisableReason disable_reason{DynamicHitDisableReason::None};
+    // Cumulative relevant HIT events while attribution is active, before native
+    // cell-vote deduplication. A mixed count is a positive -> poisoned transition;
+    // prior poison counts first entries already carrying unknown/static history.
+    std::uint64_t valid_tag_events{0},zero_tag_events{0},mixed_poison_events{0},prior_poison_events{0};
+  };
+  DynamicHitDiagnostics dynamic_hit_diagnostics_;
   struct ObservedRawFailure {Eigen::Vector3i cell;int state;};
   std::optional<ObservedRawFailure> observed_raw_failure_;
   bool dynamicHitProvenanceDomainValid() const;

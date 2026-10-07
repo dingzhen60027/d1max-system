@@ -12,6 +12,29 @@ def pose(x=0.):return N(position=vec(x),orientation=N(x=0.,y=0.,z=0.,w=1.))
 def twist(x=.2):return N(linear=vec(x),angular=vec(z=.1))
 
 
+def complete_permit(p,*,sequence=None,when=NOW):
+    p=deepcopy(p);p.frame_id='d1max_loc_odom';p.confirmation_id='confirmed-'+p.execution_id
+    p.source_stamp=stamp(when);p.valid_until=stamp(when+200_000_000)
+    if sequence is not None:p.sequence=sequence
+    return p
+
+
+def next_authority(h,*,when=NOW+50_000_000):
+    p=complete_permit(h.writer_authority,sequence=h.core.last_permit_sequence+1,when=when)
+    p.version.task_id='next-task';p.version.route_id='next-route';p.version.route_hash='d'*64
+    p.version.reference_generation+=1;p.execution_id='next-execution';p.control_epoch+=1
+    p.sdk_session='new-sdk-session';p.sdk_arm_generation=1;p.trajectory_id=5
+    p.allowed=True;p.revoked=False;p.geometry_committed=True;p.phase='tracking'
+    return p
+
+
+def retire_authority(h,*,when=NOW+30_000_000):
+    p=complete_permit(h.applied or h.writer_authority,sequence=h.core.last_permit_sequence+1,when=when)
+    p.allowed=False;p.revoked=True;p.phase='terminal'
+    assert h.on_permit(p,when)
+    return p
+
+
 def ack(p,*,g=None,sequence=1,applied=True,when=NOW):
     return N(schema_version=1,handoff_id=g.handoff_id if g else '',grant_sequence=g.sequence if g else 0,
         sequence=sequence,previous_commit_sequence=g.expected_commit_sequence if g else 0,
@@ -228,7 +251,7 @@ def test_stationary_reentry_dangerous_or_unbound_witness_is_rejected(change):
     elif change=='retained_motion':g.retain_incumbent_until=stamp(NOW+1)
     else:e.valid_until=stamp(NOW-1)
     g.stationary_evidence=deepcopy(e)
-    assert h.on_stationary(e)
+    assert h.on_stationary(e)==(change!='foreign_sdk')
     assert not h.on_grant(g,NOW) and h.commit_sequence==1
 
 
@@ -246,3 +269,134 @@ def test_applied_new_identity_invalidates_stop_witness_without_revoking_delayed_
     assert h.on_stationary(later) and h.candidate is not None
     assert h.on_ack(ack(g.candidate,g=g,sequence=3),NOW)
     assert h.commit_sequence==2 and h.core.permits[-1].allowed
+
+
+def test_retired_execution_starts_independent_ack_and_owner_grant_highwaters():
+    h,p,d,g,m,proof=ready()
+    assert h.on_ack(ack(g.candidate,g=g,sequence=16,when=NOW+10_000_000),NOW+20_000_000)
+    next_old=deepcopy(g);next_old.handoff_id='old-handoff-8';next_old.sequence=8
+    next_old.expected_commit_sequence=2;next_old.incumbent=deepcopy(h.applied)
+    next_old.candidate=deepcopy(h.applied);next_old.candidate.geometry_committed=False
+    next_old.candidate.sequence=3;next_old.candidate.trajectory_id=4
+    next_old.candidate.version.anchor_revision+=1
+    assert h.on_grant(next_old,NOW+20_000_000)
+    assert (h.last_ack_sequence,h.last_grant_sequence,h.commit_sequence)==(16,8,2)
+    retire_authority(h)
+    new=next_authority(h);assert h.on_permit(new,NOW+50_000_000)
+    assert (h.last_ack_sequence,h.last_grant_sequence,h.commit_sequence)==(0,0,0)
+    assert h.applied is None and h.grant is None
+    assert h.on_ack(ack(new,sequence=2,when=NOW+50_000_000),NOW+60_000_000)
+    new_grant=deepcopy(g);new_grant.handoff_id='next-execution:handoff:1';new_grant.sequence=1
+    new_grant.incumbent=deepcopy(h.applied);new_grant.candidate=deepcopy(new)
+    new_grant.candidate.sequence+=1;new_grant.candidate.trajectory_id=6
+    new_grant.candidate.version.anchor_revision+=1;new_grant.candidate.geometry_committed=False
+    new_grant.source_stamp=stamp(NOW+60_000_000)
+    new_grant.transition_deadline=stamp(NOW+200_000_000)
+    new_grant.valid_until=stamp(NOW+200_000_000)
+    new_grant.retain_incumbent_until=stamp(NOW+200_000_000)
+    assert h.on_grant(new_grant,NOW+60_000_000)
+    assert h.commit_sequence==1 and h.last_ack_sequence==2 and h.last_grant_sequence==1
+    assert h.applied.valid_until==new.valid_until
+
+
+@pytest.mark.parametrize('kind',['initial','handoff_positive','handoff_negative'])
+def test_old_large_ack_cannot_poison_or_roll_back_new_execution(kind):
+    h,p,d,g,m,proof=ready();retire_authority(h)
+    new=next_authority(h);assert h.on_permit(new,NOW+50_000_000)
+    assert h.on_ack(ack(new,sequence=2,when=NOW+50_000_000),NOW+60_000_000)
+    snapshot=(h.last_ack_sequence,h.last_grant_sequence,h.commit_sequence,deepcopy(h.applied),deepcopy(h.core.permits))
+    old=ack(p if kind=='initial' else g.candidate,g=None if kind=='initial' else g,
+        sequence=1000,applied=kind!='handoff_negative',when=NOW+60_000_000)
+    assert not h.on_ack(old,NOW+60_000_000)
+    assert snapshot==(h.last_ack_sequence,h.last_grant_sequence,h.commit_sequence,h.applied,h.core.permits)
+
+
+@pytest.mark.parametrize('change',['unretired','same_task','same_execution','same_epoch','map','session',
+    'sdk','arm','confirmation','frame','context','future_one_ns','expired','long_lease','holding','uncommitted','no_clock'])
+def test_new_execution_requires_complete_fresh_positive_forward_authority(change):
+    h,p,d,g,m,proof=ready()
+    if change!='unretired':retire_authority(h)
+    new=next_authority(h);now=NOW+50_000_000
+    if change=='same_task':new.version.task_id=p.version.task_id
+    elif change=='same_execution':new.execution_id=p.execution_id
+    elif change=='same_epoch':new.control_epoch=p.control_epoch
+    elif change=='map':new.version.map_version_id='foreign'
+    elif change=='session':new.version.session_id='foreign'
+    elif change=='sdk':new.sdk_session=''
+    elif change=='arm':new.sdk_arm_generation=0
+    elif change=='confirmation':new.confirmation_id=''
+    elif change=='frame':new.frame_id='foreign'
+    elif change=='context':new.version.context_sequence=0
+    elif change=='future_one_ns':new.source_stamp=stamp(now+1)
+    elif change=='expired':new.valid_until=stamp(now)
+    elif change=='long_lease':new.valid_until=stamp(now+750_000_001)
+    elif change=='holding':new.allowed=False;new.phase='holding'
+    elif change=='uncommitted':new.geometry_committed=False
+    elif change=='no_clock':now=None
+    snapshot=(h.last_ack_sequence,h.last_grant_sequence,h.commit_sequence,deepcopy(h.applied),
+        h.core.last_permit_sequence,deepcopy(h.writer_authority),deepcopy(h.core.permits))
+    assert not h.on_permit(new,now)
+    assert snapshot==(h.last_ack_sequence,h.last_grant_sequence,h.commit_sequence,h.applied,
+        h.core.last_permit_sequence,h.writer_authority,h.core.permits)
+
+
+def test_retirement_keeps_late_initial_heartbeat_write_fact_under_hold():
+    c,p,*_=fixture();p=complete_permit(p);p.phase='tracking'
+    c.permits.clear();c.last_permit_sequence=0
+    h=ExecutionHandoffAdmission(c,enabled=True);assert h.on_permit(p,NOW)
+    heartbeat=complete_permit(p,sequence=2,when=NOW+10_000_000)
+    assert h.on_permit(heartbeat,NOW+10_000_000)
+    retired=retire_authority(h,when=NOW+30_000_000)
+    assert h.commit_sequence==0 and h.last_ack_sequence==0
+    assert h.on_ack(ack(heartbeat,sequence=16,when=NOW+20_000_000),NOW+50_000_000)
+    assert h.applied==heartbeat and h.commit_sequence==1 and h.last_ack_sequence==16
+    assert not h.core.permits and h.applied.source_stamp==heartbeat.source_stamp
+    assert h.applied.valid_until==heartbeat.valid_until
+    restored=complete_permit(heartbeat,sequence=retired.sequence+1,when=NOW+50_000_000)
+    assert not h.on_permit(restored,NOW+50_000_000)
+    new=next_authority(h,when=NOW+60_000_000)
+    assert h.on_permit(new,NOW+60_000_000)
+    assert h.commit_sequence==0 and h.last_ack_sequence==0
+    assert h.on_ack(ack(new,sequence=2,when=NOW+60_000_000),NOW+70_000_000)
+
+
+def test_retirement_keeps_late_handoff_fact_and_cannot_restore_old_positive_lease():
+    h,p,d,g,m,proof=ready();retired=retire_authority(h)
+    assert h.on_ack(ack(g.candidate,g=g,sequence=16,when=NOW+20_000_000),NOW+50_000_000)
+    assert h.commit_sequence==2 and h.last_ack_sequence==16 and not h.core.permits
+    restored=complete_permit(h.applied,sequence=retired.sequence+1,when=NOW+50_000_000)
+    assert not h.on_permit(restored,NOW+50_000_000)
+    assert h.commit_sequence==2 and h.last_ack_sequence==16 and not h.core.permits
+
+
+def test_same_execution_heartbeat_and_holding_replan_do_not_restart_writer_counters():
+    h,p,d,g,m,proof=ready()
+    assert h.on_ack(ack(g.candidate,g=g,sequence=16,when=NOW+10_000_000),NOW+20_000_000)
+    heartbeat=complete_permit(h.applied,sequence=4,when=NOW+20_000_000)
+    assert h.on_permit(heartbeat,NOW+20_000_000)
+    holding=deepcopy(heartbeat);holding.sequence+=1;holding.allowed=False;holding.phase='holding'
+    assert h.on_permit(holding,NOW+30_000_000)
+    assert (h.last_ack_sequence,h.last_grant_sequence,h.commit_sequence)==(16,1,2)
+    assert h.retired_authority is None
+
+
+def test_new_scope_rejects_old_grant_and_stationary_before_their_highwaters():
+    h,p,g,e=stationary_ready();assert h.on_stationary(e);retire_authority(h)
+    new=next_authority(h);assert h.on_permit(new,NOW+50_000_000)
+    assert h.on_ack(ack(new,sequence=2,when=NOW+50_000_000),NOW+60_000_000)
+    old_grant=deepcopy(g);old_grant.sequence=1000
+    old_evidence=deepcopy(e);old_evidence.sequence=1000
+    assert not h.on_grant(old_grant,NOW+60_000_000)
+    assert not h.on_stationary(old_evidence)
+    assert h.last_grant_sequence==0 and not h.stationary and h.commit_sequence==1
+
+
+def test_disabled_writer_handoff_preserves_ordinary_permission_behavior():
+    c,p,*_=fixture();h=ExecutionHandoffAdmission(c,enabled=False)
+    p=complete_permit(p,sequence=2);p.phase='tracking'
+    assert h.on_permit(p,NOW)
+    new=deepcopy(p);new.sequence+=1;new.version.task_id='next-task'
+    new.execution_id='next-execution';new.control_epoch+=1
+    assert h.on_permit(new,NOW)
+    assert h.writer_authority is None and h.commit_sequence==h.last_ack_sequence==0
+    assert c.permits[-1]==new

@@ -352,10 +352,10 @@ def voxel_veto(payload, cell, resolution=.05):
 
 def certify_robot_in_body_envelope(collider_world_bounds, *, body_position, body_orientation_xyzw,
                                    radius, offset, below, above, floor_z, support_paths=(), tolerance_m=1e-6):
-    """Prove every measured link AABB is enclosed by the query double cylinder.
+    """Prove every complete link enclosure fits the query double cylinder.
 
     This is deliberately stronger than checking only nominal roll/pitch/height.
-    Each transformed primitive bounding box is clipped at body-local x=0.
+    Each complete primitive support box is clipped at body-local x=0.
     Every vertex of each convex half must fit the corresponding cylinder;
     checking only vertices against the union could miss its narrow waist.
     Declared support colliders may intersect the certified flat floor by at
@@ -415,5 +415,5 @@ def certify_robot_in_body_envelope(collider_world_bounds, *, body_position, body
             if any((vx - sign * offset) ** 2 + vy ** 2 > (radius + tolerance_m) ** 2 for vx, vy in half):
                 raise ValueError("robot_link_outside_horizontal_query_envelope:" + item["path"])
         checked.append(item["path"])
-    return dict(valid=True, checked_paths=checked, source_scope="actual_full_link_world_AABBs_inside_yaw_query_envelope",
+    return dict(valid=True, checked_paths=checked, source_scope="actual_full_link_enclosures_inside_yaw_query_envelope",
                 nominal_tilt_not_used_as_geometry_proof=True, floor_support_does_not_clear_obstacle_voxels=True)

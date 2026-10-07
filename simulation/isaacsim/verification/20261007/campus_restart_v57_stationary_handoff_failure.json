@@ -1,0 +1,2688 @@
+{
+  "schema": 1,
+  "kind": "campus_restart_v57_stationary_handoff_failure",
+  "date": "2026-10-07",
+  "status": "FAILED_RESTART_GOAL; NEW_TRACKER_SCAN_SCOPE_ESTABLISHED; PYTHON_SAFETY_SCOPE_REJECTION_CONFIRMED",
+  "scope": "Original sealed BT/PCT/SCAN/tracker/Python safety/isolated SDK writer and official PhysX Spot; cancel and resubmit within one unchanged scene and source timeline.",
+  "identity": {
+    "session_id": "14baf0ed937943d889004b0d0e6c0599",
+    "epoch": "211a931b-9715-4552-8c16-721b25586282",
+    "clock_anchor_ns": 1791377432479382334,
+    "run": "/home/eric/wjg/d1max-build-isaac/runs/campus_restart_v57_001",
+    "candidate": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v57-campus-execution-scope-restart",
+    "sealed_scene_sha256": "998f8331b2e9c53d028e35424c829ecd6954dc6d418aa9c3fcd7b9c046086cf1",
+    "sealed_braking_model_sha256": "164d765b86bef7e9624120c32a9dda6f2d01206448066249aa3c3116cddd84b1"
+  },
+  "outcome": {
+    "case_evaluation_passed": false,
+    "independent_case_evaluation_exit_code": 1,
+    "phase_outcomes": [
+      {
+        "index": 0,
+        "original_case": "cancel",
+        "passed": true,
+        "original_result": {
+          "success": false,
+          "reason": "action_cancelled",
+          "retirement_confirmed": true,
+          "physical_stop_confirmed": false
+        },
+        "goal_xyz": [
+          8.0,
+          -5.0,
+          0.0
+        ],
+        "measured_final_position": [
+          -7.646061420440674,
+          -4.924007415771484,
+          0.4870699644088745
+        ],
+        "measured_cumulative_distance_m": 0.7141492708724132,
+        "nonzero_applied_count": 537,
+        "execution_id": "14baf0ed937943d889004b0d0e6c0599.1:execution",
+        "measured_progress_credit_samples": 11
+      },
+      {
+        "index": 1,
+        "original_case": "goal",
+        "passed": false,
+        "original_result": {
+          "success": false,
+          "reason": "execution_blocked_timeout:waiting_stationary_writer_handoff_outcome",
+          "retirement_confirmed": true,
+          "physical_stop_confirmed": false
+        },
+        "goal_xyz": [
+          8.0,
+          -5.0,
+          0.0
+        ],
+        "measured_final_position": [
+          -6.339906692504883,
+          -4.763800621032715,
+          0.4867229163646698
+        ],
+        "measured_cumulative_distance_m": 1.5329226959302467,
+        "nonzero_applied_count": 747,
+        "execution_id": "14baf0ed937943d889004b0d0e6c0599.2:execution",
+        "measured_progress_credit_samples": 39
+      }
+    ],
+    "second_goal_xy_error_m": 14.341851836369349,
+    "software_retired": true,
+    "clean_shutdown": false,
+    "physical_stop_confirmed": false,
+    "child_exit_codes": {
+      "isaac_bridge": 0,
+      "isaac_sim": -15,
+      "navigation": 0,
+      "smoke": 1
+    }
+  },
+  "causal_evidence": {
+    "confirmed": [
+      "Phase0 cancel passed. Phase1 task .2/control epoch2 genuinely moved and its initial applied ACK has previous commit0/new commit1. Tracker then reports active writer1 rather than inherited phase0 writer7.",
+      "SCAN generated 2494 prepared native motion proofs, all positive observed_free_motion_sweep. In 142 stationary handoffs, the preserved same-handoff first positive prepared motion is followed by an expired SDK ACK. No safe_demand with a handoff ID occurs in the original trace.",
+      "The sealed Python safety consumer retains phase0 last_ack_sequence16 and last_grant_sequence8 across task change. Its original on_ack rejects phase1 initial ACK sequence2 before the initial-commit branch. Original ordered replay confirms that the new task consequently has no applied identity/commit in this safety consumer and rejects its handoff grants.",
+      "The native positive prepared proof therefore never becomes a safe prepared demand. The SDK correctly keeps zero and eventually rejects the stationary transaction at its original deadline. Deadline expiry is a downstream symptom of this missing execution scope, not proof that an early positive native packet was intrinsically too slow.",
+      "Sensor/proof freshness pressure also exists: original dual-LiDAR maximum steady receipt gaps are .526349/.526171s, beyond the unchanged .5s receipt lease. This evidence is retained separately and does not replace the replay-confirmed safety scope defect."
+    ],
+    "scope_failure_original_python_code": [
+      {
+        "path": "source_snapshot/nav/src/d1max_pct_scan/d1max_pct_scan/execution_handoff.py",
+        "line": 179,
+        "guard": "message.sequence<=self.last_ack_sequence rejects before initial ACK branch at lines198-204",
+        "phase1_initial_ack_sequence": 2,
+        "phase0_last_ack_sequence": 16
+      },
+      {
+        "path": "source_snapshot/nav/src/d1max_pct_scan/d1max_pct_scan/execution_handoff.py",
+        "line": 120,
+        "guard": "different task clears applied/commit_sequence/stationary, leaves last_grant_sequence/last_ack_sequence untouched",
+        "phase0_commit_sequence": 7,
+        "phase0_last_grant_sequence": 8
+      }
+    ],
+    "original_safety_replay": {
+      "schema": 1,
+      "scope": "Original permit/ACK/grant bookkeeping replay only; no reconstructed sensor or motion proof",
+      "run": "/home/eric/wjg/d1max-build-isaac/runs/campus_restart_v57_001",
+      "session_id": "14baf0ed937943d889004b0d0e6c0599",
+      "source_sha256": {
+        "sealed_v57": "38d07dc4be21c90612890ec9dcc11e92a1a9404cd1184307a65923fed365999d",
+        "source_fix": "79b5cbef66f18da7f15f5ef9105cfed4df2cfb4c390cca24369291fa33a3ad4c",
+        "shared_safety": "0bc09ad3cede363ecd56df4b17ba1aa44eb3eaa4ca1581665fb112ca25524068"
+      },
+      "phases": [
+        {
+          "index": 0,
+          "trace_path": "/home/eric/wjg/d1max-build-isaac/runs/campus_restart_v57_001/scenario_suite/phase_000_trace.jsonl",
+          "trace_sha256": "e094d7be701b814c0dedb2e3feb1dacf9d27ff93d760d33d9457bec727bd70ad",
+          "engines": {
+            "sealed_v57": {
+              "counts": {
+                "permit_accepted": 468,
+                "commit_ack_accepted": 9,
+                "handoff_grant_accepted": 32
+              },
+              "first_ack": {
+                "sequence": 2,
+                "commit_sequence": 1,
+                "applied": true,
+                "before": {
+                  "ack_highwater": 0,
+                  "grant_highwater": 0,
+                  "commit_sequence": 0,
+                  "applied_trajectory_id": null
+                },
+                "accepted": true,
+                "after": {
+                  "ack_highwater": 2,
+                  "grant_highwater": 0,
+                  "commit_sequence": 1,
+                  "applied_trajectory_id": 1
+                }
+              },
+              "end": {
+                "ack_highwater": 16,
+                "grant_highwater": 8,
+                "commit_sequence": 7,
+                "applied_trajectory_id": 19
+              }
+            },
+            "source_fix": {
+              "counts": {
+                "permit_accepted": 468,
+                "commit_ack_accepted": 9,
+                "handoff_grant_accepted": 32
+              },
+              "first_ack": {
+                "sequence": 2,
+                "commit_sequence": 1,
+                "applied": true,
+                "before": {
+                  "ack_highwater": 0,
+                  "grant_highwater": 0,
+                  "commit_sequence": 0,
+                  "applied_trajectory_id": null
+                },
+                "accepted": true,
+                "after": {
+                  "ack_highwater": 2,
+                  "grant_highwater": 0,
+                  "commit_sequence": 1,
+                  "applied_trajectory_id": 1
+                }
+              },
+              "end": {
+                "ack_highwater": 16,
+                "grant_highwater": 8,
+                "commit_sequence": 7,
+                "applied_trajectory_id": 19
+              }
+            }
+          }
+        },
+        {
+          "index": 1,
+          "trace_path": "/home/eric/wjg/d1max-build-isaac/runs/campus_restart_v57_001/scenario_suite/phase_001_trace.jsonl",
+          "trace_sha256": "6e85c83f2fa98f41796c062bb7036b72942dcf8e555eddbfb3bb3daaf374da46",
+          "engines": {
+            "sealed_v57": {
+              "counts": {
+                "permit_accepted": 1615,
+                "commit_ack_rejected": 283,
+                "handoff_grant_rejected": 1345
+              },
+              "first_ack": {
+                "sequence": 2,
+                "commit_sequence": 1,
+                "applied": true,
+                "before": {
+                  "ack_highwater": 16,
+                  "grant_highwater": 8,
+                  "commit_sequence": 0,
+                  "applied_trajectory_id": null
+                },
+                "accepted": false,
+                "after": {
+                  "ack_highwater": 16,
+                  "grant_highwater": 8,
+                  "commit_sequence": 0,
+                  "applied_trajectory_id": null
+                }
+              },
+              "end": {
+                "ack_highwater": 16,
+                "grant_highwater": 8,
+                "commit_sequence": 0,
+                "applied_trajectory_id": null
+              }
+            },
+            "source_fix": {
+              "counts": {
+                "permit_accepted": 1608,
+                "permit_rejected": 7,
+                "commit_ack_accepted": 16,
+                "handoff_grant_accepted": 128,
+                "handoff_grant_rejected": 1217,
+                "commit_ack_rejected": 267
+              },
+              "first_ack": {
+                "sequence": 2,
+                "commit_sequence": 1,
+                "applied": true,
+                "before": {
+                  "ack_highwater": 0,
+                  "grant_highwater": 0,
+                  "commit_sequence": 0,
+                  "applied_trajectory_id": null
+                },
+                "accepted": true,
+                "after": {
+                  "ack_highwater": 2,
+                  "grant_highwater": 0,
+                  "commit_sequence": 1,
+                  "applied_trajectory_id": 20
+                }
+              },
+              "end": {
+                "ack_highwater": 17,
+                "grant_highwater": 15,
+                "commit_sequence": 1,
+                "applied_trajectory_id": 20
+              }
+            }
+          }
+        }
+      ]
+    },
+    "original_phase1_trace_kind_counts": {
+      "bt_progress": 1604,
+      "permit": 1615,
+      "geometry_receipt": 7579,
+      "demand": 6849,
+      "tracking_progress": 6849,
+      "tracker": 2995,
+      "applied": 3262,
+      "safety": 259,
+      "reference_proposal": 2,
+      "native_spline": 74,
+      "trajectory_validation": 8490,
+      "route_progress": 2485,
+      "motion_validation": 4362,
+      "safe_demand": 1978,
+      "commit_ack": 283,
+      "handoff_grant": 1345
+    },
+    "reason_counts": {
+      "trajectory_validation": {
+        "observed_free": 3501,
+        "source_expired_during_check": 4989
+      },
+      "motion_validation": {
+        "observed_free_motion_sweep": 4329,
+        "motion_sweep_unknown_or_expired": 26,
+        "motion_volume_budget_exhausted": 6,
+        "motion_evidence_expired_during_check": 1
+      },
+      "commit_ack": {
+        "writer_software_commit_not_physical_confirmation": 1,
+        "handoff_deadline_expired": 156,
+        "owner_hold_or_phase_barrier": 3,
+        "owner_handoff_withdrawn:waiting_writer_handoff_outcome": 1,
+        "execution_blocked_timeout:waiting_stationary_writer_handoff_outcome": 122
+      },
+      "tracker": {
+        "handoff_retired_or_applied_uncertain": 78,
+        "tracking": 723,
+        "source_clock_paused_command_expired": 44,
+        "permission_or_native_proof_expired": 474,
+        "waiting_trajectory_clock": 40,
+        "stationary_reentry_waiting_writer": 1636
+      },
+      "applied": {
+        "waiting_trajectory_clock": 90,
+        "": 2,
+        "tracking": 767,
+        "source_clock_paused_command_expired": 55,
+        "permission_or_native_proof_expired": 2331,
+        "safety_hold:native_swept_collision_proof_missing_or_revoked": 6,
+        "safety_hold:command_sweep_rejected:motion_volume_budget_exhausted": 4,
+        "safety_hold:command_sweep_rejected:motion_sweep_unknown_or_expired": 7
+      }
+    },
+    "native_motion_roles": {
+      "incumbent": {
+        "observed_free_motion_sweep": 1835,
+        "motion_sweep_unknown_or_expired": 26,
+        "motion_volume_budget_exhausted": 6,
+        "motion_evidence_expired_during_check": 1
+      },
+      "prepared": {
+        "observed_free_motion_sweep": 2494
+      }
+    },
+    "safe_prepared_trace_count": 0,
+    "stationary_grants_with_positive_motion_then_deadline_ack": 142,
+    "same_handoff_original_deadline_witnesses": [
+      {
+        "handoff_id": "14baf0ed937943d889004b0d0e6c0599.2:execution:handoff:16",
+        "grant": {
+          "kind": "handoff_grant",
+          "receipt_monotonic_ns": 1224118603664926,
+          "source_clock_ns": 1791377465519382334,
+          "data": {
+            "schema_version": 2,
+            "transition_mode": 1,
+            "handoff_id": "14baf0ed937943d889004b0d0e6c0599.2:execution:handoff:16",
+            "sequence": 16,
+            "expected_commit_sequence": 1,
+            "incumbent": {
+              "version": {
+                "schema_version": 3,
+                "session_id": "14baf0ed937943d889004b0d0e6c0599",
+                "task_id": "14baf0ed937943d889004b0d0e6c0599.2",
+                "route_id": "14baf0ed937943d889004b0d0e6c0599.2:48d83d23996291a586df06bc66dfa729993242e58bc979ae369e6eba5d67f061",
+                "route_hash": "48d83d23996291a586df06bc66dfa729993242e58bc979ae369e6eba5d67f061",
+                "map_version_id": "3043c9fe91e258f20f94f2a6f0e420769bc54db3e56a458ad65cdc36d5d3a811",
+                "localization_epoch": 1,
+                "localization_seed_id": "isaac-211a931b-9715-4552-8c16-721b25586282",
+                "reference_generation": 3,
+                "segment_id": "floor",
+                "anchor_id": "0312419c0ad2ab8d06508029fad34161d1f602f3fd0f1f60cfc06bcf0bf25b9f",
+                "anchor_revision": 1,
+                "context_sequence": 1,
+                "map_geometry_revision": 1
+              },
+              "execution_id": "14baf0ed937943d889004b0d0e6c0599.2:execution",
+              "control_epoch": 2,
+              "confirmation_id": "14baf0ed937943d889004b0d0e6c0599.2:isaac-smoke-14baf0ed937943d889004b0d0e6c0599",
+              "sdk_session": "isolated-14baf0ed937943d889004b0d0e6c0599",
+              "sdk_arm_generation": 2,
+              "sequence": 1168,
+              "source_stamp": {
+                "sec": 1791377465,
+                "nanosec": 519382334
+              },
+              "valid_until": {
+                "sec": 1791377465,
+                "nanosec": 769382334
+              },
+              "trajectory_id": 20,
+              "validation_sequence": 3680,
+              "frame_id": "d1max_loc_odom",
+              "goal_position": {
+                "x": 8.0,
+                "y": -4.999999999999999,
+                "z": 0.48100000000000004
+              },
+              "allowed": false,
+              "geometry_committed": true,
+              "revoked": false,
+              "has_goal_yaw": false,
+              "goal_yaw": 0.0,
+              "goal_yaw_tolerance_rad": 0.15,
+              "phase": "holding",
+              "transport_mode": "isolated_mock",
+              "reason": "waiting_current_collision_and_tracker_proof"
+            },
+            "candidate": {
+              "version": {
+                "schema_version": 3,
+                "session_id": "14baf0ed937943d889004b0d0e6c0599",
+                "task_id": "14baf0ed937943d889004b0d0e6c0599.2",
+                "route_id": "14baf0ed937943d889004b0d0e6c0599.2:48d83d23996291a586df06bc66dfa729993242e58bc979ae369e6eba5d67f061",
+                "route_hash": "48d83d23996291a586df06bc66dfa729993242e58bc979ae369e6eba5d67f061",
+                "map_version_id": "3043c9fe91e258f20f94f2a6f0e420769bc54db3e56a458ad65cdc36d5d3a811",
+                "localization_epoch": 1,
+                "localization_seed_id": "isaac-211a931b-9715-4552-8c16-721b25586282",
+                "reference_generation": 4,
+                "segment_id": "floor",
+                "anchor_id": "0312419c0ad2ab8d06508029fad34161d1f602f3fd0f1f60cfc06bcf0bf25b9f",
+                "anchor_revision": 1,
+                "context_sequence": 1,
+                "map_geometry_revision": 1
+              },
+              "execution_id": "14baf0ed937943d889004b0d0e6c0599.2:execution",
+              "control_epoch": 2,
+              "confirmation_id": "14baf0ed937943d889004b0d0e6c0599.2:isaac-smoke-14baf0ed937943d889004b0d0e6c0599",
+              "sdk_session": "isolated-14baf0ed937943d889004b0d0e6c0599",
+              "sdk_arm_generation": 2,
+              "sequence": 1169,
+              "source_stamp": {
+                "sec": 1791377465,
+                "nanosec": 519382334
+              },
+              "valid_until": {
+                "sec": 1791377465,
+                "nanosec": 691749245
+              },
+              "trajectory_id": 65,
+              "validation_sequence": 3882,
+              "frame_id": "d1max_loc_odom",
+              "goal_position": {
+                "x": 8.0,
+                "y": -4.999999999999999,
+                "z": 0.48100000000000004
+              },
+              "allowed": true,
+              "geometry_committed": false,
+              "revoked": false,
+              "has_goal_yaw": false,
+              "goal_yaw": 0.0,
+              "goal_yaw_tolerance_rad": 0.15,
+              "phase": "tracking",
+              "transport_mode": "isolated_mock",
+              "reason": "waiting_current_collision_and_tracker_proof"
+            },
+            "stationary_evidence": {
+              "schema_version": 1,
+              "version": {
+                "schema_version": 3,
+                "session_id": "14baf0ed937943d889004b0d0e6c0599",
+                "task_id": "14baf0ed937943d889004b0d0e6c0599.2",
+                "route_id": "14baf0ed937943d889004b0d0e6c0599.2:48d83d23996291a586df06bc66dfa729993242e58bc979ae369e6eba5d67f061",
+                "route_hash": "48d83d23996291a586df06bc66dfa729993242e58bc979ae369e6eba5d67f061",
+                "map_version_id": "3043c9fe91e258f20f94f2a6f0e420769bc54db3e56a458ad65cdc36d5d3a811",
+                "localization_epoch": 1,
+                "localization_seed_id": "isaac-211a931b-9715-4552-8c16-721b25586282",
+                "reference_generation": 3,
+                "segment_id": "floor",
+                "anchor_id": "0312419c0ad2ab8d06508029fad34161d1f602f3fd0f1f60cfc06bcf0bf25b9f",
+                "anchor_revision": 1,
+                "context_sequence": 1,
+                "map_geometry_revision": 1
+              },
+              "execution_id": "14baf0ed937943d889004b0d0e6c0599.2:execution",
+              "control_epoch": 2,
+              "sdk_session": "isolated-14baf0ed937943d889004b0d0e6c0599",
+              "sdk_arm_generation": 2,
+              "transport_mode": "isolated_mock",
+              "sequence": 969,
+              "writer_commit_sequence": 1,
+              "applied_trajectory_id": 20,
+              "zero_write_sequence": 921,
+              "zero_ack_at": {
+                "sec": 1791377464,
+                "nanosec": 859382334
+              },
+              "mc_raw_stamp_ns": 1791377465519382334,
+              "mc_clock_epoch": "isolated-simulated-clock",
+              "time_basis": "isolated_simulated_source_clock",
+              "source_stamp": {
+                "sec": 1791377465,
+                "nanosec": 519382334
+              },
+              "received_stamp": {
+                "sec": 1791377465,
+                "nanosec": 519382334
+              },
+              "capture_lower_bound": {
+                "sec": 1791377465,
+                "nanosec": 499382334
+              },
+              "capture_upper_bound": {
+                "sec": 1791377465,
+                "nanosec": 519382334
+              },
+              "mc_capture_delay_bound_sec": 0.02,
+              "valid_until": {
+                "sec": 1791377465,
+                "nanosec": 769382334
+              },
+              "stationary_samples": 39,
+              "stationary_duration_sec": 0.6019997596740723,
+              "measured_linear_mps": 0.006787823252117867,
+              "measured_angular_radps": 0.01592968163075171,
+              "nonzero_blocked": true,
+              "usable": true,
+              "physical_acceptance_verified": false
+            },
+            "source_stamp": {
+              "sec": 1791377465,
+              "nanosec": 519382334
+            },
+            "valid_until": {
+              "sec": 1791377465,
+              "nanosec": 691749245
+            },
+            "transition_deadline": {
+              "sec": 1791377465,
+              "nanosec": 691749245
+            },
+            "retain_incumbent_until": {
+              "sec": 1791377465,
+              "nanosec": 519382334
+            },
+            "revoked": false,
+            "reason": "stationary_same_route_writer_cas"
+          },
+          "original_line_number": 14833
+        },
+        "first_positive_prepared_motion": {
+          "kind": "motion_validation",
+          "receipt_monotonic_ns": 1224118620122846,
+          "source_clock_ns": 1791377465519382334,
+          "data": {
+            "wire": {
+              "version": {
+                "schema_version": 3,
+                "session_id": "14baf0ed937943d889004b0d0e6c0599",
+                "task_id": "14baf0ed937943d889004b0d0e6c0599.2",
+                "route_id": "14baf0ed937943d889004b0d0e6c0599.2:48d83d23996291a586df06bc66dfa729993242e58bc979ae369e6eba5d67f061",
+                "route_hash": "48d83d23996291a586df06bc66dfa729993242e58bc979ae369e6eba5d67f061",
+                "map_version_id": "3043c9fe91e258f20f94f2a6f0e420769bc54db3e56a458ad65cdc36d5d3a811",
+                "localization_epoch": 1,
+                "localization_seed_id": "isaac-211a931b-9715-4552-8c16-721b25586282",
+                "reference_generation": 4,
+                "segment_id": "floor",
+                "anchor_id": "0312419c0ad2ab8d06508029fad34161d1f602f3fd0f1f60cfc06bcf0bf25b9f",
+                "anchor_revision": 1,
+                "context_sequence": 1,
+                "map_geometry_revision": 1
+              },
+              "execution_id": "14baf0ed937943d889004b0d0e6c0599.2:execution",
+              "control_epoch": 2,
+              "sdk_session": "isolated-14baf0ed937943d889004b0d0e6c0599",
+              "sdk_arm_generation": 2,
+              "trajectory_id": 65,
+              "permit_sequence": 1169,
+              "trajectory_validation_sequence": 3886,
+              "demand_sequence": 3281,
+              "demand_source_stamp": {
+                "sec": 1791377465,
+                "nanosec": 519382334
+              },
+              "demand_valid_until": {
+                "sec": 1791377465,
+                "nanosec": 619382334
+              },
+              "demand_body_source_stamp": {
+                "sec": 1791377465,
+                "nanosec": 519382334
+              },
+              "body_source_stamp": {
+                "sec": 1791377465,
+                "nanosec": 519382334
+              },
+              "sequence": 3604,
+              "front_ray_source_stamp": {
+                "sec": 1791377465,
+                "nanosec": 397382334
+              },
+              "rear_ray_source_stamp": {
+                "sec": 1791377465,
+                "nanosec": 397382334
+              },
+              "map_snapshot_revision": 2002340,
+              "check_begin": {
+                "sec": 1791377465,
+                "nanosec": 519382334
+              },
+              "check_end": {
+                "sec": 1791377465,
+                "nanosec": 519382334
+              },
+              "valid_until": {
+                "sec": 1791377465,
+                "nanosec": 619382334
+              },
+              "velocity": {
+                "linear": {
+                  "x": 0.0,
+                  "y": 0.0,
+                  "z": 0.0
+                },
+                "angular": {
+                  "x": 0.0,
+                  "y": 0.0,
+                  "z": 0.0
+                }
+              },
+              "frame_id": "d1max_loc_odom",
+              "valid": true,
+              "reason": "observed_free_motion_sweep",
+              "transport_mode": "isolated_mock",
+              "braking_model_sha256": "164d765b86bef7e9624120c32a9dda6f2d01206448066249aa3c3116cddd84b1",
+              "handoff_id": "14baf0ed937943d889004b0d0e6c0599.2:execution:handoff:16",
+              "entry_admission_sequence": 2345,
+              "entry_curve_pose": {
+                "position": {
+                  "x": -6.335710842749041,
+                  "y": -4.769664986401512,
+                  "z": 0.4898227017861756
+                },
+                "orientation": {
+                  "x": 0.0002292949502589181,
+                  "y": 0.005064422730356455,
+                  "z": -0.10417728126049042,
+                  "w": 0.9945458769798279
+                }
+              },
+              "entry_curve_twist": {
+                "linear": {
+                  "x": 0.00029928735950297846,
+                  "y": -0.00014615970406202906,
+                  "z": -8.898150350112184e-05
+                },
+                "angular": {
+                  "x": 0.0,
+                  "y": 0.0,
+                  "z": 0.0
+                }
+              },
+              "entry_curve_time": 0.08285514479669491,
+              "entry_position_error_m": 0.004501905219082506,
+              "entry_velocity_error_mps": 0.006867661888093298
+            },
+            "execution_id": "14baf0ed937943d889004b0d0e6c0599.2:execution",
+            "trajectory_id": 65,
+            "control_epoch": 2,
+            "sequence": 3604,
+            "permit_sequence": 1169,
+            "trajectory_validation_sequence": 3886,
+            "demand_sequence": 3281,
+            "valid": true,
+            "reason": "observed_free_motion_sweep",
+            "handoff_id": "14baf0ed937943d889004b0d0e6c0599.2:execution:handoff:16",
+            "body_source_stamp_ns": 1791377465519382334,
+            "valid_until_ns": 1791377465619382334,
+            "demand_source_stamp_ns": 1791377465519382334,
+            "demand_valid_until_ns": 1791377465619382334,
+            "demand_body_source_stamp_ns": 1791377465519382334,
+            "front_ray_source_stamp_ns": 1791377465397382334,
+            "rear_ray_source_stamp_ns": 1791377465397382334,
+            "check_begin_ns": 1791377465519382334,
+            "check_end_ns": 1791377465519382334,
+            "velocity": [
+              0.0,
+              0.0
+            ]
+          },
+          "original_line_number": 14839
+        },
+        "expired_ack": {
+          "kind": "commit_ack",
+          "receipt_monotonic_ns": 1224119253416843,
+          "source_clock_ns": 1791377465697382334,
+          "data": {
+            "wire": {
+              "schema_version": 1,
+              "handoff_id": "14baf0ed937943d889004b0d0e6c0599.2:execution:handoff:16",
+              "grant_sequence": 16,
+              "sequence": 18,
+              "previous_commit_sequence": 1,
+              "commit_sequence": 1,
+              "incumbent_version": {
+                "schema_version": 3,
+                "session_id": "14baf0ed937943d889004b0d0e6c0599",
+                "task_id": "14baf0ed937943d889004b0d0e6c0599.2",
+                "route_id": "14baf0ed937943d889004b0d0e6c0599.2:48d83d23996291a586df06bc66dfa729993242e58bc979ae369e6eba5d67f061",
+                "route_hash": "48d83d23996291a586df06bc66dfa729993242e58bc979ae369e6eba5d67f061",
+                "map_version_id": "3043c9fe91e258f20f94f2a6f0e420769bc54db3e56a458ad65cdc36d5d3a811",
+                "localization_epoch": 1,
+                "localization_seed_id": "isaac-211a931b-9715-4552-8c16-721b25586282",
+                "reference_generation": 3,
+                "segment_id": "floor",
+                "anchor_id": "0312419c0ad2ab8d06508029fad34161d1f602f3fd0f1f60cfc06bcf0bf25b9f",
+                "anchor_revision": 1,
+                "context_sequence": 1,
+                "map_geometry_revision": 1
+              },
+              "candidate_version": {
+                "schema_version": 3,
+                "session_id": "14baf0ed937943d889004b0d0e6c0599",
+                "task_id": "14baf0ed937943d889004b0d0e6c0599.2",
+                "route_id": "14baf0ed937943d889004b0d0e6c0599.2:48d83d23996291a586df06bc66dfa729993242e58bc979ae369e6eba5d67f061",
+                "route_hash": "48d83d23996291a586df06bc66dfa729993242e58bc979ae369e6eba5d67f061",
+                "map_version_id": "3043c9fe91e258f20f94f2a6f0e420769bc54db3e56a458ad65cdc36d5d3a811",
+                "localization_epoch": 1,
+                "localization_seed_id": "isaac-211a931b-9715-4552-8c16-721b25586282",
+                "reference_generation": 4,
+                "segment_id": "floor",
+                "anchor_id": "0312419c0ad2ab8d06508029fad34161d1f602f3fd0f1f60cfc06bcf0bf25b9f",
+                "anchor_revision": 1,
+                "context_sequence": 1,
+                "map_geometry_revision": 1
+              },
+              "incumbent_trajectory_id": 20,
+              "candidate_trajectory_id": 65,
+              "execution_id": "14baf0ed937943d889004b0d0e6c0599.2:execution",
+              "sdk_session": "isolated-14baf0ed937943d889004b0d0e6c0599",
+              "transport_mode": "isolated_mock",
+              "control_epoch": 2,
+              "sdk_arm_generation": 2,
+              "permit_sequence": 1169,
+              "demand_sequence": 0,
+              "motion_validation_sequence": 0,
+              "entry_admission_sequence": 0,
+              "applied_at": {
+                "sec": 1791377465,
+                "nanosec": 697382334
+              },
+              "demand_source_stamp": {
+                "sec": 0,
+                "nanosec": 0
+              },
+              "demand_body_source_stamp": {
+                "sec": 0,
+                "nanosec": 0
+              },
+              "entry_source_stamp": {
+                "sec": 0,
+                "nanosec": 0
+              },
+              "body_source_stamp": {
+                "sec": 0,
+                "nanosec": 0
+              },
+              "valid_until": {
+                "sec": 1791377465,
+                "nanosec": 691749245
+              },
+              "measured_pose": {
+                "header": {
+                  "stamp": {
+                    "sec": 0,
+                    "nanosec": 0
+                  },
+                  "frame_id": ""
+                },
+                "pose": {
+                  "position": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                  },
+                  "orientation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0,
+                    "w": 1.0
+                  }
+                }
+              },
+              "measured_twist": {
+                "linear": {
+                  "x": 0.0,
+                  "y": 0.0,
+                  "z": 0.0
+                },
+                "angular": {
+                  "x": 0.0,
+                  "y": 0.0,
+                  "z": 0.0
+                }
+              },
+              "applied_velocity": {
+                "linear": {
+                  "x": 0.0,
+                  "y": 0.0,
+                  "z": 0.0
+                },
+                "angular": {
+                  "x": 0.0,
+                  "y": 0.0,
+                  "z": 0.0
+                }
+              },
+              "curve_time": 0.0,
+              "applied": false,
+              "write_submitted": false,
+              "write_acknowledged": false,
+              "reason": "handoff_deadline_expired"
+            },
+            "execution_id": "14baf0ed937943d889004b0d0e6c0599.2:execution",
+            "control_epoch": 2,
+            "sequence": 18,
+            "permit_sequence": 1169,
+            "motion_validation_sequence": 0,
+            "demand_sequence": 0,
+            "reason": "handoff_deadline_expired",
+            "handoff_id": "14baf0ed937943d889004b0d0e6c0599.2:execution:handoff:16",
+            "applied": false,
+            "body_source_stamp_ns": 0,
+            "valid_until_ns": 1791377465691749245,
+            "demand_source_stamp_ns": 0,
+            "demand_body_source_stamp_ns": 0,
+            "applied_at_ns": 1791377465697382334
+          },
+          "original_line_number": 15036
+        },
+        "grant_to_first_motion_receipt_ms": 16.45792,
+        "first_motion_to_ack_receipt_ms": 633.293997,
+        "first_motion_validity_at_original_check_ms": 100.0,
+        "ack_applied_at_past_original_grant_deadline_ms": 5.633089,
+        "warning": "Event receipts are observer arrivals. Prepared positive native proof is not an SDK safe-demand acceptance; source and steady timestamps are not interchanged."
+      },
+      {
+        "handoff_id": "14baf0ed937943d889004b0d0e6c0599.2:execution:handoff:160",
+        "grant": {
+          "kind": "handoff_grant",
+          "receipt_monotonic_ns": 1224216266998789,
+          "source_clock_ns": 1791377492897382334,
+          "data": {
+            "schema_version": 2,
+            "transition_mode": 1,
+            "handoff_id": "14baf0ed937943d889004b0d0e6c0599.2:execution:handoff:160",
+            "sequence": 160,
+            "expected_commit_sequence": 1,
+            "incumbent": {
+              "version": {
+                "schema_version": 3,
+                "session_id": "14baf0ed937943d889004b0d0e6c0599",
+                "task_id": "14baf0ed937943d889004b0d0e6c0599.2",
+                "route_id": "14baf0ed937943d889004b0d0e6c0599.2:48d83d23996291a586df06bc66dfa729993242e58bc979ae369e6eba5d67f061",
+                "route_hash": "48d83d23996291a586df06bc66dfa729993242e58bc979ae369e6eba5d67f061",
+                "map_version_id": "3043c9fe91e258f20f94f2a6f0e420769bc54db3e56a458ad65cdc36d5d3a811",
+                "localization_epoch": 1,
+                "localization_seed_id": "isaac-211a931b-9715-4552-8c16-721b25586282",
+                "reference_generation": 3,
+                "segment_id": "floor",
+                "anchor_id": "0312419c0ad2ab8d06508029fad34161d1f602f3fd0f1f60cfc06bcf0bf25b9f",
+                "anchor_revision": 1,
+                "context_sequence": 1,
+                "map_geometry_revision": 1
+              },
+              "execution_id": "14baf0ed937943d889004b0d0e6c0599.2:execution",
+              "control_epoch": 2,
+              "confirmation_id": "14baf0ed937943d889004b0d0e6c0599.2:isaac-smoke-14baf0ed937943d889004b0d0e6c0599",
+              "sdk_session": "isolated-14baf0ed937943d889004b0d0e6c0599",
+              "sdk_arm_generation": 2,
+              "sequence": 2534,
+              "source_stamp": {
+                "sec": 1791377492,
+                "nanosec": 897382334
+              },
+              "valid_until": {
+                "sec": 1791377493,
+                "nanosec": 147382334
+              },
+              "trajectory_id": 20,
+              "validation_sequence": 3680,
+              "frame_id": "d1max_loc_odom",
+              "goal_position": {
+                "x": 8.0,
+                "y": -4.999999999999999,
+                "z": 0.48100000000000004
+              },
+              "allowed": false,
+              "geometry_committed": true,
+              "revoked": false,
+              "has_goal_yaw": false,
+              "goal_yaw": 0.0,
+              "goal_yaw_tolerance_rad": 0.15,
+              "phase": "holding",
+              "transport_mode": "isolated_mock",
+              "reason": "waiting_current_collision_and_tracker_proof"
+            },
+            "candidate": {
+              "version": {
+                "schema_version": 3,
+                "session_id": "14baf0ed937943d889004b0d0e6c0599",
+                "task_id": "14baf0ed937943d889004b0d0e6c0599.2",
+                "route_id": "14baf0ed937943d889004b0d0e6c0599.2:48d83d23996291a586df06bc66dfa729993242e58bc979ae369e6eba5d67f061",
+                "route_hash": "48d83d23996291a586df06bc66dfa729993242e58bc979ae369e6eba5d67f061",
+                "map_version_id": "3043c9fe91e258f20f94f2a6f0e420769bc54db3e56a458ad65cdc36d5d3a811",
+                "localization_epoch": 1,
+                "localization_seed_id": "isaac-211a931b-9715-4552-8c16-721b25586282",
+                "reference_generation": 4,
+                "segment_id": "floor",
+                "anchor_id": "0312419c0ad2ab8d06508029fad34161d1f602f3fd0f1f60cfc06bcf0bf25b9f",
+                "anchor_revision": 1,
+                "context_sequence": 1,
+                "map_geometry_revision": 1
+              },
+              "execution_id": "14baf0ed937943d889004b0d0e6c0599.2:execution",
+              "control_epoch": 2,
+              "confirmation_id": "14baf0ed937943d889004b0d0e6c0599.2:isaac-smoke-14baf0ed937943d889004b0d0e6c0599",
+              "sdk_session": "isolated-14baf0ed937943d889004b0d0e6c0599",
+              "sdk_arm_generation": 2,
+              "sequence": 2536,
+              "source_stamp": {
+                "sec": 1791377492,
+                "nanosec": 897382334
+              },
+              "valid_until": {
+                "sec": 1791377493,
+                "nanosec": 74342355
+              },
+              "trajectory_id": 92,
+              "validation_sequence": 9929,
+              "frame_id": "d1max_loc_odom",
+              "goal_position": {
+                "x": 8.0,
+                "y": -4.999999999999999,
+                "z": 0.48100000000000004
+              },
+              "allowed": true,
+              "geometry_committed": false,
+              "revoked": false,
+              "has_goal_yaw": false,
+              "goal_yaw": 0.0,
+              "goal_yaw_tolerance_rad": 0.15,
+              "phase": "tracking",
+              "transport_mode": "isolated_mock",
+              "reason": "waiting_current_collision_and_tracker_proof"
+            },
+            "stationary_evidence": {
+              "schema_version": 1,
+              "version": {
+                "schema_version": 3,
+                "session_id": "14baf0ed937943d889004b0d0e6c0599",
+                "task_id": "14baf0ed937943d889004b0d0e6c0599.2",
+                "route_id": "14baf0ed937943d889004b0d0e6c0599.2:48d83d23996291a586df06bc66dfa729993242e58bc979ae369e6eba5d67f061",
+                "route_hash": "48d83d23996291a586df06bc66dfa729993242e58bc979ae369e6eba5d67f061",
+                "map_version_id": "3043c9fe91e258f20f94f2a6f0e420769bc54db3e56a458ad65cdc36d5d3a811",
+                "localization_epoch": 1,
+                "localization_seed_id": "isaac-211a931b-9715-4552-8c16-721b25586282",
+                "reference_generation": 3,
+                "segment_id": "floor",
+                "anchor_id": "0312419c0ad2ab8d06508029fad34161d1f602f3fd0f1f60cfc06bcf0bf25b9f",
+                "anchor_revision": 1,
+                "context_sequence": 1,
+                "map_geometry_revision": 1
+              },
+              "execution_id": "14baf0ed937943d889004b0d0e6c0599.2:execution",
+              "control_epoch": 2,
+              "sdk_session": "isolated-14baf0ed937943d889004b0d0e6c0599",
+              "sdk_arm_generation": 2,
+              "transport_mode": "isolated_mock",
+              "sequence": 2922,
+              "writer_commit_sequence": 1,
+              "applied_trajectory_id": 20,
+              "zero_write_sequence": 921,
+              "zero_ack_at": {
+                "sec": 1791377464,
+                "nanosec": 859382334
+              },
+              "mc_raw_stamp_ns": 1791377492879382334,
+              "mc_clock_epoch": "isolated-simulated-clock",
+              "time_basis": "isolated_simulated_source_clock",
+              "source_stamp": {
+                "sec": 1791377492,
+                "nanosec": 879382334
+              },
+              "received_stamp": {
+                "sec": 1791377492,
+                "nanosec": 879382334
+              },
+              "capture_lower_bound": {
+                "sec": 1791377492,
+                "nanosec": 859382334
+              },
+              "capture_upper_bound": {
+                "sec": 1791377492,
+                "nanosec": 879382334
+              },
+              "mc_capture_delay_bound_sec": 0.02,
+              "valid_until": {
+                "sec": 1791377493,
+                "nanosec": 129382334
+              },
+              "stationary_samples": 1677,
+              "stationary_duration_sec": 27.961999893188477,
+              "measured_linear_mps": 0.007460707873494595,
+              "measured_angular_radps": 0.0003499756271851082,
+              "nonzero_blocked": true,
+              "usable": true,
+              "physical_acceptance_verified": false
+            },
+            "source_stamp": {
+              "sec": 1791377492,
+              "nanosec": 897382334
+            },
+            "valid_until": {
+              "sec": 1791377493,
+              "nanosec": 74342355
+            },
+            "transition_deadline": {
+              "sec": 1791377493,
+              "nanosec": 74342355
+            },
+            "retain_incumbent_until": {
+              "sec": 1791377492,
+              "nanosec": 897382334
+            },
+            "revoked": false,
+            "reason": "stationary_same_route_writer_cas"
+          },
+          "original_line_number": 46698
+        },
+        "first_positive_prepared_motion": {
+          "kind": "motion_validation",
+          "receipt_monotonic_ns": 1224216305829937,
+          "source_clock_ns": 1791377492899382334,
+          "data": {
+            "wire": {
+              "version": {
+                "schema_version": 3,
+                "session_id": "14baf0ed937943d889004b0d0e6c0599",
+                "task_id": "14baf0ed937943d889004b0d0e6c0599.2",
+                "route_id": "14baf0ed937943d889004b0d0e6c0599.2:48d83d23996291a586df06bc66dfa729993242e58bc979ae369e6eba5d67f061",
+                "route_hash": "48d83d23996291a586df06bc66dfa729993242e58bc979ae369e6eba5d67f061",
+                "map_version_id": "3043c9fe91e258f20f94f2a6f0e420769bc54db3e56a458ad65cdc36d5d3a811",
+                "localization_epoch": 1,
+                "localization_seed_id": "isaac-211a931b-9715-4552-8c16-721b25586282",
+                "reference_generation": 4,
+                "segment_id": "floor",
+                "anchor_id": "0312419c0ad2ab8d06508029fad34161d1f602f3fd0f1f60cfc06bcf0bf25b9f",
+                "anchor_revision": 1,
+                "context_sequence": 1,
+                "map_geometry_revision": 1
+              },
+              "execution_id": "14baf0ed937943d889004b0d0e6c0599.2:execution",
+              "control_epoch": 2,
+              "sdk_session": "isolated-14baf0ed937943d889004b0d0e6c0599",
+              "sdk_arm_generation": 2,
+              "trajectory_id": 92,
+              "permit_sequence": 2536,
+              "trajectory_validation_sequence": 9933,
+              "demand_sequence": 12644,
+              "demand_source_stamp": {
+                "sec": 1791377492,
+                "nanosec": 899382334
+              },
+              "demand_valid_until": {
+                "sec": 1791377492,
+                "nanosec": 999382334
+              },
+              "demand_body_source_stamp": {
+                "sec": 1791377492,
+                "nanosec": 899382334
+              },
+              "body_source_stamp": {
+                "sec": 1791377492,
+                "nanosec": 899382334
+              },
+              "sequence": 6203,
+              "front_ray_source_stamp": {
+                "sec": 1791377492,
+                "nanosec": 797382334
+              },
+              "rear_ray_source_stamp": {
+                "sec": 1791377492,
+                "nanosec": 797382334
+              },
+              "map_snapshot_revision": 2018239,
+              "check_begin": {
+                "sec": 1791377492,
+                "nanosec": 899382334
+              },
+              "check_end": {
+                "sec": 1791377492,
+                "nanosec": 899382334
+              },
+              "valid_until": {
+                "sec": 1791377492,
+                "nanosec": 999382334
+              },
+              "velocity": {
+                "linear": {
+                  "x": 0.0069058578900299105,
+                  "y": 0.0,
+                  "z": 0.0
+                },
+                "angular": {
+                  "x": 0.0,
+                  "y": 0.0,
+                  "z": -0.016012131981551648
+                }
+              },
+              "frame_id": "d1max_loc_odom",
+              "valid": true,
+              "reason": "observed_free_motion_sweep",
+              "transport_mode": "isolated_mock",
+              "braking_model_sha256": "164d765b86bef7e9624120c32a9dda6f2d01206448066249aa3c3116cddd84b1",
+              "handoff_id": "14baf0ed937943d889004b0d0e6c0599.2:execution:handoff:160",
+              "entry_admission_sequence": 12264,
+              "entry_curve_pose": {
+                "position": {
+                  "x": -6.339905196187518,
+                  "y": -4.7638116215002375,
+                  "z": 0.48672153290313636
+                },
+                "orientation": {
+                  "x": 0.00012359053653199226,
+                  "y": 0.004927164409309626,
+                  "z": -0.12999272346496582,
+                  "w": 0.9915027618408203
+                }
+              },
+              "entry_curve_twist": {
+                "linear": {
+                  "x": 1.1925194435382164e-05,
+                  "y": -6.018763573893487e-06,
+                  "z": -2.2751349525862613e-06
+                },
+                "angular": {
+                  "x": 0.0,
+                  "y": 0.0,
+                  "z": 0.0
+                }
+              },
+              "entry_curve_time": 0.01655467112464778,
+              "entry_position_error_m": 6.091898514712164e-06,
+              "entry_velocity_error_mps": 0.00743134150947213
+            },
+            "execution_id": "14baf0ed937943d889004b0d0e6c0599.2:execution",
+            "trajectory_id": 92,
+            "control_epoch": 2,
+            "sequence": 6203,
+            "permit_sequence": 2536,
+            "trajectory_validation_sequence": 9933,
+            "demand_sequence": 12644,
+            "valid": true,
+            "reason": "observed_free_motion_sweep",
+            "handoff_id": "14baf0ed937943d889004b0d0e6c0599.2:execution:handoff:160",
+            "body_source_stamp_ns": 1791377492899382334,
+            "valid_until_ns": 1791377492999382334,
+            "demand_source_stamp_ns": 1791377492899382334,
+            "demand_valid_until_ns": 1791377492999382334,
+            "demand_body_source_stamp_ns": 1791377492899382334,
+            "front_ray_source_stamp_ns": 1791377492797382334,
+            "rear_ray_source_stamp_ns": 1791377492797382334,
+            "check_begin_ns": 1791377492899382334,
+            "check_end_ns": 1791377492899382334,
+            "velocity": [
+              0.0069058578900299105,
+              -0.016012131981551648
+            ]
+          },
+          "original_line_number": 46715
+        },
+        "expired_ack": {
+          "kind": "commit_ack",
+          "receipt_monotonic_ns": 1224216904562711,
+          "source_clock_ns": 1791377493079382334,
+          "data": {
+            "wire": {
+              "schema_version": 1,
+              "handoff_id": "14baf0ed937943d889004b0d0e6c0599.2:execution:handoff:160",
+              "grant_sequence": 160,
+              "sequence": 162,
+              "previous_commit_sequence": 1,
+              "commit_sequence": 1,
+              "incumbent_version": {
+                "schema_version": 3,
+                "session_id": "14baf0ed937943d889004b0d0e6c0599",
+                "task_id": "14baf0ed937943d889004b0d0e6c0599.2",
+                "route_id": "14baf0ed937943d889004b0d0e6c0599.2:48d83d23996291a586df06bc66dfa729993242e58bc979ae369e6eba5d67f061",
+                "route_hash": "48d83d23996291a586df06bc66dfa729993242e58bc979ae369e6eba5d67f061",
+                "map_version_id": "3043c9fe91e258f20f94f2a6f0e420769bc54db3e56a458ad65cdc36d5d3a811",
+                "localization_epoch": 1,
+                "localization_seed_id": "isaac-211a931b-9715-4552-8c16-721b25586282",
+                "reference_generation": 3,
+                "segment_id": "floor",
+                "anchor_id": "0312419c0ad2ab8d06508029fad34161d1f602f3fd0f1f60cfc06bcf0bf25b9f",
+                "anchor_revision": 1,
+                "context_sequence": 1,
+                "map_geometry_revision": 1
+              },
+              "candidate_version": {
+                "schema_version": 3,
+                "session_id": "14baf0ed937943d889004b0d0e6c0599",
+                "task_id": "14baf0ed937943d889004b0d0e6c0599.2",
+                "route_id": "14baf0ed937943d889004b0d0e6c0599.2:48d83d23996291a586df06bc66dfa729993242e58bc979ae369e6eba5d67f061",
+                "route_hash": "48d83d23996291a586df06bc66dfa729993242e58bc979ae369e6eba5d67f061",
+                "map_version_id": "3043c9fe91e258f20f94f2a6f0e420769bc54db3e56a458ad65cdc36d5d3a811",
+                "localization_epoch": 1,
+                "localization_seed_id": "isaac-211a931b-9715-4552-8c16-721b25586282",
+                "reference_generation": 4,
+                "segment_id": "floor",
+                "anchor_id": "0312419c0ad2ab8d06508029fad34161d1f602f3fd0f1f60cfc06bcf0bf25b9f",
+                "anchor_revision": 1,
+                "context_sequence": 1,
+                "map_geometry_revision": 1
+              },
+              "incumbent_trajectory_id": 20,
+              "candidate_trajectory_id": 92,
+              "execution_id": "14baf0ed937943d889004b0d0e6c0599.2:execution",
+              "sdk_session": "isolated-14baf0ed937943d889004b0d0e6c0599",
+              "transport_mode": "isolated_mock",
+              "control_epoch": 2,
+              "sdk_arm_generation": 2,
+              "permit_sequence": 2536,
+              "demand_sequence": 0,
+              "motion_validation_sequence": 0,
+              "entry_admission_sequence": 0,
+              "applied_at": {
+                "sec": 1791377493,
+                "nanosec": 79382334
+              },
+              "demand_source_stamp": {
+                "sec": 0,
+                "nanosec": 0
+              },
+              "demand_body_source_stamp": {
+                "sec": 0,
+                "nanosec": 0
+              },
+              "entry_source_stamp": {
+                "sec": 0,
+                "nanosec": 0
+              },
+              "body_source_stamp": {
+                "sec": 0,
+                "nanosec": 0
+              },
+              "valid_until": {
+                "sec": 1791377493,
+                "nanosec": 74342355
+              },
+              "measured_pose": {
+                "header": {
+                  "stamp": {
+                    "sec": 0,
+                    "nanosec": 0
+                  },
+                  "frame_id": ""
+                },
+                "pose": {
+                  "position": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                  },
+                  "orientation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0,
+                    "w": 1.0
+                  }
+                }
+              },
+              "measured_twist": {
+                "linear": {
+                  "x": 0.0,
+                  "y": 0.0,
+                  "z": 0.0
+                },
+                "angular": {
+                  "x": 0.0,
+                  "y": 0.0,
+                  "z": 0.0
+                }
+              },
+              "applied_velocity": {
+                "linear": {
+                  "x": 0.0,
+                  "y": 0.0,
+                  "z": 0.0
+                },
+                "angular": {
+                  "x": 0.0,
+                  "y": 0.0,
+                  "z": 0.0
+                }
+              },
+              "curve_time": 0.0,
+              "applied": false,
+              "write_submitted": false,
+              "write_acknowledged": false,
+              "reason": "handoff_deadline_expired"
+            },
+            "execution_id": "14baf0ed937943d889004b0d0e6c0599.2:execution",
+            "control_epoch": 2,
+            "sequence": 162,
+            "permit_sequence": 2536,
+            "motion_validation_sequence": 0,
+            "demand_sequence": 0,
+            "reason": "handoff_deadline_expired",
+            "handoff_id": "14baf0ed937943d889004b0d0e6c0599.2:execution:handoff:160",
+            "applied": false,
+            "body_source_stamp_ns": 0,
+            "valid_until_ns": 1791377493074342355,
+            "demand_source_stamp_ns": 0,
+            "demand_body_source_stamp_ns": 0,
+            "applied_at_ns": 1791377493079382334
+          },
+          "original_line_number": 46909
+        },
+        "grant_to_first_motion_receipt_ms": 38.831148,
+        "first_motion_to_ack_receipt_ms": 598.732774,
+        "first_motion_validity_at_original_check_ms": 100.0,
+        "ack_applied_at_past_original_grant_deadline_ms": 5.039979,
+        "warning": "Event receipts are observer arrivals. Prepared positive native proof is not an SDK safe-demand acceptance; source and steady timestamps are not interchanged."
+      }
+    ],
+    "phase0_last_original_ack_and_grant": {
+      "commit_ack": {
+        "kind": "commit_ack",
+        "receipt_monotonic_ns": 1224045102635687,
+        "source_clock_ns": 1791377444639382334,
+        "data": {
+          "wire": {
+            "schema_version": 1,
+            "handoff_id": "14baf0ed937943d889004b0d0e6c0599.1:execution:handoff:8",
+            "grant_sequence": 8,
+            "sequence": 16,
+            "previous_commit_sequence": 6,
+            "commit_sequence": 7,
+            "incumbent_version": {
+              "schema_version": 3,
+              "session_id": "14baf0ed937943d889004b0d0e6c0599",
+              "task_id": "14baf0ed937943d889004b0d0e6c0599.1",
+              "route_id": "14baf0ed937943d889004b0d0e6c0599.1:12131a81afb9da26c549cdb5284054e63659a6fceb1a3faa7ae3de0b172008a7",
+              "route_hash": "12131a81afb9da26c549cdb5284054e63659a6fceb1a3faa7ae3de0b172008a7",
+              "map_version_id": "3043c9fe91e258f20f94f2a6f0e420769bc54db3e56a458ad65cdc36d5d3a811",
+              "localization_epoch": 1,
+              "localization_seed_id": "isaac-211a931b-9715-4552-8c16-721b25586282",
+              "reference_generation": 1,
+              "segment_id": "floor",
+              "anchor_id": "79db42cf10a81f273fa0c341840965e1acfafff037446e36c7976f86c9bf6e81",
+              "anchor_revision": 1,
+              "context_sequence": 1,
+              "map_geometry_revision": 1
+            },
+            "candidate_version": {
+              "schema_version": 3,
+              "session_id": "14baf0ed937943d889004b0d0e6c0599",
+              "task_id": "14baf0ed937943d889004b0d0e6c0599.1",
+              "route_id": "14baf0ed937943d889004b0d0e6c0599.1:12131a81afb9da26c549cdb5284054e63659a6fceb1a3faa7ae3de0b172008a7",
+              "route_hash": "12131a81afb9da26c549cdb5284054e63659a6fceb1a3faa7ae3de0b172008a7",
+              "map_version_id": "3043c9fe91e258f20f94f2a6f0e420769bc54db3e56a458ad65cdc36d5d3a811",
+              "localization_epoch": 1,
+              "localization_seed_id": "isaac-211a931b-9715-4552-8c16-721b25586282",
+              "reference_generation": 1,
+              "segment_id": "floor",
+              "anchor_id": "79db42cf10a81f273fa0c341840965e1acfafff037446e36c7976f86c9bf6e81",
+              "anchor_revision": 1,
+              "context_sequence": 1,
+              "map_geometry_revision": 1
+            },
+            "incumbent_trajectory_id": 18,
+            "candidate_trajectory_id": 19,
+            "execution_id": "14baf0ed937943d889004b0d0e6c0599.1:execution",
+            "sdk_session": "isolated-14baf0ed937943d889004b0d0e6c0599",
+            "transport_mode": "isolated_mock",
+            "control_epoch": 1,
+            "sdk_arm_generation": 1,
+            "permit_sequence": 327,
+            "demand_sequence": 832,
+            "motion_validation_sequence": 1412,
+            "entry_admission_sequence": 410,
+            "applied_at": {
+              "sec": 1791377444,
+              "nanosec": 639382334
+            },
+            "demand_source_stamp": {
+              "sec": 1791377444,
+              "nanosec": 639382334
+            },
+            "demand_body_source_stamp": {
+              "sec": 1791377444,
+              "nanosec": 639382334
+            },
+            "entry_source_stamp": {
+              "sec": 1791377444,
+              "nanosec": 639382334
+            },
+            "body_source_stamp": {
+              "sec": 1791377444,
+              "nanosec": 639382334
+            },
+            "valid_until": {
+              "sec": 1791377444,
+              "nanosec": 739382334
+            },
+            "measured_pose": {
+              "header": {
+                "stamp": {
+                  "sec": 1791377444,
+                  "nanosec": 639382334
+                },
+                "frame_id": "d1max_loc_odom"
+              },
+              "pose": {
+                "position": {
+                  "x": -7.561639308929443,
+                  "y": -4.93638801574707,
+                  "z": 0.493563175201416
+                },
+                "orientation": {
+                  "x": 0.004105252213776112,
+                  "y": 0.012339521199464798,
+                  "z": -0.06740439683198929,
+                  "w": 0.9976410865783691
+                }
+              }
+            },
+            "measured_twist": {
+              "linear": {
+                "x": -0.007894743271751735,
+                "y": 4.045726828631694e-05,
+                "z": -0.0045231589656091085
+              },
+              "angular": {
+                "x": 0.03476990163351566,
+                "y": 0.052160638452429756,
+                "z": -0.005727672085402681
+              }
+            },
+            "applied_velocity": {
+              "linear": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": 0.0
+              },
+              "angular": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": 0.0
+              }
+            },
+            "curve_time": 0.0,
+            "applied": true,
+            "write_submitted": true,
+            "write_acknowledged": true,
+            "reason": "writer_software_commit_not_physical_confirmation"
+          },
+          "execution_id": "14baf0ed937943d889004b0d0e6c0599.1:execution",
+          "control_epoch": 1,
+          "sequence": 16,
+          "permit_sequence": 327,
+          "motion_validation_sequence": 1412,
+          "demand_sequence": 832,
+          "reason": "writer_software_commit_not_physical_confirmation",
+          "handoff_id": "14baf0ed937943d889004b0d0e6c0599.1:execution:handoff:8",
+          "applied": true,
+          "body_source_stamp_ns": 1791377444639382334,
+          "valid_until_ns": 1791377444739382334,
+          "demand_source_stamp_ns": 1791377444639382334,
+          "demand_body_source_stamp_ns": 1791377444639382334,
+          "applied_at_ns": 1791377444639382334
+        },
+        "original_line_number": 8959
+      },
+      "handoff_grant": {
+        "kind": "handoff_grant",
+        "receipt_monotonic_ns": 1224045064137912,
+        "source_clock_ns": 1791377444639382334,
+        "data": {
+          "schema_version": 2,
+          "transition_mode": 0,
+          "handoff_id": "14baf0ed937943d889004b0d0e6c0599.1:execution:handoff:8",
+          "sequence": 8,
+          "expected_commit_sequence": 6,
+          "incumbent": {
+            "version": {
+              "schema_version": 3,
+              "session_id": "14baf0ed937943d889004b0d0e6c0599",
+              "task_id": "14baf0ed937943d889004b0d0e6c0599.1",
+              "route_id": "14baf0ed937943d889004b0d0e6c0599.1:12131a81afb9da26c549cdb5284054e63659a6fceb1a3faa7ae3de0b172008a7",
+              "route_hash": "12131a81afb9da26c549cdb5284054e63659a6fceb1a3faa7ae3de0b172008a7",
+              "map_version_id": "3043c9fe91e258f20f94f2a6f0e420769bc54db3e56a458ad65cdc36d5d3a811",
+              "localization_epoch": 1,
+              "localization_seed_id": "isaac-211a931b-9715-4552-8c16-721b25586282",
+              "reference_generation": 1,
+              "segment_id": "floor",
+              "anchor_id": "79db42cf10a81f273fa0c341840965e1acfafff037446e36c7976f86c9bf6e81",
+              "anchor_revision": 1,
+              "context_sequence": 1,
+              "map_geometry_revision": 1
+            },
+            "execution_id": "14baf0ed937943d889004b0d0e6c0599.1:execution",
+            "control_epoch": 1,
+            "confirmation_id": "14baf0ed937943d889004b0d0e6c0599.1:isaac-smoke-14baf0ed937943d889004b0d0e6c0599",
+            "sdk_session": "isolated-14baf0ed937943d889004b0d0e6c0599",
+            "sdk_arm_generation": 1,
+            "sequence": 326,
+            "source_stamp": {
+              "sec": 1791377444,
+              "nanosec": 519382334
+            },
+            "valid_until": {
+              "sec": 1791377444,
+              "nanosec": 769382334
+            },
+            "trajectory_id": 18,
+            "validation_sequence": 1325,
+            "frame_id": "d1max_loc_odom",
+            "goal_position": {
+              "x": 8.0,
+              "y": -5.0,
+              "z": 0.48100000000000004
+            },
+            "allowed": true,
+            "geometry_committed": true,
+            "revoked": false,
+            "has_goal_yaw": false,
+            "goal_yaw": 0.0,
+            "goal_yaw_tolerance_rad": 0.15,
+            "phase": "tracking",
+            "transport_mode": "isolated_mock",
+            "reason": "committed_execution_lease"
+          },
+          "candidate": {
+            "version": {
+              "schema_version": 3,
+              "session_id": "14baf0ed937943d889004b0d0e6c0599",
+              "task_id": "14baf0ed937943d889004b0d0e6c0599.1",
+              "route_id": "14baf0ed937943d889004b0d0e6c0599.1:12131a81afb9da26c549cdb5284054e63659a6fceb1a3faa7ae3de0b172008a7",
+              "route_hash": "12131a81afb9da26c549cdb5284054e63659a6fceb1a3faa7ae3de0b172008a7",
+              "map_version_id": "3043c9fe91e258f20f94f2a6f0e420769bc54db3e56a458ad65cdc36d5d3a811",
+              "localization_epoch": 1,
+              "localization_seed_id": "isaac-211a931b-9715-4552-8c16-721b25586282",
+              "reference_generation": 1,
+              "segment_id": "floor",
+              "anchor_id": "79db42cf10a81f273fa0c341840965e1acfafff037446e36c7976f86c9bf6e81",
+              "anchor_revision": 1,
+              "context_sequence": 1,
+              "map_geometry_revision": 1
+            },
+            "execution_id": "14baf0ed937943d889004b0d0e6c0599.1:execution",
+            "control_epoch": 1,
+            "confirmation_id": "14baf0ed937943d889004b0d0e6c0599.1:isaac-smoke-14baf0ed937943d889004b0d0e6c0599",
+            "sdk_session": "isolated-14baf0ed937943d889004b0d0e6c0599",
+            "sdk_arm_generation": 1,
+            "sequence": 327,
+            "source_stamp": {
+              "sec": 1791377444,
+              "nanosec": 539382334
+            },
+            "valid_until": {
+              "sec": 1791377444,
+              "nanosec": 769382334
+            },
+            "trajectory_id": 19,
+            "validation_sequence": 1330,
+            "frame_id": "d1max_loc_odom",
+            "goal_position": {
+              "x": 8.0,
+              "y": -5.0,
+              "z": 0.48100000000000004
+            },
+            "allowed": true,
+            "geometry_committed": false,
+            "revoked": false,
+            "has_goal_yaw": false,
+            "goal_yaw": 0.0,
+            "goal_yaw_tolerance_rad": 0.15,
+            "phase": "tracking",
+            "transport_mode": "isolated_mock",
+            "reason": "committed_execution_lease"
+          },
+          "stationary_evidence": {
+            "schema_version": 0,
+            "version": {
+              "schema_version": 0,
+              "session_id": "",
+              "task_id": "",
+              "route_id": "",
+              "route_hash": "",
+              "map_version_id": "",
+              "localization_epoch": 0,
+              "localization_seed_id": "",
+              "reference_generation": 0,
+              "segment_id": "",
+              "anchor_id": "",
+              "anchor_revision": 0,
+              "context_sequence": 0,
+              "map_geometry_revision": 0
+            },
+            "execution_id": "",
+            "control_epoch": 0,
+            "sdk_session": "",
+            "sdk_arm_generation": 0,
+            "transport_mode": "",
+            "sequence": 0,
+            "writer_commit_sequence": 0,
+            "applied_trajectory_id": 0,
+            "zero_write_sequence": 0,
+            "zero_ack_at": {
+              "sec": 0,
+              "nanosec": 0
+            },
+            "mc_raw_stamp_ns": 0,
+            "mc_clock_epoch": "",
+            "time_basis": "",
+            "source_stamp": {
+              "sec": 0,
+              "nanosec": 0
+            },
+            "received_stamp": {
+              "sec": 0,
+              "nanosec": 0
+            },
+            "capture_lower_bound": {
+              "sec": 0,
+              "nanosec": 0
+            },
+            "capture_upper_bound": {
+              "sec": 0,
+              "nanosec": 0
+            },
+            "mc_capture_delay_bound_sec": 0.0,
+            "valid_until": {
+              "sec": 0,
+              "nanosec": 0
+            },
+            "stationary_samples": 0,
+            "stationary_duration_sec": 0.0,
+            "measured_linear_mps": 0.0,
+            "measured_angular_radps": 0.0,
+            "nonzero_blocked": false,
+            "usable": false,
+            "physical_acceptance_verified": false
+          },
+          "source_stamp": {
+            "sec": 1791377444,
+            "nanosec": 539382334
+          },
+          "valid_until": {
+            "sec": 1791377444,
+            "nanosec": 769382334
+          },
+          "transition_deadline": {
+            "sec": 1791377444,
+            "nanosec": 769382334
+          },
+          "retain_incumbent_until": {
+            "sec": 1791377444,
+            "nanosec": 769382334
+          },
+          "revoked": false,
+          "reason": "conditional_writer_cas"
+        },
+        "original_line_number": 8947
+      }
+    },
+    "new_task_original_initial_ack": {
+      "kind": "commit_ack",
+      "receipt_monotonic_ns": 1224070303813436,
+      "source_clock_ns": 1791377451939382334,
+      "data": {
+        "wire": {
+          "schema_version": 1,
+          "handoff_id": "",
+          "grant_sequence": 0,
+          "sequence": 2,
+          "previous_commit_sequence": 0,
+          "commit_sequence": 1,
+          "incumbent_version": {
+            "schema_version": 3,
+            "session_id": "14baf0ed937943d889004b0d0e6c0599",
+            "task_id": "14baf0ed937943d889004b0d0e6c0599.2",
+            "route_id": "14baf0ed937943d889004b0d0e6c0599.2:48d83d23996291a586df06bc66dfa729993242e58bc979ae369e6eba5d67f061",
+            "route_hash": "48d83d23996291a586df06bc66dfa729993242e58bc979ae369e6eba5d67f061",
+            "map_version_id": "3043c9fe91e258f20f94f2a6f0e420769bc54db3e56a458ad65cdc36d5d3a811",
+            "localization_epoch": 1,
+            "localization_seed_id": "isaac-211a931b-9715-4552-8c16-721b25586282",
+            "reference_generation": 3,
+            "segment_id": "floor",
+            "anchor_id": "0312419c0ad2ab8d06508029fad34161d1f602f3fd0f1f60cfc06bcf0bf25b9f",
+            "anchor_revision": 1,
+            "context_sequence": 1,
+            "map_geometry_revision": 1
+          },
+          "candidate_version": {
+            "schema_version": 3,
+            "session_id": "14baf0ed937943d889004b0d0e6c0599",
+            "task_id": "14baf0ed937943d889004b0d0e6c0599.2",
+            "route_id": "14baf0ed937943d889004b0d0e6c0599.2:48d83d23996291a586df06bc66dfa729993242e58bc979ae369e6eba5d67f061",
+            "route_hash": "48d83d23996291a586df06bc66dfa729993242e58bc979ae369e6eba5d67f061",
+            "map_version_id": "3043c9fe91e258f20f94f2a6f0e420769bc54db3e56a458ad65cdc36d5d3a811",
+            "localization_epoch": 1,
+            "localization_seed_id": "isaac-211a931b-9715-4552-8c16-721b25586282",
+            "reference_generation": 3,
+            "segment_id": "floor",
+            "anchor_id": "0312419c0ad2ab8d06508029fad34161d1f602f3fd0f1f60cfc06bcf0bf25b9f",
+            "anchor_revision": 1,
+            "context_sequence": 1,
+            "map_geometry_revision": 1
+          },
+          "incumbent_trajectory_id": 0,
+          "candidate_trajectory_id": 20,
+          "execution_id": "14baf0ed937943d889004b0d0e6c0599.2:execution",
+          "sdk_session": "isolated-14baf0ed937943d889004b0d0e6c0599",
+          "transport_mode": "isolated_mock",
+          "control_epoch": 2,
+          "sdk_arm_generation": 2,
+          "permit_sequence": 566,
+          "demand_sequence": 2092,
+          "motion_validation_sequence": 1417,
+          "entry_admission_sequence": 0,
+          "applied_at": {
+            "sec": 1791377451,
+            "nanosec": 939382334
+          },
+          "demand_source_stamp": {
+            "sec": 1791377451,
+            "nanosec": 939382334
+          },
+          "demand_body_source_stamp": {
+            "sec": 1791377451,
+            "nanosec": 939382334
+          },
+          "entry_source_stamp": {
+            "sec": 0,
+            "nanosec": 0
+          },
+          "body_source_stamp": {
+            "sec": 1791377451,
+            "nanosec": 939382334
+          },
+          "valid_until": {
+            "sec": 1791377452,
+            "nanosec": 39382334
+          },
+          "measured_pose": {
+            "header": {
+              "stamp": {
+                "sec": 1791377451,
+                "nanosec": 939382334
+              },
+              "frame_id": "d1max_loc_odom"
+            },
+            "pose": {
+              "position": {
+                "x": -7.647597789764404,
+                "y": -4.92418098449707,
+                "z": 0.48630645871162415
+              },
+              "orientation": {
+                "x": 0.0034358908887952566,
+                "y": -0.005220808554440737,
+                "z": -0.10796023905277252,
+                "w": 0.9941355586051941
+              }
+            }
+          },
+          "measured_twist": {
+            "linear": {
+              "x": -0.0005766424571086851,
+              "y": 2.628244405594573e-05,
+              "z": 0.007233033888131511
+            },
+            "angular": {
+              "x": -0.0002630687662179592,
+              "y": -0.0003120773193274117,
+              "z": -0.003753453260209092
+            }
+          },
+          "applied_velocity": {
+            "linear": {
+              "x": 0.00321083595296653,
+              "y": 0.0,
+              "z": 0.0
+            },
+            "angular": {
+              "x": 0.0,
+              "y": 0.0,
+              "z": 0.007422399148344994
+            }
+          },
+          "curve_time": 0.0,
+          "applied": true,
+          "write_submitted": true,
+          "write_acknowledged": true,
+          "reason": "writer_software_commit_not_physical_confirmation"
+        },
+        "execution_id": "14baf0ed937943d889004b0d0e6c0599.2:execution",
+        "control_epoch": 2,
+        "sequence": 2,
+        "permit_sequence": 566,
+        "motion_validation_sequence": 1417,
+        "demand_sequence": 2092,
+        "reason": "writer_software_commit_not_physical_confirmation",
+        "handoff_id": "",
+        "applied": true,
+        "body_source_stamp_ns": 1791377451939382334,
+        "valid_until_ns": 1791377452039382334,
+        "demand_source_stamp_ns": 1791377451939382334,
+        "demand_body_source_stamp_ns": 1791377451939382334,
+        "applied_at_ns": 1791377451939382334
+      },
+      "original_line_number": 743
+    },
+    "first_new_scope_tracker_writer1": {
+      "kind": "tracker",
+      "receipt_monotonic_ns": 1224070333962532,
+      "source_clock_ns": 1791377451959382334,
+      "data": {
+        "reason": "tracking",
+        "permit_reject_reason": "",
+        "prepare_reason": "prepared_not_committed",
+        "handoff_reason": "",
+        "maneuver_phase": "following",
+        "trajectory_id": 20,
+        "installation_sequence": 8,
+        "writer_commit_sequence": 1,
+        "finished": false,
+        "preparation_pending": false,
+        "execution_frozen": false,
+        "active": true,
+        "control_diagnostic": {
+          "before_trajectory_start": false,
+          "body_present": true,
+          "body_source_stamp_ns": 1791377451959382334,
+          "curve_duration": 9.375985285385358,
+          "duplicate_source": false,
+          "geometry_available": true,
+          "installed_trajectory_start_ns": 1791377451879382334,
+          "lookahead_curve_time": 2.282003844261832,
+          "lookahead_from_xyz_arc_m": 0.0,
+          "lookahead_position": [
+            -7.463858670194229,
+            -4.925073382435695,
+            0.4806116640751136
+          ],
+          "lookahead_requested_distance_m": 0.18400000000000002,
+          "lookahead_target_xyz_arc_m": 0.18400000000000002,
+          "lookahead_velocity": [
+            0.21201410437905754,
+            -0.0011275851502075092,
+            0.0028499298019030376
+          ],
+          "measured_arc_m": 0.0,
+          "measured_xy_speed_mps": 0.000554845673691317,
+          "planar_acceleration_limit_mps2": 0.34606987727761473,
+          "planar_speed_limit_mps": 0.20352783499469174,
+          "previous_step_source_ns": 1791377451939382334,
+          "projected_curve_time": 0.0,
+          "receipt_interval_s": 0.05999079393222928,
+          "source_interval_s": 0.02,
+          "spatial_control_lookahead": true,
+          "spatial_planar_braking_envelope": true,
+          "step_seen": true,
+          "step_source_ns": 1791377451959382334,
+          "step_trajectory_id": 20,
+          "step_trajectory_start_ns": 1791377451879382334
+        }
+      },
+      "original_line_number": 751
+    },
+    "first_stationary_writer_wait": {
+      "kind": "tracker",
+      "receipt_monotonic_ns": 1224118614571690,
+      "source_clock_ns": 1791377465519382334,
+      "data": {
+        "reason": "stationary_reentry_waiting_writer",
+        "permit_reject_reason": "heartbeat_proof_not_fresh",
+        "prepare_reason": "prepared_not_committed",
+        "handoff_reason": "prepared_waiting_writer",
+        "maneuver_phase": "following",
+        "trajectory_id": 20,
+        "installation_sequence": 8,
+        "writer_commit_sequence": 1,
+        "finished": false,
+        "preparation_pending": false,
+        "execution_frozen": true,
+        "active": true,
+        "control_diagnostic": {
+          "before_trajectory_start": false,
+          "body_present": true,
+          "body_source_stamp_ns": 1791377465519382334,
+          "curve_duration": 9.375985285385358,
+          "duplicate_source": false,
+          "geometry_available": true,
+          "installed_trajectory_start_ns": 1791377451879382334,
+          "lookahead_curve_time": 5.97879922583762,
+          "lookahead_from_xyz_arc_m": 1.3131482607861389,
+          "lookahead_position": [
+            -6.150726034271334,
+            -4.931414636214877,
+            0.4810017806533998
+          ],
+          "lookahead_requested_distance_m": 0.18400000000000002,
+          "lookahead_target_xyz_arc_m": 1.4971482607861388,
+          "lookahead_velocity": [
+            0.34894470842103625,
+            -0.0016333839488264896,
+            2.7117092522812672e-05
+          ],
+          "measured_arc_m": 1.3131482607861389,
+          "measured_xy_speed_mps": 0.0008648800410877876,
+          "planar_acceleration_limit_mps2": 0.34606987727761473,
+          "planar_speed_limit_mps": 0.2274173479252897,
+          "previous_step_source_ns": 1791377464519382334,
+          "projected_curve_time": 5.480246643867446,
+          "receipt_interval_s": 0.060015205992385745,
+          "source_interval_s": 0.02,
+          "spatial_control_lookahead": true,
+          "spatial_planar_braking_envelope": true,
+          "step_seen": true,
+          "step_source_ns": 1791377464539382334,
+          "step_trajectory_id": 20,
+          "step_trajectory_start_ns": 1791377451879382334
+        }
+      },
+      "original_line_number": 14837
+    },
+    "last_nonzero_applied": {
+      "kind": "applied",
+      "receipt_monotonic_ns": 1224115102849043,
+      "source_clock_ns": 1791377464519382334,
+      "data": {
+        "wire": {
+          "version": {
+            "schema_version": 3,
+            "session_id": "14baf0ed937943d889004b0d0e6c0599",
+            "task_id": "14baf0ed937943d889004b0d0e6c0599.2",
+            "route_id": "14baf0ed937943d889004b0d0e6c0599.2:48d83d23996291a586df06bc66dfa729993242e58bc979ae369e6eba5d67f061",
+            "route_hash": "48d83d23996291a586df06bc66dfa729993242e58bc979ae369e6eba5d67f061",
+            "map_version_id": "3043c9fe91e258f20f94f2a6f0e420769bc54db3e56a458ad65cdc36d5d3a811",
+            "localization_epoch": 1,
+            "localization_seed_id": "isaac-211a931b-9715-4552-8c16-721b25586282",
+            "reference_generation": 3,
+            "segment_id": "floor",
+            "anchor_id": "0312419c0ad2ab8d06508029fad34161d1f602f3fd0f1f60cfc06bcf0bf25b9f",
+            "anchor_revision": 1,
+            "context_sequence": 1,
+            "map_geometry_revision": 1
+          },
+          "execution_id": "14baf0ed937943d889004b0d0e6c0599.2:execution",
+          "control_epoch": 2,
+          "sdk_session": "isolated-14baf0ed937943d889004b0d0e6c0599",
+          "sdk_arm_generation": 2,
+          "sequence": 3106,
+          "permit_sequence": 1133,
+          "validation_sequence": 3680,
+          "motion_validation_sequence": 3602,
+          "braking_model_sha256": "164d765b86bef7e9624120c32a9dda6f2d01206448066249aa3c3116cddd84b1",
+          "trajectory_id": 20,
+          "source_stamp": {
+            "sec": 1791377464,
+            "nanosec": 519382334
+          },
+          "body_source_stamp": {
+            "sec": 1791377464,
+            "nanosec": 519382334
+          },
+          "valid_until": {
+            "sec": 1791377464,
+            "nanosec": 619382334
+          },
+          "velocity": {
+            "linear": {
+              "x": 0.2274173479252897,
+              "y": 0.0,
+              "z": 0.0
+            },
+            "angular": {
+              "x": 0.0,
+              "y": 0.0,
+              "z": -0.06329595361171413
+            }
+          },
+          "hold": false,
+          "safety_checked": true,
+          "safety_source_stamp": {
+            "sec": 1791377464,
+            "nanosec": 397382334
+          },
+          "transport_mode": "isolated_mock",
+          "reason": "tracking"
+        },
+        "execution_id": "14baf0ed937943d889004b0d0e6c0599.2:execution",
+        "trajectory_id": 20,
+        "control_epoch": 2,
+        "sequence": 3106,
+        "permit_sequence": 1133,
+        "validation_sequence": 3680,
+        "motion_validation_sequence": 3602,
+        "hold": false,
+        "reason": "tracking",
+        "source_stamp_ns": 1791377464519382334,
+        "body_source_stamp_ns": 1791377464519382334,
+        "valid_until_ns": 1791377464619382334,
+        "safety_source_stamp_ns": 1791377464397382334,
+        "velocity": [
+          0.2274173479252897,
+          -0.06329595361171413
+        ]
+      },
+      "original_line_number": 13841
+    },
+    "last_prepared_positive_motion": {
+      "kind": "motion_validation",
+      "receipt_monotonic_ns": 1224217564118337,
+      "source_clock_ns": 1791377493279382334,
+      "data": {
+        "wire": {
+          "version": {
+            "schema_version": 3,
+            "session_id": "14baf0ed937943d889004b0d0e6c0599",
+            "task_id": "14baf0ed937943d889004b0d0e6c0599.2",
+            "route_id": "14baf0ed937943d889004b0d0e6c0599.2:48d83d23996291a586df06bc66dfa729993242e58bc979ae369e6eba5d67f061",
+            "route_hash": "48d83d23996291a586df06bc66dfa729993242e58bc979ae369e6eba5d67f061",
+            "map_version_id": "3043c9fe91e258f20f94f2a6f0e420769bc54db3e56a458ad65cdc36d5d3a811",
+            "localization_epoch": 1,
+            "localization_seed_id": "isaac-211a931b-9715-4552-8c16-721b25586282",
+            "reference_generation": 4,
+            "segment_id": "floor",
+            "anchor_id": "0312419c0ad2ab8d06508029fad34161d1f602f3fd0f1f60cfc06bcf0bf25b9f",
+            "anchor_revision": 1,
+            "context_sequence": 1,
+            "map_geometry_revision": 1
+          },
+          "execution_id": "14baf0ed937943d889004b0d0e6c0599.2:execution",
+          "control_epoch": 2,
+          "sdk_session": "isolated-14baf0ed937943d889004b0d0e6c0599",
+          "sdk_arm_generation": 2,
+          "trajectory_id": 93,
+          "permit_sequence": 2551,
+          "trajectory_validation_sequence": 10011,
+          "demand_sequence": 12766,
+          "demand_source_stamp": {
+            "sec": 1791377493,
+            "nanosec": 279382334
+          },
+          "demand_valid_until": {
+            "sec": 1791377493,
+            "nanosec": 289489755
+          },
+          "demand_body_source_stamp": {
+            "sec": 1791377493,
+            "nanosec": 279382334
+          },
+          "body_source_stamp": {
+            "sec": 1791377493,
+            "nanosec": 279382334
+          },
+          "sequence": 6237,
+          "front_ray_source_stamp": {
+            "sec": 1791377493,
+            "nanosec": 97382334
+          },
+          "rear_ray_source_stamp": {
+            "sec": 1791377493,
+            "nanosec": 97382334
+          },
+          "map_snapshot_revision": 2018272,
+          "check_begin": {
+            "sec": 1791377493,
+            "nanosec": 279382334
+          },
+          "check_end": {
+            "sec": 1791377493,
+            "nanosec": 279382334
+          },
+          "valid_until": {
+            "sec": 1791377493,
+            "nanosec": 289489755
+          },
+          "velocity": {
+            "linear": {
+              "x": 0.006900412461523568,
+              "y": 0.0,
+              "z": 0.0
+            },
+            "angular": {
+              "x": 0.0,
+              "y": 0.0,
+              "z": -0.015999772027134897
+            }
+          },
+          "frame_id": "d1max_loc_odom",
+          "valid": true,
+          "reason": "observed_free_motion_sweep",
+          "transport_mode": "isolated_mock",
+          "braking_model_sha256": "164d765b86bef7e9624120c32a9dda6f2d01206448066249aa3c3116cddd84b1",
+          "handoff_id": "14baf0ed937943d889004b0d0e6c0599.2:execution:handoff:161",
+          "entry_admission_sequence": 12386,
+          "entry_curve_pose": {
+            "position": {
+              "x": -6.339905738830566,
+              "y": -4.763807773590088,
+              "z": 0.4867249131202698
+            },
+            "orientation": {
+              "x": 0.0001174913122667931,
+              "y": 0.004921723622828722,
+              "z": -0.12999089062213898,
+              "w": 0.9915030002593994
+            }
+          },
+          "entry_curve_twist": {
+            "linear": {
+              "x": 0.0,
+              "y": 0.0,
+              "z": 0.0
+            },
+            "angular": {
+              "x": 0.0,
+              "y": 0.0,
+              "z": 0.0
+            }
+          },
+          "entry_curve_time": 0.0,
+          "entry_position_error_m": 2.748446371961724e-06,
+          "entry_velocity_error_mps": 0.007384402528526944
+        },
+        "execution_id": "14baf0ed937943d889004b0d0e6c0599.2:execution",
+        "trajectory_id": 93,
+        "control_epoch": 2,
+        "sequence": 6237,
+        "permit_sequence": 2551,
+        "trajectory_validation_sequence": 10011,
+        "demand_sequence": 12766,
+        "valid": true,
+        "reason": "observed_free_motion_sweep",
+        "handoff_id": "14baf0ed937943d889004b0d0e6c0599.2:execution:handoff:161",
+        "body_source_stamp_ns": 1791377493279382334,
+        "valid_until_ns": 1791377493289489755,
+        "demand_source_stamp_ns": 1791377493279382334,
+        "demand_valid_until_ns": 1791377493289489755,
+        "demand_body_source_stamp_ns": 1791377493279382334,
+        "front_ray_source_stamp_ns": 1791377493097382334,
+        "rear_ray_source_stamp_ns": 1791377493097382334,
+        "check_begin_ns": 1791377493279382334,
+        "check_end_ns": 1791377493279382334,
+        "velocity": [
+          0.006900412461523568,
+          -0.015999772027134897
+        ]
+      },
+      "original_line_number": 47123
+    },
+    "observer_clock_limitation": "Trace receipts measure observer arrival, not arbitrary component callback time. Source deadlines remain original; a later positive candidate cannot replace an earlier failed incumbent check.",
+    "old_v53_tracker_sequence_inheritance_reproduced": false,
+    "persistent_dynamic_unknown_primary_failure_claim": false,
+    "native_policy_fixedpoint_despite_continuous_walking_demand_primary_failure_claim": false
+  },
+  "native_500hz_domain_and_actual_final_zero_stop": {
+    "schema": 1,
+    "kind": "sealed_normal_navigation_500hz_physics_audit",
+    "verified": true,
+    "errors": [],
+    "scope": "isolated_simulation_native_PhysX_500Hz_BEGIN_and_actual_final_END",
+    "velocity_domain_scope": "instantaneous full XYZ admission; not a future full XYZ reachability guarantee",
+    "hardware_acceptance": false,
+    "continuous_collision_claim": false,
+    "raw_records_modified": false,
+    "raw_sha256": "340aaa2af1a83b1193745d7c5900a297f91175a44c48202c54ccfbfef93cd5f9",
+    "session_id": "14baf0ed937943d889004b0d0e6c0599",
+    "epoch": "211a931b-9715-4552-8c16-721b25586282",
+    "clock_anchor_ns": 1791377432479382334,
+    "scene_sha256": "998f8331b2e9c53d028e35424c829ecd6954dc6d418aa9c3fcd7b9c046086cf1",
+    "model_sha256": "164d765b86bef7e9624120c32a9dda6f2d01206448066249aa3c3116cddd84b1",
+    "actual_source_ticks": 32886,
+    "duration_ns": 65772000000,
+    "sample_count": 32887,
+    "complete_native_500hz": true,
+    "native_first_tick": 1010,
+    "native_final_tick": 33896,
+    "policy_first_counter": 1000,
+    "policy_final_counter": 33886,
+    "manifest_policy_hz": 50,
+    "manifest_observation_count": 3389,
+    "observation_count_scope": "original count includes bootstrap; not a reconstructed source-only inference gate",
+    "all_epoch": {
+      "sample_count": 32887,
+      "max_full_xyz_speed_mps": 0.5369957376439801,
+      "peak_source_ns": 1791377453519382334,
+      "peak_source_tick": 10520,
+      "peak_raw_linear_velocity_world": [
+        0.5302516222000122,
+        0.08090725541114807,
+        0.02552754245698452
+      ],
+      "max_abs_world_yaw_rate_radps": 0.3528510630130768,
+      "max_full_angular_speed_radps": 0.8515920656883705,
+      "full_angular_norm_is_diagnostic_only": true,
+      "speed_bounds": {
+        "reachable_max_speed_mps": 0.65,
+        "reference_max_speed_mps": 0.65,
+        "measured_travel_max_speed_mps": 0.65
+      },
+      "yaw_bound_radps": 0.8,
+      "exceeded_speed_domains": [],
+      "yaw_domain_exceeded": false
+    },
+    "final_stop": {
+      "verified": true,
+      "scope": "final actual zero-consumption episode; native full XYZ and angular norm",
+      "transition_exercised": true,
+      "linear_threshold_mps": 0.03,
+      "angular_threshold_radps": 0.05,
+      "stationary_duration_s": 1.0,
+      "stop_latency_bound_s": 3.0,
+      "stopping_distance_bound_m": 0.5,
+      "stopping_yaw_bound_rad": 0.4,
+      "last_nonzero_consumption_source_ns": 1791377464553382334,
+      "zero_consumption_source_ns": 1791377464555382334,
+      "reason": "recorded_stop_within_original_bounds",
+      "stationary_window_start_source_ns": 1791377464875382334,
+      "confirmation_source_ns": 1791377465875382334,
+      "confirmation_latency_s": 1.32,
+      "extra_xy_path_m": 0.02969511675311418,
+      "extra_absolute_yaw_path_rad": 0.021901047350576824,
+      "actual_zero_tail_duration_s": 33.696
+    }
+  },
+  "all_actor_and_geometry_evidence": {
+    "all_six_actor_ids": [
+      "door_blocking_cart",
+      "office_person",
+      "oncoming_cart",
+      "plaza_cart",
+      "plaza_person",
+      "warehouse_forklift"
+    ],
+    "sampled_source_rows": 3946,
+    "presence_counts": {
+      "door_blocking_cart": 3946,
+      "office_person": 3946,
+      "oncoming_cart": 3946,
+      "plaza_cart": 3946,
+      "plaza_person": 3946,
+      "warehouse_forklift": 3946
+    },
+    "first_last_sim_time_ns": [
+      18000000,
+      65760000000
+    ],
+    "max_sampling_gap_ns": 20000000,
+    "body_attestation": {
+      "required": true,
+      "verified_samples": 3946,
+      "failures": 0,
+      "envelope": {
+        "radius": 0.6078651750202781,
+        "offset": 0.3125,
+        "above": 0.589,
+        "support_floor_z": 0.0,
+        "support_penetration_m": 0.02
+      }
+    },
+    "static_attestation": {
+      "expected_sha256": "d7138b0cc540a5e53d8640ef17898a4e13ef48f2f03ed6643f74d07a1178af17",
+      "cadence": "every actual body state; source timestamp unchanged",
+      "count": 3946,
+      "faults": 0,
+      "fault_latched": false,
+      "last_sha256": "d7138b0cc540a5e53d8640ef17898a4e13ef48f2f03ed6643f74d07a1178af17",
+      "last_fault": "",
+      "total_wall_s": 0.011181412730365992,
+      "max_wall_s": 6.819306872785091e-05,
+      "full_stage_audits": 1,
+      "notice_timings": {},
+      "cache_hits": 36832
+    },
+    "sampled_possible_overlap_counts": {
+      "static": 0,
+      "dynamic": 0
+    },
+    "sampled_collision_faults": [],
+    "required_actor_encounter_observed": false,
+    "native_floor_hit_audit": {
+      "scans": 1316,
+      "native_floor_hits": 3277168,
+      "max_abs_error_m": 5.146409560397025e-06,
+      "sealed_error_bound_m": 0.0002,
+      "raw_endpoints_and_source_times_preserved": true
+    },
+    "qualified_action_memory_recovery_events": 0
+  },
+  "performance": {
+    "original_timing": {
+      "measured_state_samples": 3946,
+      "measured_state_wall_seconds": 232.09304815880023,
+      "measured_state_sim_seconds": 65.742,
+      "wall_seconds_per_sim_second": 3.530361841118314,
+      "realtime_factor": 0.28325708383569814,
+      "state_wall_hz": 16.997493166192527,
+      "longest_state_wall_gap_s": 0.257813154021278,
+      "longest_rays_wall_gap_s": [
+        0.5263489938806742,
+        0.5261705531738698
+      ]
+    },
+    "original_dual_lidar_source_frequency_hz": 10,
+    "original_ray_receipt_lease_s": 0.5,
+    "maximum_ray_receipt_gaps_exceed_original_lease": true,
+    "whole_curve_check_ms_semantics": "original source clock elapsed; check_ms0 does not prove zero CPU cost or no geometry query",
+    "higher_lidar_frequency_repairs_safety_scope_bug_claim": false
+  },
+  "independent_audit": {
+    "whole_500hz_audit_exit_code": 0,
+    "native_500hz_verified": true,
+    "case_checks": [
+      {
+        "name": "sealed_same_scene",
+        "status": "passed",
+        "reason": ""
+      },
+      {
+        "name": "sealed_spot_encounter_profile_model",
+        "status": "passed",
+        "reason": ""
+      },
+      {
+        "name": "single_session_ordered_actions",
+        "status": "failed",
+        "reason": "original_smoke_phase_failed:1"
+      },
+      {
+        "name": "phase_000_action_stop_source",
+        "status": "passed",
+        "reason": ""
+      },
+      {
+        "name": "phase_000_test_source_budget",
+        "status": "passed",
+        "reason": ""
+      },
+      {
+        "name": "phase_000_source_cancel",
+        "status": "passed",
+        "reason": ""
+      },
+      {
+        "name": "phase_001_action_stop_source",
+        "status": "failed",
+        "reason": "original_action_or_measured_stop_failed"
+      },
+      {
+        "name": "phase_001_test_source_budget",
+        "status": "passed",
+        "reason": ""
+      },
+      {
+        "name": "phase_001_goal",
+        "status": "failed",
+        "reason": ""
+      },
+      {
+        "name": "fresh_ordered_task_identities_and_source_deadline",
+        "status": "passed",
+        "reason": ""
+      },
+      {
+        "name": "independent_full_physics_motion_domain_and_stop",
+        "status": "passed",
+        "reason": ""
+      },
+      {
+        "name": "actual_link_static_and_actor_collision",
+        "status": "passed",
+        "reason": ""
+      },
+      {
+        "name": "intended_dynamic_encounter_observed",
+        "status": "failed",
+        "reason": "intended_sampled_proximity_encounter_not_exercised_during_original_action_interval"
+      },
+      {
+        "name": "owned_graph_retirement",
+        "status": "failed",
+        "reason": "Navigation test failed; inspect smoke.log and its original reports"
+      }
+    ]
+  },
+  "bindings": {
+    "independent_case_evaluation": {
+      "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/v57_sealed_case_evaluation.json",
+      "sha256": "034be9de0d0a73f3a1d20ef6216a1ee56d9691d73736a5e80b46db704d330755",
+      "bytes": 9624
+    },
+    "independent_native_500hz_audit": {
+      "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/v57_navigation_physics_audit.json",
+      "sha256": "5cac4aec393fb74b6576a1273d28908cebed2dea0420d60160dab3944e65bbe9",
+      "bytes": 2779
+    },
+    "original_candidate_integrity": {
+      "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v57-campus-execution-scope-restart/isaac_candidate_integrity.json",
+      "sha256": "3692fbf3d73777d7b902b0ecfe15d62371c41cfe210a0bbd7a1824bb187ffab7",
+      "bytes": 799213
+    },
+    "original_sealed_code": {
+      "simulation/assets/scene_config.json": {
+        "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v57-campus-execution-scope-restart/simulation/assets/scene_config.json",
+        "sha256": "998f8331b2e9c53d028e35424c829ecd6954dc6d418aa9c3fcd7b9c046086cf1",
+        "bytes": 64790,
+        "matches_original_candidate_integrity": true
+      },
+      "simulation/scenario_suite.py": {
+        "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v57-campus-execution-scope-restart/simulation/scenario_suite.py",
+        "sha256": "8ed66f2a99c27ea530cd478d9c8094db3d40e9f3fee5f026da5572d774bf8f4f",
+        "bytes": 47102,
+        "matches_original_candidate_integrity": true
+      },
+      "simulation/navigation_physics_audit.py": {
+        "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v57-campus-execution-scope-restart/simulation/navigation_physics_audit.py",
+        "sha256": "93042f7962c8d2fb5fa78a2d9a7934b8b8c52ddb241b641152f566f30c5263a8",
+        "bytes": 18468,
+        "matches_original_candidate_integrity": true
+      },
+      "simulation/scene.py": {
+        "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v57-campus-execution-scope-restart/simulation/scene.py",
+        "sha256": "338fed025c34e828324fe93053378bfdcfdecf0abf2a658b76e8824da8b352d0",
+        "bytes": 86153,
+        "matches_original_candidate_integrity": true
+      },
+      "simulation/world_builder.py": {
+        "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v57-campus-execution-scope-restart/simulation/world_builder.py",
+        "sha256": "b90bb503024aa0ede575fa8488c3b165c2f830114224991c40c3220843856433",
+        "bytes": 57272,
+        "matches_original_candidate_integrity": true
+      },
+      "simulation/quadruped.py": {
+        "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v57-campus-execution-scope-restart/simulation/quadruped.py",
+        "sha256": "191626991514d1ed2cd8c118ab1e8da4c1c2b99be23b39dc447a6e395cf8dbd2",
+        "bytes": 40630,
+        "matches_original_candidate_integrity": true
+      },
+      "simulation/truth_map.py": {
+        "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v57-campus-execution-scope-restart/simulation/truth_map.py",
+        "sha256": "40ff59bb84b741bb54bda07333ced7220a44a0ff709b90b78b9bb1507750832c",
+        "bytes": 53324,
+        "matches_original_candidate_integrity": true
+      },
+      "application/install/scan_planner/include/plan_manage/trajectory_collision.hpp": {
+        "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v57-campus-execution-scope-restart/application/install/scan_planner/include/plan_manage/trajectory_collision.hpp",
+        "sha256": "4ff22c6293be20cad924ef56428ca88d94a19642147c470f5c05c98bf25f9b4f",
+        "bytes": 17663,
+        "matches_original_candidate_integrity": true
+      },
+      "application/install/scan_planner/include/plan_manage/execution_validator.hpp": {
+        "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v57-campus-execution-scope-restart/application/install/scan_planner/include/plan_manage/execution_validator.hpp",
+        "sha256": "188ead1ca3a4929f89e8819b16049e6703ebca5527061025ee19cc27de4c758d",
+        "bytes": 76900,
+        "matches_original_candidate_integrity": true
+      },
+      "application/install/scan_planner/lib/scan_planner/scan_planner_node": {
+        "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v57-campus-execution-scope-restart/application/install/scan_planner/lib/scan_planner/scan_planner_node",
+        "sha256": "fb6e8730165880d1795e239f209ba7c1b1fced7fad5e6a432063037fc1a3324c",
+        "bytes": 9053152,
+        "matches_original_candidate_integrity": true
+      },
+      "application/install/d1max_trajectory_tracker/include/d1max_trajectory_tracker/tracker_core.hpp": {
+        "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v57-campus-execution-scope-restart/application/install/d1max_trajectory_tracker/include/d1max_trajectory_tracker/tracker_core.hpp",
+        "sha256": "7eed42768212f24a400082f36f52b1d6779760d24b84edc0a1b27d9fc8398a18",
+        "bytes": 98402,
+        "matches_original_candidate_integrity": true
+      },
+      "application/install/d1max_trajectory_tracker/include/d1max_trajectory_tracker/execution_contract.hpp": {
+        "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v57-campus-execution-scope-restart/application/install/d1max_trajectory_tracker/include/d1max_trajectory_tracker/execution_contract.hpp",
+        "sha256": "e77d4068c1e00d16459be8f1258e96b37e9672c3a8e8e5495f34ddc3da5a94ca",
+        "bytes": 69736,
+        "matches_original_candidate_integrity": true
+      },
+      "source_snapshot/nav/src/d1max_trajectory_tracker/src/trajectory_tracker.cpp": {
+        "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v57-campus-execution-scope-restart/source_snapshot/nav/src/d1max_trajectory_tracker/src/trajectory_tracker.cpp",
+        "sha256": "154dc29520b05f38c4d4742e736f61377c9c068606a993e453d5295fc2a1941e",
+        "bytes": 27252,
+        "matches_original_candidate_integrity": true
+      }
+    },
+    "original_raw_records": {
+      "session.json": {
+        "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/runs/campus_restart_v57_001/session.json",
+        "sha256": "63dbec505e5c52b4951cb58e30e7ce135b1c4a86a1e35a7b7b7bf0af9c39f566",
+        "bytes": 14525
+      },
+      "braking_model.json": {
+        "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/runs/campus_restart_v57_001/braking_model.json",
+        "sha256": "164d765b86bef7e9624120c32a9dda6f2d01206448066249aa3c3116cddd84b1",
+        "bytes": 1905
+      },
+      "run_summary.json": {
+        "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/runs/campus_restart_v57_001/run_summary.json",
+        "sha256": "4777dedf44a4c0740234e3fbea8f39cadbf0d24d682afdcbd2b115c93bdac877",
+        "bytes": 910
+      },
+      "shutdown.json": {
+        "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/runs/campus_restart_v57_001/shutdown.json",
+        "sha256": "1a899a9c33c90f1936b1c4d4827b7a045c78ea32beb6c3ad9d1c6639aaa61f86",
+        "bytes": 274
+      },
+      "runtime_bundle.json": {
+        "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/runs/campus_restart_v57_001/runtime_bundle.json",
+        "sha256": "3d3d9370745f3259a917b7d93dfeb5d30667d2e764e0b61ca1be2c1ebc1e0717",
+        "bytes": 745878
+      },
+      "runtime_inputs.json": {
+        "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/runs/campus_restart_v57_001/runtime_inputs.json",
+        "sha256": "c6880dcffa37ee8debe6a681f0259b4348e1160f6bb86e5d4cbc192a6e1645d1",
+        "bytes": 311164
+      },
+      "tracker.yaml": {
+        "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/runs/campus_restart_v57_001/tracker.yaml",
+        "sha256": "85272031f0ad93483c487c088f2ecfc6a5083153c01b572bb1d2173ab4e81947",
+        "bytes": 1548
+      },
+      "scan.yaml": {
+        "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/runs/campus_restart_v57_001/scan.yaml",
+        "sha256": "cb03690cdae655c767e4b48cd95a80407e047b36eba4b60cc9ca42aa7d39c427",
+        "bytes": 5095
+      },
+      "mock_sdk.yaml": {
+        "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/runs/campus_restart_v57_001/mock_sdk.yaml",
+        "sha256": "654c3e68ac14bf32cc971572ee07f6be3f08cf73d3c4a51f2dd0396ea000b424",
+        "bytes": 601
+      },
+      "scan.log": {
+        "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/runs/campus_restart_v57_001/scan.log",
+        "sha256": "c0a3c422e95e63f1993f75669a7e85a0f642f77ab0a78e38c86959307b63d8f5",
+        "bytes": 629363
+      },
+      "tracker.log": {
+        "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/runs/campus_restart_v57_001/tracker.log",
+        "sha256": "9418752506c3c8c1df2548d72caff927311d94e80a4fa7262b0ea7bf3d32e5e0",
+        "bytes": 197
+      },
+      "mock_sdk.log": {
+        "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/runs/campus_restart_v57_001/mock_sdk.log",
+        "sha256": "b03577a2412c7c1754008fe100782a642185a9f9c50cee845e4a0ecd0da47a83",
+        "bytes": 66
+      },
+      "safety.log": {
+        "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/runs/campus_restart_v57_001/safety.log",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "bytes": 0
+      },
+      "scenario_suite/execution.json": {
+        "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/runs/campus_restart_v57_001/scenario_suite/execution.json",
+        "sha256": "6b9bc551be00e0e354a77e47116a0e35ec8a09b92a737d9cd49761c1838b338e",
+        "bytes": 3012
+      },
+      "scenario_suite/phase_000_report.json": {
+        "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/runs/campus_restart_v57_001/scenario_suite/phase_000_report.json",
+        "sha256": "988944f5c47f620a87a5ffc33cdc0308a937045ae8837217c6c6cf179c89ba54",
+        "bytes": 1659531
+      },
+      "scenario_suite/phase_000_trace.jsonl": {
+        "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/runs/campus_restart_v57_001/scenario_suite/phase_000_trace.jsonl",
+        "sha256": "e094d7be701b814c0dedb2e3feb1dacf9d27ff93d760d33d9457bec727bd70ad",
+        "bytes": 22047182
+      },
+      "scenario_suite/phase_001_report.json": {
+        "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/runs/campus_restart_v57_001/scenario_suite/phase_001_report.json",
+        "sha256": "a75631d3a394d0af418e34a072417d5ecadc51cfc5e7117580e9d2396475f212",
+        "bytes": 4660115
+      },
+      "scenario_suite/phase_001_trace.jsonl": {
+        "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/runs/campus_restart_v57_001/scenario_suite/phase_001_trace.jsonl",
+        "sha256": "6e85c83f2fa98f41796c062bb7036b72942dcf8e555eddbfb3bb3daaf374da46",
+        "bytes": 95063610
+      },
+      "physics/summary.json": {
+        "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/runs/campus_restart_v57_001/physics/summary.json",
+        "sha256": "b49cfb9aead506482f2ad7630994c211f758c4b1a1656c9f28404a52e32762b5",
+        "bytes": 29581
+      },
+      "physics/policy_history_manifest.json": {
+        "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/runs/campus_restart_v57_001/physics/policy_history_manifest.json",
+        "sha256": "cf956e6da1e120d4577bf998c96b6f79e6490124e4ed4677f0301e85a93bd038",
+        "bytes": 1147
+      },
+      "physics/policy_component_state_500hz.jsonl": {
+        "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/runs/campus_restart_v57_001/physics/policy_component_state_500hz.jsonl",
+        "sha256": "340aaa2af1a83b1193745d7c5900a297f91175a44c48202c54ccfbfef93cd5f9",
+        "bytes": 42802020
+      },
+      "physics/policy_command_events.jsonl": {
+        "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/runs/campus_restart_v57_001/physics/policy_command_events.jsonl",
+        "sha256": "623de5346cce920624fc0e850842b6cc2ae30ca06ab56f04cd834fb932012b0f",
+        "bytes": 3341471
+      },
+      "physics/policy_observations.jsonl": {
+        "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/runs/campus_restart_v57_001/physics/policy_observations.jsonl",
+        "sha256": "8a949944e21d9a6a662cba7c338cf6de02ba91eae0c3b2b2603f27be4dfc16b3",
+        "bytes": 6085078
+      },
+      "physics/policy_recovery_events.jsonl": {
+        "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/runs/campus_restart_v57_001/physics/policy_recovery_events.jsonl",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "bytes": 0
+      },
+      "physics/trajectory.jsonl": {
+        "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/runs/campus_restart_v57_001/physics/trajectory.jsonl",
+        "sha256": "c4b67aed34d7da929f889914b2f43c191026c15b08a9ef490d3e2cbf9fba375c",
+        "bytes": 8672070
+      },
+      "physics/dynamic_actor_readings.jsonl": {
+        "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/runs/campus_restart_v57_001/physics/dynamic_actor_readings.jsonl",
+        "sha256": "eba3ddb9378d555ad34e9deb5383480048a604e1a1e51a11a60678872996f3dc",
+        "bytes": 4740009
+      },
+      "physics/robot_link_readings.jsonl": {
+        "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/runs/campus_restart_v57_001/physics/robot_link_readings.jsonl",
+        "sha256": "d585fe16baffe9e71c831a8ce7f32b16e0b0b0627fd762ae250b9caf6f2949d7",
+        "bytes": 30674129
+      },
+      "physics/floor_hit_audit.jsonl": {
+        "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/runs/campus_restart_v57_001/physics/floor_hit_audit.jsonl",
+        "sha256": "8bb80ddb6226a1265f778dd20ecd86eeee8a851128f55a1f93087aa74e6d8787",
+        "bytes": 347657
+      },
+      "physics/imu_readings.jsonl": {
+        "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/runs/campus_restart_v57_001/physics/imu_readings.jsonl",
+        "sha256": "04d8c811155d6172828a9c87456f2810f3aec1df2197d25efc8fe94890462402",
+        "bytes": 2363651
+      },
+      "physics/collision_audit.json": {
+        "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/runs/campus_restart_v57_001/physics/collision_audit.json",
+        "sha256": "8c8e0dfac66d73429909d0a04d27b85fcbed831bec25afd6c10331b55daa194e",
+        "bytes": 4350
+      }
+    },
+    "private_readonly_summary": {
+      "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/v57_restart_failure_private_summary.json",
+      "sha256": "e02ebbeb1f2897f74c018e48efa881239d3b71356348c66a70ccdbbf31d6a8e5",
+      "bytes": 151672
+    },
+    "private_scope_guard_review": {
+      "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/v57_safety_scope_original_readonly_review.json",
+      "sha256": "5182e820c19a777cfd44413f3975d31cea57bf64cb8c369ad8f05cca64bf95d7",
+      "bytes": 27144
+    },
+    "independent_original_safety_replay": {
+      "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/unknown_research/v57_safety_execution_scope_replay.json",
+      "sha256": "44e9d01b1ff0740f36c4a78292aeabefc713f412615213864158220bfab80eca",
+      "bytes": 4776
+    },
+    "original_safety_replay_script": {
+      "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/unknown_research/replay_v57_safety_execution_scope.py",
+      "sha256": "660662bc37924a1d9c26e3b936ba6d26a08bbcfae5a12a883d2c976a293a2a68",
+      "bytes": 4194
+    },
+    "readonly_analysis_script": {
+      "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/v57_restart_failure_readonly_summary.py",
+      "sha256": "c58882e1e0f1d5eef394c340033c6c835cd17c6751a9cfe389e593c3c8340483",
+      "bytes": 12855
+    },
+    "publication_script": {
+      "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/v57_publish_restart_failure.py",
+      "sha256": "cdbed47131d4c1460725cb5f7d491615564363818267e3e13613d9e2bba9bae6",
+      "bytes": 9184
+    },
+    "sealed_python_safety_code": {
+      "source_snapshot/nav/src/d1max_pct_scan/d1max_pct_scan/execution_handoff.py": {
+        "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v57-campus-execution-scope-restart/source_snapshot/nav/src/d1max_pct_scan/d1max_pct_scan/execution_handoff.py",
+        "sha256": "38d07dc4be21c90612890ec9dcc11e92a1a9404cd1184307a65923fed365999d",
+        "bytes": 19421
+      },
+      "application/install/d1max_pct_scan/lib/python3.10/site-packages/d1max_pct_scan/execution_handoff.py": {
+        "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v57-campus-execution-scope-restart/application/install/d1max_pct_scan/lib/python3.10/site-packages/d1max_pct_scan/execution_handoff.py",
+        "sha256": "38d07dc4be21c90612890ec9dcc11e92a1a9404cd1184307a65923fed365999d",
+        "bytes": 19421
+      },
+      "source_snapshot/nav/src/d1max_pct_scan/d1max_pct_scan/execution_safety_node.py": {
+        "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v57-campus-execution-scope-restart/source_snapshot/nav/src/d1max_pct_scan/d1max_pct_scan/execution_safety_node.py",
+        "sha256": "c8d66e021bf04afdf2f0d0fc60a81cb8c007dace4a70a8af95bbd5b7b7498383",
+        "bytes": 6344
+      }
+    },
+    "physical_response_comparison": {
+      "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/v57_v52_physics_response_readonly.json",
+      "sha256": "5769f697666b5493e13bacfd376775d1bd0c243f8d3cd98043a5076f9d8345fb",
+      "bytes": 8100
+    }
+  },
+  "limitations": [
+    "This original restart case remains FAILED; positive native geometry proofs, cancel PASS and independent speed/stop PASS do not substitute for goal arrival.",
+    "The root cause is demonstrated for the original sealed Python safety consumer by replaying preserved source-stamped event order. The repaired bookkeeping replay is not a new formal navigation pass; old failed evidence is not reclassified.",
+    "The original safety replay handles permit/ACK/grant bookkeeping only. Its 128 accepted repaired continuous grant callbacks do not reconstruct raw sensor/stationary/motion evidence or certify repaired stationary handoffs.",
+    "Proof/ACK counts are events, not continuous validity duration. Each same-handoff witness preserves original source deadlines and observer receipts; clocks are not interchanged.",
+    "Some incumbent motion/curve proofs genuinely expire, and 26 motion UNKNOWN plus six resource rejections occur. No blanket claim of continuously fresh sensing or all-space FREE is made.",
+    "All six actors are present, but the required plaza-person sampled approach/near/depart encounter was not exercised in this failed run.",
+    "The complete instantaneous full-XYZ speed audit is not a proof of future full-XYZ reachability or hardware acceptance. Sampled primitive collision audit is not continuous collision certification.",
+    "Original clean_shutdown=false, simulator exit-15 and physical_stop_confirmed=false are preserved. Independent final native full-norm true-zero STOP1.320s is a separate simulator evidence result.",
+    "No runtime/candidate/raw records, deadlines, UNKNOWN rules, collision geometry, commands, memory or sources were changed by this analysis."
+  ]
+}

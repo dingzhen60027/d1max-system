@@ -1,0 +1,987 @@
+{
+  "schema": 1,
+  "kind": "isolated_spot_reachable65_projection_fix_offline_audit",
+  "audited_at_utc": "2026-10-07T11:45:36.042140+00:00",
+  "status": "offline_projection_fix_verified_runtime_pending",
+  "offline_build_tests_verified": true,
+  "runtime_closure_complete": false,
+  "formal_navigation_pass": false,
+  "navigation_authorization": false,
+  "hardware_acceptance": false,
+  "scope": "New projection fix source, mirrored source, exported installed header, compiled SCAN consumers and root rebuild/test records. Current native XML results replace prior SCAN results; this offline audit is not an actual navigation or physical acceptance result.",
+  "prior_incomplete_offline_record": {
+    "artifact": {
+      "path": "/home/eric/wjg/d1max-system/simulation/isaacsim/verification/20261007/spot_reachable65_runtime_offline.json",
+      "sha256": "67f9285f66db1c53b3da6fa92d76b079f9de6e1c995a93ad26ffa78198a16c3c",
+      "bytes": 38129
+    },
+    "status": "incomplete_projection_cap",
+    "original_bytes_preserved": true
+  },
+  "calibration_domain": {
+    "explicit_isolated_marker_max_reachable_speed_mps": 0.65,
+    "same_hashed_record_reference_and_travel_caps_required": true,
+    "command_max_speed_mps": 0.3,
+    "command_max_yaw_radps": 0.5,
+    "reachable_yaw_cap_radps": 0.8,
+    "old_record_domains_unchanged": true,
+    "stop_geometry_timing_c1_unknown_and_lease_contracts_unchanged": true,
+    "existing_measured_query_epsilon_unchanged": true
+  },
+  "frozen_projection_files": [
+    {
+      "source": {
+        "path": "/home/eric/wjg/d1max-system/d1max_nav_ws/src/scan_planner_vendor/plan_manage/include/plan_manage/trajectory_collision.hpp",
+        "sha256": "4ff22c6293be20cad924ef56428ca88d94a19642147c470f5c05c98bf25f9b4f",
+        "bytes": 17663
+      },
+      "mirror": {
+        "path": "/home/eric/wjg/d1max-build-isaac/nav-source/src/scan_planner_vendor/plan_manage/include/plan_manage/trajectory_collision.hpp",
+        "sha256": "4ff22c6293be20cad924ef56428ca88d94a19642147c470f5c05c98bf25f9b4f",
+        "bytes": 17663
+      },
+      "expected_sha256": "4ff22c6293be20cad924ef56428ca88d94a19642147c470f5c05c98bf25f9b4f",
+      "matched": true
+    },
+    {
+      "source": {
+        "path": "/home/eric/wjg/d1max-system/d1max_nav_ws/src/scan_planner_vendor/plan_manage/test/test_trajectory_collision.cpp",
+        "sha256": "2d412eee31dd27add22a0b3eb63073bbbee2c1142925dd80448b2bbebcc003ba",
+        "bytes": 22223
+      },
+      "mirror": {
+        "path": "/home/eric/wjg/d1max-build-isaac/nav-source/src/scan_planner_vendor/plan_manage/test/test_trajectory_collision.cpp",
+        "sha256": "2d412eee31dd27add22a0b3eb63073bbbee2c1142925dd80448b2bbebcc003ba",
+        "bytes": 22223
+      },
+      "expected_sha256": "2d412eee31dd27add22a0b3eb63073bbbee2c1142925dd80448b2bbebcc003ba",
+      "matched": true
+    }
+  ],
+  "installed_projection_header": {
+    "path": "/home/eric/wjg/d1max-build-isaac/nav/install/scan_planner/include/plan_manage/trajectory_collision.hpp",
+    "sha256": "4ff22c6293be20cad924ef56428ca88d94a19642147c470f5c05c98bf25f9b4f",
+    "bytes": 17663
+  },
+  "prior_11_source_freeze": {
+    "audit": {
+      "path": "/home/eric/wjg/d1max-build-isaac/unknown_research/dot65_projection_prior_source_recheck.json",
+      "sha256": "6cc057ea3249765354d5da9fdfc542d0bff89968d35529a66ed34b900bc1e2b8",
+      "bytes": 7306
+    },
+    "all_11_frozen_source_and_mirror_hashes_match": true,
+    "frozen_source_hashes": {
+      "d1max_nav_ws/src/d1max_pct_scan/d1max_pct_scan/braking_model.py": "a5b403e56f6ce53d083853b35a31a66ea95e36d9cfd1ca26bda4618172278e64",
+      "d1max_nav_ws/src/d1max_pct_scan/test/test_braking_model.py": "bcd2bf940b2b499d193666b233d09efb20de83f469bad84d3166e36e207d6de9",
+      "d1max_nav_ws/src/d1max_planning_interfaces/include/d1max_planning_interfaces/isolated_reference_model.hpp": "423b1ade4a01671f979e08e5412aa238fde7e57ce17f55b9eaff07768b725db9",
+      "d1max_nav_ws/src/d1max_planning_interfaces/test/test_isolated_reference_model.cpp": "b0e554a47556072c78075df03637b87a73166b811544f0c4b4321eeb7cc811de",
+      "d1max_nav_ws/src/scan_planner_vendor/bspline_opt/include/bspline_opt/bspline_optimizer.h": "4eb241e4502af79d14678c30e9ef98041de4700c1299c8e6dd72a138dc58ca23",
+      "d1max_nav_ws/src/scan_planner_vendor/bspline_opt/test/test_optimizer_budget.cpp": "c587b7f95e9577f41cc33707ff29c62ad9d45e268ba51456992366a2798407b9",
+      "d1max_nav_ws/src/scan_planner_vendor/plan_manage/include/plan_manage/motion_sweep.hpp": "a1dbc1e5ea5b25d43ec264f2d12278e44940efd8da952a2308431959415a0884",
+      "d1max_nav_ws/src/scan_planner_vendor/plan_manage/src/motion_sweep.cpp": "0199408f0d3927825f8dc35d95cf377ec6658722ea17000af4a6d7b44eb87ebb",
+      "d1max_nav_ws/src/scan_planner_vendor/plan_manage/test/test_motion_sweep.cpp": "0dea5e6a8ed20b14d0c85d6e003b089d7cb58dfb7af15e93587bd794dd5bd5e8",
+      "d1max_ros2/sdk_bridge_ws/src/d1max_sdk_bridge/src/execution_acceptance.hpp": "eadb548875194aca4c29344c5865fcbeef3ea6a152ce3ddb7a4e4842d9012f0f",
+      "d1max_ros2/sdk_bridge_ws/src/d1max_sdk_bridge/src/test_execution_acceptance.cpp": "29e50b07421abf1279b9516b6566ed9d3d739d24e9f1a15fa9c6c891bf3aec7e"
+    }
+  },
+  "compiled_dependency_audit": {
+    "artifact": {
+      "path": "/home/eric/wjg/d1max-build-isaac/unknown_research/dot65_projection_dependency_audit.json",
+      "sha256": "1fefda4f34512167fec059ba5e7d59245c506e36dab1a7c75b2e7fd47ca5a60f",
+      "bytes": 21879
+    },
+    "evidence": {
+      "schema": 1,
+      "kind": "isolated_dot65_projection_native_dependency_audit",
+      "audited_at_utc": "2026-10-07T11:44:40.199208+00:00",
+      "status": "projection_dependency_verified_offline",
+      "scope": "Current projection fix only: frozen header/test source, nav-source mirror, installed header, three actual scan planner consumers, linked objects and scan binaries. Historical v47 is recorded separately and remains unchanged.",
+      "audit_is_read_only_except_this_report": true,
+      "tests_executed_by_this_audit": false,
+      "build_executed_by_this_audit": false,
+      "ros_or_kit_started_by_this_audit": false,
+      "runtime_navigation_success_claim": false,
+      "physical_acceptance": false,
+      "expected_frozen_source_sha256": "4ff22c6293be20cad924ef56428ca88d94a19642147c470f5c05c98bf25f9b4f",
+      "expected_frozen_test_sha256": "2d412eee31dd27add22a0b3eb63073bbbee2c1142925dd80448b2bbebcc003ba",
+      "source": {
+        "path": "/home/eric/wjg/d1max-system/d1max_nav_ws/src/scan_planner_vendor/plan_manage/include/plan_manage/trajectory_collision.hpp",
+        "resolved_path": "/home/eric/wjg/d1max-system/d1max_nav_ws/src/scan_planner_vendor/plan_manage/include/plan_manage/trajectory_collision.hpp",
+        "bytes": 17663,
+        "sha256": "4ff22c6293be20cad924ef56428ca88d94a19642147c470f5c05c98bf25f9b4f",
+        "mtime_ns": 1791372875052806495
+      },
+      "mirror": {
+        "path": "/home/eric/wjg/d1max-build-isaac/nav-source/src/scan_planner_vendor/plan_manage/include/plan_manage/trajectory_collision.hpp",
+        "resolved_path": "/home/eric/wjg/d1max-build-isaac/nav-source/src/scan_planner_vendor/plan_manage/include/plan_manage/trajectory_collision.hpp",
+        "bytes": 17663,
+        "sha256": "4ff22c6293be20cad924ef56428ca88d94a19642147c470f5c05c98bf25f9b4f",
+        "mtime_ns": 1791372875052806495
+      },
+      "installed_header": {
+        "path": "/home/eric/wjg/d1max-build-isaac/nav/install/scan_planner/include/plan_manage/trajectory_collision.hpp",
+        "resolved_path": "/home/eric/wjg/d1max-build-isaac/nav/install/scan_planner/include/plan_manage/trajectory_collision.hpp",
+        "bytes": 17663,
+        "sha256": "4ff22c6293be20cad924ef56428ca88d94a19642147c470f5c05c98bf25f9b4f",
+        "mtime_ns": 1791372875000000000
+      },
+      "test_source": {
+        "path": "/home/eric/wjg/d1max-system/d1max_nav_ws/src/scan_planner_vendor/plan_manage/test/test_trajectory_collision.cpp",
+        "resolved_path": "/home/eric/wjg/d1max-system/d1max_nav_ws/src/scan_planner_vendor/plan_manage/test/test_trajectory_collision.cpp",
+        "bytes": 22223,
+        "sha256": "2d412eee31dd27add22a0b3eb63073bbbee2c1142925dd80448b2bbebcc003ba",
+        "mtime_ns": 1791372875052806495
+      },
+      "test_mirror": {
+        "path": "/home/eric/wjg/d1max-build-isaac/nav-source/src/scan_planner_vendor/plan_manage/test/test_trajectory_collision.cpp",
+        "resolved_path": "/home/eric/wjg/d1max-build-isaac/nav-source/src/scan_planner_vendor/plan_manage/test/test_trajectory_collision.cpp",
+        "bytes": 22223,
+        "sha256": "2d412eee31dd27add22a0b3eb63073bbbee2c1142925dd80448b2bbebcc003ba",
+        "mtime_ns": 1791372875052806495
+      },
+      "projection_contract": {
+        "isolated_official_spot_max_mps": 0.65,
+        "default_d1_max_mps": 0.3,
+        "header_line": 154
+      },
+      "header_install_and_export": {
+        "cmake_source": {
+          "path": "/home/eric/wjg/d1max-build-isaac/nav-source/src/scan_planner_vendor/plan_manage/CMakeLists.txt",
+          "resolved_path": "/home/eric/wjg/d1max-build-isaac/nav-source/src/scan_planner_vendor/plan_manage/CMakeLists.txt",
+          "bytes": 6938,
+          "sha256": "ea45141b2d4084ba0796223b95885a84ac3d09f333ec9678b808609887054992",
+          "mtime_ns": 1791350736413604986
+        },
+        "private_target_include_line": 39,
+        "header_install_rule_line": 56,
+        "cmake_install_script": {
+          "path": "/home/eric/wjg/d1max-build-isaac/nav/build/scan_planner/cmake_install.cmake",
+          "resolved_path": "/home/eric/wjg/d1max-build-isaac/nav/build/scan_planner/cmake_install.cmake",
+          "bytes": 14085,
+          "sha256": "6c1c120736f44b3ad56d50f5dc4d03e37d9bf11284d3a55a2d11b17a5bf4e7d8",
+          "mtime_ns": 1791289860368734252
+        },
+        "directory_install_line": 146,
+        "install_manifest": {
+          "path": "/home/eric/wjg/d1max-build-isaac/nav/build/scan_planner/install_manifest.txt",
+          "resolved_path": "/home/eric/wjg/d1max-build-isaac/nav/build/scan_planner/install_manifest.txt",
+          "bytes": 4616,
+          "sha256": "ef392d2827d95285329a0a8c9c02c9f90a2a19271f7f3773404bef7282e44407",
+          "mtime_ns": 1791373035140249156
+        },
+        "header_manifest_line": 17,
+        "installed_package_config": {
+          "path": "/home/eric/wjg/d1max-build-isaac/nav/install/scan_planner/share/scan_planner/cmake/scan_plannerConfig.cmake",
+          "resolved_path": "/home/eric/wjg/d1max-build-isaac/nav/install/scan_planner/share/scan_planner/cmake/scan_plannerConfig.cmake",
+          "bytes": 1281,
+          "sha256": "1274829e66efb710b47e766d516231add2d279b9f66c70b4c7c444422e639b49",
+          "mtime_ns": 1791108879000000000
+        },
+        "config_extras_line": 39,
+        "installed_header_present": true,
+        "package_exports_include_directory": false,
+        "note": "scan_planner uses PRIVATE source include and installs its include directory; scan_plannerConfig.cmake has empty _extras and does not export an include interface. Actual compiler dependency paths use the nav-source mirror, not the installed copy."
+      },
+      "compiler_configuration": {
+        "cache": {
+          "path": "/home/eric/wjg/d1max-build-isaac/nav/build/scan_planner/CMakeCache.txt",
+          "resolved_path": "/home/eric/wjg/d1max-build-isaac/nav/build/scan_planner/CMakeCache.txt",
+          "bytes": 93843,
+          "sha256": "48f57fb8c98aab050f948b88a4056ee1ee94ba12b891c88801c976eca538e9c6",
+          "mtime_ns": 1791372238246589717
+        },
+        "build_type": "Release",
+        "build_testing": true,
+        "compiler": "/usr/bin/g++-11"
+      },
+      "consumers": [
+        {
+          "translation_unit": "planner_manager.cpp",
+          "dependency": {
+            "path": "/home/eric/wjg/d1max-build-isaac/nav/build/scan_planner/CMakeFiles/scan_planner_node.dir/src/planner_manager.cpp.o.d",
+            "resolved_path": "/home/eric/wjg/d1max-build-isaac/nav/build/scan_planner/CMakeFiles/scan_planner_node.dir/src/planner_manager.cpp.o.d",
+            "bytes": 105432,
+            "sha256": "8f4df2ce3bb749788ac75a67fcaf71db40dfbcb1d0156bf6c3186ebdfa817078",
+            "mtime_ns": 1791372993403112582
+          },
+          "object": {
+            "path": "/home/eric/wjg/d1max-build-isaac/nav/build/scan_planner/CMakeFiles/scan_planner_node.dir/src/planner_manager.cpp.o",
+            "resolved_path": "/home/eric/wjg/d1max-build-isaac/nav/build/scan_planner/CMakeFiles/scan_planner_node.dir/src/planner_manager.cpp.o",
+            "bytes": 695096,
+            "sha256": "d52c64ba108de1eeed92fa313ec098a850ecc3eb39b03c71b207adfe6c4cc007",
+            "mtime_ns": 1791372993500115240
+          },
+          "trajectory_header_dependency_line": 1719,
+          "trajectory_header_dependency_path": "/home/eric/wjg/d1max-build-isaac/nav-source/src/scan_planner_vendor/plan_manage/include/plan_manage/trajectory_collision.hpp",
+          "resolved_trajectory_header": {
+            "path": "/home/eric/wjg/d1max-build-isaac/nav-source/src/scan_planner_vendor/plan_manage/include/plan_manage/trajectory_collision.hpp",
+            "resolved_path": "/home/eric/wjg/d1max-build-isaac/nav-source/src/scan_planner_vendor/plan_manage/include/plan_manage/trajectory_collision.hpp",
+            "bytes": 17663,
+            "sha256": "4ff22c6293be20cad924ef56428ca88d94a19642147c470f5c05c98bf25f9b4f",
+            "mtime_ns": 1791372875052806495
+          },
+          "object_newer_than_frozen_header": true,
+          "object_in_actual_link_command": true
+        },
+        {
+          "translation_unit": "scan_planner_node.cpp",
+          "dependency": {
+            "path": "/home/eric/wjg/d1max-build-isaac/nav/build/scan_planner/CMakeFiles/scan_planner_node.dir/src/scan_planner_node.cpp.o.d",
+            "resolved_path": "/home/eric/wjg/d1max-build-isaac/nav/build/scan_planner/CMakeFiles/scan_planner_node.dir/src/scan_planner_node.cpp.o.d",
+            "bytes": 119257,
+            "sha256": "43eb272049bd44c77a682eb70eb7218cba1cc90a17002fdfc80b21dfebd233dd",
+            "mtime_ns": 1791372979519731352
+          },
+          "object": {
+            "path": "/home/eric/wjg/d1max-build-isaac/nav/build/scan_planner/CMakeFiles/scan_planner_node.dir/src/scan_planner_node.cpp.o",
+            "resolved_path": "/home/eric/wjg/d1max-build-isaac/nav/build/scan_planner/CMakeFiles/scan_planner_node.dir/src/scan_planner_node.cpp.o",
+            "bytes": 101680,
+            "sha256": "2a42b596ef0bd7bc686bcce396bbf0ad754e0be0665d160b417dfe92f0c57d5c",
+            "mtime_ns": 1791372979570732755
+          },
+          "trajectory_header_dependency_line": 1715,
+          "trajectory_header_dependency_path": "/home/eric/wjg/d1max-build-isaac/nav-source/src/scan_planner_vendor/plan_manage/include/plan_manage/trajectory_collision.hpp",
+          "resolved_trajectory_header": {
+            "path": "/home/eric/wjg/d1max-build-isaac/nav-source/src/scan_planner_vendor/plan_manage/include/plan_manage/trajectory_collision.hpp",
+            "resolved_path": "/home/eric/wjg/d1max-build-isaac/nav-source/src/scan_planner_vendor/plan_manage/include/plan_manage/trajectory_collision.hpp",
+            "bytes": 17663,
+            "sha256": "4ff22c6293be20cad924ef56428ca88d94a19642147c470f5c05c98bf25f9b4f",
+            "mtime_ns": 1791372875052806495
+          },
+          "object_newer_than_frozen_header": true,
+          "object_in_actual_link_command": true
+        },
+        {
+          "translation_unit": "scan_replan_fsm.cpp",
+          "dependency": {
+            "path": "/home/eric/wjg/d1max-build-isaac/nav/build/scan_planner/CMakeFiles/scan_planner_node.dir/src/scan_replan_fsm.cpp.o.d",
+            "resolved_path": "/home/eric/wjg/d1max-build-isaac/nav/build/scan_planner/CMakeFiles/scan_planner_node.dir/src/scan_replan_fsm.cpp.o.d",
+            "bytes": 119761,
+            "sha256": "e74cf59788272b78fb3402730c3cc05025a0d1ee9156d79b6a1c2dbb646671c1",
+            "mtime_ns": 1791373021663883688
+          },
+          "object": {
+            "path": "/home/eric/wjg/d1max-build-isaac/nav/build/scan_planner/CMakeFiles/scan_planner_node.dir/src/scan_replan_fsm.cpp.o",
+            "resolved_path": "/home/eric/wjg/d1max-build-isaac/nav/build/scan_planner/CMakeFiles/scan_planner_node.dir/src/scan_replan_fsm.cpp.o",
+            "bytes": 12792240,
+            "sha256": "23c92b701ec30150d313774a9cef59735c997af048edb6306636e21aa5652d06",
+            "mtime_ns": 1791373022347902272
+          },
+          "trajectory_header_dependency_line": 1717,
+          "trajectory_header_dependency_path": "/home/eric/wjg/d1max-build-isaac/nav-source/src/scan_planner_vendor/plan_manage/include/plan_manage/trajectory_collision.hpp",
+          "resolved_trajectory_header": {
+            "path": "/home/eric/wjg/d1max-build-isaac/nav-source/src/scan_planner_vendor/plan_manage/include/plan_manage/trajectory_collision.hpp",
+            "resolved_path": "/home/eric/wjg/d1max-build-isaac/nav-source/src/scan_planner_vendor/plan_manage/include/plan_manage/trajectory_collision.hpp",
+            "bytes": 17663,
+            "sha256": "4ff22c6293be20cad924ef56428ca88d94a19642147c470f5c05c98bf25f9b4f",
+            "mtime_ns": 1791372875052806495
+          },
+          "object_newer_than_frozen_header": true,
+          "object_in_actual_link_command": true
+        }
+      ],
+      "actual_link_command": {
+        "file": {
+          "path": "/home/eric/wjg/d1max-build-isaac/nav/build/scan_planner/CMakeFiles/scan_planner_node.dir/link.txt",
+          "resolved_path": "/home/eric/wjg/d1max-build-isaac/nav/build/scan_planner/CMakeFiles/scan_planner_node.dir/link.txt",
+          "bytes": 19492,
+          "sha256": "802b10c9a4b570fe41670a52f230db046419af6932a780ca8aec83c8595e36d9",
+          "mtime_ns": 1791124346151924283
+        },
+        "linked_object_paths": [
+          "/home/eric/wjg/d1max-build-isaac/nav/build/scan_planner/CMakeFiles/scan_planner_node.dir/src/motion_sweep.cpp.o",
+          "/home/eric/wjg/d1max-build-isaac/nav/build/scan_planner/CMakeFiles/scan_planner_node.dir/src/scan_planner_node.cpp.o",
+          "/home/eric/wjg/d1max-build-isaac/nav/build/scan_planner/CMakeFiles/scan_planner_node.dir/src/scan_replan_fsm.cpp.o",
+          "/home/eric/wjg/d1max-build-isaac/nav/build/scan_planner/CMakeFiles/scan_planner_node.dir/src/planner_manager.cpp.o"
+        ]
+      },
+      "scan_binary_build": {
+        "path": "/home/eric/wjg/d1max-build-isaac/nav/build/scan_planner/scan_planner_node",
+        "resolved_path": "/home/eric/wjg/d1max-build-isaac/nav/build/scan_planner/scan_planner_node",
+        "bytes": 9047680,
+        "sha256": "f5b8841074becb19871c825fdd2bd876ba52606fa7e233e90ff050bc68e9abd8",
+        "mtime_ns": 1791373023390930603,
+        "elf_build_id": "b73466888c443ccdf00a9e689cc5d143ea018edf",
+        "rpath_or_runpath": [
+          "0x000000000000001d (RUNPATH)            Library runpath: [/opt/ros/humble/lib:/home/eric/wjg/d1max-build-isaac/nav/install/d1max_planning_interfaces/lib:/home/eric/wjg/d1max-build-isaac/nav/install/scan_planner_msgs/lib:]"
+        ]
+      },
+      "scan_binary_installed": {
+        "path": "/home/eric/wjg/d1max-build-isaac/nav/install/scan_planner/lib/scan_planner/scan_planner_node",
+        "resolved_path": "/home/eric/wjg/d1max-build-isaac/nav/install/scan_planner/lib/scan_planner/scan_planner_node",
+        "bytes": 9047680,
+        "sha256": "e1d01483651d6e0836f61c8cfcb6cadd3df4194eb0de052e6e752e3277fed002",
+        "mtime_ns": 1791373023000000000,
+        "elf_build_id": "b73466888c443ccdf00a9e689cc5d143ea018edf",
+        "rpath_or_runpath": []
+      },
+      "build_install_difference": {
+        "same_elf_build_id": true,
+        "sha256_equal": false,
+        "install_script": {
+          "path": "/home/eric/wjg/d1max-build-isaac/nav/build/scan_planner/cmake_install.cmake",
+          "resolved_path": "/home/eric/wjg/d1max-build-isaac/nav/build/scan_planner/cmake_install.cmake",
+          "bytes": 14085,
+          "sha256": "6c1c120736f44b3ad56d50f5dc4d03e37d9bf11284d3a55a2d11b17a5bf4e7d8",
+          "mtime_ns": 1791289860368734252
+        },
+        "rpath_change_lines": [
+          55,
+          56,
+          57,
+          58
+        ],
+        "note": "Build RUNPATH is cleared by the recorded CMake RPATH_CHANGE; equal ELF BuildIDs and different SHA256 reflect this install transformation."
+      },
+      "test_compile_evidence": {
+        "dependency": {
+          "path": "/home/eric/wjg/d1max-build-isaac/nav/build/scan_planner/CMakeFiles/test_trajectory_collision.dir/test/test_trajectory_collision.cpp.o.d",
+          "resolved_path": "/home/eric/wjg/d1max-build-isaac/nav/build/scan_planner/CMakeFiles/test_trajectory_collision.dir/test/test_trajectory_collision.cpp.o.d",
+          "bytes": 33303,
+          "sha256": "2df28a8aa8089f4186d82a57292d4b4f2d5253073a98a913997fac5b5101b516",
+          "mtime_ns": 1791372999919290956
+        },
+        "object": {
+          "path": "/home/eric/wjg/d1max-build-isaac/nav/build/scan_planner/CMakeFiles/test_trajectory_collision.dir/test/test_trajectory_collision.cpp.o",
+          "resolved_path": "/home/eric/wjg/d1max-build-isaac/nav/build/scan_planner/CMakeFiles/test_trajectory_collision.dir/test/test_trajectory_collision.cpp.o",
+          "bytes": 817728,
+          "sha256": "e6cbf2dd6fad7e5d0417666d9008648daf52356efc2813c0a9494e173c74fbe0",
+          "mtime_ns": 1791372999981292652
+        },
+        "binary": {
+          "path": "/home/eric/wjg/d1max-build-isaac/nav/build/scan_planner/test_trajectory_collision",
+          "resolved_path": "/home/eric/wjg/d1max-build-isaac/nav/build/scan_planner/test_trajectory_collision",
+          "bytes": 1014456,
+          "sha256": "e8061e9706b259ccc8640404188a6702e94e67f240ffc8f07370291438ca4133",
+          "mtime_ns": 1791373003651392961,
+          "elf_build_id": "8de483c10b2d1a99ae447d7999265423bb9bea9b",
+          "rpath_or_runpath": [
+            "0x000000000000001d (RUNPATH)            Library runpath: [/opt/ros/humble/lib:/home/eric/wjg/d1max-build-isaac/nav/install/d1max_planning_interfaces/lib:/home/eric/wjg/d1max-build-isaac/nav/install/scan_planner_msgs/lib]"
+          ]
+        }
+      },
+      "existing_build_and_test_evidence": {
+        "build_log": {
+          "path": "/home/eric/wjg/d1max-build-isaac/dot65_projection_rebuild.log",
+          "resolved_path": "/home/eric/wjg/d1max-build-isaac/dot65_projection_rebuild.log",
+          "bytes": 23005,
+          "sha256": "798465868f1a9530326b25e448b60b455cdda58c6a5748abbc60b3fcbf55cc43",
+          "mtime_ns": 1791373035391255950
+        },
+        "build_finished_packages": [
+          "scan_planner",
+          "d1max_scan_planner"
+        ],
+        "ctest_log": {
+          "path": "/home/eric/wjg/d1max-build-isaac/dot65_projection_scan_ctest.log",
+          "resolved_path": "/home/eric/wjg/d1max-build-isaac/dot65_projection_scan_ctest.log",
+          "bytes": 2439,
+          "sha256": "94317f555c0de0fa4529977910231b19066c1ff973afb8926e89a53ebc657eda",
+          "mtime_ns": 1791373041497421070
+        },
+        "reported_ctest_tests": 18,
+        "reported_ctest_failed": 0,
+        "reported_ctest_passed_percent": 100,
+        "executed_by_this_audit": false,
+        "no_ros_launch_or_navigation_success_inference": true
+      },
+      "prior_native_audit_preserved": {
+        "path": "/home/eric/wjg/d1max-build-isaac/unknown_research/dot65_native_dependency_audit.json",
+        "resolved_path": "/home/eric/wjg/d1max-build-isaac/unknown_research/dot65_native_dependency_audit.json",
+        "bytes": 60545,
+        "sha256": "06c44c4116e68aa3b982b7d936cafa8951ff4d39222fb8ba1a4c51bb6bc45cd7",
+        "mtime_ns": 1791372943770741994
+      },
+      "historical_v47": {
+        "session": {
+          "path": "/home/eric/wjg/d1max-system/campus_crossing_v47_001/session.json",
+          "resolved_path": "/home/eric/wjg/d1max-system/campus_crossing_v47_001/session.json",
+          "bytes": 14354,
+          "sha256": "b5f012777225834bc1032ae99ad6aa2c60ca92546f1eea77ee07c690fb939f25",
+          "mtime_ns": 1791372588513112312
+        },
+        "session_id": "7e63695d7109427594cc611e3e11e19f",
+        "transport_mode": "isolated_mock",
+        "physical_acceptance": false,
+        "runtime_bundle": {
+          "path": "/home/eric/wjg/d1max-system/campus_crossing_v47_001/runtime_bundle.json",
+          "resolved_path": "/home/eric/wjg/d1max-system/campus_crossing_v47_001/runtime_bundle.json",
+          "bytes": 744886,
+          "sha256": "fe418f39211509ee41f8c6f2dac37a3de5502dc90a23b3246fb4d602609c067b",
+          "mtime_ns": 1791372594500306852
+        },
+        "scan_command_binary_path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v47-campus-all-actors-response/application/install/scan_planner/lib/scan_planner/scan_planner_node",
+        "scan_binary": {
+          "path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v47-campus-all-actors-response/application/install/scan_planner/lib/scan_planner/scan_planner_node",
+          "resolved_path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v47-campus-all-actors-response/application/install/scan_planner/lib/scan_planner/scan_planner_node",
+          "bytes": 9047680,
+          "sha256": "8cbd7a28636b2f4e85e1d2cd9e98615632f5500baa0a5fcb5a99ea85bcb3823d",
+          "mtime_ns": 1791372298000000000,
+          "elf_build_id": "6f5e8d5fb87521212bbeda725ab328b34d9d6f11",
+          "rpath_or_runpath": []
+        },
+        "runtime_bundle_expected_scan_binary_sha256": "8cbd7a28636b2f4e85e1d2cd9e98615632f5500baa0a5fcb5a99ea85bcb3823d",
+        "runtime_bundle_scan_binary_matches": true,
+        "candidate_source_header": {
+          "path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v47-campus-all-actors-response/source_snapshot/nav/src/scan_planner_vendor/plan_manage/include/plan_manage/trajectory_collision.hpp",
+          "resolved_path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v47-campus-all-actors-response/source_snapshot/nav/src/scan_planner_vendor/plan_manage/include/plan_manage/trajectory_collision.hpp",
+          "bytes": 17662,
+          "sha256": "69539f37c7d22557d4861655ecfdebc1d414ff998758f502d218b07cf1fb6d15",
+          "mtime_ns": 1791296443576517572
+        },
+        "candidate_installed_header": {
+          "path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v47-campus-all-actors-response/application/install/scan_planner/include/plan_manage/trajectory_collision.hpp",
+          "resolved_path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v47-campus-all-actors-response/application/install/scan_planner/include/plan_manage/trajectory_collision.hpp",
+          "bytes": 17662,
+          "sha256": "69539f37c7d22557d4861655ecfdebc1d414ff998758f502d218b07cf1fb6d15",
+          "mtime_ns": 1791296443000000000
+        },
+        "isolated_projection_cap_mps": 0.6,
+        "header_line": 154,
+        "public_original_failure_report": {
+          "path": "/home/eric/wjg/d1max-system/simulation/isaacsim/verification/20261007/campus_crossing_v47_projection_domain_failure.json",
+          "resolved_path": "/home/eric/wjg/d1max-system/simulation/isaacsim/verification/20261007/campus_crossing_v47_projection_domain_failure.json",
+          "bytes": 39762,
+          "sha256": "3e37c795e4ff30a9cf8b4aa25f7a95c0069b5e542d75aea1072c101e62a85f7b",
+          "mtime_ns": 1791373174039940898
+        },
+        "original_failure_status": "FAILED",
+        "confirmed_original_contract_mismatch": true,
+        "historical_evidence_not_repaired_or_reinterpreted_as_success": true
+      },
+      "checks": {
+        "source_mirror_installed_header_match_frozen_sha": true,
+        "source_mirror_test_match_frozen_sha": true,
+        "all_three_consumers_resolve_frozen_mirror": true,
+        "all_three_objects_newer_than_header_and_linked": true,
+        "build_binary_newer_than_all_three_objects": true,
+        "build_and_installed_binary_same_build_id": true,
+        "installed_header_listed_in_actual_install_manifest": true,
+        "installed_header_has_new_explicit_projection_limit": true,
+        "test_object_newer_than_frozen_source": true,
+        "old_native_audit_preserved": true,
+        "existing_scan_ctest_log_reports_18_passed": true
+      },
+      "verified": true,
+      "evidence_boundary": "This separate audit verifies current offline projection source-to-dependency-to-binary closure and records the existing 18 scan CTest log. It does not execute tests/builds, validate a new Kit navigation run, prove ROS launch behavior, or claim physical acceptance. Historical v47 sealed 0.6 projection source and its runtime-selected binary remain separate original failure evidence; prior audit/public files are unchanged."
+    }
+  },
+  "build_log": {
+    "path": "/home/eric/wjg/d1max-build-isaac/dot65_projection_rebuild.log",
+    "sha256": "798465868f1a9530326b25e448b60b455cdda58c6a5748abbc60b3fcbf55cc43",
+    "bytes": 23005
+  },
+  "scan_ctest_log": {
+    "path": "/home/eric/wjg/d1max-build-isaac/dot65_projection_scan_ctest.log",
+    "sha256": "94317f555c0de0fa4529977910231b19066c1ff973afb8926e89a53ebc657eda",
+    "bytes": 2439
+  },
+  "scan_ctest_xml": {
+    "path": "/home/eric/wjg/d1max-build-isaac/dot65_projection_scan_ctest.xml",
+    "sha256": "ba43f9e887c5222a9ae1465c4e72cf73cabb5e810ca91dc5acdba4019f5da45e",
+    "bytes": 62360
+  },
+  "regression_contract": {
+    "new_cases": [
+      "IsolatedProjectionAcceptsExactCalibratedCapWithoutChangingDefault",
+      "OldProjectionRecordRetainsItsOwnTravelDomainAfterCalibrationCapChange"
+    ],
+    "actual_projection_gtest": {
+      "path": "/home/eric/wjg/d1max-build-isaac/nav/build/scan_planner/test_results/scan_planner/test_trajectory_collision.gtest.xml",
+      "sha256": "c8e1a189d85daac27545b9fa60448d80e88c216e33a79e0a52ef58ba5e2c043d",
+      "bytes": 5679,
+      "tests": 27,
+      "failures": 0,
+      "errors": 0,
+      "disabled": 0,
+      "skipped": 0,
+      "case_names": [
+        "OriginalUnixNanosecondsSurviveBodyCopyAndFreshnessBoundaries",
+        "WholeCurveProofDoesNotRenewOriginalUnixBodyFreshness",
+        "TraceCapturesOriginalFirstNonFreeActualBodyQuery",
+        "TracePreservesQuerySequenceAndCapturesLateUnknown",
+        "TraceCapturesPreviewRotationUnknownWithoutSkippingSweep",
+        "TraceCannotInventWitnessForClearBudgetOrStaleSource",
+        "PredecessorFullCurveIncludesFinalThirdAndEndpoint",
+        "MeasuredSuffixSkipsOnlyIrrelevantPrefixAndRetainsReverseSweep",
+        "MeasuredSuffixAllowsActualShortRetreatNotFloorOrRemoteJump",
+        "ExplicitIsolatedPlantBoundDoesNotChangeDefaultOrReverseSweep",
+        "IsolatedProjectionAcceptsExactCalibratedCapWithoutChangingDefault",
+        "OldProjectionRecordRetainsItsOwnTravelDomainAfterCalibrationCapChange",
+        "CommittedTrackingRequiresEveryActualConnectorFootprintNotCandidateTolerance",
+        "UnknownAndOutsideCannotProduceContinuityProof",
+        "QueryBudgetNeverConvertsPartialCheckToSuccess",
+        "WallBudgetNeverConvertsPartialCheckToSuccess",
+        "MissingStaleFutureWrongFrameAndInvalidOrientationFailClosed",
+        "CallbackSourceLeaseCannotBeRenewedByRepeatedOrDelayedReceipt",
+        "InitialMeasuredRotationSharesQueryBudgetAndRejectsEveryNonFreeState",
+        "ShortestSignedTurnCrossesPiNotTheOppositeArc",
+        "PredecessorUsesMeasuredCurrentTimeNotHistoricalStart",
+        "StationaryCurveUsesMeasuredYawInsteadOfInventingZeroHeading",
+        "MeasuredProgressKeepsOldCurveAfterTwentyCentimeterMove",
+        "PreviewProgressDoesNotSkipCollisionUnknownOrRotationProof",
+        "StationaryPreviewCannotAdvanceByRepeatedChecks",
+        "MeasuredProgressCannotRewindTeleportOrJumpFloors",
+        "SpatialCrossingDoesNotSelectDistantLaterBranch"
+      ],
+      "package": "scan_planner"
+    },
+    "exact_new_explicit_spot_max_speed_mps": 0.65,
+    "nextafter_above_new_cap_rejected": true,
+    "default_unmarked_max_speed_mps": 0.3,
+    "nextafter_above_default_rejected": true,
+    "old_record_retains_own_travel_cap": true,
+    "old_record_example": {
+      "measured_motion_m": 0.27,
+      "source_dt_s": 0.4,
+      "old_record_max_speed_mps": 0.6,
+      "new_record_max_speed_mps": 0.65,
+      "unchanged_search_padding_m": 0.0125,
+      "old_record_search_budget_m": 0.2525,
+      "new_record_search_budget_m": 0.2725,
+      "unchanged_candidate_residual_limit_m": 0.0125,
+      "old_record_result": "rejected",
+      "new_record_result": "accepted"
+    },
+    "geometry_source_age_reverse_margin_and_stop_bounds_changed": false
+  },
+  "tests": {
+    "current_xml_audit": {
+      "path": "/home/eric/wjg/d1max-build-isaac/unknown_research/dot65_projection_ctest_xml_audit.json",
+      "sha256": "bfa2985a945ac1ef168cb509f92ecf552b63b10dd9bdb110c9c932f00c4c4153",
+      "bytes": 97920
+    },
+    "ctest_wrapper_targets": 59,
+    "ctest_wrapper_failures": 0,
+    "gtest_targets": 38,
+    "gtest_cases": 990,
+    "gtest_failures": 0,
+    "gtest_errors": 0,
+    "gtest_disabled": 0,
+    "gtest_by_package": {
+      "plan_env": {
+        "targets": 8,
+        "cases": 266,
+        "failures": 0,
+        "errors": 0,
+        "disabled": 0,
+        "skipped": 0
+      },
+      "d1max_planning_interfaces": {
+        "targets": 1,
+        "cases": 15,
+        "failures": 0,
+        "errors": 0,
+        "disabled": 0,
+        "skipped": 0
+      },
+      "d1max_navigation_bt": {
+        "targets": 5,
+        "cases": 247,
+        "failures": 0,
+        "errors": 0,
+        "disabled": 0,
+        "skipped": 0
+      },
+      "bspline_opt": {
+        "targets": 4,
+        "cases": 38,
+        "failures": 0,
+        "errors": 0,
+        "disabled": 0,
+        "skipped": 0
+      },
+      "scan_planner": {
+        "targets": 11,
+        "cases": 186,
+        "failures": 0,
+        "errors": 0,
+        "disabled": 0,
+        "skipped": 0
+      },
+      "d1max_motion_safety": {
+        "targets": 1,
+        "cases": 6,
+        "failures": 0,
+        "errors": 0,
+        "disabled": 0,
+        "skipped": 0
+      },
+      "d1max_trajectory_tracker": {
+        "targets": 4,
+        "cases": 204,
+        "failures": 0,
+        "errors": 0,
+        "disabled": 0,
+        "skipped": 0
+      },
+      "path_searching": {
+        "targets": 4,
+        "cases": 28,
+        "failures": 0,
+        "errors": 0,
+        "disabled": 0,
+        "skipped": 0
+      }
+    },
+    "no_ros_harness_targets": 5,
+    "no_ros_checks": 170,
+    "no_ros_check_failures": 0,
+    "sdk_assert_executable_targets": 14,
+    "sdk_inner_assertion_case_count": "not exported; executable targets are not individual assertion counts",
+    "installed_python_cases": 67,
+    "installed_python_failures": 0,
+    "ctest_xml": [
+      {
+        "path": "/home/eric/wjg/d1max-build-isaac/dot65_bspline_opt_ctest.xml",
+        "sha256": "f75da90f8b495f4662861aad50245086b7be4575476d0267687b80b6c4ce93db",
+        "bytes": 11964,
+        "failures": 0,
+        "errors": 0,
+        "disabled": 0,
+        "skipped": 0,
+        "case_names": [
+          "test_optimizer_budget",
+          "test_uniform_bspline",
+          "test_reference_path",
+          "test_whole_spline_collision"
+        ],
+        "wrapper_tests": 4
+      },
+      {
+        "path": "/home/eric/wjg/d1max-build-isaac/dot65_d1max_motion_safety_ctest.xml",
+        "sha256": "145c9f4944a88f8c1a0451c2c5695fb89e3b0e5aab22fac586031355847de268",
+        "bytes": 8581,
+        "failures": 0,
+        "errors": 0,
+        "disabled": 0,
+        "skipped": 0,
+        "case_names": [
+          "test_continuous_collision_monitor"
+        ],
+        "wrapper_tests": 1
+      },
+      {
+        "path": "/home/eric/wjg/d1max-build-isaac/dot65_d1max_navigation_bt_ctest.xml",
+        "sha256": "3ad9fc7e749fc3a7ed0b4d6aed88d7123b0901af87ebeb22d85521a7f73be8fc",
+        "bytes": 52324,
+        "failures": 0,
+        "errors": 0,
+        "disabled": 0,
+        "skipped": 0,
+        "case_names": [
+          "test_navigation_bt",
+          "test_navigation_bt_runtime",
+          "test_navigation_task_contract",
+          "test_initial_pose_transaction",
+          "test_execution_owner"
+        ],
+        "wrapper_tests": 5
+      },
+      {
+        "path": "/home/eric/wjg/d1max-build-isaac/dot65_d1max_planning_interfaces_ctest.xml",
+        "sha256": "a4e5d0bc13b072a43b6e2a80b7d7532df2c5bbd4bc7d8034617e0a931fa13805",
+        "bytes": 4387,
+        "failures": 0,
+        "errors": 0,
+        "disabled": 0,
+        "skipped": 0,
+        "case_names": [
+          "test_isolated_reference_model"
+        ],
+        "wrapper_tests": 1
+      },
+      {
+        "path": "/home/eric/wjg/d1max-build-isaac/dot65_d1max_trajectory_tracker_ctest.xml",
+        "sha256": "2bf0c7a10f7254d0e06a771c6fc709544a578551eec8eb696ce4ff57eb04f32e",
+        "bytes": 43787,
+        "failures": 0,
+        "errors": 0,
+        "disabled": 0,
+        "skipped": 0,
+        "case_names": [
+          "test_fixed_bspline_sampler",
+          "test_tracker_core",
+          "test_tracker_v2",
+          "test_navigation_state_contract"
+        ],
+        "wrapper_tests": 4
+      },
+      {
+        "path": "/home/eric/wjg/d1max-build-isaac/dot65_path_searching_ctest.xml",
+        "sha256": "92488260b47059c167e6fe8041e5d1c05080925eff360acb742aeba9a3279c54",
+        "bytes": 32269,
+        "failures": 0,
+        "errors": 0,
+        "disabled": 0,
+        "skipped": 0,
+        "case_names": [
+          "test_search_lattice",
+          "test_search_endpoint",
+          "test_internal_search_anchor",
+          "test_reference_lattice_connector"
+        ],
+        "wrapper_tests": 4
+      },
+      {
+        "path": "/home/eric/wjg/d1max-build-isaac/dot65_plan_env_ctest.xml",
+        "sha256": "01a18fc2dd84d83b093ca4108b1b317ed0b97e19c36847b57b43a1bb6788422d",
+        "bytes": 63387,
+        "failures": 0,
+        "errors": 0,
+        "disabled": 0,
+        "skipped": 0,
+        "case_names": [
+          "test_solve_budget",
+          "test_voxel_collision",
+          "test_near_field_diagnostics",
+          "test_map_context",
+          "test_projected_rays",
+          "test_static_occupancy_prior",
+          "test_dynamic_occupancy_oracle",
+          "test_official_resolution"
+        ],
+        "wrapper_tests": 8
+      },
+      {
+        "path": "/home/eric/wjg/d1max-build-isaac/dot65_projection_scan_ctest.xml",
+        "sha256": "ba43f9e887c5222a9ae1465c4e72cf73cabb5e810ca91dc5acdba4019f5da45e",
+        "bytes": 62360,
+        "failures": 0,
+        "errors": 0,
+        "disabled": 0,
+        "skipped": 0,
+        "case_names": [
+          "test_async_worker_no_ros",
+          "test_replan_handoff_no_ros",
+          "test_replan_recovery_no_ros",
+          "test_reference_callback_no_ros",
+          "test_preview_revalidation_no_ros",
+          "test_input_contract",
+          "test_local_plan_debug",
+          "test_collision_reference",
+          "test_trajectory_collision",
+          "test_initial_yaw_native",
+          "test_candidate_adoption",
+          "test_low_speed_entry_fit",
+          "test_execution_ledger",
+          "test_motion_sweep",
+          "test_reference_target",
+          "test_visible_reference_target",
+          "test_test_planner_startup.py",
+          "test_test_waypoint_parameters.py"
+        ],
+        "wrapper_tests": 18
+      },
+      {
+        "path": "/home/eric/wjg/d1max-build-isaac/dot65_sdk_ctest.xml",
+        "sha256": "965e3596ec4277118229af4ca850976dae3d0c6be74e81dd3ed9089537f46fe2",
+        "bytes": 3594,
+        "failures": 0,
+        "errors": 0,
+        "disabled": 0,
+        "skipped": 0,
+        "case_names": [
+          "test_mc_report",
+          "test_joint_report",
+          "test_monitor_estop",
+          "test_sdk_session",
+          "test_sdk_ownership",
+          "test_navigation_motion",
+          "test_navigation_dispatch",
+          "test_execution_shutdown",
+          "test_execution_scheduler",
+          "test_execution_transport",
+          "test_execution_handoff",
+          "test_execution_publication",
+          "test_execution_mock_telemetry",
+          "test_execution_acceptance"
+        ],
+        "wrapper_tests": 14
+      }
+    ],
+    "empty_launch_wrappers": [
+      {
+        "name": "test_test_planner_startup.py",
+        "actual_unittest_cases": 0,
+        "wrapper_return_code_zero": true,
+        "observed_process_exit_code": -2,
+        "ctest_xml": "/home/eric/wjg/d1max-build-isaac/dot65_projection_scan_ctest.xml",
+        "zero_case_result_xml": {
+          "path": "/home/eric/wjg/d1max-build-isaac/nav/build/scan_planner/test_results/scan_planner/test_test_planner_startup.py.xunit.xml",
+          "sha256": "49d09059da668bed187b8059ea948d2843e876c289c034628ec04ff15c8d69a2",
+          "bytes": 270,
+          "tests": 0,
+          "failures": 0,
+          "errors": 0,
+          "disabled": 0,
+          "skipped": 0,
+          "case_names": []
+        },
+        "scope": "No launch function assertion coverage; wrapper pass only."
+      },
+      {
+        "name": "test_test_waypoint_parameters.py",
+        "actual_unittest_cases": 0,
+        "wrapper_return_code_zero": true,
+        "observed_process_exit_code": -2,
+        "ctest_xml": "/home/eric/wjg/d1max-build-isaac/dot65_projection_scan_ctest.xml",
+        "zero_case_result_xml": {
+          "path": "/home/eric/wjg/d1max-build-isaac/nav/build/scan_planner/test_results/scan_planner/test_test_waypoint_parameters.py.xunit.xml",
+          "sha256": "5a48991bfa1511b1ffc524cad57f7c6d3149032f00b13e90fca6bb5f92c5a39c",
+          "bytes": 278,
+          "tests": 0,
+          "failures": 0,
+          "errors": 0,
+          "disabled": 0,
+          "skipped": 0,
+          "case_names": []
+        },
+        "scope": "No launch function assertion coverage; wrapper pass only."
+      }
+    ],
+    "current_scan_replaces_prior_scan_results": true,
+    "count_scope": "Current XML files counted once. Scan uses projection rebuild results; prior scan tests are not added again. CTest wrappers and inner GTest/noROS checks overlap and are not additive."
+  },
+  "installed_python": {
+    "current_module": {
+      "path": "/home/eric/wjg/d1max-build-isaac/nav/install/d1max_pct_scan/lib/python3.10/site-packages/d1max_pct_scan/braking_model.py",
+      "sha256": "a5b403e56f6ce53d083853b35a31a66ea95e36d9cfd1ca26bda4618172278e64",
+      "bytes": 6956
+    },
+    "source_equal": true,
+    "prior_actual_import_verification": {
+      "path": "/home/eric/wjg/d1max-build-isaac/dot65_installed_python_import.json",
+      "sha256": "f89e52dcdeb56639c92184cec256f09140793840642dfeaa928404a23968d0c1",
+      "bytes": 434
+    },
+    "tests": {
+      "path": "/home/eric/wjg/d1max-build-isaac/dot65_installed_python_ctest.xml",
+      "sha256": "c96325d0ccb83676a32f3b6e1ca443e99a0e30e6daf7e673ffdcf3a0dfd1b487",
+      "bytes": 10530,
+      "tests": 67,
+      "failures": 0,
+      "errors": 0,
+      "disabled": 0,
+      "skipped": 0,
+      "case_names": [
+        "test_fixture_is_file_bound_and_never_live_acceptance",
+        "test_missing_nonfinite_or_unlimited_model_never_authorizes[stopping_yaw_rad-0.0]",
+        "test_missing_nonfinite_or_unlimited_model_never_authorizes[tracking_error_bound_m-None]",
+        "test_missing_nonfinite_or_unlimited_model_never_authorizes[reaction_bound_s-nan]",
+        "test_missing_nonfinite_or_unlimited_model_never_authorizes[max_speed_mps-0.31]",
+        "test_missing_nonfinite_or_unlimited_model_never_authorizes[tracking_error_bound_m-0.27]",
+        "test_missing_nonfinite_or_unlimited_model_never_authorizes[stopping_yaw_rad-1.01]",
+        "test_missing_nonfinite_or_unlimited_model_never_authorizes[heading_error_bound_rad-0.51]",
+        "test_no_expiry_or_reaction_budget_guessing",
+        "test_stationary_thresholds_are_bound_to_measured_noise_and_mc_rate",
+        "test_explicit_xyz_domain_up_to_platform_reach_does_not_change_command_or_braking[0.508039]",
+        "test_explicit_xyz_domain_up_to_platform_reach_does_not_change_command_or_braking[0.532]",
+        "test_explicit_xyz_domain_up_to_platform_reach_does_not_change_command_or_braking[0.6]",
+        "test_absent_xyz_marker_preserves_legacy_without_inferring_platform_reach",
+        "test_xyz_reference_model_numbers_exact_marker_and_evidence_are_required[reference_max_speed_mps-0.600001]",
+        "test_xyz_reference_model_numbers_exact_marker_and_evidence_are_required[measured_travel_max_speed_mps-0.600001]",
+        "test_xyz_reference_model_numbers_exact_marker_and_evidence_are_required[observed_max_full_xyz_speed_mps-0.600001]",
+        "test_xyz_reference_model_numbers_exact_marker_and_evidence_are_required[reference_max_speed_mps-0.0]",
+        "test_xyz_reference_model_numbers_exact_marker_and_evidence_are_required[measured_travel_max_speed_mps-True]",
+        "test_xyz_reference_model_numbers_exact_marker_and_evidence_are_required[observed_max_full_xyz_speed_mps-nan]",
+        "test_xyz_reference_model_numbers_exact_marker_and_evidence_are_required[reference_max_speed_mps-0.6]",
+        "test_xyz_reference_model_numbers_exact_marker_and_evidence_are_required[schema-1.0]",
+        "test_xyz_reference_model_numbers_exact_marker_and_evidence_are_required[kind-official_go2_physx]",
+        "test_xyz_reference_model_numbers_exact_marker_and_evidence_are_required[source_scope-live]",
+        "test_xyz_reference_model_numbers_exact_marker_and_evidence_are_required[evidence_sha256-BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB]",
+        "test_xyz_reference_model_numbers_exact_marker_and_evidence_are_required[extra-True]",
+        "test_incomplete_xyz_model_never_falls_back_to_legacy[reference_max_speed_mps]",
+        "test_incomplete_xyz_model_never_falls_back_to_legacy[measured_travel_max_speed_mps]",
+        "test_incomplete_xyz_model_never_falls_back_to_legacy[observed_max_full_xyz_speed_mps]",
+        "test_incomplete_xyz_model_never_falls_back_to_legacy[evidence_sha256]",
+        "test_incomplete_xyz_model_never_falls_back_to_legacy[schema]",
+        "test_incomplete_xyz_model_never_falls_back_to_legacy[kind]",
+        "test_incomplete_xyz_model_never_falls_back_to_legacy[source_scope]",
+        "test_xyz_domains_must_fit_same_hashed_reach_and_both_observation_and_command",
+        "test_calibrated_dot65_record_is_exact_hashed_isolated_domain[0.616161]",
+        "test_calibrated_dot65_record_is_exact_hashed_isolated_domain[0.65]",
+        "test_calibrated_dot65_reference_cap_remains_strict[reference_max_speed_mps]",
+        "test_calibrated_dot65_reference_cap_remains_strict[measured_travel_max_speed_mps]",
+        "test_calibrated_dot65_reference_cap_remains_strict[observed_max_full_xyz_speed_mps]",
+        "test_old_dot60_record_cannot_accept_new_observation_or_reuse_old_hash",
+        "test_calibrated_dot65_marker_measurement_and_evidence_guards[reach_over_cap]",
+        "test_calibrated_dot65_marker_measurement_and_evidence_guards[measurement_mismatch]",
+        "test_calibrated_dot65_marker_measurement_and_evidence_guards[invalid_evidence]",
+        "test_calibrated_dot65_marker_measurement_and_evidence_guards[fixture]",
+        "test_calibrated_dot65_marker_measurement_and_evidence_guards[transport]",
+        "test_xyz_model_requires_original_platform_and_exact_isolated_fixture[platform]",
+        "test_xyz_model_requires_original_platform_and_exact_isolated_fixture[fixture]",
+        "test_xyz_model_requires_original_platform_and_exact_isolated_fixture[transport]",
+        "test_xyz_model_requires_original_platform_and_exact_isolated_fixture[schema_float]",
+        "test_spot_actual_motion_is_separate_from_command_authority",
+        "test_new_reference_marker_alone_cannot_authorize_live",
+        "test_spot_model_identity_numeric_bounds_and_measurement_match_are_required[schema-True]",
+        "test_spot_model_identity_numeric_bounds_and_measurement_match_are_required[schema-1.0]",
+        "test_spot_model_identity_numeric_bounds_and_measurement_match_are_required[schema-2]",
+        "test_spot_model_identity_numeric_bounds_and_measurement_match_are_required[kind-official_go2_physx]",
+        "test_spot_model_identity_numeric_bounds_and_measurement_match_are_required[source_scope-live]",
+        "test_spot_model_identity_numeric_bounds_and_measurement_match_are_required[command_max_speed_mps-0.301]",
+        "test_spot_model_identity_numeric_bounds_and_measurement_match_are_required[command_max_yaw_radps-0.501]",
+        "test_spot_model_identity_numeric_bounds_and_measurement_match_are_required[command_max_speed_mps-0.0]",
+        "test_spot_model_identity_numeric_bounds_and_measurement_match_are_required[command_max_yaw_radps-True]",
+        "test_spot_model_identity_numeric_bounds_and_measurement_match_are_required[reachable_max_speed_mps-0.601]",
+        "test_spot_model_identity_numeric_bounds_and_measurement_match_are_required[reachable_max_yaw_radps-0.801]",
+        "test_spot_model_identity_numeric_bounds_and_measurement_match_are_required[reachable_max_speed_mps-0.59]",
+        "test_spot_model_identity_numeric_bounds_and_measurement_match_are_required[reachable_max_yaw_radps-0.79]",
+        "test_spot_model_identity_numeric_bounds_and_measurement_match_are_required[reachable_max_speed_mps-nan]",
+        "test_spot_model_identity_numeric_bounds_and_measurement_match_are_required[reachable_max_yaw_radps-0.8]",
+        "test_spot_model_cannot_relax_stop_timing_or_legacy_default"
+      ]
+    }
+  },
+  "production_selector": {
+    "path": "/home/eric/wjg/d1max-system/d1max_nav_ws/deploy/single_floor_release.json",
+    "sha256": "6aeb6dd5b57a97de146fbf36260ad78210678f0befe6e1eee0be5f6524085f4a",
+    "bytes": 620,
+    "expected_sha256": "6aeb6dd5b57a97de146fbf36260ad78210678f0befe6e1eee0be5f6524085f4a",
+    "unchanged": true
+  },
+  "preserved_v47_failure": {
+    "public_failure": {
+      "path": "/home/eric/wjg/d1max-system/simulation/isaacsim/verification/20261007/campus_crossing_v47_projection_domain_failure.json",
+      "sha256": "3e37c795e4ff30a9cf8b4aa25f7a95c0069b5e542d75aea1072c101e62a85f7b",
+      "bytes": 39762
+    },
+    "original_run": "/home/eric/wjg/d1max-system/campus_crossing_v47_001",
+    "original_candidate": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v47-campus-all-actors-response",
+    "old_sealed_projection_header": {
+      "path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v47-campus-all-actors-response/application/install/scan_planner/include/plan_manage/trajectory_collision.hpp",
+      "sha256": "69539f37c7d22557d4861655ecfdebc1d414ff998758f502d218b07cf1fb6d15",
+      "bytes": 17662
+    },
+    "old_sealed_scan_node": {
+      "path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v47-campus-all-actors-response/application/install/scan_planner/lib/scan_planner/scan_planner_node",
+      "sha256": "8cbd7a28636b2f4e85e1d2cd9e98615632f5500baa0a5fcb5a99ea85bcb3823d",
+      "bytes": 9047680
+    },
+    "sealed_reachable_model_mps": 0.65,
+    "sealed_projection_cap_mps": 0.6,
+    "sealed_projection_guard_rejects_model": true,
+    "all_consumed_commands_zero": false,
+    "actual_consumed_nonzero_command_rows": 68,
+    "longest_nonzero_contiguous_consumption_s": 0.044,
+    "qualified_forward_at_least_05_consumption_rows": 0,
+    "historical_run_outcome_unchanged": true
+  },
+  "audit_actions": {
+    "tests_run": false,
+    "native_build_run": false,
+    "ros_graph_started": false,
+    "kit_started": false,
+    "read_only_except_audit_reports": true
+  },
+  "limitations": [
+    "The old incomplete offline artifact and sealed v47 failure retain their original bytes and outcomes.",
+    "Two launch wrappers returned success with zero unittest cases after SIGINT exit -2; they provide no startup-function assertion coverage.",
+    "SCAN installs its projection header but has no exported include in scan_plannerConfig; the compiled planner uses the verified PRIVATE source-mirror include.",
+    "SDK closure remains the prior explicit isolated-execution-only build; no live SDK or physical-robot acceptance is claimed.",
+    "The two source tests pass in the rebuilt native artifact, but formal navigation, source leases, goal arrival, actor behavior and full 500Hz physical-domain/stop acceptance require an independent run.",
+    "No source timestamps, collision geometry, lease deadlines, unknown-space conditions or old .60 braking records were relaxed by this fix."
+  ]
+}

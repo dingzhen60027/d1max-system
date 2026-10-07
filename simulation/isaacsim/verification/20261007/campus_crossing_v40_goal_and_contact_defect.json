@@ -1,0 +1,170 @@
+{
+  "schema": 1,
+  "kind": "isolated_spot_navigation_goal_success_with_unpassed_legacy_encounter_case",
+  "formal_goal_pass": true,
+  "full_case_pass": false,
+  "continuous500hz_velocity_acceptance": false,
+  "run": "/home/eric/wjg/d1max-build-isaac/runs/campus_crossing_v40_diagnostic_001",
+  "session_id": "c9be3401036b4f10ae660aab7a809d02",
+  "result": {
+    "success": true,
+    "reason": "measured_goal_reached",
+    "retirement_confirmed": true,
+    "physical_stop_confirmed": false
+  },
+  "position": [
+    7.859297752380371,
+    -4.968657970428467,
+    0.48775771260261536
+  ],
+  "goal_error_xy_m": 0.14415077281401661,
+  "cumulative_xy_m": 16.500846099973355,
+  "sampled_max_full_xyz_mps": 0.5956079401616965,
+  "minimum_actual_same_pair_primitive_center_distance_m": 2.3457582734042814,
+  "sampled_actor_separation_AABB_lower_bound_m": 1.8514234099478162,
+  "legacy_2m_encounter_observed": false,
+  "legacy_case_evaluation": {
+    "schema": 1,
+    "kind": "isolated_isaac_scenario_evaluation_v1",
+    "case_id": "crossing_blocker",
+    "configuration_sha256": "7395b12e4062773c272c44e1733fe7b0cbb8bf63d480b8c7d9cd73d4d23cdba0",
+    "session": "/home/eric/wjg/d1max-build-isaac/runs/campus_crossing_v40_diagnostic_001",
+    "status": "failed",
+    "passed": false,
+    "checks": [
+      {
+        "name": "sealed_same_scene",
+        "status": "passed",
+        "reason": "",
+        "evidence": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v40-campus-crossing-diagnostic/simulation/assets/scene_config.json"
+      },
+      {
+        "name": "single_session_ordered_actions",
+        "status": "passed",
+        "reason": "",
+        "evidence": "/home/eric/wjg/d1max-build-isaac/runs/campus_crossing_v40_diagnostic_001/scenario_suite/execution.json"
+      },
+      {
+        "name": "phase_000_action_stop_source",
+        "status": "passed",
+        "reason": "",
+        "evidence": "/home/eric/wjg/d1max-build-isaac/runs/campus_crossing_v40_diagnostic_001/scenario_suite/phase_000_report.json"
+      },
+      {
+        "name": "phase_000_test_source_budget",
+        "status": "passed",
+        "reason": "",
+        "evidence": {
+          "source_elapsed_s": 86.48,
+          "applied_source_budget_s": 216.0,
+          "sealed_phase_source_budget_s": 216
+        }
+      },
+      {
+        "name": "phase_000_goal",
+        "status": "passed",
+        "reason": "",
+        "evidence": {
+          "measured_xy_error_m": 0.14415077281401661
+        }
+      },
+      {
+        "name": "fresh_ordered_task_identities_and_source_deadline",
+        "status": "passed",
+        "reason": "",
+        "evidence": null
+      },
+      {
+        "name": "actual_link_static_and_actor_collision",
+        "status": "passed",
+        "reason": "",
+        "evidence": "/home/eric/wjg/d1max-build-isaac/runs/campus_crossing_v40_diagnostic_001/physics/collision_audit.json"
+      },
+      {
+        "name": "intended_dynamic_encounter_observed",
+        "status": "failed",
+        "reason": "intended_sampled_proximity_encounter_not_exercised_during_original_action_interval",
+        "evidence": {
+          "collision_audit_sha256": "6b6bdb165ee1cbf202cc7bfaa68f3131567eef9971bb3308b5fcc228dd6fba4f",
+          "source": "actual_registered_link_and_actor_geometry",
+          "scope": "sampled_same_step_primitive_center_proximity_only",
+          "selected_exact_pair_witnesses": []
+        }
+      },
+      {
+        "name": "owned_graph_retirement",
+        "status": "passed",
+        "reason": "",
+        "evidence": "/home/eric/wjg/d1max-build-isaac/runs/campus_crossing_v40_diagnostic_001/run_summary.json"
+      }
+    ],
+    "physical_robot_acceptance": false,
+    "collision_scope": "sampled_actual_geometry_only_when_bound_evidence_present",
+    "continuous_collision_certificate": false,
+    "localization_validation": false
+  },
+  "captured_prior3_defect_file": "/home/eric/wjg/d1max-build-isaac/v40_prior3_actor_hit_captured.json",
+  "notes": [
+    "goal_reached_and_measured_stop_confirmed_in_original_BT_PCT_SCAN_tracker_safety_sole_writer",
+    "old_hit_clean_actor1_and_strictly_newer_whole_xyz_actor_disjoint_evidence_did_not_restore_prior3_contact",
+    "no_selected_selector_change; raw_v40_remains_original_legacy_2m_failed_case",
+    "simulation_mock_physical_stop_confirmed_false_is_live_only_scope; not_a_missing_measured_stationary_confirmation"
+  ],
+  "raw_bindings": [
+    {
+      "path": "/home/eric/wjg/d1max-build-isaac/runs/campus_crossing_v40_diagnostic_001/scenario_suite/phase_000_report.json",
+      "sha256": "2c7caaf658bd9b601809d865330ac6b2aa88498fcc47bfafd9c65789ef142b96",
+      "bytes": 7242375
+    },
+    {
+      "path": "/home/eric/wjg/d1max-build-isaac/runs/campus_crossing_v40_diagnostic_001/scenario_suite/phase_000_trace.jsonl",
+      "sha256": "60a5532a6c1be45e599596bab6099f67d2d0f8291fec092aee7706bdd8274272",
+      "bytes": 149843902
+    },
+    {
+      "path": "/home/eric/wjg/d1max-build-isaac/runs/campus_crossing_v40_diagnostic_001/scenario_suite/execution.json",
+      "sha256": "2aae449895319668bb2e2fcb3fa979c11738e1b79670c6dfcdc0d0735bed8f0d",
+      "bytes": 1474
+    },
+    {
+      "path": "/home/eric/wjg/d1max-build-isaac/runs/campus_crossing_v40_diagnostic_001/physics/trajectory.jsonl",
+      "sha256": "659ebdc0ba73905a5e2ad7cb1b5832d8414d0af9a2113e93fa08a5d99a392a8a",
+      "bytes": 11987915
+    },
+    {
+      "path": "/home/eric/wjg/d1max-build-isaac/runs/campus_crossing_v40_diagnostic_001/physics/collision_audit.json",
+      "sha256": "6b6bdb165ee1cbf202cc7bfaa68f3131567eef9971bb3308b5fcc228dd6fba4f",
+      "bytes": 3217
+    },
+    {
+      "path": "/home/eric/wjg/d1max-build-isaac/runs/campus_crossing_v40_diagnostic_001/physics/summary.json",
+      "sha256": "7d5e090f1978243255e7d0fa25884a50b82b7778dd8e3e1a334a180535bf5514",
+      "bytes": 29361
+    },
+    {
+      "path": "/home/eric/wjg/d1max-build-isaac/runs/campus_crossing_v40_diagnostic_001/run_summary.json",
+      "sha256": "d2fb9d94814168d7c69e3cb2fcf68b2685d6838f69bb2bb8e25a61b5840bedfb",
+      "bytes": 904
+    },
+    {
+      "path": "/home/eric/wjg/d1max-build-isaac/runs/campus_crossing_v40_diagnostic_001/scan.log",
+      "sha256": "e639f09cb1836737d7e884501c50b41e938abcb08cb4d4222f66e6135fe4caa2",
+      "bytes": 517614
+    },
+    {
+      "path": "/home/eric/wjg/d1max-build-isaac/v40_prior3_actor_hit_captured.json",
+      "sha256": "88848129a4f666c3d369dc90318662f25a44b455be079dcbca89b024b08a1c78",
+      "bytes": 8646
+    },
+    {
+      "path": "/home/eric/wjg/d1max-build-isaac/v40_command_causal_summary.json",
+      "sha256": "e56409e90cb958f3b82a13f8eb76a5b4cac9483b72c84076d2fe24ab7a7813a7",
+      "bytes": 1185148
+    },
+    {
+      "path": "/home/eric/wjg/d1max-build-isaac/v40_sealed_case_evaluation.json",
+      "sha256": "c0f9be24a3b6e3c49cc15a5891a5ba0aa400f1b94f69b60404aa608695d1cb48",
+      "bytes": 2759
+    }
+  ]
+}

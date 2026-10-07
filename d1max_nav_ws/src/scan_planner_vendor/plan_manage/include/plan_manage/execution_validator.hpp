@@ -251,19 +251,39 @@ public:
     active_->progress=p;
   }
   bool commit(const ew::ExecutionPermit& p) {
+    return commitAt(p,node_?node_->now().nanoseconds():0);
+  }
+  bool commitAt(const ew::ExecutionPermit& p,std::int64_t now) {
     std::lock_guard<std::mutex> l(mutex_);
     if(p.transport_mode!=mode_||p.sequence<=permit_sequence_)return false;
-    if(writer_handoff_&&writer_commit_sequence_&&active_&&
+    const bool new_scope=writer_handoff_&&writer_authority_&&!sameWriterAuthority(*writer_authority_,p);
+    if(new_scope&&(!newWriterAuthorityAllowed(p,now)||!candidate_||candidate_->version!=p.version||
+       candidate_->spline.trajectory.traj_id!=p.trajectory_id))return false;
+    if(!new_scope&&writer_handoff_&&writer_commit_sequence_&&active_&&
        (p.version!=active_->version||p.trajectory_id!=active_->spline.trajectory.traj_id)&&
        p.version.reference_generation<=active_->version.reference_generation&&!p.revoked)return false;
-    if(writer_handoff_&&writer_commit_sequence_&&active_&&
+    if(!new_scope&&writer_handoff_&&writer_commit_sequence_&&active_&&
        (p.version!=active_->version||p.trajectory_id!=active_->spline.trajectory.traj_id)&&!p.revoked)return false;
     latest_permit_=p;permits_.push_back(p);while(permits_.size()>32)permits_.pop_front();
     if(p.revoked){retired_=p.version;active_.reset();candidate_.reset();if(grant_)grant_retired_=true;
       ++motion_stop_barrier_;permit_sequence_=p.sequence;return true;}
     if(!p.geometry_committed){permit_sequence_=p.sequence;return false;}
-    if(active_&&active_->version==p.version&&active_->spline.trajectory.traj_id==p.trajectory_id) {permit_sequence_=p.sequence;return true;}
+    if(active_&&active_->version==p.version&&active_->spline.trajectory.traj_id==p.trajectory_id) {
+      if(writer_handoff_&&!writer_authority_&&completeWriterAuthority(p,now))writer_authority_=p;
+      permit_sequence_=p.sequence;return true;
+    }
     if(!candidate_||candidate_->version!=p.version||candidate_->spline.trajectory.traj_id!=p.trajectory_id)return false;
+    // SDK commit/ACK sequences restart only at an accepted new execution
+    // grant. Cancellation alone retains the irreversible old writer facts.
+    // Install the complete owner-authorized geometry before changing scope;
+    // failed/foreign candidates cannot erase the incumbent ledger.
+    if(new_scope) {
+      writer_commit_sequence_=ack_sequence_=0;initial_writer_ack_.reset();
+      grant_.reset();tombstone_grant_.reset();prepared_.reset();tombstone_job_.reset();prepared_demand_.reset();
+      grant_retired_=grant_applied_=tombstone_retired_=false;
+      latest_demand_.reset();++motion_stop_barrier_;++prepared_stop_barrier_;
+      writer_authority_=p;
+    } else if(writer_handoff_&&!writer_authority_&&completeWriterAuthority(p,now))writer_authority_=p;
     active_=candidate_;permit_sequence_=p.sequence;
     committed_jobs_.push_back(*active_);while(committed_jobs_.size()>8)committed_jobs_.pop_front();
     // A read-only durable geometry view for late UI subscribers. This is not
@@ -295,6 +315,8 @@ public:
     std::lock_guard<std::mutex> l(mutex_);
     if(!writer_handoff_||g.schema_version!=2||g.handoff_id.empty()||g.sequence==0||
        g.expected_commit_sequence!=writer_commit_sequence_||g.candidate.transport_mode!=mode_)return false;
+    if(writer_authority_&&(!sameWriterAuthority(*writer_authority_,g.incumbent)||
+       !sameWriterAuthority(*writer_authority_,g.candidate)))return false;
     if(grant_&&grant_->handoff_id==g.handoff_id) {
       if(g.revoked&&g.sequence>=grant_->sequence){grant_retired_=true;++prepared_stop_barrier_;return true;}
       return g==*grant_;
@@ -332,6 +354,10 @@ public:
   bool commitAck(const ew::ExecutionCommitAck& a) {return commitAckAt(a,node_->now().nanoseconds());}
   bool commitAckAt(const ew::ExecutionCommitAck& a,std::int64_t now) {
     std::lock_guard<std::mutex> l(mutex_);
+    // Compare identity before the scope-local watermark. A prior execution's
+    // late applied fact must never restore its curve or poison the new ACK
+    // sequence, while same-scope late ACKs retain the original HOLD semantics.
+    if(writer_authority_&&!ackWriterAuthorityMatches(a,*writer_authority_))return false;
     if(!writer_handoff_||a.schema_version!=1||a.sequence<=ack_sequence_||a.transport_mode!=mode_)return false;
     if(a.handoff_id.empty()) {
       const auto first=std::find_if(permits_.begin(),permits_.end(),[&](const auto& p){
@@ -356,11 +382,13 @@ public:
       const bool current=active_&&a.candidate_version==active_->version&&
         a.candidate_trajectory_id==active_->spline.trajectory.traj_id;
       writer_commit_sequence_=1;ack_sequence_=a.sequence;initial_writer_ack_=a;
+      if(!writer_authority_)writer_authority_=*first;
       if(!current||!a.write_submitted||ns(a.valid_until)<=now||!latest_permit_||ns(latest_permit_->valid_until)<=now) {
         // Restore only the original bounded geometry fact. No old source pose,
         // progress or collision lease is a current authorization. The unique
         // Owner must reconcile this ACK before it can authorize another entry.
-        active_=*original;active_->proof.reset();active_->progress.reset();candidate_.reset();
+        active_=*original;active_->proof.reset();active_->progress.reset();
+        if(!retiredSuccessorCandidate(a.candidate_version))candidate_.reset();
         auto held=*first;held.allowed=false;held.phase="holding";latest_permit_=held;
         permit_sequence_=std::max(permit_sequence_,first->sequence);
         if(grant_)grant_retired_=true;
@@ -402,7 +430,8 @@ public:
     // because the callback arrived after the original proof expired.
     const bool hold=(tombstone?tombstone_retired_:grant_retired_)||!a.write_submitted||
       ns(a.valid_until)<=now||ns(p.valid_until)<=now;
-    active_=selected_job;candidate_.reset();
+    active_=selected_job;
+    if(!retiredSuccessorCandidate(a.candidate_version))candidate_.reset();
     if(tombstone)grant_retired_=true; // Current conditional expected an obsolete writer identity.
     else {grant_applied_=true;grant_retired_=hold;}
     writer_commit_sequence_=a.commit_sequence;ack_sequence_=a.sequence;auto promoted=p;promoted.geometry_committed=true;latest_permit_=promoted;
@@ -421,11 +450,74 @@ public:
     if(d.hold||std::abs(d.velocity.linear.x)+std::abs(d.velocity.angular.z)<1e-12)++motion_stop_barrier_;
   }
 private:
+  static bool sameWriterAuthority(const ew::ExecutionPermit& a,const ew::ExecutionPermit& b) {
+    return sameExecutionTask(a.version,b.version)&&a.execution_id==b.execution_id&&
+      a.control_epoch==b.control_epoch&&a.sdk_session==b.sdk_session&&
+      a.sdk_arm_generation==b.sdk_arm_generation&&a.transport_mode==b.transport_mode;
+  }
+  static bool ackWriterAuthorityMatches(const ew::ExecutionCommitAck& a,const ew::ExecutionPermit& p) {
+    return sameExecutionTask(a.candidate_version,p.version)&&a.execution_id==p.execution_id&&
+      a.control_epoch==p.control_epoch&&a.sdk_session==p.sdk_session&&
+      a.sdk_arm_generation==p.sdk_arm_generation&&a.transport_mode==p.transport_mode;
+  }
+  bool completeWriterAuthority(const ew::ExecutionPermit& p,std::int64_t now)const {
+    const auto& v=p.version;
+    if(now<=0||!p.allowed||p.revoked||!p.geometry_committed||p.frame_id!=frame_||p.transport_mode!=mode_||
+       p.execution_id.empty()||p.confirmation_id.empty()||p.control_epoch==0||p.sdk_session.empty()||p.sdk_arm_generation==0||
+       v.schema_version!=3||v.session_id.empty()||v.task_id.empty()||v.route_id.empty()||v.route_hash.empty()||
+       v.map_version_id.empty()||v.localization_epoch==0||v.localization_seed_id.empty()||v.reference_generation==0||
+       v.segment_id.empty()||v.anchor_id.empty()||v.anchor_revision==0||v.context_sequence==0||v.map_geometry_revision==0||
+       p.source_stamp.sec<0||p.source_stamp.nanosec>=1000000000U||
+       p.valid_until.sec<0||p.valid_until.nanosec>=1000000000U)return false;
+    const auto source=ns(p.source_stamp),until=ns(p.valid_until);
+    return source>0&&source<=now+20000000LL&&now-source<=750000000LL&&
+      until>now&&until>source&&until-source<=750000000LL;
+  }
+  bool newWriterAuthorityAllowed(const ew::ExecutionPermit& p,std::int64_t now)const {
+    if(!writer_authority_||!completeWriterAuthority(p,now)||!retired_)return false;
+    const auto& old=*writer_authority_;
+    // SDK arm generation is an exact binding, not a cross-session counter.
+    // The owner's execution epoch is the explicit strictly advancing fence.
+    return sameExecutionTask(*retired_,old.version)&&p.version.session_id==old.version.session_id&&
+      p.version.map_version_id==old.version.map_version_id&&p.version.task_id!=old.version.task_id&&
+      p.execution_id!=old.execution_id&&p.control_epoch>old.control_epoch;
+  }
   struct Job {ew::TaggedBspline spline;ew::ExecutionVersion version;std::string proposal;
     std::optional<ew::SupportReference> support;double measured_time{0.};
     bool has_goal_yaw{false};double goal_yaw{0.};Eigen::Vector3d goal{Eigen::Vector3d::Zero()};
     std::optional<ew::LocalPlanDebug> debug;std::optional<ew::TrajectoryValidation> proof;
     std::optional<ew::TrackingProgress> progress;};
+  bool retiredSuccessorCandidate(const ew::ExecutionVersion& applied)const {
+    if(!retired_||!sameExecutionTask(*retired_,applied)||!candidate_)return false;
+    const auto& v=candidate_->version;const auto& s=candidate_->spline;const auto& curve=s.trajectory;
+    // Preserve only complete immutable DATA for a different successor task.
+    // The old applied identity still becomes the active/HOLD fact; no permit,
+    // proof, measured entry, source lease or command is borrowed by this data.
+    if(v.schema_version!=3||v.session_id!=applied.session_id||v.map_version_id!=applied.map_version_id||
+       v.task_id.empty()||v.task_id==applied.task_id||v.route_id.empty()||v.route_hash.empty()||
+       v.localization_epoch==0||v.localization_seed_id.empty()||v.reference_generation==0||
+       v.segment_id.empty()||v.anchor_id.empty()||v.anchor_revision==0||v.context_sequence==0||v.map_geometry_revision==0||
+       s.schema_version!=2||s.session_id!=v.session_id||s.task_id!=v.task_id||s.route_id!=v.route_id||
+       s.route_hash!=v.route_hash||s.map_version_id!=v.map_version_id||s.localization_epoch!=v.localization_epoch||
+       s.localization_seed_id!=v.localization_seed_id||s.generation!=v.reference_generation||
+       s.segment_id!=v.segment_id||s.anchor_id!=v.anchor_id||s.anchor_revision!=v.anchor_revision||
+       s.context_sequence!=v.context_sequence||s.map_geometry_revision!=v.map_geometry_revision||
+       s.frame_id!=frame_||s.point_reference!="body_center"||s.segment_kind!="floor"||s.required_mode!="general"||
+       curve.traj_id<=0||curve.order!=3||curve.start_time.sec<0||curve.start_time.nanosec>=1000000000U||ns(curve.start_time)<=0||
+       curve.pos_pts.size()<4||curve.pos_pts.size()>10000||curve.knots.size()!=curve.pos_pts.size()+4||
+       !std::isfinite(s.valid_start_time)||s.valid_start_time<0.||
+       !std::isfinite(s.valid_start_arc_length)||s.valid_start_arc_length<0.||
+       s.join_source_stamp.sec<0||s.join_source_stamp.nanosec>=1000000000U||ns(s.join_source_stamp)<=0)return false;
+    const auto finite_xyz=[](const auto& p){return std::isfinite(p.x)&&std::isfinite(p.y)&&std::isfinite(p.z);};
+    if(!finite_xyz(s.join_pose.position)||!finite_xyz(s.join_pose.orientation)||!std::isfinite(s.join_pose.orientation.w)||
+       !finite_xyz(s.join_twist.linear)||!finite_xyz(s.join_twist.angular)||
+       (s.join_acceleration_valid&&(!finite_xyz(s.join_acceleration.linear)||!finite_xyz(s.join_acceleration.angular))))return false;
+    for(const auto& point:curve.pos_pts)
+      if(!std::isfinite(point.x)||!std::isfinite(point.y)||!std::isfinite(point.z))return false;
+    for(std::size_t i=0;i<curve.knots.size();++i)
+      if(!std::isfinite(curve.knots[i])||(i&&curve.knots[i]<=curve.knots[i-1]))return false;
+    return true;
+  }
   void run() {
     while(!stop_) {
       const auto begin=std::chrono::steady_clock::now();
@@ -731,7 +823,11 @@ private:
       d.sequence,sweep.unique_voxels,sweep.length,sweep.heading_bound,(ns(out.check_end)-ns(out.check_begin))*1e-6,
       (ns(out.check_end)-ns(d.source_stamp))*1e-6,(ns(out.check_end)-map.integratedRaySourceStamp(0))*1e-6,
       (ns(out.check_end)-map.integratedRaySourceStamp(1))*1e-6,queried,out.reason.c_str(),out.map_snapshot_revision,
-      ns(out.body_source_stamp),ns(out.check_end),queried&&out.reason=="motion_sweep_occupied"?
+      // UNKNOWN and outside results also come from the original swept-cell
+      // query. Read its captured first failure/lease; never retry a query for
+      // diagnostics or infer that an omitted OCCUPIED-only field meant no query.
+      ns(out.body_source_stamp),ns(out.check_end),queried&&(out.reason=="motion_sweep_occupied"||
+        out.reason=="motion_sweep_unknown_or_expired"||out.reason=="motion_sweep_outside_map")?
         map.describeObservedRawFailure().c_str():"{\"first_cell_available\":false}");
     else RCLCPP_INFO_THROTTLE(node_->get_logger(),*node_->get_clock(),1000,
       "Motion proof demand=%lu snapshot=%lu unique_voxels=%zu check_ms=%.3f source_age_ms=%.3f body_age_ms=%.3f front_age_ms=%.3f rear_age_ms=%.3f lease_ms=%.3f",
@@ -827,8 +923,9 @@ private:
         if(!result.valid&&log_now-prior_log>=250000000LL&&
            proof_log_steady_ns_.compare_exchange_strong(prior_log,log_now)) {
           RCLCPP_WARN(node_->get_logger(),
-            "Execution proof curve=%ld measured_progress=%d residual=%.6f queries=%zu check_ms=%.3f reason=%s",
-            result.trajectory_id,measured_progress,join_residual,queries,query_seconds*1000.,result.reason.c_str());
+            "Execution proof curve=%ld measured_progress=%d residual=%.6f queries=%zu check_ms=%.3f reason=%s dynamic_hit_provenance=%s",
+            result.trajectory_id,measured_progress,join_residual,queries,query_seconds*1000.,result.reason.c_str(),
+            map.describeDynamicHitProvenanceStatus().c_str());
           emit_unknown_diagnostic=unknown && query_trace.first_non_free.has_value();
         }
       }
@@ -954,5 +1051,6 @@ private:
   std::optional<ew::ExecutionHandoffGrant> grant_,tombstone_grant_;
   std::optional<ew::PreparedMotionDemand> prepared_demand_;
   std::uint64_t writer_commit_sequence_{0},ack_sequence_{0},prepared_stop_barrier_{0};
+  std::optional<ew::ExecutionPermit> writer_authority_;
 };
 } // namespace scan_planner

@@ -1,0 +1,889 @@
+{
+  "schema": 1,
+  "kind": "campus_crossing_v45_all_actors_response_failure_v1",
+  "run": "campus_crossing_v45_001",
+  "session_id": "07e56ae46d0b466aa854454d6436d787",
+  "candidate": "isaac-candidate-v45-campus-all-actors-response",
+  "status": "failed",
+  "formal_goal_pass": false,
+  "full_case_pass": false,
+  "hardware_acceptance": false,
+  "continuous_collision_claim": false,
+  "scope": "original normal-navigation Action with six measured native actors; read-only post-run evaluation",
+  "raw_records_modified": false,
+  "core_code_modified": false,
+  "actual_result": {
+    "action_result_status": 6,
+    "result": {
+      "success": false,
+      "reason": "execution_blocked_timeout:waiting_measured_motion_progress",
+      "retirement_confirmed": true,
+      "physical_stop_confirmed": false
+    },
+    "goal_xyz": [
+      8.0,
+      -5.0,
+      0.0
+    ],
+    "measured_final_position": [
+      -6.6825032234191895,
+      -4.899960041046143,
+      0.4763050675392151
+    ],
+    "measured_goal_xy_error_m": 14.682844033057846,
+    "observer_cumulative_xy_m": 2.672982662183031,
+    "net_xy_from_native_initial_to_observer_final_m": 1.2498905027686296,
+    "nonzero_applied_count": 2876,
+    "progress_credit_samples": 41
+  },
+  "original_retirement": {
+    "clean_shutdown": false,
+    "child_exit_codes": {
+      "isaac_bridge": 0,
+      "isaac_sim": -15,
+      "navigation": 0,
+      "smoke": 1
+    },
+    "navigation_shutdown": {
+      "request_accepted": true,
+      "software_retired": true,
+      "physical_stop_confirmed": false,
+      "reason": "software_retired_not_physical_stop",
+      "elapsed_s": 0.15722564212046564,
+      "session_id": "07e56ae46d0b466aa854454d6436d787",
+      "recorded_at_unix": 1791370964.6835318
+    },
+    "meaning": "software retirement and independently measured PhysX STOP do not change original physical_stop_confirmed=false"
+  },
+  "selected_fixture": {
+    "robot_kind": "official_spot_physx",
+    "command_domain": [
+      0.2,
+      0.3
+    ],
+    "policy_input_limits": {
+      "schema": 1,
+      "linear": 0.3,
+      "angular": 0.5
+    },
+    "velocity_feedback_mode": "spot_monotone_measured_v2",
+    "stall_recovery": {
+      "schema": 1,
+      "enabled": true,
+      "isolated_fixture": true
+    }
+  },
+  "sealed_case_evaluation": {
+    "status": "failed",
+    "passed": false,
+    "checks": [
+      {
+        "name": "sealed_same_scene",
+        "status": "passed",
+        "reason": ""
+      },
+      {
+        "name": "sealed_spot_encounter_profile_model",
+        "status": "passed",
+        "reason": ""
+      },
+      {
+        "name": "single_session_ordered_actions",
+        "status": "failed",
+        "reason": "original_smoke_phase_failed:0"
+      },
+      {
+        "name": "phase_000_action_stop_source",
+        "status": "failed",
+        "reason": "original_action_or_measured_stop_failed"
+      },
+      {
+        "name": "phase_000_test_source_budget",
+        "status": "passed",
+        "reason": ""
+      },
+      {
+        "name": "phase_000_goal",
+        "status": "failed",
+        "reason": ""
+      },
+      {
+        "name": "fresh_ordered_task_identities_and_source_deadline",
+        "status": "passed",
+        "reason": ""
+      },
+      {
+        "name": "independent_full_physics_motion_domain_and_stop",
+        "status": "passed",
+        "reason": ""
+      },
+      {
+        "name": "actual_link_static_and_actor_collision",
+        "status": "passed",
+        "reason": ""
+      },
+      {
+        "name": "intended_dynamic_encounter_observed",
+        "status": "failed",
+        "reason": "intended_sampled_proximity_encounter_not_exercised_during_original_action_interval"
+      },
+      {
+        "name": "owned_graph_retirement",
+        "status": "failed",
+        "reason": "Navigation test failed; inspect smoke.log and its original reports"
+      }
+    ],
+    "private_output": {
+      "private_absolute_path": "/home/eric/wjg/d1max-build-isaac/v45_sealed_case_evaluation.json",
+      "bytes": 8997,
+      "sha256": "0ab7979c04a37733cfa6e57080008d0c171b8fdf794d3f1fa909e6a325f3ee17"
+    }
+  },
+  "physics_audit": {
+    "schema": 1,
+    "kind": "sealed_normal_navigation_500hz_physics_audit",
+    "verified": true,
+    "errors": [],
+    "scope": "isolated_simulation_native_PhysX_500Hz_BEGIN_and_actual_final_END",
+    "velocity_domain_scope": "instantaneous full XYZ admission; not a future full XYZ reachability guarantee",
+    "hardware_acceptance": false,
+    "continuous_collision_claim": false,
+    "raw_records_modified": false,
+    "raw_sha256": "840efdc2c867993edb344a42d294f8cbf8665ed2b3518db44f303436b571f903",
+    "session_id": "07e56ae46d0b466aa854454d6436d787",
+    "epoch": "8b663f8e-46f3-41e7-941b-6398d0b2f2bf",
+    "clock_anchor_ns": 1791370726118476941,
+    "scene_sha256": "1b3e06e7b6695119f469e256c010cf9c959073aac4120f2967534ddec3d221da",
+    "model_sha256": "29644d7503f143978d478f837237e3dacbbc76c06299eea8660bb40f6fa85be6",
+    "actual_source_ticks": 28348,
+    "duration_ns": 56696000000,
+    "sample_count": 28349,
+    "complete_native_500hz": true,
+    "native_first_tick": 1010,
+    "native_final_tick": 29358,
+    "policy_first_counter": 1000,
+    "policy_final_counter": 29348,
+    "manifest_policy_hz": 50,
+    "manifest_observation_count": 2935,
+    "observation_count_scope": "original count includes bootstrap; not a reconstructed source-only inference gate",
+    "all_epoch": {
+      "sample_count": 28349,
+      "max_full_xyz_speed_mps": 0.4481810855999152,
+      "peak_source_ns": 1791370730836476941,
+      "peak_source_tick": 2359,
+      "peak_raw_linear_velocity_world": [
+        0.41433024406433105,
+        0.17028996348381042,
+        0.014073474332690239
+      ],
+      "max_abs_world_yaw_rate_radps": 0.3930564522743225,
+      "max_full_angular_speed_radps": 0.7477877254333176,
+      "full_angular_norm_is_diagnostic_only": true,
+      "speed_bounds": {
+        "reachable_max_speed_mps": 0.6,
+        "reference_max_speed_mps": 0.6,
+        "measured_travel_max_speed_mps": 0.6
+      },
+      "yaw_bound_radps": 0.8,
+      "exceeded_speed_domains": [],
+      "yaw_domain_exceeded": false
+    },
+    "final_stop": {
+      "verified": true,
+      "scope": "final actual zero-consumption episode; native full XYZ and angular norm",
+      "transition_exercised": true,
+      "linear_threshold_mps": 0.03,
+      "angular_threshold_radps": 0.05,
+      "stationary_duration_s": 1.0,
+      "stop_latency_bound_s": 3.0,
+      "stopping_distance_bound_m": 0.5,
+      "stopping_yaw_bound_rad": 0.4,
+      "last_nonzero_consumption_source_ns": 1791370776816476941,
+      "zero_consumption_source_ns": 1791370776818476941,
+      "reason": "recorded_stop_within_original_bounds",
+      "stationary_window_start_source_ns": 1791370777876476941,
+      "confirmation_source_ns": 1791370778876476941,
+      "confirmation_latency_s": 2.058,
+      "extra_xy_path_m": 0.09134194404551946,
+      "extra_absolute_yaw_path_rad": 0.019262429346389276,
+      "actual_zero_tail_duration_s": 5.996
+    }
+  },
+  "action_interval_audit": {
+    "source_interval_ns": [
+      1791370728898476941,
+      1791370778898476941
+    ],
+    "sample_count": 25001,
+    "max_full_xyz_speed_mps": 0.4481810855999152,
+    "peak_source_ns": 1791370730836476941,
+    "peak_source_tick": 2359,
+    "peak_raw_linear_velocity_world": [
+      0.41433024406433105,
+      0.17028996348381042,
+      0.014073474332690239
+    ],
+    "max_abs_world_yaw_rate_radps": 0.3930564522743225,
+    "max_full_angular_speed_radps": 0.7477877254333176,
+    "full_angular_norm_is_diagnostic_only": true,
+    "speed_bounds": {
+      "reachable_max_speed_mps": 0.6,
+      "reference_max_speed_mps": 0.6,
+      "measured_travel_max_speed_mps": 0.6
+    },
+    "yaw_bound_radps": 0.8,
+    "exceeded_speed_domains": [],
+    "yaw_domain_exceeded": false
+  },
+  "six_actor_observation": {
+    "ids": [
+      "door_blocking_cart",
+      "office_person",
+      "oncoming_cart",
+      "plaza_cart",
+      "plaza_person",
+      "warehouse_forklift"
+    ],
+    "all_six_enabled": true,
+    "actual_sample_count": 3401,
+    "first_sim_time_ns": 18000000,
+    "last_sim_time_ns": 56680000000,
+    "max_source_sampling_gap_ns": 20000000,
+    "different_id_set_count": 0,
+    "registry_sha256s": [
+      "96b092886099b5b2c0904ce86c34d607167c8cee28865d318455c88bc7aea734"
+    ],
+    "all_actual_samples_present": true,
+    "actors": {
+      "door_blocking_cart": {
+        "sample_count": 3401,
+        "present_true_count": 3401,
+        "position_min": [
+          12.0,
+          -25.0,
+          0.0
+        ],
+        "position_max": [
+          18.0,
+          -25.0,
+          0.0
+        ],
+        "peak_full_speed_mps": 0.360012024641037
+      },
+      "office_person": {
+        "sample_count": 3401,
+        "present_true_count": 3401,
+        "position_min": [
+          -43.99999237060547,
+          20.0,
+          0.0
+        ],
+        "position_max": [
+          -16.0,
+          20.0,
+          0.0
+        ],
+        "peak_full_speed_mps": 0.7638930678367615
+      },
+      "oncoming_cart": {
+        "sample_count": 3401,
+        "present_true_count": 3401,
+        "position_min": [
+          2.0,
+          -25.0,
+          0.0
+        ],
+        "position_max": [
+          22.0,
+          -25.0,
+          0.0
+        ],
+        "peak_full_speed_mps": 0.7500647902488708
+      },
+      "plaza_cart": {
+        "sample_count": 3401,
+        "present_true_count": 3401,
+        "position_min": [
+          5.0,
+          -9.999979972839355,
+          5.960464477539063e-08
+        ],
+        "position_max": [
+          5.0,
+          15.0,
+          5.960464477539063e-08
+        ],
+        "peak_full_speed_mps": 1.0714529752731323
+      },
+      "plaza_person": {
+        "sample_count": 3401,
+        "present_true_count": 3401,
+        "position_min": [
+          0.0,
+          -15.0,
+          0.0
+        ],
+        "position_max": [
+          0.0,
+          11.472867965698242,
+          0.0
+        ],
+        "peak_full_speed_mps": 1.012503981590271
+      },
+      "warehouse_forklift": {
+        "sample_count": 3401,
+        "present_true_count": 3401,
+        "position_min": [
+          32.0,
+          9.000005722045898,
+          -2.980232238769531e-07
+        ],
+        "position_max": [
+          32.0,
+          33.83110046386719,
+          -2.980232238769531e-07
+        ],
+        "peak_full_speed_mps": 0.6008147597312927
+      }
+    },
+    "sampled_collision_audit": {
+      "completed": true,
+      "sample_count": 3401,
+      "nonfloor_static_penetration_count": 0,
+      "dynamic_penetration_count": 0,
+      "possible_overlap_counts": {
+        "static": 0,
+        "dynamic": 0
+      },
+      "encounter_observed": false,
+      "min_actor_separation_lower_bound_m": 5.9017928661123324,
+      "scope": "sampled_actual_link_geometry_static_and_actor",
+      "continuous_collision_proof": false
+    }
+  },
+  "response_and_guard_evidence": {
+    "memory_event_count": 0,
+    "recovery_file_bytes": 0,
+    "asset_applied_memory_events": 0,
+    "offline_same_frozen_guard_emitted_events": 0,
+    "guard_qualification_min_forward_mps": 0.05,
+    "guard_required_continuous_source_s": 1.0,
+    "longest_forward_at_least_005": {
+      "first_source_tick": 12010,
+      "last_source_tick": 12405,
+      "first_source_ns": 24020000000,
+      "last_source_ns": 24810000000,
+      "sample_count": 396,
+      "source_span_s": 0.79
+    },
+    "longest_positive_forward": {
+      "first_source_tick": 22360,
+      "last_source_tick": 22859,
+      "first_source_ns": 44720000000,
+      "last_source_ns": 45718000000,
+      "sample_count": 500,
+      "source_span_s": 0.9980000000000001
+    },
+    "longest_full_qualified_static_window": {
+      "first_source_tick": 12208,
+      "last_source_tick": 12361,
+      "first_source_ns": 24416000000,
+      "last_source_ns": 24722000000,
+      "sample_count": 154,
+      "source_span_s": 0.306
+    },
+    "native_500hz_windows": [
+      {
+        "source_interval_s": [
+          10,
+          20
+        ],
+        "actual_begin_samples": 5000,
+        "net_xy_m": 0.7404508149912554,
+        "first_tick": 5000,
+        "last_tick": 9999,
+        "highlevel_forward": {
+          "min": 0.0,
+          "median": 0.069214619803059,
+          "max": 0.19775421558720843
+        },
+        "policy_forward": {
+          "min": -0.11125065386295319,
+          "median": 0.11807001754641533,
+          "max": 0.30000001192092896
+        },
+        "actual_xy_speed": {
+          "min": 0.00019661204104545204,
+          "median": 0.07818804131562515,
+          "max": 0.29328688745510006
+        },
+        "actual_full_xyz_speed": {
+          "min": 0.0012475995006832807,
+          "median": 0.10099587210503752,
+          "max": 0.2987099941598478
+        },
+        "actual_full_angular_speed": {
+          "min": 0.001653605847503654,
+          "median": 0.11628068990553629,
+          "max": 0.7477877254333176
+        },
+        "positive_fraction": 0.8538,
+        "min005_fraction": 0.5874
+      },
+      {
+        "source_interval_s": [
+          20,
+          30
+        ],
+        "actual_begin_samples": 5000,
+        "net_xy_m": 0.043248664147389954,
+        "first_tick": 10000,
+        "last_tick": 14999,
+        "highlevel_forward": {
+          "min": 0.0,
+          "median": 0.08267964690690313,
+          "max": 0.19775421558720843
+        },
+        "policy_forward": {
+          "min": -0.028272436931729317,
+          "median": 0.2725905627012253,
+          "max": 0.30000001192092896
+        },
+        "actual_xy_speed": {
+          "min": 0.0008137933754188947,
+          "median": 0.029742760927393253,
+          "max": 0.09033753784551382
+        },
+        "actual_full_xyz_speed": {
+          "min": 0.0008692060638537583,
+          "median": 0.031869240542557645,
+          "max": 0.09238534752999586
+        },
+        "actual_full_angular_speed": {
+          "min": 0.0030280321817399186,
+          "median": 0.039972037217799544,
+          "max": 0.30337493217538086
+        },
+        "positive_fraction": 0.862,
+        "min005_fraction": 0.6364
+      },
+      {
+        "source_interval_s": [
+          30,
+          40
+        ],
+        "actual_begin_samples": 5000,
+        "net_xy_m": 0.009894799533435661,
+        "first_tick": 15000,
+        "last_tick": 19999,
+        "highlevel_forward": {
+          "min": 0.0,
+          "median": 0.04144594331232414,
+          "max": 0.19775421558720843
+        },
+        "policy_forward": {
+          "min": -0.035551153123378754,
+          "median": 0.13817105442285538,
+          "max": 0.30000001192092896
+        },
+        "actual_xy_speed": {
+          "min": 0.0012665890039240896,
+          "median": 0.03228734485919373,
+          "max": 0.14871802544744092
+        },
+        "actual_full_xyz_speed": {
+          "min": 0.0020883305771277273,
+          "median": 0.035307006680952234,
+          "max": 0.15049519201062578
+        },
+        "actual_full_angular_speed": {
+          "min": 0.0030117244731029482,
+          "median": 0.03327929636523477,
+          "max": 0.13608940287957683
+        },
+        "positive_fraction": 0.7016,
+        "min005_fraction": 0.44
+      },
+      {
+        "source_interval_s": [
+          40,
+          48
+        ],
+        "actual_begin_samples": 4000,
+        "net_xy_m": 0.004662516171225934,
+        "first_tick": 20000,
+        "last_tick": 23999,
+        "highlevel_forward": {
+          "min": 0.0,
+          "median": 0.08262737467108323,
+          "max": 0.19610442201077322
+        },
+        "policy_forward": {
+          "min": -0.019416574388742447,
+          "median": 0.2755099833011627,
+          "max": 0.30000001192092896
+        },
+        "actual_xy_speed": {
+          "min": 0.0008729101790882194,
+          "median": 0.026430217810888917,
+          "max": 0.07072336349558005
+        },
+        "actual_full_xyz_speed": {
+          "min": 0.0018954733434554474,
+          "median": 0.03247782029692284,
+          "max": 0.07531987074002719
+        },
+        "actual_full_angular_speed": {
+          "min": 0.0013314547888613978,
+          "median": 0.03807913889410543,
+          "max": 0.12209063387546193
+        },
+        "positive_fraction": 0.8695,
+        "min005_fraction": 0.6155
+      }
+    ],
+    "actual_begin_guard_sample_counts": {
+      "steady_deadline_expired": 1660,
+      "accepted_command": 26682,
+      "steady_deadline_expired_prephysics": 6
+    },
+    "inferences": [
+      "Original qualified recovery never had its required continuous one-second source window; zero applied memory interventions are consistent with this exact gate.",
+      "Recorded late positive demands and policy inputs produce very little net XY progress. This supports a history-dependent low-response hypothesis; it does not establish a unique neural fixed point or a universal minimum gait input.",
+      "All six actors were physically present and moved, but the original Action did not exercise the required sampled proximity encounter; actor presence is not encounter acceptance."
+    ]
+  },
+  "receipt_and_proof_evidence": {
+    "original_physics_timing": {
+      "measured_state_samples": 3401,
+      "measured_state_wall_seconds": 213.18490535509773,
+      "measured_state_sim_seconds": 56.662000000000006,
+      "wall_seconds_per_sim_second": 3.7623964095001536,
+      "realtime_factor": 0.26578804866892086,
+      "state_wall_hz": 15.948596333950988,
+      "longest_state_wall_gap_s": 0.34336170204915106,
+      "longest_rays_wall_gap_s": [
+        0.7122422831598669,
+        0.7098441899288446
+      ]
+    },
+    "original_ray_receipt_lease_s": 0.5,
+    "captured_expiry_witness": {
+      "scan_log_line": 24,
+      "classification": "captured_lease_receipt_expiry_witness; diagnostic follows original failure, not a complete causal replay",
+      "query_receipt_ns": 1217307730557744,
+      "both_ray_receipt_ns": [
+        1217307230557535,
+        1217307296753008
+      ],
+      "receipt_ages_ms": [
+        500.000209,
+        433.804736
+      ],
+      "query_source_ns": 1791370729889365126,
+      "both_ray_source_ns": [
+        1791370729636476941,
+        1791370729636476941
+      ],
+      "source_ages_ms": [
+        252.888185,
+        252.888185
+      ],
+      "cached_prior_lease_valid": false,
+      "dynamic_oracle_query_valid": true,
+      "source_deadline_ns": 1,
+      "receipt_deadline_ns": 1
+    },
+    "original_trace_reason_message_counts": {
+      "tracker": {
+        "waiting_execution_permission": 73,
+        "geometry_only_no_motion_permission": 109,
+        "tracking": 2630,
+        "permission_or_native_proof_expired": 263,
+        "waiting_trajectory_clock": 216,
+        "source_clock_paused_command_expired": 76,
+        "handoff_retired_or_applied_uncertain": 286,
+        "braking_envelope_reentry_required": 2,
+        "stationary_reentry_waiting_writer": 1
+      },
+      "safety": {
+        "foreign_execution_context": 1,
+        "task_owner_revoked": 37,
+        "native_raw_ray_execution_admitted": 213,
+        "waiting_command_sweep": 153,
+        "zero_stop_request_not_free_space_proof": 65,
+        "old_or_foreign_command_proof": 2,
+        "evidence_upgrade_not_current_immutable_demand": 3,
+        "prepared_proof_without_original_demand": 2,
+        "permission_expired_or_curve_mismatch": 1,
+        "conditional_prepared_motion_admitted_not_applied": 7,
+        "execution_version_not_committed": 1,
+        "native_swept_collision_proof_missing_or_revoked": 1
+      },
+      "trajectory_validation": {
+        "observed_free": 7058,
+        "source_expired_during_check": 510
+      },
+      "applied": {
+        "": 3,
+        "tracking": 3338,
+        "permission_or_native_proof_expired": 279,
+        "waiting_trajectory_clock": 90,
+        "safety_hold:command_sweep_rejected:motion_sweep_unknown_or_expired": 37,
+        "source_clock_paused_command_expired": 62,
+        "safety_hold:command_sweep_rejected:motion_evidence_expired_during_check": 2,
+        "braking_envelope_reentry_required": 131,
+        "safety_hold:native_swept_collision_proof_missing_or_revoked": 4
+      },
+      "motion_validation": {
+        "observed_free_motion_sweep": 7056,
+        "motion_evidence_expired_during_check": 34,
+        "motion_sweep_unknown_or_expired": 154
+      }
+    },
+    "limitations": [
+      "Message counts are not time-weighted durations.",
+      "Ray receipt gaps exceeding .5s and original proof expiry events support intermittent withdrawal; no claim that every low-response or final failure was caused by receipt gaps.",
+      "The public failure reason remains the original execution_blocked_timeout:waiting_measured_motion_progress."
+    ]
+  },
+  "raw_bindings": {
+    "session.json": {
+      "private_absolute_path": "/home/eric/wjg/d1max-build-isaac/runs/campus_crossing_v45_001/session.json",
+      "bytes": 14423,
+      "sha256": "dab9b8e241d35a40895b8e2326b3ec8c1429e642f41fdb1252786d8bf1bbd28f"
+    },
+    "braking_model.json": {
+      "private_absolute_path": "/home/eric/wjg/d1max-build-isaac/runs/campus_crossing_v45_001/braking_model.json",
+      "bytes": 1900,
+      "sha256": "29644d7503f143978d478f837237e3dacbbc76c06299eea8660bb40f6fa85be6"
+    },
+    "run_summary.json": {
+      "private_absolute_path": "/home/eric/wjg/d1max-build-isaac/runs/campus_crossing_v45_001/run_summary.json",
+      "bytes": 909,
+      "sha256": "6898a972dc30d991b6e276019b11ad29dc7dac3c17167b58148d604a5de4845f"
+    },
+    "shutdown.json": {
+      "private_absolute_path": "/home/eric/wjg/d1max-build-isaac/runs/campus_crossing_v45_001/shutdown.json",
+      "bytes": 275,
+      "sha256": "162a61be237ff408b0f1d8fa3c7cc46434aea5d5acf56ec57d12537d15eaca1b"
+    },
+    "runtime_bundle.json": {
+      "private_absolute_path": "/home/eric/wjg/d1max-build-isaac/runs/campus_crossing_v45_001/runtime_bundle.json",
+      "bytes": 745006,
+      "sha256": "05583e9ce6e39190621fca328dffa0c3bc74c96ce5adf421c95ddbcd4cedbaa6"
+    },
+    "physics/ready.json": {
+      "private_absolute_path": "/home/eric/wjg/d1max-build-isaac/runs/campus_crossing_v45_001/physics/ready.json",
+      "bytes": 17895,
+      "sha256": "6fcd85102f5165501d3b84bb1777594102004ae01143abb2758f7eec30cad654"
+    },
+    "physics/summary.json": {
+      "private_absolute_path": "/home/eric/wjg/d1max-build-isaac/runs/campus_crossing_v45_001/physics/summary.json",
+      "bytes": 29569,
+      "sha256": "c85e3deae4b4f4d8038cbde31959b983d0af526b4e66fb89fdc10f8702c01295"
+    },
+    "physics/policy_history_manifest.json": {
+      "private_absolute_path": "/home/eric/wjg/d1max-build-isaac/runs/campus_crossing_v45_001/physics/policy_history_manifest.json",
+      "bytes": 1146,
+      "sha256": "2b7c101f5f2737b77110ff1c096934de9753bd19626ac0d41bdfc9b3156caf24"
+    },
+    "physics/policy_component_state_500hz.jsonl": {
+      "private_absolute_path": "/home/eric/wjg/d1max-build-isaac/runs/campus_crossing_v45_001/physics/policy_component_state_500hz.jsonl",
+      "bytes": 37099343,
+      "sha256": "840efdc2c867993edb344a42d294f8cbf8665ed2b3518db44f303436b571f903"
+    },
+    "physics/policy_command_events.jsonl": {
+      "private_absolute_path": "/home/eric/wjg/d1max-build-isaac/runs/campus_crossing_v45_001/physics/policy_command_events.jsonl",
+      "bytes": 3126804,
+      "sha256": "005ad75ea6e33bd0751a9e531c4cf7e882e6ff17539bf5c4db7db58802523f3f"
+    },
+    "physics/policy_observations.jsonl": {
+      "private_absolute_path": "/home/eric/wjg/d1max-build-isaac/runs/campus_crossing_v45_001/physics/policy_observations.jsonl",
+      "bytes": 5238015,
+      "sha256": "9a2882f83193014d22c4f727baead6c3d76c33b89cee1963f057a683456ca87b"
+    },
+    "physics/policy_recovery_events.jsonl": {
+      "private_absolute_path": "/home/eric/wjg/d1max-build-isaac/runs/campus_crossing_v45_001/physics/policy_recovery_events.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "physics/trajectory.jsonl": {
+      "private_absolute_path": "/home/eric/wjg/d1max-build-isaac/runs/campus_crossing_v45_001/physics/trajectory.jsonl",
+      "bytes": 7487056,
+      "sha256": "68910f168ba9fd54a02c95c3a0c6174761428958b90bf210adca56e614623eef"
+    },
+    "physics/dynamic_actor_readings.jsonl": {
+      "private_absolute_path": "/home/eric/wjg/d1max-build-isaac/runs/campus_crossing_v45_001/physics/dynamic_actor_readings.jsonl",
+      "bytes": 4095491,
+      "sha256": "efe81f37d54f4dedf7f0ce3eb6f30dd924577556c3b9860ebe6e64c5a64615f6"
+    },
+    "physics/collision_audit.json": {
+      "private_absolute_path": "/home/eric/wjg/d1max-build-isaac/runs/campus_crossing_v45_001/physics/collision_audit.json",
+      "bytes": 5010,
+      "sha256": "362eaeba24c26e60d837ea944f7c6b6c280e4ec1070959adc7142e79c9fa2b64"
+    },
+    "physics/robot_link_readings.jsonl": {
+      "private_absolute_path": "/home/eric/wjg/d1max-build-isaac/runs/campus_crossing_v45_001/physics/robot_link_readings.jsonl",
+      "bytes": 26443501,
+      "sha256": "a6e18a45d3d1daaf1d18ee4acd263ac1f8f94217d5ba1cde1f438dfc9b232b29"
+    },
+    "physics/floor_hit_audit.jsonl": {
+      "private_absolute_path": "/home/eric/wjg/d1max-build-isaac/runs/campus_crossing_v45_001/physics/floor_hit_audit.jsonl",
+      "bytes": 299363,
+      "sha256": "5b10fb38b4e0b116db7e97d2bafbb6e31024729202811c44453f2a544025e14c"
+    },
+    "isaac_bridge_status.json": {
+      "private_absolute_path": "/home/eric/wjg/d1max-build-isaac/runs/campus_crossing_v45_001/isaac_bridge_status.json",
+      "bytes": 1481,
+      "sha256": "07af2a1ae1d6dbe37592fc190fed9dc5e92c85a70333575fc2454a4062f87db5"
+    },
+    "scenario_suite/execution.json": {
+      "private_absolute_path": "/home/eric/wjg/d1max-build-isaac/runs/campus_crossing_v45_001/scenario_suite/execution.json",
+      "bytes": 2171,
+      "sha256": "ccebe7fd72cd96003726da7ba4fbb5ecd9bb72985e45f648cf62993ddd728a77"
+    },
+    "scenario_suite/phase_000_report.json": {
+      "private_absolute_path": "/home/eric/wjg/d1max-build-isaac/runs/campus_crossing_v45_001/scenario_suite/phase_000_report.json",
+      "bytes": 5441924,
+      "sha256": "7a46c470fa0b18f95c2615d9389c1b4090a5642dda6e582d77fa96e2b2a1cf51"
+    },
+    "scenario_suite/phase_000_trace.jsonl": {
+      "private_absolute_path": "/home/eric/wjg/d1max-build-isaac/runs/campus_crossing_v45_001/scenario_suite/phase_000_trace.jsonl",
+      "bytes": 100100718,
+      "sha256": "8927f3ae90687262e4fcb5d315e1f39d5f78541c156e6348b2dc6040c2523ebf"
+    },
+    "scan.log": {
+      "private_absolute_path": "/home/eric/wjg/d1max-build-isaac/runs/campus_crossing_v45_001/scan.log",
+      "bytes": 1091796,
+      "sha256": "e38d4e93c96e47987a314f19923c527bda30ba73f2b06202187ee5e831633054"
+    },
+    "sealed_scene": {
+      "private_absolute_path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v45-campus-all-actors-response/simulation/assets/scene_config.json",
+      "bytes": 63180,
+      "sha256": "1b3e06e7b6695119f469e256c010cf9c959073aac4120f2967534ddec3d221da"
+    },
+    "candidate_integrity": {
+      "private_absolute_path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v45-campus-all-actors-response/isaac_candidate_integrity.json",
+      "bytes": 779391,
+      "sha256": "49378f05f365d207147b32a16d4064a0b3bd39a2c8337b80c8dddc0a9350b11d"
+    },
+    "case_evaluation_new_output": {
+      "private_absolute_path": "/home/eric/wjg/d1max-build-isaac/v45_sealed_case_evaluation.json",
+      "bytes": 8997,
+      "sha256": "0ab7979c04a37733cfa6e57080008d0c171b8fdf794d3f1fa909e6a325f3ee17"
+    },
+    "physics_audit_new_output": {
+      "private_absolute_path": "/home/eric/wjg/d1max-build-isaac/v45_navigation_physics_audit.json",
+      "bytes": 2777,
+      "sha256": "579bddf7be46ee6b18bdd23c0ed064f4b47268668ba545f494e50d38d7a067b5"
+    },
+    "causal_windows_new_output": {
+      "private_absolute_path": "/home/eric/wjg/d1max-build-isaac/v45_causal_windows_scan_audit.json",
+      "bytes": 6725,
+      "sha256": "fad09f0b111f017fad09ed26c6dfb63f77766100eb3dc85aa301a2fa4f7ad585"
+    },
+    "static_prior_manifest": {
+      "private_absolute_path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v45-campus-all-actors-response/map/isaac_floor/collision_prior/static_prior.json",
+      "bytes": 50259,
+      "sha256": "f5d160d8354f1c6730317add61e9b58016273f7fd62fa2ddc55df61df5353474"
+    }
+  },
+  "frozen_code_bindings": {
+    "scene.py": {
+      "private_absolute_path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v45-campus-all-actors-response/simulation/scene.py",
+      "bytes": 85556,
+      "sha256": "164683802a6117087f0ce1d38b47dbe03761740a435d6af48406a48045bac4c0"
+    },
+    "quadruped.py": {
+      "private_absolute_path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v45-campus-all-actors-response/simulation/quadruped.py",
+      "bytes": 40630,
+      "sha256": "191626991514d1ed2cd8c118ab1e8da4c1c2b99be23b39dc447a6e395cf8dbd2"
+    },
+    "policy_history.py": {
+      "private_absolute_path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v45-campus-all-actors-response/simulation/policy_history.py",
+      "bytes": 11361,
+      "sha256": "6ef66b983ed408946a203f0f222ac83052c73745c193e30acbc8c03a29df19ab"
+    },
+    "stall_recovery.py": {
+      "private_absolute_path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v45-campus-all-actors-response/simulation/stall_recovery.py",
+      "bytes": 6436,
+      "sha256": "f0d03abbbce79c18303bc2264e7050b5ebd3e7996df5b9037dd6ca6751e1c53a"
+    },
+    "scenario_suite.py": {
+      "private_absolute_path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v45-campus-all-actors-response/simulation/scenario_suite.py",
+      "bytes": 44989,
+      "sha256": "25fa4ca7912a0081b0bbfbce523c1ca769acaf82c6efc40d55709495be8a02c5"
+    },
+    "navigation_physics_audit.py": {
+      "private_absolute_path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v45-campus-all-actors-response/simulation/navigation_physics_audit.py",
+      "bytes": 18468,
+      "sha256": "93042f7962c8d2fb5fa78a2d9a7934b8b8c52ddb241b641152f566f30c5263a8"
+    },
+    "dynamic_collision.py": {
+      "private_absolute_path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v45-campus-all-actors-response/simulation/dynamic_collision.py",
+      "bytes": 23947,
+      "sha256": "07098c9debe51cb43bd0308234a085fcc206f4dccafd8d9cb5c4af890ff16045"
+    },
+    "world_builder.py": {
+      "private_absolute_path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v45-campus-all-actors-response/simulation/world_builder.py",
+      "bytes": 50640,
+      "sha256": "e693653309b595da3580627a1c8af977224b0679ac092a0e778f6b0a75ca2fd6"
+    },
+    "truth_map.py": {
+      "private_absolute_path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v45-campus-all-actors-response/simulation/truth_map.py",
+      "bytes": 53324,
+      "sha256": "40ff59bb84b741bb54bda07333ced7220a44a0ff709b90b78b9bb1507750832c"
+    },
+    "collision_audit.py": {
+      "private_absolute_path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v45-campus-all-actors-response/simulation/collision_audit.py",
+      "bytes": 35966,
+      "sha256": "02c6694c77d0792c6cc140557dc1674fcc5c28db06989e8642767ef3fbeb494f"
+    },
+    "bridge.py": {
+      "private_absolute_path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v45-campus-all-actors-response/simulation/bridge.py",
+      "bytes": 36442,
+      "sha256": "86ddb9b41a1591878f73c0812c7a56500c6bf61391615e40b5ce6fdd8fef8d14"
+    },
+    "protocol.py": {
+      "private_absolute_path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v45-campus-all-actors-response/simulation/protocol.py",
+      "bytes": 19676,
+      "sha256": "adf1a60d48f61ad8dad27636b27b3feac05fc97c55620804919bfa00308530ec"
+    },
+    "grid_map.cpp": {
+      "private_absolute_path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v45-campus-all-actors-response/source_snapshot/nav/src/scan_planner_vendor/plan_env/src/grid_map.cpp",
+      "bytes": 140400,
+      "sha256": "33eb9eaeb09c304473fd08f3e26cfe1326f68142e312248b80c2164d7162a408"
+    },
+    "execution_validator.hpp": {
+      "private_absolute_path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v45-campus-all-actors-response/source_snapshot/nav/src/scan_planner_vendor/plan_manage/include/plan_manage/execution_validator.hpp",
+      "bytes": 69699,
+      "sha256": "8e37973bf3505f239119b6f2d8771aab89c7cfc4e915953a8d6f1a2a46b73376"
+    },
+    "motion_sweep.cpp": {
+      "private_absolute_path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v45-campus-all-actors-response/source_snapshot/nav/src/scan_planner_vendor/plan_manage/src/motion_sweep.cpp",
+      "bytes": 5708,
+      "sha256": "8aa65a28c5059e3d9f3110305d1a8366384b3a663993ef7028319343ab7f7e7b"
+    },
+    "trajectory_tracker.cpp": {
+      "private_absolute_path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v45-campus-all-actors-response/source_snapshot/nav/src/d1max_trajectory_tracker/src/trajectory_tracker.cpp",
+      "bytes": 27252,
+      "sha256": "154dc29520b05f38c4d4742e736f61377c9c068606a993e453d5295fc2a1941e"
+    },
+    "verification_python_braking_model": {
+      "private_absolute_path": "/home/eric/wjg/d1max-build-isaac/nav/install/d1max_pct_scan/lib/python3.10/site-packages/d1max_pct_scan/braking_model.py",
+      "bytes": 6949,
+      "sha256": "e55859ce878f4545c19f42561f262e0b7fe74e59137eacc9bea4a76c6e6358be"
+    },
+    "verification_environment": {
+      "private_absolute_path": "/home/eric/wjg/d1max-system/simulation/isaacsim/env.sh",
+      "bytes": 2633,
+      "sha256": "c18dcd24dfb26f2b5150311ad795eb9904ed5b2ce3cdb86ba28f114296a474ad"
+    }
+  },
+  "notes": [
+    "Sealed evaluation exit1 is expected for this failed Action and was saved to a new private file; original run artifacts were not replaced.",
+    "Native 500Hz measured-domain and STOP verification pass independently of goal/encounter/graph-retirement acceptance.",
+    "No simulator, ROS participant, native build, runtime change, or action-memory intervention was started by this post-run audit."
+  ]
+}

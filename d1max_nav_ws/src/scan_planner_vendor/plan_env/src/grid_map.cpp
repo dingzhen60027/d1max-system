@@ -175,6 +175,8 @@ void GridMap::initMap(rclcpp::Node *node)
       throw std::invalid_argument("native actor hit identities require sealed isolated static, floor-contact and exact dynamic registry evidence");
     dynamic_hit_registry_sha256_=dynamic_oracle_.registry();
   }
+  RCLCPP_INFO(node_->get_logger(),"[GridMap] dynamic hit provenance startup: %s",
+      describeDynamicHitProvenanceStatus().c_str());
 
   mp_.lidar_extrinsic_ <<
       1.0, 0.0, 0.0, -0.01100,
@@ -434,6 +436,7 @@ void GridMap::copyCollisionSnapshotTo(GridMap &out,std::int64_t source_now_ns,
   out.dynamic_hit_registry_sha256_=dynamic_hit_registry_sha256_;
   out.dynamic_hit_provenance_disabled_=dynamic_hit_provenance_disabled_;
   out.dynamic_hit_provenance_limit_=dynamic_hit_provenance_limit_;
+  out.dynamic_hit_diagnostics_=dynamic_hit_diagnostics_;
   out.observed_raw_failure_.reset();
   out.dynamic_oracle_=dynamic_oracle_; // Original source, receipt, registry and finite bounds.
   out.dynamic_oracle_query_valid_=false;
@@ -638,25 +641,36 @@ void GridMap::recordDynamicHitProvenance(const Eigen::Vector3i& cell,std::int64_
   if(!mp_.dynamic_hit_provenance_enabled_||dynamic_hit_provenance_disabled_)return;
   const std::array<int,3> key{{cell.x(),cell.y(),cell.z()}};
   if(!dynamicHitProvenanceDomainValid()||dynamic_hit_registry_sha256_!=dynamic_oracle_.registry()) {
+    dynamic_hit_diagnostics_.disable_reason=DynamicHitDisableReason::DomainMismatch;
     dynamic_hit_provenance_disabled_=true;dynamic_hit_provenance_.clear();
     observed_cylinder_cache_.clear();++occupancy_revision_;return;
   }
   if(actor_id>dynamic_oracle_.actorCount())actor_id=0;
+  const auto count=[](std::uint64_t& value) {
+    if(value<std::numeric_limits<std::uint64_t>::max())++value;
+  };
+  count(actor_id?dynamic_hit_diagnostics_.valid_tag_events:dynamic_hit_diagnostics_.zero_tag_events);
   auto found=dynamic_hit_provenance_.find(key);
   if(found==dynamic_hit_provenance_.end()) {
     if(dynamic_hit_provenance_.size()>=dynamic_hit_provenance_limit_) {
       // Losing any hit identity may conceal an unknown/static contradiction.
       // Exhaustion revokes all exceptions, not only the overflowing cell.
+      dynamic_hit_diagnostics_.disable_reason=DynamicHitDisableReason::MetadataOverflow;
       dynamic_hit_provenance_disabled_=true;dynamic_hit_provenance_.clear();
       observed_cylinder_cache_.clear();++occupancy_revision_;return;
     }
     const auto raw=isInMap(cell)?scan_planner::diagnoseRawVoxel(md_.occupancy_buffer_[toAddress(cell)],
         mp_.clamp_min_log_,mp_.min_occupancy_log_,mp_.unknown_flag_):scan_planner::RawVoxelDiagnostic::Outside;
     if(static_prior_live_hits_.count(key)||raw==scan_planner::RawVoxelDiagnostic::Occupied||
-        raw==scan_planner::RawVoxelDiagnostic::Insufficient||raw==scan_planner::RawVoxelDiagnostic::Outside)actor_id=0;
+        raw==scan_planner::RawVoxelDiagnostic::Insufficient||raw==scan_planner::RawVoxelDiagnostic::Outside) {
+      count(dynamic_hit_diagnostics_.prior_poison_events);actor_id=0;
+    }
     dynamic_hit_provenance_.emplace(key,DynamicHitProvenance{stamp,actor_id});
   } else {
-    if(found->second.actor_id!=actor_id)found->second.actor_id=0;
+    if(found->second.actor_id!=actor_id) {
+      if(found->second.actor_id)count(dynamic_hit_diagnostics_.mixed_poison_events);
+      found->second.actor_id=0;
+    }
     found->second.stamp=std::max(found->second.stamp,stamp);
   }
   observed_cylinder_cache_.clear();++occupancy_revision_;
@@ -791,6 +805,13 @@ int GridMap::uncachedRawCollisionStatusAtAddress(const Eigen::Vector3i& cell,int
   if(mp_.validated_static_prior_) {
     if(!static_prior_query_lease_valid_)return 2;
     if(static_prior_live_hits_.count(key)) {
+      // The whole closed contact cell already excludes every nonfloor static
+      // solid plus its certified margin. Only an exact, unpoisoned actor-only
+      // contradiction may cease to veto that independent contact certificate
+      // after its newer complete full-XYZ reachable geometry is disjoint.
+      // The global dynamic veto above still covers every registered actor.
+      // This selects floor contact, not empty space; odds/hits/stamps stay raw.
+      if(prior==3&&static_prior_&&static_prior_->floorContactEnabled()&&retiredDynamicActorHit(key))return 0;
       // A known actor may leave after just one measured hit, before laser
       // odds reach OCCUPIED. The same independent STATIC FREE argument
       // applies to that attributed contradiction; arbitrary unknown/weak
@@ -1108,6 +1129,9 @@ const char *GridMap::collisionEvidenceSource(const Eigen::Vector3i &cell,int sta
   if(static_prior_&&static_prior_context_valid_&&static_prior_->state(key)==1)return "certified_static_occupied";
   if(state==0&&static_prior_&&static_prior_context_valid_&&static_prior_->state(key)==0&&retiredDynamicActorHit(key))
     return "certified_static_free"; // Independent certificate selected; original hit history/odds remain visible.
+  if(state==0&&static_prior_&&static_prior_context_valid_&&static_prior_->floorContactEnabled()&&
+      static_prior_->state(key)==3&&retiredDynamicActorHit(key))
+    return "certified_flat_floor_support_contact"; // Actor veto retired; the certified floor is still contact.
   if(static_prior_live_hits_.count(key))return "live_static_conflict";
   if(state!=0)return state==1?"live_occupied":"unknown";
   if(static_prior_&&static_prior_context_valid_&&static_prior_->state(key)==3)return "certified_flat_floor_support_contact";
@@ -1123,9 +1147,27 @@ const char *GridMap::collisionEvidenceSource(const Eigen::Vector3i &cell,int sta
   return "live_observed_free";
 }
 
+std::string GridMap::describeDynamicHitProvenanceStatus() const
+{
+  const char* reason="none";
+  if(dynamic_hit_diagnostics_.disable_reason==DynamicHitDisableReason::DomainMismatch)reason="domain_or_registry_mismatch";
+  else if(dynamic_hit_diagnostics_.disable_reason==DynamicHitDisableReason::MetadataOverflow)reason="metadata_limit_exhausted";
+  return nlohmann::json{{"enabled",mp_.dynamic_hit_provenance_enabled_},
+      {"domain_valid",dynamicHitProvenanceDomainValid()},
+      {"latched_disabled",dynamic_hit_provenance_disabled_},{"entry_count",dynamic_hit_provenance_.size()},
+      {"entry_limit",dynamic_hit_provenance_limit_},{"disable_reason",reason},
+      {"registry_sha256",dynamic_hit_registry_sha256_},
+      {"counter_scope","relevant_static_free_or_nonfloor_contact_hits_before_vote_dedup_while_active"},
+      {"valid_tag_events",dynamic_hit_diagnostics_.valid_tag_events},
+      {"zero_tag_events",dynamic_hit_diagnostics_.zero_tag_events},
+      {"mixed_poison_events",dynamic_hit_diagnostics_.mixed_poison_events},
+      {"prior_poison_events",dynamic_hit_diagnostics_.prior_poison_events}}.dump();
+}
+
 std::string GridMap::describeObservedRawFailure() const
 {
   nlohmann::json out={{"first_cell_available",bool(observed_raw_failure_)}};
+  out["dynamic_hit_provenance"]=nlohmann::json::parse(describeDynamicHitProvenanceStatus());
   if(!observed_raw_failure_)return out.dump();
   const auto cell=observed_raw_failure_->cell;
   const std::array<int,3> key{{cell.x(),cell.y(),cell.z()}};
@@ -1177,6 +1219,7 @@ std::string GridMap::describeCollisionLease() const
     receipts[sensor]=std::chrono::duration_cast<std::chrono::nanoseconds>(
         ray_integrated_receipts_[sensor].time_since_epoch()).count();
   return nlohmann::json{{"kind","captured_collision_query_lease"},
+      {"dynamic_hit_provenance",nlohmann::json::parse(describeDynamicHitProvenanceStatus())},
       {"query_source_ns",collision_cache_clock_ns_},{"query_receipt_ns",collision_cache_receipt_ns_},
       {"source_deadline_ns",collision_cache_deadline_ns_},{"receipt_deadline_ns",collision_cache_receipt_deadline_ns_},
       {"both_ray_source_ns",ray_integrated_stamps_},{"both_ray_receipt_ns",receipts},

@@ -52,7 +52,7 @@ BrakingModel BrakingModel::load(const std::string& file,const std::string& sha,c
     };
     out.command_max_speed=bounded("command_max_speed_mps",.3);
     out.command_max_yaw=bounded("command_max_yaw_radps",.5);
-    if(bounded("reachable_max_speed_mps",.6)!=out.max_speed||bounded("reachable_max_yaw_radps",.8)!=out.max_yaw)
+    if(bounded("reachable_max_speed_mps",.65)!=out.max_speed||bounded("reachable_max_yaw_radps",.8)!=out.max_yaw)
       throw std::invalid_argument("isolated platform measurement mismatch");
     out.isolated_spot_model=true;
   }

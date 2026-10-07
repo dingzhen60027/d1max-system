@@ -1,0 +1,130 @@
+{
+  "schema": 1,
+  "scope": "original_same_snapshot_unknown_capture",
+  "run": "/home/eric/wjg/d1max-build-isaac/runs/campus_crossing_v40_diagnostic_001",
+  "scan_log_prefix_bytes": 383881,
+  "scan_log_prefix_sha256": "a1d93b41f9232f0ce2060e069aa7a81a06bca36b42f9df59c3abefade4f18dfd",
+  "count": 2,
+  "captured": [
+    {
+      "line": 1341,
+      "raw_line": "[WARN] [1791366472.327405678] [d1max.live_planning.scan.scan_planner_node]: Motion proof demand=2858 voxels=168477 length=0.902 yaw_bound=1.036 check_ms=0.000 demand_age_ms=0.000 front_age_ms=162.000 rear_age_ms=162.000 queried=1 reason=motion_sweep_unknown_or_expired snapshot=3130595 body_source_ns=1791366373112873492 check_end_ns=1791366373112873492 first_cell={\"attributed_hit_source_ns\":1791366372450873492,\"both_ray_receipt_ns\":[1213010897937351,1213010937566870],\"both_ray_source_ns\":[1791366372950873492,1791366372950873492],\"dynamic_hit_provenance\":{\"counter_scope\":\"relevant_static_free_or_nonfloor_contact_hits_before_vote_dedup_while_active\",\"disable_reason\":\"none\",\"domain_valid\":true,\"enabled\":true,\"entry_count\":4910,\"entry_limit\":100000,\"latched_disabled\":false,\"mixed_poison_events\":0,\"prior_poison_events\":10,\"registry_sha256\":\"d43fdce89b58165d0673931d50b0d07e8ecd10aa09f42bc46568d685ebce4b15\",\"valid_tag_events\":8396,\"zero_tag_events\":0},\"dynamic_hit_provenance_disabled\":false,\"dynamic_hit_provenance_enabled\":true,\"dynamic_query_valid\":true,\"dynamic_receipt_deadline_ns\":1213011441795381,\"dynamic_registry_sha256\":\"d43fdce89b58165d0673931d50b0d07e8ecd10aa09f42bc46568d685ebce4b15\",\"dynamic_source_deadline_ns\":1791366373312873492,\"dynamic_source_ns\":1791366373112873492,\"first_cell_available\":true,\"free_receipt_ns\":1213010897937351,\"free_source_ns\":1791366372950873492,\"hit_actor_cell_state\":0,\"hit_actor_id\":1,\"hit_actor_name\":\"plaza_person\",\"hit_source_ns\":1791366372450873492,\"index\":[-6,-83,0],\"native_state\":2,\"prior_state\":3,\"raw_category\":\"observed_insufficient\",\"raw_log_odds\":-1.0251163004619048,\"raw_state\":2,\"receipt_deadline_ns\":1213011397937351,\"receipt_query_ns\":1213011270705302,\"source_deadline_ns\":1791366373312873492,\"source_query_ns\":1791366373141521096,\"static_context_valid\":true,\"static_query_valid\":true}",
+      "raw_line_sha256": "c3e898179cbe6805ae2fbe00e43f57bdf7147d0e532e5641b277a8555a180e09",
+      "captured": {
+        "attributed_hit_source_ns": 1791366372450873492,
+        "both_ray_receipt_ns": [
+          1213010897937351,
+          1213010937566870
+        ],
+        "both_ray_source_ns": [
+          1791366372950873492,
+          1791366372950873492
+        ],
+        "dynamic_hit_provenance": {
+          "counter_scope": "relevant_static_free_or_nonfloor_contact_hits_before_vote_dedup_while_active",
+          "disable_reason": "none",
+          "domain_valid": true,
+          "enabled": true,
+          "entry_count": 4910,
+          "entry_limit": 100000,
+          "latched_disabled": false,
+          "mixed_poison_events": 0,
+          "prior_poison_events": 10,
+          "registry_sha256": "d43fdce89b58165d0673931d50b0d07e8ecd10aa09f42bc46568d685ebce4b15",
+          "valid_tag_events": 8396,
+          "zero_tag_events": 0
+        },
+        "dynamic_hit_provenance_disabled": false,
+        "dynamic_hit_provenance_enabled": true,
+        "dynamic_query_valid": true,
+        "dynamic_receipt_deadline_ns": 1213011441795381,
+        "dynamic_registry_sha256": "d43fdce89b58165d0673931d50b0d07e8ecd10aa09f42bc46568d685ebce4b15",
+        "dynamic_source_deadline_ns": 1791366373312873492,
+        "dynamic_source_ns": 1791366373112873492,
+        "first_cell_available": true,
+        "free_receipt_ns": 1213010897937351,
+        "free_source_ns": 1791366372950873492,
+        "hit_actor_cell_state": 0,
+        "hit_actor_id": 1,
+        "hit_actor_name": "plaza_person",
+        "hit_source_ns": 1791366372450873492,
+        "index": [
+          -6,
+          -83,
+          0
+        ],
+        "native_state": 2,
+        "prior_state": 3,
+        "raw_category": "observed_insufficient",
+        "raw_log_odds": -1.0251163004619048,
+        "raw_state": 2,
+        "receipt_deadline_ns": 1213011397937351,
+        "receipt_query_ns": 1213011270705302,
+        "source_deadline_ns": 1791366373312873492,
+        "source_query_ns": 1791366373141521096,
+        "static_context_valid": true,
+        "static_query_valid": true
+      }
+    },
+    {
+      "line": 1353,
+      "raw_line": "[WARN] [1791366473.162533505] [d1max.live_planning.scan.scan_planner_node]: Motion proof demand=2898 voxels=168627 length=0.902 yaw_bound=1.036 check_ms=0.000 demand_age_ms=20.000 front_age_ms=142.000 rear_age_ms=142.000 queried=1 reason=motion_sweep_unknown_or_expired snapshot=3132564 body_source_ns=1791366373372873492 check_end_ns=1791366373392873492 first_cell={\"attributed_hit_source_ns\":1791366372650873492,\"both_ray_receipt_ns\":[1213011786201885,1213011827825907],\"both_ray_source_ns\":[1791366373250873492,1791366373250873492],\"dynamic_hit_provenance\":{\"counter_scope\":\"relevant_static_free_or_nonfloor_contact_hits_before_vote_dedup_while_active\",\"disable_reason\":\"none\",\"domain_valid\":true,\"enabled\":true,\"entry_count\":5151,\"entry_limit\":100000,\"latched_disabled\":false,\"mixed_poison_events\":0,\"prior_poison_events\":10,\"registry_sha256\":\"d43fdce89b58165d0673931d50b0d07e8ecd10aa09f42bc46568d685ebce4b15\",\"valid_tag_events\":8792,\"zero_tag_events\":0},\"dynamic_hit_provenance_disabled\":false,\"dynamic_hit_provenance_enabled\":true,\"dynamic_query_valid\":true,\"dynamic_receipt_deadline_ns\":1213012296072169,\"dynamic_registry_sha256\":\"d43fdce89b58165d0673931d50b0d07e8ecd10aa09f42bc46568d685ebce4b15\",\"dynamic_source_deadline_ns\":1791366373592873492,\"dynamic_source_ns\":1791366373392873492,\"first_cell_available\":true,\"free_receipt_ns\":1213011786201885,\"free_source_ns\":1791366373250873492,\"hit_actor_cell_state\":0,\"hit_actor_id\":1,\"hit_actor_name\":\"plaza_person\",\"hit_source_ns\":1791366372650873492,\"index\":[-6,-78,0],\"native_state\":2,\"prior_state\":3,\"raw_category\":\"observed_insufficient\",\"raw_log_odds\":-1.8724141608491083,\"raw_state\":2,\"receipt_deadline_ns\":1213012286201885,\"receipt_query_ns\":1213012104823621,\"source_deadline_ns\":1791366373592873492,\"source_query_ns\":1791366373401430267,\"static_context_valid\":true,\"static_query_valid\":true}",
+      "raw_line_sha256": "4482eb0e67961bc39baa3ff72548c6710cdf149819be1bb2677a2d46ee2ffc61",
+      "captured": {
+        "attributed_hit_source_ns": 1791366372650873492,
+        "both_ray_receipt_ns": [
+          1213011786201885,
+          1213011827825907
+        ],
+        "both_ray_source_ns": [
+          1791366373250873492,
+          1791366373250873492
+        ],
+        "dynamic_hit_provenance": {
+          "counter_scope": "relevant_static_free_or_nonfloor_contact_hits_before_vote_dedup_while_active",
+          "disable_reason": "none",
+          "domain_valid": true,
+          "enabled": true,
+          "entry_count": 5151,
+          "entry_limit": 100000,
+          "latched_disabled": false,
+          "mixed_poison_events": 0,
+          "prior_poison_events": 10,
+          "registry_sha256": "d43fdce89b58165d0673931d50b0d07e8ecd10aa09f42bc46568d685ebce4b15",
+          "valid_tag_events": 8792,
+          "zero_tag_events": 0
+        },
+        "dynamic_hit_provenance_disabled": false,
+        "dynamic_hit_provenance_enabled": true,
+        "dynamic_query_valid": true,
+        "dynamic_receipt_deadline_ns": 1213012296072169,
+        "dynamic_registry_sha256": "d43fdce89b58165d0673931d50b0d07e8ecd10aa09f42bc46568d685ebce4b15",
+        "dynamic_source_deadline_ns": 1791366373592873492,
+        "dynamic_source_ns": 1791366373392873492,
+        "first_cell_available": true,
+        "free_receipt_ns": 1213011786201885,
+        "free_source_ns": 1791366373250873492,
+        "hit_actor_cell_state": 0,
+        "hit_actor_id": 1,
+        "hit_actor_name": "plaza_person",
+        "hit_source_ns": 1791366372650873492,
+        "index": [
+          -6,
+          -78,
+          0
+        ],
+        "native_state": 2,
+        "prior_state": 3,
+        "raw_category": "observed_insufficient",
+        "raw_log_odds": -1.8724141608491083,
+        "raw_state": 2,
+        "receipt_deadline_ns": 1213012286201885,
+        "receipt_query_ns": 1213012104823621,
+        "source_deadline_ns": 1791366373592873492,
+        "source_query_ns": 1791366373401430267,
+        "static_context_valid": true,
+        "static_query_valid": true
+      }
+    }
+  ]
+}

@@ -1,0 +1,154 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites tests="125" failures="0" disabled="0" errors="0" time="0.184" timestamp="2026-10-07T20:36:24" name="AllTests">
+  <testsuite name="TrackerV2" tests="31" failures="0" disabled="0" errors="0" time="0.01" timestamp="2026-10-07T20:36:24">
+    <testcase name="LegacyInputsCannotManufactureControlIdentity" status="run" result="completed" time="0" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.TrackerV2" />
+    <testcase name="MissingOrDifferentMapGeometryRevisionCannotEnterTheAdmittedCurve" status="run" result="completed" time="0" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.TrackerV2" />
+    <testcase name="PredictedStateHeadersDoNotManufactureIndependentTurnRestSamples" status="run" result="completed" time="0" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.TrackerV2" />
+    <testcase name="WrongEpochOdometryInvalidatesWholeTask" status="run" result="completed" time="0.001" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.TrackerV2" />
+    <testcase name="RetiredExpiredAndDuplicateObservationsCannotStopNewTaskOrRenewItsBody" status="run" result="completed" time="0" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.TrackerV2" />
+    <testcase name="RetiredEpochWithNewerTimestampCannotCancelRelocalizedTask" status="run" result="completed" time="0" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.TrackerV2" />
+    <testcase name="FreshEvidenceFaultCannotBeClearedByOlderValidPacket" status="run" result="completed" time="0" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.TrackerV2" />
+    <testcase name="NewEpochWithResetClockRevokesInsteadOfHidingBehindPriorSourceFloor" status="run" result="completed" time="0" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.TrackerV2" />
+    <testcase name="ForeignAndFutureFaultsCannotPoisonNextExpectedSource" status="run" result="completed" time="0" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.TrackerV2" />
+    <testcase name="NewerForeignSessionMapOrSchemaDoesNotStopFreshTrajectoryOrEraseMeasuredProgress" status="run" result="completed" time="0" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.TrackerV2" />
+    <testcase name="MatchingXYZProgressUsesRealSourceTimeNotControlTicks" status="run" result="completed" time="0" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.TrackerV2" />
+    <testcase name="SmallPhysicalBacktrackPreservesOnlyCommittedHighWater" status="run" result="completed" time="0" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.TrackerV2" />
+    <testcase name="VerticalMeasurementIsNotLostByXYProjection" status="run" result="completed" time="0" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.TrackerV2" />
+    <testcase name="DifferentSegmentOrAnchorNeverReplacesCurve" status="run" result="completed" time="0" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.TrackerV2" />
+    <testcase name="HigherIdCannotHideOlderSolveOrDistantJoin" status="run" result="completed" time="0.001" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.TrackerV2" />
+    <testcase name="ValidReplacementPreservesLimiterAndDoesNotInventGlobalProgress" status="run" result="completed" time="0" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.TrackerV2" />
+    <testcase name="CancelNeedsSameIdentityNotMerelyMatchingGeneration" status="run" result="completed" time="0" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.TrackerV2" />
+    <testcase name="FreshPublishStampCannotLeaseOldOrFutureMeasurementEvidence" status="run" result="completed" time="0" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.TrackerV2" />
+    <testcase name="FreshBodyStateCannotHideReorderedInputs" status="run" result="completed" time="0" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.TrackerV2" />
+    <testcase name="SourceEvidenceExpiresWithoutAnyNewCallback" status="run" result="completed" time="0" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.TrackerV2" />
+    <testcase name="MovingBodyAdmitsMeasuredNonzeroCurveParameterWithoutRestarting" status="run" result="completed" time="0" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.TrackerV2" />
+    <testcase name="DeliveryTimeDoesNotAdvanceAStationaryJoin" status="run" result="completed" time="0.001" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.TrackerV2" />
+    <testcase name="InvalidHandoffProofNeverReplacesIncumbent" status="run" result="completed" time="0" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.TrackerV2" />
+    <testcase name="MatchingPositionCannotHideVelocityMismatchOrUnboundedCurveDynamics" status="run" result="completed" time="0.001" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.TrackerV2" />
+    <testcase name="ActualVendorCurveAllowsDistantBendButRejectsUnbrakeableEntryWithoutResettingLimiter" status="run" result="completed" time="0" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.TrackerV2" />
+    <testcase name="HandoffCannotJumpPastBoundedArcWindowOrOntoOtherFloor" status="run" result="completed" time="0" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.TrackerV2" />
+    <testcase name="VerifiedFloorSpatialProfileDoesNotFlattenOrGloballyThrottleXYZCurve" status="run" result="completed" time="0.002" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.TrackerV2" />
+    <testcase name="RemainingDomainIncludesMeasuredBacktrackingNotHighWaterCutoff" status="run" result="completed" time="0" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.TrackerV2" />
+    <testcase name="LocalEndpointRetainsFreshMeasuredCurveWhileSuccessorIsOnlyPrepared" status="run" result="completed" time="0.003" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.TrackerV2" />
+    <testcase name="RecoverableSourceGapRetainsCurveAndNeedsDistinctSamplesOverPointSixSeconds" status="run" result="completed" time="0" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.TrackerV2" />
+    <testcase name="SupportRelativeHeightAllowsVerifiedCorridorButNotCrossFloorSupport" status="run" result="completed" time="0.001" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.TrackerV2" />
+  </testsuite>
+  <testsuite name="TrackerJoinDiagnostic" tests="2" failures="0" disabled="0" errors="0" time="0" timestamp="2026-10-07T20:36:24">
+    <testcase name="EveryEvidencePredicateReportsItsOriginalReasonWithoutChangingVerdict" status="run" result="completed" time="0" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.TrackerJoinDiagnostic" />
+    <testcase name="FailedTrialPreservesOriginalFineNanosecondEvidenceAndSafeIncumbent" status="run" result="completed" time="0" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.TrackerJoinDiagnostic" />
+  </testsuite>
+  <testsuite name="TrackerMovingEntry" tests="5" failures="0" disabled="0" errors="0" time="0.042" timestamp="2026-10-07T20:36:24">
+    <testcase name="ReverseMeasuredPrefixReproducesTurnaroundButCannotReplaceMovingIncumbent" status="run" result="completed" time="0.005" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.TrackerMovingEntry" />
+    <testcase name="ExistingHeadingThresholdAllowsContinuousDirectionAndRejectsOnlyItsOtherSide" status="run" result="completed" time="0.019" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.TrackerMovingEntry" />
+    <testcase name="ZeroOutputMayAlignButPositiveNearZeroOutputDoesNotInventAMovingThreshold" status="run" result="completed" time="0.011" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.TrackerMovingEntry" />
+    <testcase name="PreparedEntryRechecksDirectionAfterIncumbentResumesWithoutPromotingGeometry" status="run" result="completed" time="0.004" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.TrackerMovingEntry" />
+    <testcase name="IncumbentAlreadyOutsideHeadingGateCannotClaimContinuousForwardEntry" status="run" result="completed" time="0.003" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.TrackerMovingEntry" />
+  </testsuite>
+  <testsuite name="TrackerSpatialLookahead" tests="5" failures="0" disabled="0" errors="0" time="0.019" timestamp="2026-10-07T20:36:24">
+    <testcase name="ExactV32XYZCurveRequestsForwardWithoutAdvancingMeasuredPhaseOrRaisingItsCap" status="run" result="completed" time="0.005" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.TrackerSpatialLookahead" />
+    <testcase name="DefaultRequiresVerifiedFloorAndPureVerticalHasNoPlanarAuthority" status="run" result="completed" time="0.001" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.TrackerSpatialLookahead" />
+    <testcase name="OriginalCurvatureAndMovingHeadingGuardsStillConstrainAForwardLookPoint" status="run" result="completed" time="0.009" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.TrackerSpatialLookahead" />
+    <testcase name="TerminalZeroArcSpanKeepsEndpointFeedForwardAndOriginalMeasuredPhase" status="run" result="completed" time="0.001" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.TrackerSpatialLookahead" />
+    <testcase name="RecordedNearCuspKeepsFullXYZAndItsOriginalTinyBrakingCap" status="run" result="completed" time="0.003" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.TrackerSpatialLookahead" />
+  </testsuite>
+  <testsuite name="TrackerGeometryReceipt" tests="4" failures="0" disabled="0" errors="0" time="0.001" timestamp="2026-10-07T20:36:24">
+    <testcase name="PreparationAndUnconnectedFreshBodyCannotClaimSoftwareInstallation" status="run" result="completed" time="0" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.TrackerGeometryReceipt" />
+    <testcase name="InstalledFactsStayFixedAcrossProofRenewalHoldingAndRepeatedBody" status="run" result="completed" time="0.001" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.TrackerGeometryReceipt" />
+    <testcase name="MotionFencePreservesActualInstallationAndCannotBorrowMovingHandoff" status="run" result="completed" time="0" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.TrackerGeometryReceipt" />
+    <testcase name="UnixOriginalBodyFactsAreExactAtInstallationAndDoNotRenewWithTimer" status="run" result="completed" time="0" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.TrackerGeometryReceipt" />
+  </testsuite>
+  <testsuite name="TrackerEntryReobservation" tests="3" failures="0" disabled="0" errors="0" time="0.001" timestamp="2026-10-07T20:36:24">
+    <testcase name="FreshWholeProofUsesActualNewBoundaryNotAnExpiredWorkerSample" status="run" result="completed" time="0.001" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.TrackerEntryReobservation" />
+    <testcase name="CurrentMeasurementAndFiniteNativeDomainRemainStrict" status="run" result="completed" time="0" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.TrackerEntryReobservation" />
+    <testcase name="StaleOrNegativeWholeProofCannotRefreshEntry" status="run" result="completed" time="0" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.TrackerEntryReobservation" />
+  </testsuite>
+  <testsuite name="TrackerWriterCAS" tests="13" failures="0" disabled="0" errors="0" time="0.052" timestamp="2026-10-07T20:36:24">
+    <testcase name="InitialAckBindsActualInstallationNotLatestIntentAndCannotRollback" status="run" result="completed" time="0.001" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.TrackerWriterCAS" />
+    <testcase name="InitialFactRequiresSignedLeaseAndRealInstallationButAcceptsExpiredReceiptTime" status="run" result="completed" time="0.001" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.TrackerWriterCAS" />
+    <testcase name="CancelledCommitTwoAndAckHighWaterCannotBlockNextExecutionCommitOne" status="run" result="completed" time="0.002" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.TrackerWriterCAS" />
+    <testcase name="NewWriterScopeRequiresRetiredDifferentTaskExecutionAndForwardControlEpoch" status="run" result="completed" time="0.003" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.TrackerWriterCAS" />
+    <testcase name="CancelBeforeLateInitialFactRecordsCommitUnderHoldUntilNewAuthority" status="run" result="completed" time="0" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.TrackerWriterCAS" />
+    <testcase name="ConditionalGrantNeverChangesIncumbentBeforeActualWriterFact" status="run" result="completed" time="0.002" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.TrackerWriterCAS" />
+    <testcase name="FixedGrantRejectsOverwriteAndPreparationUsesActualMovingBoundary" status="run" result="completed" time="0" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.TrackerWriterCAS" />
+    <testcase name="PreparedExpiryCopiesOriginalFineNanosecondCapsWithoutRoundTrip" status="run" result="completed" time="0.002" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.TrackerWriterCAS" />
+    <testcase name="LateAppliedFactMovesIdentityForwardAndHoldsWithoutRollback" status="run" result="completed" time="0.001" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.TrackerWriterCAS" />
+    <testcase name="NegativeFactReleasesSlotButLateAppliedTombstoneCannotResume" status="run" result="completed" time="0.001" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.TrackerWriterCAS" />
+    <testcase name="SameReferenceDifferentCurveNegativeFactResolvesOnlyExactUnchangedWriter" status="run" result="completed" time="0" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.TrackerWriterCAS" />
+    <testcase name="WrongAppliedOwnerOrChangedCommandNeverReplacesGeometry" status="run" result="completed" time="0.005" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.TrackerWriterCAS" />
+    <testcase name="StationaryReentryRequiresOriginalSdkWitnessAndNewCurveProofNotOldProof" status="run" result="completed" time="0.034" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.TrackerWriterCAS" />
+  </testsuite>
+  <testsuite name="TrackerTimeContract" tests="7" failures="0" disabled="0" errors="0" time="0.001" timestamp="2026-10-07T20:36:24">
+    <testcase name="RealUnixLeaseFactsRemainExactAndCanOnlyCapFreshDeadline" status="run" result="completed" time="0" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.TrackerTimeContract" />
+    <testcase name="V10EqualUnixSourceIsAdmittedAndTrueFutureNanosecondIsRejected" status="run" result="completed" time="0" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.TrackerTimeContract" />
+    <testcase name="IntegerFreshnessUsesOriginalLimitsAtNanosecondBoundary" status="run" result="completed" time="0" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.TrackerTimeContract" />
+    <testcase name="OriginalNanosecondOrderingDoesNotCollapseAdjacentBodySources" status="run" result="completed" time="0" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.TrackerTimeContract" />
+    <testcase name="ExactUnixClockFlowsThroughPrepareCommitDemandAndInstallation" status="run" result="completed" time="0" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.TrackerTimeContract" />
+    <testcase name="WholeCurveProofAbsoluteExpiryDoesNotGainOneNanosecond" status="run" result="completed" time="0.001" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.TrackerTimeContract" />
+    <testcase name="PreparedDemandAndAdmissionKeepActualClockNanoseconds" status="run" result="completed" time="0" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.TrackerTimeContract" />
+  </testsuite>
+  <testsuite name="TrackerExecution" tests="25" failures="0" disabled="0" errors="0" time="0.034" timestamp="2026-10-07T20:36:24">
+    <testcase name="CandidatePreparationDoesNotActivateBeforeMatchingOwnerCommit" status="run" result="completed" time="0.001" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.TrackerExecution" />
+    <testcase name="NewCandidateCannotBeActivatedWithPredecessorAdmissionAndProof" status="run" result="completed" time="0" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.TrackerExecution" />
+    <testcase name="GeometryOnlyCommitNeverProducesMotionAndCanLaterAuthorize" status="run" result="completed" time="0.001" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.TrackerExecution" />
+    <testcase name="ArmingHeartbeatDoesNotEraseCommittedGeometryOrNeedOldAdmission" status="run" result="completed" time="0" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.TrackerExecution" />
+    <testcase name="ProofGapStopsImmediatelyButDoesNotInventOdometryRecoveryDelay" status="run" result="completed" time="0" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.TrackerExecution" />
+    <testcase name="ThirtySecondStationaryPreviewCanExecuteOnlyWithCurrentExactProof" status="run" result="completed" time="0.009" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.TrackerExecution" />
+    <testcase name="NativeUnknownExpiredProofWrongOwnerAndMockLeakCannotCommit" status="run" result="completed" time="0.001" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.TrackerExecution" />
+    <testcase name="FreshNextProofDoesNotRevokeStillFreshLeasedPredecessor" status="run" result="completed" time="0.001" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.TrackerExecution" />
+    <testcase name="TwoHundredMillisecondProofRefreshDoesNotWaitForOwnerHeartbeat" status="run" result="completed" time="0" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.TrackerExecution" />
+    <testcase name="ProofFloorCannotBorrowForeignGeometryOrCrossLatestInvalidFence" status="run" result="completed" time="0.002" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.TrackerExecution" />
+    <testcase name="FreshCollisionProofCannotRenewAuthorityOrResumeHoldingPhase" status="run" result="completed" time="0.001" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.TrackerExecution" />
+    <testcase name="OwnerCanCommitAdmittedProofWhenNextValidSequenceArrivesFirst" status="run" result="completed" time="0" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.TrackerExecution" />
+    <testcase name="MissingSupportAndStairSemanticsNeverBecomeFlatFloorByDefault" status="run" result="completed" time="0.002" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.TrackerExecution" />
+    <testcase name="RemainingProofIsOnlyForCommittedCurveAndRecomputesArcCoverage" status="run" result="completed" time="0.002" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.TrackerExecution" />
+    <testcase name="OlderFreshHeartbeatCanUseExactProofHistoryButNeverMaskNewInvalid" status="run" result="completed" time="0" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.TrackerExecution" />
+    <testcase name="GeometryPreviewProjectsOnlyNewMeasuredPositionWhileDemandStaysZero" status="run" result="completed" time="0" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.TrackerExecution" />
+    <testcase name="ControlDeadlineDoesNotFreezeThePriorCollisionSnapshotsDeadline" status="run" result="completed" time="0.002" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.TrackerExecution" />
+    <testcase name="IndependentControlDeadlineNeverExtendsOriginalOwnerLease" status="run" result="completed" time="0" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.TrackerExecution" />
+    <testcase name="OnlyOwnExactFreshBlockedForwardTurnCanRequestDifferentManeuver" status="run" result="completed" time="0" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.TrackerExecution" />
+    <testcase name="UnknownStaleForeignOrMutatedSweepCannotRequestTurn" status="run" result="completed" time="0.008" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.TrackerExecution" />
+    <testcase name="NeverGeneratedOrRevokedDemandCannotRequestTurn" status="run" result="completed" time="0" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.TrackerExecution" />
+    <testcase name="BlockedEntryReportsExactOriginalSweepOnceWithoutRestampingOrAuthority" status="run" result="completed" time="0.002" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.TrackerExecution" />
+    <testcase name="OccupiedInPlaceAlignTurnReportsBlockedEntryInsteadOfRepeatingIt" status="run" result="completed" time="0.001" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.TrackerExecution" />
+    <testcase name="NewerProposalCannotRedatePreparedCurveTask" status="run" result="completed" time="0" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.TrackerExecution" />
+    <testcase name="FailedCommitStillFollowsOwnerLeaseForSuccessorProposal" status="run" result="completed" time="0.001" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.TrackerExecution" />
+  </testsuite>
+  <testsuite name="TrackerSpatialBudget" tests="4" failures="0" disabled="0" errors="0" time="0.004" timestamp="2026-10-07T20:36:24">
+    <testcase name="FlatSlopeAndReversedOrRotatedTravelUseTheSameSpatialLimit" status="run" result="completed" time="0" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.TrackerSpatialBudget" />
+    <testcase name="UndefinedAndVerticalDirectionsCannotBecomeFlatGround" status="run" result="completed" time="0" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.TrackerSpatialBudget" />
+    <testcase name="ProductionCurveControllerPreservesTrueVerticalVelocityAndAcceleration" status="run" result="completed" time="0.003" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.TrackerSpatialBudget" />
+    <testcase name="UncommittedCandidateCannotChangeTheIncumbentBudgetOrLimiter" status="run" result="completed" time="0.001" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.TrackerSpatialBudget" />
+  </testsuite>
+  <testsuite name="TrackerPreparationWorker" tests="9" failures="0" disabled="0" errors="0" time="0.012" timestamp="2026-10-07T20:36:24">
+    <testcase name="LatestPendingIsBoundedAndOldCompletionCannotWin" status="run" result="completed" time="0.001" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.TrackerPreparationWorker" />
+    <testcase name="CancelNeverQueuesBehindBuildAndRetiredResultCannotReturn" status="run" result="completed" time="0.001" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.TrackerPreparationWorker" />
+    <testcase name="ExceptionsBecomeFailedCompletionNotSharedControllerMutation" status="run" result="completed" time="0.001" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.TrackerPreparationWorker" />
+    <testcase name="ProductionGeometryPreparesOffOwnerButOnlyExactPermitCommits" status="run" result="completed" time="0.002" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.TrackerPreparationWorker" />
+    <testcase name="CancelAndDuplicateCannotInstallRetiredCandidateOrMutateCachedCurve" status="run" result="completed" time="0.001" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.TrackerPreparationWorker" />
+    <testcase name="CachedGeometryCannotBeReusedForMutatedShapeOrRelaxedConfiguration" status="run" result="completed" time="0" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.TrackerPreparationWorker" />
+    <testcase name="CachedSupportCannotAuthorizeDifferentEvidenceWithReusedHash" status="run" result="completed" time="0" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.TrackerPreparationWorker" />
+    <testcase name="RejectedCandidatePreservesIncumbentAndWorkerNeverPredictsActualEntry" status="run" result="completed" time="0.005" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.TrackerPreparationWorker" />
+    <testcase name="FreshContextResetRetiresPreparedCandidateAndPriorPermit" status="run" result="completed" time="0.001" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.TrackerPreparationWorker" />
+  </testsuite>
+  <testsuite name="TrackerReferenceDomain" tests="8" failures="0" disabled="0" errors="0" time="0.001" timestamp="2026-10-07T20:36:24">
+    <testcase name="FullXyzDerivativeAndTravelAreSeparateFromCommandCaps" status="run" result="completed" time="0" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.TrackerReferenceDomain" />
+    <testcase name="NoReferenceClockAdvanceAndXyzC1RemainsPointZeroFive" status="run" result="completed" time="0" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.TrackerReferenceDomain" />
+    <testcase name="ActualAbovePointFiveStopsAndLegacyMeasurementsStayUnchanged" status="run" result="completed" time="0" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.TrackerReferenceDomain" />
+    <testcase name="ExplicitPointSixAdmitsRawGaitPeakWithoutClippingXyzOrRaisingCommands" status="run" result="completed" time="0" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.TrackerReferenceDomain" />
+    <testcase name="PointSixCurveAdmissionStillUsesOriginalXyzC1AndMeasuredProgress" status="run" result="completed" time="0" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.TrackerReferenceDomain" />
+    <testcase name="SealedReferenceCannotAuthorizeLiveDifferentRecordOrCommandIncrease" status="run" result="completed" time="0.001" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.TrackerReferenceDomain" />
+    <testcase name="WriterAckUsesOriginalBoundedXyzArcAndKeepsC1" status="run" result="completed" time="0" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.TrackerReferenceDomain" />
+    <testcase name="CachedGeometryCannotSwitchReferenceDomain" status="run" result="completed" time="0" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.TrackerReferenceDomain" />
+  </testsuite>
+  <testsuite name="TrackerDuplicateTick" tests="9" failures="0" disabled="0" errors="0" time="0.007" timestamp="2026-10-07T20:36:24">
+    <testcase name="Skips20msTimersWithoutNewDemandOrLimiterResetAndResumesContinuously" status="run" result="completed" time="0" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.TrackerDuplicateTick" />
+    <testcase name="OriginalDemandExpiresBySteadyReceiptAndSameSourceCannotRenewIt" status="run" result="completed" time="0.001" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.TrackerDuplicateTick" />
+    <testcase name="OriginalTwoMicrosecondCurveProofIsNotRenewedByLongerNewProof" status="run" result="completed" time="0" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.TrackerDuplicateTick" />
+    <testcase name="NewMatchingShorterProofAndPermitPermanentlyShortenOriginalLease" status="run" result="completed" time="0.001" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.TrackerDuplicateTick" />
+    <testcase name="ExactOwnMotionProofOnlyShortensAndNeverRefreshesEmissionReceipt" status="run" result="completed" time="0" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.TrackerDuplicateTick" />
+    <testcase name="RevocationInvalidProofHoldingAndNewBodyFaultCannotBeSkipped" status="run" result="completed" time="0.002" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.TrackerDuplicateTick" />
+    <testcase name="ChangedAuthorityAndControlPhaseRequireOrdinaryControlPath" status="run" result="completed" time="0.002" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.TrackerDuplicateTick" />
+    <testcase name="AppliedAckSameNowUsesOriginalPreparedCommandDeadline" status="run" result="completed" time="0" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.TrackerDuplicateTick" />
+    <testcase name="OneNanosecondRegressionAtUnixScaleStopsEvenWhenDoubleCannotDistinguishIt" status="run" result="completed" time="0.001" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.TrackerDuplicateTick" />
+  </testsuite>
+</testsuites>

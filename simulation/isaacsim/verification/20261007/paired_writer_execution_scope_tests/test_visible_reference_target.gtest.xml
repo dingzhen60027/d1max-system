@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites tests="7" failures="0" disabled="0" errors="0" time="0.071" timestamp="2026-10-07T20:45:47" name="AllTests">
+  <testsuite name="VisibleReferenceTarget" tests="7" failures="0" disabled="0" errors="0" time="0.071" timestamp="2026-10-07T20:45:47">
+    <testcase name="ProductionObservedSideStepAndNativeAstarAroundBoxWithoutSeeingBehindIt" status="run" result="completed" time="0.038" timestamp="2026-10-07T20:45:47" classname="scan_planner.VisibleReferenceTarget" />
+    <testcase name="NoObservedSideSpaceDoesNotBecomeAFreeDetour" status="run" result="completed" time="0.013" timestamp="2026-10-07T20:45:47" classname="scan_planner.VisibleReferenceTarget" />
+    <testcase name="ExecutionSideTargetIncludesSameReactionAndBrakingEnvelope" status="run" result="completed" time="0.011" timestamp="2026-10-07T20:45:47" classname="scan_planner.VisibleReferenceTarget" />
+    <testcase name="MissingSideSupportCannotBorrowCenterlineHeight" status="run" result="completed" time="0.003" timestamp="2026-10-07T20:45:47" classname="scan_planner.VisibleReferenceTarget" />
+    <testcase name="SideHeightComesFromOriginalSupportInsteadOfFlatRoute" status="run" result="completed" time="0.003" timestamp="2026-10-07T20:45:47" classname="scan_planner.VisibleReferenceTarget" />
+    <testcase name="StairsWrongFloorOrFrameCannotBeChosenAsSideSupport" status="run" result="completed" time="0.002" timestamp="2026-10-07T20:45:48" classname="scan_planner.VisibleReferenceTarget" />
+    <testcase name="CancelledAndFiniteQueryBudgetCannotProduceTarget" status="run" result="completed" time="0.001" timestamp="2026-10-07T20:45:48" classname="scan_planner.VisibleReferenceTarget" />
+  </testsuite>
+</testsuites>

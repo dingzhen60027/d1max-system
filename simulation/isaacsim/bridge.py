@@ -19,7 +19,18 @@ import numpy as np
 
 from protocol import (STATE_PORT, COMMAND_PORT, MAX_DATAGRAM, RayAssembler,
                       decode, finite_vector, command_packet, native_ray_metadata,
-                      NATIVE_RAY_PHASE)
+NATIVE_RAY_PHASE)
+
+
+MC_MEASUREMENT_TOPIC = '/d1max/isaacsim/mc_state'
+MC_MEASUREMENT_CONTRACT = 'physx_raw_mc_after_geometry_revocation_v1'
+
+
+def geometry_revocation(reason):
+    return (reason == 'isaac_static_collision_geometry_revoked'
+            or reason == 'isaac_static_prior_body_tilt_outside_contract'
+            or reason == 'isaac_static_prior_body_height_outside_flat_floor_contract'
+            or reason.startswith('isaac_actual_full_body_envelope_revoked:'))
 
 
 def quaternion_matrix(quaternion):
@@ -191,6 +202,10 @@ def main():
     if session.get('transport_mode') != 'isolated_mock' or session.get('simulation_backend') != 'isaacsim_physx':
         raise ValueError('isaac_isolated_session_required')
     contract = session['isaac_bridge_contract']
+    mc_topic = contract.get('mc_measurement_topic')
+    if mc_topic is not None and (mc_topic != MC_MEASUREMENT_TOPIC
+            or contract.get('mc_measurement_contract') != MC_MEASUREMENT_CONTRACT):
+        raise ValueError('invalid_isaac_mc_measurement_contract')
     phase_contract = native_phase_contract(session)
     anchor_ns = int(contract['clock_anchor_ns'])
     frames = session['navigation_contract']['frames']
@@ -218,7 +233,12 @@ def main():
             self.command_sequence = 0
             self.last_status = 0.
             self.fault = ''
+            self.measurement_fault = ''
+            self.geometry_stop_measurements = False
             self.state_count = 0
+            self.clock_count = 0
+            self.mc_count = 0
+            self.mc_after_geometry_fault_count = 0
             self.body_envelope_verified_samples = 0
             self.body_envelope_failures = 0
             self.body_envelope_registry_sha256 = ''
@@ -246,7 +266,11 @@ def main():
                 self.dynamic_markers = self.create_publisher(MarkerArray, '/d1max/isaacsim/dynamic_actors', 1)
                 self.create_subscription(String, '/d1max/live_planning/scan_map_context',
                     self.on_dynamic_context, QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL))
-            self.clock_pub = self.create_publisher(ClockMessage, '/clock', 10)
+            self.clock_pub = self.create_publisher(ClockMessage, '/clock',
+                QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL))
+            # Only the isolated SDK's MC input consumes this topic. Navigation
+            # retains its separate unusable terminal revocation after a fault.
+            self.mc_pub = self.create_publisher(LocalNavigationState, mc_topic, 10) if mc_topic else None
             self.global_pub = self.create_publisher(NavigationState, '/d1max/localization/navigation/state', 10)
             self.local_pub = self.create_publisher(LocalNavigationState, '/d1max/localization/navigation/local_state', 10)
             self.odom_global_pub = self.create_publisher(Odometry, '/d1max/localization/odometry/global', qos_profile_sensor_data)
@@ -289,9 +313,15 @@ def main():
                     max(0, self.last_state_sim_ns), 0., 0.), self.target)
 
         def fail(self, reason):
+            # A geometry revocation does not invalidate finite native motion
+            # measurements. A source reset/pause/other fault does, permanently.
+            if not geometry_revocation(reason):
+                self.measurement_fault = self.measurement_fault or reason
+                self.geometry_stop_measurements = False
             if self.fault:
                 return
             self.fault = reason
+            self.geometry_stop_measurements = geometry_revocation(reason) and self.mc_pub is not None
             self.send_zero()
             # Revoke the original measured sample without inventing a newer
             # IMU timestamp, pose, posterior, or stopped measurement.
@@ -405,7 +435,7 @@ def main():
                 max(.001, min(.15, (until_ns-source_ns)*1e-9))), self.target)
 
         def state(self, packet):
-            if self.fault:
+            if self.fault and not self.geometry_stop_measurements:
                 return
             source_ns = self.source(packet)
             if source_ns is None:
@@ -429,16 +459,6 @@ def main():
             if abs(np.linalg.norm(quaternion)-1.) > .01:
                 raise ValueError('invalid_physics_quaternion')
             rotation = quaternion_matrix(quaternion/np.linalg.norm(quaternion))
-            try:
-                validate_static_prior_state(packet,session.get('static_collision_prior_contract'),rotation)
-            except ValueError as error:
-                if session.get('static_collision_prior_contract', {}).get('body_envelope_attestation_required'):
-                    self.body_envelope_failures += 1
-                self.fail(str(error))
-                return
-            if session.get('static_collision_prior_contract', {}).get('body_envelope_attestation_required'):
-                self.body_envelope_verified_samples += 1
-                self.body_envelope_registry_sha256 = packet['body_envelope_registry_sha256']
             # nav_msgs twist is body-frame; Isaac articulation velocities are
             # world-frame measurements, never substituted with command values.
             body_linear, body_angular = rotation.T@linear, rotation.T@angular
@@ -448,6 +468,18 @@ def main():
             clock = ClockMessage()
             stamp(clock.clock, source_ns)
             self.clock_pub.publish(clock)
+            self.clock_count += 1
+            if not self.fault:
+                try:
+                    validate_static_prior_state(packet,session.get('static_collision_prior_contract'),rotation)
+                except ValueError as error:
+                    if session.get('static_collision_prior_contract', {}).get('body_envelope_attestation_required'):
+                        self.body_envelope_failures += 1
+                    self.fail(str(error))
+                else:
+                    if session.get('static_collision_prior_contract', {}).get('body_envelope_attestation_required'):
+                        self.body_envelope_verified_samples += 1
+                        self.body_envelope_registry_sha256 = packet['body_envelope_registry_sha256']
             odometry = Odometry()
             stamp(odometry.header.stamp, source_ns)
             odometry.header.frame_id = frames['odom_frame']
@@ -479,6 +511,18 @@ def main():
                     stamp(field, source_ns)
                 stamp(value.imu_stamp, imu_ns)
                 value.extrapolation_sec = (source_ns-imu_ns)*1e-9 if imu_usable else 0.
+            if self.mc_pub is not None:
+                mc = deepcopy(local)
+                if self.fault:
+                    mc.reason = 'isaac_physx_measured_mc_only_after_geometry_revocation'
+                self.mc_pub.publish(mc)
+                self.mc_count += 1
+                if self.fault:
+                    self.mc_after_geometry_fault_count += 1
+            if self.fault:
+                # No odometry, TF, navigation pose, perception or geometry
+                # authority can return, even if later attestations are valid.
+                return
             self.local_pub.publish(local)
             self.last_local_state = deepcopy(local)
             self.global_pub.publish(global_state)
@@ -494,7 +538,8 @@ def main():
             self.state_count += 1
 
         def imu(self, packet):
-            if self.fault or self.source(packet) is None:
+            if ((self.fault and not self.geometry_stop_measurements)
+                    or self.source(packet) is None):
                 return
             sequence = packet['sequence']
             if type(sequence) is not int or sequence <= self.last_imu_sequence:
@@ -518,8 +563,9 @@ def main():
             message.linear_acceleration.x, message.linear_acceleration.y, message.linear_acceleration.z = acceleration
             # Zero covariance means unknown covariance in sensor_msgs/Imu;
             # measured deterministic values are not claimed as calibrated noise.
-            for publisher in self.imu_pub:
-                publisher.publish(message)
+            if not self.fault:
+                for publisher in self.imu_pub:
+                    publisher.publish(message)
             self.imu_history.append(source)
             self.last_imu_sequence = sequence
             self.imu_count += 1
@@ -634,6 +680,9 @@ def main():
                 status = dict(schema=1, simulation=True, physical_acceptance=False,
                     session_id=session['id'], epoch=self.epoch,
                     last_sim_time_ns=self.last_state_sim_ns, measured_state_samples=self.state_count,
+                    original_clock_samples=self.clock_count, mc_measurement_samples=self.mc_count,
+                    mc_samples_after_geometry_fault=self.mc_after_geometry_fault_count,
+                    mc_measurement_topic=mc_topic, measurement_fault=self.measurement_fault,
                     ray_scans=self.ray_count, incomplete_scans_dropped=self.assembler.dropped,
                     native_imu_samples=self.imu_count,
                     latest_native_imu_sim_time_ns=self.imu_history[-1] if self.imu_history else None,

@@ -1,0 +1,154 @@
+{
+  "schema": 1,
+  "scope": "Original permit/ACK/grant bookkeeping replay only; no reconstructed sensor or motion proof",
+  "run": "/home/eric/wjg/d1max-build-isaac/runs/campus_restart_v57_001",
+  "session_id": "14baf0ed937943d889004b0d0e6c0599",
+  "source_sha256": {
+    "sealed_v57": "38d07dc4be21c90612890ec9dcc11e92a1a9404cd1184307a65923fed365999d",
+    "source_fix": "79b5cbef66f18da7f15f5ef9105cfed4df2cfb4c390cca24369291fa33a3ad4c",
+    "shared_safety": "0bc09ad3cede363ecd56df4b17ba1aa44eb3eaa4ca1581665fb112ca25524068"
+  },
+  "phases": [
+    {
+      "index": 0,
+      "trace_path": "/home/eric/wjg/d1max-build-isaac/runs/campus_restart_v57_001/scenario_suite/phase_000_trace.jsonl",
+      "trace_sha256": "e094d7be701b814c0dedb2e3feb1dacf9d27ff93d760d33d9457bec727bd70ad",
+      "engines": {
+        "sealed_v57": {
+          "counts": {
+            "permit_accepted": 468,
+            "commit_ack_accepted": 9,
+            "handoff_grant_accepted": 32
+          },
+          "first_ack": {
+            "sequence": 2,
+            "commit_sequence": 1,
+            "applied": true,
+            "before": {
+              "ack_highwater": 0,
+              "grant_highwater": 0,
+              "commit_sequence": 0,
+              "applied_trajectory_id": null
+            },
+            "accepted": true,
+            "after": {
+              "ack_highwater": 2,
+              "grant_highwater": 0,
+              "commit_sequence": 1,
+              "applied_trajectory_id": 1
+            }
+          },
+          "end": {
+            "ack_highwater": 16,
+            "grant_highwater": 8,
+            "commit_sequence": 7,
+            "applied_trajectory_id": 19
+          }
+        },
+        "source_fix": {
+          "counts": {
+            "permit_accepted": 468,
+            "commit_ack_accepted": 9,
+            "handoff_grant_accepted": 32
+          },
+          "first_ack": {
+            "sequence": 2,
+            "commit_sequence": 1,
+            "applied": true,
+            "before": {
+              "ack_highwater": 0,
+              "grant_highwater": 0,
+              "commit_sequence": 0,
+              "applied_trajectory_id": null
+            },
+            "accepted": true,
+            "after": {
+              "ack_highwater": 2,
+              "grant_highwater": 0,
+              "commit_sequence": 1,
+              "applied_trajectory_id": 1
+            }
+          },
+          "end": {
+            "ack_highwater": 16,
+            "grant_highwater": 8,
+            "commit_sequence": 7,
+            "applied_trajectory_id": 19
+          }
+        }
+      }
+    },
+    {
+      "index": 1,
+      "trace_path": "/home/eric/wjg/d1max-build-isaac/runs/campus_restart_v57_001/scenario_suite/phase_001_trace.jsonl",
+      "trace_sha256": "6e85c83f2fa98f41796c062bb7036b72942dcf8e555eddbfb3bb3daaf374da46",
+      "engines": {
+        "sealed_v57": {
+          "counts": {
+            "permit_accepted": 1615,
+            "commit_ack_rejected": 283,
+            "handoff_grant_rejected": 1345
+          },
+          "first_ack": {
+            "sequence": 2,
+            "commit_sequence": 1,
+            "applied": true,
+            "before": {
+              "ack_highwater": 16,
+              "grant_highwater": 8,
+              "commit_sequence": 0,
+              "applied_trajectory_id": null
+            },
+            "accepted": false,
+            "after": {
+              "ack_highwater": 16,
+              "grant_highwater": 8,
+              "commit_sequence": 0,
+              "applied_trajectory_id": null
+            }
+          },
+          "end": {
+            "ack_highwater": 16,
+            "grant_highwater": 8,
+            "commit_sequence": 0,
+            "applied_trajectory_id": null
+          }
+        },
+        "source_fix": {
+          "counts": {
+            "permit_accepted": 1608,
+            "permit_rejected": 7,
+            "commit_ack_accepted": 16,
+            "handoff_grant_accepted": 128,
+            "handoff_grant_rejected": 1217,
+            "commit_ack_rejected": 267
+          },
+          "first_ack": {
+            "sequence": 2,
+            "commit_sequence": 1,
+            "applied": true,
+            "before": {
+              "ack_highwater": 0,
+              "grant_highwater": 0,
+              "commit_sequence": 0,
+              "applied_trajectory_id": null
+            },
+            "accepted": true,
+            "after": {
+              "ack_highwater": 2,
+              "grant_highwater": 0,
+              "commit_sequence": 1,
+              "applied_trajectory_id": 20
+            }
+          },
+          "end": {
+            "ack_highwater": 17,
+            "grant_highwater": 15,
+            "commit_sequence": 1,
+            "applied_trajectory_id": 20
+          }
+        }
+      }
+    }
+  ]
+}

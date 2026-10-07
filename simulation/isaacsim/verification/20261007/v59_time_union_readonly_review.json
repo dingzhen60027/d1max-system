@@ -1,0 +1,686 @@
+{
+  "schema": 1,
+  "scope": "Read-only original v59 time-union investigation; no Kit, source changes, lease changes or navigation acceptance",
+  "candidate": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v59-campus-all-writer-scopes-restart",
+  "run": "/home/eric/wjg/d1max-build-isaac/runs/campus_restart_v59_001",
+  "clock_anchor_ns": 1791378794217157156,
+  "original_after_failure_unknown_warning_count_70_to_82_818": 92,
+  "captured_after_failure_all_domains_valid_count": 68,
+  "important_limit": "Execution diagnostic_after_failure evidence is not the original check; original same-capture Motion first-cell at71.34 had static_query_valid=false. This artifact cannot identify sole cause of last nonzero-to-zero transition72.856s.",
+  "selected_original_after_failure_rows": [
+    {
+      "original_scan_log_line": 2214,
+      "original_check_end_ns": 1791378865397157156,
+      "scene_check_end_s": 71.18,
+      "curve": 125,
+      "query_index": 337,
+      "query_xyz": [
+        1.236063372,
+        -4.982069242,
+        0.481002175
+      ],
+      "captured_after_failure_lease_domains_valid": true,
+      "first_unknown_center": "1.525,-4.825,-0.025",
+      "lease": {
+        "barrier_ns": 1791378796557157156,
+        "both_ray_receipt_ns": [
+          1225598376887380,
+          1225598465944611
+        ],
+        "both_ray_source_ns": [
+          1791378865335157156,
+          1791378865335157156
+        ],
+        "cached_prior_lease_valid": true,
+        "context_sequence": 1,
+        "dynamic_hit_provenance": {
+          "counter_scope": "relevant_static_free_or_nonfloor_contact_hits_before_vote_dedup_while_active",
+          "disable_reason": "none",
+          "domain_valid": true,
+          "enabled": true,
+          "entry_count": 6729,
+          "entry_limit": 100000,
+          "latched_disabled": false,
+          "mixed_poison_events": 0,
+          "prior_poison_events": 54,
+          "registry_sha256": "96b092886099b5b2c0904ce86c34d607167c8cee28865d318455c88bc7aea734",
+          "valid_tag_events": 10243,
+          "zero_tag_events": 0
+        },
+        "dynamic_oracle_enabled": true,
+        "dynamic_oracle_query_valid": true,
+        "dynamic_oracle_reachable_until_ns": 1791378871377157156,
+        "dynamic_oracle_registry_sha256": "96b092886099b5b2c0904ce86c34d607167c8cee28865d318455c88bc7aea734",
+        "dynamic_oracle_sequence": 4270,
+        "dynamic_oracle_source_ns": 1791378865377157156,
+        "epoch": 1,
+        "flat_support_contact_enabled": true,
+        "kind": "captured_collision_query_lease",
+        "policy": "validated_static_prior_with_dynamic_oracle_double_cylinder",
+        "query_receipt_ns": 1225598577174794,
+        "query_source_ns": 1791378865414995943,
+        "ray_clock_fault": false,
+        "receipt_deadline_ns": 1225598581698866,
+        "seed_id": "isaac-6e1a22db-8b01-4de7-ada4-9218b39d1960",
+        "session_id": "a7a35db297f84fe6becd3f6f1cb65c2b",
+        "source_deadline_ns": 1791378865577157156,
+        "static_prior_context_valid": true,
+        "static_prior_geometry_sha256": "d7138b0cc540a5e53d8640ef17898a4e13ef48f2f03ed6643f74d07a1178af17",
+        "static_prior_loaded": true,
+        "static_prior_manifest_sha256": "39722f7295c00a1784925b4f813d210c260911199b06102c05ca4a346ed4df6d",
+        "static_prior_map_version": "48dce43dcabcb7245af495bbe62d34c9fbe8e06b62d13b45697258d743c44ca2"
+      }
+    },
+    {
+      "original_scan_log_line": 2236,
+      "original_check_end_ns": 1791378866097157156,
+      "scene_check_end_s": 71.88000000000001,
+      "curve": 125,
+      "query_index": 303,
+      "query_xyz": [
+        1.16523189,
+        -4.988751441,
+        0.481006423
+      ],
+      "captured_after_failure_lease_domains_valid": true,
+      "first_unknown_center": "1.475,-4.875,-0.025",
+      "lease": {
+        "barrier_ns": 1791378796557157156,
+        "both_ray_receipt_ns": [
+          1225602626563302,
+          1225602725448736
+        ],
+        "both_ray_source_ns": [
+          1791378866035157156,
+          1791378866035157156
+        ],
+        "cached_prior_lease_valid": true,
+        "context_sequence": 1,
+        "dynamic_hit_provenance": {
+          "counter_scope": "relevant_static_free_or_nonfloor_contact_hits_before_vote_dedup_while_active",
+          "disable_reason": "none",
+          "domain_valid": true,
+          "enabled": true,
+          "entry_count": 6729,
+          "entry_limit": 100000,
+          "latched_disabled": false,
+          "mixed_poison_events": 0,
+          "prior_poison_events": 54,
+          "registry_sha256": "96b092886099b5b2c0904ce86c34d607167c8cee28865d318455c88bc7aea734",
+          "valid_tag_events": 10243,
+          "zero_tag_events": 0
+        },
+        "dynamic_oracle_enabled": true,
+        "dynamic_oracle_query_valid": true,
+        "dynamic_oracle_reachable_until_ns": 1791378872077157156,
+        "dynamic_oracle_registry_sha256": "96b092886099b5b2c0904ce86c34d607167c8cee28865d318455c88bc7aea734",
+        "dynamic_oracle_sequence": 4312,
+        "dynamic_oracle_source_ns": 1791378866077157156,
+        "epoch": 1,
+        "flat_support_contact_enabled": true,
+        "kind": "captured_collision_query_lease",
+        "policy": "validated_static_prior_with_dynamic_oracle_double_cylinder",
+        "query_receipt_ns": 1225602830331476,
+        "query_source_ns": 1791378866110004870,
+        "ray_clock_fault": false,
+        "receipt_deadline_ns": 1225602830346481,
+        "seed_id": "isaac-6e1a22db-8b01-4de7-ada4-9218b39d1960",
+        "session_id": "a7a35db297f84fe6becd3f6f1cb65c2b",
+        "source_deadline_ns": 1791378866277157156,
+        "static_prior_context_valid": true,
+        "static_prior_geometry_sha256": "d7138b0cc540a5e53d8640ef17898a4e13ef48f2f03ed6643f74d07a1178af17",
+        "static_prior_loaded": true,
+        "static_prior_manifest_sha256": "39722f7295c00a1784925b4f813d210c260911199b06102c05ca4a346ed4df6d",
+        "static_prior_map_version": "48dce43dcabcb7245af495bbe62d34c9fbe8e06b62d13b45697258d743c44ca2"
+      }
+    },
+    {
+      "original_scan_log_line": 2260,
+      "original_check_end_ns": 1791378871697157156,
+      "scene_check_end_s": 77.48,
+      "curve": 127,
+      "query_index": 1,
+      "query_xyz": [
+        -0.173025578,
+        -4.85090065,
+        0.487320721
+      ],
+      "captured_after_failure_lease_domains_valid": true,
+      "first_unknown_center": "0.125,-4.525,-0.025",
+      "lease": {
+        "barrier_ns": 1791378796557157156,
+        "both_ray_receipt_ns": [
+          1225643659471784,
+          1225643740567588
+        ],
+        "both_ray_source_ns": [
+          1791378871635157156,
+          1791378871635157156
+        ],
+        "cached_prior_lease_valid": true,
+        "context_sequence": 1,
+        "dynamic_hit_provenance": {
+          "counter_scope": "relevant_static_free_or_nonfloor_contact_hits_before_vote_dedup_while_active",
+          "disable_reason": "none",
+          "domain_valid": true,
+          "enabled": true,
+          "entry_count": 6729,
+          "entry_limit": 100000,
+          "latched_disabled": false,
+          "mixed_poison_events": 0,
+          "prior_poison_events": 54,
+          "registry_sha256": "96b092886099b5b2c0904ce86c34d607167c8cee28865d318455c88bc7aea734",
+          "valid_tag_events": 10243,
+          "zero_tag_events": 0
+        },
+        "dynamic_oracle_enabled": true,
+        "dynamic_oracle_query_valid": true,
+        "dynamic_oracle_reachable_until_ns": 1791378877677157156,
+        "dynamic_oracle_registry_sha256": "96b092886099b5b2c0904ce86c34d607167c8cee28865d318455c88bc7aea734",
+        "dynamic_oracle_sequence": 4648,
+        "dynamic_oracle_source_ns": 1791378871677157156,
+        "epoch": 1,
+        "flat_support_contact_enabled": true,
+        "kind": "captured_collision_query_lease",
+        "policy": "validated_static_prior_with_dynamic_oracle_double_cylinder",
+        "query_receipt_ns": 1225643801615927,
+        "query_source_ns": 1791378871701475723,
+        "ray_clock_fault": false,
+        "receipt_deadline_ns": 1225643862356770,
+        "seed_id": "isaac-6e1a22db-8b01-4de7-ada4-9218b39d1960",
+        "session_id": "a7a35db297f84fe6becd3f6f1cb65c2b",
+        "source_deadline_ns": 1791378871877157156,
+        "static_prior_context_valid": true,
+        "static_prior_geometry_sha256": "d7138b0cc540a5e53d8640ef17898a4e13ef48f2f03ed6643f74d07a1178af17",
+        "static_prior_loaded": true,
+        "static_prior_manifest_sha256": "39722f7295c00a1784925b4f813d210c260911199b06102c05ca4a346ed4df6d",
+        "static_prior_map_version": "48dce43dcabcb7245af495bbe62d34c9fbe8e06b62d13b45697258d743c44ca2"
+      }
+    },
+    {
+      "original_scan_log_line": 2293,
+      "original_check_end_ns": 1791378872237157156,
+      "scene_check_end_s": 78.02000000000001,
+      "curve": 127,
+      "query_index": 1,
+      "query_xyz": [
+        -0.173061296,
+        -4.850903034,
+        0.487301826
+      ],
+      "captured_after_failure_lease_domains_valid": true,
+      "first_unknown_center": "0.125,-4.525,-0.025",
+      "lease": {
+        "barrier_ns": 1791378796557157156,
+        "both_ray_receipt_ns": [
+          1225646227305786,
+          1225646329820986
+        ],
+        "both_ray_source_ns": [
+          1791378872135157156,
+          1791378872135157156
+        ],
+        "cached_prior_lease_valid": true,
+        "context_sequence": 1,
+        "dynamic_hit_provenance": {
+          "counter_scope": "relevant_static_free_or_nonfloor_contact_hits_before_vote_dedup_while_active",
+          "disable_reason": "none",
+          "domain_valid": true,
+          "enabled": true,
+          "entry_count": 6729,
+          "entry_limit": 100000,
+          "latched_disabled": false,
+          "mixed_poison_events": 0,
+          "prior_poison_events": 54,
+          "registry_sha256": "96b092886099b5b2c0904ce86c34d607167c8cee28865d318455c88bc7aea734",
+          "valid_tag_events": 10243,
+          "zero_tag_events": 0
+        },
+        "dynamic_oracle_enabled": true,
+        "dynamic_oracle_query_valid": true,
+        "dynamic_oracle_reachable_until_ns": 1791378878237157156,
+        "dynamic_oracle_registry_sha256": "96b092886099b5b2c0904ce86c34d607167c8cee28865d318455c88bc7aea734",
+        "dynamic_oracle_sequence": 4682,
+        "dynamic_oracle_source_ns": 1791378872237157156,
+        "epoch": 1,
+        "flat_support_contact_enabled": true,
+        "kind": "captured_collision_query_lease",
+        "policy": "validated_static_prior_with_dynamic_oracle_double_cylinder",
+        "query_receipt_ns": 1225646484980063,
+        "query_source_ns": 1791378872241902108,
+        "ray_clock_fault": false,
+        "receipt_deadline_ns": 1225646680036659,
+        "seed_id": "isaac-6e1a22db-8b01-4de7-ada4-9218b39d1960",
+        "session_id": "a7a35db297f84fe6becd3f6f1cb65c2b",
+        "source_deadline_ns": 1791378872437157156,
+        "static_prior_context_valid": true,
+        "static_prior_geometry_sha256": "d7138b0cc540a5e53d8640ef17898a4e13ef48f2f03ed6643f74d07a1178af17",
+        "static_prior_loaded": true,
+        "static_prior_manifest_sha256": "39722f7295c00a1784925b4f813d210c260911199b06102c05ca4a346ed4df6d",
+        "static_prior_map_version": "48dce43dcabcb7245af495bbe62d34c9fbe8e06b62d13b45697258d743c44ca2"
+      }
+    },
+    {
+      "original_scan_log_line": 2421,
+      "original_check_end_ns": 1791378874137157156,
+      "scene_check_end_s": 79.92,
+      "curve": 127,
+      "query_index": 1,
+      "query_xyz": [
+        -0.17315203,
+        -4.850863934,
+        0.487263411
+      ],
+      "captured_after_failure_lease_domains_valid": true,
+      "first_unknown_center": "0.125,-4.525,-0.025",
+      "lease": {
+        "barrier_ns": 1791378796557157156,
+        "both_ray_receipt_ns": [
+          1225654564113517,
+          1225654655732077
+        ],
+        "both_ray_source_ns": [
+          1791378874035157156,
+          1791378874035157156
+        ],
+        "cached_prior_lease_valid": true,
+        "context_sequence": 1,
+        "dynamic_hit_provenance": {
+          "counter_scope": "relevant_static_free_or_nonfloor_contact_hits_before_vote_dedup_while_active",
+          "disable_reason": "none",
+          "domain_valid": true,
+          "enabled": true,
+          "entry_count": 7195,
+          "entry_limit": 100000,
+          "latched_disabled": false,
+          "mixed_poison_events": 0,
+          "prior_poison_events": 56,
+          "registry_sha256": "96b092886099b5b2c0904ce86c34d607167c8cee28865d318455c88bc7aea734",
+          "valid_tag_events": 10865,
+          "zero_tag_events": 0
+        },
+        "dynamic_oracle_enabled": true,
+        "dynamic_oracle_query_valid": true,
+        "dynamic_oracle_reachable_until_ns": 1791378880137157156,
+        "dynamic_oracle_registry_sha256": "96b092886099b5b2c0904ce86c34d607167c8cee28865d318455c88bc7aea734",
+        "dynamic_oracle_sequence": 4796,
+        "dynamic_oracle_source_ns": 1791378874137157156,
+        "epoch": 1,
+        "flat_support_contact_enabled": true,
+        "kind": "captured_collision_query_lease",
+        "policy": "validated_static_prior_with_dynamic_oracle_double_cylinder",
+        "query_receipt_ns": 1225654993746081,
+        "query_source_ns": 1791378874244059391,
+        "ray_clock_fault": false,
+        "receipt_deadline_ns": 1225655064113517,
+        "seed_id": "isaac-6e1a22db-8b01-4de7-ada4-9218b39d1960",
+        "session_id": "a7a35db297f84fe6becd3f6f1cb65c2b",
+        "source_deadline_ns": 1791378874337157156,
+        "static_prior_context_valid": true,
+        "static_prior_geometry_sha256": "d7138b0cc540a5e53d8640ef17898a4e13ef48f2f03ed6643f74d07a1178af17",
+        "static_prior_loaded": true,
+        "static_prior_manifest_sha256": "39722f7295c00a1784925b4f813d210c260911199b06102c05ca4a346ed4df6d",
+        "static_prior_map_version": "48dce43dcabcb7245af495bbe62d34c9fbe8e06b62d13b45697258d743c44ca2"
+      }
+    },
+    {
+      "original_scan_log_line": 2590,
+      "original_check_end_ns": 1791378876917157156,
+      "scene_check_end_s": 82.7,
+      "curve": 127,
+      "query_index": 1,
+      "query_xyz": [
+        -0.173206925,
+        -4.850869179,
+        0.487235159
+      ],
+      "captured_after_failure_lease_domains_valid": true,
+      "first_unknown_center": "0.125,-4.525,-0.025",
+      "lease": {
+        "barrier_ns": 1791378796557157156,
+        "both_ray_receipt_ns": [
+          1225666523729268,
+          1225666592491128
+        ],
+        "both_ray_source_ns": [
+          1791378876835157156,
+          1791378876835157156
+        ],
+        "cached_prior_lease_valid": true,
+        "context_sequence": 1,
+        "dynamic_hit_provenance": {
+          "counter_scope": "relevant_static_free_or_nonfloor_contact_hits_before_vote_dedup_while_active",
+          "disable_reason": "none",
+          "domain_valid": true,
+          "enabled": true,
+          "entry_count": 12533,
+          "entry_limit": 100000,
+          "latched_disabled": false,
+          "mixed_poison_events": 0,
+          "prior_poison_events": 117,
+          "registry_sha256": "96b092886099b5b2c0904ce86c34d607167c8cee28865d318455c88bc7aea734",
+          "valid_tag_events": 24143,
+          "zero_tag_events": 0
+        },
+        "dynamic_oracle_enabled": true,
+        "dynamic_oracle_query_valid": true,
+        "dynamic_oracle_reachable_until_ns": 1791378882917157156,
+        "dynamic_oracle_registry_sha256": "96b092886099b5b2c0904ce86c34d607167c8cee28865d318455c88bc7aea734",
+        "dynamic_oracle_sequence": 4962,
+        "dynamic_oracle_source_ns": 1791378876917157156,
+        "epoch": 1,
+        "flat_support_contact_enabled": true,
+        "kind": "captured_collision_query_lease",
+        "policy": "validated_static_prior_with_dynamic_oracle_double_cylinder",
+        "query_receipt_ns": 1225666674021830,
+        "query_source_ns": 1791378876922846751,
+        "ray_clock_fault": false,
+        "receipt_deadline_ns": 1225666868133208,
+        "seed_id": "isaac-6e1a22db-8b01-4de7-ada4-9218b39d1960",
+        "session_id": "a7a35db297f84fe6becd3f6f1cb65c2b",
+        "source_deadline_ns": 1791378877117157156,
+        "static_prior_context_valid": true,
+        "static_prior_geometry_sha256": "d7138b0cc540a5e53d8640ef17898a4e13ef48f2f03ed6643f74d07a1178af17",
+        "static_prior_loaded": true,
+        "static_prior_manifest_sha256": "39722f7295c00a1784925b4f813d210c260911199b06102c05ca4a346ed4df6d",
+        "static_prior_map_version": "48dce43dcabcb7245af495bbe62d34c9fbe8e06b62d13b45697258d743c44ca2"
+      }
+    }
+  ],
+  "original_actual_actor_6s_reconstruction": [
+    {
+      "original_dynamic_reading_line": 4608,
+      "simulation_source_ns": 76800000000,
+      "original_actor_sample": {
+        "present": true,
+        "position": [
+          0.0,
+          1.7123520374298096,
+          0.0
+        ],
+        "orientation_xyzw": [
+          0.0,
+          0.0,
+          0.7071068286895752,
+          0.7071068286895752
+        ],
+        "linear_velocity": [
+          0.0,
+          -0.9865164160728455,
+          0.0
+        ]
+      },
+      "original_registry_sha256": "96b092886099b5b2c0904ce86c34d607167c8cee28865d318455c88bc7aea734",
+      "sealed_original_6s_body_region": {
+        "state": 2,
+        "min": [
+          -0.30010164827182234,
+          -4.618564929915081,
+          -0.020101648271822245
+        ],
+        "max": [
+          0.30010164827182234,
+          2.0144267758650605,
+          1.6201016482718225
+        ]
+      },
+      "closed_voxel_index": [
+        2,
+        -91,
+        -1
+      ],
+      "closed_voxel_bounds": [
+        [
+          0.1,
+          -4.55,
+          -0.05
+        ],
+        [
+          0.15,
+          -4.5,
+          0
+        ]
+      ],
+      "future_tube_intersects": true,
+      "scope": "Offline reconstruction of sealed same-step tube from original actual sample; not an original native proof or new sensor capture"
+    },
+    {
+      "original_dynamic_reading_line": 4650,
+      "simulation_source_ns": 77500000000,
+      "original_actor_sample": {
+        "present": true,
+        "position": [
+          0.0,
+          1.01806640625,
+          0.0
+        ],
+        "orientation_xyzw": [
+          0.0,
+          0.0,
+          0.7071068286895752,
+          0.7071068286895752
+        ],
+        "linear_velocity": [
+          0.0,
+          -0.9966492056846619,
+          0.0
+        ]
+      },
+      "original_registry_sha256": "96b092886099b5b2c0904ce86c34d607167c8cee28865d318455c88bc7aea734",
+      "sealed_original_6s_body_region": {
+        "state": 2,
+        "min": [
+          -0.30010164827182234,
+          -5.309638815952571,
+          -0.020101648271822245
+        ],
+        "max": [
+          0.30010164827182234,
+          1.320161388577566,
+          1.6201016482718225
+        ]
+      },
+      "closed_voxel_index": [
+        2,
+        -91,
+        -1
+      ],
+      "closed_voxel_bounds": [
+        [
+          0.1,
+          -4.55,
+          -0.05
+        ],
+        [
+          0.15,
+          -4.5,
+          0
+        ]
+      ],
+      "future_tube_intersects": true,
+      "scope": "Offline reconstruction of sealed same-step tube from original actual sample; not an original native proof or new sensor capture"
+    },
+    {
+      "original_dynamic_reading_line": 4680,
+      "simulation_source_ns": 78000000000,
+      "original_actor_sample": {
+        "present": true,
+        "position": [
+          0.0,
+          0.5182499885559082,
+          0.0
+        ],
+        "orientation_xyzw": [
+          0.0,
+          0.0,
+          0.7071068286895752,
+          0.7071068286895752
+        ],
+        "linear_velocity": [
+          0.0,
+          -1.0023711919784546,
+          0.0
+        ]
+      },
+      "original_registry_sha256": "96b092886099b5b2c0904ce86c34d607167c8cee28865d318455c88bc7aea734",
+      "sealed_original_6s_body_region": {
+        "state": 2,
+        "min": [
+          -0.30010164827182234,
+          -5.798045607765065,
+          -0.020101648271822245
+        ],
+        "max": [
+          0.30010164827182234,
+          0.8203563780150673,
+          1.6201016482718225
+        ]
+      },
+      "closed_voxel_index": [
+        2,
+        -91,
+        -1
+      ],
+      "closed_voxel_bounds": [
+        [
+          0.1,
+          -4.55,
+          -0.05
+        ],
+        [
+          0.15,
+          -4.5,
+          0
+        ]
+      ],
+      "future_tube_intersects": true,
+      "scope": "Offline reconstruction of sealed same-step tube from original actual sample; not an original native proof or new sensor capture"
+    },
+    {
+      "original_dynamic_reading_line": 4800,
+      "simulation_source_ns": 80000000000,
+      "original_actor_sample": {
+        "present": true,
+        "position": [
+          0.0,
+          -1.5,
+          0.0
+        ],
+        "orientation_xyzw": [
+          0.0,
+          0.0,
+          0.7071068286895752,
+          0.7071068286895752
+        ],
+        "linear_velocity": [
+          0.0,
+          -1.012503981590271,
+          0.0
+        ]
+      },
+      "original_registry_sha256": "96b092886099b5b2c0904ce86c34d607167c8cee28865d318455c88bc7aea734",
+      "sealed_original_6s_body_region": {
+        "state": 2,
+        "min": [
+          -0.30010164827182234,
+          -7.694694337515074,
+          -0.020101648271822245
+        ],
+        "max": [
+          0.30010164827182234,
+          -1.1978733517349334,
+          1.6201016482718225
+        ]
+      },
+      "closed_voxel_index": [
+        2,
+        -91,
+        -1
+      ],
+      "closed_voxel_bounds": [
+        [
+          0.1,
+          -4.55,
+          -0.05
+        ],
+        [
+          0.15,
+          -4.5,
+          0
+        ]
+      ],
+      "future_tube_intersects": true,
+      "scope": "Offline reconstruction of sealed same-step tube from original actual sample; not an original native proof or new sensor capture"
+    },
+    {
+      "original_dynamic_reading_line": 4962,
+      "simulation_source_ns": 82700000000,
+      "original_actor_sample": {
+        "present": true,
+        "position": [
+          0.0,
+          -4.217142581939697,
+          0.0
+        ],
+        "orientation_xyzw": [
+          0.0,
+          0.0,
+          0.7071068286895752,
+          0.7071068286895752
+        ],
+        "linear_velocity": [
+          0.0,
+          -0.9942054152488708,
+          0.0
+        ]
+      },
+      "original_registry_sha256": "96b092886099b5b2c0904ce86c34d607167c8cee28865d318455c88bc7aea734",
+      "sealed_original_6s_body_region": {
+        "state": 2,
+        "min": [
+          -0.30010164827182234,
+          -10.054881473302569,
+          -0.020101648271822245
+        ],
+        "max": [
+          0.30010164827182234,
+          -3.9150526987724352,
+          1.6201016482718225
+        ]
+      },
+      "closed_voxel_index": [
+        2,
+        -91,
+        -1
+      ],
+      "closed_voxel_bounds": [
+        [
+          0.1,
+          -4.55,
+          -0.05
+        ],
+        [
+          0.15,
+          -4.5,
+          0
+        ]
+      ],
+      "future_tube_intersects": true,
+      "scope": "Offline reconstruction of sealed same-step tube from original actual sample; not an original native proof or new sensor capture"
+    }
+  ],
+  "implementation_confirmed": {
+    "script_interval": "[simulation source-2ms, simulation source+6s+2ms]",
+    "space_union": true,
+    "per_query_physical_time_argument": false,
+    "full_xyz_closed_veto_precedes_independent_static_contact": true,
+    "spline_parameter_is_measured_spatial_progress_not_physical_arrival": true
+  },
+  "code_sha256": {
+    "simulation/dynamic_collision.py": "07098c9debe51cb43bd0308234a085fcc206f4dccafd8d9cb5c4af890ff16045",
+    "application/install/plan_env/include/plan_env/dynamic_occupancy_oracle.hpp": "9e43c30836bd8cea4a7d60accf7ebfc35427aa745d46b83747a3dddf4d3c4f8c",
+    "source_snapshot/nav/src/scan_planner_vendor/plan_env/src/grid_map.cpp": "33eb9eaeb09c304473fd08f3e26cfe1326f68142e312248b80c2164d7162a408",
+    "application/install/scan_planner/include/plan_manage/trajectory_collision.hpp": "4ff22c6293be20cad924ef56428ca88d94a19642147c470f5c05c98bf25f9b4f",
+    "application/install/scan_planner/include/plan_manage/motion_sweep.hpp": "a1dbc1e5ea5b25d43ec264f2d12278e44940efd8da952a2308431959415a0884"
+  }
+}

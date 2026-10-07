@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites tests="27" failures="0" disabled="0" errors="0" time="0.005" timestamp="2026-10-07T20:45:46" name="AllTests">
+  <testsuite name="TrajectoryCollision" tests="27" failures="0" disabled="0" errors="0" time="0.005" timestamp="2026-10-07T20:45:46">
+    <testcase name="OriginalUnixNanosecondsSurviveBodyCopyAndFreshnessBoundaries" status="run" result="completed" time="0" timestamp="2026-10-07T20:45:46" classname="scan_planner.TrajectoryCollision" />
+    <testcase name="WholeCurveProofDoesNotRenewOriginalUnixBodyFreshness" status="run" result="completed" time="0" timestamp="2026-10-07T20:45:46" classname="scan_planner.TrajectoryCollision" />
+    <testcase name="TraceCapturesOriginalFirstNonFreeActualBodyQuery" status="run" result="completed" time="0" timestamp="2026-10-07T20:45:46" classname="scan_planner.TrajectoryCollision" />
+    <testcase name="TracePreservesQuerySequenceAndCapturesLateUnknown" status="run" result="completed" time="0" timestamp="2026-10-07T20:45:46" classname="scan_planner.TrajectoryCollision" />
+    <testcase name="TraceCapturesPreviewRotationUnknownWithoutSkippingSweep" status="run" result="completed" time="0" timestamp="2026-10-07T20:45:46" classname="scan_planner.TrajectoryCollision" />
+    <testcase name="TraceCannotInventWitnessForClearBudgetOrStaleSource" status="run" result="completed" time="0.001" timestamp="2026-10-07T20:45:46" classname="scan_planner.TrajectoryCollision" />
+    <testcase name="PredecessorFullCurveIncludesFinalThirdAndEndpoint" status="run" result="completed" time="0" timestamp="2026-10-07T20:45:46" classname="scan_planner.TrajectoryCollision" />
+    <testcase name="MeasuredSuffixSkipsOnlyIrrelevantPrefixAndRetainsReverseSweep" status="run" result="completed" time="0" timestamp="2026-10-07T20:45:46" classname="scan_planner.TrajectoryCollision" />
+    <testcase name="MeasuredSuffixAllowsActualShortRetreatNotFloorOrRemoteJump" status="run" result="completed" time="0" timestamp="2026-10-07T20:45:46" classname="scan_planner.TrajectoryCollision" />
+    <testcase name="ExplicitIsolatedPlantBoundDoesNotChangeDefaultOrReverseSweep" status="run" result="completed" time="0" timestamp="2026-10-07T20:45:46" classname="scan_planner.TrajectoryCollision" />
+    <testcase name="IsolatedProjectionAcceptsExactCalibratedCapWithoutChangingDefault" status="run" result="completed" time="0" timestamp="2026-10-07T20:45:46" classname="scan_planner.TrajectoryCollision" />
+    <testcase name="OldProjectionRecordRetainsItsOwnTravelDomainAfterCalibrationCapChange" status="run" result="completed" time="0" timestamp="2026-10-07T20:45:46" classname="scan_planner.TrajectoryCollision" />
+    <testcase name="CommittedTrackingRequiresEveryActualConnectorFootprintNotCandidateTolerance" status="run" result="completed" time="0.001" timestamp="2026-10-07T20:45:46" classname="scan_planner.TrajectoryCollision" />
+    <testcase name="UnknownAndOutsideCannotProduceContinuityProof" status="run" result="completed" time="0" timestamp="2026-10-07T20:45:46" classname="scan_planner.TrajectoryCollision" />
+    <testcase name="QueryBudgetNeverConvertsPartialCheckToSuccess" status="run" result="completed" time="0" timestamp="2026-10-07T20:45:46" classname="scan_planner.TrajectoryCollision" />
+    <testcase name="WallBudgetNeverConvertsPartialCheckToSuccess" status="run" result="completed" time="0.002" timestamp="2026-10-07T20:45:46" classname="scan_planner.TrajectoryCollision" />
+    <testcase name="MissingStaleFutureWrongFrameAndInvalidOrientationFailClosed" status="run" result="completed" time="0" timestamp="2026-10-07T20:45:46" classname="scan_planner.TrajectoryCollision" />
+    <testcase name="CallbackSourceLeaseCannotBeRenewedByRepeatedOrDelayedReceipt" status="run" result="completed" time="0" timestamp="2026-10-07T20:45:46" classname="scan_planner.TrajectoryCollision" />
+    <testcase name="InitialMeasuredRotationSharesQueryBudgetAndRejectsEveryNonFreeState" status="run" result="completed" time="0" timestamp="2026-10-07T20:45:46" classname="scan_planner.TrajectoryCollision" />
+    <testcase name="ShortestSignedTurnCrossesPiNotTheOppositeArc" status="run" result="completed" time="0" timestamp="2026-10-07T20:45:46" classname="scan_planner.TrajectoryCollision" />
+    <testcase name="PredecessorUsesMeasuredCurrentTimeNotHistoricalStart" status="run" result="completed" time="0" timestamp="2026-10-07T20:45:46" classname="scan_planner.TrajectoryCollision" />
+    <testcase name="StationaryCurveUsesMeasuredYawInsteadOfInventingZeroHeading" status="run" result="completed" time="0" timestamp="2026-10-07T20:45:46" classname="scan_planner.TrajectoryCollision" />
+    <testcase name="MeasuredProgressKeepsOldCurveAfterTwentyCentimeterMove" status="run" result="completed" time="0" timestamp="2026-10-07T20:45:46" classname="scan_planner.TrajectoryCollision" />
+    <testcase name="PreviewProgressDoesNotSkipCollisionUnknownOrRotationProof" status="run" result="completed" time="0.001" timestamp="2026-10-07T20:45:46" classname="scan_planner.TrajectoryCollision" />
+    <testcase name="StationaryPreviewCannotAdvanceByRepeatedChecks" status="run" result="completed" time="0" timestamp="2026-10-07T20:45:46" classname="scan_planner.TrajectoryCollision" />
+    <testcase name="MeasuredProgressCannotRewindTeleportOrJumpFloors" status="run" result="completed" time="0" timestamp="2026-10-07T20:45:46" classname="scan_planner.TrajectoryCollision" />
+    <testcase name="SpatialCrossingDoesNotSelectDistantLaterBranch" status="run" result="completed" time="0" timestamp="2026-10-07T20:45:46" classname="scan_planner.TrajectoryCollision" />
+  </testsuite>
+</testsuites>

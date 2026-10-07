@@ -70,6 +70,34 @@ int main(){
  assert(plant.max_speed==.6&&plant.max_yaw==.8&&plant.command_max_speed==.15&&plant.command_max_yaw==.3);
  assert(plant.stop_latency==3.&&plant.stopping_distance==.5);
  assert(!check(spot).valid);assert(!loadMock(spot,"live").valid);
+ // A new exact-hashed isolated engineering record may select .65; it does
+ // not change the old record's .6 domain or the writer's .3/.5 command caps.
+ auto calibrated=spot;
+ calibrated["measurements"]["max_speed_mps"]=.65;
+ calibrated["isolated_platform_model"]["reachable_max_speed_mps"]=.65;
+ calibrated["isolated_platform_model"]["command_max_speed_mps"]=.3;
+ calibrated["isolated_platform_model"]["command_max_yaw_radps"]=.5;
+ const auto new_plant=loadMock(calibrated);
+ assert(new_plant.valid&&new_plant.isolated_spot_model&&new_plant.max_speed==.65);
+ assert(new_plant.command_max_speed==.3&&new_plant.command_max_yaw==.5);
+ assert(new_plant.stop_latency==plant.stop_latency&&new_plant.stopping_distance==plant.stopping_distance);
+ assert(new_plant.policy.sensor_source_age_bound_s==plant.policy.sensor_source_age_bound_s);
+ assert(!check(calibrated).valid&&!loadMock(calibrated,"live").valid);
+ assert(!loadBrakingModel(record.string(),plant.sha256,"isolated_mock").valid);
+ bad=calibrated;bad["measurements"]["max_speed_mps"]=std::nextafter(.65,1.);
+ bad["isolated_platform_model"]["reachable_max_speed_mps"]=bad["measurements"]["max_speed_mps"];
+ assert(!loadMock(bad).valid);
+ bad=calibrated;bad["isolated_platform_model"]["reachable_max_speed_mps"]=.6;
+ assert(!loadMock(bad).valid);
+ bad=spot;bad["measurements"]["max_speed_mps"]=.616161;
+ assert(!loadMock(bad).valid);  // The original .6 marker still binds its record.
+ bad=calibrated;bad.erase("isolated_platform_model");assert(!loadMock(bad).valid);
+ bad=calibrated;bad["fixture_only"]=false;assert(!loadMock(bad).valid);
+ bad=calibrated;bad["transport_mode"]="live";assert(!loadMock(bad).valid);
+ bad=calibrated;bad["isolated_platform_model"]["command_max_speed_mps"]=.301;
+ assert(!loadMock(bad).valid);
+ bad=calibrated;bad["isolated_platform_model"]["command_max_yaw_radps"]=.501;
+ assert(!loadMock(bad).valid);
  // A stripped older marker cannot turn a new isolated reference record into
  // physical acceptance or a live braking calibration.
  bad=mock;bad["isolated_full_xyz_reference_model"]={{"schema",1},{"kind","official_spot_physx"}};

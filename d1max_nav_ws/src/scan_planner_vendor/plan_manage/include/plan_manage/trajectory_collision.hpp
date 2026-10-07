@@ -151,7 +151,7 @@ inline std::optional<MeasuredCurveDomain> measuredRemainingCurveDomain(UniformBs
      !std::isfinite(previous_measured_time)||previous_measured_time<0.||previous_measured_time>duration||
      !std::isfinite(source_dt)||source_dt<-.02||source_dt>.4||
      !std::isfinite(committed_arc)||committed_arc<0.||!std::isfinite(max_speed)||max_speed<=0.||
-     max_speed>(speed_profile==MeasuredSpeedProfile::IsolatedOfficialSpot?.6:.3)||
+     max_speed>(speed_profile==MeasuredSpeedProfile::IsolatedOfficialSpot?.65:.3)||
      !std::isfinite(reverse_margin)||reverse_margin<.15||reverse_margin>.15+1e-9)return {};
   for(int i=1;i<knots.size();++i)if(knots[i]<=knots[i-1])return {};
   const int n=std::max(1,static_cast<int>(std::ceil(duration/.02)));

@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites tests="7" failures="0" disabled="0" errors="0" time="0.005" timestamp="2026-10-07T20:45:46" name="AllTests">
+  <testsuite name="InitialYawNative" tests="7" failures="0" disabled="0" errors="0" time="0.005" timestamp="2026-10-07T20:45:46">
+    <testcase name="FullyObservedTurnWithoutObstaclesRemainsAdmissible" status="run" result="completed" time="0.004" timestamp="2026-10-07T20:45:46" classname="scan_planner.InitialYawNative">
+<properties>
+<property name="accepted" value="true"/>
+</properties>
+    </testcase>
+    <testcase name="FreeEndpointsCannotHideOccupiedIntermediateFootprint" status="run" result="completed" time="0" timestamp="2026-10-07T20:45:46" classname="scan_planner.InitialYawNative">
+<properties>
+<property name="accepted" value="false"/>
+</properties>
+    </testcase>
+    <testcase name="UnobservedIntermediateFootprintMustNotBeAcceptedEither" status="run" result="completed" time="0.001" timestamp="2026-10-07T20:45:46" classname="scan_planner.InitialYawNative">
+<properties>
+<property name="accepted" value="false"/>
+</properties>
+    </testcase>
+    <testcase name="PreviewInternalFinalAndRepeatedFullChecksShareOneContract" status="run" result="completed" time="0" timestamp="2026-10-07T20:45:46" classname="scan_planner.InitialYawNative" />
+    <testcase name="PreviewThresholdCannotSkipActualRotatingBodyCollision" status="run" result="completed" time="0" timestamp="2026-10-07T20:45:46" classname="scan_planner.InitialYawNative" />
+    <testcase name="PreviewSourceLeaseJoinDistanceAndSweepBudgetRemainMandatory" status="run" result="completed" time="0" timestamp="2026-10-07T20:45:46" classname="scan_planner.InitialYawNative" />
+    <testcase name="IncompleteProofIsNotAClaimOfOccupiedGeometry" status="run" result="completed" time="0" timestamp="2026-10-07T20:45:46" classname="scan_planner.InitialYawNative" />
+  </testsuite>
+</testsuites>

@@ -61,14 +61,17 @@ class IsolatedReferenceModel {
     };
     const double command=bound(platform,"command_max_speed_mps",.3);
     const double yaw=bound(platform,"command_max_yaw_radps",.5);
-    const double reach=bound(platform,"reachable_max_speed_mps",.6);
+    const double reach=bound(platform,"reachable_max_speed_mps",.65);
     const double reach_yaw=bound(platform,"reachable_max_yaw_radps",.8);
     if(command>reach||yaw>reach_yaw||record.at("measurements").at("max_speed_mps")!=reach||
         record.at("measurements").at("max_yaw_radps")!=reach_yaw)
       throw std::invalid_argument("isolated_reference_platform_mismatch");
-    const double speed=bound(reference,"reference_max_speed_mps",.5);
-    const double travel=bound(reference,"measured_travel_max_speed_mps",.5);
-    const double observed=bound(reference,"observed_max_full_xyz_speed_mps",.5);
+    // These are instantaneous full-XYZ admission/reference domains, not a
+    // future full-XYZ plant or braking claim. Their explicit sealed values
+    // cannot exceed the SAME platform's already validated reachable speed.
+    const double speed=bound(reference,"reference_max_speed_mps",reach);
+    const double travel=bound(reference,"measured_travel_max_speed_mps",reach);
+    const double observed=bound(reference,"observed_max_full_xyz_speed_mps",reach);
     const auto& evidence=reference.at("evidence_sha256");
     if(!evidence.is_string()||!shaValid(evidence.get<std::string>())||
         observed>speed||observed>travel||command>speed||command>travel)

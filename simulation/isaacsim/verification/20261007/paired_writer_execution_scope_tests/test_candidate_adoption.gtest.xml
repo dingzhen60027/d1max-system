@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites tests="19" failures="0" disabled="0" errors="0" time="0.007" timestamp="2026-10-07T20:45:46" name="AllTests">
+  <testsuite name="CandidateAdoption" tests="18" failures="0" disabled="0" errors="0" time="0.006" timestamp="2026-10-07T20:45:46">
+    <testcase name="MovingNineCentimetersJoinsOriginalCurveInsteadOfTZero" status="run" result="completed" time="0.001" timestamp="2026-10-07T20:45:46" classname="scan_planner.CandidateAdoption" />
+    <testcase name="UnixSourceOrderAndElapsedBoundUseOriginalNanoseconds" status="run" result="completed" time="0.001" timestamp="2026-10-07T20:45:46" classname="scan_planner.CandidateAdoption" />
+    <testcase name="IndependentXyzReferenceAndTravelKeepRawZAndMeasuredEntry" status="run" result="completed" time="0" timestamp="2026-10-07T20:45:46" classname="scan_planner.CandidateAdoption" />
+    <testcase name="ExpandedReferenceDomainStillRequiresOriginalXyzC1AndSourceLease" status="run" result="completed" time="0" timestamp="2026-10-07T20:45:46" classname="scan_planner.CandidateAdoption" />
+    <testcase name="IndependentTravelDoesNotReplaceWholeCurveCollisionOrFinalSourceGate" status="run" result="completed" time="0" timestamp="2026-10-07T20:45:46" classname="scan_planner.CandidateAdoption" />
+    <testcase name="NanosecondBodyChangeInvalidatesSourceLeaseAcrossFullCheck" status="run" result="completed" time="0" timestamp="2026-10-07T20:45:46" classname="scan_planner.CandidateAdoption" />
+    <testcase name="StationaryInputCannotAdvanceWithClock" status="run" result="completed" time="0.001" timestamp="2026-10-07T20:45:46" classname="scan_planner.CandidateAdoption" />
+    <testcase name="WrongFloorFarLateralAndWrongVelocityCannotJoin" status="run" result="completed" time="0" timestamp="2026-10-07T20:45:46" classname="scan_planner.CandidateAdoption" />
+    <testcase name="EntryCannotSkipSemanticSegmentBoundaryOrContext" status="run" result="completed" time="0" timestamp="2026-10-07T20:45:46" classname="scan_planner.CandidateAdoption" />
+    <testcase name="ArcWindowRejectsLaterOverlappingBranchDespiteNearbyXYZ" status="run" result="completed" time="0" timestamp="2026-10-07T20:45:46" classname="scan_planner.CandidateAdoption" />
+    <testcase name="RegressedOrOverBudgetSourceCannotLicenseProjection" status="run" result="completed" time="0" timestamp="2026-10-07T20:45:46" classname="scan_planner.CandidateAdoption" />
+    <testcase name="RealNativeOccupiedAndUnknownRemainderStillBlock" status="run" result="completed" time="0" timestamp="2026-10-07T20:45:46" classname="scan_planner.CandidateAdoption" />
+    <testcase name="CollisionBehindEntryIsStillCheckedConservatively" status="run" result="completed" time="0" timestamp="2026-10-07T20:45:46" classname="scan_planner.CandidateAdoption" />
+    <testcase name="FullCurveVelocityAndAccelerationBoundsAreNotRelaxed" status="run" result="completed" time="0" timestamp="2026-10-07T20:45:46" classname="scan_planner.CandidateAdoption" />
+    <testcase name="FreshAtStartButExpiredMapAtEndCannotCommit" status="run" result="completed" time="0.001" timestamp="2026-10-07T20:45:46" classname="scan_planner.CandidateAdoption" />
+    <testcase name="FreshAtStartButExpiredBodyAtEndCannotCommit" status="run" result="completed" time="0" timestamp="2026-10-07T20:45:46" classname="scan_planner.CandidateAdoption" />
+    <testcase name="SourceContextRevisionAndBodyReplacementDuringCheckCannotCommit" status="run" result="completed" time="0.002" timestamp="2026-10-07T20:45:46" classname="scan_planner.CandidateAdoption" />
+    <testcase name="CanceledOrFourHundredMillisecondLateCheckCannotCommit" status="run" result="completed" time="0" timestamp="2026-10-07T20:45:46" classname="scan_planner.CandidateAdoption" />
+  </testsuite>
+  <testsuite name="WorkerLifecycle" tests="1" failures="0" disabled="0" errors="0" time="0.001" timestamp="2026-10-07T20:45:46">
+    <testcase name="ActualSnapshotLeaseReleasedOnNormalAndExceptionalWorkerExit" status="run" result="completed" time="0.001" timestamp="2026-10-07T20:45:46" classname="scan_planner.WorkerLifecycle" />
+  </testsuite>
+</testsuites>

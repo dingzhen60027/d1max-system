@@ -1,0 +1,13 @@
+{
+  "request_sent": true,
+  "request_accepted": true,
+  "software_retired": true,
+  "physical_stop_confirmed": false,
+  "reason": "software_retired_not_physical_stop",
+  "requested_at": 1791381946.5739303,
+  "requested_source_ns": 1791381946573930327,
+  "timeout_stage": null,
+  "elapsed_s": 0.11554714618250728,
+  "session_id": "40d3d992bfd84b6c83dcba38e19cc829",
+  "recorded_at_unix": 1791382293.432437
+}

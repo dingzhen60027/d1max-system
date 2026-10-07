@@ -28,11 +28,127 @@ NUMERICAL_OUTWARD_MARGIN_M = 1e-6
 ENCOUNTER_RULE = "measured_primitive_center_approach_near_depart_v1"
 ENCOUNTER_SOURCE = "actual_registered_link_and_actor_geometry"
 ENCOUNTER_SCOPE = "sampled_same_step_primitive_center_proximity_only"
+SPOT_EXPOSURE_PROFILE = "isolated_spot_reachable_3m_exposure_v1"
+SPOT_EXPOSURE_PROFILE_65 = "isolated_spot_reachable65_3m_exposure_v1"
+ENCOUNTER_HISTORY_PROFILE = "actual_snapshot_cadence_v1"
 
 
-def encounter_contract(actor_ids):
+def spot_exposure_speed_limit(token):
+    """Explicit versions retain their original sealed motion domain."""
+    if token == SPOT_EXPOSURE_PROFILE:
+        return .6
+    if token == SPOT_EXPOSURE_PROFILE_65:
+        return .65
+    raise ValueError("invalid_isolated_spot_encounter_profile")
+
+
+def spot_exposure_profile(spec):
+    """Explicit new-case metric, bound to the fixture's unchanged safety model.
+
+    The current conservative reachable stopping tube is about 2.53m; primitive
+    centers also differ vertically. Its successful stop can prevent the legacy
+    2m exposure metric. Three metres describes an encounter, not route blocking
+    or a reduced collision/stop bound. Existing cases never select it implicitly.
+    """
+    robot = spec.get("robot", {})
+    selected = robot.get("actor_encounter_profile")
+    if selected is None:
+        return None
+    if robot.get("kind") != "official_spot_physx":
+        raise ValueError("invalid_isolated_spot_encounter_profile")
+    speed = spot_exposure_speed_limit(selected)
+    reference, limits = robot.get("full_xyz_reference_model", {}), robot.get("model_limits", {})
+    if not isinstance(reference, dict) or not isinstance(limits, dict):
+        raise ValueError("spot_encounter_profile_source_domain_mismatch")
+    digest = reference.get("evidence_sha256")
+    if (not isinstance(digest, str) or len(digest) != 64
+            or any(c not in "0123456789abcdef" for c in digest)
+            or type(reference.get("reference_max_speed_mps")) not in (int, float)
+            or reference["reference_max_speed_mps"] != speed
+            or type(reference.get("measured_travel_max_speed_mps")) not in (int, float)
+            or reference["measured_travel_max_speed_mps"] != speed
+            or type(limits.get("max_linear_speed_mps")) not in (int, float)
+            or limits["max_linear_speed_mps"] != speed
+            or type(limits.get("max_angular_speed_radps")) not in (int, float)
+            or limits["max_angular_speed_radps"] != .8):
+        raise ValueError("spot_encounter_profile_source_domain_mismatch")
+    body = robot.get("body_size")
+    navigation = robot.get("navigation_envelope", {})
+    support = spec.get("flat_support_contact", {})
+    if (not isinstance(body, list) or len(body) != 3
+            or not isinstance(navigation, dict) or not isinstance(support, dict)
+            or support.get("enabled") is not True
+            or not isinstance(robot.get("body_reference_calibration"), dict)):
+        raise ValueError("spot_encounter_body_envelope_metadata_missing")
+    numbers = body + [robot.get("body_reference_height"), navigation.get("length_m"),
+        navigation.get("width_m"), navigation.get("above_body_m"), support.get("penetration_allowance_m")]
+    if any(type(v) not in (int, float) or not math.isfinite(v) or v <= 0 for v in numbers):
+        raise ValueError("invalid_spot_encounter_body_envelope_metadata")
+    floor_z = spec.get("floor", {}).get("z")
+    if type(floor_z) not in (int, float) or not math.isfinite(floor_z) or support.get("floor_z") != floor_z:
+        raise ValueError("spot_encounter_support_metadata_mismatch")
+    length, width = max(body[0], navigation["length_m"]), max(body[1], navigation["width_m"])
+    offset = length/4.
+    envelope = dict(radius=(offset**2+(width/2.)**2)**.5+.06, offset=offset,
+        above=navigation["above_body_m"], support_floor_z=floor_z,
+        support_penetration_m=support["penetration_allowance_m"])
+    metadata = dict(body_size=body, navigation_envelope=navigation,
+        body_reference_height=robot["body_reference_height"],
+        body_reference_calibration=robot["body_reference_calibration"], native_envelope=envelope)
+    return dict(schema=1, kind=selected, robot_kind="official_spot_physx",
+        source_reference_evidence_sha256=digest,
+        reference_max_speed_mps=speed, measured_travel_max_speed_mps=speed,
+        reachable_max_speed_mps=speed, reachable_max_yaw_radps=.8,
+        body_reference_height_m=robot["body_reference_height"], body_envelope=envelope,
+        body_envelope_metadata_sha256=hashlib.sha256(canonical(metadata)).hexdigest(),
+        runtime_exact_model_and_registered_body_binding_required=True,
+        interpretation="actual_sampled_encounter_exposure_only; not_route_blocking",
+        rationale=("conservative_stopping_tube_about_2.53m_plus_primitive_center_vertical_offset; legacy_2m_unchanged"
+            if selected == SPOT_EXPOSURE_PROFILE else
+            "explicit_recalibrated_.65_fixture_sampled_exposure; legacy_.60_profile_and_2m_unchanged"))
+
+
+def encounter_history_binding(spec, exposure_profile, maximum_leg_source_s):
+    """Opt-in offline storage for the fixture's two actual sampling lattices.
+
+    In a closed T-second window, the 50Hz state and 25Hz acquisition-BEGIN
+    lattices contain at most floor(50*T)+1 + floor(25*T)+1 snapshots. Four
+    boundary slots cover these two endpoints conservatively. This only sizes
+    audit RAM; excess actual samples still revoke the encounter verdict.
+    """
+    robot = spec.get("robot", {})
+    selected = robot.get("actor_encounter_history_profile")
+    if selected is None:
+        return None
+    physics, lidar = spec.get("physics", {}), spec.get("lidar", {})
+    if (selected != ENCOUNTER_HISTORY_PROFILE
+            or robot.get("kind") != "official_spot_physx"
+            or exposure_profile is None
+            or not isinstance(physics, dict) or not isinstance(lidar, dict)):
+        raise ValueError("invalid_actor_encounter_history_profile")
+    cadence = (physics.get("frequency_hz"), physics.get("state_frequency_hz"), lidar.get("frequency_hz"))
+    if (any(type(v) not in (int, float) or not math.isfinite(v) for v in cadence)
+            or cadence != (500., 50., 25.) or maximum_leg_source_s != 30.):
+        raise ValueError("actor_encounter_history_source_cadence_mismatch")
+    boundary_allowance = 4
+    rate_bound = cadence[1]+cadence[2]
+    derived = math.ceil(rate_bound*maximum_leg_source_s)+boundary_allowance
+    capacity = max(2048, derived)
+    if capacity > 4096:
+        raise ValueError("actor_encounter_history_capacity_exceeded")
+    return dict(schema=1, kind=selected, robot_kind="official_spot_physx",
+        physics_frequency_hz=cadence[0], state_frequency_hz=cadence[1],
+        lidar_acquisition_frequency_hz=cadence[2], maximum_leg_source_s=maximum_leg_source_s,
+        maximum_actual_snapshot_rate_hz=rate_bound, boundary_allowance_samples=boundary_allowance,
+        derived_history_samples_per_pair=derived, maximum_history_samples_per_pair=capacity,
+        source_exposure_profile_sha256=hashlib.sha256(canonical(exposure_profile)).hexdigest(),
+        derivation="max(2048,ceil((state_frequency_hz+lidar_acquisition_frequency_hz)*maximum_leg_source_s)+4)",
+        scope="offline_encounter_audit_history_only; no_online_collision_or_lease_change")
+
+
+def encounter_contract(actor_ids, spec=None):
     """Explicit preparation-time rule; changing it requires a new candidate."""
-    return dict(schema=1, rule=ENCOUNTER_RULE, required_actor_ids=sorted(actor_ids),
+    value = dict(schema=1, rule=ENCOUNTER_RULE, required_actor_ids=sorted(actor_ids),
         near_center_distance_m=2., minimum_near_source_s=.5,
         minimum_distance_change_m=.5, minimum_leg_source_s=1.,
         minimum_mean_distance_rate_mps=.05, maximum_leg_source_s=30.,
@@ -41,16 +157,24 @@ def encounter_contract(actor_ids):
         approach_starts_outside_near=True, departure_ends_outside_near=True,
         identity_scope="same_exact_robot_path_and_actor_shape_path_for_all_three_legs",
         scope=ENCOUNTER_SCOPE)
+    profile = spot_exposure_profile(spec) if spec is not None else None
+    if profile is not None:
+        value.update(near_center_distance_m=3., profile=profile)
+    history = encounter_history_binding(spec, profile, value["maximum_leg_source_s"]) if spec is not None else None
+    if history is not None:
+        value.update(maximum_history_samples_per_pair=history["maximum_history_samples_per_pair"],
+            history_capacity_binding=history)
+    return value
 
 
-def validate_encounter_contract(value, enabled_actor_ids):
+def validate_encounter_contract(value, enabled_actor_ids, spec=None):
     if not isinstance(value, dict):
         raise ValueError("invalid_actor_encounter_contract")
     ids = value.get("required_actor_ids")
     if (not isinstance(ids, list) or not all(isinstance(v, str) for v in ids)
             or ids != sorted(set(ids))
             or not set(ids).issubset(enabled_actor_ids)
-            or value != encounter_contract(ids)):
+            or value != encounter_contract(ids, spec)):
         raise ValueError("invalid_actor_encounter_contract")
     return value
 
@@ -155,7 +279,7 @@ def review_actual_encounter(value, spec, collision, action_begin_ns, action_end_
     """
     enabled = [a["id"] for a in actor_registry(spec)]
     contract = validate_encounter_contract(
-        spec["scenario_suite_contract"]["actor_encounter_contract"], enabled)
+        spec["scenario_suite_contract"]["actor_encounter_contract"], enabled, spec)
     if value is None or not contract["required_actor_ids"]:
         return None, []
     if not isinstance(value, dict):
@@ -169,6 +293,8 @@ def review_actual_encounter(value, spec, collision, action_begin_ns, action_end_
         source_begin_ns=collision["source_begin_ns"], source_end_ns=collision["source_end_ns"],
         robot_collision_registry_sha256=hashlib.sha256(canonical(spec["robot_collision_registry"])).hexdigest(),
         actor_collision_registry_sha256=hashlib.sha256(canonical(actor_registry(spec))).hexdigest())
+    if "profile" in contract:
+        expected["profile"] = contract["profile"]
     if (any(value.get(k) != v for k, v in expected.items())
             or collision.get("robot_collision_registry_sha256") != expected["robot_collision_registry_sha256"]
             or collision.get("actor_collision_registry_sha256") != expected["actor_collision_registry_sha256"]
@@ -332,7 +458,7 @@ class Audit:
         self.actor_ids = [actor["id"] for actor in self.actors]
         self.actor_registry_sha = hashlib.sha256(canonical(self.actors)).hexdigest()
         encounter = self.spec.get("scenario_suite_contract", {}).get("actor_encounter_contract")
-        self.encounters = (_EncounterPairs(validate_encounter_contract(encounter, self.actor_ids), anchor_ns)
+        self.encounters = (_EncounterPairs(validate_encounter_contract(encounter, self.actor_ids, self.spec), anchor_ns)
                            if encounter is not None else None)
         self._actor_centers = []
         self.static = []
@@ -492,6 +618,8 @@ class Audit:
                 observation_status="not_required" if not required else "completed" if fresh else "pending",
                 limitations=["sampled_proximity_only", "not_route_blocking_or_yield_or_contact_evidence",
                              "caller_binds_actual_snapshots_to_same_physics_step"])
+            if "profile" in contract:
+                encounter["profile"] = contract["profile"]
         return dict(schema=1, scope=SCOPE, completed=complete,
             continuous_collision_proof=False,
             separation_method="strict_closed_AABB_separation_of_actual_transformed_primitives",

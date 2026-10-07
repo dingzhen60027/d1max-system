@@ -1,0 +1,863 @@
+{
+  "schema": 1,
+  "kind": "campus_crossing_v47_projection_domain_failure",
+  "date": "2026-10-07",
+  "status": "FAILED",
+  "scope": "Original mainline BT/PCT/SCAN/tracker/safety/isolated writer and native PhysX Spot navigation; read-only evaluation of its sealed failed run.",
+  "original_paths": {
+    "run": "/home/eric/wjg/d1max-system/campus_crossing_v47_001",
+    "candidate": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v47-campus-all-actors-response",
+    "raw_run_not_moved_or_modified": true
+  },
+  "identity": {
+    "session_id": "7e63695d7109427594cc611e3e11e19f",
+    "epoch": "df852280-87e0-4f93-8eb8-86614f5e8c5d",
+    "clock_anchor_ns": 1791372588230343212,
+    "sealed_scene_sha256": "da9e2d9130aec7b44a9bc25e467725b5aef7146cfa6f39c0ee466a4d9b41fec2",
+    "sealed_model_sha256": "b43379bb3668e0cdcf79996a98aa12151c20358a5a5485b2eec70fc8ba8c4673",
+    "sealed_reference_evidence_sha256": "44e56925dd1f4b78a4d3994701b1700429e00c3fd7f80b26ddcb86e321b97262",
+    "selected_encounter_profile": "isolated_spot_reachable65_3m_exposure_v1"
+  },
+  "outcome": {
+    "scenario_evaluation_passed": false,
+    "expected_evaluation_exit_code": 1,
+    "original_action_success": false,
+    "original_action_reason": "execution_blocked_timeout:waiting_current_collision_and_tracker_proof",
+    "goal_xyz": [
+      8.0,
+      -5.0,
+      0.0
+    ],
+    "measured_action_final_position": [
+      -7.9214606285095215,
+      -5.024724960327148,
+      0.48079442977905273
+    ],
+    "measured_action_xy_error_m": 15.921479826600352,
+    "original_action_measured_distance_m": 0.00807444883491332,
+    "original_progress_credit_samples": 0,
+    "software_retired": true,
+    "clean_shutdown": false,
+    "physical_stop_confirmed": false,
+    "child_exit_codes": {
+      "isaac_bridge": 0,
+      "isaac_sim": -15,
+      "navigation": 0,
+      "smoke": 1
+    },
+    "hardware_acceptance": false
+  },
+  "causal_projection_evidence": {
+    "confirmed_contract_mismatch": true,
+    "sealed_model_reachable_and_reference_and_travel_max_mps": 0.65,
+    "sealed_helper_isolated_profile_hard_cap_mps": 0.6,
+    "legacy_d1_helper_hard_cap_mps": 0.3,
+    "first_guard_expression": "max_speed > (speed_profile == MeasuredSpeedProfile::IsolatedOfficialSpot ? .6 : .3)",
+    "mathematical_evaluation": {
+      "max_speed": 0.65,
+      "profile": "IsolatedOfficialSpot",
+      "cap": 0.6,
+      "reject_condition": true,
+      "comparison": ".65 > .60"
+    },
+    "execution_path": [
+      "ExecutionValidator begins a private observed proof and reads fresh measured progress.",
+      "For the isolated Spot model, the call passes braking.max_speed=.65 and IsolatedOfficialSpot.",
+      "measuredRemainingCurveDomain initializes its residual witness to quiet NaN, then rejects .65 at its original precondition.",
+      "The precondition returns before constructing sampled curve points, projecting the measured XYZ body, or querying collision geometry.",
+      "The caller consequently has no domain/join; its original diagnostic records residual=nan, queries=0, and measured_projection_or_connection_invalid.",
+      "With zero geometry queries, beginObservedProof has cleared query clocks/deadlines; observedProofDeadlineNs can return the original expired sentinel 1.",
+      "The later original publication guard can overwrite the preliminary reason with source_expired_during_check; that label alone cannot identify a real ray/actor lease expiration."
+    ],
+    "confirmed_original_zero_query_warning_count": 401,
+    "original_warning_first": {
+      "original_line_number": 21,
+      "original_text": "[WARN] [1791372628.806568232] [d1max.live_planning.scan.scan_planner_node]: Execution proof curve=1 measured_progress=1 residual=nan queries=0 check_ms=0.000 reason=measured_projection_or_connection_invalid dynamic_hit_provenance={\"counter_scope\":\"relevant_static_free_or_nonfloor_contact_hits_before_vote_dedup_while_active\",\"disable_reason\":\"none\",\"domain_valid\":true,\"enabled\":true,\"entry_count\":0,\"entry_limit\":100000,\"latched_disabled\":false,\"mixed_poison_events\":0,\"prior_poison_events\":0,\"registry_sha256\":\"96b092886099b5b2c0904ce86c34d607167c8cee28865d318455c88bc7aea734\",\"valid_tag_events\":0,\"zero_tag_events\":0}"
+    },
+    "original_warning_last": {
+      "original_line_number": 781,
+      "original_text": "[WARN] [1791372737.199378682] [d1max.live_planning.scan.scan_planner_node]: Execution proof curve=30 measured_progress=1 residual=nan queries=0 check_ms=0.000 reason=measured_projection_or_connection_invalid dynamic_hit_provenance={\"counter_scope\":\"relevant_static_free_or_nonfloor_contact_hits_before_vote_dedup_while_active\",\"disable_reason\":\"none\",\"domain_valid\":true,\"enabled\":true,\"entry_count\":0,\"entry_limit\":100000,\"latched_disabled\":false,\"mixed_poison_events\":0,\"prior_poison_events\":0,\"registry_sha256\":\"96b092886099b5b2c0904ce86c34d607167c8cee28865d318455c88bc7aea734\",\"valid_tag_events\":0,\"zero_tag_events\":0}"
+    },
+    "warning_throttle_ms": 250,
+    "warnings_are_not_all_queries_count": true,
+    "original_published_trajectory_reason_counts": {
+      "observed_free": 88,
+      "source_expired_during_check": 5420
+    },
+    "original_tracker_reason_counts": {
+      "waiting_execution_permission": 73,
+      "geometry_only_no_motion_permission": 244,
+      "waiting_trajectory_clock": 28,
+      "permission_or_native_proof_expired": 1527,
+      "stationary_reentry_waiting_writer": 69,
+      "source_clock_paused_command_expired": 2,
+      "tracking": 7,
+      "handoff_retired_or_applied_uncertain": 214
+    },
+    "source_expired_reason_all_real_sensor_expiry_claim": false,
+    "sensor_receipt_gaps_also_present_s": [
+      0.645027182996273,
+      0.644868876086548
+    ],
+    "sensor_receipt_gap_only_failure_cause_claim": false,
+    "first_original_failed_wire": {
+      "kind": "trajectory_validation",
+      "receipt_monotonic_ns": 1219167754495162,
+      "source_clock_ns": 1791372591350343212,
+      "data": {
+        "wire": {
+          "version": {
+            "schema_version": 3,
+            "session_id": "7e63695d7109427594cc611e3e11e19f",
+            "task_id": "7e63695d7109427594cc611e3e11e19f.1",
+            "route_id": "7e63695d7109427594cc611e3e11e19f.1:e74cd99c1f21ca07ae3a5a8f8a9222fad6abff9add49e90de283005097186181",
+            "route_hash": "e74cd99c1f21ca07ae3a5a8f8a9222fad6abff9add49e90de283005097186181",
+            "map_version_id": "c19eddd0f839b0679a910068961b569e6e0f5a7679108bbf8fdf34136c07e24c",
+            "localization_epoch": 1,
+            "localization_seed_id": "isaac-df852280-87e0-4f93-8eb8-86614f5e8c5d",
+            "reference_generation": 1,
+            "segment_id": "floor",
+            "anchor_id": "8549daada997a5cabec0fd407e37f785e510facfd82347cff3c990171ad767ac",
+            "anchor_revision": 1,
+            "context_sequence": 1,
+            "map_geometry_revision": 1
+          },
+          "proposal_id": "7e63695d7109427594cc611e3e11e19f.1.1",
+          "trajectory_id": 1,
+          "sequence": 3,
+          "source_stamp": {
+            "sec": 1791372591,
+            "nanosec": 350343212
+          },
+          "check_begin": {
+            "sec": 1791372591,
+            "nanosec": 350343212
+          },
+          "check_end": {
+            "sec": 1791372591,
+            "nanosec": 350343212
+          },
+          "valid_until": {
+            "sec": 0,
+            "nanosec": 1
+          },
+          "body_source_stamp": {
+            "sec": 1791372591,
+            "nanosec": 350343212
+          },
+          "front_ray_source_stamp": {
+            "sec": 1791372591,
+            "nanosec": 248343212
+          },
+          "rear_ray_source_stamp": {
+            "sec": 1791372591,
+            "nanosec": 248343212
+          },
+          "map_snapshot_revision": 414024,
+          "support_reference_id": "7e63695d7109427594cc611e3e11e19f.1.1",
+          "support_hash": "2500a8280864e3e4f1cd73d80b6b60e81ff73aa6d863235e62447aa085403008",
+          "valid": false,
+          "whole_curve": true,
+          "remaining_curve": false,
+          "checked_from_time": 0.0,
+          "checked_to_time": 0.0,
+          "curve_duration": 0.0,
+          "reverse_margin_m": 0.0,
+          "goal_yaw_checked": false,
+          "checked_goal_yaw": 0.0,
+          "valid_start_time": 0.0,
+          "valid_start_arc_length": 0.0,
+          "frame_id": "d1max_loc_odom",
+          "collision_policy": "observed_free",
+          "transport_mode": "isolated_mock",
+          "reason": "source_expired_during_check"
+        },
+        "trajectory_id": 1,
+        "sequence": 3,
+        "valid": false,
+        "reason": "source_expired_during_check",
+        "source_stamp_ns": 1791372591350343212,
+        "body_source_stamp_ns": 1791372591350343212,
+        "valid_until_ns": 1,
+        "front_ray_source_stamp_ns": 1791372591248343212,
+        "rear_ray_source_stamp_ns": 1791372591248343212,
+        "check_begin_ns": 1791372591350343212,
+        "check_end_ns": 1791372591350343212
+      }
+    },
+    "last_original_failed_wire": {
+      "kind": "trajectory_validation",
+      "receipt_monotonic_ns": 1219276213481155,
+      "source_clock_ns": 1791372621390343212,
+      "data": {
+        "wire": {
+          "version": {
+            "schema_version": 3,
+            "session_id": "7e63695d7109427594cc611e3e11e19f",
+            "task_id": "7e63695d7109427594cc611e3e11e19f.1",
+            "route_id": "7e63695d7109427594cc611e3e11e19f.1:e74cd99c1f21ca07ae3a5a8f8a9222fad6abff9add49e90de283005097186181",
+            "route_hash": "e74cd99c1f21ca07ae3a5a8f8a9222fad6abff9add49e90de283005097186181",
+            "map_version_id": "c19eddd0f839b0679a910068961b569e6e0f5a7679108bbf8fdf34136c07e24c",
+            "localization_epoch": 1,
+            "localization_seed_id": "isaac-df852280-87e0-4f93-8eb8-86614f5e8c5d",
+            "reference_generation": 1,
+            "segment_id": "floor",
+            "anchor_id": "8549daada997a5cabec0fd407e37f785e510facfd82347cff3c990171ad767ac",
+            "anchor_revision": 1,
+            "context_sequence": 1,
+            "map_geometry_revision": 1
+          },
+          "proposal_id": "7e63695d7109427594cc611e3e11e19f.1.1",
+          "trajectory_id": 30,
+          "sequence": 5514,
+          "source_stamp": {
+            "sec": 1791372621,
+            "nanosec": 390343212
+          },
+          "check_begin": {
+            "sec": 1791372621,
+            "nanosec": 390343212
+          },
+          "check_end": {
+            "sec": 1791372621,
+            "nanosec": 390343212
+          },
+          "valid_until": {
+            "sec": 0,
+            "nanosec": 1
+          },
+          "body_source_stamp": {
+            "sec": 1791372621,
+            "nanosec": 390343212
+          },
+          "front_ray_source_stamp": {
+            "sec": 1791372621,
+            "nanosec": 248343212
+          },
+          "rear_ray_source_stamp": {
+            "sec": 1791372621,
+            "nanosec": 248343212
+          },
+          "map_snapshot_revision": 458874,
+          "support_reference_id": "7e63695d7109427594cc611e3e11e19f.1.1",
+          "support_hash": "2500a8280864e3e4f1cd73d80b6b60e81ff73aa6d863235e62447aa085403008",
+          "valid": false,
+          "whole_curve": true,
+          "remaining_curve": false,
+          "checked_from_time": 0.0,
+          "checked_to_time": 0.0,
+          "curve_duration": 0.0,
+          "reverse_margin_m": 0.0,
+          "goal_yaw_checked": false,
+          "checked_goal_yaw": 0.0,
+          "valid_start_time": 0.0,
+          "valid_start_arc_length": 0.0,
+          "frame_id": "d1max_loc_odom",
+          "collision_policy": "observed_free",
+          "transport_mode": "isolated_mock",
+          "reason": "source_expired_during_check"
+        },
+        "trajectory_id": 30,
+        "sequence": 5514,
+        "valid": false,
+        "reason": "source_expired_during_check",
+        "source_stamp_ns": 1791372621390343212,
+        "body_source_stamp_ns": 1791372621390343212,
+        "valid_until_ns": 1,
+        "front_ray_source_stamp_ns": 1791372621248343212,
+        "rear_ray_source_stamp_ns": 1791372621248343212,
+        "check_begin_ns": 1791372621390343212,
+        "check_end_ns": 1791372621390343212
+      }
+    },
+    "line_bindings": [
+      {
+        "file": "application/install/scan_planner/include/plan_manage/trajectory_collision.hpp",
+        "line": 139,
+        "meaning": "Function entry; original max_speed/profile arguments follow."
+      },
+      {
+        "file": "application/install/scan_planner/include/plan_manage/trajectory_collision.hpp",
+        "line": 145,
+        "meaning": "Residual initially quiet NaN."
+      },
+      {
+        "file": "application/install/scan_planner/include/plan_manage/trajectory_collision.hpp",
+        "line": 154,
+        "meaning": "Legacy isolated cap .6 rejects the new .65 argument before projection."
+      },
+      {
+        "file": "application/install/scan_planner/include/plan_manage/execution_validator.hpp",
+        "line": 782,
+        "meaning": "Caller passes sealed isolated braking max_speed and Spot profile."
+      },
+      {
+        "file": "application/install/scan_planner/include/plan_manage/execution_validator.hpp",
+        "line": 822,
+        "meaning": "No join yields the projection failure reason before final freshness publication checks."
+      },
+      {
+        "file": "application/install/scan_planner/include/plan_manage/execution_validator.hpp",
+        "line": 867,
+        "meaning": "Final deadline checks can overwrite that preliminary reason."
+      },
+      {
+        "file": "application/install/plan_env/include/plan_env/grid_map.h",
+        "line": 289,
+        "meaning": "Proof start clears original query clocks and receipt deadlines."
+      },
+      {
+        "file": "source_snapshot/nav/src/scan_planner_vendor/plan_env/src/grid_map.cpp",
+        "line": 487,
+        "meaning": "Expired/uninitialized proof receipt returns sentinel1, never an unbounded FREE proof."
+      }
+    ],
+    "live_repair_source_used_in_this_analysis": false,
+    "fix_or_new_navigation_success_in_this_artifact": false
+  },
+  "command_and_initial_drift": {
+    "actual_source_ticks": 19022,
+    "body_samples_including_final_end": 19023,
+    "complete_500hz_source_and_native_tick_and_policy_counter_continuity_verified": true,
+    "actual_consumed_nonzero_command_rows": 68,
+    "actual_consumed_zero_command_rows": 18955,
+    "all_consumed_commands_zero": false,
+    "trace_applied_count": 2430,
+    "trace_nonzero_applied_count": 10,
+    "all_trace_applied_commands_zero": false,
+    "actual_consumed_max_abs_forward_mps": 0.006924231801270648,
+    "actual_consumed_max_abs_yaw_radps": 0.01600655186921358,
+    "actual_nonzero_intervals": [
+      {
+        "first_source_tick": 6164,
+        "last_source_tick": 6171,
+        "first_source_ns": 12328000000,
+        "last_source_ns": 12342000000,
+        "sample_count": 8,
+        "actual_consumption_duration_s": 0.016
+      },
+      {
+        "first_source_tick": 8214,
+        "last_source_tick": 8225,
+        "first_source_ns": 16428000000,
+        "last_source_ns": 16450000000,
+        "sample_count": 12,
+        "actual_consumption_duration_s": 0.024
+      },
+      {
+        "first_source_tick": 9214,
+        "last_source_tick": 9235,
+        "first_source_ns": 18428000000,
+        "last_source_ns": 18470000000,
+        "sample_count": 22,
+        "actual_consumption_duration_s": 0.044
+      },
+      {
+        "first_source_tick": 10756,
+        "last_source_tick": 10759,
+        "first_source_ns": 21512000000,
+        "last_source_ns": 21518000000,
+        "sample_count": 4,
+        "actual_consumption_duration_s": 0.008
+      },
+      {
+        "first_source_tick": 13760,
+        "last_source_tick": 13775,
+        "first_source_ns": 27520000000,
+        "last_source_ns": 27550000000,
+        "sample_count": 16,
+        "actual_consumption_duration_s": 0.032
+      },
+      {
+        "first_source_tick": 14262,
+        "last_source_tick": 14267,
+        "first_source_ns": 28524000000,
+        "last_source_ns": 28534000000,
+        "sample_count": 6,
+        "actual_consumption_duration_s": 0.012
+      }
+    ],
+    "longest_nonzero_contiguous_consumption_s": 0.044,
+    "qualified_minimum_forward_.05_consumption_rows": 0,
+    "original_first_body_sample": {
+      "schema": 1,
+      "kind": "actual_full_body_component_measurement",
+      "phase": "source",
+      "source_tick": 0,
+      "source_ns": 0,
+      "native_physics_tick": 1010,
+      "native_simulation_time_s": 2.02,
+      "policy_counter": 1000,
+      "acquisition_phase": "actual_pre_policy_PhysX_BEGIN",
+      "epoch": "df852280-87e0-4f93-8eb8-86614f5e8c5d",
+      "clock_anchor_ns": 1791372588230343212,
+      "session_id": "7e63695d7109427594cc611e3e11e19f",
+      "mode": "navigation_wire",
+      "authority": {
+        "command_sequence": -1,
+        "command_source_stamp_ns": null,
+        "command_source_deadline_ns": 0,
+        "command_steady_deadline_ns": 0,
+        "command_steady_deadline_s": 0.0,
+        "guard_reason": "steady_deadline_expired",
+        "geometry_fault_latched": false,
+        "policy_input_override": null,
+        "replay_original_authority": null
+      },
+      "highlevel_command": [
+        0.0,
+        0.0
+      ],
+      "official_policy_input": [
+        -0.00469421548768878,
+        0.0,
+        0.022270292043685913
+      ],
+      "position": [
+        -7.926351070404053,
+        -5.022715091705322,
+        0.4817865490913391
+      ],
+      "quaternion_wxyz": [
+        0.9999151825904846,
+        -0.002756789093837142,
+        -0.0016362142050638795,
+        -0.012627595104277134
+      ],
+      "linear_velocity_world": [
+        0.0124003691598773,
+        -0.0006778401439078152,
+        0.007487660739570856
+      ],
+      "angular_velocity_world": [
+        0.0013775444822385907,
+        0.004696013871580362,
+        -0.020318493247032166
+      ],
+      "full_linear_speed": 0.014501506332544899,
+      "full_angular_speed": 0.02089955365342315
+    },
+    "original_final_body_sample": {
+      "schema": 1,
+      "kind": "actual_full_body_component_measurement",
+      "phase": "source",
+      "source_tick": 19022,
+      "source_ns": 38044000000,
+      "native_physics_tick": 20032,
+      "policy_counter": 20022,
+      "acquisition_phase": "actual_final_PhysX_END",
+      "epoch": "df852280-87e0-4f93-8eb8-86614f5e8c5d",
+      "clock_anchor_ns": 1791372588230343212,
+      "session_id": "7e63695d7109427594cc611e3e11e19f",
+      "highlevel_command": [
+        0.0,
+        0.0
+      ],
+      "official_policy_input": [
+        2.29565139306942e-05,
+        0.0,
+        0.02898317389190197
+      ],
+      "position": [
+        -7.921459197998047,
+        -5.024722576141357,
+        0.48079365491867065
+      ],
+      "quaternion_wxyz": [
+        0.9993759393692017,
+        -0.001679589506238699,
+        -0.0005025969003327191,
+        -0.03527916222810745
+      ],
+      "linear_velocity_world": [
+        -4.7169989557005465e-05,
+        -1.7582617147127166e-05,
+        0.007469269912689924
+      ],
+      "angular_velocity_world": [
+        -0.0004641501000151038,
+        -5.004959166399203e-05,
+        -5.631841122522019e-05
+      ],
+      "full_linear_speed": 0.007469439549588409,
+      "full_angular_speed": 0.0004702255208011324
+    },
+    "initial_before_first_nonzero": {
+      "source_interval_ns": [
+        0,
+        12328000000
+      ],
+      "first_nonzero_consumption_source_ns": 12328000000,
+      "initial_position": [
+        -7.926351070404053,
+        -5.022715091705322,
+        0.4817865490913391
+      ],
+      "position_at_first_nonzero": [
+        -7.921532154083252,
+        -5.0247802734375,
+        0.48075971007347107
+      ],
+      "delta_xyz_m": [
+        0.004818916320800781,
+        -0.0020651817321777344,
+        -0.001026839017868042
+      ],
+      "net_xy_m": 0.0052427979260887755,
+      "cumulative_xy_m": 0.009378312428010393,
+      "interpretation": "Measured settling drift occurs while the highlevel command is exactly zero; it is not navigation progress."
+    },
+    "all_recorded_body_cumulative_xy_m": 0.012301366589293716,
+    "all_recorded_body_initial_to_final_net_xy_m": 0.005287760338514308,
+    "original_goal_action_sampled_distance_m": 0.00807444883491332,
+    "navigation_stable_walk_then_stop_exercised": false
+  },
+  "native_500hz_domain_and_final_zero_audit": {
+    "original_helper_value": {
+      "schema": 1,
+      "kind": "sealed_normal_navigation_500hz_physics_audit",
+      "verified": true,
+      "errors": [],
+      "scope": "isolated_simulation_native_PhysX_500Hz_BEGIN_and_actual_final_END",
+      "velocity_domain_scope": "instantaneous full XYZ admission; not a future full XYZ reachability guarantee",
+      "hardware_acceptance": false,
+      "continuous_collision_claim": false,
+      "raw_records_modified": false,
+      "raw_sha256": "4b70efccf212fed6379f6f016ea61bc64abeb7c75c3f9e5b969b807b30ec74aa",
+      "session_id": "7e63695d7109427594cc611e3e11e19f",
+      "epoch": "df852280-87e0-4f93-8eb8-86614f5e8c5d",
+      "clock_anchor_ns": 1791372588230343212,
+      "scene_sha256": "da9e2d9130aec7b44a9bc25e467725b5aef7146cfa6f39c0ee466a4d9b41fec2",
+      "model_sha256": "b43379bb3668e0cdcf79996a98aa12151c20358a5a5485b2eec70fc8ba8c4673",
+      "actual_source_ticks": 19022,
+      "duration_ns": 38044000000,
+      "sample_count": 19023,
+      "complete_native_500hz": true,
+      "native_first_tick": 1010,
+      "native_final_tick": 20032,
+      "policy_first_counter": 1000,
+      "policy_final_counter": 20022,
+      "manifest_policy_hz": 50,
+      "manifest_observation_count": 2003,
+      "observation_count_scope": "original count includes bootstrap; not a reconstructed source-only inference gate",
+      "all_epoch": {
+        "sample_count": 19023,
+        "max_full_xyz_speed_mps": 0.014501506332544899,
+        "peak_source_ns": 1791372588230343212,
+        "peak_source_tick": 0,
+        "peak_raw_linear_velocity_world": [
+          0.0124003691598773,
+          -0.0006778401439078152,
+          0.007487660739570856
+        ],
+        "max_abs_world_yaw_rate_radps": 0.02168675884604454,
+        "max_full_angular_speed_radps": 0.022891851204129187,
+        "full_angular_norm_is_diagnostic_only": true,
+        "speed_bounds": {
+          "reachable_max_speed_mps": 0.65,
+          "reference_max_speed_mps": 0.65,
+          "measured_travel_max_speed_mps": 0.65
+        },
+        "yaw_bound_radps": 0.8,
+        "exceeded_speed_domains": [],
+        "yaw_domain_exceeded": false
+      },
+      "action_interval": {
+        "source_interval_ns": [
+          1791372591050343212,
+          1791372622450343212
+        ],
+        "sample_count": 15701,
+        "max_full_xyz_speed_mps": 0.008494563143490976,
+        "peak_source_ns": 1791372606836343212,
+        "peak_source_tick": 9303,
+        "peak_raw_linear_velocity_world": [
+          0.00040904065826907754,
+          0.0001550371089251712,
+          0.008483292534947395
+        ],
+        "max_abs_world_yaw_rate_radps": 0.02168675884604454,
+        "max_full_angular_speed_radps": 0.022891851204129187,
+        "full_angular_norm_is_diagnostic_only": true,
+        "speed_bounds": {
+          "reachable_max_speed_mps": 0.65,
+          "reference_max_speed_mps": 0.65,
+          "measured_travel_max_speed_mps": 0.65
+        },
+        "yaw_bound_radps": 0.8,
+        "exceeded_speed_domains": [],
+        "yaw_domain_exceeded": false
+      },
+      "final_stop": {
+        "verified": true,
+        "scope": "final actual zero-consumption episode; native full XYZ and angular norm",
+        "transition_exercised": true,
+        "linear_threshold_mps": 0.03,
+        "angular_threshold_radps": 0.05,
+        "stationary_duration_s": 1.0,
+        "stop_latency_bound_s": 3.0,
+        "stopping_distance_bound_m": 0.5,
+        "stopping_yaw_bound_rad": 0.4,
+        "last_nonzero_consumption_source_ns": 1791372616764343212,
+        "zero_consumption_source_ns": 1791372616766343212,
+        "reason": "recorded_stop_within_original_bounds",
+        "stationary_window_start_source_ns": 1791372616766343212,
+        "confirmation_source_ns": 1791372617766343212,
+        "confirmation_latency_s": 1.0,
+        "extra_xy_path_m": 9.492448225587152e-05,
+        "extra_absolute_yaw_path_rad": 6.890868135700501e-05,
+        "actual_zero_tail_duration_s": 9.508
+      }
+    },
+    "meaning": "Original helper verifies instantaneous full XYZ samples and the final true-zero episode; its passed result does not override failed navigation/unclean shutdown/physical_stop_confirmed=false.",
+    "limited_command_exposure": "Only six brief pulses, max forward .0069243 m/s and longest 44 ms; no sustained WALK or qualified .05 m/s recovery demand was exercised.",
+    "stop_transition_fact": true,
+    "all_commands_zero_assumption_rejected": true,
+    "full_speed_walk_to_zero_stop_validation_claim": false,
+    "future_continuous_full_xyz_reachability_claim": false
+  },
+  "bindings": {
+    "private_readonly_summary": {
+      "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/v47_projection_domain_private_summary.json",
+      "sha256": "297e7882835276377dd1c591c423668e0b7600d7b6a9291f15fc6c49f3f1c75e",
+      "bytes": 46208
+    },
+    "analysis_script": {
+      "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/v47_projection_domain_readonly_analysis.py",
+      "sha256": "c1e09f2ab358f9f6b9119da1ee1bd12a1c1797f74bc83be56a1dc306ba0b4c6f",
+      "bytes": 18503
+    },
+    "new_sealed_case_evaluation": {
+      "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/v47_sealed_case_evaluation.json",
+      "sha256": "d3728e9c14232cabf65efdc7a399d9d599366de429e170125531d29d9b8bf7a9",
+      "bytes": 8963
+    },
+    "original_candidate_integrity": {
+      "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v47-campus-all-actors-response/isaac_candidate_integrity.json",
+      "sha256": "65850cea97ad2daf81903d707a391894aabfb65f92f9bb128b1f86a2cf437575",
+      "bytes": 780294
+    },
+    "original_candidate_release": {
+      "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v47-campus-all-actors-response/release.json",
+      "sha256": "c34da5426db615e5bda076d1b5da262bec32affee4662ea002e0a622f4ed4b9b",
+      "bytes": 802
+    },
+    "original_raw_records": {
+      "session.json": {
+        "local_evidence_path": "/home/eric/wjg/d1max-system/campus_crossing_v47_001/session.json",
+        "sha256": "b5f012777225834bc1032ae99ad6aa2c60ca92546f1eea77ee07c690fb939f25",
+        "bytes": 14354
+      },
+      "braking_model.json": {
+        "local_evidence_path": "/home/eric/wjg/d1max-system/campus_crossing_v47_001/braking_model.json",
+        "sha256": "b43379bb3668e0cdcf79996a98aa12151c20358a5a5485b2eec70fc8ba8c4673",
+        "bytes": 1905
+      },
+      "run_summary.json": {
+        "local_evidence_path": "/home/eric/wjg/d1max-system/campus_crossing_v47_001/run_summary.json",
+        "sha256": "499979ca3a88364aa6689497fdf26f41c5022caadb6204f0a243421493f8f4e4",
+        "bytes": 898
+      },
+      "shutdown.json": {
+        "local_evidence_path": "/home/eric/wjg/d1max-system/campus_crossing_v47_001/shutdown.json",
+        "sha256": "dd616bdb4c807825d668c886438eb9fc57479e12c273c6ff27d202b14a9702ac",
+        "bytes": 274
+      },
+      "scan.yaml": {
+        "local_evidence_path": "/home/eric/wjg/d1max-system/campus_crossing_v47_001/scan.yaml",
+        "sha256": "a12e94627802e359ccc49f9e8a34e86ebcec23a45b282a0adf76c392d2e25de0",
+        "bytes": 5082
+      },
+      "tracker.yaml": {
+        "local_evidence_path": "/home/eric/wjg/d1max-system/campus_crossing_v47_001/tracker.yaml",
+        "sha256": "62d5872bd9d72c850913bda2122ccaff8da94e4f5692ec88ace969d8921a0baa",
+        "bytes": 1539
+      },
+      "quadruped_fixture_profile.yaml": {
+        "local_evidence_path": "/home/eric/wjg/d1max-system/campus_crossing_v47_001/quadruped_fixture_profile.yaml",
+        "sha256": "f9311afa9ec3cfad17c2a2f692f9e2048594862a1846302c22d4a3085cf13a94",
+        "bytes": 784
+      },
+      "runtime_bundle.json": {
+        "local_evidence_path": "/home/eric/wjg/d1max-system/campus_crossing_v47_001/runtime_bundle.json",
+        "sha256": "fe418f39211509ee41f8c6f2dac37a3de5502dc90a23b3246fb4d602609c067b",
+        "bytes": 744886
+      },
+      "runtime_inputs.json": {
+        "local_evidence_path": "/home/eric/wjg/d1max-system/campus_crossing_v47_001/runtime_inputs.json",
+        "sha256": "75cd25cca85741381aa5dbb6839fae4227ca2542e4edb905ac9046ba6e86cd76",
+        "bytes": 311160
+      },
+      "scan.log": {
+        "local_evidence_path": "/home/eric/wjg/d1max-system/campus_crossing_v47_001/scan.log",
+        "sha256": "d98d56f68019e0beb76e1617625339b9a7aa9ed546e33e23bad2cd675ff248ff",
+        "bytes": 276778
+      },
+      "smoke.log": {
+        "local_evidence_path": "/home/eric/wjg/d1max-system/campus_crossing_v47_001/smoke.log",
+        "sha256": "94565b1265166a648b45e19c9e8d504e6f171643d548a311ca8ccaebd858339e",
+        "bytes": 192
+      },
+      "scenario_suite/execution.json": {
+        "local_evidence_path": "/home/eric/wjg/d1max-system/campus_crossing_v47_001/scenario_suite/execution.json",
+        "sha256": "9ad8a1d6a0772b97aac5aa4fd0f7e642d607839b88c22b6b9400369e9ca3f47c",
+        "bytes": 2188
+      },
+      "scenario_suite/phase_000_report.json": {
+        "local_evidence_path": "/home/eric/wjg/d1max-system/campus_crossing_v47_001/scenario_suite/phase_000_report.json",
+        "sha256": "2dbb5bb6a6d34df9178d2af8a9ab47039eb0762542d88cab7b2d77f53dc7bcaa",
+        "bytes": 3688632,
+        "matches_original_phase_hash": true
+      },
+      "scenario_suite/phase_000_trace.jsonl": {
+        "local_evidence_path": "/home/eric/wjg/d1max-system/campus_crossing_v47_001/scenario_suite/phase_000_trace.jsonl",
+        "sha256": "5590b5123d3b24d7be7688548f2d50c95330412455f23e157eb3293cdf143ced",
+        "bytes": 54514387,
+        "matches_original_phase_hash": true
+      },
+      "physics/summary.json": {
+        "local_evidence_path": "/home/eric/wjg/d1max-system/campus_crossing_v47_001/physics/summary.json",
+        "sha256": "adfe2f21530f4d5b8a0de52667195375502c8307ebcb5895ffc81bf3e53a7f16",
+        "bytes": 29586
+      },
+      "physics/policy_history_manifest.json": {
+        "local_evidence_path": "/home/eric/wjg/d1max-system/campus_crossing_v47_001/physics/policy_history_manifest.json",
+        "sha256": "91b46d550871166f72bb67e967796db8b670b7769ac578e4de420d893642ec32",
+        "bytes": 1147
+      },
+      "physics/policy_component_state_500hz.jsonl": {
+        "local_evidence_path": "/home/eric/wjg/d1max-system/campus_crossing_v47_001/physics/policy_component_state_500hz.jsonl",
+        "sha256": "4b70efccf212fed6379f6f016ea61bc64abeb7c75c3f9e5b969b807b30ec74aa",
+        "bytes": 24711854
+      },
+      "physics/policy_command_events.jsonl": {
+        "local_evidence_path": "/home/eric/wjg/d1max-system/campus_crossing_v47_001/physics/policy_command_events.jsonl",
+        "sha256": "3fdb0b6fbe8fd1d5e03dffdec994dbb333ef861c585b8a591be26ec6c5854cd2",
+        "bytes": 1882847
+      },
+      "physics/policy_observations.jsonl": {
+        "local_evidence_path": "/home/eric/wjg/d1max-system/campus_crossing_v47_001/physics/policy_observations.jsonl",
+        "sha256": "740ec5ae86678dfa30ca3d3ad7c6ec0f3258c1b988d09132202f76e1ad3f26a0",
+        "bytes": 3603105
+      },
+      "physics/policy_recovery_events.jsonl": {
+        "local_evidence_path": "/home/eric/wjg/d1max-system/campus_crossing_v47_001/physics/policy_recovery_events.jsonl",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "bytes": 0
+      },
+      "physics/trajectory.jsonl": {
+        "local_evidence_path": "/home/eric/wjg/d1max-system/campus_crossing_v47_001/physics/trajectory.jsonl",
+        "sha256": "ca2dcfcfe65f96db25f742c7ef94eea68319b9b03149d18e9db0c390609c25bd",
+        "bytes": 5023476
+      },
+      "physics/dynamic_actor_readings.jsonl": {
+        "local_evidence_path": "/home/eric/wjg/d1max-system/campus_crossing_v47_001/physics/dynamic_actor_readings.jsonl",
+        "sha256": "7bae044bd77bb54c150a97507404fac1fc5ec78492df41b5060fe990e0b91df2",
+        "bytes": 2751174
+      },
+      "physics/robot_link_readings.jsonl": {
+        "local_evidence_path": "/home/eric/wjg/d1max-system/campus_crossing_v47_001/physics/robot_link_readings.jsonl",
+        "sha256": "6182a6a4301251669f4a33af03213152e2e93d6f3dbffe3fcf95eedac86a65ee",
+        "bytes": 17778522
+      },
+      "physics/imu_readings.jsonl": {
+        "local_evidence_path": "/home/eric/wjg/d1max-system/campus_crossing_v47_001/physics/imu_readings.jsonl",
+        "sha256": "e78054aed92b230ce4cffba732baa8a880520128bad25bd9c27d4dc89d8b9311",
+        "bytes": 1388221
+      },
+      "physics/floor_hit_audit.jsonl": {
+        "local_evidence_path": "/home/eric/wjg/d1max-system/campus_crossing_v47_001/physics/floor_hit_audit.jsonl",
+        "sha256": "c120e19c897b9f2c2948da1c5ab4078fea0292fd9765828958f9834609b4e0c4",
+        "bytes": 201006
+      },
+      "physics/collision_audit.json": {
+        "local_evidence_path": "/home/eric/wjg/d1max-system/campus_crossing_v47_001/physics/collision_audit.json",
+        "sha256": "58c51065023cdd70d0fa1400cdf4e41450dba8cfc983612e9a1ecc9d029d9621",
+        "bytes": 5003
+      }
+    },
+    "original_sealed_code": {
+      "application/install/scan_planner/include/plan_manage/trajectory_collision.hpp": {
+        "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v47-campus-all-actors-response/application/install/scan_planner/include/plan_manage/trajectory_collision.hpp",
+        "sha256": "69539f37c7d22557d4861655ecfdebc1d414ff998758f502d218b07cf1fb6d15",
+        "bytes": 17662,
+        "matches_original_candidate_integrity_hash": true
+      },
+      "application/install/scan_planner/include/plan_manage/execution_validator.hpp": {
+        "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v47-campus-all-actors-response/application/install/scan_planner/include/plan_manage/execution_validator.hpp",
+        "sha256": "8e37973bf3505f239119b6f2d8771aab89c7cfc4e915953a8d6f1a2a46b73376",
+        "bytes": 69699,
+        "matches_original_candidate_integrity_hash": true
+      },
+      "application/install/scan_planner/lib/scan_planner/scan_planner_node": {
+        "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v47-campus-all-actors-response/application/install/scan_planner/lib/scan_planner/scan_planner_node",
+        "sha256": "8cbd7a28636b2f4e85e1d2cd9e98615632f5500baa0a5fcb5a99ea85bcb3823d",
+        "bytes": 9047680,
+        "matches_original_candidate_integrity_hash": true
+      },
+      "application/install/plan_env/include/plan_env/grid_map.h": {
+        "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v47-campus-all-actors-response/application/install/plan_env/include/plan_env/grid_map.h",
+        "sha256": "74ce1256ec0e72e38db70552f13b3e1ea6ac2501948745e1eb30d831b80e5323",
+        "bytes": 36370,
+        "matches_original_candidate_integrity_hash": true
+      },
+      "source_snapshot/nav/src/scan_planner_vendor/plan_manage/include/plan_manage/trajectory_collision.hpp": {
+        "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v47-campus-all-actors-response/source_snapshot/nav/src/scan_planner_vendor/plan_manage/include/plan_manage/trajectory_collision.hpp",
+        "sha256": "69539f37c7d22557d4861655ecfdebc1d414ff998758f502d218b07cf1fb6d15",
+        "bytes": 17662,
+        "matches_original_candidate_integrity_hash": true
+      },
+      "source_snapshot/nav/src/scan_planner_vendor/plan_manage/include/plan_manage/execution_validator.hpp": {
+        "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v47-campus-all-actors-response/source_snapshot/nav/src/scan_planner_vendor/plan_manage/include/plan_manage/execution_validator.hpp",
+        "sha256": "8e37973bf3505f239119b6f2d8771aab89c7cfc4e915953a8d6f1a2a46b73376",
+        "bytes": 69699,
+        "matches_original_candidate_integrity_hash": true
+      },
+      "source_snapshot/nav/src/scan_planner_vendor/plan_env/src/grid_map.cpp": {
+        "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v47-campus-all-actors-response/source_snapshot/nav/src/scan_planner_vendor/plan_env/src/grid_map.cpp",
+        "sha256": "33eb9eaeb09c304473fd08f3e26cfe1326f68142e312248b80c2164d7162a408",
+        "bytes": 140400,
+        "matches_original_candidate_integrity_hash": true
+      },
+      "simulation/assets/scene_config.json": {
+        "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v47-campus-all-actors-response/simulation/assets/scene_config.json",
+        "sha256": "da9e2d9130aec7b44a9bc25e467725b5aef7146cfa6f39c0ee466a4d9b41fec2",
+        "bytes": 63392,
+        "matches_original_candidate_integrity_hash": true
+      },
+      "simulation/scenario_suite.py": {
+        "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v47-campus-all-actors-response/simulation/scenario_suite.py",
+        "sha256": "63cb0a54221fd22ec7bf09017fd68e64e46d406d06f00f2c4a05f04206c37126",
+        "bytes": 45415,
+        "matches_original_candidate_integrity_hash": true
+      },
+      "simulation/navigation_physics_audit.py": {
+        "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v47-campus-all-actors-response/simulation/navigation_physics_audit.py",
+        "sha256": "93042f7962c8d2fb5fa78a2d9a7934b8b8c52ddb241b641152f566f30c5263a8",
+        "bytes": 18468,
+        "matches_original_candidate_integrity_hash": true
+      },
+      "simulation/scene.py": {
+        "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v47-campus-all-actors-response/simulation/scene.py",
+        "sha256": "d8c37e43262278f85379675b3ffcdd428c914e679f05b3b51e6644e036fba65a",
+        "bytes": 85718,
+        "matches_original_candidate_integrity_hash": true
+      },
+      "simulation/quadruped.py": {
+        "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v47-campus-all-actors-response/simulation/quadruped.py",
+        "sha256": "191626991514d1ed2cd8c118ab1e8da4c1c2b99be23b39dc447a6e395cf8dbd2",
+        "bytes": 40630,
+        "matches_original_candidate_integrity_hash": true
+      }
+    }
+  },
+  "limitations": [
+    "The old sealed .65 candidate remains FAILED. No newly edited live header, later build or future run is substituted for its executed bytes.",
+    "The .65/.60 mismatch and zero-query path are confirmed by frozen source and original warnings; this artifact does not assert that every published source_expired event represents that path or a genuine sensor lease expiration.",
+    "There are 68 actual nonzero source ticks and ten nonzero applied messages, not an all-zero command history. They are very small brief pulses and do not establish stable walking or full-speed braking calibration.",
+    "The original final-zero helper passes for those limited commands, while the original shutdown explicitly remains unclean and physical_stop_confirmed=false.",
+    "Initial actual settling drift during zero highlevel commands is recorded separately and does not count as navigation achievement.",
+    "Sensor receipt gaps also exceed the original .5 s lease; future successful navigation still requires a fresh proof chain and actual goal arrival.",
+    "This is a read-only failure analysis, with no core edits, native compilation, Kit, ROS participant, raw rewriting, or physical-robot acceptance."
+  ]
+}

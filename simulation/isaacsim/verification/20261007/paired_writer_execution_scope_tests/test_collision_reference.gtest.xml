@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites tests="5" failures="0" disabled="0" errors="0" time="0" timestamp="2026-10-07T20:45:46" name="AllTests">
+  <testsuite name="CollisionReference" tests="5" failures="0" disabled="0" errors="0" time="0" timestamp="2026-10-07T20:45:46">
+    <testcase name="PreservesClearCornerAndHeight" status="run" result="completed" time="0" timestamp="2026-10-07T20:45:46" classname="scan_planner.CollisionReference" />
+    <testcase name="UsesVerifiedDetourNotBlockedGlobalLine" status="run" result="completed" time="0" timestamp="2026-10-07T20:45:46" classname="scan_planner.CollisionReference" />
+    <testcase name="SearchFailureIsNotAValidSeed" status="run" result="completed" time="0" timestamp="2026-10-07T20:45:46" classname="scan_planner.CollisionReference" />
+    <testcase name="RejectsSearchThatCutsBlockedConnector" status="run" result="completed" time="0" timestamp="2026-10-07T20:45:46" classname="scan_planner.CollisionReference" />
+    <testcase name="UnknownAndTerminalObstacleAreNotMadeTraversable" status="run" result="completed" time="0" timestamp="2026-10-07T20:45:46" classname="scan_planner.CollisionReference" />
+  </testsuite>
+</testsuites>

@@ -13,8 +13,8 @@ from .command_admission import CommandAdmission
 from .execution_safety import Decision, ExecutionSafety, binding, fresh, version
 
 
-def task_binding(message):
-    v=message.version
+def task_binding(message,*,version_field='version'):
+    v=getattr(message,version_field)
     return (v.schema_version,v.session_id,v.task_id,v.route_id,v.route_hash,
             v.map_version_id,v.localization_epoch,v.localization_seed_id,
             message.execution_id,message.control_epoch,message.sdk_session,
@@ -49,12 +49,17 @@ class ExecutionHandoffAdmission:
         self.finished=deque(maxlen=8)
         self.last_grant_sequence=0
         self.last_ack_sequence=0
+        self.writer_authority=None
+        self.retired_authority=None
+        self.original_permits=deque(maxlen=32)
         self.pending_revoked=False
         self.failed_write_binding=None
         self.stationary=deque(maxlen=8)
 
     def on_stationary(self,message):
         # These are original SDK-published witnesses, not local-odom velocity.
+        if (self.writer_authority is not None and
+                task_binding(message)!=task_binding(self.writer_authority)):return False
         if message.schema_version!=1 or message.sequence<=0:return False
         if self.stationary and message.sequence<=self.stationary[-1].sequence:return False
         self.stationary.append(deepcopy(message))
@@ -99,7 +104,54 @@ class ExecutionHandoffAdmission:
             and math.isfinite(speed) and 0<=speed<=policy['linear_threshold_mps']
             and math.isfinite(yaw) and 0<=yaw<=policy['angular_threshold_radps'])
 
-    def on_permit(self,message):
+    def _complete_authority(self,message,now_ns):
+        try:
+            v=message.version
+            def valid_stamp(value):
+                return (type(value.sec) is int and value.sec>=0 and
+                        type(value.nanosec) is int and 0<=value.nanosec<1_000_000_000)
+            return (type(now_ns) is int and now_ns>0 and message.allowed and not message.revoked
+                and message.geometry_committed and message.phase in ('tracking','aligning')
+                and message.frame_id=='d1max_loc_odom' and message.transport_mode==self.core.mode
+                and bool(message.execution_id) and bool(message.confirmation_id) and bool(message.sdk_session)
+                and message.control_epoch>0 and message.sdk_arm_generation>0
+                and v.schema_version==3 and v.session_id==self.core.session
+                and all(bool(getattr(v,k)) for k in ('task_id','route_id','route_hash','map_version_id',
+                    'localization_seed_id','segment_id','anchor_id'))
+                and all(getattr(v,k)>0 for k in ('localization_epoch','reference_generation',
+                    'anchor_revision','context_sequence','map_geometry_revision'))
+                and valid_stamp(message.source_stamp) and valid_stamp(message.valid_until)
+                and fresh(message.source_stamp,now_ns,750_000_000)
+                and now_ns<stamp_ns(message.valid_until)<=stamp_ns(message.source_stamp)+750_000_000)
+        except (ValueError,TypeError,AttributeError,OverflowError):return False
+
+    def _new_authority_allowed(self,message,now_ns):
+        previous=self.writer_authority
+        return (previous is not None and self.retired_authority==task_binding(previous)
+            and self._complete_authority(message,now_ns)
+            and message.version.session_id==previous.version.session_id
+            and message.version.map_version_id==previous.version.map_version_id
+            and message.version.task_id!=previous.version.task_id
+            and message.execution_id!=previous.execution_id
+            and message.control_epoch>previous.control_epoch)
+
+    def _bind_writer_authority(self,message):
+        # Owner grant and SDK ACK counters restart for this explicitly armed
+        # execution. Cancel alone keeps their old highwaters and late facts.
+        self.writer_authority=deepcopy(message);self.retired_authority=None
+        self.last_ack_sequence=self.last_grant_sequence=self.commit_sequence=0
+        self.applied=None;self.grant=None;self.candidate=None;self.prepared.clear()
+        self.original_permits.clear()
+        self.pending_revoked=False;self.failed_write_binding=None;self.stationary.clear()
+        self.core.last_original=None;self.ordinary.recent=None
+
+    def on_permit(self,message,now_ns=None):
+        different=(self.enabled and self.writer_authority is not None and
+            task_binding(message)!=task_binding(self.writer_authority))
+        if different and not self._new_authority_allowed(message,now_ns):return False
+        if (self.enabled and self.writer_authority is not None and not different
+                and self.retired_authority==task_binding(self.writer_authority)
+                and message.allowed and not message.revoked):return False
         if (self.failed_write_binding is not None and message.allowed and not message.revoked
                 and task_binding(message)==self.failed_write_binding):return False
         if (self.enabled and self.applied is not None and not message.revoked and message.allowed
@@ -109,6 +161,15 @@ class ExecutionHandoffAdmission:
             # grant) cannot replace an identity already chosen by the writer.
             return False
         accepted=self.core.on_permit(message)
+        if self.enabled and accepted and (different or self.writer_authority is None and
+                self._complete_authority(message,now_ns)):
+            self._bind_writer_authority(message)
+        if (self.enabled and accepted and message.revoked and self.writer_authority is not None
+                and task_binding(message)==task_binding(self.writer_authority)):
+            self.retired_authority=task_binding(self.writer_authority)
+        if (self.enabled and accepted and self.commit_sequence==0 and message.allowed
+                and not message.revoked and message.geometry_committed):
+            self.original_permits.append(deepcopy(message))
         stopped_reentry=(self.grant is not None and self.candidate is not None
             and self.grant.transition_mode==1 and not message.revoked and not message.allowed
             and message.phase=='holding' and binding(message)==binding(self.grant.incumbent)
@@ -134,6 +195,9 @@ class ExecutionHandoffAdmission:
     def on_grant(self,message,now_ns):
         try:
             if not self.enabled or message.schema_version!=2 or not message.handoff_id:return False
+            if (self.writer_authority is not None and
+                    (task_binding(message.incumbent)!=task_binding(self.writer_authority) or
+                     task_binding(message.candidate)!=task_binding(self.writer_authority))):return False
             if self.grant is not None and message.handoff_id==self.grant.handoff_id:
                 if message.revoked:
                     self._retire_pending();return True
@@ -176,6 +240,9 @@ class ExecutionHandoffAdmission:
 
     def on_ack(self,message,now_ns):
         try:
+            if (self.writer_authority is not None and
+                    task_binding(message,version_field='candidate_version')!=task_binding(self.writer_authority)):
+                return False
             if (not self.enabled or message.schema_version!=1 or message.sequence<=self.last_ack_sequence
                     or not fresh(message.applied_at,now_ns,350_000_000)):
                 return False
@@ -197,6 +264,11 @@ class ExecutionHandoffAdmission:
                 return True
             if not message.handoff_id:
                 p=next((p for p in self.core.permits if p.sequence==message.permit_sequence),None)
+                if p is None:
+                    # Revocation removed the ordinary permission queue, not
+                    # the immutable first-write authorization facts. The
+                    # writer may have used a later same-scope heartbeat.
+                    p=next((p for p in self.original_permits if p.sequence==message.permit_sequence),None)
                 if (self.commit_sequence!=0 or p is None or not message.applied
                         or message.previous_commit_sequence!=0 or message.commit_sequence!=1
                         or not p.allowed or p.revoked or not p.geometry_committed
@@ -218,6 +290,11 @@ class ExecutionHandoffAdmission:
                     or stamp_ns(message.measured_pose.header.stamp)!=stamp_ns(message.body_source_stamp)):
                 return False
             self.last_ack_sequence=message.sequence;self.commit_sequence=message.commit_sequence
+            if self.writer_authority is None:
+                self.writer_authority=deepcopy(p)
+                if (self.core.permits and self.core.permits[-1].revoked and
+                        task_binding(self.core.permits[-1])==task_binding(p)):
+                    self.retired_authority=task_binding(p)
             self.applied=deepcopy(p)
             self.applied.geometry_committed=True
             # Promote only the original conditional lease. Revoke/HOLD which
@@ -230,6 +307,7 @@ class ExecutionHandoffAdmission:
                 and binding(self.core.permits[-1])==binding(g.incumbent)
                 and self.core.permits[-1].trajectory_id==g.incumbent.trajectory_id)
             revoked=bool(not message.write_submitted or (message.handoff_id and self.pending_revoked)
+                or self.retired_authority==task_binding(p)
                 or self.core.permits and (self.core.permits[-1].revoked or
                     not self.core.permits[-1].allowed and not stopped_reentry))
             if not revoked:

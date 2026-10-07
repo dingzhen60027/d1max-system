@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites tests="12" failures="0" disabled="0" errors="0" time="0" timestamp="2026-10-07T20:45:46" name="AllTests">
+  <testsuite name="InputContract" tests="12" failures="0" disabled="0" errors="0" time="0" timestamp="2026-10-07T20:45:46">
+    <testcase name="ReverseMeasuredVelocityMustNotBecomeStationaryBoundary" status="run" result="completed" time="0" timestamp="2026-10-07T20:45:46" classname="scan_planner.InputContract" />
+    <testcase name="GroundToBodyShiftOnlyOnceAndDuplicateStartRemoved" status="run" result="completed" time="0" timestamp="2026-10-07T20:45:46" classname="scan_planner.InputContract" />
+    <testcase name="CornersAndNonzeroSegmentsAreNotSimplifiedAway" status="run" result="completed" time="0" timestamp="2026-10-07T20:45:46" classname="scan_planner.InputContract" />
+    <testcase name="RejectInvalidAndDiscontinuousPaths" status="run" result="completed" time="0" timestamp="2026-10-07T20:45:46" classname="scan_planner.InputContract" />
+    <testcase name="StandardBodyTwistRotatesIntoWorld" status="run" result="completed" time="0" timestamp="2026-10-07T20:45:46" classname="scan_planner.InputContract" />
+    <testcase name="SessionAndGenerationMustMatchWithoutReplay" status="run" result="completed" time="0" timestamp="2026-10-07T20:45:46" classname="scan_planner.InputContract" />
+    <testcase name="PeriodicReplanUsesIndependentTimeAndDefaultsDisabled" status="run" result="completed" time="0" timestamp="2026-10-07T20:45:46" classname="scan_planner.InputContract" />
+    <testcase name="FormalEntryEventSharesOneWorkerAndHalfSecondMonotonicSubmissionGuard" status="run" result="completed" time="0" timestamp="2026-10-07T20:45:46" classname="scan_planner.InputContract" />
+    <testcase name="ReferenceTargetDiagnosticsDoNotCallUnobservedQueriesOccupied" status="run" result="completed" time="0" timestamp="2026-10-07T20:45:46" classname="scan_planner.InputContract" />
+    <testcase name="MeasuredReferenceCompletionUsesXYAndHeightTogether" status="run" result="completed" time="0" timestamp="2026-10-07T20:45:46" classname="scan_planner.InputContract" />
+    <testcase name="DynamicsRecoveryDoesNotRequirePoseOrOccupancyChange" status="run" result="completed" time="0" timestamp="2026-10-07T20:45:46" classname="scan_planner.InputContract" />
+    <testcase name="RotationInPlaceChangesBoundaryWithoutTranslationOrMapChange" status="run" result="completed" time="0" timestamp="2026-10-07T20:45:46" classname="scan_planner.InputContract" />
+  </testsuite>
+</testsuites>

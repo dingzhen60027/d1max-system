@@ -1,0 +1,62 @@
+{
+  "schema": 1,
+  "kind": "original_full_link_same_source_geometry_replay",
+  "raw_capture_sha256": "8d82b383ff787e9f85987f25e4550002ba82e709747e20cc8cfe300aa2687073",
+  "original_code_sha256": "9a5b4e3860fd310a5468393914ef749c11e1bd1f47554b54c60e094ecaa293b6",
+  "new_code_sha256": "2d4594332ccc2c04647d4c08d4fcf5768257aee3c5c95b5cfdbead127720a834",
+  "same_query_envelope": {
+    "radius": 0.6078651750202781,
+    "offset": 0.3125,
+    "above": 0.589,
+    "support_floor_z": 0.0,
+    "support_penetration_m": 0.02
+  },
+  "results": [
+    {
+      "original_source_ns": 83800000000,
+      "collider_count": 13,
+      "original_world_aabb": {
+        "body_envelope_valid": true,
+        "body_envelope_checked_sim_time_ns": 83800000000,
+        "body_envelope_registry_sha256": "e68b27ca3e0a30c3bdbaeb43414ae4a19674f9661adb167cc6bd0e38ab6ebc76",
+        "body_envelope_fault": ""
+      },
+      "new_query_support_box": {
+        "body_envelope_valid": true,
+        "body_envelope_checked_sim_time_ns": 83800000000,
+        "body_envelope_registry_sha256": "e68b27ca3e0a30c3bdbaeb43414ae4a19674f9661adb167cc6bd0e38ab6ebc76",
+        "body_envelope_fault": ""
+      }
+    },
+    {
+      "original_source_ns": 83818000000,
+      "collider_count": 13,
+      "original_world_aabb": {
+        "body_envelope_valid": false,
+        "error": "robot_link_outside_horizontal_query_envelope:/World/Spot/body/collisions/mesh_0"
+      },
+      "new_query_support_box": {
+        "body_envelope_valid": true,
+        "body_envelope_checked_sim_time_ns": 83818000000,
+        "body_envelope_registry_sha256": "e68b27ca3e0a30c3bdbaeb43414ae4a19674f9661adb167cc6bd0e38ab6ebc76",
+        "body_envelope_fault": ""
+      }
+    },
+    {
+      "original_source_ns": 83820000000,
+      "collider_count": 13,
+      "original_world_aabb": {
+        "body_envelope_valid": false,
+        "error": "robot_link_outside_horizontal_query_envelope:/World/Spot/body/collisions/mesh_0"
+      },
+      "new_query_support_box": {
+        "body_envelope_valid": true,
+        "body_envelope_checked_sim_time_ns": 83820000000,
+        "body_envelope_registry_sha256": "e68b27ca3e0a30c3bdbaeb43414ae4a19674f9661adb167cc6bd0e38ab6ebc76",
+        "body_envelope_fault": ""
+      }
+    }
+  ],
+  "raw_geometry_and_timestamps_modified": false,
+  "physical_navigation_or_speed_domain_pass": false
+}

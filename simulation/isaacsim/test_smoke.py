@@ -7,7 +7,7 @@ from d1max_pct_scan.bt_adapter_contract import valid_compute_request
 from smoke import (navigation_goal, expected_task_result, drain_imu_witness,
     trace_output_path, cancellation_due, terminal_observation_complete,
     stationarity_window, body_height_evidence, source_observation_expired,
-    trace_wire_value)
+    trace_wire_value, measured_velocity_components, measured_velocity_domain_evidence)
 
 
 def test_navigation_goal_survives_unchanged_compute_action_validation():
@@ -164,3 +164,117 @@ def test_causal_trace_preserves_complete_received_curve_and_exact_entry():
     assert wire['join_twist']['linear']['z']==.00612
     assert wire['valid_start_time']==.027123456789
     assert message.join_source_stamp.nanosec==123456789
+
+
+def sealed_spot_velocity_record(tmp_path):
+    import hashlib
+    import json
+    path=tmp_path/'braking_model.json'
+    record=dict(schema_version=3,model='reaction_braking_reachable_v1',
+        transport_mode='isolated_mock',fixture_only=True,session_id='domain-session',
+        measurements=dict(max_speed_mps=.6,max_yaw_radps=.8),
+        isolated_platform_model=dict(schema=1,kind='official_spot_physx',
+            command_max_speed_mps=.25,command_max_yaw_radps=.3,
+            reachable_max_speed_mps=.6,reachable_max_yaw_radps=.8,
+            source_scope='isolated_simulation_physx_measured_model'),
+        isolated_full_xyz_reference_model=dict(schema=1,kind='official_spot_physx',
+            reference_max_speed_mps=.6,measured_travel_max_speed_mps=.6,
+            observed_max_full_xyz_speed_mps=.5759470588816599,evidence_sha256='a'*64,
+            source_scope='isolated_simulation_physx_measured_model'))
+    session=dict(id='domain-session',simulation_backend='isaacsim_physx',
+        simulation_clock='isaac_fixed_anchor_v1',transport_mode='isolated_mock',
+        physical_acceptance=False,max_speed_mps=.25,max_yaw_radps=.3,
+        robot_profile=str(tmp_path/'quadruped_fixture_profile.yaml'),
+        execution_braking_model_record=str(path))
+    def seal():
+        raw=json.dumps(record).encode()
+        path.write_bytes(raw)
+        digest=hashlib.sha256(raw).hexdigest()
+        session.update(execution_braking_model_sha256=digest,input_hashes={str(path):digest})
+    seal()
+    return session,record,seal
+
+
+def velocity_domain_check(session, speed, **changes):
+    stats=dict(measured_state_count=10,velocity_sample_count=10,
+        invalid_velocity_sample_count=0,max_full_xyz_speed_mps=speed,
+        max_full_angular_speed_radps=.9)
+    return measured_velocity_domain_evidence(session,**dict(stats,**changes))
+
+
+def test_actual_v39_full_xyz_peak_is_rejected_without_clamping_any_axis(tmp_path):
+    session,_,_=sealed_spot_velocity_record(tmp_path)
+    measured=measured_velocity_components(
+        SimpleNamespace(x=.5760377645492554,y=.1930128037929535,z=.04835313558578491),
+        SimpleNamespace(x=-.2184164822101593,y=.013279813341796398,z=.03262309357523918))
+    assert measured['linear_mps']==math.hypot(*measured['linear_velocity_xyz'])
+    assert measured['linear_velocity_xyz'][1]==.1930128037929535
+    verified,evidence=velocity_domain_check(session,measured['linear_mps'])
+    assert not verified and evidence['required']
+    assert evidence['reason']=='measured_full_xyz_speed_outside_sealed_domain'
+    assert evidence['measured_max_full_xyz_speed_mps']>.6
+    assert set(evidence['exceeded_domains'])=={
+        'reachable_max_speed_mps','reference_max_speed_mps','measured_travel_max_speed_mps'}
+    verified,evidence=velocity_domain_check(session,.5759470588816599)
+    assert verified
+    assert evidence['full_angular_norm_is_diagnostic_only']  # .9 is not compared to yaw .8.
+    assert velocity_domain_check(session,.6)[0]
+    assert not velocity_domain_check(session,math.nextafter(.6,math.inf))[0]
+
+
+def test_independent_reference_and_travel_limits_are_both_checked(tmp_path):
+    session,record,seal=sealed_spot_velocity_record(tmp_path)
+    reference=record['isolated_full_xyz_reference_model']
+    reference.update(observed_max_full_xyz_speed_mps=.4,reference_max_speed_mps=.5)
+    seal()
+    assert velocity_domain_check(session,.49)[0]
+    verified,evidence=velocity_domain_check(session,.55)
+    assert not verified and evidence['exceeded_domains']==['reference_max_speed_mps']
+    reference.update(reference_max_speed_mps=.6,measured_travel_max_speed_mps=.5)
+    seal()
+    verified,evidence=velocity_domain_check(session,.55)
+    assert not verified and evidence['exceeded_domains']==['measured_travel_max_speed_mps']
+
+
+def test_nonfinite_or_missing_measurements_cannot_hide_in_a_finite_maximum(tmp_path):
+    session,_,_=sealed_spot_velocity_record(tmp_path)
+    measured=measured_velocity_components(SimpleNamespace(x=math.nan,y=0.,z=0.),
+        SimpleNamespace(x=0.,y=0.,z=0.))
+    assert not measured['velocity_finite'] and math.isnan(measured['linear_velocity_xyz'][0])
+    for changes in (dict(max_full_xyz_speed_mps=math.nan),dict(max_full_angular_speed_radps=math.inf),
+            dict(invalid_velocity_sample_count=1),dict(velocity_sample_count=9),
+            dict(measured_state_count=0,velocity_sample_count=0)):
+        verified,evidence=velocity_domain_check(session,.2,**changes)
+        assert not verified
+        assert evidence['reason']=='spot_velocity_measurements_missing_or_nonfinite'
+
+
+def test_wrong_record_hash_session_or_marker_never_reverts_to_wheel_gate(tmp_path):
+    session,record,seal=sealed_spot_velocity_record(tmp_path)
+    for key,value in (('simulation_backend','foreign'),('simulation_clock','wall'),
+            ('transport_mode','live'),('physical_acceptance',True),('id','foreign')):
+        assert not velocity_domain_check(dict(session,**{key:value}),.2)[0]
+    assert not velocity_domain_check(dict(session,execution_braking_model_sha256='f'*64),.2)[0]
+    assert not velocity_domain_check(dict(session,input_hashes={}),.2)[0]
+    record['isolated_full_xyz_reference_model']['evidence_sha256']='unsealed'
+    seal()
+    assert not velocity_domain_check(session,.2)[0]
+    record.pop('isolated_full_xyz_reference_model')
+    seal()
+    verified,evidence=velocity_domain_check(session,.2)
+    assert not verified and evidence['reason']=='spot_full_xyz_reference_marker_missing'
+    record.pop('isolated_platform_model')
+    seal()
+    assert not velocity_domain_check(session,.2)[0]  # Sealed quadruped identity still requires a marker.
+
+
+def test_absent_legacy_wheel_marker_keeps_existing_acceptance_gate(tmp_path):
+    verified,evidence=velocity_domain_check({},.8,measured_state_count=0,velocity_sample_count=0)
+    assert verified and not evidence['required']
+    session,record,seal=sealed_spot_velocity_record(tmp_path)
+    session['robot_profile']=str(tmp_path/'wheel_fixture_profile.yaml')
+    record.pop('isolated_platform_model')
+    record.pop('isolated_full_xyz_reference_model')
+    seal()
+    verified,evidence=velocity_domain_check(session,.8)
+    assert verified and not evidence['required']

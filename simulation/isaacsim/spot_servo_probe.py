@@ -89,7 +89,8 @@ def main():
     result.mkdir(parents=True, exist_ok=False)
     snapshot = result / 'source_snapshot'
     snapshot.mkdir()
-    for name in ('quadruped.py', 'runtime_geometry.py', 'dynamic_collision.py', 'spot_servo_probe.py'):
+    for name in ('quadruped.py', 'runtime_geometry.py', 'dynamic_collision.py', 'world_builder.py',
+                 'policy_history.py', 'stall_recovery.py', 'spot_servo_probe.py'):
         shutil.copyfile(Path(__file__).resolve().parent / name, snapshot / name)
     sys.path.insert(0, str(snapshot))
     hashes = {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in snapshot.iterdir()}

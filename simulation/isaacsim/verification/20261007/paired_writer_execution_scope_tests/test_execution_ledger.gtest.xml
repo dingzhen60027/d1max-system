@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites tests="49" failures="0" disabled="0" errors="0" time="0.001" timestamp="2026-10-07T20:45:46" name="AllTests">
+  <testsuite name="ExecutionLedger" tests="49" failures="0" disabled="0" errors="0" time="0.001" timestamp="2026-10-07T20:45:46">
+    <testcase name="WriterCASPinsPreparedUntilMatchedAckAndNeverRollsBack" status="run" result="completed" time="0" timestamp="2026-10-07T20:45:46" classname="scan_planner.ExecutionLedger" />
+    <testcase name="LateInitialAckRestoresOnlyBoundedOriginalGeometryAndHoldsWithoutRenewingProof" status="run" result="completed" time="0" timestamp="2026-10-07T20:45:46" classname="scan_planner.ExecutionLedger" />
+    <testcase name="InitialAckNeverGuessesMissingJobOrForeignWriterAndHistoryIsBounded" status="run" result="completed" time="0" timestamp="2026-10-07T20:45:46" classname="scan_planner.ExecutionLedger" />
+    <testcase name="ExactNegativeWriterFactReleasesPreparedButNeverAdvancesOrClearsIncumbent" status="run" result="completed" time="0" timestamp="2026-10-07T20:45:46" classname="scan_planner.ExecutionLedger" />
+    <testcase name="PreparedZeroStillRequiresFreshExactEntryAndStrictBoundary" status="run" result="completed" time="0" timestamp="2026-10-07T20:45:46" classname="scan_planner.ExecutionLedger" />
+    <testcase name="StationaryReentryPinsSdkZeroAndMcEvidenceWithoutGrantingIncumbentMotion" status="run" result="completed" time="0" timestamp="2026-10-07T20:45:46" classname="scan_planner.ExecutionLedger" />
+    <testcase name="PreparedSweepComesAfterIncumbentRenewalAndSharesFixedRoundBudget" status="run" result="completed" time="0" timestamp="2026-10-07T20:45:46" classname="scan_planner.ExecutionLedger" />
+    <testcase name="PreparedUnusedRoundTimeIsCappedByExistingActualMotionBudget" status="run" result="completed" time="0" timestamp="2026-10-07T20:45:46" classname="scan_planner.ExecutionLedger" />
+    <testcase name="PreparedBudgetIsClampedToLessThanReserveWhenRoundTimeIsShort" status="run" result="completed" time="0" timestamp="2026-10-07T20:45:46" classname="scan_planner.ExecutionLedger" />
+    <testcase name="PreparedRemainsLastAfterUnsuccessfulIncumbentRenewalWithoutMotionRetry" status="run" result="completed" time="0" timestamp="2026-10-07T20:45:46" classname="scan_planner.ExecutionLedger" />
+    <testcase name="PreparedCannotStartAtOrAfterOriginalDeadlineFromAnyEarlierPhase" status="run" result="completed" time="0" timestamp="2026-10-07T20:45:46" classname="scan_planner.ExecutionLedger" />
+    <testcase name="CandidateAndDebugNeverReplaceCommittedOwner" status="run" result="completed" time="0" timestamp="2026-10-07T20:45:46" classname="scan_planner.ExecutionLedger" />
+    <testcase name="SlowProofCannotOverwriteNewerSourceMapOrNegativeEvidence" status="run" result="completed" time="0" timestamp="2026-10-07T20:45:46" classname="scan_planner.ExecutionLedger" />
+    <testcase name="FastLaneChecksLatestMotionBeforeIncumbentAndNeverRunsCandidate" status="run" result="completed" time="0" timestamp="2026-10-07T20:45:46" classname="scan_planner.ExecutionLedger" />
+    <testcase name="PositiveCurrentRenewalRechecksLatestDemandWithinSameRoundAtMostOnce" status="run" result="completed" time="0" timestamp="2026-10-07T20:45:46" classname="scan_planner.ExecutionLedger" />
+    <testcase name="FailedExpiredRetiredOrOverBudgetRenewalCannotRequestPositiveMotionRetry" status="run" result="completed" time="0" timestamp="2026-10-07T20:45:46" classname="scan_planner.ExecutionLedger" />
+    <testcase name="CurrentBudgetMissRetainsOnlyOriginalLeaseAndNeverSuppressesActualOccupied" status="run" result="completed" time="0" timestamp="2026-10-07T20:45:46" classname="scan_planner.ExecutionLedger" />
+    <testcase name="BlockedEntryRequiresExactNativeOccupiedProofAndNeverGrantsMotion" status="run" result="completed" time="0" timestamp="2026-10-07T20:45:46" classname="scan_planner.ExecutionLedger" />
+    <testcase name="OccupiedInPlaceTurnIsBlockedEntryButStillAndReverseAreNot" status="run" result="completed" time="0" timestamp="2026-10-07T20:45:46" classname="scan_planner.ExecutionLedger" />
+    <testcase name="RevokedOrReplacedOwnerCannotConsumeOldBlockedEntry" status="run" result="completed" time="0" timestamp="2026-10-07T20:45:46" classname="scan_planner.ExecutionLedger" />
+    <testcase name="OnlyMatchingOwnerGeometryCommitSwitchesCurve" status="run" result="completed" time="0" timestamp="2026-10-07T20:45:46" classname="scan_planner.ExecutionLedger" />
+    <testcase name="HoldingFreshMeasuredProgressIsNotMissingOrVirtualMotion" status="run" result="completed" time="0" timestamp="2026-10-07T20:45:46" classname="scan_planner.ExecutionLedger" />
+    <testcase name="UnixBodyAndProgressKeepOriginalNanosecondOrdering" status="run" result="completed" time="0" timestamp="2026-10-07T20:45:46" classname="scan_planner.ExecutionLedger" />
+    <testcase name="ExactFreshCandidateEntryRejectionIsOneBoundedReseedNotGeometryRetirement" status="run" result="completed" time="0" timestamp="2026-10-07T20:45:46" classname="scan_planner.ExecutionLedger" />
+    <testcase name="EntryReseedRejectsWrongTaskProofSourceUnknownAndSuccess" status="run" result="completed" time="0" timestamp="2026-10-07T20:45:46" classname="scan_planner.ExecutionLedger" />
+    <testcase name="QueuedEntryFailureCoalescesAndIsDiscardedForAcceptedReplacedExpiredOrRevokedCandidate" status="run" result="completed" time="0" timestamp="2026-10-07T20:45:46" classname="scan_planner.ExecutionLedger" />
+    <testcase name="MeasuredTerminalReseedIsOncePerAppliedCurveNotElapsedCandidateClockOrPreviewHold" status="run" result="completed" time="0" timestamp="2026-10-07T20:45:46" classname="scan_planner.ExecutionLedger" />
+    <testcase name="WrongFloorAnchorAndExpiredProgressNeverReplaceSource" status="run" result="completed" time="0" timestamp="2026-10-07T20:45:46" classname="scan_planner.ExecutionLedger" />
+    <testcase name="RevocationRetiresCandidateAndRejectsLateGeometry" status="run" result="completed" time="0" timestamp="2026-10-07T20:45:46" classname="scan_planner.ExecutionLedger" />
+    <testcase name="ReferenceCancellationRetiresOwnerBeforeAcknowledgementButNotForeignTasks" status="run" result="completed" time="0" timestamp="2026-10-07T20:45:46" classname="scan_planner.ExecutionLedger" />
+    <testcase name="ReplanBoundaryUsesActualTwistAndNeverInventsMeasuredAcceleration" status="run" result="completed" time="0" timestamp="2026-10-07T20:45:46" classname="scan_planner.ExecutionLedger" />
+    <testcase name="ActualConnectorRequiresSourceGroundNotImaginaryLineOrAnotherFloor" status="run" result="completed" time="0" timestamp="2026-10-07T20:45:46" classname="scan_planner.ExecutionLedger" />
+    <testcase name="CommandProofRequiresExactCurrentOwnerAndCannotAuthorizeHolding" status="run" result="completed" time="0" timestamp="2026-10-07T20:45:46" classname="scan_planner.ExecutionLedger" />
+    <testcase name="LaterZeroAndPermissionRevocationFenceLateMotionProof" status="run" result="completed" time="0" timestamp="2026-10-07T20:45:46" classname="scan_planner.ExecutionLedger" />
+    <testcase name="NativeMotionDemandMayUseNewerEvidenceButNeverBelowOwnerFloor" status="run" result="completed" time="0" timestamp="2026-10-07T20:45:46" classname="scan_planner.ExecutionLedger" />
+    <testcase name="RefreshedCurveProofDoesNotInheritExpiredTwoHundredMillisecondFloor" status="run" result="completed" time="0" timestamp="2026-10-07T20:45:46" classname="scan_planner.ExecutionLedger" />
+    <testcase name="NegativeCurveRevisionFencesOldCommandEvenAfterPositiveRecovery" status="run" result="completed" time="0" timestamp="2026-10-07T20:45:46" classname="scan_planner.ExecutionLedger" />
+    <testcase name="MotionProofCannotBorrowOtherVersionCurveFutureOrExpiredNewestEvidence" status="run" result="completed" time="0" timestamp="2026-10-07T20:45:46" classname="scan_planner.ExecutionLedger" />
+    <testcase name="ActuallyCheckedRevisionCanSatisfyNewerOwnerFloorWithoutChangingAuthority" status="run" result="completed" time="0" timestamp="2026-10-07T20:45:46" classname="scan_planner.ExecutionLedger" />
+    <testcase name="NewRetiredTaskAuthorityStartsIndependentWriterAndAckSequence" status="run" result="completed" time="0" timestamp="2026-10-07T20:45:46" classname="scan_planner.ExecutionLedger" />
+    <testcase name="OldInitialOrHandoffAckCannotRestoreOrPoisonNewAuthority" status="run" result="completed" time="0" timestamp="2026-10-07T20:45:46" classname="scan_planner.ExecutionLedger" />
+    <testcase name="CancellationAloneStillAcceptsSameAuthorityLateAppliedFactAndHolds" status="run" result="completed" time="0" timestamp="2026-10-07T20:45:46" classname="scan_planner.ExecutionLedger" />
+    <testcase name="NewCompleteAuthorityCanReplaceCanceledIdentityRestoredByLateAck" status="run" result="completed" time="0" timestamp="2026-10-07T20:45:46" classname="scan_planner.ExecutionLedger" />
+    <testcase name="SameExecutionHeartbeatOrReplanCannotResetWriterScope" status="run" result="completed" time="0" timestamp="2026-10-07T20:45:46" classname="scan_planner.ExecutionLedger" />
+    <testcase name="InvalidUnretiredOrUnmatchedNewAuthorityNeverResetsWriterFacts" status="run" result="completed" time="0" timestamp="2026-10-07T20:45:46" classname="scan_planner.ExecutionLedger" />
+    <testcase name="SdkArmGenerationIsExactIdentityAcrossNewSessionNotGlobalCounter" status="run" result="completed" time="0" timestamp="2026-10-07T20:45:46" classname="scan_planner.ExecutionLedger" />
+    <testcase name="SuccessorCandidateBeforeLateInitialFactSurvivesWithoutAuthorityOrLeaseRenewal" status="run" result="completed" time="0" timestamp="2026-10-07T20:45:46" classname="scan_planner.ExecutionLedger" />
+    <testcase name="SuccessorCandidateBeforeLateHandoffFactSurvivesWhileOldPreparedIsRetired" status="run" result="completed" time="0" timestamp="2026-10-07T20:45:46" classname="scan_planner.ExecutionLedger" />
+    <testcase name="LateWriterFactStillClearsSameTaskOrIncompleteSuccessorData" status="run" result="completed" time="0" timestamp="2026-10-07T20:45:46" classname="scan_planner.ExecutionLedger" />
+  </testsuite>
+</testsuites>

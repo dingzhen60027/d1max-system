@@ -1,0 +1,106 @@
+{
+  "schema": 1,
+  "scope": "offline_v3_exact_zero_policy_input_and_frozen_v2_component_contract; not_formal_navigation_or_hardware_acceptance",
+  "source_files": [
+    {
+      "path": "/home/eric/wjg/d1max-system/simulation/isaacsim/quadruped.py",
+      "sha256": "46d0bd434d848d5c1e54f47182c386e1058f290b17635c1d29d5805a4f21d798"
+    },
+    {
+      "path": "/home/eric/wjg/d1max-system/simulation/isaacsim/scene.py",
+      "sha256": "50710ca27178f5b5d9986c89768c3bb0a90d2979c2b6ed6a7fcd34de0127a836"
+    },
+    {
+      "path": "/home/eric/wjg/d1max-system/simulation/isaacsim/full_scene_replay.py",
+      "sha256": "cd6eba11f5ad4f9748ec8465a4902133da1ecab45aec7bca8d9be18f70fcec31"
+    },
+    {
+      "path": "/home/eric/wjg/d1max-system/simulation/isaacsim/test_quadruped.py",
+      "sha256": "f76f38eff1835b4a30195054c95237b8c6ff33c3ab0c83612e2273ddf2c45e09"
+    },
+    {
+      "path": "/home/eric/wjg/d1max-system/simulation/isaacsim/test_full_scene_replay.py",
+      "sha256": "fafcc85450bb87df551a1a4e381569819b66ad2d35093b4f8d53e609d3ed4154"
+    }
+  ],
+  "original_v59_zero_audit": {
+    "path": "/home/eric/wjg/d1max-build-isaac/v59_true_zero_policy_readonly.json",
+    "sha256": "89e6a6b43997e304d3ad507d7dfa37166cdaec1f7c2144356e66bef0bc4cade9"
+  },
+  "tests": {
+    "command": "PYTHONPATH=simulation/isaacsim python3 -m pytest -q simulation/isaacsim/test_quadruped.py simulation/isaacsim/test_full_scene_replay.py",
+    "passed": 90,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "log": {
+      "path": "/home/eric/wjg/d1max-build-isaac/v59-zero-servo-offline/tests.log",
+      "sha256": "97e13db88cea888562ae733aa6e732d09f7203defffe86d6f757da89c6fa04e2"
+    },
+    "xml": {
+      "path": "/home/eric/wjg/d1max-build-isaac/v59-zero-servo-offline/tests.xml",
+      "sha256": "062f6e8b29c2c94821cdd3e5f98e10d3940cb64828564407153d2d7861842d33"
+    }
+  },
+  "mode": "spot_monotone_measured_v3",
+  "default_changed": false,
+  "exact_zero": {
+    "each_axis_independently": true,
+    "integral_cleared": true,
+    "policy_input_withdrawal_hz": 500,
+    "official_inference_hz": 50,
+    "measured_filter_retained": true,
+    "no_action_memory_or_counter_reset": true,
+    "no_root_or_joint_state_write": true
+  },
+  "ab_plan": {
+    "original_source_ticks": 43412,
+    "selected_prefix_ticks": 43410,
+    "excluded_original_tail_ticks": 2,
+    "excluded_original_tail_ns": 4000000,
+    "activation_source_tick": 36428,
+    "activation_source_ns": 72856000000,
+    "bootstrap_and_preceding_ticks": "original_v2",
+    "source_scene_and_frozen_commands": "same bytes; future root-owned component execution not performed here",
+    "possible_actor_push": "original first actor AABB overlap at82.818s; zero-input residual is established but83s physical peak is not attributed solely to servo; no contact-force witness"
+  },
+  "future_component_plan_only": {
+    "freeze": [
+      "python3",
+      "simulation/isaacsim/full_scene_replay.py",
+      "freeze",
+      "--history-dir",
+      "/home/eric/wjg/d1max-build-isaac/runs/campus_restart_v59_001/physics",
+      "--source-ticks",
+      "43410",
+      "--output",
+      "NEW_FROZEN_PATH"
+    ],
+    "baseline": [
+      "python3",
+      "simulation/isaacsim/full_scene_replay.py",
+      "command",
+      "--session",
+      "/home/eric/wjg/d1max-build-isaac/runs/campus_restart_v59_001",
+      "--result-dir",
+      "NEW_BASELINE_PATH",
+      "--frozen-command-file",
+      "NEW_FROZEN_PATH"
+    ],
+    "alternative": [
+      "python3",
+      "simulation/isaacsim/full_scene_replay.py",
+      "command",
+      "--session",
+      "/home/eric/wjg/d1max-build-isaac/runs/campus_restart_v59_001",
+      "--result-dir",
+      "NEW_ALTERNATIVE_PATH",
+      "--frozen-command-file",
+      "NEW_FROZEN_PATH",
+      "--test-velocity-feedback-mode",
+      "spot_monotone_measured_v3",
+      "--test-velocity-feedback-start-tick",
+      "36428"
+    ]
+  }
+}

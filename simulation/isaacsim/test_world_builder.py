@@ -1,6 +1,9 @@
 """Offline world, actor timing, resource and actual USD collider regressions."""
 import copy
 import importlib.util
+import hashlib
+from pathlib import Path
+from unittest.mock import patch
 import math
 import unittest
 
@@ -27,6 +30,63 @@ class CampusGeometryTests(unittest.TestCase):
         self.assertTrue(world.collision_names(self.spec, [-35., -11., .52]))
         self.assertTrue(world.collision_names(self.spec, [0., 0., 3.]))
 
+    def test_generated_defaults_match_checked_in_asset_and_verified_fixture_domain(self):
+        self.assertEqual(world.create_large_world(), self.spec)
+        robot, physics = self.spec["robot"], self.spec["physics"]
+        self.assertEqual(robot["max_linear_speed"], .23)
+        self.assertEqual(robot["max_angular_speed"], .3)
+        self.assertEqual(robot["policy_input_limits"], dict(schema=1, linear=.38, angular=.5))
+        self.assertEqual(robot["model_limits"], dict(max_linear_speed_mps=.65, max_angular_speed_radps=.8))
+        self.assertEqual(robot["actor_encounter_profile"], "isolated_spot_reachable65_3m_exposure_v1")
+        reference = robot["full_xyz_reference_model"]
+        self.assertEqual((reference["reference_max_speed_mps"], reference["measured_travel_max_speed_mps"]), (.65, .65))
+        evidence = Path(world.__file__).parent / reference["evidence_file"]
+        self.assertFalse(Path(reference["evidence_file"]).is_absolute())
+        self.assertEqual(hashlib.sha256(evidence.read_bytes()).hexdigest(), reference["evidence_sha256"])
+        self.assertTrue(robot["record_full_physics_history"])
+        self.assertEqual(robot["stall_recovery"], dict(schema=1, enabled=True, isolated_fixture=True))
+        self.assertEqual(physics["dynamic_actor_target_backend"], "native_kinematic_v1")
+        self.assertEqual((physics["frequency_hz"], physics["state_frequency_hz"], self.spec["lidar"]["frequency_hz"]), (500., 50., 10.))
+        self.assertFalse(physics["usd_velocity_writeback"])
+
+    def test_ground_goals_do_not_change_authored_spawn_or_actor_case_scope(self):
+        self.assertEqual(self.spec["robot"]["goal"][2], self.spec["floor"]["z"])
+        for case in self.spec["scenarios"]:
+            self.assertEqual(case["start"][2], .52)  # Historical body-height annotation.
+            self.assertTrue(all(goal[2] == self.spec["floor"]["z"] for goal in case["goals"]))
+            self.assertTrue(all(event["goal"][2] == self.spec["floor"]["z"]
+                for event in case.get("events", []) if "goal" in event))
+            selected = world.scenario_spec(self.spec, case["id"])
+            self.assertEqual(selected["robot"]["initial_pose"][2], .8)
+            self.assertEqual(selected["robot"]["goal"][2], 0.)
+            self.assertEqual([actor["id"] for actor in selected["dynamic_actors"] if actor["enabled"]],
+                             [actor["id"] for actor in self.spec["dynamic_actors"] if actor["id"] in case["actor_ids"]])
+        crossing = next(case for case in self.spec["scenarios"] if case["id"] == "crossing_blocker")
+        self.assertEqual(crossing["actor_ids"], ["plaza_person"])
+        self.assertNotIn("background_actor_ids", crossing)  # All-six roles require separate authoring.
+
+    def test_offline_audit_maps_floor_goals_to_body_reference_without_mutating_scene(self):
+        spec = copy.deepcopy(self.spec)
+        spec["scenarios"] = [next(case for case in spec["scenarios"] if case["id"] == "crossing_blocker")]
+        spec["dynamic_actors"] = []  # This regression covers static route conversion only.
+        spec["scenarios"][0]["actor_ids"] = []
+        original, calls = copy.deepcopy(spec), []
+        original_find_route = world.find_route
+        def observed_route(value, start, goal, *args, **kwargs):
+            calls.append((list(start), list(goal)))
+            return original_find_route(value, start, goal, *args, **kwargs)
+        with patch.object(world, "find_route", side_effect=observed_route):
+            report = world.audit_world(spec)
+        self.assertEqual(spec, original)
+        self.assertEqual(calls, [([-8, -5, .481], [8, -5, .481])])
+        self.assertTrue(report["flat_single_level_only"])
+        self.assertTrue(report["route_checks"][0]["all_static_goals_reachable"])
+        # The geometric API still rejects raw ground XYZ as body-centre input.
+        with self.assertRaisesRegex(ValueError, "route_endpoint_collision"):
+            world.find_route(spec, [-8, -5, .481], [8, -5, 0.])
+        with self.assertRaisesRegex(ValueError, "offline_route_is_single_level"):
+            world.find_route(spec, [-8, -5, .52], [8, -5, .481])
+
     def test_missing_enclosure_and_invalid_geometry_fail_closed(self):
         bad = copy.deepcopy(self.spec)
         bad["static_boxes"] = [b for b in bad["static_boxes"] if b["name"] != "west_wall"]
@@ -39,9 +99,11 @@ class CampusGeometryTests(unittest.TestCase):
 
     def test_all_scenarios_have_static_whole_body_routes(self):
         total = 0.
+        body_z = self.spec["floor"]["z"] + self.spec["robot"]["body_reference_height"]
         for case in world.scenario_matrix(self.spec):
-            start = case["start"][:3]
-            for goal in case["goals"]:
+            start = [case["start"][0], case["start"][1], body_z]
+            for floor_goal in case["goals"]:
+                goal = [floor_goal[0], floor_goal[1], body_z]
                 route = world.find_route(self.spec, start, goal)
                 for a, b in zip(route, route[1:]):
                     # Check the segment, not just route vertices.

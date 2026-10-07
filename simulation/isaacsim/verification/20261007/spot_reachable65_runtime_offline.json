@@ -1,0 +1,954 @@
+{
+  "schema": 1,
+  "kind": "isolated_spot_reachable65_prior_runtime_build_offline_audit",
+  "audited_at_utc": "2026-10-07T11:38:30.976434+00:00",
+  "status": "incomplete_projection_cap",
+  "offline_build_tests_verified": true,
+  "runtime_closure_complete": false,
+  "formal_navigation_pass": false,
+  "navigation_authorization": false,
+  "hardware_acceptance": false,
+  "scope": "Completed prior dot65 native/Python build and tests only; v47 exposed the remaining projection cap. Later two-file projection fix is source-frozen and is not included in those prior binaries/tests.",
+  "calibration_domain": {
+    "explicit_isolated_marker_max_reachable_speed_mps": 0.65,
+    "same_hashed_record_reference_and_travel_caps_required": true,
+    "command_max_speed_mps": 0.3,
+    "command_max_yaw_radps": 0.5,
+    "reachable_yaw_cap_radps": 0.8,
+    "old_record_domains_unchanged": true,
+    "stop_geometry_timing_c1_unknown_and_lease_contracts_unchanged": true,
+    "existing_measured_query_epsilon_unchanged": true
+  },
+  "source_freeze": {
+    "path": "/home/eric/wjg/d1max-build-isaac/unknown_research/isolated_dot65_source_freeze.json",
+    "sha256": "cb6656ae856ff0e55281c0e88fd65f76a0a6831f371d3910b26de4d92c602d65",
+    "bytes": 2251
+  },
+  "source_mirror_audit": {
+    "path": "/home/eric/wjg/d1max-build-isaac/unknown_research/dot65_source_mirror_audit.json",
+    "sha256": "3eaf867e348143711462d352093102853945edf18cfe1793b78a36f667b933b8",
+    "bytes": 8724
+  },
+  "all_11_frozen_source_and_mirror_hashes_match": true,
+  "source_files": {
+    "d1max_nav_ws/src/d1max_pct_scan/d1max_pct_scan/braking_model.py": "a5b403e56f6ce53d083853b35a31a66ea95e36d9cfd1ca26bda4618172278e64",
+    "d1max_nav_ws/src/d1max_pct_scan/test/test_braking_model.py": "bcd2bf940b2b499d193666b233d09efb20de83f469bad84d3166e36e207d6de9",
+    "d1max_nav_ws/src/d1max_planning_interfaces/include/d1max_planning_interfaces/isolated_reference_model.hpp": "423b1ade4a01671f979e08e5412aa238fde7e57ce17f55b9eaff07768b725db9",
+    "d1max_nav_ws/src/d1max_planning_interfaces/test/test_isolated_reference_model.cpp": "b0e554a47556072c78075df03637b87a73166b811544f0c4b4321eeb7cc811de",
+    "d1max_nav_ws/src/scan_planner_vendor/bspline_opt/include/bspline_opt/bspline_optimizer.h": "4eb241e4502af79d14678c30e9ef98041de4700c1299c8e6dd72a138dc58ca23",
+    "d1max_nav_ws/src/scan_planner_vendor/bspline_opt/test/test_optimizer_budget.cpp": "c587b7f95e9577f41cc33707ff29c62ad9d45e268ba51456992366a2798407b9",
+    "d1max_nav_ws/src/scan_planner_vendor/plan_manage/include/plan_manage/motion_sweep.hpp": "a1dbc1e5ea5b25d43ec264f2d12278e44940efd8da952a2308431959415a0884",
+    "d1max_nav_ws/src/scan_planner_vendor/plan_manage/src/motion_sweep.cpp": "0199408f0d3927825f8dc35d95cf377ec6658722ea17000af4a6d7b44eb87ebb",
+    "d1max_nav_ws/src/scan_planner_vendor/plan_manage/test/test_motion_sweep.cpp": "0dea5e6a8ed20b14d0c85d6e003b089d7cb58dfb7af15e93587bd794dd5bd5e8",
+    "d1max_ros2/sdk_bridge_ws/src/d1max_sdk_bridge/src/execution_acceptance.hpp": "eadb548875194aca4c29344c5865fcbeef3ea6a152ce3ddb7a4e4842d9012f0f",
+    "d1max_ros2/sdk_bridge_ws/src/d1max_sdk_bridge/src/test_execution_acceptance.cpp": "29e50b07421abf1279b9516b6566ed9d3d739d24e9f1a15fa9c6c891bf3aec7e"
+  },
+  "compiler_cache": [
+    {
+      "package": "d1max_planning_interfaces",
+      "cache_path": "/home/eric/wjg/d1max-build-isaac/nav/build/d1max_planning_interfaces/CMakeCache.txt",
+      "values": {
+        "BUILD_TESTING": "ON",
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_CXX_COMPILER": "/usr/bin/g++-11"
+      }
+    },
+    {
+      "package": "plan_env",
+      "cache_path": "/home/eric/wjg/d1max-build-isaac/nav/build/plan_env/CMakeCache.txt",
+      "values": {
+        "BUILD_TESTING": "ON",
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_CXX_COMPILER": "/usr/bin/g++-11"
+      }
+    },
+    {
+      "package": "path_searching",
+      "cache_path": "/home/eric/wjg/d1max-build-isaac/nav/build/path_searching/CMakeCache.txt",
+      "values": {
+        "BUILD_TESTING": "ON",
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_CXX_COMPILER": "/usr/bin/g++-11"
+      }
+    },
+    {
+      "package": "bspline_opt",
+      "cache_path": "/home/eric/wjg/d1max-build-isaac/nav/build/bspline_opt/CMakeCache.txt",
+      "values": {
+        "BUILD_TESTING": "ON",
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_CXX_COMPILER": "/usr/bin/g++-11"
+      }
+    },
+    {
+      "package": "d1max_navigation_bt",
+      "cache_path": "/home/eric/wjg/d1max-build-isaac/nav/build/d1max_navigation_bt/CMakeCache.txt",
+      "values": {
+        "BUILD_TESTING": "ON",
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_CXX_COMPILER": "/usr/bin/g++-11"
+      }
+    },
+    {
+      "package": "d1max_trajectory_tracker",
+      "cache_path": "/home/eric/wjg/d1max-build-isaac/nav/build/d1max_trajectory_tracker/CMakeCache.txt",
+      "values": {
+        "BUILD_TESTING": "ON",
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_CXX_COMPILER": "/usr/bin/g++-11"
+      }
+    },
+    {
+      "package": "scan_planner",
+      "cache_path": "/home/eric/wjg/d1max-build-isaac/nav/build/scan_planner/CMakeCache.txt",
+      "values": {
+        "BUILD_TESTING": "ON",
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_CXX_COMPILER": "/usr/bin/g++-11"
+      }
+    },
+    {
+      "package": "d1max_motion_safety",
+      "cache_path": "/home/eric/wjg/d1max-build-isaac/nav/build/d1max_motion_safety/CMakeCache.txt",
+      "values": {
+        "BUILD_TESTING": "ON",
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_CXX_COMPILER": "/usr/bin/g++-11"
+      }
+    }
+  ],
+  "native_dependency_audit": {
+    "path": "/home/eric/wjg/d1max-build-isaac/unknown_research/dot65_native_dependency_audit.json",
+    "sha256": "06c44c4116e68aa3b982b7d936cafa8951ff4d39222fb8ba1a4c51bb6bc45cd7",
+    "bytes": 60545
+  },
+  "native_header_resolution": {
+    "planning_interfaces_exported_include_directory": "/home/eric/wjg/d1max-build-isaac/nav/install/d1max_planning_interfaces/include/d1max_planning_interfaces",
+    "active_installed_header": "/home/eric/wjg/d1max-build-isaac/nav/install/d1max_planning_interfaces/include/d1max_planning_interfaces/d1max_planning_interfaces/isolated_reference_model.hpp",
+    "active_installed_header_sha256": "423b1ade4a01671f979e08e5412aa238fde7e57ce17f55b9eaff07768b725db9",
+    "legacy_flat_header_exported": false,
+    "legacy_flat_header_compiled_dependency_count": 0,
+    "nav_dependency_files_scanned": 404,
+    "audited_consumers": 19,
+    "sdk_header_publicly_installed": false,
+    "sdk_build_scope": {
+      "mode": "isolated_execution_only",
+      "cmake_option": "D1MAX_BUILD_ISOLATED_EXECUTION_ONLY:BOOL=ON",
+      "cmake_cache": {
+        "path": "/home/eric/wjg/d1max-build-isaac/sdk/build/d1max_sdk_bridge/CMakeCache.txt",
+        "exists": true,
+        "resolved_path": "/home/eric/wjg/d1max-build-isaac/sdk/build/d1max_sdk_bridge/CMakeCache.txt",
+        "bytes": 29123,
+        "sha256": "b949be8e587eb6a7aa2c88d89f95c6cc3c510f526e84438084267dbceaf92a67",
+        "mtime_ns": 1791372311890209574
+      },
+      "target_directories": {
+        "path": "/home/eric/wjg/d1max-build-isaac/sdk/build/d1max_sdk_bridge/CMakeFiles/TargetDirectories.txt",
+        "exists": true,
+        "resolved_path": "/home/eric/wjg/d1max-build-isaac/sdk/build/d1max_sdk_bridge/CMakeFiles/TargetDirectories.txt",
+        "bytes": 2364,
+        "sha256": "f03c96935330f72d69af8acb946ae64ea4fe61d4e3c3e9a14c781e09baca93c9",
+        "mtime_ns": 1791372311914210102
+      },
+      "consumer_targets": [
+        "sdk_execution_mock",
+        "execution_acceptance_check",
+        "test_execution_acceptance"
+      ],
+      "sdk_monitor_bridge_in_current_target_directories": false,
+      "sdk_monitor_bridge_in_current_install_manifest": false,
+      "sdk_monitor_bridge_artifacts": [
+        {
+          "path": "/home/eric/wjg/d1max-build-isaac/sdk/build/d1max_sdk_bridge/sdk_monitor_bridge",
+          "exists": false
+        },
+        {
+          "path": "/home/eric/wjg/d1max-build-isaac/sdk/install/d1max_sdk_bridge/lib/d1max_sdk_bridge/sdk_monitor_bridge",
+          "exists": false
+        },
+        {
+          "path": "/home/eric/wjg/d1max-build-isaac/sdk/build/d1max_sdk_bridge/CMakeFiles/sdk_monitor_bridge.dir/src/sdk_monitor_bridge.cpp.o.d",
+          "exists": false
+        }
+      ],
+      "live_sdk_build_or_runtime_claim": false
+    },
+    "build_install_identity": {
+      "planner_elf_build_id": "6f5e8d5fb87521212bbeda725ab328b34d9d6f11",
+      "tracker_elf_build_id": "dda9f0faa708d764b87f5e79e7ccf28a0f3b737f",
+      "sdk_mock_elf_build_id": "18e5c0108f1750ed27e304d5e6c98b8542eca6a6",
+      "build_and_install_ids_matched": true,
+      "sha_difference_scope": "expected RPATH removal explicitly recorded by cmake_install.cmake; not interpreted as stale source",
+      "install_scripts": {
+        "planner": {
+          "path": "/home/eric/wjg/d1max-build-isaac/nav/build/scan_planner/cmake_install.cmake",
+          "resolved_path": "/home/eric/wjg/d1max-build-isaac/nav/build/scan_planner/cmake_install.cmake",
+          "bytes": 14085,
+          "sha256": "6c1c120736f44b3ad56d50f5dc4d03e37d9bf11284d3a55a2d11b17a5bf4e7d8",
+          "mtime_ns": 1791289860368734252
+        },
+        "tracker": {
+          "path": "/home/eric/wjg/d1max-build-isaac/nav/build/d1max_trajectory_tracker/cmake_install.cmake",
+          "resolved_path": "/home/eric/wjg/d1max-build-isaac/nav/build/d1max_trajectory_tracker/cmake_install.cmake",
+          "bytes": 8681,
+          "sha256": "34b4b62cc0510e1da642b153d2ea2073a10043f2416cf6d1d3db672c66b52669",
+          "mtime_ns": 1791295401694796240
+        },
+        "sdk": {
+          "path": "/home/eric/wjg/d1max-build-isaac/sdk/build/d1max_sdk_bridge/cmake_install.cmake",
+          "resolved_path": "/home/eric/wjg/d1max-build-isaac/sdk/build/d1max_sdk_bridge/cmake_install.cmake",
+          "bytes": 9002,
+          "sha256": "4042dae145108ba944dcc1fcbf71e99c27d7531e06d6e3e2982f3c4fe39dabf8",
+          "mtime_ns": 1791108492126415819
+        }
+      }
+    }
+  },
+  "tests": {
+    "ctest_wrapper_targets": 59,
+    "ctest_wrapper_failures": 0,
+    "gtest_targets": 38,
+    "gtest_cases": 988,
+    "gtest_failures": 0,
+    "gtest_errors": 0,
+    "gtest_disabled": 0,
+    "gtest_by_package": {
+      "plan_env": {
+        "targets": 8,
+        "cases": 266,
+        "failures": 0,
+        "errors": 0,
+        "disabled": 0
+      },
+      "d1max_planning_interfaces": {
+        "targets": 1,
+        "cases": 15,
+        "failures": 0,
+        "errors": 0,
+        "disabled": 0
+      },
+      "d1max_navigation_bt": {
+        "targets": 5,
+        "cases": 247,
+        "failures": 0,
+        "errors": 0,
+        "disabled": 0
+      },
+      "bspline_opt": {
+        "targets": 4,
+        "cases": 38,
+        "failures": 0,
+        "errors": 0,
+        "disabled": 0
+      },
+      "scan_planner": {
+        "targets": 11,
+        "cases": 184,
+        "failures": 0,
+        "errors": 0,
+        "disabled": 0
+      },
+      "d1max_motion_safety": {
+        "targets": 1,
+        "cases": 6,
+        "failures": 0,
+        "errors": 0,
+        "disabled": 0
+      },
+      "d1max_trajectory_tracker": {
+        "targets": 4,
+        "cases": 204,
+        "failures": 0,
+        "errors": 0,
+        "disabled": 0
+      },
+      "path_searching": {
+        "targets": 4,
+        "cases": 28,
+        "failures": 0,
+        "errors": 0,
+        "disabled": 0
+      }
+    },
+    "no_ros_harness_targets": 5,
+    "no_ros_checks": 170,
+    "no_ros_check_failures": 0,
+    "sdk_assert_executable_targets": 14,
+    "sdk_inner_assertion_case_count": "not exported; do not infer an assertion count from one CTest executable",
+    "installed_python_cases": 67,
+    "installed_python_failures": 0,
+    "empty_launch_wrappers": [
+      {
+        "name": "test_test_planner_startup.py",
+        "actual_unittest_cases": 0,
+        "wrapper_return_code_zero": true,
+        "observed_process_exit_code": -2,
+        "ctest_xml": "/home/eric/wjg/d1max-build-isaac/dot65_scan_planner_ctest.xml"
+      },
+      {
+        "name": "test_test_waypoint_parameters.py",
+        "actual_unittest_cases": 0,
+        "wrapper_return_code_zero": true,
+        "observed_process_exit_code": -2,
+        "ctest_xml": "/home/eric/wjg/d1max-build-isaac/dot65_scan_planner_ctest.xml"
+      }
+    ],
+    "count_scope": "CTest wrappers and their inner GTEST/harness cases overlap and are not additive.",
+    "xml_audit": {
+      "path": "/home/eric/wjg/d1max-build-isaac/unknown_research/dot65_ctest_xml_audit.json",
+      "sha256": "863b746cf7777d19b09f47cd650c924c965d7a01e96b04334174b41c35bc1609",
+      "bytes": 21036
+    },
+    "ctest_xml": [
+      {
+        "path": "/home/eric/wjg/d1max-build-isaac/dot65_bspline_opt_ctest.xml",
+        "sha256": "f75da90f8b495f4662861aad50245086b7be4575476d0267687b80b6c4ce93db",
+        "bytes": 11964,
+        "wrapper_tests": 4,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "case_names": [
+          "test_optimizer_budget",
+          "test_uniform_bspline",
+          "test_reference_path",
+          "test_whole_spline_collision"
+        ]
+      },
+      {
+        "path": "/home/eric/wjg/d1max-build-isaac/dot65_d1max_motion_safety_ctest.xml",
+        "sha256": "145c9f4944a88f8c1a0451c2c5695fb89e3b0e5aab22fac586031355847de268",
+        "bytes": 8581,
+        "wrapper_tests": 1,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "case_names": [
+          "test_continuous_collision_monitor"
+        ]
+      },
+      {
+        "path": "/home/eric/wjg/d1max-build-isaac/dot65_d1max_navigation_bt_ctest.xml",
+        "sha256": "3ad9fc7e749fc3a7ed0b4d6aed88d7123b0901af87ebeb22d85521a7f73be8fc",
+        "bytes": 52324,
+        "wrapper_tests": 5,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "case_names": [
+          "test_navigation_bt",
+          "test_navigation_bt_runtime",
+          "test_navigation_task_contract",
+          "test_initial_pose_transaction",
+          "test_execution_owner"
+        ]
+      },
+      {
+        "path": "/home/eric/wjg/d1max-build-isaac/dot65_d1max_planning_interfaces_ctest.xml",
+        "sha256": "a4e5d0bc13b072a43b6e2a80b7d7532df2c5bbd4bc7d8034617e0a931fa13805",
+        "bytes": 4387,
+        "wrapper_tests": 1,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "case_names": [
+          "test_isolated_reference_model"
+        ]
+      },
+      {
+        "path": "/home/eric/wjg/d1max-build-isaac/dot65_d1max_trajectory_tracker_ctest.xml",
+        "sha256": "2bf0c7a10f7254d0e06a771c6fc709544a578551eec8eb696ce4ff57eb04f32e",
+        "bytes": 43787,
+        "wrapper_tests": 4,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "case_names": [
+          "test_fixed_bspline_sampler",
+          "test_tracker_core",
+          "test_tracker_v2",
+          "test_navigation_state_contract"
+        ]
+      },
+      {
+        "path": "/home/eric/wjg/d1max-build-isaac/dot65_path_searching_ctest.xml",
+        "sha256": "92488260b47059c167e6fe8041e5d1c05080925eff360acb742aeba9a3279c54",
+        "bytes": 32269,
+        "wrapper_tests": 4,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "case_names": [
+          "test_search_lattice",
+          "test_search_endpoint",
+          "test_internal_search_anchor",
+          "test_reference_lattice_connector"
+        ]
+      },
+      {
+        "path": "/home/eric/wjg/d1max-build-isaac/dot65_plan_env_ctest.xml",
+        "sha256": "01a18fc2dd84d83b093ca4108b1b317ed0b97e19c36847b57b43a1bb6788422d",
+        "bytes": 63387,
+        "wrapper_tests": 8,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "case_names": [
+          "test_solve_budget",
+          "test_voxel_collision",
+          "test_near_field_diagnostics",
+          "test_map_context",
+          "test_projected_rays",
+          "test_static_occupancy_prior",
+          "test_dynamic_occupancy_oracle",
+          "test_official_resolution"
+        ]
+      },
+      {
+        "path": "/home/eric/wjg/d1max-build-isaac/dot65_scan_planner_ctest.xml",
+        "sha256": "e2f73cedf11c480ed97a3b1ef6add37a25b7cf0373ec3b9961c00230748c2f0c",
+        "bytes": 61943,
+        "wrapper_tests": 18,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "case_names": [
+          "test_async_worker_no_ros",
+          "test_replan_handoff_no_ros",
+          "test_replan_recovery_no_ros",
+          "test_reference_callback_no_ros",
+          "test_preview_revalidation_no_ros",
+          "test_input_contract",
+          "test_local_plan_debug",
+          "test_collision_reference",
+          "test_trajectory_collision",
+          "test_initial_yaw_native",
+          "test_candidate_adoption",
+          "test_low_speed_entry_fit",
+          "test_execution_ledger",
+          "test_motion_sweep",
+          "test_reference_target",
+          "test_visible_reference_target",
+          "test_test_planner_startup.py",
+          "test_test_waypoint_parameters.py"
+        ]
+      },
+      {
+        "path": "/home/eric/wjg/d1max-build-isaac/dot65_sdk_ctest.xml",
+        "sha256": "965e3596ec4277118229af4ca850976dae3d0c6be74e81dd3ed9089537f46fe2",
+        "bytes": 3594,
+        "wrapper_tests": 14,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "case_names": [
+          "test_mc_report",
+          "test_joint_report",
+          "test_monitor_estop",
+          "test_sdk_session",
+          "test_sdk_ownership",
+          "test_navigation_motion",
+          "test_navigation_dispatch",
+          "test_execution_shutdown",
+          "test_execution_scheduler",
+          "test_execution_transport",
+          "test_execution_handoff",
+          "test_execution_publication",
+          "test_execution_mock_telemetry",
+          "test_execution_acceptance"
+        ]
+      }
+    ],
+    "gtest_xml": [
+      {
+        "path": "/home/eric/wjg/d1max-build-isaac/nav/build/plan_env/test_results/plan_env/test_dynamic_occupancy_oracle.gtest.xml",
+        "sha256": "67426e922a2c210664e00d2b8630ceaefabe35653278275e8f33a40899bb85d6",
+        "bytes": 2479,
+        "package": "plan_env",
+        "tests": 11,
+        "failures": 0,
+        "errors": 0,
+        "disabled": 0
+      },
+      {
+        "path": "/home/eric/wjg/d1max-build-isaac/nav/build/plan_env/test_results/plan_env/test_map_context.gtest.xml",
+        "sha256": "250117be18e6b33e53716730dd36fde2117065ed6856630a1e60e7f5f7fbe490",
+        "bytes": 5131,
+        "package": "plan_env",
+        "tests": 23,
+        "failures": 0,
+        "errors": 0,
+        "disabled": 0
+      },
+      {
+        "path": "/home/eric/wjg/d1max-build-isaac/nav/build/plan_env/test_results/plan_env/test_near_field_diagnostics.gtest.xml",
+        "sha256": "bf39aaf0396a6b23210c94a44a33b70c3385b0d02ec1036f597b860eb7e54142",
+        "bytes": 3674,
+        "package": "plan_env",
+        "tests": 17,
+        "failures": 0,
+        "errors": 0,
+        "disabled": 0
+      },
+      {
+        "path": "/home/eric/wjg/d1max-build-isaac/nav/build/plan_env/test_results/plan_env/test_official_resolution.gtest.xml",
+        "sha256": "5d4ad2f3adfa1e59d74427e0f8a7d8bb63a725eb42431800174323dd2da3641d",
+        "bytes": 1077,
+        "package": "plan_env",
+        "tests": 4,
+        "failures": 0,
+        "errors": 0,
+        "disabled": 0
+      },
+      {
+        "path": "/home/eric/wjg/d1max-build-isaac/nav/build/plan_env/test_results/plan_env/test_projected_rays.gtest.xml",
+        "sha256": "60bfba07b79f0d586d6db84e9653ef423d637a554d5fa6655b41e3b9ea20657b",
+        "bytes": 33859,
+        "package": "plan_env",
+        "tests": 148,
+        "failures": 0,
+        "errors": 0,
+        "disabled": 0
+      },
+      {
+        "path": "/home/eric/wjg/d1max-build-isaac/nav/build/plan_env/test_results/plan_env/test_solve_budget.gtest.xml",
+        "sha256": "3913d8cb2f9bd28ccdfac7ba0292149f418c06429876a8065070fc235fb82381",
+        "bytes": 1218,
+        "package": "plan_env",
+        "tests": 5,
+        "failures": 0,
+        "errors": 0,
+        "disabled": 0
+      },
+      {
+        "path": "/home/eric/wjg/d1max-build-isaac/nav/build/plan_env/test_results/plan_env/test_static_occupancy_prior.gtest.xml",
+        "sha256": "eae9f5b3db506071f52ba83acbf04fd52aff94d1d4f094b894aafe5814f280c2",
+        "bytes": 5436,
+        "package": "plan_env",
+        "tests": 26,
+        "failures": 0,
+        "errors": 0,
+        "disabled": 0
+      },
+      {
+        "path": "/home/eric/wjg/d1max-build-isaac/nav/build/plan_env/test_results/plan_env/test_voxel_collision.gtest.xml",
+        "sha256": "f503c1e0279996eed179494aef1ccbf184856fcd48226b2a4da2f82a3ef0369c",
+        "bytes": 6421,
+        "package": "plan_env",
+        "tests": 32,
+        "failures": 0,
+        "errors": 0,
+        "disabled": 0
+      },
+      {
+        "path": "/home/eric/wjg/d1max-build-isaac/nav/build/d1max_planning_interfaces/test_results/d1max_planning_interfaces/test_isolated_reference_model.gtest.xml",
+        "sha256": "7913f5c5c420e66eb96807f0a6b8ecdeaa658e89727af9cbd5cb12c603402328",
+        "bytes": 3514,
+        "package": "d1max_planning_interfaces",
+        "tests": 15,
+        "failures": 0,
+        "errors": 0,
+        "disabled": 0
+      },
+      {
+        "path": "/home/eric/wjg/d1max-build-isaac/nav/build/d1max_navigation_bt/test_results/d1max_navigation_bt/test_execution_owner.gtest.xml",
+        "sha256": "1b020458a329da5c64826e8a787798da84e43bef6ae3018fd8769dbf75d68227",
+        "bytes": 29792,
+        "package": "d1max_navigation_bt",
+        "tests": 138,
+        "failures": 0,
+        "errors": 0,
+        "disabled": 0
+      },
+      {
+        "path": "/home/eric/wjg/d1max-build-isaac/nav/build/d1max_navigation_bt/test_results/d1max_navigation_bt/test_initial_pose_transaction.gtest.xml",
+        "sha256": "8c3a5d8e6d4f9749a2f4af711652209aa9fead1ec3e02a7173540e26e7ab23f4",
+        "bytes": 2957,
+        "package": "d1max_navigation_bt",
+        "tests": 12,
+        "failures": 0,
+        "errors": 0,
+        "disabled": 0
+      },
+      {
+        "path": "/home/eric/wjg/d1max-build-isaac/nav/build/d1max_navigation_bt/test_results/d1max_navigation_bt/test_navigation_bt.gtest.xml",
+        "sha256": "f0c7051840bbd8a20899300b25364a015def85e5cb7f33cbe6ae1edf9b7f6175",
+        "bytes": 9072,
+        "package": "d1max_navigation_bt",
+        "tests": 40,
+        "failures": 0,
+        "errors": 0,
+        "disabled": 0
+      },
+      {
+        "path": "/home/eric/wjg/d1max-build-isaac/nav/build/d1max_navigation_bt/test_results/d1max_navigation_bt/test_navigation_bt_runtime.gtest.xml",
+        "sha256": "808f9bc31c712349dadf58e0fe67bd104b98c4d4d39f691f35625ca386689597",
+        "bytes": 8433,
+        "package": "d1max_navigation_bt",
+        "tests": 34,
+        "failures": 0,
+        "errors": 0,
+        "disabled": 0
+      },
+      {
+        "path": "/home/eric/wjg/d1max-build-isaac/nav/build/d1max_navigation_bt/test_results/d1max_navigation_bt/test_navigation_task_contract.gtest.xml",
+        "sha256": "8d74bee7076af0aa16582a6b12c843ce5ba20aad82adcdfb320a79ba2a66ef73",
+        "bytes": 5333,
+        "package": "d1max_navigation_bt",
+        "tests": 23,
+        "failures": 0,
+        "errors": 0,
+        "disabled": 0
+      },
+      {
+        "path": "/home/eric/wjg/d1max-build-isaac/nav/build/bspline_opt/test_results/bspline_opt/test_optimizer_budget.gtest.xml",
+        "sha256": "6ae7fc25956989616387272c6d4b33eecaa6f15acb442e0ee418ac2b75d07329",
+        "bytes": 1469,
+        "package": "bspline_opt",
+        "tests": 5,
+        "failures": 0,
+        "errors": 0,
+        "disabled": 0
+      },
+      {
+        "path": "/home/eric/wjg/d1max-build-isaac/nav/build/bspline_opt/test_results/bspline_opt/test_reference_path.gtest.xml",
+        "sha256": "9ba814a6b7b6187d93f1002101eeb6f7b6653b573ad14fcdff9eabcefb15513e",
+        "bytes": 1230,
+        "package": "bspline_opt",
+        "tests": 5,
+        "failures": 0,
+        "errors": 0,
+        "disabled": 0
+      },
+      {
+        "path": "/home/eric/wjg/d1max-build-isaac/nav/build/bspline_opt/test_results/bspline_opt/test_uniform_bspline.gtest.xml",
+        "sha256": "774d66d0bd48b4b8d598680ca5a43d0ea9e3c07256758fb13f3ad36c935e3ca8",
+        "bytes": 3382,
+        "package": "bspline_opt",
+        "tests": 16,
+        "failures": 0,
+        "errors": 0,
+        "disabled": 0
+      },
+      {
+        "path": "/home/eric/wjg/d1max-build-isaac/nav/build/bspline_opt/test_results/bspline_opt/test_whole_spline_collision.gtest.xml",
+        "sha256": "1bfbc63032709e8a1408dcea52ac5aa1782ceec5c9a4bb2264d5e2b27d7e2f6c",
+        "bytes": 2825,
+        "package": "bspline_opt",
+        "tests": 12,
+        "failures": 0,
+        "errors": 0,
+        "disabled": 0
+      },
+      {
+        "path": "/home/eric/wjg/d1max-build-isaac/nav/build/scan_planner/test_results/scan_planner/test_candidate_adoption.gtest.xml",
+        "sha256": "ce7a045287336b7bb1cec0c2f6b202e339e2205af7cd8b2849d5707c0c2998ac",
+        "bytes": 4154,
+        "package": "scan_planner",
+        "tests": 19,
+        "failures": 0,
+        "errors": 0,
+        "disabled": 0
+      },
+      {
+        "path": "/home/eric/wjg/d1max-build-isaac/nav/build/scan_planner/test_results/scan_planner/test_collision_reference.gtest.xml",
+        "sha256": "2b54134d7a0649a4124b82e9b8e16a0a287fc4b129a6d28faa448c3f26c91fa1",
+        "bytes": 1202,
+        "package": "scan_planner",
+        "tests": 5,
+        "failures": 0,
+        "errors": 0,
+        "disabled": 0
+      },
+      {
+        "path": "/home/eric/wjg/d1max-build-isaac/nav/build/scan_planner/test_results/scan_planner/test_execution_ledger.gtest.xml",
+        "sha256": "055ffc4588ffcbd0bbd3bbe7813bb5b63489e05184bae91a83917fcf3e521aad",
+        "bytes": 8184,
+        "package": "scan_planner",
+        "tests": 39,
+        "failures": 0,
+        "errors": 0,
+        "disabled": 0
+      },
+      {
+        "path": "/home/eric/wjg/d1max-build-isaac/nav/build/scan_planner/test_results/scan_planner/test_initial_yaw_native.gtest.xml",
+        "sha256": "4c819462ad1f533910fb1bdc2a99f6b8d663d9c2215956fa8edcc38ff0176274",
+        "bytes": 1928,
+        "package": "scan_planner",
+        "tests": 7,
+        "failures": 0,
+        "errors": 0,
+        "disabled": 0
+      },
+      {
+        "path": "/home/eric/wjg/d1max-build-isaac/nav/build/scan_planner/test_results/scan_planner/test_input_contract.gtest.xml",
+        "sha256": "fe192eaa56ea222fd3619519c2f3eaa3beda93379aeb9baf3a29bad5c9aba22a",
+        "bytes": 2551,
+        "package": "scan_planner",
+        "tests": 12,
+        "failures": 0,
+        "errors": 0,
+        "disabled": 0
+      },
+      {
+        "path": "/home/eric/wjg/d1max-build-isaac/nav/build/scan_planner/test_results/scan_planner/test_local_plan_debug.gtest.xml",
+        "sha256": "d77a00be129570045c449de680eb037ffa01851c0f97601e91c15cfd67d43ab3",
+        "bytes": 1479,
+        "package": "scan_planner",
+        "tests": 6,
+        "failures": 0,
+        "errors": 0,
+        "disabled": 0
+      },
+      {
+        "path": "/home/eric/wjg/d1max-build-isaac/nav/build/scan_planner/test_results/scan_planner/test_low_speed_entry_fit.gtest.xml",
+        "sha256": "fc636818beab54e982089cc69241dce06633cd1a8a2555cbc5a15bf025ff3bd8",
+        "bytes": 2323,
+        "package": "scan_planner",
+        "tests": 10,
+        "failures": 0,
+        "errors": 0,
+        "disabled": 0
+      },
+      {
+        "path": "/home/eric/wjg/d1max-build-isaac/nav/build/scan_planner/test_results/scan_planner/test_motion_sweep.gtest.xml",
+        "sha256": "e94e15a4016bbd5594a855ae7b0dbc6666c69fb4ce2f3769d3106d7a52604b61",
+        "bytes": 8132,
+        "package": "scan_planner",
+        "tests": 37,
+        "failures": 0,
+        "errors": 0,
+        "disabled": 0
+      },
+      {
+        "path": "/home/eric/wjg/d1max-build-isaac/nav/build/scan_planner/test_results/scan_planner/test_reference_target.gtest.xml",
+        "sha256": "7debc43c5313bbe2ff7d8da6739e025d01beca17641fa102d00151e14273f5b1",
+        "bytes": 3459,
+        "package": "scan_planner",
+        "tests": 17,
+        "failures": 0,
+        "errors": 0,
+        "disabled": 0
+      },
+      {
+        "path": "/home/eric/wjg/d1max-build-isaac/nav/build/scan_planner/test_results/scan_planner/test_trajectory_collision.gtest.xml",
+        "sha256": "c4c7d6088d772e63d131fe18b99599e4756efc65a982a47637817e89a816e24a",
+        "bytes": 5255,
+        "package": "scan_planner",
+        "tests": 25,
+        "failures": 0,
+        "errors": 0,
+        "disabled": 0
+      },
+      {
+        "path": "/home/eric/wjg/d1max-build-isaac/nav/build/scan_planner/test_results/scan_planner/test_visible_reference_target.gtest.xml",
+        "sha256": "b2aa27af8433e3571e1070a050444fa966cbed3f1cf4bffafc592d0640b90576",
+        "bytes": 1741,
+        "package": "scan_planner",
+        "tests": 7,
+        "failures": 0,
+        "errors": 0,
+        "disabled": 0
+      },
+      {
+        "path": "/home/eric/wjg/d1max-build-isaac/nav/build/d1max_motion_safety/test_results/d1max_motion_safety/test_continuous_collision_monitor.gtest.xml",
+        "sha256": "d32411105e64ada1e10c1b6559bbca111b4117191357a0e1690ec31337eee871",
+        "bytes": 1531,
+        "package": "d1max_motion_safety",
+        "tests": 6,
+        "failures": 0,
+        "errors": 0,
+        "disabled": 0
+      },
+      {
+        "path": "/home/eric/wjg/d1max-build-isaac/nav/build/d1max_trajectory_tracker/test_results/d1max_trajectory_tracker/test_fixed_bspline_sampler.gtest.xml",
+        "sha256": "4030a4db696e0eea68eb4b405c36ddc8148d3f8e2211c81ee78bbabc08501118",
+        "bytes": 2001,
+        "package": "d1max_trajectory_tracker",
+        "tests": 8,
+        "failures": 0,
+        "errors": 0,
+        "disabled": 0
+      },
+      {
+        "path": "/home/eric/wjg/d1max-build-isaac/nav/build/d1max_trajectory_tracker/test_results/d1max_trajectory_tracker/test_navigation_state_contract.gtest.xml",
+        "sha256": "2eeb98ca69880dae0fdeafe6e028c089a83de108bf4dfd119b584ae6228a9448",
+        "bytes": 3308,
+        "package": "d1max_trajectory_tracker",
+        "tests": 13,
+        "failures": 0,
+        "errors": 0,
+        "disabled": 0
+      },
+      {
+        "path": "/home/eric/wjg/d1max-build-isaac/nav/build/d1max_trajectory_tracker/test_results/d1max_trajectory_tracker/test_tracker_core.gtest.xml",
+        "sha256": "100ef787c46b9b47ce01ed60ed30d6d367f1f6f13a0f78619287f6f2f8452ada",
+        "bytes": 12338,
+        "package": "d1max_trajectory_tracker",
+        "tests": 61,
+        "failures": 0,
+        "errors": 0,
+        "disabled": 0
+      },
+      {
+        "path": "/home/eric/wjg/d1max-build-isaac/nav/build/d1max_trajectory_tracker/test_results/d1max_trajectory_tracker/test_tracker_v2.gtest.xml",
+        "sha256": "3037ec8e393c303d35466e6f6a9408cd5c1dee25e4d4ee735935e8a1bc26f0f4",
+        "bytes": 28236,
+        "package": "d1max_trajectory_tracker",
+        "tests": 122,
+        "failures": 0,
+        "errors": 0,
+        "disabled": 0
+      },
+      {
+        "path": "/home/eric/wjg/d1max-build-isaac/nav/build/path_searching/test_results/path_searching/test_internal_search_anchor.gtest.xml",
+        "sha256": "33171e981f15d3d666d2c9fa382df08f535dc51a1e5b00c8b2d3bfa0dc634859",
+        "bytes": 1693,
+        "package": "path_searching",
+        "tests": 5,
+        "failures": 0,
+        "errors": 0,
+        "disabled": 0
+      },
+      {
+        "path": "/home/eric/wjg/d1max-build-isaac/nav/build/path_searching/test_results/path_searching/test_reference_lattice_connector.gtest.xml",
+        "sha256": "52116177fed27ca66089888a4172926d93e11afc309fcaa41a0b19cc8bec7ec3",
+        "bytes": 1803,
+        "package": "path_searching",
+        "tests": 7,
+        "failures": 0,
+        "errors": 0,
+        "disabled": 0
+      },
+      {
+        "path": "/home/eric/wjg/d1max-build-isaac/nav/build/path_searching/test_results/path_searching/test_search_endpoint.gtest.xml",
+        "sha256": "d13b9058eac5a2ca6ec487f2cdb68f1e39729b3d09fab416ef1fc139d79804f8",
+        "bytes": 2617,
+        "package": "path_searching",
+        "tests": 12,
+        "failures": 0,
+        "errors": 0,
+        "disabled": 0
+      },
+      {
+        "path": "/home/eric/wjg/d1max-build-isaac/nav/build/path_searching/test_results/path_searching/test_search_lattice.gtest.xml",
+        "sha256": "9e6d7b55c5b459be481dce0cbe4fc3a75f69b5be6d49b0f43a6150282604843f",
+        "bytes": 1055,
+        "package": "path_searching",
+        "tests": 4,
+        "failures": 0,
+        "errors": 0,
+        "disabled": 0
+      }
+    ],
+    "installed_python_xml": {
+      "path": "/home/eric/wjg/d1max-build-isaac/dot65_installed_python_ctest.xml",
+      "sha256": "c96325d0ccb83676a32f3b6e1ca443e99a0e30e6daf7e673ffdcf3a0dfd1b487",
+      "bytes": 10530,
+      "tests": 67,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    }
+  },
+  "installed_python": {
+    "import_verification": {
+      "path": "/home/eric/wjg/d1max-build-isaac/dot65_installed_python_import.json",
+      "sha256": "f89e52dcdeb56639c92184cec256f09140793840642dfeaa928404a23968d0c1",
+      "bytes": 434
+    },
+    "actual_module": {
+      "module": "d1max_pct_scan.braking_model",
+      "actual_import_path": "/home/eric/wjg/d1max-build-isaac/nav/install/d1max_pct_scan/lib/python3.10/site-packages/d1max_pct_scan/braking_model.py",
+      "sha256": "a5b403e56f6ce53d083853b35a31a66ea95e36d9cfd1ca26bda4618172278e64",
+      "source_sha256": "a5b403e56f6ce53d083853b35a31a66ea95e36d9cfd1ca26bda4618172278e64",
+      "source_equal": true,
+      "graph_started": false,
+      "tests_run": false
+    },
+    "test_log": {
+      "path": "/home/eric/wjg/d1max-build-isaac/dot65_installed_python_ctest.log",
+      "sha256": "583ebbeb9610bf5461d8646092cb5f1e1f42c035a9186d6096859ae06fe9b412",
+      "bytes": 189
+    }
+  },
+  "build_log": {
+    "path": "/home/eric/wjg/d1max-build-isaac/dot65_closure_build_and_tests.log",
+    "sha256": "8131c2e1f0413a42ae4c6c8c68c28c7c54698f9f2a0b5084078247a32a282d97",
+    "bytes": 79665
+  },
+  "preserved_bootstrap_failure_log": {
+    "path": "/home/eric/wjg/d1max-build-isaac/dot65_closure_build_bootstrap.log",
+    "sha256": "96f860d9c1e6c9d0206b6c3a428b479f3aec6be497e46586613c32f7c5f8c955",
+    "bytes": 79
+  },
+  "production_selector": {
+    "path": "/home/eric/wjg/d1max-system/d1max_nav_ws/deploy/single_floor_release.json",
+    "sha256": "6aeb6dd5b57a97de146fbf36260ad78210678f0befe6e1eee0be5f6524085f4a",
+    "bytes": 620,
+    "expected_sha256": "6aeb6dd5b57a97de146fbf36260ad78210678f0befe6e1eee0be5f6524085f4a",
+    "unchanged": true
+  },
+  "incomplete_projection_cap": {
+    "isolated_speed_limit_in_actual_prior_build_mps": 0.6,
+    "required_new_isolated_limit_mps": 0.65,
+    "header_line": 154,
+    "actual_build_mirror": {
+      "path": "/home/eric/wjg/d1max-build-isaac/nav-source/src/scan_planner_vendor/plan_manage/include/plan_manage/trajectory_collision.hpp",
+      "exists": true,
+      "resolved_path": "/home/eric/wjg/d1max-build-isaac/nav-source/src/scan_planner_vendor/plan_manage/include/plan_manage/trajectory_collision.hpp",
+      "bytes": 17662,
+      "sha256": "69539f37c7d22557d4861655ecfdebc1d414ff998758f502d218b07cf1fb6d15",
+      "mtime_ns": 1791296443576517572
+    },
+    "installed_header": {
+      "path": "/home/eric/wjg/d1max-build-isaac/nav/install/scan_planner/include/plan_manage/trajectory_collision.hpp",
+      "exists": true,
+      "resolved_path": "/home/eric/wjg/d1max-build-isaac/nav/install/scan_planner/include/plan_manage/trajectory_collision.hpp",
+      "bytes": 17662,
+      "sha256": "69539f37c7d22557d4861655ecfdebc1d414ff998758f502d218b07cf1fb6d15",
+      "mtime_ns": 1791296443000000000
+    },
+    "actual_planner_dependency_paths": [
+      "/home/eric/wjg/d1max-build-isaac/nav/build/scan_planner/CMakeFiles/scan_planner_node.dir/src/planner_manager.cpp.o.d",
+      "/home/eric/wjg/d1max-build-isaac/nav/build/scan_planner/CMakeFiles/scan_planner_node.dir/src/scan_planner_node.cpp.o.d",
+      "/home/eric/wjg/d1max-build-isaac/nav/build/scan_planner/CMakeFiles/scan_planner_node.dir/src/scan_replan_fsm.cpp.o.d"
+    ],
+    "later_repo_source_change_included_in_prior_freeze_validation": false,
+    "later_repo_source_change_requires_new_mirror_build_and_tests": true
+  },
+  "projection_fix_pending_new_build_and_tests": {
+    "source_frozen": true,
+    "files": [
+      {
+        "path": "/home/eric/wjg/d1max-system/d1max_nav_ws/src/scan_planner_vendor/plan_manage/include/plan_manage/trajectory_collision.hpp",
+        "sha256": "4ff22c6293be20cad924ef56428ca88d94a19642147c470f5c05c98bf25f9b4f",
+        "bytes": 17663
+      },
+      {
+        "path": "/home/eric/wjg/d1max-system/d1max_nav_ws/src/scan_planner_vendor/plan_manage/test/test_trajectory_collision.cpp",
+        "sha256": "2d412eee31dd27add22a0b3eb63073bbbee2c1142925dd80448b2bbebcc003ba",
+        "bytes": 22223
+      }
+    ],
+    "new_gtest_cases": 2,
+    "native_test_execution_claim": false,
+    "old_max_speed_mps": 0.6,
+    "new_explicit_profile_max_speed_mps": 0.65,
+    "default_profile_max_speed_mps": 0.3,
+    "old_record_uses_own_travel_cap": true
+  },
+  "audit_actions": {
+    "tests_run": false,
+    "native_build_run": false,
+    "ros_graph_started": false,
+    "kit_started": false,
+    "read_only_except_audit_reports": true
+  },
+  "notes": [
+    "Two zero-case launch wrappers returned success after node SIGINT; they provide no launch-function assertion coverage.",
+    "SDK build was explicitly isolated-execution-only; sdk_monitor_bridge is absent, so no live SDK closure is claimed.",
+    "Build/install ELF SHA differences are bound by matched BuildID and install RPATH_CHANGE evidence, rather than falsely claiming byte equality.",
+    "v47 zero-motion projection failure and historical .60 overspeed failures remain failures; this record grants no formal navigation or hardware acceptance."
+  ]
+}

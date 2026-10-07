@@ -1,7 +1,7 @@
 import hashlib
 import json
 import pytest
-from d1max_pct_scan.braking_model import load_model
+from d1max_pct_scan.braking_model import load_model, reference_model_limits
 
 
 def record(tmp_path,**changes):
@@ -76,6 +76,132 @@ def spot_record(tmp_path):
 def write_record(path,obj):
     raw=json.dumps(obj).encode();path.write_bytes(raw)
     return hashlib.sha256(raw).hexdigest()
+
+
+def reference_record(tmp_path,cap=.6,observed=.532):
+    path,obj=spot_record(tmp_path)
+    obj['isolated_full_xyz_reference_model']=dict(schema=1,kind='official_spot_physx',
+        source_scope='isolated_simulation_physx_measured_model',reference_max_speed_mps=cap,
+        measured_travel_max_speed_mps=cap,observed_max_full_xyz_speed_mps=observed,evidence_sha256='b'*64)
+    return path,obj
+
+
+@pytest.mark.parametrize('observed',[.508039,.532,.6])
+def test_explicit_xyz_domain_up_to_platform_reach_does_not_change_command_or_braking(tmp_path,observed):
+    path,obj=reference_record(tmp_path,observed=observed)
+    values=load_model(path,write_record(path,obj),'isolated_mock')
+    assert reference_model_limits(obj,'isolated_mock')==dict(reference_max_speed_mps=.6,
+        measured_travel_max_speed_mps=.6,observed_max_full_xyz_speed_mps=observed)
+    assert values['max_speed_mps']==.6 and values['max_yaw_radps']==.8
+    assert values['command_max_speed_mps']==.15 and values['command_max_yaw_radps']==.3
+    assert values['stop_latency_bound_s']==3. and values['stopping_distance_m']==.5
+    with pytest.raises(ValueError,match='cannot_authorize_real_robot'):
+        load_model(path,write_record(path,obj),'live')
+
+
+def test_absent_xyz_marker_preserves_legacy_without_inferring_platform_reach(tmp_path):
+    path,obj=spot_record(tmp_path)
+    assert reference_model_limits(obj,'isolated_mock') is None
+    assert load_model(path,write_record(path,obj),'isolated_mock')['command_max_speed_mps']==.15
+
+
+@pytest.mark.parametrize('field,value',[
+    ('reference_max_speed_mps',.600001),('measured_travel_max_speed_mps',.600001),
+    ('observed_max_full_xyz_speed_mps',.600001),('reference_max_speed_mps',0.),
+    ('measured_travel_max_speed_mps',True),('observed_max_full_xyz_speed_mps',float('nan')),
+    ('reference_max_speed_mps','0.6'),('schema',1.),('kind','official_go2_physx'),
+    ('source_scope','live'),('evidence_sha256','B'*64),('extra',True)])
+def test_xyz_reference_model_numbers_exact_marker_and_evidence_are_required(tmp_path,field,value):
+    path,obj=reference_record(tmp_path);obj['isolated_full_xyz_reference_model'][field]=value
+    with pytest.raises(ValueError):load_model(path,write_record(path,obj),'isolated_mock')
+
+
+@pytest.mark.parametrize('field',['reference_max_speed_mps','measured_travel_max_speed_mps',
+    'observed_max_full_xyz_speed_mps','evidence_sha256','schema','kind','source_scope'])
+def test_incomplete_xyz_model_never_falls_back_to_legacy(tmp_path,field):
+    path,obj=reference_record(tmp_path);obj['isolated_full_xyz_reference_model'].pop(field)
+    with pytest.raises(ValueError):load_model(path,write_record(path,obj),'isolated_mock')
+
+
+def test_xyz_domains_must_fit_same_hashed_reach_and_both_observation_and_command(tmp_path):
+    path,obj=reference_record(tmp_path)
+    obj['isolated_platform_model']['reachable_max_speed_mps']=.55;obj['measurements']['max_speed_mps']=.55
+    with pytest.raises(ValueError,match='invalid_isolated_reference_bound'):
+        load_model(path,write_record(path,obj),'isolated_mock')
+    for field in ('reference_max_speed_mps','measured_travel_max_speed_mps'):
+        path,obj=reference_record(tmp_path);obj['isolated_full_xyz_reference_model'][field]=.53
+        with pytest.raises(ValueError,match='evidence_domain_invalid'):
+            load_model(path,write_record(path,obj),'isolated_mock')
+        path,obj=reference_record(tmp_path,observed=.1);obj['isolated_full_xyz_reference_model'][field]=.14
+        with pytest.raises(ValueError,match='evidence_domain_invalid'):
+            load_model(path,write_record(path,obj),'isolated_mock')
+
+
+@pytest.mark.parametrize('observed',[.616161,.65])
+def test_calibrated_dot65_record_is_exact_hashed_isolated_domain(tmp_path,observed):
+    path,obj=reference_record(tmp_path,cap=.65,observed=observed)
+    obj['measurements']['max_speed_mps']=.65
+    obj['isolated_platform_model']['reachable_max_speed_mps']=.65
+    obj['isolated_platform_model'].update(command_max_speed_mps=.30,command_max_yaw_radps=.50)
+    digest=write_record(path,obj)
+    values=load_model(path,digest,'isolated_mock')
+    assert values['max_speed_mps']==.65
+    assert values['command_max_speed_mps']==.30 and values['command_max_yaw_radps']==.50
+    assert values['stopping_distance_m']==.5 and values['stop_latency_bound_s']==3.
+    assert reference_model_limits(obj,'isolated_mock')['observed_max_full_xyz_speed_mps']==observed
+    with pytest.raises(ValueError,match='cannot_authorize_real_robot'):
+        load_model(path,digest,'live')
+    with pytest.raises(ValueError,match='hash_mismatch'):
+        load_model(path,'a'*64,'isolated_mock')
+
+
+@pytest.mark.parametrize('field',[
+    'reference_max_speed_mps','measured_travel_max_speed_mps','observed_max_full_xyz_speed_mps'])
+def test_calibrated_dot65_reference_cap_remains_strict(tmp_path,field):
+    import math
+    path,obj=reference_record(tmp_path,cap=.65,observed=.616161)
+    obj['measurements']['max_speed_mps']=.65
+    obj['isolated_platform_model']['reachable_max_speed_mps']=.65
+    obj['isolated_full_xyz_reference_model'][field]=math.nextafter(.65,math.inf)
+    with pytest.raises(ValueError,match='invalid_isolated_reference_bound'):
+        load_model(path,write_record(path,obj),'isolated_mock')
+
+
+def test_old_dot60_record_cannot_accept_new_observation_or_reuse_old_hash(tmp_path):
+    path,obj=reference_record(tmp_path,observed=.6)
+    old_digest=write_record(path,obj)
+    obj['isolated_full_xyz_reference_model']['observed_max_full_xyz_speed_mps']=.616161
+    new_digest=write_record(path,obj)
+    with pytest.raises(ValueError,match='hash_mismatch'):
+        load_model(path,old_digest,'isolated_mock')
+    with pytest.raises(ValueError,match='invalid_isolated_reference_bound'):
+        load_model(path,new_digest,'isolated_mock')
+
+
+@pytest.mark.parametrize('mutation', ['reach_over_cap','measurement_mismatch','invalid_evidence','fixture','transport'])
+def test_calibrated_dot65_marker_measurement_and_evidence_guards(tmp_path,mutation):
+    import math
+    path,obj=reference_record(tmp_path,cap=.65,observed=.616161)
+    obj['measurements']['max_speed_mps']=.65
+    obj['isolated_platform_model']['reachable_max_speed_mps']=.65
+    if mutation=='reach_over_cap':
+        obj['measurements']['max_speed_mps']=math.nextafter(.65,math.inf)
+        obj['isolated_platform_model']['reachable_max_speed_mps']=obj['measurements']['max_speed_mps']
+    elif mutation=='measurement_mismatch':obj['measurements']['max_speed_mps']=.6
+    elif mutation=='invalid_evidence':obj['isolated_full_xyz_reference_model']['evidence_sha256']=''
+    elif mutation=='fixture':obj['fixture_only']=False
+    else:obj['transport_mode']='live'
+    with pytest.raises(ValueError):load_model(path,write_record(path,obj),'isolated_mock')
+
+
+@pytest.mark.parametrize('change',['platform','fixture','transport','schema_float'])
+def test_xyz_model_requires_original_platform_and_exact_isolated_fixture(tmp_path,change):
+    path,obj=reference_record(tmp_path)
+    if change=='platform':obj.pop('isolated_platform_model')
+    elif change=='fixture':obj['fixture_only']=False
+    elif change=='transport':obj['transport_mode']='live'
+    else:obj['schema_version']=3.0
+    with pytest.raises(ValueError):load_model(path,write_record(path,obj),'isolated_mock')
 
 
 def test_spot_actual_motion_is_separate_from_command_authority(tmp_path):

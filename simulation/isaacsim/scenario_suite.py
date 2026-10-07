@@ -22,7 +22,8 @@ import time
 
 from world_builder import (DEFAULT_WORLD, find_route, load_world, scenario_matrix,
                            scenario_spec, validate_world, voxel_budget)
-from collision_audit import encounter_contract, review_actual_encounter, validate_encounter_contract
+from collision_audit import (encounter_contract, review_actual_encounter,
+                            spot_exposure_speed_limit, validate_encounter_contract)
 
 HERE = Path(__file__).resolve().parent
 KIND = "isolated_isaac_scenario_input_v1"
@@ -49,6 +50,20 @@ def _case(spec, identifier):
     if case is None:
         raise ValueError("unknown_scenario:" + identifier)
     return case
+
+
+def case_actor_scope(spec, case):
+    """Separate required encounters from equally physical background actors."""
+    known = {actor['id'] for actor in spec['dynamic_actors']}
+    required = case.get('actor_ids')
+    background = case.get('background_actor_ids', [])
+    for values in (required, background):
+        if (not isinstance(values, list) or any(type(value) is not str for value in values)
+                or len(values) != len(set(values)) or not set(values).issubset(known)):
+            raise ValueError('invalid_scenario_actor_scope')
+    if set(required).intersection(background):
+        raise ValueError('overlapping_scenario_actor_scope')
+    return sorted(required), sorted(background), sorted(required + background)
 
 
 def ground_goals(spec, case):
@@ -102,12 +117,15 @@ def phases_for_case(spec, case, lengths=None):
 def list_cases(spec):
     rows = []
     for case in scenario_matrix(spec):
+        _, background, enabled = case_actor_scope(spec, case)
         lengths = static_segment_lengths(spec, case)
         rows.append(dict(id=case["id"], ground_goals=ground_goals(spec, case), actor_ids=case["actor_ids"],
                          static_route_length_m=sum(lengths), segment_lengths_m=lengths,
                          phase_timeout_source_s=[p["timeout_source_s"] for p in phases_for_case(spec, case, lengths)],
                          length_semantics="conservative_offline_static_whole_body_connectivity; not_executed_path",
                          timeout_source_s=case["timeout_source_s"], execution_status="pending"))
+        if 'background_actor_ids' in case:
+            rows[-1].update(background_actor_ids=background, enabled_actor_ids=enabled)
     return rows
 
 
@@ -115,7 +133,11 @@ def prepare_case(spec_path, identifier, output_config):
     source = Path(spec_path).resolve(strict=True)
     original = load_world(source)
     case = _case(original, identifier)
+    required, background, enabled = case_actor_scope(original, case)
     prepared = scenario_spec(original, identifier)
+    if 'background_actor_ids' in case:
+        for actor in prepared['dynamic_actors']:
+            actor['enabled'] = actor['id'] in enabled
     goals = ground_goals(original, case)
     prepared["robot"]["fixture_goal_annotation_xyz"] = list(original["robot"]["goal"])
     prepared["robot"]["fixture_goal_body_reference_height_m"] = original["robot"]["body_reference_height"]
@@ -125,7 +147,7 @@ def prepare_case(spec_path, identifier, output_config):
     selected["goals"] = copy.deepcopy(goals)
     prepared["scenario_suite_contract"] = dict(schema=1, kind=KIND, case_id=identifier,
         world_source_sha256=_sha(source), input_code_sha256={name: _sha(HERE / name) for name in ("world_builder.py", "scenario_suite.py", "collision_audit.py")},
-        seed=prepared["seed"], enabled_actor_ids=sorted(case["actor_ids"]),
+        seed=prepared["seed"], enabled_actor_ids=enabled,
         start_pose=prepared["robot"]["initial_pose"], goals=goals,
         fixture_goal_annotations_xyz=copy.deepcopy(case["goals"]),
         phases=phases_for_case(prepared, selected), timeout_source_s=case["timeout_source_s"],
@@ -134,10 +156,12 @@ def prepare_case(spec_path, identifier, output_config):
         navigation_command_limit_mps=prepared["robot"]["max_linear_speed"],
         timeout_scope="test_observation_only; original_BT_watchdogs_and_motion_leases_unchanged",
         stationarity_window_source_s=2., goal_tolerance_xy_m=.35,
-        actor_encounter_contract=encounter_contract(case["actor_ids"] if identifier in DYNAMIC_ENCOUNTER_CASES else []),
+        actor_encounter_contract=encounter_contract(required if identifier in DYNAMIC_ENCOUNTER_CASES else [], prepared),
         candidate_seal_required=True, runtime_pose_or_actor_switching_allowed=False,
         input_seal_scope="canonical_configuration_only; new_candidate_static_geometry_robot_and_runtime_seals_required",
         execution_status="pending", physical_robot_acceptance=False)
+    if 'background_actor_ids' in case:
+        prepared['scenario_suite_contract']['background_actor_ids'] = background
     prepared["scenario_suite_contract"]["configuration_sha256"] = configuration_digest(prepared)
     validate_world(prepared)
     target = Path(output_config).expanduser().absolute()
@@ -161,16 +185,25 @@ def verify_prepared(spec, identifier=None):
         raise ValueError("prepared_scenario_configuration_changed")
     if spec.get("active_scenario") != contract["case_id"]:
         raise ValueError("prepared_active_scenario_mismatch")
+    case = _case(spec, contract['case_id'])
+    required, background, enabled = case_actor_scope(spec, case)
+    if (('background_actor_ids' in case) != ('background_actor_ids' in contract)
+            or ('background_actor_ids' in case and contract['background_actor_ids'] != background)):
+        raise ValueError('prepared_background_actor_contract_changed')
+    if contract['enabled_actor_ids'] != enabled:
+        raise ValueError('prepared_actor_selection_changed')
     if sorted(a["id"] for a in spec["dynamic_actors"] if a["enabled"]) != contract["enabled_actor_ids"]:
         raise ValueError("prepared_actor_registry_changed")
     encounter = contract.get("actor_encounter_contract")
-    required = contract["enabled_actor_ids"] if contract["case_id"] in DYNAMIC_ENCOUNTER_CASES else []
+    required = required if contract["case_id"] in DYNAMIC_ENCOUNTER_CASES else []
     if encounter is None and required:
         raise ValueError("prepared_actor_encounter_contract_missing; fresh_prepare_required")
     if encounter is not None:
-        validate_encounter_contract(encounter, contract["enabled_actor_ids"])
+        validate_encounter_contract(encounter, contract["enabled_actor_ids"], spec)
         if encounter["required_actor_ids"] != required:
             raise ValueError("prepared_intended_encounter_actor_ids_changed")
+    if "record_full_physics_history" in spec["robot"] and type(spec["robot"]["record_full_physics_history"]) is not bool:
+        raise ValueError("invalid_sealed_full_physics_history_flag")
     if any(goal[2] != spec["floor"]["z"] for goal in contract["goals"]):
         raise ValueError("scenario_goals_must_be_ground_xyz")
     for index, phase in enumerate(contract.get("phases", [])):
@@ -179,6 +212,68 @@ def verify_prepared(spec, identifier=None):
                 or not isinstance(budget, (int, float)) or not math.isfinite(budget) or budget <= 0):
             raise ValueError("invalid_phase_source_budget")
     return contract
+
+
+def encounter_profile_model_binding(spec, session):
+    """Bind a new exposure metric to the session's exact model and body registry.
+
+    Preparation seals source evidence and geometry metadata. The model obtains
+    its session identity/hash at runtime; historical legacy cases never opt in.
+    """
+    contract = verify_prepared(spec).get("actor_encounter_contract") or {}
+    profile = contract.get("profile")
+    if profile is None:
+        return None
+    expected_speed = spot_exposure_speed_limit(profile.get('kind'))
+    if (any(profile.get(key) != expected_speed for key in ('reference_max_speed_mps',
+            'measured_travel_max_speed_mps', 'reachable_max_speed_mps'))
+            or profile.get('reachable_max_yaw_radps') != .8):
+        raise ValueError('spot_encounter_session_model_source_domain_mismatch')
+    from d1max_pct_scan.braking_model import reference_model_limits
+    path = Path(session.get("execution_braking_model_record") or "")
+    if not path.is_absolute():
+        raise ValueError("spot_encounter_session_model_missing")
+    with path.open("rb") as stream:
+        raw = stream.read(1024*1024+1)
+    if not raw or len(raw) > 1024*1024:
+        raise ValueError("spot_encounter_session_model_size_invalid")
+    digest = hashlib.sha256(raw).hexdigest()
+    inputs = session.get("input_hashes")
+    if (not isinstance(inputs, dict) or digest != session.get("execution_braking_model_sha256")
+            or inputs.get(str(path)) != digest):
+        raise ValueError("spot_encounter_session_model_hash_mismatch")
+    record = json.loads(raw)
+    if (not isinstance(record, dict) or not session.get("id") or record.get("session_id") != session["id"]
+            or session.get("simulation_backend") != "isaacsim_physx"
+            or session.get("simulation_clock") != "isaac_fixed_anchor_v1"
+            or session.get("transport_mode") != "isolated_mock"
+            or session.get("physical_acceptance") is not False):
+        raise ValueError("spot_encounter_session_model_identity_mismatch")
+    reference = reference_model_limits(record, session["transport_mode"])
+    platform = record.get("isolated_platform_model", {})
+    if (reference is None
+            or record["isolated_full_xyz_reference_model"]["evidence_sha256"] != profile["source_reference_evidence_sha256"]
+            or any(reference[key] != profile[key] for key in ("reference_max_speed_mps", "measured_travel_max_speed_mps"))
+            or any(platform[key] != profile[key] for key in ("reachable_max_speed_mps", "reachable_max_yaw_radps"))
+            or platform["command_max_speed_mps"] != session.get("max_speed_mps")
+            or platform["command_max_yaw_radps"] != session.get("max_yaw_radps")
+            or session.get("max_speed_mps") != spec["robot"]["max_linear_speed"]
+            or session.get("max_yaw_radps") != spec["robot"]["max_angular_speed"]):
+        raise ValueError("spot_encounter_session_model_source_domain_mismatch")
+    prior = session.get("static_collision_prior_contract", {})
+    registry = spec.get("robot_collision_registry")
+    registry_sha = hashlib.sha256(_canonical(registry)).hexdigest()
+    if (not isinstance(registry, dict) or not registry.get("colliders")
+            or prior.get("body_envelope_registry_sha256") != registry_sha
+            or prior.get("body_envelope") != profile["body_envelope"]
+            or session.get("body_height") != profile["body_reference_height_m"]):
+        raise ValueError("spot_encounter_session_body_envelope_mismatch")
+    return dict(profile=profile["kind"], session_id=session["id"],
+        execution_braking_model_sha256=digest,
+        source_reference_evidence_sha256=profile["source_reference_evidence_sha256"],
+        body_envelope_metadata_sha256=profile["body_envelope_metadata_sha256"],
+        actual_robot_collision_registry_sha256=registry_sha,
+        interpretation="actual_sampled_encounter_exposure_only; not_route_blocking")
 
 
 def _new_json(path, value):
@@ -234,6 +329,17 @@ def evaluate_case(prepared_spec, session_dir):
                 and session.get("simulation_backend") == "isaacsim_physx"
                 and session.get("transport_mode") == "isolated_mock")
             check("sealed_same_scene", "passed" if same else "failed", "" if same else "foreign_or_changed_sealed_scene", str(scene_path))
+        if "profile" in (contract.get("actor_encounter_contract") or {}):
+            if session is None or execution is None:
+                check("sealed_spot_encounter_profile_model", "pending", "same_session_model_and_execution_binding_missing")
+            else:
+                try:
+                    binding = encounter_profile_model_binding(prepared_spec, session)
+                    if execution.get("encounter_profile_model_binding") != binding:
+                        raise ValueError("spot_encounter_execution_model_binding_changed")
+                    check("sealed_spot_encounter_profile_model", "passed", evidence=binding)
+                except (ValueError, TypeError, KeyError, OSError) as exc:
+                    check("sealed_spot_encounter_profile_model", "failed", str(exc))
         if execution is None:
             check("single_session_ordered_actions", "pending", "no_suite_execution_record")
         else:
@@ -344,6 +450,26 @@ def evaluate_case(prepared_spec, session_dir):
             check("fresh_ordered_task_identities_and_source_deadline", "passed" if ordered and unique and timed and resumed else "failed", "" if ordered and unique and timed and resumed else "task_order_identity_or_source_deadline_failed")
         else:
             check("fresh_ordered_task_identities_and_source_deadline", "pending", "original_action_source_events_incomplete")
+        if prepared_spec["robot"].get("record_full_physics_history") is True:
+            manifest_path = session_dir / "physics/policy_history_manifest.json"
+            raw_path = session_dir / "physics/policy_component_state_500hz.jsonl"
+            model_path = Path((session or {}).get("execution_braking_model_record") or "")
+            if (session is None or not sent_stamps or not terminal_stamps
+                    or any(s is None for s in sent_stamps+terminal_stamps)
+                    or not manifest_path.is_file() or not raw_path.is_file() or not model_path.is_file()):
+                check("independent_full_physics_motion_domain_and_stop", "pending", "bound_original_500Hz_BEGIN_END_or_action_model_evidence_missing")
+            else:
+                try:
+                    from navigation_physics_audit import audit_navigation_physics_files
+                    physics = audit_navigation_physics_files(session_dir / "session.json",
+                        action_interval_ns=(min(sent_stamps),max(terminal_stamps)))
+                    valid_result = (isinstance(physics, dict) and type(physics.get("verified")) is bool
+                        and isinstance(physics.get("errors"), list) and all(isinstance(s,str) for s in physics["errors"]))
+                    verified = valid_result and physics["verified"] is True and not physics["errors"]
+                    reason = "" if verified else ";".join(physics["errors"]) if valid_result else "invalid_independent_physics_audit_result"
+                    check("independent_full_physics_motion_domain_and_stop", "passed" if verified else "failed", reason, physics)
+                except (ValueError, KeyError, TypeError, OSError, ImportError) as exc:
+                    check("independent_full_physics_motion_domain_and_stop", "failed", "invalid_original_physics_evidence:"+str(exc))
         collision_path = session_dir / "physics/collision_audit.json"
         collision = _read(collision_path)
         bound = False
@@ -388,7 +514,10 @@ def evaluate_case(prepared_spec, session_dir):
                     check("intended_dynamic_encounter_observed", "pending" if observed is None else "passed" if observed else "failed",
                         "encounter_sampling_or_audit_incomplete" if observed is None else "" if observed else "intended_sampled_proximity_encounter_not_exercised_during_original_action_interval",
                         dict(collision_audit_sha256=_sha(collision_path), source="actual_registered_link_and_actor_geometry",
-                             scope="sampled_same_step_primitive_center_proximity_only", selected_exact_pair_witnesses=selected))
+                             scope="sampled_same_step_primitive_center_proximity_only", selected_exact_pair_witnesses=selected,
+                             **(dict(near_center_distance_m=contract["actor_encounter_contract"]["near_center_distance_m"],
+                                     profile=contract["actor_encounter_contract"]["profile"])
+                                if "profile" in contract["actor_encounter_contract"] else {})))
                 except (ValueError, KeyError, TypeError) as exc:
                     check("intended_dynamic_encounter_observed", "failed", "invalid_actual_encounter_evidence:" + str(exc), str(collision_path))
         if summary is None:
@@ -435,6 +564,7 @@ def execute_case(session_dir, identifier):
         raise ValueError("sealed_scene_changed")
     spec = json.loads(scene.read_text())
     contract = verify_prepared(spec, identifier)
+    profile_binding = encounter_profile_model_binding(spec, session)
     smoke = HERE / "smoke.py"
     if not all(flag in smoke.read_text() for flag in ("--trace-output", "--cancel-source-time-s", "--stationary-window-s", "--source-duration-s")):
         raise ValueError("frozen_smoke_has_no_multi_goal_source_evidence_interface")
@@ -445,6 +575,8 @@ def execute_case(session_dir, identifier):
                   event_clock=contract["event_clock"], actor_clock=contract["actor_clock"],
                   scene_clock_anchor_ns=session["isaac_bridge_contract"]["clock_anchor_ns"],
                   timeout_scope=contract["timeout_scope"])
+    if profile_binding is not None:
+        record["encounter_profile_model_binding"] = profile_binding
     record_path = output / "execution.json"
     _new_json(record_path, record)
     def save():

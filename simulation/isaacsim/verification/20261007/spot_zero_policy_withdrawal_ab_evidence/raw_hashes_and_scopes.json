@@ -1,0 +1,51 @@
+{
+  "schema": 1,
+  "raw_large_files_not_copied": true,
+  "frozen_command_sha256": "6a9d175c01b09708fddf7327c08e7732a7b97790fcb66e320c65e12cf64f466c",
+  "frozen_prefix": {
+    "kind": "original_actual_500hz_source_prefix",
+    "explicit_prefix": true,
+    "original_source_tick_count": 43412,
+    "selected_source_tick_count": 43410,
+    "excluded_tail_tick_count": 2,
+    "source_origin_ns": 0,
+    "excluded_events_count": 1,
+    "timestamps_modified": false,
+    "original_records_modified": false
+  },
+  "streams": [
+    {
+      "run": "original",
+      "raw500_sha256": "23eac6beca478fe6e5b0497f37000c6d5367ebe3701c55b5674fc703c27bbbd1",
+      "BEGIN_count": 43412,
+      "actual_END_count": 1,
+      "command_events_sha256": "a6b9fa1f51ac3ee97aa5ff0a1d7356e577e60b6f5ec58be02ee157627b81e804",
+      "observations_sha256": "290846abe5161b3c1d4e6f0ea12efb2f63b3db268936857bb5b31f10dfce9c72",
+      "actor_readings_sha256": "0559e6310e61971689b08ba3d346f47c7deb4d99112ce1c5277f7702f454d68a",
+      "robot_links_sha256": "303e11d7c543376c72ab27e2e7410e464e2515284ad02486d929ff15510f8466",
+      "manifest_sha256": "f6bbec8fc976482502b26dfe052502f74a46902718bd3a2f9acfcf0a9f5dd9f6"
+    },
+    {
+      "run": "baseline",
+      "raw500_sha256": "4ae9721022718d5358ccc4b2a82d79c1cf7ca145c037d9e4a8f220eb4b4ab895",
+      "BEGIN_count": 43410,
+      "actual_END_count": 1,
+      "command_events_sha256": "57aa79f29be1645806e6645434cebde73b35d7d2e8d5bc7dc03d6429186d92e3",
+      "observations_sha256": "408b54606c2ea6194938f43abeef30d9d03aa44e3d6ef38965393919ab6ebd67",
+      "actor_readings_sha256": "0559e6310e61971689b08ba3d346f47c7deb4d99112ce1c5277f7702f454d68a",
+      "robot_links_sha256": "303e11d7c543376c72ab27e2e7410e464e2515284ad02486d929ff15510f8466",
+      "manifest_sha256": "f6c888238808c09a1dbafabe9470ac695d8721956dc286c3a75a0bb5033caa68"
+    },
+    {
+      "run": "alternative",
+      "raw500_sha256": "01d294ffef90defcd2a37212fc8888dc9d49e29aaa1c383e67d49ae3f7548972",
+      "BEGIN_count": 43410,
+      "actual_END_count": 1,
+      "command_events_sha256": "934838292fb971de04e4527b5f2727fdc0350a0396ae2229514601e5d340ed83",
+      "observations_sha256": "6cc1614bf548ce21f4df7da1cd1e613d04bc828b0ab05245936acbab31b9ecbc",
+      "actor_readings_sha256": "0559e6310e61971689b08ba3d346f47c7deb4d99112ce1c5277f7702f454d68a",
+      "robot_links_sha256": "755c36809d4bc6ee5220868a559fa57418fee17c61cc06931f63f597c6c39236",
+      "manifest_sha256": "bf0a9adbf07c14894c4448d926b16d95c03786fdce45ef7aefb66346372d61d7"
+    }
+  ]
+}

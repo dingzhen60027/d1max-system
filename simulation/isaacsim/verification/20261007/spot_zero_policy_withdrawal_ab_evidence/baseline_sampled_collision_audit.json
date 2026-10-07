@@ -1,0 +1,497 @@
+{
+  "schema": 1,
+  "scope": "sampled_actual_link_geometry_static_and_actor",
+  "completed": true,
+  "continuous_collision_proof": false,
+  "separation_method": "strict_closed_AABB_separation_of_actual_transformed_primitives",
+  "numerical_outward_margin_m": 1e-06,
+  "floor_contact_scope": "excluded_explicit_support_plane_requires_separate_contact_certificate",
+  "robot_kind": "official_spot_physx",
+  "session_id": "a7a35db297f84fe6becd3f6f1cb65c2b",
+  "spec_sha256": "cab62b35067fa14dab4da90733c4be3b824aed95b027a7d3345edbc5497f626e",
+  "spec_canonical_sha256": "58618754c56de96cf0bb1df69ffbf9023ea9ad2685dfbe1a792bc2b5550de7d3",
+  "trajectory_sha256": "2f7f3b74e30021e07a90cf0b3112438d702cd1b9554d8293b447310cb142c79c",
+  "robot_collision_registry_sha256": "e68b27ca3e0a30c3bdbaeb43414ae4a19674f9661adb167cc6bd0e38ab6ebc76",
+  "actor_collision_registry_sha256": "96b092886099b5b2c0904ce86c34d607167c8cee28865d318455c88bc7aea734",
+  "actor_ids": [
+    "door_blocking_cart",
+    "office_person",
+    "oncoming_cart",
+    "plaza_cart",
+    "plaza_person",
+    "warehouse_forklift"
+  ],
+  "sample_count": 5210,
+  "trajectory_sample_count": 5210,
+  "trajectory_sources_all_audited": true,
+  "source_begin_ns": 1791378794235157156,
+  "source_end_ns": 1791378881037157156,
+  "max_source_sampling_gap_ns": 20000000,
+  "actual_actor_encounter": {
+    "schema": 1,
+    "rule": "measured_primitive_center_approach_near_depart_v1",
+    "source": "actual_registered_link_and_actor_geometry",
+    "scope": "sampled_same_step_primitive_center_proximity_only",
+    "completed": true,
+    "required_actor_ids": [
+      "plaza_person"
+    ],
+    "contract_sha256": "02628470adb3accc5cd7d930fb5a44b1a1420d238eb9996c95bbc100ea6b1c49",
+    "observed": true,
+    "actors": [
+      {
+        "actor_id": "plaza_person",
+        "observed": true,
+        "witnesses": [
+          {
+            "actor_id": "plaza_person",
+            "robot_path": "/World/Spot/fr_lleg/collisions/mesh_1",
+            "actor_shape_path": "/World/Dynamic/plaza_person/body",
+            "approach_start": {
+              "sim_time_ns": 33780000000,
+              "source_stamp_ns": 1791378827997157156,
+              "actor_id": "plaza_person",
+              "robot_path": "/World/Spot/fr_lleg/collisions/mesh_1",
+              "actor_shape_path": "/World/Dynamic/plaza_person/body",
+              "robot_center_m": [
+                -2.68127669607063,
+                -5.16447631173119,
+                0.19287314705172573
+              ],
+              "actor_center_m": [
+                0.0,
+                -7.594708442687988,
+                0.8
+              ],
+              "center_distance_m": 3.669315460245566
+            },
+            "near_begin": {
+              "sim_time_ns": 34780000000,
+              "source_stamp_ns": 1791378828997157156,
+              "actor_id": "plaza_person",
+              "robot_path": "/World/Spot/fr_lleg/collisions/mesh_1",
+              "actor_shape_path": "/World/Dynamic/plaza_person/body",
+              "robot_center_m": [
+                -2.472621675966573,
+                -5.100075714244897,
+                0.18086713798020754
+              ],
+              "actor_center_m": [
+                0.0,
+                -6.665237903594971,
+                0.8
+              ],
+              "center_distance_m": 2.9911396042752134
+            },
+            "near_end": {
+              "sim_time_ns": 38000000000,
+              "source_stamp_ns": 1791378832217157156,
+              "actor_id": "plaza_person",
+              "robot_path": "/World/Spot/fr_lleg/collisions/mesh_1",
+              "actor_shape_path": "/World/Dynamic/plaza_person/body",
+              "robot_center_m": [
+                -2.4708189564738268,
+                -5.098993934873937,
+                0.18208063320498147
+              ],
+              "actor_center_m": [
+                0.0,
+                -3.518249988555908,
+                0.8
+              ],
+              "center_distance_m": 2.9975860426936642
+            },
+            "closest": {
+              "sim_time_ns": 36400000000,
+              "source_stamp_ns": 1791378830617157156,
+              "actor_id": "plaza_person",
+              "robot_path": "/World/Spot/fr_lleg/collisions/mesh_1",
+              "actor_shape_path": "/World/Dynamic/plaza_person/body",
+              "robot_center_m": [
+                -2.4723663796178017,
+                -5.0989271979611095,
+                0.1810754166094372
+              ],
+              "actor_center_m": [
+                0.0,
+                -5.1056342124938965,
+                0.8
+              ],
+              "center_distance_m": 2.5486679146239437
+            },
+            "departure_end": {
+              "sim_time_ns": 38100000000,
+              "source_stamp_ns": 1791378832317157156,
+              "actor_id": "plaza_person",
+              "robot_path": "/World/Spot/fr_lleg/collisions/mesh_1",
+              "actor_shape_path": "/World/Dynamic/plaza_person/body",
+              "robot_center_m": [
+                -2.472195044961062,
+                -5.098980213815969,
+                0.18120453286990285
+              ],
+              "actor_center_m": [
+                0.0,
+                -3.4179627895355225,
+                0.8
+              ],
+              "center_distance_m": 3.0529454222447625
+            },
+            "near_sample_count": 194,
+            "near_maximum_center_distance_m": 2.9975860426936642
+          }
+        ]
+      }
+    ],
+    "truncated_actor_ids": [],
+    "maximum_source_sampling_gap_ns": 20000000,
+    "source_begin_ns": 1791378794235157156,
+    "source_end_ns": 1791378881037157156,
+    "source_anchor_ns": 1791378794217157156,
+    "session_id": "a7a35db297f84fe6becd3f6f1cb65c2b",
+    "scene_sha256": "cab62b35067fa14dab4da90733c4be3b824aed95b027a7d3345edbc5497f626e",
+    "robot_collision_registry_sha256": "e68b27ca3e0a30c3bdbaeb43414ae4a19674f9661adb167cc6bd0e38ab6ebc76",
+    "actor_collision_registry_sha256": "96b092886099b5b2c0904ce86c34d607167c8cee28865d318455c88bc7aea734",
+    "observation_status": "completed",
+    "limitations": [
+      "sampled_proximity_only",
+      "not_route_blocking_or_yield_or_contact_evidence",
+      "caller_binds_actual_snapshots_to_same_physics_step"
+    ],
+    "profile": {
+      "body_envelope": {
+        "above": 0.589,
+        "offset": 0.3125,
+        "radius": 0.6078651750202781,
+        "support_floor_z": 0.0,
+        "support_penetration_m": 0.02
+      },
+      "body_envelope_metadata_sha256": "913fe1289cf8ad86926331d6a1ec815b5051b4752766b3637489656ff1bd169b",
+      "body_reference_height_m": 0.481,
+      "interpretation": "actual_sampled_encounter_exposure_only; not_route_blocking",
+      "kind": "isolated_spot_reachable65_3m_exposure_v1",
+      "measured_travel_max_speed_mps": 0.65,
+      "rationale": "explicit_recalibrated_.65_fixture_sampled_exposure; legacy_.60_profile_and_2m_unchanged",
+      "reachable_max_speed_mps": 0.65,
+      "reachable_max_yaw_radps": 0.8,
+      "reference_max_speed_mps": 0.65,
+      "robot_kind": "official_spot_physx",
+      "runtime_exact_model_and_registered_body_binding_required": true,
+      "schema": 1,
+      "source_reference_evidence_sha256": "44e56925dd1f4b78a4d3994701b1700429e00c3fd7f80b26ddcb86e321b97262"
+    }
+  },
+  "non_floor_static_penetration_count": 0,
+  "dynamic_penetration_count": null,
+  "possible_overlap_counts": {
+    "static": 0,
+    "dynamic": 346
+  },
+  "possible_overlap_sample_counts": {
+    "static": 0,
+    "dynamic": 145
+  },
+  "checked_pair_counts": {
+    "static": 5824780,
+    "dynamic": 1151410
+  },
+  "possible_overlap_examples": [
+    {
+      "kind": "dynamic",
+      "sim_time_ns": 82818000000,
+      "source_stamp_ns": 1791378877035157156,
+      "robot_path": "/World/Spot/body/collisions/mesh_0",
+      "obstacle_path": "/World/Dynamic/plaza_person/body",
+      "aabb_intersection_min": [
+        -0.28000099999999994,
+        -4.614344433380127,
+        0.4166039375351437
+      ],
+      "aabb_intersection_max": [
+        0.258570065841158,
+        -4.59981966344902,
+        0.5578635784102909
+      ],
+      "classification": "potential_overlap_unresolved"
+    },
+    {
+      "kind": "dynamic",
+      "sim_time_ns": 82820000000,
+      "source_stamp_ns": 1791378877037157156,
+      "robot_path": "/World/Spot/body/collisions/mesh_0",
+      "obstacle_path": "/World/Dynamic/plaza_person/body",
+      "aabb_intersection_min": [
+        -0.28000099999999994,
+        -4.616329029632569,
+        0.41660373511506577
+      ],
+      "aabb_intersection_max": [
+        0.2585700050734746,
+        -4.599819581696573,
+        0.5578636616210794
+      ],
+      "classification": "potential_overlap_unresolved"
+    },
+    {
+      "kind": "dynamic",
+      "sim_time_ns": 82840000000,
+      "source_stamp_ns": 1791378877057157156,
+      "robot_path": "/World/Spot/body/collisions/mesh_0",
+      "obstacle_path": "/World/Dynamic/plaza_person/body",
+      "aabb_intersection_min": [
+        -0.28000099999999994,
+        -4.636174038482666,
+        0.4166027689245313
+      ],
+      "aabb_intersection_max": [
+        0.2585696762336357,
+        -4.599818035446416,
+        0.557864031765166
+      ],
+      "classification": "potential_overlap_unresolved"
+    },
+    {
+      "kind": "dynamic",
+      "sim_time_ns": 82860000000,
+      "source_stamp_ns": 1791378877077157156,
+      "robot_path": "/World/Spot/body/collisions/mesh_0",
+      "obstacle_path": "/World/Dynamic/plaza_person/body",
+      "aabb_intersection_min": [
+        -0.28000099999999994,
+        -4.656012371612549,
+        0.4166016536202097
+      ],
+      "aabb_intersection_max": [
+        0.2585690472770606,
+        -4.59981710045436,
+        0.5578643722091056
+      ],
+      "classification": "potential_overlap_unresolved"
+    },
+    {
+      "kind": "dynamic",
+      "sim_time_ns": 82880000000,
+      "source_stamp_ns": 1791378877097157156,
+      "robot_path": "/World/Spot/body/collisions/mesh_0",
+      "obstacle_path": "/World/Dynamic/plaza_person/body",
+      "aabb_intersection_min": [
+        -0.28000099999999994,
+        -4.675845459533692,
+        0.4166003766338132
+      ],
+      "aabb_intersection_max": [
+        0.2585684389302646,
+        -4.5998151132059375,
+        0.5578657088001469
+      ],
+      "classification": "potential_overlap_unresolved"
+    },
+    {
+      "kind": "dynamic",
+      "sim_time_ns": 82900000000,
+      "source_stamp_ns": 1791378877117157156,
+      "robot_path": "/World/Spot/body/collisions/mesh_0",
+      "obstacle_path": "/World/Dynamic/plaza_person/body",
+      "aabb_intersection_min": [
+        -0.28000099999999994,
+        -4.695672825408936,
+        0.41500529350593135
+      ],
+      "aabb_intersection_max": [
+        0.2590558470570351,
+        -4.599481426545654,
+        0.5607435434882398
+      ],
+      "classification": "potential_overlap_unresolved"
+    },
+    {
+      "kind": "dynamic",
+      "sim_time_ns": 82900000000,
+      "source_stamp_ns": 1791378877117157156,
+      "robot_path": "/World/Spot/fl_uleg/collisions/mesh_0",
+      "obstacle_path": "/World/Dynamic/plaza_person/body",
+      "aabb_intersection_min": [
+        -0.03368764945942039,
+        -4.695672825408936,
+        0.2689809764950971
+      ],
+      "aabb_intersection_max": [
+        0.22188791465490845,
+        -4.695597372397364,
+        0.5570705031309467
+      ],
+      "classification": "potential_overlap_unresolved"
+    },
+    {
+      "kind": "dynamic",
+      "sim_time_ns": 82918000000,
+      "source_stamp_ns": 1791378877135157156,
+      "robot_path": "/World/Spot/body/collisions/mesh_0",
+      "obstacle_path": "/World/Dynamic/plaza_person/body",
+      "aabb_intersection_min": [
+        -0.28000099999999994,
+        -4.713512257171631,
+        0.4111184786995465
+      ],
+      "aabb_intersection_max": [
+        0.26030649730405847,
+        -4.600056226255085,
+        0.5711320925513691
+      ],
+      "classification": "potential_overlap_unresolved"
+    },
+    {
+      "kind": "dynamic",
+      "sim_time_ns": 82918000000,
+      "source_stamp_ns": 1791378877135157156,
+      "robot_path": "/World/Spot/fl_uleg/collisions/mesh_0",
+      "obstacle_path": "/World/Dynamic/plaza_person/body",
+      "aabb_intersection_min": [
+        -0.03280649841569183,
+        -4.713512257171631,
+        0.2675091711882992
+      ],
+      "aabb_intersection_max": [
+        0.22333496042009499,
+        -4.713443786149374,
+        0.5592470955520935
+      ],
+      "classification": "potential_overlap_unresolved"
+    },
+    {
+      "kind": "dynamic",
+      "sim_time_ns": 82920000000,
+      "source_stamp_ns": 1791378877137157156,
+      "robot_path": "/World/Spot/body/collisions/mesh_0",
+      "obstacle_path": "/World/Dynamic/plaza_person/body",
+      "aabb_intersection_min": [
+        -0.28000099999999994,
+        -4.715493992401123,
+        0.4109592831552204
+      ],
+      "aabb_intersection_max": [
+        0.2603755772086406,
+        -4.600332521220996,
+        0.5721193754255597
+      ],
+      "classification": "potential_overlap_unresolved"
+    },
+    {
+      "kind": "dynamic",
+      "sim_time_ns": 82920000000,
+      "source_stamp_ns": 1791378877137157156,
+      "robot_path": "/World/Spot/fl_uleg/collisions/mesh_0",
+      "obstacle_path": "/World/Dynamic/plaza_person/body",
+      "aabb_intersection_min": [
+        -0.03259790587812761,
+        -4.715493992401123,
+        0.2674014288799021
+      ],
+      "aabb_intersection_max": [
+        0.22345604532859115,
+        -4.7153350360187885,
+        0.5595555251947049
+      ],
+      "classification": "potential_overlap_unresolved"
+    },
+    {
+      "kind": "dynamic",
+      "sim_time_ns": 82940000000,
+      "source_stamp_ns": 1791378877157157156,
+      "robot_path": "/World/Spot/body/collisions/mesh_0",
+      "obstacle_path": "/World/Dynamic/plaza_person/body",
+      "aabb_intersection_min": [
+        -0.28000099999999994,
+        -4.7353094373474125,
+        0.4106024864148273
+      ],
+      "aabb_intersection_max": [
+        0.2607267442452665,
+        -4.603816773435634,
+        0.5814368364382612
+      ],
+      "classification": "potential_overlap_unresolved"
+    },
+    {
+      "kind": "dynamic",
+      "sim_time_ns": 82940000000,
+      "source_stamp_ns": 1791378877157157156,
+      "robot_path": "/World/Spot/fl_uleg/collisions/mesh_0",
+      "obstacle_path": "/World/Dynamic/plaza_person/body",
+      "aabb_intersection_min": [
+        -0.03130618445177337,
+        -4.7353094373474125,
+        0.2664659901647206
+      ],
+      "aabb_intersection_max": [
+        0.2245019995291017,
+        -4.735285987908479,
+        0.5621363145190018
+      ],
+      "classification": "potential_overlap_unresolved"
+    },
+    {
+      "kind": "dynamic",
+      "sim_time_ns": 82960000000,
+      "source_stamp_ns": 1791378877177157156,
+      "robot_path": "/World/Spot/body/collisions/mesh_0",
+      "obstacle_path": "/World/Dynamic/plaza_person/body",
+      "aabb_intersection_min": [
+        -0.28000099999999994,
+        -4.755118683410645,
+        0.4115259089135365
+      ],
+      "aabb_intersection_max": [
+        0.2605942330886642,
+        -4.608087658187709,
+        0.5897414050436779
+      ],
+      "classification": "potential_overlap_unresolved"
+    },
+    {
+      "kind": "dynamic",
+      "sim_time_ns": 82960000000,
+      "source_stamp_ns": 1791378877177157156,
+      "robot_path": "/World/Spot/fl_uleg/collisions/mesh_0",
+      "obstacle_path": "/World/Dynamic/plaza_person/body",
+      "aabb_intersection_min": [
+        -0.029926278321993002,
+        -4.755118683410645,
+        0.2660213357868537
+      ],
+      "aabb_intersection_max": [
+        0.22495446977331388,
+        -4.755018373049255,
+        0.5649669957967561
+      ],
+      "classification": "potential_overlap_unresolved"
+    },
+    {
+      "kind": "dynamic",
+      "sim_time_ns": 82980000000,
+      "source_stamp_ns": 1791378877197157156,
+      "robot_path": "/World/Spot/body/collisions/mesh_0",
+      "obstacle_path": "/World/Dynamic/plaza_person/body",
+      "aabb_intersection_min": [
+        -0.28000099999999994,
+        -4.774922207427979,
+        0.4125938412665711
+      ],
+      "aabb_intersection_max": [
+        0.26001250604423504,
+        -4.61418428798588,
+        0.5968985560417785
+      ],
+      "classification": "potential_overlap_unresolved"
+    }
+  ],
+  "min_static_separation_lower_bound_m": 2.7694565922068826,
+  "min_actor_separation_lower_bound_m": 0.0,
+  "faults": [],
+  "limitations": [
+    "sampled_times_only",
+    "AABB_overlap_is_unresolved_not_measured_penetration",
+    "encounter_is_sampled_proximity_only",
+    "caller_binds_snapshots_to_same_physics_step"
+  ]
+}

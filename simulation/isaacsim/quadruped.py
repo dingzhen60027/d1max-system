@@ -41,7 +41,8 @@ class VelocityFeedback:
         self.limits = np.asarray([max_policy_linear, max_policy_angular], dtype=float)
         if not np.isfinite(self.limits).all() or np.any(self.limits <= 0):
             raise ValueError('invalid_policy_velocity_limits')
-        if mode not in ('legacy_pi_v1', 'spot_nonlinear_measured_v1', 'spot_monotone_measured_v2'):
+        if mode not in ('legacy_pi_v1', 'spot_nonlinear_measured_v1',
+                        'spot_monotone_measured_v2', 'spot_monotone_measured_v3'):
             raise ValueError('invalid_velocity_feedback_mode')
         self.mode = mode
         self.kp = np.asarray([.35, .5])
@@ -53,6 +54,20 @@ class VelocityFeedback:
         self.integral = np.zeros(2)
         self.filtered = None
 
+    def withdraw_zero_axes(self, desired):
+        """v3 withdraws an exact-zero axis, including its integral history.
+
+        This is command withdrawal, not a measured stationary certificate.
+        The plant calls it on every original tick, including ticks between
+        official inferences; measured filtering and policy phase stay intact.
+        """
+        desired = np.asarray(desired, dtype=float)
+        if desired.shape != (2,) or not np.isfinite(desired).all():
+            raise ValueError('invalid_velocity_feedback_sample')
+        axes = desired == 0. if self.mode == 'spot_monotone_measured_v3' else np.zeros(2, dtype=bool)
+        self.integral[axes] = 0.
+        return axes
+
     def base_linear_policy_demand(self, desired_vx):
         """Signed static mapping before measured feedback and saturation.
 
@@ -63,7 +78,7 @@ class VelocityFeedback:
         """
         if self.mode == 'spot_nonlinear_measured_v1':
             return desired_vx + .25 * math.tanh(desired_vx / .005) * math.exp(-abs(desired_vx) / .15)
-        if self.mode == 'spot_monotone_measured_v2':
+        if self.mode in ('spot_monotone_measured_v2', 'spot_monotone_measured_v3'):
             return 2. * desired_vx
         return desired_vx
 
@@ -82,14 +97,14 @@ class VelocityFeedback:
         if self.mode == 'spot_nonlinear_measured_v1':
             # Preserve the old expression/order for exact historical replay.
             feedforward[0] = .25 * math.tanh(desired[0] / .005) * math.exp(-abs(desired[0]) / .15)
-        elif self.mode == 'spot_monotone_measured_v2':
+        elif self.mode in ('spot_monotone_measured_v2', 'spot_monotone_measured_v3'):
             feedforward[0] = desired[0]
         proposed = np.clip(self.integral + self.ki * error * dt, -self.integral_limit, self.integral_limit)
         raw = desired + feedforward + self.kp * error + proposed
         pushes_saturation = ((raw > self.limits) & (error > 0)) | ((raw < -self.limits) & (error < 0))
         self.integral = np.where(pushes_saturation, self.integral, proposed)
         target = desired + feedforward + self.kp * error + self.integral
-        if self.mode != 'legacy_pi_v1' and desired[0] == 0.:
+        if self.mode in ('spot_nonlinear_measured_v1', 'spot_monotone_measured_v2') and desired[0] == 0.:
             # Withdraw all forward feedforward/history from live drive at zero
             # demand. Source-time decay preserves correction across a brief
             # zero pulse; parking still uses actual measured velocity feedback.
@@ -97,7 +112,31 @@ class VelocityFeedback:
             # error integration + antiwindup, then decay, then output withdrawal.
             self.integral[0] *= math.exp(-dt / .5)
             target[0] = self.kp[0] * error[0]
+        if self.mode == 'spot_monotone_measured_v3':
+            target[self.withdraw_zero_axes(desired)] = 0.
         return np.clip(target, -self.limits, self.limits)
+
+
+def policy_input_limits(config):
+    """Read explicit internal policy bounds, independently of nav/plant limits.
+
+    Historical fixtures keep the original servo saturation. An opt-in sealed
+    fixture can use a separately measured input domain; it grants no additional
+    SDK command authority and changes no physical state.
+    """
+    record = config.get('policy_input_limits')
+    if record is None:
+        return .3, .5
+    if (not isinstance(record, dict) or set(record) != {'schema', 'linear', 'angular'}
+            or type(record['schema']) is not int or record['schema'] != 1):
+        raise ValueError('invalid_sealed_policy_input_limits')
+    result = []
+    for field, cap in (('linear', .6), ('angular', .5)):
+        value = record[field]
+        if type(value) not in (int, float) or not math.isfinite(value) or not 0 < value <= cap:
+            raise ValueError('invalid_sealed_policy_input_limit:' + field)
+        result.append(float(value))
+    return tuple(result)
 
 
 def canonical(value):
@@ -268,6 +307,13 @@ class QuadrupedPlant:
         self.max_linear_speed = float(self.config.get('max_linear_speed', .25))
         self.max_angular_speed = float(self.config.get('max_angular_speed', .4))
         validate_step(PHYSICS_DT, 0., 0., self.max_linear_speed, self.max_angular_speed)
+        from stall_recovery import StallRecovery, enabled_for
+        self.stall_recovery_enabled = enabled_for(self.config)
+        self.stall_recovery = StallRecovery() if self.stall_recovery_enabled else None
+        self.stall_recovery_events = 0
+        self._observation_observer = self._recovery_observer = None
+        self._policy_tick_context = None
+        self._component_policy_calibration = False
         position = self.config.get('initial_position', [0., 0., .8])
         yaw = float(self.config.get('initial_yaw', 0.))
         orientation = [math.cos(yaw / 2), 0., 0., math.sin(yaw / 2)]
@@ -289,6 +335,13 @@ class QuadrupedPlant:
                 inner._previous_action = inner._current_action = None
                 inner._policy_counter = 0
 
+            def _compute_observation(inner, command):
+                # Call the official reader exactly once. The same unmodified
+                # tensor object goes to official inference after observation.
+                from policy_history import observe_official_return
+                return observe_official_return(super()._compute_observation, command,
+                    self._observation_observer, int(inner._policy_counter), self._policy_tick_context)
+
         self.controller = LocalOnlySpot()
         if not math.isclose(self.controller._dt, PHYSICS_DT, abs_tol=1e-12) or self.controller._decimation != POLICY_DECIMATION:
             raise ValueError('unexpected_spot_policy_timing')
@@ -298,7 +351,9 @@ class QuadrupedPlant:
         self.velocity_feedback_enabled = self.config.get('velocity_feedback', True)
         if type(self.velocity_feedback_enabled) is not bool:
             raise ValueError('velocity_feedback_must_be_explicit_bool')
-        self.velocity_feedback = VelocityFeedback(mode=self.config.get('velocity_feedback_mode', 'legacy_pi_v1'))
+        policy_linear, policy_angular = policy_input_limits(self.config)
+        self.velocity_feedback = VelocityFeedback(policy_linear, policy_angular,
+            mode=self.config.get('velocity_feedback_mode', 'legacy_pi_v1'))
         self._initialized = False
         self._steps = 0
         self._last_inference_previous_action = None
@@ -359,16 +414,54 @@ class QuadrupedPlant:
         self.controller._policy_counter = 0
         self.velocity_feedback.reset()
 
-    def step(self, dt, vx, wz):
+    def set_policy_observers(self, observation=None, recovery=None):
+        if (observation is not None and not callable(observation)) or (recovery is not None and not callable(recovery)):
+            raise ValueError('invalid_policy_observer')
+        self._observation_observer, self._recovery_observer = observation, recovery
+
+    def enable_component_policy_calibration(self):
+        """Scene's bounded no-UDP component mode only; never navigation use."""
+        if self.stall_recovery_enabled:
+            raise ValueError('policy_calibration_cannot_mix_stall_recovery')
+        self._component_policy_calibration = True
+
+    def step(self, dt, vx, wz, *, tick_context=None, policy_command_override=None):
         from isaacsim.core.experimental.utils import backend
         if not self._initialized:
             raise RuntimeError('spot_not_initialized')
         validate_step(dt, vx, wz, self.max_linear_speed, self.max_angular_speed)
+        self._policy_tick_context = tick_context
+        if policy_command_override is not None:
+            if (not self._component_policy_calibration or not isinstance(tick_context, dict)
+                    or tick_context.get('mode') != 'isolated_policy_calibration'):
+                raise ValueError('policy_override_requires_bounded_component_mode')
+            override = np.asarray(policy_command_override, dtype=float)
+            if override.shape != (3,) or not np.isfinite(override).all() or not 0 <= override[0] <= .6 or override[1] != 0 or override[2] != 0:
+                raise ValueError('invalid_component_policy_command')
         with backend.use_backend('tensor', raise_on_unsupported=True, raise_on_fallback=True):
             policy_command = np.asarray([vx, wz], dtype=float)
+            if self.velocity_feedback.mode == 'spot_monotone_measured_v3':
+                zero_axes = self.velocity_feedback.withdraw_zero_axes([vx, wz])
+                if zero_axes[0]:
+                    self._command[0] = 0.
+                if zero_axes[1]:
+                    self._command[2] = 0.
+                # Both zero inputs ask the unchanged official policy to stand.
+                # Do not reset actions/counter, force an extra inference or
+                # write physical states to manufacture a stopped robot.
+            measured_velocity = None
+            recovery_event = None
+            if (self.stall_recovery_enabled and (not isinstance(tick_context, dict)
+                    or tick_context.get('phase') != 'bootstrap'
+                    or self.stall_recovery.previous_ns is not None)):
+                measured_velocity = [array(v)[0] for v in self.get_velocities()]
+                recovery_event = self.stall_recovery.observe(
+                    tick_context.get('source_ns') if isinstance(tick_context, dict) else None, [vx,wz],
+                    measured_velocity[0], measured_velocity[1], int(self.controller._policy_counter),
+                    tick_context=tick_context)
             if self.velocity_feedback_enabled and self.controller._policy_counter % POLICY_DECIMATION == 0:
                 _, orientations = self.get_world_poses()
-                linear, angular = [array(v)[0] for v in self.get_velocities()]
+                linear, angular = measured_velocity if measured_velocity is not None else [array(v)[0] for v in self.get_velocities()]
                 inverse_rotation = rotation_wxyz(array(orientations)[0]).T
                 linear_body, angular_body = inverse_rotation @ linear, inverse_rotation @ angular
                 policy_command = self.velocity_feedback.update(PHYSICS_DT * POLICY_DECIMATION,
@@ -376,6 +469,25 @@ class QuadrupedPlant:
                 self._command[0], self._command[1], self._command[2] = float(policy_command[0]), 0., float(policy_command[1])
             elif not self.velocity_feedback_enabled:
                 self._command[0], self._command[1], self._command[2] = float(vx), 0., float(wz)
+            if policy_command_override is not None:
+                self._command[:] = self._torch.as_tensor(override, dtype=self._command.dtype, device=self._command.device)
+            if recovery_event is not None:
+                def action_copy(value):
+                    return None if value is None else value.detach().cpu().reshape(-1).tolist()
+                counter = int(self.controller._policy_counter)
+                recovery_event.update(before_previous_action=action_copy(self.controller._previous_action),
+                    before_current_action=action_copy(self.controller._current_action),
+                    policy_input=self._command.detach().cpu().tolist(),
+                    integral=self.velocity_feedback.integral.tolist(), tick_context=dict(tick_context))
+                self.controller._previous_action = self._torch.zeros(12, dtype=self._command.dtype, device=self._command.device)
+                self.controller._current_action = self._torch.zeros(12, dtype=self._command.dtype, device=self._command.device)
+                if int(self.controller._policy_counter) != counter:
+                    raise RuntimeError('stall_memory_intervention_changed_policy_counter')
+                recovery_event.update(after_previous_action=action_copy(self.controller._previous_action),
+                    after_current_action=action_copy(self.controller._current_action), after_policy_counter=counter)
+                self.stall_recovery_events += 1
+                if self._recovery_observer is not None:
+                    self._recovery_observer(recovery_event)
             if self.controller._policy_counter % POLICY_DECIMATION == 0:
                 previous = self.controller._previous_action
                 self._last_inference_previous_action = (None if previous is None
@@ -557,11 +669,14 @@ class QuadrupedPlant:
         return dict(schema=1, kind='official_spot_physx', source='NVIDIA Isaac Sim 6.0 matching PhysX Spot model/policy/env',
                     root_path=self.root_path, body_path=self.body_path, articulation_path=self.articulation_path, physics_dt_s=PHYSICS_DT,
                     physics_frequency_hz=500, policy_decimation=POLICY_DECIMATION, policy_frequency_hz=50,
+                    stall_recovery=dict(enabled=self.stall_recovery_enabled,
+                        isolated_fixture_only=True, applied_events=self.stall_recovery_events),
                     max_linear_speed_mps=self.max_linear_speed, max_angular_speed_radps=self.max_angular_speed,
                     velocity_feedback=dict(enabled=self.velocity_feedback_enabled,
                         mode=self.velocity_feedback.mode,
                         type=('bounded_measured_body_velocity_PI_v1' if self.velocity_feedback.mode == 'legacy_pi_v1'
                               else 'bounded_monotone_measured_body_velocity_PI_v2' if self.velocity_feedback.mode == 'spot_monotone_measured_v2'
+                              else 'bounded_monotone_measured_body_velocity_PI_v3_exact_zero' if self.velocity_feedback.mode == 'spot_monotone_measured_v3'
                               else 'bounded_smooth_nonlinear_measured_body_velocity_PI_v1'),
                         policy_command_limits=self.velocity_feedback.limits.tolist(), kp=self.velocity_feedback.kp.tolist(),
                         ki=self.velocity_feedback.ki.tolist(), integral_limit=self.velocity_feedback.integral_limit.tolist(),
@@ -572,11 +687,17 @@ class QuadrupedPlant:
                         monotone_linear_policy_mapping=(dict(gain=2., formula='2*vx_des',
                             bounded_slope=2., strict_zero=True,
                             calibration_status='candidate_gain_not_a_measured_inverse; independent_PhysX_tracking_and_stop_required')
-                            if self.velocity_feedback.mode == 'spot_monotone_measured_v2' else None),
+                            if self.velocity_feedback.mode in ('spot_monotone_measured_v2', 'spot_monotone_measured_v3') else None),
                         zero_linear_demand=(dict(history_decay_time_constant_s=.5,
                             output='kp_linear*(zero_desired-measured_filtered_vx); forward feedforward and integral excluded',
                             update_order='measured_filter,error,integral_proposal,antiwindup,history_decay,output_withdrawal')
-                            if self.velocity_feedback.mode != 'legacy_pi_v1' else None)),
+                            if self.velocity_feedback.mode in ('spot_nonlinear_measured_v1', 'spot_monotone_measured_v2') else None),
+                        zero_axes_demand=(dict(output='exact zero on each zero-demand policy axis',
+                            integral='clear that axis; retain actual measured filter',
+                            withdrawal_frequency_hz=500, official_inference_frequency_hz=50,
+                            stand_request='both policy-input axes zero; not measured STOP',
+                            action_memory_and_counter='unchanged')
+                            if self.velocity_feedback.mode == 'spot_monotone_measured_v3' else None)),
                     usd_path=str(self.usd_path), policy_path=str(self.policy_path), env_config_path=str(self.env_config_path),
                     asset_manifest_path=str(self.asset_manifest_path),
                     asset_manifest_sha256=hashlib.sha256(self.asset_manifest_path.read_bytes()).hexdigest(),

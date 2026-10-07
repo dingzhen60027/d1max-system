@@ -1,0 +1,1069 @@
+{
+  "schema": 1,
+  "kind": "private_v59_delayed_v3_frozen_full_scene_comparison",
+  "evidence_verified": true,
+  "errors": [],
+  "activation_source_tick": 36428,
+  "exact_zero_input_is_not_physical_stop": true,
+  "hardware_acceptance": false,
+  "navigation_acceptance": false,
+  "continuous_collision_claim": false,
+  "raw_records_modified": false,
+  "causal_scope": "one isolated frozen-command delayed controller-factor comparison; no unique PI, neural-policy or contact-force attribution",
+  "limitations": [
+    "Neither run is a new navigation Action acceptance.",
+    "Actors and commands retain original source time and paths; epochs intentionally differ.",
+    "Possible AABB overlap is sampled unresolved geometry and does not prove contact force.",
+    "Frozen prefix excludes original last two ticks (4ms), without new ZERO or synthetic state.",
+    "Future full XYZ speed guarantee is not inferred from the instantaneous .65 admission domain."
+  ],
+  "original_session_path": "/home/eric/wjg/d1max-build-isaac/runs/campus_restart_v59_001/session.json",
+  "original_session_sha256": "ce2877ebb8bef8e765fdc7d9a90286be5c2dfc554881b6d973a27d99f4a6be43",
+  "scene_path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v59-campus-all-writer-scopes-restart/simulation/assets/scene_config.json",
+  "scene_rawbytes_sha256": "cab62b35067fa14dab4da90733c4be3b824aed95b027a7d3345edbc5497f626e",
+  "model_path": "/home/eric/wjg/d1max-build-isaac/runs/campus_restart_v59_001/braking_model.json",
+  "model_rawbytes_sha256": "0d95d7834f932f7230e99ebd6c5e6c41f5a36311aa358a0fea501c2db1b4c10d",
+  "frozen_path": "/home/eric/wjg/d1max-build-isaac/v59_zero_ab_frozen_43410.json",
+  "frozen_sha256": "6a9d175c01b09708fddf7327c08e7732a7b97790fcb66e320c65e12cf64f466c",
+  "original_prefix_metadata": {
+    "kind": "original_actual_500hz_source_prefix",
+    "explicit_prefix": true,
+    "original_source_tick_count": 43412,
+    "selected_source_tick_count": 43410,
+    "excluded_tail_tick_count": 2,
+    "source_origin_ns": 0,
+    "excluded_events_count": 1,
+    "timestamps_modified": false,
+    "original_records_modified": false
+  },
+  "excluded_original_tail_source_duration_s": 0.004,
+  "original": {
+    "path": "/home/eric/wjg/d1max-build-isaac/runs/campus_restart_v59_001/physics",
+    "epoch": "6e1a22db-8b01-4de7-ada4-9218b39d1960",
+    "validation_verified": true,
+    "raw_file_sha256": "23eac6beca478fe6e5b0497f37000c6d5367ebe3701c55b5674fc703c27bbbd1",
+    "manifest_sha256": "f6bbec8fc976482502b26dfe052502f74a46902718bd3a2f9acfcf0a9f5dd9f6",
+    "summary_sha256": "63f92e43b8545e19233996b12cc093b443e67e2988dfda6928be33ee480d87ee",
+    "ready_sha256": "53b0525bd67d576cd1e97984d079a8e78f1eb8459b8e0e4259d21985338427b6",
+    "begin_sample_count": 43412,
+    "actual_END_count": 1,
+    "actual_END": {
+      "source_tick": 43412,
+      "source_ns": 86824000000,
+      "native_physics_tick": 44422,
+      "policy_counter": 44412,
+      "acquisition_phase": "actual_final_PhysX_END",
+      "position": [
+        -0.6285540461540222,
+        -6.435716152191162,
+        0.48824605345726013
+      ],
+      "quaternion_wxyz": [
+        0.8459908366203308,
+        0.0016648684395477176,
+        -0.00019516507745720446,
+        -0.5331947803497314
+      ],
+      "linear_velocity_world": [
+        0.0009800876723602414,
+        -0.0020153806544840336,
+        0.007963457144796848
+      ],
+      "angular_velocity_world": [
+        -0.00030230628908611834,
+        0.0005665990756824613,
+        0.021217407658696175
+      ],
+      "official_policy_input": [
+        -0.000850810669362545,
+        0.0,
+        0.114752858877182
+      ],
+      "highlevel_command": [
+        0.0,
+        0.0
+      ]
+    },
+    "duration_source_ns": 86824000000,
+    "original_bootstrap_native_tick": 1010,
+    "original_policy_counter": 1000,
+    "source_50hz_observation_count": 4342,
+    "bootstrap_50hz_observation_count": 100,
+    "observations_sha256": "290846abe5161b3c1d4e6f0ea12efb2f63b3db268936857bb5b31f10dfce9c72",
+    "command_events_count": 5655,
+    "command_events_sha256": "a6b9fa1f51ac3ee97aa5ff0a1d7356e577e60b6f5ec58be02ee157627b81e804",
+    "component_experiment": null,
+    "velocity_feedback_experiment": null,
+    "recorded_recovery_count": 0,
+    "full_epoch_domain": {
+      "sample_count": 43413,
+      "max_full_xyz_speed_mps": 1.0646345352085824,
+      "peak_source_ns": 1791378877415157156,
+      "peak_source_tick": 41599,
+      "peak_raw_linear_velocity_world": [
+        -0.02394910529255867,
+        -1.0382963418960571,
+        -0.23412355780601501
+      ],
+      "max_abs_world_yaw_rate_radps": 0.8869698643684387,
+      "max_full_angular_speed_radps": 1.9531864055982198,
+      "full_angular_norm_is_diagnostic_only": true,
+      "speed_bounds": {
+        "platform_instantaneous_admission": 0.65,
+        "full_xyz_reference": 0.65,
+        "measured_travel": 0.65
+      },
+      "yaw_bound_radps": 0.8,
+      "exceeded_speed_domains": [
+        "platform_instantaneous_admission",
+        "full_xyz_reference",
+        "measured_travel"
+      ],
+      "yaw_domain_exceeded": true
+    },
+    "activation_to_END_domain": {
+      "sample_count": 6985,
+      "max_full_xyz_speed_mps": 1.0646345352085824,
+      "peak_source_ns": 1791378877415157156,
+      "peak_source_tick": 41599,
+      "peak_raw_linear_velocity_world": [
+        -0.02394910529255867,
+        -1.0382963418960571,
+        -0.23412355780601501
+      ],
+      "max_abs_world_yaw_rate_radps": 0.8869698643684387,
+      "max_full_angular_speed_radps": 1.9531864055982198,
+      "full_angular_norm_is_diagnostic_only": true,
+      "speed_bounds": {
+        "platform_instantaneous_admission": 0.65,
+        "full_xyz_reference": 0.65,
+        "measured_travel": 0.65
+      },
+      "yaw_bound_radps": 0.8,
+      "exceeded_speed_domains": [
+        "platform_instantaneous_admission",
+        "full_xyz_reference",
+        "measured_travel"
+      ],
+      "yaw_domain_exceeded": true
+    },
+    "activation_begin": {
+      "source_tick": 36428,
+      "source_ns": 72856000000,
+      "native_physics_tick": 37438,
+      "policy_counter": 37428,
+      "acquisition_phase": "actual_pre_policy_PhysX_BEGIN",
+      "position": [
+        -0.17211224138736725,
+        -4.851107120513916,
+        0.4876893162727356
+      ],
+      "quaternion_wxyz": [
+        0.9827877879142761,
+        -0.00031226850114762783,
+        -0.0006647963309660554,
+        -0.1847367286682129
+      ],
+      "linear_velocity_world": [
+        0.001261505065485835,
+        -0.0003655340406112373,
+        0.006829085759818554
+      ],
+      "angular_velocity_world": [
+        -0.008326001465320587,
+        -0.001350848819129169,
+        0.009453022852540016
+      ],
+      "official_policy_input": [
+        0.017797347158193588,
+        0.0,
+        0.054292190819978714
+      ],
+      "highlevel_command": [
+        0.0,
+        0.0
+      ]
+    },
+    "zero_axis_policy_withdrawal": {
+      "scope": "consumed original BEGIN ticks from activation through last real step; END is observation only",
+      "begin_checks_by_axis": [
+        6984,
+        6984
+      ],
+      "nonzero_policy_input_on_zero_command_by_axis": [
+        6984,
+        6984
+      ],
+      "every_zero_axis_input_exactly_zero": false,
+      "first_violation_by_axis": [
+        {
+          "source_tick": 36428,
+          "source_ns": 72856000000,
+          "native_physics_tick": 37438,
+          "policy_counter": 37428,
+          "acquisition_phase": "actual_pre_policy_PhysX_BEGIN",
+          "position": [
+            -0.17211224138736725,
+            -4.851107120513916,
+            0.4876893162727356
+          ],
+          "quaternion_wxyz": [
+            0.9827877879142761,
+            -0.00031226850114762783,
+            -0.0006647963309660554,
+            -0.1847367286682129
+          ],
+          "linear_velocity_world": [
+            0.001261505065485835,
+            -0.0003655340406112373,
+            0.006829085759818554
+          ],
+          "angular_velocity_world": [
+            -0.008326001465320587,
+            -0.001350848819129169,
+            0.009453022852540016
+          ],
+          "official_policy_input": [
+            0.017797347158193588,
+            0.0,
+            0.054292190819978714
+          ],
+          "highlevel_command": [
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "source_tick": 36428,
+          "source_ns": 72856000000,
+          "native_physics_tick": 37438,
+          "policy_counter": 37428,
+          "acquisition_phase": "actual_pre_policy_PhysX_BEGIN",
+          "position": [
+            -0.17211224138736725,
+            -4.851107120513916,
+            0.4876893162727356
+          ],
+          "quaternion_wxyz": [
+            0.9827877879142761,
+            -0.00031226850114762783,
+            -0.0006647963309660554,
+            -0.1847367286682129
+          ],
+          "linear_velocity_world": [
+            0.001261505065485835,
+            -0.0003655340406112373,
+            0.006829085759818554
+          ],
+          "angular_velocity_world": [
+            -0.008326001465320587,
+            -0.001350848819129169,
+            0.009453022852540016
+          ],
+          "official_policy_input": [
+            0.017797347158193588,
+            0.0,
+            0.054292190819978714
+          ],
+          "highlevel_command": [
+            0.0,
+            0.0
+          ]
+        }
+      ]
+    },
+    "measured_final_zero_episode": {
+      "verified": false,
+      "scope": "final actual zero-consumption episode; native full XYZ and angular norm",
+      "transition_exercised": true,
+      "linear_threshold_mps": 0.03,
+      "angular_threshold_radps": 0.05,
+      "stationary_duration_s": 1.0,
+      "stop_latency_bound_s": 3.0,
+      "stopping_distance_bound_m": 0.5,
+      "stopping_yaw_bound_rad": 0.4,
+      "last_nonzero_consumption_source_ns": 1791378867071157156,
+      "zero_consumption_source_ns": 1791378867073157156,
+      "reason": "recorded_stop_then_zero_tail_motion",
+      "stationary_window_start_source_ns": 1791378867073157156,
+      "confirmation_source_ns": 1791378868073157156,
+      "confirmation_latency_s": 1.0,
+      "extra_xy_path_m": 0.0006089960920905477,
+      "extra_absolute_yaw_path_rad": 0.003132879829290003,
+      "actual_zero_tail_duration_s": 13.968,
+      "initial_stationary_window_verified": true,
+      "maintained_stationarity_to_end": false,
+      "post_confirmation_motion_samples": 1356,
+      "first_post_confirmation_motion_source_ns": 1791378877113157156,
+      "zero_tail_total_xy_path_m": 1.7012253894410867,
+      "zero_tail_total_absolute_yaw_path_rad": 0.9094629286710249
+    },
+    "actor_actual_raw_sha256": "0559e6310e61971689b08ba3d346f47c7deb4d99112ce1c5277f7702f454d68a",
+    "actor_canonical_rows_sha256": "f728476fd3bcb193e69834fd9849cc487b4ae15dbd1a56bcd7680c534f0079df",
+    "actor_sample_packets": 5210,
+    "actor_ids": [
+      "door_blocking_cart",
+      "office_person",
+      "oncoming_cart",
+      "plaza_cart",
+      "plaza_person",
+      "warehouse_forklift"
+    ],
+    "robot_links_raw_sha256": "303e11d7c543376c72ab27e2e7410e464e2515284ad02486d929ff15510f8466",
+    "collision_audit": {
+      "path": "/home/eric/wjg/d1max-build-isaac/runs/campus_restart_v59_001/physics/collision_audit.json",
+      "sha256": "e716e8b453638eb9b2202c7876cf0e688a01a0cf569c1b0190d4bddca89af81c",
+      "completed": false,
+      "sample_count": 5210,
+      "possible_overlap_counts": {
+        "static": 0,
+        "dynamic": 346
+      },
+      "possible_overlap_sample_counts": {
+        "static": 0,
+        "dynamic": 145
+      },
+      "first_recorded_dynamic_possible_overlap": {
+        "kind": "dynamic",
+        "sim_time_ns": 82818000000,
+        "source_stamp_ns": 1791378877035157156,
+        "robot_path": "/World/Spot/body/collisions/mesh_0",
+        "obstacle_path": "/World/Dynamic/plaza_person/body",
+        "aabb_intersection_min": [
+          -0.28000099999999994,
+          -4.614344433380127,
+          0.4166039375351437
+        ],
+        "aabb_intersection_max": [
+          0.258570065841158,
+          -4.59981966344902,
+          0.5578635784102909
+        ],
+        "classification": "potential_overlap_unresolved"
+      },
+      "contact_force_measured": false,
+      "continuous_collision_claim": false,
+      "interpretation": "sampled possible AABB overlap is unresolved; neither contact nor a unique force cause is established"
+    }
+  },
+  "baseline": {
+    "path": "/home/eric/wjg/d1max-build-isaac/v59_zero_ab_baseline",
+    "epoch": "978c248b-6df1-4529-a3a1-8cabd75f163b",
+    "validation_verified": true,
+    "raw_file_sha256": "4ae9721022718d5358ccc4b2a82d79c1cf7ca145c037d9e4a8f220eb4b4ab895",
+    "manifest_sha256": "f6c888238808c09a1dbafabe9470ac695d8721956dc286c3a75a0bb5033caa68",
+    "summary_sha256": "3939f372b64ef999bd31ba06dd867beba1477868937e322780d99532323c039e",
+    "ready_sha256": "12f71046efd3aab94344735ee2a1f1c5c37e25c5e5f38324a3f3eed9be126de3",
+    "begin_sample_count": 43410,
+    "actual_END_count": 1,
+    "actual_END": {
+      "source_tick": 43410,
+      "source_ns": 86820000000,
+      "native_physics_tick": 44420,
+      "policy_counter": 44410,
+      "acquisition_phase": "actual_final_PhysX_END",
+      "position": [
+        -0.6285580992698669,
+        -6.435708999633789,
+        0.48824402689933777
+      ],
+      "quaternion_wxyz": [
+        0.8459683656692505,
+        0.0016652223421260715,
+        -0.0001954618055606261,
+        -0.5332305431365967
+      ],
+      "linear_velocity_world": [
+        0.0009952570544555783,
+        -0.0020254645496606827,
+        0.007955729030072689
+      ],
+      "angular_velocity_world": [
+        -0.00012651929864659905,
+        0.00016064278315752745,
+        0.021232733502984047
+      ],
+      "official_policy_input": [
+        -0.0008827838464640081,
+        0.0,
+        0.1147465780377388
+      ],
+      "highlevel_command": [
+        0.0,
+        0.0
+      ]
+    },
+    "duration_source_ns": 86820000000,
+    "original_bootstrap_native_tick": 1010,
+    "original_policy_counter": 1000,
+    "source_50hz_observation_count": 4341,
+    "bootstrap_50hz_observation_count": 100,
+    "observations_sha256": "408b54606c2ea6194938f43abeef30d9d03aa44e3d6ef38965393919ab6ebd67",
+    "command_events_count": 5654,
+    "command_events_sha256": "57aa79f29be1645806e6645434cebde73b35d7d2e8d5bc7dc03d6429186d92e3",
+    "component_experiment": {
+      "schema": 1,
+      "kind": "full_scene_component_action_memory_configuration",
+      "requested": false,
+      "source_spec_stall_recovery": {
+        "schema": 1,
+        "enabled": true,
+        "isolated_fixture": true
+      },
+      "source_resolved_stall_recovery_enabled": true,
+      "runtime_local_override": null,
+      "source_scene_bytes_modified": false,
+      "navigation_authorization": false,
+      "intervention_scope": "existing StallRecovery; action-memory only; no root/joint writes or counter reset",
+      "actual_source_begin_ns": 0,
+      "actual_source_begin_native_tick": 1010,
+      "actual_source_begin_policy_counter": 1000,
+      "actual_source_begin_native_simulation_time_s": 2.02,
+      "session_id": "a7a35db297f84fe6becd3f6f1cb65c2b",
+      "epoch": "978c248b-6df1-4529-a3a1-8cabd75f163b",
+      "clock_anchor_ns": 1791378794217157156,
+      "source_scene_sha256": "cab62b35067fa14dab4da90733c4be3b824aed95b027a7d3345edbc5497f626e",
+      "frozen_command_sha256": "6a9d175c01b09708fddf7327c08e7732a7b97790fcb66e320c65e12cf64f466c"
+    },
+    "velocity_feedback_experiment": {
+      "schema": 1,
+      "requested": false,
+      "source_mode": "spot_monotone_measured_v2",
+      "runtime_mode": "spot_monotone_measured_v2",
+      "requested_mode": null,
+      "activation_source_tick": 0,
+      "applied": false,
+      "runtime_local_override": null,
+      "source_scene_bytes_modified": false,
+      "navigation_authorization": false,
+      "intervention_scope": "exact-zero policy input/integral withdrawal only; no root/joint writes or counter reset",
+      "session_id": "a7a35db297f84fe6becd3f6f1cb65c2b",
+      "epoch": "978c248b-6df1-4529-a3a1-8cabd75f163b",
+      "clock_anchor_ns": 1791378794217157156,
+      "source_scene_sha256": "cab62b35067fa14dab4da90733c4be3b824aed95b027a7d3345edbc5497f626e",
+      "frozen_command_sha256": "6a9d175c01b09708fddf7327c08e7732a7b97790fcb66e320c65e12cf64f466c",
+      "actual_source_begin_ns": 0,
+      "actual_source_begin_native_tick": 1010,
+      "actual_source_begin_policy_counter": 1000
+    },
+    "recorded_recovery_count": 0,
+    "full_epoch_domain": {
+      "sample_count": 43411,
+      "max_full_xyz_speed_mps": 1.0646345352085824,
+      "peak_source_ns": 1791378877415157156,
+      "peak_source_tick": 41599,
+      "peak_raw_linear_velocity_world": [
+        -0.02394910529255867,
+        -1.0382963418960571,
+        -0.23412355780601501
+      ],
+      "max_abs_world_yaw_rate_radps": 0.8869698643684387,
+      "max_full_angular_speed_radps": 1.9531864055982198,
+      "full_angular_norm_is_diagnostic_only": true,
+      "speed_bounds": {
+        "platform_instantaneous_admission": 0.65,
+        "full_xyz_reference": 0.65,
+        "measured_travel": 0.65
+      },
+      "yaw_bound_radps": 0.8,
+      "exceeded_speed_domains": [
+        "platform_instantaneous_admission",
+        "full_xyz_reference",
+        "measured_travel"
+      ],
+      "yaw_domain_exceeded": true
+    },
+    "activation_to_END_domain": {
+      "sample_count": 6983,
+      "max_full_xyz_speed_mps": 1.0646345352085824,
+      "peak_source_ns": 1791378877415157156,
+      "peak_source_tick": 41599,
+      "peak_raw_linear_velocity_world": [
+        -0.02394910529255867,
+        -1.0382963418960571,
+        -0.23412355780601501
+      ],
+      "max_abs_world_yaw_rate_radps": 0.8869698643684387,
+      "max_full_angular_speed_radps": 1.9531864055982198,
+      "full_angular_norm_is_diagnostic_only": true,
+      "speed_bounds": {
+        "platform_instantaneous_admission": 0.65,
+        "full_xyz_reference": 0.65,
+        "measured_travel": 0.65
+      },
+      "yaw_bound_radps": 0.8,
+      "exceeded_speed_domains": [
+        "platform_instantaneous_admission",
+        "full_xyz_reference",
+        "measured_travel"
+      ],
+      "yaw_domain_exceeded": true
+    },
+    "activation_begin": {
+      "source_tick": 36428,
+      "source_ns": 72856000000,
+      "native_physics_tick": 37438,
+      "policy_counter": 37428,
+      "acquisition_phase": "actual_pre_policy_PhysX_BEGIN",
+      "position": [
+        -0.17211224138736725,
+        -4.851107120513916,
+        0.4876893162727356
+      ],
+      "quaternion_wxyz": [
+        0.9827877879142761,
+        -0.00031226850114762783,
+        -0.0006647963309660554,
+        -0.1847367286682129
+      ],
+      "linear_velocity_world": [
+        0.001261505065485835,
+        -0.0003655340406112373,
+        0.006829085759818554
+      ],
+      "angular_velocity_world": [
+        -0.008326001465320587,
+        -0.001350848819129169,
+        0.009453022852540016
+      ],
+      "official_policy_input": [
+        0.017797347158193588,
+        0.0,
+        0.054292190819978714
+      ],
+      "highlevel_command": [
+        0.0,
+        0.0
+      ]
+    },
+    "zero_axis_policy_withdrawal": {
+      "scope": "consumed original BEGIN ticks from activation through last real step; END is observation only",
+      "begin_checks_by_axis": [
+        6982,
+        6982
+      ],
+      "nonzero_policy_input_on_zero_command_by_axis": [
+        6982,
+        6982
+      ],
+      "every_zero_axis_input_exactly_zero": false,
+      "first_violation_by_axis": [
+        {
+          "source_tick": 36428,
+          "source_ns": 72856000000,
+          "native_physics_tick": 37438,
+          "policy_counter": 37428,
+          "acquisition_phase": "actual_pre_policy_PhysX_BEGIN",
+          "position": [
+            -0.17211224138736725,
+            -4.851107120513916,
+            0.4876893162727356
+          ],
+          "quaternion_wxyz": [
+            0.9827877879142761,
+            -0.00031226850114762783,
+            -0.0006647963309660554,
+            -0.1847367286682129
+          ],
+          "linear_velocity_world": [
+            0.001261505065485835,
+            -0.0003655340406112373,
+            0.006829085759818554
+          ],
+          "angular_velocity_world": [
+            -0.008326001465320587,
+            -0.001350848819129169,
+            0.009453022852540016
+          ],
+          "official_policy_input": [
+            0.017797347158193588,
+            0.0,
+            0.054292190819978714
+          ],
+          "highlevel_command": [
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "source_tick": 36428,
+          "source_ns": 72856000000,
+          "native_physics_tick": 37438,
+          "policy_counter": 37428,
+          "acquisition_phase": "actual_pre_policy_PhysX_BEGIN",
+          "position": [
+            -0.17211224138736725,
+            -4.851107120513916,
+            0.4876893162727356
+          ],
+          "quaternion_wxyz": [
+            0.9827877879142761,
+            -0.00031226850114762783,
+            -0.0006647963309660554,
+            -0.1847367286682129
+          ],
+          "linear_velocity_world": [
+            0.001261505065485835,
+            -0.0003655340406112373,
+            0.006829085759818554
+          ],
+          "angular_velocity_world": [
+            -0.008326001465320587,
+            -0.001350848819129169,
+            0.009453022852540016
+          ],
+          "official_policy_input": [
+            0.017797347158193588,
+            0.0,
+            0.054292190819978714
+          ],
+          "highlevel_command": [
+            0.0,
+            0.0
+          ]
+        }
+      ]
+    },
+    "measured_final_zero_episode": {
+      "verified": false,
+      "scope": "final actual zero-consumption episode; native full XYZ and angular norm",
+      "transition_exercised": true,
+      "linear_threshold_mps": 0.03,
+      "angular_threshold_radps": 0.05,
+      "stationary_duration_s": 1.0,
+      "stop_latency_bound_s": 3.0,
+      "stopping_distance_bound_m": 0.5,
+      "stopping_yaw_bound_rad": 0.4,
+      "last_nonzero_consumption_source_ns": 1791378867071157156,
+      "zero_consumption_source_ns": 1791378867073157156,
+      "reason": "recorded_stop_then_zero_tail_motion",
+      "stationary_window_start_source_ns": 1791378867073157156,
+      "confirmation_source_ns": 1791378868073157156,
+      "confirmation_latency_s": 1.0,
+      "extra_xy_path_m": 0.0006089960920905477,
+      "extra_absolute_yaw_path_rad": 0.003132879829290003,
+      "actual_zero_tail_duration_s": 13.964,
+      "initial_stationary_window_verified": true,
+      "maintained_stationarity_to_end": false,
+      "post_confirmation_motion_samples": 1356,
+      "first_post_confirmation_motion_source_ns": 1791378877113157156,
+      "zero_tail_total_xy_path_m": 1.7012171672673424,
+      "zero_tail_total_absolute_yaw_path_rad": 0.9093784562910102
+    },
+    "actor_actual_raw_sha256": "0559e6310e61971689b08ba3d346f47c7deb4d99112ce1c5277f7702f454d68a",
+    "actor_canonical_rows_sha256": "f728476fd3bcb193e69834fd9849cc487b4ae15dbd1a56bcd7680c534f0079df",
+    "actor_sample_packets": 5210,
+    "actor_ids": [
+      "door_blocking_cart",
+      "office_person",
+      "oncoming_cart",
+      "plaza_cart",
+      "plaza_person",
+      "warehouse_forklift"
+    ],
+    "robot_links_raw_sha256": "303e11d7c543376c72ab27e2e7410e464e2515284ad02486d929ff15510f8466",
+    "collision_audit": {
+      "path": "/home/eric/wjg/d1max-build-isaac/v59_zero_ab_baseline/collision_audit.json",
+      "sha256": "ea6904aafdc471790cc5f9c6d864b22a22497ef1b49c1aaef6e850e7b84f65a9",
+      "completed": true,
+      "sample_count": 5210,
+      "possible_overlap_counts": {
+        "static": 0,
+        "dynamic": 346
+      },
+      "possible_overlap_sample_counts": {
+        "static": 0,
+        "dynamic": 145
+      },
+      "first_recorded_dynamic_possible_overlap": {
+        "kind": "dynamic",
+        "sim_time_ns": 82818000000,
+        "source_stamp_ns": 1791378877035157156,
+        "robot_path": "/World/Spot/body/collisions/mesh_0",
+        "obstacle_path": "/World/Dynamic/plaza_person/body",
+        "aabb_intersection_min": [
+          -0.28000099999999994,
+          -4.614344433380127,
+          0.4166039375351437
+        ],
+        "aabb_intersection_max": [
+          0.258570065841158,
+          -4.59981966344902,
+          0.5578635784102909
+        ],
+        "classification": "potential_overlap_unresolved"
+      },
+      "contact_force_measured": false,
+      "continuous_collision_claim": false,
+      "interpretation": "sampled possible AABB overlap is unresolved; neither contact nor a unique force cause is established"
+    }
+  },
+  "alternative": {
+    "path": "/home/eric/wjg/d1max-build-isaac/v59_zero_ab_v3_tick36428",
+    "epoch": "c77aa594-3e41-4c26-8489-edeb52828358",
+    "validation_verified": true,
+    "raw_file_sha256": "01d294ffef90defcd2a37212fc8888dc9d49e29aaa1c383e67d49ae3f7548972",
+    "manifest_sha256": "bf0a9adbf07c14894c4448d926b16d95c03786fdce45ef7aefb66346372d61d7",
+    "summary_sha256": "507ad31118a4eb9412bf85977f9d4512b768e6f9f9e700b16fef8070bb1cecbb",
+    "ready_sha256": "c80ed5f53e6a5d1c0caf594050c4383633fc92eb616302af6d3347ca36c52676",
+    "begin_sample_count": 43410,
+    "actual_END_count": 1,
+    "actual_END": {
+      "source_tick": 43410,
+      "source_ns": 86820000000,
+      "native_physics_tick": 44420,
+      "policy_counter": 44410,
+      "acquisition_phase": "actual_final_PhysX_END",
+      "position": [
+        -0.5531827211380005,
+        -5.665450572967529,
+        0.4793413579463959
+      ],
+      "quaternion_wxyz": [
+        0.7487757205963135,
+        -0.00445837527513504,
+        -0.004103959072381258,
+        -0.6627957224845886
+      ],
+      "linear_velocity_world": [
+        -0.000766422541346401,
+        0.001629467704333365,
+        0.006631949916481972
+      ],
+      "angular_velocity_world": [
+        0.0010682770516723394,
+        -0.0008965035667642951,
+        -0.019420839846134186
+      ],
+      "official_policy_input": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "highlevel_command": [
+        0.0,
+        0.0
+      ]
+    },
+    "duration_source_ns": 86820000000,
+    "original_bootstrap_native_tick": 1010,
+    "original_policy_counter": 1000,
+    "source_50hz_observation_count": 4341,
+    "bootstrap_50hz_observation_count": 100,
+    "observations_sha256": "6cc1614bf548ce21f4df7da1cd1e613d04bc828b0ab05245936acbab31b9ecbc",
+    "command_events_count": 5654,
+    "command_events_sha256": "934838292fb971de04e4527b5f2727fdc0350a0396ae2229514601e5d340ed83",
+    "component_experiment": {
+      "schema": 1,
+      "kind": "full_scene_component_action_memory_configuration",
+      "requested": false,
+      "source_spec_stall_recovery": {
+        "schema": 1,
+        "enabled": true,
+        "isolated_fixture": true
+      },
+      "source_resolved_stall_recovery_enabled": true,
+      "runtime_local_override": null,
+      "source_scene_bytes_modified": false,
+      "navigation_authorization": false,
+      "intervention_scope": "existing StallRecovery; action-memory only; no root/joint writes or counter reset",
+      "actual_source_begin_ns": 0,
+      "actual_source_begin_native_tick": 1010,
+      "actual_source_begin_policy_counter": 1000,
+      "actual_source_begin_native_simulation_time_s": 2.02,
+      "session_id": "a7a35db297f84fe6becd3f6f1cb65c2b",
+      "epoch": "c77aa594-3e41-4c26-8489-edeb52828358",
+      "clock_anchor_ns": 1791378794217157156,
+      "source_scene_sha256": "cab62b35067fa14dab4da90733c4be3b824aed95b027a7d3345edbc5497f626e",
+      "frozen_command_sha256": "6a9d175c01b09708fddf7327c08e7732a7b97790fcb66e320c65e12cf64f466c"
+    },
+    "velocity_feedback_experiment": {
+      "schema": 1,
+      "requested": true,
+      "source_mode": "spot_monotone_measured_v2",
+      "runtime_mode": "spot_monotone_measured_v3",
+      "requested_mode": "spot_monotone_measured_v3",
+      "activation_source_tick": 36428,
+      "applied": true,
+      "runtime_local_override": "spot_monotone_measured_v3",
+      "source_scene_bytes_modified": false,
+      "navigation_authorization": false,
+      "intervention_scope": "exact-zero policy input/integral withdrawal only; no root/joint writes or counter reset",
+      "actual_activation_source_tick": 36428,
+      "actual_activation_source_ns": 72856000000,
+      "actual_activation_native_tick": 37438,
+      "actual_activation_policy_counter": 37428,
+      "actual_activation_phase": "actual_pre_policy_PhysX_BEGIN",
+      "session_id": "a7a35db297f84fe6becd3f6f1cb65c2b",
+      "epoch": "c77aa594-3e41-4c26-8489-edeb52828358",
+      "clock_anchor_ns": 1791378794217157156,
+      "source_scene_sha256": "cab62b35067fa14dab4da90733c4be3b824aed95b027a7d3345edbc5497f626e",
+      "frozen_command_sha256": "6a9d175c01b09708fddf7327c08e7732a7b97790fcb66e320c65e12cf64f466c",
+      "actual_source_begin_ns": 0,
+      "actual_source_begin_native_tick": 1010,
+      "actual_source_begin_policy_counter": 1000
+    },
+    "recorded_recovery_count": 0,
+    "full_epoch_domain": {
+      "sample_count": 43411,
+      "max_full_xyz_speed_mps": 1.3343624204849402,
+      "peak_source_ns": 1791378877617157156,
+      "peak_source_tick": 41700,
+      "peak_raw_linear_velocity_world": [
+        -0.5503397583961487,
+        -1.2046637535095215,
+        0.1625867784023285
+      ],
+      "max_abs_world_yaw_rate_radps": 1.377488613128662,
+      "max_full_angular_speed_radps": 3.323134995117542,
+      "full_angular_norm_is_diagnostic_only": true,
+      "speed_bounds": {
+        "platform_instantaneous_admission": 0.65,
+        "full_xyz_reference": 0.65,
+        "measured_travel": 0.65
+      },
+      "yaw_bound_radps": 0.8,
+      "exceeded_speed_domains": [
+        "platform_instantaneous_admission",
+        "full_xyz_reference",
+        "measured_travel"
+      ],
+      "yaw_domain_exceeded": true
+    },
+    "activation_to_END_domain": {
+      "sample_count": 6983,
+      "max_full_xyz_speed_mps": 1.3343624204849402,
+      "peak_source_ns": 1791378877617157156,
+      "peak_source_tick": 41700,
+      "peak_raw_linear_velocity_world": [
+        -0.5503397583961487,
+        -1.2046637535095215,
+        0.1625867784023285
+      ],
+      "max_abs_world_yaw_rate_radps": 1.377488613128662,
+      "max_full_angular_speed_radps": 3.323134995117542,
+      "full_angular_norm_is_diagnostic_only": true,
+      "speed_bounds": {
+        "platform_instantaneous_admission": 0.65,
+        "full_xyz_reference": 0.65,
+        "measured_travel": 0.65
+      },
+      "yaw_bound_radps": 0.8,
+      "exceeded_speed_domains": [
+        "platform_instantaneous_admission",
+        "full_xyz_reference",
+        "measured_travel"
+      ],
+      "yaw_domain_exceeded": true
+    },
+    "activation_begin": {
+      "source_tick": 36428,
+      "source_ns": 72856000000,
+      "native_physics_tick": 37438,
+      "policy_counter": 37428,
+      "acquisition_phase": "actual_pre_policy_PhysX_BEGIN",
+      "position": [
+        -0.17211224138736725,
+        -4.851107120513916,
+        0.4876893162727356
+      ],
+      "quaternion_wxyz": [
+        0.9827877879142761,
+        -0.00031226850114762783,
+        -0.0006647963309660554,
+        -0.1847367286682129
+      ],
+      "linear_velocity_world": [
+        0.001261505065485835,
+        -0.0003655340406112373,
+        0.006829085759818554
+      ],
+      "angular_velocity_world": [
+        -0.008326001465320587,
+        -0.001350848819129169,
+        0.009453022852540016
+      ],
+      "official_policy_input": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "highlevel_command": [
+        0.0,
+        0.0
+      ]
+    },
+    "zero_axis_policy_withdrawal": {
+      "scope": "consumed original BEGIN ticks from activation through last real step; END is observation only",
+      "begin_checks_by_axis": [
+        6982,
+        6982
+      ],
+      "nonzero_policy_input_on_zero_command_by_axis": [
+        0,
+        0
+      ],
+      "every_zero_axis_input_exactly_zero": true,
+      "first_violation_by_axis": [
+        null,
+        null
+      ]
+    },
+    "measured_final_zero_episode": {
+      "verified": false,
+      "scope": "final actual zero-consumption episode; native full XYZ and angular norm",
+      "transition_exercised": true,
+      "linear_threshold_mps": 0.03,
+      "angular_threshold_radps": 0.05,
+      "stationary_duration_s": 1.0,
+      "stop_latency_bound_s": 3.0,
+      "stopping_distance_bound_m": 0.5,
+      "stopping_yaw_bound_rad": 0.4,
+      "last_nonzero_consumption_source_ns": 1791378867071157156,
+      "zero_consumption_source_ns": 1791378867073157156,
+      "reason": "recorded_stop_then_zero_tail_motion",
+      "stationary_window_start_source_ns": 1791378867073157156,
+      "confirmation_source_ns": 1791378868073157156,
+      "confirmation_latency_s": 1.0,
+      "extra_xy_path_m": 0.003068269826919106,
+      "extra_absolute_yaw_path_rad": 0.027782977680325838,
+      "actual_zero_tail_duration_s": 13.964,
+      "initial_stationary_window_verified": true,
+      "maintained_stationarity_to_end": false,
+      "post_confirmation_motion_samples": 1790,
+      "first_post_confirmation_motion_source_ns": 1791378875395157156,
+      "zero_tail_total_xy_path_m": 0.9789934175725925,
+      "zero_tail_total_absolute_yaw_path_rad": 1.0784628448148124
+    },
+    "actor_actual_raw_sha256": "0559e6310e61971689b08ba3d346f47c7deb4d99112ce1c5277f7702f454d68a",
+    "actor_canonical_rows_sha256": "f728476fd3bcb193e69834fd9849cc487b4ae15dbd1a56bcd7680c534f0079df",
+    "actor_sample_packets": 5210,
+    "actor_ids": [
+      "door_blocking_cart",
+      "office_person",
+      "oncoming_cart",
+      "plaza_cart",
+      "plaza_person",
+      "warehouse_forklift"
+    ],
+    "robot_links_raw_sha256": "755c36809d4bc6ee5220868a559fa57418fee17c61cc06931f63f597c6c39236",
+    "collision_audit": {
+      "path": "/home/eric/wjg/d1max-build-isaac/v59_zero_ab_v3_tick36428/collision_audit.json",
+      "sha256": "1eda489d4ad062dbea1fe2360dc3e947b8a429cbddf52d114ad2eadbf55a0c2b",
+      "completed": true,
+      "sample_count": 5210,
+      "possible_overlap_counts": {
+        "static": 0,
+        "dynamic": 270
+      },
+      "possible_overlap_sample_counts": {
+        "static": 0,
+        "dynamic": 113
+      },
+      "first_recorded_dynamic_possible_overlap": {
+        "kind": "dynamic",
+        "sim_time_ns": 82680000000,
+        "source_stamp_ns": 1791378876897157156,
+        "robot_path": "/World/Spot/body/collisions/mesh_0",
+        "obstacle_path": "/World/Dynamic/plaza_person/body",
+        "aabb_intersection_min": [
+          -0.28000099999999994,
+          -4.4772599492797855,
+          0.3988268583024587
+        ],
+        "aabb_intersection_max": [
+          0.1708454121744072,
+          -4.475606847249234,
+          0.5512870342527781
+        ],
+        "classification": "potential_overlap_unresolved"
+      },
+      "contact_force_measured": false,
+      "continuous_collision_claim": false,
+      "interpretation": "sampled possible AABB overlap is unresolved; neither contact nor a unique force cause is established"
+    }
+  },
+  "comparisons": {
+    "original_v59_to_baseline_begin": {
+      "sample_count": 43410,
+      "fields": [
+        "position",
+        "quaternion_wxyz",
+        "linear_velocity_world",
+        "angular_velocity_world",
+        "official_policy_input",
+        "highlevel_command"
+      ],
+      "all_fields_exactly_equal": true,
+      "different_row_counts_by_field": {
+        "position": 0,
+        "quaternion_wxyz": 0,
+        "linear_velocity_world": 0,
+        "angular_velocity_world": 0,
+        "official_policy_input": 0,
+        "highlevel_command": 0
+      },
+      "first_difference": null
+    },
+    "baseline_to_v3_before_activation": {
+      "sample_count": 36428,
+      "fields": [
+        "position",
+        "quaternion_wxyz",
+        "linear_velocity_world",
+        "angular_velocity_world",
+        "official_policy_input",
+        "highlevel_command"
+      ],
+      "all_fields_exactly_equal": true,
+      "different_row_counts_by_field": {
+        "position": 0,
+        "quaternion_wxyz": 0,
+        "linear_velocity_world": 0,
+        "angular_velocity_world": 0,
+        "official_policy_input": 0,
+        "highlevel_command": 0
+      },
+      "first_difference": null
+    },
+    "all_original_source_BEGIN_commands": {
+      "sample_count": 43410,
+      "fields": [
+        "highlevel_command"
+      ],
+      "all_fields_exactly_equal": true,
+      "different_row_counts_by_field": {
+        "highlevel_command": 0
+      },
+      "first_difference": null,
+      "END_last_consumed_command_exactly_equal": true
+    },
+    "all_actual_actor_packets": {
+      "packet_count": 5210,
+      "full_rows_exactly_equal": true,
+      "first_difference": null,
+      "canonical_baseline_sha256": "f728476fd3bcb193e69834fd9849cc487b4ae15dbd1a56bcd7680c534f0079df",
+      "canonical_alternative_sha256": "f728476fd3bcb193e69834fd9849cc487b4ae15dbd1a56bcd7680c534f0079df",
+      "normalization": "sorted JSON key serialization only; no field omitted or value changed"
+    },
+    "actual_13_link_geometry_before_activation": {
+      "baseline_packet_count": 4371,
+      "alternative_packet_count": 4371,
+      "full_rows_exactly_equal": true,
+      "first_difference": null,
+      "baseline_canonical_sha256": "4c913791ff1d8709b39f83db7d2d44f3d88a6aa8f68f96e169883884ece272e5",
+      "alternative_canonical_sha256": "4c913791ff1d8709b39f83db7d2d44f3d88a6aa8f68f96e169883884ece272e5"
+    }
+  },
+  "same_controller_source_snapshot_required": true,
+  "changed_factor": "runtime servo.mode at real BEGIN tick36428 only; source scene remains v2",
+  "source_hashes": {
+    "/home/eric/wjg/d1max-build-isaac/v59_zero_ab_analysis.py": "c4e58b6f33a05c06869ab5d1297e1f61426d98cc504f85d36bf8958d4c6e6868",
+    "/home/eric/wjg/d1max-system/simulation/isaacsim/navigation_physics_audit.py": "224fc1c11de454c561d04273a7a54bbc07ac1ec332c6e1f42746a4dbd09a12da",
+    "/home/eric/wjg/d1max-system/simulation/isaacsim/policy_history.py": "6ef66b983ed408946a203f0f222ac83052c73745c193e30acbc8c03a29df19ab",
+    "/home/eric/wjg/d1max-system/simulation/isaacsim/full_scene_replay.py": "cd6eba11f5ad4f9748ec8465a4902133da1ecab45aec7bca8d9be18f70fcec31",
+    "/home/eric/wjg/d1max-system/simulation/isaacsim/scene.py": "50710ca27178f5b5d9986c89768c3bb0a90d2979c2b6ed6a7fcd34de0127a836",
+    "/home/eric/wjg/d1max-system/simulation/isaacsim/quadruped.py": "46d0bd434d848d5c1e54f47182c386e1058f290b17635c1d29d5805a4f21d798",
+    "/home/eric/wjg/d1max-system/d1max_nav_ws/src/d1max_pct_scan/d1max_pct_scan/braking_model.py": "a5b403e56f6ce53d083853b35a31a66ea95e36d9cfd1ca26bda4618172278e64"
+  }
+}

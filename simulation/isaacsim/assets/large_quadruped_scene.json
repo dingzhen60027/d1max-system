@@ -13,7 +13,8 @@
   "physics": {
     "frequency_hz": 500.0,
     "state_frequency_hz": 50.0,
-    "usd_velocity_writeback": false
+    "usd_velocity_writeback": false,
+    "dynamic_actor_target_backend": "native_kinematic_v1"
   },
   "room": {
     "x_min": -50.0,
@@ -1567,10 +1568,23 @@
     "goal": [
       0.0,
       24.0,
-      0.52
+      0.0
     ],
-    "max_linear_speed": 0.15,
+    "max_linear_speed": 0.23,
     "max_angular_speed": 0.3,
+    "policy_input_limits": {
+      "schema": 1,
+      "linear": 0.38,
+      "angular": 0.5
+    },
+    "record_full_physics_history": true,
+    "history_annotation": "read-only actual500Hz PhysX BEGIN+finalEND fullXYZ/rotation; original navigation UDP and sole SDK writer unchanged",
+    "stall_recovery": {
+      "schema": 1,
+      "enabled": true,
+      "isolated_fixture": true
+    },
+    "actor_encounter_profile": "isolated_spot_reachable65_3m_exposure_v1",
     "offline_collision_envelope": {
       "radius_m": 0.65,
       "bottom_z_offset_m": -0.481,
@@ -1588,11 +1602,18 @@
       "planned_absolute_upper_m": 1.07,
       "actual_gait_z": "unchanged_raw_PhysX; full_registered_legs_floor_minus_.02_to_actual_body_plus_above"
     },
+    "velocity_feedback_mode": "spot_monotone_measured_v2",
+    "full_xyz_reference_model": {
+      "reference_max_speed_mps": 0.65,
+      "measured_travel_max_speed_mps": 0.65,
+      "evidence_file": "verification/20261007/spot_velocity_domain_v47_native_navigation.json",
+      "evidence_sha256": "44e56925dd1f4b78a4d3994701b1700429e00c3fd7f80b26ddcb86e321b97262"
+    },
     "model_limits": {
-      "max_linear_speed_mps": 0.6,
+      "max_linear_speed_mps": 0.65,
       "max_angular_speed_radps": 0.8
     },
-    "speed_limit_scope": "navigation_command_0.15mps_0.30radps; isolated_PhysX_reachable_bounds_0.60mps_0.80radps; live_transport_unchanged",
+    "speed_limit_scope": "navigation_command_0.23mps_0.30radps; internal_official_policy_cap_0.38mps_0.50radps; isolated_PhysX_engineering_full_XYZ_reference_travel_reachable_0.65mps_0.80radps_yaw; original_live_transport_and_stop_contract_unchanged",
     "body_size_scope": "nominal navigation body dimensions; exact loaded official collision registry is authoritative",
     "stance_status": "reference_height_from_official_Spot_PhysX_standing_test; offline_envelope_is_conservative_design_only",
     "observed_standing_body_z_range_m": [
@@ -1601,14 +1622,7 @@
     ],
     "terrain_contract": "flat_ground_contacts_require_actual_link_contact_certificate; stairs_and_cross_level_not_supported",
     "model_binding": "official_Spot_PhysX_asset; exact_runtime_collision_registry_and_contact_evidence_required",
-    "spawn_clearance_basis": "authored_zero_joint_foot_bottom_minus_0.692m_relative_to_body; 0.80m_spawn_leaves_about_0.108m_clearance",
-    "velocity_feedback_mode": "spot_monotone_measured_v2",
-    "full_xyz_reference_model": {
-      "reference_max_speed_mps": 0.5,
-      "measured_travel_max_speed_mps": 0.5,
-      "evidence_file": "verification/20261007/spot_full_xyz_reference_domain_v36.json",
-      "evidence_sha256": "1ab7fef769ec0cf186a39f0b72b1d5decd6b2dba99788a1efc61506401d418d3"
-    }
+    "spawn_clearance_basis": "authored_zero_joint_foot_bottom_minus_0.692m_relative_to_body; 0.80m_spawn_leaves_about_0.108m_clearance"
   },
   "lidar": {
     "origins": [
@@ -1959,6 +1973,14 @@
       "max_linear_speed_mps": 1.0325,
       "max_linear_acceleration_mps2": 0.10125,
       "velocity_bound_scope": "analytic_C1_bound_plus_explicit_0.02mps_native_f32_position_500Hz_quantization_margin_for_100x80m_campus; retain_all_measured_samples",
+      "future_motion_contract": {
+        "schema": 1,
+        "kind": "sealed_c1_smoothstep_kinematic_v1",
+        "source_scope": "isolated_simulation_enforced_kinematic_script",
+        "actual_pose_error_bound_m": 0.0001,
+        "actual_tilt_error_bound_rad": 1e-06,
+        "physics_dt_ns": 2000000
+      },
       "max_yaw_rate_radps": 0.0,
       "collision_shapes": [
         {
@@ -1994,15 +2016,7 @@
       "scenario_ids": [
         "long_distance_multi_goal",
         "crossing_blocker"
-      ],
-      "future_motion_contract": {
-        "schema": 1,
-        "kind": "sealed_c1_smoothstep_kinematic_v1",
-        "source_scope": "isolated_simulation_enforced_kinematic_script",
-        "actual_pose_error_bound_m": 0.0001,
-        "actual_tilt_error_bound_rad": 1e-06,
-        "physics_dt_ns": 2000000
-      }
+      ]
     },
     {
       "id": "office_person",
@@ -2050,6 +2064,14 @@
       "max_linear_speed_mps": 0.7836363636363637,
       "max_linear_acceleration_mps2": 0.05553719008264463,
       "velocity_bound_scope": "analytic_C1_bound_plus_explicit_0.02mps_native_f32_position_500Hz_quantization_margin_for_100x80m_campus; retain_all_measured_samples",
+      "future_motion_contract": {
+        "schema": 1,
+        "kind": "sealed_c1_smoothstep_kinematic_v1",
+        "source_scope": "isolated_simulation_enforced_kinematic_script",
+        "actual_pose_error_bound_m": 0.0001,
+        "actual_tilt_error_bound_rad": 1e-06,
+        "physics_dt_ns": 2000000
+      },
       "max_yaw_rate_radps": 0.0,
       "collision_shapes": [
         {
@@ -2084,15 +2106,7 @@
       ],
       "scenario_ids": [
         "long_distance_multi_goal"
-      ],
-      "future_motion_contract": {
-        "schema": 1,
-        "kind": "sealed_c1_smoothstep_kinematic_v1",
-        "source_scope": "isolated_simulation_enforced_kinematic_script",
-        "actual_pose_error_bound_m": 0.0001,
-        "actual_tilt_error_bound_rad": 1e-06,
-        "physics_dt_ns": 2000000
-      }
+      ]
     },
     {
       "id": "plaza_cart",
@@ -2140,6 +2154,14 @@
       "max_linear_speed_mps": 1.0914285714285714,
       "max_linear_acceleration_mps2": 0.12244897959183673,
       "velocity_bound_scope": "analytic_C1_bound_plus_explicit_0.02mps_native_f32_position_500Hz_quantization_margin_for_100x80m_campus; retain_all_measured_samples",
+      "future_motion_contract": {
+        "schema": 1,
+        "kind": "sealed_c1_smoothstep_kinematic_v1",
+        "source_scope": "isolated_simulation_enforced_kinematic_script",
+        "actual_pose_error_bound_m": 0.0001,
+        "actual_tilt_error_bound_rad": 1e-06,
+        "physics_dt_ns": 2000000
+      },
       "max_yaw_rate_radps": 0.0,
       "collision_shapes": [
         {
@@ -2190,15 +2212,7 @@
       "scenario_ids": [
         "long_distance_multi_goal",
         "cancel_and_park"
-      ],
-      "future_motion_contract": {
-        "schema": 1,
-        "kind": "sealed_c1_smoothstep_kinematic_v1",
-        "source_scope": "isolated_simulation_enforced_kinematic_script",
-        "actual_pose_error_bound_m": 0.0001,
-        "actual_tilt_error_bound_rad": 1e-06,
-        "physics_dt_ns": 2000000
-      }
+      ]
     },
     {
       "id": "warehouse_forklift",
@@ -2246,6 +2260,14 @@
       "max_linear_speed_mps": 0.62,
       "max_linear_acceleration_mps2": 0.036923076923076927,
       "velocity_bound_scope": "analytic_C1_bound_plus_explicit_0.02mps_native_f32_position_500Hz_quantization_margin_for_100x80m_campus; retain_all_measured_samples",
+      "future_motion_contract": {
+        "schema": 1,
+        "kind": "sealed_c1_smoothstep_kinematic_v1",
+        "source_scope": "isolated_simulation_enforced_kinematic_script",
+        "actual_pose_error_bound_m": 0.0001,
+        "actual_tilt_error_bound_rad": 1e-06,
+        "physics_dt_ns": 2000000
+      },
       "max_yaw_rate_radps": 0.0,
       "collision_shapes": [
         {
@@ -2316,15 +2338,7 @@
       ],
       "scenario_ids": [
         "long_distance_multi_goal"
-      ],
-      "future_motion_contract": {
-        "schema": 1,
-        "kind": "sealed_c1_smoothstep_kinematic_v1",
-        "source_scope": "isolated_simulation_enforced_kinematic_script",
-        "actual_pose_error_bound_m": 0.0001,
-        "actual_tilt_error_bound_rad": 1e-06,
-        "physics_dt_ns": 2000000
-      }
+      ]
     },
     {
       "id": "oncoming_cart",
@@ -2363,6 +2377,14 @@
       "max_linear_speed_mps": 0.77,
       "max_linear_acceleration_mps2": 0.075,
       "velocity_bound_scope": "analytic_C1_bound_plus_explicit_0.02mps_native_f32_position_500Hz_quantization_margin_for_100x80m_campus; retain_all_measured_samples",
+      "future_motion_contract": {
+        "schema": 1,
+        "kind": "sealed_c1_smoothstep_kinematic_v1",
+        "source_scope": "isolated_simulation_enforced_kinematic_script",
+        "actual_pose_error_bound_m": 0.0001,
+        "actual_tilt_error_bound_rad": 1e-06,
+        "physics_dt_ns": 2000000
+      },
       "max_yaw_rate_radps": 0.0,
       "collision_shapes": [
         {
@@ -2412,15 +2434,7 @@
       ],
       "scenario_ids": [
         "narrow_head_on"
-      ],
-      "future_motion_contract": {
-        "schema": 1,
-        "kind": "sealed_c1_smoothstep_kinematic_v1",
-        "source_scope": "isolated_simulation_enforced_kinematic_script",
-        "actual_pose_error_bound_m": 0.0001,
-        "actual_tilt_error_bound_rad": 1e-06,
-        "physics_dt_ns": 2000000
-      }
+      ]
     },
     {
       "id": "door_blocking_cart",
@@ -2477,6 +2491,14 @@
       "max_linear_speed_mps": 0.38,
       "max_linear_acceleration_mps2": 0.0576,
       "velocity_bound_scope": "analytic_C1_bound_plus_explicit_0.02mps_native_f32_position_500Hz_quantization_margin_for_100x80m_campus; retain_all_measured_samples",
+      "future_motion_contract": {
+        "schema": 1,
+        "kind": "sealed_c1_smoothstep_kinematic_v1",
+        "source_scope": "isolated_simulation_enforced_kinematic_script",
+        "actual_pose_error_bound_m": 0.0001,
+        "actual_tilt_error_bound_rad": 1e-06,
+        "physics_dt_ns": 2000000
+      },
       "max_yaw_rate_radps": 0.18849555921538758,
       "collision_shapes": [
         {
@@ -2527,15 +2549,7 @@
       "scenario_ids": [
         "temporary_door_block",
         "resume_after_block"
-      ],
-      "future_motion_contract": {
-        "schema": 1,
-        "kind": "sealed_c1_smoothstep_kinematic_v1",
-        "source_scope": "isolated_simulation_enforced_kinematic_script",
-        "actual_pose_error_bound_m": 0.0001,
-        "actual_tilt_error_bound_rad": 1e-06,
-        "physics_dt_ns": 2000000
-      }
+      ]
     }
   ],
   "scenarios": [
@@ -2551,27 +2565,27 @@
         [
           -43.75,
           29,
-          0.52
+          0.0
         ],
         [
           42,
           20,
-          0.52
+          0.0
         ],
         [
           24,
           -25,
-          0.52
+          0.0
         ],
         [
           -34,
           -28,
-          0.52
+          0.0
         ],
         [
           0,
           24,
-          0.52
+          0.0
         ]
       ],
       "actor_ids": [
@@ -2600,7 +2614,7 @@
         [
           8,
           -5,
-          0.52
+          0.0
         ]
       ],
       "actor_ids": [
@@ -2625,7 +2639,7 @@
         [
           20,
           -25,
-          0.52
+          0.0
         ]
       ],
       "actor_ids": [
@@ -2650,7 +2664,7 @@
         [
           20,
           -25,
-          0.52
+          0.0
         ]
       ],
       "actor_ids": [
@@ -2675,7 +2689,7 @@
         [
           10,
           -4,
-          0.52
+          0.0
         ]
       ],
       "actor_ids": [
@@ -2706,7 +2720,7 @@
         [
           20,
           -25,
-          0.52
+          0.0
         ]
       ],
       "actor_ids": [
@@ -2723,7 +2737,7 @@
           "goal": [
             20,
             -25,
-            0.52
+            0.0
           ]
         }
       ],

@@ -250,6 +250,15 @@ struct GridMapTestAccess {
     map.dynamic_hit_provenance_limit_=limit;
   }
   static bool actorProvenanceDisabled(const GridMap& map) {return map.dynamic_hit_provenance_disabled_;}
+  static auto diagnosticReadWitness(const GridMap& map) {
+    return std::make_tuple(map.occupancy_revision_,map.free_evidence_revision_,
+        map.collision_cache_clock_ns_,map.collision_cache_receipt_ns_,
+        map.collision_cache_deadline_ns_,map.collision_cache_receipt_deadline_ns_,
+        map.raw_collision_cache_generation_,map.unknown_collision_queries_,
+        map.static_prior_query_lease_valid_,map.dynamic_oracle_query_valid_,
+        map.observed_cylinder_cache_.size(),map.dynamic_oracle_.sequence(),
+        map.dynamic_oracle_.sourceDeadlineNs(),map.dynamic_oracle_.receiptDeadlineNs());
+  }
   static void disableActorProvenance(GridMap& map) {
     map.mp_.dynamic_hit_provenance_enabled_=false;map.observed_cylinder_cache_.clear();
   }
@@ -438,6 +447,197 @@ class ActorHitProvenance:public ::testing::Test {
     GridMapTestAccess::integrate(map,now,now*1e-9);
   }
 };
+
+class ContactActorHitProvenance:public ::testing::Test {
+ protected:
+  GridMap map;
+  const Eigen::Vector3i hit{15,0,0}; // Whole closed [0,.1] Z cell intersects the certified plane.
+  void SetUp() override {initialize();}
+  void initialize(const std::vector<std::string>& actors={"actor"},std::uint8_t prior=3,bool contact=true) {
+    GridMapTestAccess::configure(map);GridMapTestAccess::pointQueryGeometry(map);
+    GridMapTestAccess::productionProbabilities(map);
+    const auto hash=GridMapTestAccess::attachStaticPrior(map,{{hit,prior}},contact,1e-5,actors);
+    ASSERT_TRUE(map.applyLocalizationContext(priorContext(hash)));GridMapTestAccess::dynamicOracle(map,actors);
+    for(unsigned sensor=0;sensor<2;++sensor)ASSERT_TRUE(GridMapTestAccess::accept(map,
+        packet(sensor,101900000000LL,1,1,{.55,.05,.05},{-1.55,.05,.05})));
+    GridMapTestAccess::integrate(map);
+    auto oracle=nlohmann::json::parse(oraclePacket(1,102000000000LL,3.));
+    if(actors.size()>1) {
+      auto other=oracle["actors"][0];other["actor_id"]="other";oracle["actors"].push_back(other);
+    }
+    ASSERT_TRUE(map.applyDynamicOccupancyOracle(oracle.dump(),102000000000LL));
+    GridMapTestAccess::actorProvenance(map);
+  }
+  void taggedHit(const std::vector<std::uint16_t>& ids={1},std::int64_t source=101950000000LL,
+      std::int64_t now=102000000000LL,std::uint64_t sequence=2) {
+    ASSERT_TRUE(GridMapTestAccess::accept(map,withActorIds(packet(0,source,sequence,ids.size(),
+        {.55,.05,.025},{1.55,.05,.025}),ids),now,now*1e-9));
+    GridMapTestAccess::integrate(map,now,now*1e-9);
+  }
+};
+class ContactTwoActorHitProvenance:public ContactActorHitProvenance {
+ protected:void SetUp() override {initialize({"actor","other"});}
+};
+class ContactStaticOccupiedPrior:public ContactActorHitProvenance {
+ protected:void SetUp() override {initialize({"actor"},1);}
+};
+class ContactStaticUnknownPrior:public ContactActorHitProvenance {
+ protected:void SetUp() override {initialize({"actor"},2);}
+};
+class ContactWithoutCertificate:public ContactActorHitProvenance {
+ protected:void SetUp() override {initialize({"actor"},0,false);}
+};
+
+TEST_F(ContactActorHitProvenance, RealWeakHitSelectsCertifiedContactWithoutClearingOriginalHistory) {
+  taggedHit();ASSERT_EQ(GridMapTestAccess::category(map,hit),scan_planner::RawVoxelDiagnostic::Insufficient);
+  ASSERT_EQ(GridMapTestAccess::attribution(map,hit),1);ASSERT_TRUE(GridMapTestAccess::conflict(map,hit));
+  const auto odds=GridMapTestAccess::buffers(map);
+  const auto source=GridMapTestAccess::freeStamp(map,hit),receipt=GridMapTestAccess::freeReceipt(map,hit);
+  EXPECT_EQ(GridMapTestAccess::status(map,hit),0);EXPECT_EQ(GridMapTestAccess::uncachedStatus(map,hit),0);
+  EXPECT_EQ(GridMapTestAccess::evidenceSource(map,hit,0),"certified_flat_floor_support_contact");
+  EXPECT_EQ(GridMapTestAccess::buffers(map),odds);EXPECT_EQ(GridMapTestAccess::freeStamp(map,hit),source);
+  EXPECT_EQ(GridMapTestAccess::freeReceipt(map,hit),receipt);EXPECT_TRUE(GridMapTestAccess::conflict(map,hit));
+  EXPECT_EQ(GridMapTestAccess::attribution(map,hit),1);EXPECT_EQ(map.observedProofDeadlineNs(),102200000000LL);
+}
+
+TEST_F(ContactActorHitProvenance, OccupiedActorOddsStillSelectContactOnlyAfterStrictlyNewerOracle) {
+  for(unsigned i=0;i<4;++i)taggedHit({1},101950000000LL+i*10000000LL,102000000000LL,2+i);
+  ASSERT_EQ(GridMapTestAccess::category(map,hit),scan_planner::RawVoxelDiagnostic::Occupied);
+  const auto odds=GridMapTestAccess::buffers(map);EXPECT_EQ(GridMapTestAccess::status(map,hit),0);
+  EXPECT_EQ(GridMapTestAccess::evidenceSource(map,hit,0),"certified_flat_floor_support_contact");
+  EXPECT_EQ(GridMapTestAccess::buffers(map),odds);EXPECT_TRUE(GridMapTestAccess::conflict(map,hit));
+}
+
+TEST_F(ContactActorHitProvenance, EqualOracleAndAnyLaterOriginalHitCannotBorrowContactPrivilege) {
+  taggedHit({1},102000000000LL,102000000000LL);
+  ASSERT_EQ(GridMapTestAccess::attribution(map,hit),1);EXPECT_EQ(GridMapTestAccess::status(map,hit),2);
+  ASSERT_TRUE(map.applyDynamicOccupancyOracle(oraclePacket(2,102010000000LL,3.),102010000000LL));
+  GridMapTestAccess::integrate(map,102010000000LL,102.01);ASSERT_EQ(GridMapTestAccess::status(map,hit),0);
+  taggedHit({1},102020000000LL,102020000000LL,3);EXPECT_EQ(GridMapTestAccess::status(map,hit),2);
+  ASSERT_TRUE(map.applyDynamicOccupancyOracle(oraclePacket(3,102030000000LL,3.),102030000000LL));
+  GridMapTestAccess::integrate(map,102030000000LL,102.03);EXPECT_EQ(GridMapTestAccess::status(map,hit),0);
+}
+
+TEST_F(ContactActorHitProvenance, FullClosedCellFacesAndBothVerticalFacesRemainDynamicVetoes) {
+  taggedHit();ASSERT_EQ(GridMapTestAccess::status(map,hit),0);const auto odds=GridMapTestAccess::buffers(map);
+  const std::vector<std::array<double,3>> centers{{1.8,.05,.05},{1.55,.05,.3},{1.55,.05,-.2}};
+  for(unsigned i=0;i<centers.size();++i) {
+    const auto source=102010000000LL+i*10000000LL;
+    const auto& center=centers[i];
+    ASSERT_TRUE(map.applyDynamicOccupancyOracle(oracleSpherePacket(center,.2,2+i,source),source));
+    GridMapTestAccess::integrate(map,source,source*1e-9);EXPECT_EQ(GridMapTestAccess::status(map,hit),2)<<i;
+  }
+  EXPECT_EQ(GridMapTestAccess::buffers(map),odds);EXPECT_TRUE(GridMapTestAccess::conflict(map,hit));
+}
+
+TEST_F(ContactTwoActorHitProvenance, AnotherCompleteActorStillVetoesAndMixedActorIdentityNeverRetires) {
+  taggedHit();ASSERT_EQ(GridMapTestAccess::status(map,hit),0);
+  auto oracle=nlohmann::json::parse(oraclePacket(2,102010000000LL,3.));
+  auto other=oracle["actors"][0];other["actor_id"]="other";
+  other["regions"][0]["min"]={1.5,0.,0.};other["regions"][0]["max"]={1.6,.1,.1};
+  oracle["actors"].push_back(other);
+  ASSERT_TRUE(map.applyDynamicOccupancyOracle(oracle.dump(),102010000000LL));
+  GridMapTestAccess::integrate(map,102010000000LL,102.01);EXPECT_EQ(GridMapTestAccess::status(map,hit),2);
+  GridMapTestAccess::actualPriorHit(map,hit,102011000000LL,.025,2);
+  EXPECT_EQ(GridMapTestAccess::attribution(map,hit),0);
+  oracle["sequence"]=3;oracle["source_stamp_ns"]=102020000000LL;oracle["valid_until_ns"]=102220000000LL;
+  oracle["reachable_until_ns"]=108020000000LL;oracle["actors"][1]["regions"]=oracle["actors"][0]["regions"];
+  ASSERT_TRUE(map.applyDynamicOccupancyOracle(oracle.dump(),102020000000LL));
+  GridMapTestAccess::integrate(map,102020000000LL,102.02);EXPECT_EQ(GridMapTestAccess::status(map,hit),2);
+}
+
+TEST_F(ContactActorHitProvenance, UntaggedDeduplicatedHitIsStickyAndLaterActorLabelCannotRepairIt) {
+  taggedHit({1,0});ASSERT_EQ(GridMapTestAccess::attribution(map,hit),0);
+  EXPECT_EQ(GridMapTestAccess::status(map,hit),2);
+  taggedHit({1},101960000000LL,102010000000LL,3);
+  EXPECT_EQ(GridMapTestAccess::attribution(map,hit),0);EXPECT_EQ(GridMapTestAccess::status(map,hit),2);
+  EXPECT_EQ(GridMapTestAccess::evidenceSource(map,hit,2),"live_static_conflict");
+}
+
+TEST_F(ContactActorHitProvenance, EvenOlderUnattributedHitRevokesPreviouslyCachedContact) {
+  taggedHit();ASSERT_EQ(GridMapTestAccess::status(map,hit),0);
+  std::size_t visits=0;ASSERT_EQ(GridMapTestAccess::snapshotColumn(map,hit,1,visits),0);
+  const auto odds=GridMapTestAccess::buffers(map);
+  GridMapTestAccess::actualPriorHit(map,hit,101800000000LL,.025,0);
+  EXPECT_EQ(GridMapTestAccess::attribution(map,hit),0);EXPECT_EQ(GridMapTestAccess::status(map,hit),2);
+  EXPECT_EQ(GridMapTestAccess::snapshotColumn(map,hit,1,visits),2);EXPECT_EQ(visits,1U);
+  EXPECT_EQ(GridMapTestAccess::buffers(map),odds); // A late older endpoint changes attribution, never raw evidence.
+}
+
+TEST_F(ContactActorHitProvenance, OriginalLegacyNonfloorHistoryKeepsPriorPoisonAfterNewActorLabel) {
+  ASSERT_TRUE(GridMapTestAccess::accept(map,packet(0,101950000000LL,2,1,{.55,.05,.025},{1.55,.05,.025})));
+  GridMapTestAccess::integrate(map);ASSERT_EQ(GridMapTestAccess::status(map,hit),2);
+  taggedHit({1},101960000000LL,102010000000LL,3);
+  EXPECT_EQ(GridMapTestAccess::attribution(map,hit),0);EXPECT_EQ(GridMapTestAccess::status(map,hit),2);
+  EXPECT_GT(nlohmann::json::parse(map.describeDynamicHitProvenanceStatus())["zero_tag_events"],0);
+}
+
+TEST_F(ContactActorHitProvenance, PriorUnattributedWeakHistoryCannotBeReclassifiedWhenFeatureEnables) {
+  GridMapTestAccess::disableActorProvenance(map);
+  ASSERT_TRUE(GridMapTestAccess::accept(map,packet(0,101950000000LL,2,1,{.55,.05,.025},{1.55,.05,.025})));
+  GridMapTestAccess::integrate(map);ASSERT_EQ(GridMapTestAccess::status(map,hit),2);
+  GridMapTestAccess::actorProvenance(map);taggedHit({1},101960000000LL,102010000000LL,3);
+  EXPECT_EQ(GridMapTestAccess::attribution(map,hit),0);EXPECT_EQ(GridMapTestAccess::status(map,hit),2);
+  EXPECT_GT(nlohmann::json::parse(map.describeDynamicHitProvenanceStatus())["prior_poison_events"],0);
+}
+
+TEST_F(ContactActorHitProvenance, FeatureOffImmediatelyRejectsOtherwiseQualifiedContact) {
+  taggedHit();ASSERT_EQ(GridMapTestAccess::status(map,hit),0);const auto odds=GridMapTestAccess::buffers(map);
+  GridMapTestAccess::disableActorProvenance(map);EXPECT_EQ(GridMapTestAccess::status(map,hit),2);
+  EXPECT_EQ(GridMapTestAccess::buffers(map),odds);
+}
+
+TEST_F(ContactActorHitProvenance, RevokedStaticIdentityImmediatelyRejectsOtherwiseQualifiedContact) {
+  taggedHit();ASSERT_EQ(GridMapTestAccess::status(map,hit),0);
+  EXPECT_FALSE(map.applyLocalizationContext(context(2,2)));EXPECT_EQ(GridMapTestAccess::status(map,hit),2);
+}
+
+TEST_F(ContactActorHitProvenance, ChangedActorRegistryRevokesOtherwiseQualifiedContact) {
+  taggedHit();ASSERT_EQ(GridMapTestAccess::status(map,hit),0);
+  GridMapTestAccess::dynamicOracle(map,{"different"});
+  GridMapTestAccess::actualPriorHit(map,hit,102010000000LL,.025,1);
+  EXPECT_TRUE(GridMapTestAccess::actorProvenanceDisabled(map));EXPECT_EQ(GridMapTestAccess::status(map,hit),2);
+}
+
+TEST_F(ContactActorHitProvenance, FeatureOffOverflowAndUnverifiedContextRemainFailClosed) {
+  GridMapTestAccess::actorProvenance(map,1);taggedHit();ASSERT_EQ(GridMapTestAccess::status(map,hit),0);
+  GridMapTestAccess::actualPriorHit(map,{14,0,0},101960000000LL,.025,0);
+  ASSERT_TRUE(GridMapTestAccess::actorProvenanceDisabled(map));EXPECT_EQ(GridMapTestAccess::status(map,hit),2);
+  GridMapTestAccess::disableActorProvenance(map);EXPECT_EQ(GridMapTestAccess::status(map,hit),2);
+  EXPECT_FALSE(map.applyLocalizationContext(context(2,2)));EXPECT_EQ(GridMapTestAccess::status(map,hit),2);
+}
+
+TEST_F(ContactActorHitProvenance, DuplicateOracleNeverRenewsSourceOrReceiptContactLease) {
+  taggedHit();ASSERT_EQ(GridMapTestAccess::status(map,hit),0);
+  const auto deadline=map.observedProofDeadlineNs();const auto odds=GridMapTestAccess::buffers(map);
+  ASSERT_TRUE(map.applyDynamicOccupancyOracle(oraclePacket(1,102000000000LL,3.),102100000000LL));
+  EXPECT_EQ(map.observedProofDeadlineNs(),deadline);
+  GridMapTestAccess::integrate(map,102100000000LL,102.21);EXPECT_EQ(GridMapTestAccess::status(map,hit),2);
+  EXPECT_EQ(GridMapTestAccess::buffers(map),odds); // Receipt expired even while source is within .2 s.
+}
+
+TEST_F(ContactActorHitProvenance, OriginalOracleSourceExpiryCannotSelectContactCertificate) {
+  taggedHit();ASSERT_EQ(GridMapTestAccess::status(map,hit),0);const auto odds=GridMapTestAccess::buffers(map);
+  GridMapTestAccess::integrate(map,102200000000LL,102.01);EXPECT_EQ(GridMapTestAccess::status(map,hit),2);
+  EXPECT_EQ(GridMapTestAccess::buffers(map),odds);
+}
+
+TEST_F(ContactStaticOccupiedPrior, NonfloorStaticOccupiedCellCannotSelectContactCertificate) {
+  taggedHit();EXPECT_EQ(GridMapTestAccess::status(map,hit),1);
+}
+
+TEST_F(ContactStaticUnknownPrior, UncertifiedCellCannotSelectContactCertificate) {
+  taggedHit();EXPECT_EQ(GridMapTestAccess::status(map,hit),2);
+}
+
+TEST_F(ContactWithoutCertificate, MissingWholeContactCertificateRejectsActorTaggedWireSchema) {
+  const auto tagged=withActorIds(packet(0,101950000000LL,2,1,{.55,.05,.025},{1.55,.05,.025}),{1});
+  EXPECT_FALSE(GridMapTestAccess::accept(map,tagged));
+  ASSERT_TRUE(GridMapTestAccess::accept(map,packet(0,101960000000LL,3,1,{.55,.05,.025},{1.55,.05,.025})));
+  GridMapTestAccess::integrate(map);
+  EXPECT_EQ(GridMapTestAccess::category(map,hit),scan_planner::RawVoxelDiagnostic::Insufficient);
+  EXPECT_EQ(GridMapTestAccess::status(map,hit),2); // A default static-FREE cell still keeps its untagged real hit.
+}
 
 TEST(ActorRaySchema, LegacyBytesStayUnattributedAnd72RequiresExplicitBound) {
   const auto legacy=packet(0,101900000000LL,1,2);
@@ -722,6 +922,82 @@ TEST_F(ActorHitProvenance, SnapshotIdentitySourceRollbackAndFirstOccupiedEvidenc
   EXPECT_EQ(detail["hit_source_ns"],102010000000LL);EXPECT_EQ(detail["hit_actor_id"],0);
   const auto odds=GridMapTestAccess::buffers(map);GridMapTestAccess::queryTime(map,101800000000LL);
   EXPECT_NE(GridMapTestAccess::status(map,hit),0);EXPECT_EQ(GridMapTestAccess::buffers(map),odds);
+}
+
+TEST_F(ActorHitProvenance, DiagnosticCountsBeforeDedupAndNeverRelabelsStickyPoison) {
+  taggedHit({1,0}); // Both actual endpoints must be visible despite one native cell vote.
+  const auto first=nlohmann::json::parse(map.describeDynamicHitProvenanceStatus());
+  EXPECT_TRUE(first["enabled"].get<bool>());EXPECT_TRUE(first["domain_valid"].get<bool>());EXPECT_FALSE(first["latched_disabled"].get<bool>());
+  EXPECT_EQ(first["entry_count"],1);EXPECT_EQ(first["entry_limit"],100000);
+  EXPECT_EQ(first["valid_tag_events"],1);EXPECT_EQ(first["zero_tag_events"],1);
+  EXPECT_EQ(first["mixed_poison_events"],1);EXPECT_EQ(first["prior_poison_events"],0);
+  EXPECT_EQ(first["disable_reason"],"none");EXPECT_EQ(GridMapTestAccess::attribution(map,hit),0);
+  GridMapTestAccess::actualPriorHit(map,hit,101960000000LL,.15,1);
+  const auto later=nlohmann::json::parse(map.describeDynamicHitProvenanceStatus());
+  EXPECT_EQ(later["valid_tag_events"],2);EXPECT_EQ(later["mixed_poison_events"],1);
+  EXPECT_EQ(GridMapTestAccess::attribution(map,hit),0);EXPECT_EQ(GridMapTestAccess::status(map,hit),1);
+}
+
+TEST_F(ActorHitProvenance, DiagnosticPriorPoisonRecordsOriginalUnattributedHistory) {
+  GridMapTestAccess::disableActorProvenance(map);
+  ASSERT_TRUE(GridMapTestAccess::accept(map,packet(0,101950000000LL,2,1,{.55,.05,.15},{1.55,.05,.15})));
+  GridMapTestAccess::integrate(map);const auto original=GridMapTestAccess::buffers(map);
+  GridMapTestAccess::actorProvenance(map);
+  GridMapTestAccess::actualPriorHit(map,hit,101960000000LL,.15,1);
+  const auto status=nlohmann::json::parse(map.describeDynamicHitProvenanceStatus());
+  EXPECT_EQ(status["valid_tag_events"],1);EXPECT_EQ(status["prior_poison_events"],1);
+  EXPECT_EQ(status["mixed_poison_events"],0);EXPECT_EQ(GridMapTestAccess::attribution(map,hit),0);
+  EXPECT_EQ(GridMapTestAccess::buffers(map),original);EXPECT_EQ(GridMapTestAccess::status(map,hit),1);
+}
+
+TEST_F(ActorHitProvenance, DiagnosticOverflowReasonAndCountsPersistAcrossOriginalReset) {
+  GridMapTestAccess::actorProvenance(map,1);taggedHit();
+  GridMapTestAccess::actualPriorHit(map,{14,0,1},101960000000LL,.15,0);
+  const auto disabled=nlohmann::json::parse(map.describeDynamicHitProvenanceStatus());
+  EXPECT_TRUE(disabled["latched_disabled"].get<bool>());EXPECT_EQ(disabled["entry_count"],0);
+  EXPECT_EQ(disabled["entry_limit"],1);EXPECT_EQ(disabled["disable_reason"],"metadata_limit_exhausted");
+  EXPECT_EQ(disabled["valid_tag_events"],1);EXPECT_EQ(disabled["zero_tag_events"],1);
+  GridMapTestAccess::reset(map);
+  EXPECT_EQ(nlohmann::json::parse(map.describeDynamicHitProvenanceStatus()),disabled);
+  EXPECT_NE(GridMapTestAccess::status(map,hit),0);
+}
+
+TEST_F(ActorHitProvenance, DiagnosticDomainRevocationIsDistinctFromMetadataExhaustion) {
+  taggedHit();GridMapTestAccess::dynamicOracle(map,{"different"});
+  GridMapTestAccess::actualPriorHit(map,{14,0,1},101960000000LL,.15,1);
+  const auto status=nlohmann::json::parse(map.describeDynamicHitProvenanceStatus());
+  EXPECT_FALSE(status["domain_valid"].get<bool>());EXPECT_TRUE(status["latched_disabled"].get<bool>());
+  EXPECT_EQ(status["disable_reason"],"domain_or_registry_mismatch");EXPECT_EQ(status["entry_count"],0);
+  EXPECT_EQ(status["valid_tag_events"],1);EXPECT_EQ(status["zero_tag_events"],0);
+  EXPECT_NE(GridMapTestAccess::status(map,hit),0);
+}
+
+TEST_F(ActorHitProvenance, DiagnosticDescriptionsDoNotQueryAndSnapshotsKeepOriginalBookkeeping) {
+  // A production snapshot queries the real steady clock. Both original ray
+  // receipts and the oracle receipt must therefore be genuinely current,
+  // rather than the memory fixture's deterministic 102-second receipt.
+  const auto receipt=std::chrono::steady_clock::now();
+  const auto receipt_ns=std::chrono::duration_cast<std::chrono::nanoseconds>(receipt.time_since_epoch()).count();
+  for(unsigned sensor=0;sensor<2;++sensor)ASSERT_TRUE(GridMapTestAccess::accept(map,withActorIds(
+      packet(sensor,101950000000LL,2,1,{.55,.05,.15},{1.55,.05,.15}),{1}),102001000000LL,receipt_ns*1e-9));
+  GridMapTestAccess::integrate(map,102001000000LL,receipt_ns*1e-9);
+  ASSERT_TRUE(map.applyDynamicOccupancyOracle(oraclePacket(2,102001000000LL,3.),receipt_ns));
+  GridMap snapshot;map.copyCollisionSnapshotTo(snapshot,102001000000LL,receipt);
+  snapshot.beginObservedProof();ASSERT_EQ(snapshot.observedRawSnapshotStatus(hit),0);
+  const auto state=GridMapTestAccess::diagnosticReadWitness(snapshot);
+  const auto odds=GridMapTestAccess::buffers(snapshot);
+  const auto status=nlohmann::json::parse(snapshot.describeDynamicHitProvenanceStatus());
+  const auto lease=nlohmann::json::parse(snapshot.describeCollisionLease());
+  EXPECT_EQ(lease["dynamic_hit_provenance"],status);
+  EXPECT_EQ(nlohmann::json::parse(snapshot.describeObservedRawFailure())["dynamic_hit_provenance"],status);
+  EXPECT_EQ(GridMapTestAccess::diagnosticReadWitness(snapshot),state);
+  EXPECT_EQ(GridMapTestAccess::buffers(snapshot),odds);
+  GridMapTestAccess::actualPriorHit(map,hit,102010000000LL,.15,0);
+  EXPECT_EQ(nlohmann::json::parse(map.describeDynamicHitProvenanceStatus())["mixed_poison_events"],1);
+  EXPECT_EQ(nlohmann::json::parse(snapshot.describeDynamicHitProvenanceStatus()),status);
+  EXPECT_EQ(nlohmann::json::parse(snapshot.describeCollisionLease()),lease);
+  EXPECT_EQ(GridMapTestAccess::diagnosticReadWitness(snapshot),state);
+  EXPECT_EQ(snapshot.observedRawSnapshotStatus(hit),0); // Original independent evidence remains selectable.
 }
 
 TEST(DynamicOracleIntegration, SphereCornerDisjointnessRetainsPriorContactLiveHitsAndCompleteTopVolume) {

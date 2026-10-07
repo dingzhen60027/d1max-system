@@ -1,0 +1,352 @@
+{
+  "schema": 1,
+  "scope": "offline_narrow_v38_optimizer_reference_consumer_fix",
+  "formal_navigation_pass": false,
+  "original_failure": {
+    "run": "/home/eric/wjg/d1max-build-isaac/runs/campus_crossing_v38_001",
+    "candidate_original_header_sha256": "8371d43f4246669a3926864ba78581ce723f5ef674a71de6a1694b0d1e36ea83",
+    "cause": "sealed reference=.60 passed by manager into optimizer setter with stale .50 defensive bound; invalid_argument swallowed as solve_exception",
+    "immutable_original_reproducer": [
+      {
+        "path": "/home/eric/wjg/d1max-build-isaac/v38_solver_reproducer/compile.log",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "text": null
+      },
+      {
+        "path": "/home/eric/wjg/d1max-build-isaac/v38_solver_reproducer/reproduce.cpp",
+        "sha256": "af79a886939871e9581f21aeb156c6c8c4c44603d0decf76f71e8ea5685fb800",
+        "text": null
+      },
+      {
+        "path": "/home/eric/wjg/d1max-build-isaac/v38_solver_reproducer/result.log",
+        "sha256": "b535cc63687a729d01aeebc64bdd0e3b0ce12dc99435fdea3125219ad597d3c7",
+        "text": "0.575 rejected: invalid reference derivative speed\n0.6 rejected: invalid reference derivative speed\n"
+      }
+    ]
+  },
+  "changes": [
+    {
+      "source": "/home/eric/wjg/d1max-system/d1max_nav_ws/src/scan_planner_vendor/bspline_opt/include/bspline_opt/bspline_optimizer.h",
+      "sha256": "1b26b7bb5fe54a0ad0046d7e6ef6e8d5906792651ccb5cc399afda5eba080cbe",
+      "build_copy": "/home/eric/wjg/d1max-build-isaac/nav-source/src/scan_planner_vendor/bspline_opt/include/bspline_opt/bspline_optimizer.h",
+      "build_copy_sha256": "1b26b7bb5fe54a0ad0046d7e6ef6e8d5906792651ccb5cc399afda5eba080cbe",
+      "byte_equal": true
+    },
+    {
+      "source": "/home/eric/wjg/d1max-system/d1max_nav_ws/src/scan_planner_vendor/bspline_opt/test/test_optimizer_budget.cpp",
+      "sha256": "04f5ebb0563f41d6c0f7040af4af7cd8c2e1607025280e9aa041ae1aab9b7d29",
+      "build_copy": "/home/eric/wjg/d1max-build-isaac/nav-source/src/scan_planner_vendor/bspline_opt/test/test_optimizer_budget.cpp",
+      "build_copy_sha256": "04f5ebb0563f41d6c0f7040af4af7cd8c2e1607025280e9aa041ae1aab9b7d29",
+      "byte_equal": true
+    },
+    {
+      "source": "/home/eric/wjg/d1max-system/d1max_nav_ws/src/scan_planner_vendor/plan_manage/src/scan_replan_fsm.cpp",
+      "sha256": "7bf40d3fe8a9507bd940fbd5a6aa87e615bd5933621aed3dde21596e4bd03420",
+      "build_copy": "/home/eric/wjg/d1max-build-isaac/nav-source/src/scan_planner_vendor/plan_manage/src/scan_replan_fsm.cpp",
+      "build_copy_sha256": "7bf40d3fe8a9507bd940fbd5a6aa87e615bd5933621aed3dde21596e4bd03420",
+      "byte_equal": true
+    },
+    {
+      "source": "/home/eric/wjg/d1max-system/d1max_nav_ws/src/scan_planner_vendor/plan_manage/test/test_async_worker_no_ros.py",
+      "sha256": "d30b4cf64e5130e279c6bfcdcdc85ff94d60313676c7d820b2c1c3cbdf8ef1e1",
+      "build_copy": "/home/eric/wjg/d1max-build-isaac/nav-source/src/scan_planner_vendor/plan_manage/test/test_async_worker_no_ros.py",
+      "build_copy_sha256": "d30b4cf64e5130e279c6bfcdcdc85ff94d60313676c7d820b2c1c3cbdf8ef1e1",
+      "byte_equal": true
+    }
+  ],
+  "installed_header": {
+    "path": "/home/eric/wjg/d1max-build-isaac/nav/install/bspline_opt/include/bspline_opt/bspline_optimizer.h",
+    "sha256": "1b26b7bb5fe54a0ad0046d7e6ef6e8d5906792651ccb5cc399afda5eba080cbe",
+    "byte_equal_to_source": true
+  },
+  "installed_scan_node": {
+    "path": "/home/eric/wjg/d1max-build-isaac/nav/install/scan_planner/lib/scan_planner/scan_planner_node",
+    "sha256": "fd70b44b3107b2d3ffb898d6f1b7d521b769e88a3a7c582cb3dbc15b7b5ac4df"
+  },
+  "build": {
+    "packages": [
+      "bspline_opt",
+      "scan_planner",
+      "d1max_scan_planner"
+    ],
+    "exit_code": 0,
+    "jobs": 2,
+    "sequential_executor": true,
+    "installed": true
+  },
+  "ctest": {
+    "bspline_opt": {
+      "passed": 4,
+      "total": 4
+    },
+    "scan_planner": {
+      "passed": 18,
+      "total": 18
+    }
+  },
+  "xml_counts": {
+    "bspline_opt": {
+      "xml_tests": 37,
+      "failures": 0,
+      "errors": 0
+    },
+    "scan_planner": {
+      "xml_tests": 182,
+      "failures": 0,
+      "errors": 0
+    }
+  },
+  "test_xml_snapshot": [
+    {
+      "path": "/home/eric/wjg/d1max-build-isaac/v38_solver_fix_evidence/bspline_opt_test_optimizer_budget.gtest.xml",
+      "sha256": "981d9d4af75e556c73c679e885c2d0ad6f05174c10a0c520c1731592e5c31a54",
+      "root_counts": {
+        "tests": "4",
+        "failures": "0",
+        "disabled": "0",
+        "errors": "0",
+        "time": "0",
+        "timestamp": "2026-10-07T17:28:06",
+        "name": "AllTests"
+      }
+    },
+    {
+      "path": "/home/eric/wjg/d1max-build-isaac/v38_solver_fix_evidence/bspline_opt_test_reference_path.gtest.xml",
+      "sha256": "6ddf40fc7ad7b8b901bbe8eea6b498e32f6628e4874c8b71d1f7213459ed93b9",
+      "root_counts": {
+        "tests": "5",
+        "failures": "0",
+        "disabled": "0",
+        "errors": "0",
+        "time": "0",
+        "timestamp": "2026-10-07T17:28:06",
+        "name": "AllTests"
+      }
+    },
+    {
+      "path": "/home/eric/wjg/d1max-build-isaac/v38_solver_fix_evidence/bspline_opt_test_uniform_bspline.gtest.xml",
+      "sha256": "7fd17f58d9db3dda7026fcf35f1b0a1acb9974a476a9759498b7b3d8cae53703",
+      "root_counts": {
+        "tests": "16",
+        "failures": "0",
+        "disabled": "0",
+        "errors": "0",
+        "time": "0.001",
+        "timestamp": "2026-10-07T17:28:06",
+        "name": "AllTests"
+      }
+    },
+    {
+      "path": "/home/eric/wjg/d1max-build-isaac/v38_solver_fix_evidence/bspline_opt_test_whole_spline_collision.gtest.xml",
+      "sha256": "a30c423fa5406c8871749652a1eb933408932978951e2c8c4d5a479e313fc335",
+      "root_counts": {
+        "tests": "12",
+        "failures": "0",
+        "disabled": "0",
+        "errors": "0",
+        "time": "0.009",
+        "timestamp": "2026-10-07T17:28:06",
+        "name": "AllTests"
+      }
+    },
+    {
+      "path": "/home/eric/wjg/d1max-build-isaac/v38_solver_fix_evidence/scan_planner_test_candidate_adoption.gtest.xml",
+      "sha256": "6482bb4921fbf878023c295e3a1b69067aa80f24b411cfc8cbd3e086f40532e8",
+      "root_counts": {
+        "tests": "19",
+        "failures": "0",
+        "disabled": "0",
+        "errors": "0",
+        "time": "0.008",
+        "timestamp": "2026-10-07T17:28:10",
+        "name": "AllTests"
+      }
+    },
+    {
+      "path": "/home/eric/wjg/d1max-build-isaac/v38_solver_fix_evidence/scan_planner_test_collision_reference.gtest.xml",
+      "sha256": "aaf227353707665c6abeb4a338326383cad84b3755624929b5aa1c27a4285c39",
+      "root_counts": {
+        "tests": "5",
+        "failures": "0",
+        "disabled": "0",
+        "errors": "0",
+        "time": "0.001",
+        "timestamp": "2026-10-07T17:28:10",
+        "name": "AllTests"
+      }
+    },
+    {
+      "path": "/home/eric/wjg/d1max-build-isaac/v38_solver_fix_evidence/scan_planner_test_execution_ledger.gtest.xml",
+      "sha256": "33113cc9a58eeb65116665e0c89ba6d141ab9a1e7f9b3ba272db6f91da293a00",
+      "root_counts": {
+        "tests": "39",
+        "failures": "0",
+        "disabled": "0",
+        "errors": "0",
+        "time": "0",
+        "timestamp": "2026-10-07T17:28:10",
+        "name": "AllTests"
+      }
+    },
+    {
+      "path": "/home/eric/wjg/d1max-build-isaac/v38_solver_fix_evidence/scan_planner_test_initial_yaw_native.gtest.xml",
+      "sha256": "abd95661eda56ca01ce48387ed0dee16da3aca29e6784457fcf2f0c87e0371a0",
+      "root_counts": {
+        "tests": "7",
+        "failures": "0",
+        "disabled": "0",
+        "errors": "0",
+        "time": "0.006",
+        "timestamp": "2026-10-07T17:28:10",
+        "name": "AllTests"
+      }
+    },
+    {
+      "path": "/home/eric/wjg/d1max-build-isaac/v38_solver_fix_evidence/scan_planner_test_input_contract.gtest.xml",
+      "sha256": "f79237d4245e2620e76912b2adc444d397a26006419d26b1de2f4d74e82e8970",
+      "root_counts": {
+        "tests": "12",
+        "failures": "0",
+        "disabled": "0",
+        "errors": "0",
+        "time": "0",
+        "timestamp": "2026-10-07T17:28:10",
+        "name": "AllTests"
+      }
+    },
+    {
+      "path": "/home/eric/wjg/d1max-build-isaac/v38_solver_fix_evidence/scan_planner_test_local_plan_debug.gtest.xml",
+      "sha256": "c6d2097c62c7910ecda41b0aee8ad66ba4e015c68a644b3f509bfdced6fec610",
+      "root_counts": {
+        "tests": "6",
+        "failures": "0",
+        "disabled": "0",
+        "errors": "0",
+        "time": "0",
+        "timestamp": "2026-10-07T17:28:10",
+        "name": "AllTests"
+      }
+    },
+    {
+      "path": "/home/eric/wjg/d1max-build-isaac/v38_solver_fix_evidence/scan_planner_test_low_speed_entry_fit.gtest.xml",
+      "sha256": "35273a0b1970df96571f403d08f245e4a3ff10fdb28b081242e6e6753def7866",
+      "root_counts": {
+        "tests": "10",
+        "failures": "0",
+        "disabled": "0",
+        "errors": "0",
+        "time": "0",
+        "timestamp": "2026-10-07T17:28:10",
+        "name": "AllTests"
+      }
+    },
+    {
+      "path": "/home/eric/wjg/d1max-build-isaac/v38_solver_fix_evidence/scan_planner_test_motion_sweep.gtest.xml",
+      "sha256": "b36cf287d917be2d95613239b2201db41b8fd214a96ad736a5b25b78998e72dc",
+      "root_counts": {
+        "tests": "35",
+        "failures": "0",
+        "disabled": "0",
+        "errors": "0",
+        "time": "0.802",
+        "timestamp": "2026-10-07T17:28:10",
+        "name": "AllTests"
+      }
+    },
+    {
+      "path": "/home/eric/wjg/d1max-build-isaac/v38_solver_fix_evidence/scan_planner_test_reference_target.gtest.xml",
+      "sha256": "0a91ca1f95854bb3790301bd5d401705a1e9addfea4c3e651c8d1d34164cbe86",
+      "root_counts": {
+        "tests": "17",
+        "failures": "0",
+        "disabled": "0",
+        "errors": "0",
+        "time": "0",
+        "timestamp": "2026-10-07T17:28:11",
+        "name": "AllTests"
+      }
+    },
+    {
+      "path": "/home/eric/wjg/d1max-build-isaac/v38_solver_fix_evidence/scan_planner_test_test_planner_startup.py.xunit.xml",
+      "sha256": "49d09059da668bed187b8059ea948d2843e876c289c034628ec04ff15c8d69a2",
+      "root_counts": {
+        "name": "scan_planner.test_planner_startup",
+        "tests": "0",
+        "failures": "0",
+        "errors": "0",
+        "time": "0"
+      }
+    },
+    {
+      "path": "/home/eric/wjg/d1max-build-isaac/v38_solver_fix_evidence/scan_planner_test_test_waypoint_parameters.py.xunit.xml",
+      "sha256": "5a48991bfa1511b1ffc524cad57f7c6d3149032f00b13e90fca6bb5f92c5a39c",
+      "root_counts": {
+        "name": "scan_planner.test_waypoint_parameters",
+        "tests": "0",
+        "failures": "0",
+        "errors": "0",
+        "time": "0"
+      }
+    },
+    {
+      "path": "/home/eric/wjg/d1max-build-isaac/v38_solver_fix_evidence/scan_planner_test_trajectory_collision.gtest.xml",
+      "sha256": "64f25c2a83d188647b6187df59ac0c334e03f8a90a7217f2b9382919aaf1e4bd",
+      "root_counts": {
+        "tests": "25",
+        "failures": "0",
+        "disabled": "0",
+        "errors": "0",
+        "time": "0.004",
+        "timestamp": "2026-10-07T17:28:10",
+        "name": "AllTests"
+      }
+    },
+    {
+      "path": "/home/eric/wjg/d1max-build-isaac/v38_solver_fix_evidence/scan_planner_test_visible_reference_target.gtest.xml",
+      "sha256": "1bf7490c6d1d5fd5a8328ae1f624077461de4a431fc96859144203c5864b70cb",
+      "root_counts": {
+        "tests": "7",
+        "failures": "0",
+        "disabled": "0",
+        "errors": "0",
+        "time": "0.072",
+        "timestamp": "2026-10-07T17:28:11",
+        "name": "AllTests"
+      }
+    }
+  ],
+  "logs": [
+    {
+      "path": "/home/eric/wjg/d1max-build-isaac/v38_solver_fix_build.log",
+      "sha256": "a95d9d21fe28d06e76431f066f253b77cb5cf9c208e5458c1a6410c603479716"
+    },
+    {
+      "path": "/home/eric/wjg/d1max-build-isaac/v38_solver_fix_bspline_ctest.log",
+      "sha256": "de959357cdf07aa275f4653149553fffdb7665f9a7697bbcab9f73d27febf114"
+    },
+    {
+      "path": "/home/eric/wjg/d1max-build-isaac/v38_solver_fix_bspline_ctest.xml",
+      "sha256": "8353eb700ca30d994f7e7abcbaca86b8a5bd925b9eab770841e5f4e90b65b366"
+    },
+    {
+      "path": "/home/eric/wjg/d1max-build-isaac/v38_solver_fix_scan_ctest.log",
+      "sha256": "ffc55f98b19857322e21a48dad79f404d7c0eddd600c6071414efeea9127d701"
+    },
+    {
+      "path": "/home/eric/wjg/d1max-build-isaac/v38_solver_fix_scan_ctest.xml",
+      "sha256": "890cd28ee1d1ccd2c9c18dd7054a0012986ae3ad190461c65fc485692cf5184e"
+    }
+  ],
+  "new_regressions": [
+    ".575 and .60 explicit validated reference accepted; nullopt restores configured cruise .25",
+    ".600001, zero, negative, NaN, Infinity rejected without mutating configured cruise; missing explicit domain does not infer .60"
+  ],
+  "preserved": [
+    "guide cruise and writer command=.25, yaw and ramp unchanged",
+    "fullXYZ raw pose/velocity and .05 C1 unchanged",
+    "source/receipt deadlines and UNKNOWN collision policies unchanged",
+    "bad_alloc remains fatal; std::exception diagnostic capped at256 characters with old solve_exception reason",
+    "no class layout change, no Kit/ROS/hardware run in fix verification"
+  ],
+  "frozen": true
+}

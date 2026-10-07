@@ -827,6 +827,29 @@ wire::ExecutionCommitAck preparedWriterAck(const wire::ExecutionHandoffGrant& g,
   a.measured_pose=x.measured_pose;a.measured_twist=x.measured_twist;a.applied_velocity=x.demand.velocity;
   a.curve_time=x.curve_time;a.applied=a.write_submitted=true;return a;
 }
+wire::ExecutionPermit nextWriterPermit() {
+  auto v=version(3);v.task_id="next_task";v.route_id="next_route";
+  auto p=permitWire(v);p.execution_id="next_exec";p.control_epoch=2;p.sdk_arm_generation=2;
+  p.sequence=12;p.trajectory_id=3;p.validation_sequence=3;
+  p.source_stamp=stamp(100.10);p.valid_until=stamp(100.40);return p;
+}
+void stageNextWriterExecution(ExecutionContract& gate,const wire::ExecutionPermit& p) {
+  auto arming=p;--arming.sequence;arming.allowed=arming.geometry_committed=false;arming.phase="arming";
+  arming.trajectory_id=-1;arming.validation_sequence=0; // No geometry has been admitted yet.
+  ASSERT_TRUE(gate.permit(arming,100.10,10.10));
+  ASSERT_TRUE(gate.receiveOdom(odom(100.10),100.10,10.10));
+  auto proposal=proposalWire(p.version);proposal.source_stamp=p.source_stamp;proposal.valid_until=p.valid_until;
+  gate.proposal(proposal,100.10);
+  auto t=curve(p.trajectory_id,100.10);t.generation=p.version.reference_generation;
+  t.identity=d1max_trajectory_tracker::identity(p.version);gate.candidate(t);
+  auto support=supportWire(p.version);support.source_stamp=p.source_stamp;gate.support(support);
+  auto proof=proofWire(p.version);proof.trajectory_id=p.trajectory_id;proof.sequence=p.validation_sequence;
+  proof.source_stamp=proof.check_begin=proof.check_end=proof.body_source_stamp=
+    proof.front_ray_source_stamp=proof.rear_ray_source_stamp=p.source_stamp;
+  proof.valid_until=stamp(100.35);gate.validation(proof,100.10);
+  const auto prepared=gate.prepare(100.10,10.10);
+  ASSERT_TRUE(prepared&&prepared->accepted) << gate.lastPrepareReason();
+}
 }
 TEST(TrackerGeometryReceipt, PreparationAndUnconnectedFreshBodyCannotClaimSoftwareInstallation) {
   ExecutionContract gate(executionConfig(),"isolated_mock",{},true);
@@ -1003,6 +1026,92 @@ TEST(TrackerWriterCAS, InitialFactRequiresSignedLeaseAndRealInstallationButAccep
       EXPECT_FALSE(gate.core().hasInstalledGeometry());
     }
   }
+}
+TEST(TrackerWriterCAS, CancelledCommitTwoAndAckHighWaterCannotBlockNextExecutionCommitOne) {
+  ExecutionContract gate(executionConfig(),"isolated_mock",std::string(64,'f'),true);
+  const auto old=stageWriterHandoff(gate);ASSERT_TRUE(gate.handoff(old,100.02,10.02));
+  ASSERT_TRUE(gate.receiveOdom(odom(100.04),100.04,10.04));
+  const auto prepared=gate.preparedStep(100.04,10.04);ASSERT_TRUE(prepared);
+  auto old_ack=preparedWriterAck(old,*prepared);old_ack.sequence=4;
+  ASSERT_TRUE(gate.commitAck(old_ack,100.04,10.04));ASSERT_EQ(gate.writerCommitSequence(),2U);
+  auto revoked=old.candidate;revoked.sequence=10;revoked.revoked=true;revoked.allowed=false;
+  revoked.geometry_committed=true;ASSERT_TRUE(gate.permit(revoked,100.06,10.06));
+  EXPECT_EQ(gate.writerCommitSequence(),2U);EXPECT_TRUE(gate.step(100.06,10.06).hold);
+  // Cancellation cannot erase an irreversible callback fact in the old scope.
+  ++old_ack.sequence;old_ack.write_acknowledged=true;
+  ASSERT_TRUE(gate.commitAck(old_ack,100.07,10.07));EXPECT_TRUE(gate.step(100.07,10.07).hold);
+  auto next=nextWriterPermit();stageNextWriterExecution(gate,next);
+  EXPECT_EQ(gate.writerCommitSequence(),2U); // arming/preparation alone has no authority
+  ASSERT_TRUE(gate.permit(next,100.10,10.10));EXPECT_EQ(gate.writerCommitSequence(),0U);
+  auto first=initialWriterAck(next);first.sequence=2;first.applied_at=stamp(100.12);
+  ASSERT_TRUE(gate.commitAck(first,100.12,10.12));EXPECT_EQ(gate.writerCommitSequence(),1U);
+  EXPECT_FALSE(gate.commitAck(first,100.12,10.12)); // duplicate within this scope
+  old_ack.sequence=999;EXPECT_FALSE(gate.commitAck(old_ack,100.13,10.13));
+  EXPECT_EQ(gate.writerCommitSequence(),1U);EXPECT_EQ(gate.core().trajectoryId(),3);
+  // A normal new-scope heartbeat does not reset either counter.
+  auto heartbeat=next;heartbeat.sequence=13;heartbeat.source_stamp=stamp(100.13);
+  ASSERT_TRUE(gate.permit(heartbeat,100.13,10.13));EXPECT_EQ(gate.writerCommitSequence(),1U);
+  EXPECT_FALSE(gate.commitAck(first,100.13,10.13));
+  auto v=next.version;++v.reference_generation;
+  auto proposal=proposalWire(v);proposal.expected_version=next.version;proposal.expected_trajectory_id=3;
+  proposal.source_stamp=stamp(100.14);proposal.valid_until=stamp(100.39);gate.proposal(proposal,100.14);
+  auto t=curve(4,100.14);t.generation=v.reference_generation;t.identity=d1max_trajectory_tracker::identity(v);
+  gate.candidate(t);auto support=supportWire(v);support.source_stamp=stamp(100.14);gate.support(support);
+  auto proof=proofWire(v);proof.trajectory_id=4;proof.sequence=4;
+  proof.source_stamp=proof.check_begin=proof.check_end=proof.body_source_stamp=
+    proof.front_ray_source_stamp=proof.rear_ray_source_stamp=stamp(100.14);
+  proof.valid_until=stamp(100.39);gate.validation(proof,100.14);
+  ASSERT_TRUE(gate.receiveOdom(odom(100.14),100.14,10.14));
+  ASSERT_TRUE(gate.prepare(100.14,10.14)->accepted);
+  wire::ExecutionHandoffGrant g;g.schema_version=2;g.handoff_id="next_scope_handoff";g.sequence=1;
+  g.expected_commit_sequence=1;g.incumbent=heartbeat;g.candidate=next;g.candidate.version=v;
+  g.candidate.sequence=14;g.candidate.trajectory_id=4;g.candidate.validation_sequence=4;
+  g.candidate.geometry_committed=false;g.candidate.source_stamp=stamp(100.14);
+  g.source_stamp=stamp(100.14);g.valid_until=g.transition_deadline=stamp(100.34);
+  g.candidate.valid_until=g.valid_until;g.retain_incumbent_until=heartbeat.valid_until;
+  ASSERT_TRUE(gate.handoff(g,100.14,10.14));
+  ASSERT_TRUE(gate.receiveOdom(odom(100.16),100.16,10.16));
+  const auto entry=gate.preparedStep(100.16,10.16);ASSERT_TRUE(entry);
+  auto applied=preparedWriterAck(g,*entry);applied.sequence=3;
+  ASSERT_TRUE(gate.commitAck(applied,100.16,10.16));EXPECT_EQ(gate.writerCommitSequence(),2U);
+  EXPECT_EQ(gate.core().trajectoryId(),4);
+  auto replay=revoked;replay.sequence=1000;replay.revoked=false;replay.allowed=true;
+  EXPECT_FALSE(gate.permit(replay,100.17,10.17));EXPECT_EQ(gate.core().trajectoryId(),4);
+}
+TEST(TrackerWriterCAS, NewWriterScopeRequiresRetiredDifferentTaskExecutionAndForwardControlEpoch) {
+  for(int variant=0;variant<3;++variant) {
+    SCOPED_TRACE(variant);ExecutionContract gate(executionConfig(),"isolated_mock",std::string(64,'f'),true);
+    const auto old=stageWriterHandoff(gate);ASSERT_TRUE(gate.handoff(old,100.02,10.02));
+    ASSERT_TRUE(gate.receiveOdom(odom(100.04),100.04,10.04));
+    const auto entry=gate.preparedStep(100.04,10.04);ASSERT_TRUE(entry);
+    auto ack=preparedWriterAck(old,*entry);ack.sequence=4;ASSERT_TRUE(gate.commitAck(ack,100.04,10.04));
+    auto revoked=old.candidate;revoked.sequence=10;revoked.revoked=true;revoked.allowed=false;
+    ASSERT_TRUE(gate.permit(revoked,100.06,10.06));
+    auto next=nextWriterPermit();if(variant==0)next.control_epoch=1;if(variant==1)next.execution_id="exec";
+    stageNextWriterExecution(gate,next);
+    if(variant==2) {auto proof=proofWire(next.version);proof.trajectory_id=3;proof.sequence=4;
+      proof.valid=false;proof.reason="original_newer_negative";gate.validation(proof,100.10);}
+    EXPECT_FALSE(gate.permit(next,100.10,10.10));EXPECT_EQ(gate.writerCommitSequence(),2U);
+    auto replay=old.candidate;replay.sequence=99;replay.geometry_committed=true;replay.control_epoch=2;
+    EXPECT_FALSE(gate.permit(replay,100.11,10.11));EXPECT_EQ(gate.writerCommitSequence(),2U);
+  }
+}
+TEST(TrackerWriterCAS, CancelBeforeLateInitialFactRecordsCommitUnderHoldUntilNewAuthority) {
+  ExecutionContract gate(executionConfig(),"isolated_mock",{},true);stage(gate);
+  ASSERT_TRUE(gate.prepare(100.,10.)->accepted);auto p=permitWire();ASSERT_TRUE(gate.permit(p,100.,10.));
+  auto revoke=p;revoke.sequence=2;revoke.revoked=true;revoke.allowed=false;
+  ASSERT_TRUE(gate.permit(revoke,100.01,10.01));EXPECT_EQ(gate.writerCommitSequence(),0U);
+  auto late=initialWriterAck(p);ASSERT_TRUE(gate.commitAck(late,100.04,10.04));
+  EXPECT_EQ(gate.writerCommitSequence(),1U);EXPECT_TRUE(gate.step(100.04,10.04).hold);
+  EXPECT_FALSE(gate.core().hasInstalledGeometry());
+  auto next=nextWriterPermit();stageNextWriterExecution(gate,next);
+  // Pure successor preparation retains the retired writer's irreversible
+  // identity and commit fact. Only positive, freshly proved authority binds.
+  EXPECT_EQ(gate.writerCommitSequence(),1U);EXPECT_EQ(gate.core().task().identity.task_id,p.version.task_id);
+  EXPECT_TRUE(gate.core().holding());EXPECT_FALSE(gate.core().hasInstalledGeometry());
+  ASSERT_TRUE(gate.permit(next,100.10,10.10));
+  EXPECT_EQ(gate.writerCommitSequence(),0U);late.sequence=999;
+  EXPECT_FALSE(gate.commitAck(late,100.11,10.11));EXPECT_EQ(gate.core().trajectoryId(),3);
 }
 TEST(TrackerWriterCAS, ConditionalGrantNeverChangesIncumbentBeforeActualWriterFact) {
   for(const auto generation:{1U,2U}) {
@@ -1994,7 +2103,7 @@ TEST(TrackerPreparationWorker, CachedGeometryCannotBeReusedForMutatedShapeOrRela
 }
 
 namespace {
-Config isolatedReferenceConfig() {
+Config isolatedReferenceConfig(double reference_speed=.5,double observed_speed=.48905959685208217) {
   auto c=config();c.max_speed=.15;c.max_yaw_rate=.3;c.require_support_reference=true;
   c.spatial_planar_braking_envelope=true;c.spatial_control_lookahead=true;
   const nlohmann::json record={{"schema_version",3},{"transport_mode","isolated_mock"},{"fixture_only",true},
@@ -2004,8 +2113,8 @@ Config isolatedReferenceConfig() {
       {"source_scope","isolated_simulation_physx_measured_model"},{"command_max_speed_mps",.15},
       {"command_max_yaw_radps",.3},{"reachable_max_speed_mps",.6},{"reachable_max_yaw_radps",.8}}},
     {"isolated_full_xyz_reference_model",{{"schema",1},{"kind","official_spot_physx"},
-      {"source_scope","isolated_simulation_physx_measured_model"},{"reference_max_speed_mps",.5},
-      {"measured_travel_max_speed_mps",.5},{"observed_max_full_xyz_speed_mps",.48905959685208217},
+      {"source_scope","isolated_simulation_physx_measured_model"},{"reference_max_speed_mps",reference_speed},
+      {"measured_travel_max_speed_mps",reference_speed},{"observed_max_full_xyz_speed_mps",observed_speed},
       {"evidence_sha256",std::string(64,'b')}}}};
   c.isolated_reference_model=d1max_planning_interfaces::IsolatedReferenceModel::parse(record,std::string(64,'a'),"isolated_mock");
   return c;
@@ -2055,6 +2164,46 @@ TEST(TrackerReferenceDomain, ActualAbovePointFiveStopsAndLegacyMeasurementsStayU
   body=odom(100.02);body.velocity_in_frame={.4,0.,.299};body.planar_speed=.4;
   EXPECT_TRUE(core.receiveOdom(body,100.02,10.02));
   TrackerCore legacy(config());body.velocity_in_frame={.4,0.,.31};EXPECT_TRUE(legacy.receiveOdom(body,100.02,10.02));
+}
+
+TEST(TrackerReferenceDomain, ExplicitPointSixAdmitsRawGaitPeakWithoutClippingXyzOrRaisingCommands) {
+  const auto c=isolatedReferenceConfig(.6,.532);TrackerCore core(c),narrow(isolatedReferenceConfig());
+  auto body=odom();body.velocity_in_frame={.4,0.,.35};body.planar_speed=.4;
+  ASSERT_GT(body.velocity_in_frame.stableNorm(),.5);
+  ASSERT_LT(body.velocity_in_frame.stableNorm(),.6);
+  EXPECT_FALSE(narrow.receiveOdom(body,100.,10.));
+  ASSERT_TRUE(core.receiveOdom(body,100.,10.));
+  EXPECT_EQ(core.odometry().velocity_in_frame,body.velocity_in_frame);
+  EXPECT_EQ(core.odometry().position,body.position);EXPECT_DOUBLE_EQ(core.odometry().stamp,100.);
+  EXPECT_DOUBLE_EQ(c.max_speed,.15);EXPECT_DOUBLE_EQ(c.max_yaw_rate,.3);
+  body=odom(100.02);body.velocity_in_frame={0.,0.,.600001};body.planar_speed=0.;
+  EXPECT_FALSE(core.receiveOdom(body,100.02,10.02));EXPECT_EQ(core.reason(),"invalid_odometry");
+}
+
+TEST(TrackerReferenceDomain, PointSixCurveAdmissionStillUsesOriginalXyzC1AndMeasuredProgress) {
+  const auto c=isolatedReferenceConfig(.6,.532);auto t=xyzReferenceCurve();
+  for(std::size_t i=0;i<t.points.size();++i)t.points[i].x()=.0275*(double(i)-1.);
+  certify(t);const auto original=t.points;
+  const auto support=supportEvidence(supportWire());t.prepared=PreparedGeometry::build(c,t,support);
+  ASSERT_TRUE(t.prepared->derivatives_valid);
+  ASSERT_GT(t.join_velocity.stableNorm(),.5);ASSERT_LT(t.join_velocity.stableNorm(),.6);
+  EXPECT_TRUE(isolatedAppliedEntryValid(c,t,0.,t.join_position,t.join_velocity,0.));
+  EXPECT_FALSE(isolatedAppliedEntryValid(c,t,0.,t.join_position+Eigen::Vector3d{0.,.012501,0.},
+      t.join_velocity,0.)); // Original absolute XYZ join tolerance, no travel time to invent.
+  for(double difference:{.049,.050001}) {
+    auto body=odom();body.position=t.join_position;
+    body.velocity_in_frame=t.join_velocity+Eigen::Vector3d{0.,difference,0.};
+    body.planar_speed=body.velocity_in_frame.head<2>().norm();
+    TrackerCore core(c);ASSERT_TRUE(core.receiveOdom(body,100.,10.));
+    EXPECT_EQ(core.admitRevision(task(),t,support,100.,10.,true),difference<.05)<<core.candidateReason();
+    if(difference<.05) {
+      const auto output=core.step(100.02,10.02);
+      EXPECT_DOUBLE_EQ(core.progressTime(),0.);EXPECT_DOUBLE_EQ(core.progressArc(),0.);
+      EXPECT_LE(output.forward,.15);EXPECT_LE(std::abs(output.yaw_rate),.3);
+      EXPECT_EQ(core.odometry().velocity_in_frame,body.velocity_in_frame);
+    }
+  }
+  EXPECT_EQ(t.points,original);
 }
 
 TEST(TrackerReferenceDomain, SealedReferenceCannotAuthorizeLiveDifferentRecordOrCommandIncrease) {

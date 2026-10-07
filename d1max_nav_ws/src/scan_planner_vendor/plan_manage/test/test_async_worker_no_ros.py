@@ -21,6 +21,7 @@ HARNESS = r'''
 #include <stdexcept>
 #include <new>
 #define RCLCPP_INFO(...) ((void)0)
+#define RCLCPP_WARN(...) ((void)0)
 struct Time {double value=100.;double seconds() const{return value;}
   Time operator-(Time rhs) const{return {value-rhs.value};}};
 namespace builtin_interfaces {namespace msg {using Time=::Time;}}

@@ -1,0 +1,163 @@
+{
+  "schema": 1,
+  "scope": "read-only existing full500Hz native measurements and actual consumed wire commands; no new run, source edit, domain acceptance rule or calibration",
+  "definitions": {
+    "time": "source seconds from each original scene epoch anchor; not wall or ROS receipt time",
+    "positive_segment": "highlevel vx>0 at consecutive original 2ms native samples, independently of trajectory id or changed command magnitude; duration is last-source minus first-source",
+    "stationary_qualification": "actual vx demand>=.05 plus true full linear norm<=.03 and full angular norm<=.05 on consecutive source samples; .05 is the existing recovery eligibility floor, not a calibrated walking minimum",
+    "counts": "500Hz BEGIN plus genuine final END; sampled applied states are a separate scope",
+    "continuity": "positive/stationary interval traversal checked source spacing; manifest records original full native tick invocation continuity; no additional whole-epoch acceptance rerun here"
+  },
+  "runs": {
+    "campus_restart_v57_001": {
+      "original_files": [
+        {
+          "path": "/home/eric/wjg/d1max-build-isaac/runs/campus_restart_v57_001/physics/policy_component_state_500hz.jsonl",
+          "sha256": "340aaa2af1a83b1193745d7c5900a297f91175a44c48202c54ccfbfef93cd5f9"
+        },
+        {
+          "path": "/home/eric/wjg/d1max-build-isaac/runs/campus_restart_v57_001/physics/policy_history_manifest.json",
+          "sha256": "cf956e6da1e120d4577bf998c96b6f79e6490124e4ed4677f0301e85a93bd038"
+        },
+        {
+          "path": "/home/eric/wjg/d1max-build-isaac/runs/campus_restart_v57_001/physics/policy_command_events.jsonl",
+          "sha256": "623de5346cce920624fc0e850842b6cc2ae30ca06ab56f04cd834fb932012b0f"
+        },
+        {
+          "path": "/home/eric/wjg/d1max-build-isaac/runs/campus_restart_v57_001/physics/policy_recovery_events.jsonl",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "path": "/home/eric/wjg/d1max-build-isaac/runs/campus_restart_v57_001/session.json",
+          "sha256": "63dbec505e5c52b4951cb58e30e7ce135b1c4a86a1e35a7b7b7bf0af9c39f566"
+        }
+      ],
+      "source_ticks": 32886,
+      "actual_BEGIN_plus_END_samples": 32887,
+      "duration_source_s": 65.772,
+      "manifest_consecutive_tick_invocations_checked": true,
+      "command_vx_counts": {
+        "positive": 9274,
+        "zero": 23613,
+        "negative": 0,
+        "positive_fraction": 0.28199592544166385
+      },
+      "continuous_positive_vx_segments": 98,
+      "longest_positive_vx_source_span_s": 0.966,
+      "longest_positive_ge_05_and_full_stationary_source_span_s": 0.322,
+      "recovery_events": 0,
+      "raw_max_full_XYZ_speed_mps": 0.5369957376439801,
+      "positive_vx_below_05_samples": 2037,
+      "last_positive_vx_consumed_source_s": 32.074,
+      "last_nonzero_command_change_source_s": 32.056,
+      "last_nonzero_command_change": [
+        0.2274173479252897,
+        -0.06329595361171413
+      ],
+      "post35_command_events": 2080,
+      "post35_command_event_guard_reasons": [
+        "accepted_command"
+      ],
+      "post35_max_abs_both_highlevel_command_components": 0.0,
+      "longest_qualified_stationary_window_source_s": [
+        11.396,
+        11.718
+      ],
+      "phase1_longest_qualified_stationary_source_span_s": 0.058,
+      "terminal_window_35_45": {
+        "highlevel_vx_min_median_max": [
+          0,
+          0,
+          0
+        ],
+        "official_policy_vx_median": 0.00014650322555098683,
+        "raw_XY_speed_median_mps": 0.00034699507037595984,
+        "raw_full_XYZ_speed_median_mps": 0.007330487655816722,
+        "net_XY_m": 0.004100359516043052
+      },
+      "phase1_result": {
+        "status": 6,
+        "reason": "execution_blocked_timeout:waiting_stationary_writer_handoff_outcome",
+        "distance_m": 1.5329226959302467,
+        "nonzero_applied_states": 747
+      }
+    },
+    "campus_crossing_v52_001": {
+      "original_files": [
+        {
+          "path": "/home/eric/wjg/d1max-build-isaac/runs/campus_crossing_v52_001/physics/policy_component_state_500hz.jsonl",
+          "sha256": "77ba9c77ba9887480e544a7ca1c66b6b55841621c2de51898b06e5b588b920cc"
+        },
+        {
+          "path": "/home/eric/wjg/d1max-build-isaac/runs/campus_crossing_v52_001/physics/policy_history_manifest.json",
+          "sha256": "31cb494757ebb9f96aeb46c9fe47bed7002b85978b35f56500ad5e9328ca85f0"
+        },
+        {
+          "path": "/home/eric/wjg/d1max-build-isaac/runs/campus_crossing_v52_001/physics/policy_command_events.jsonl",
+          "sha256": "dee9b99641617f8e19d77da3e0eadf333e4db3928778cc2233cd345421402be8"
+        },
+        {
+          "path": "/home/eric/wjg/d1max-build-isaac/runs/campus_crossing_v52_001/physics/policy_recovery_events.jsonl",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "path": "/home/eric/wjg/d1max-build-isaac/runs/campus_crossing_v52_001/session.json",
+          "sha256": "502200c05899cf4ec37c90a4b2a066d7b2d96f2cd099b8226ef14a5285e3b5ba"
+        }
+      ],
+      "source_ticks": 53962,
+      "actual_BEGIN_plus_END_samples": 53963,
+      "duration_source_s": 107.924,
+      "manifest_consecutive_tick_invocations_checked": true,
+      "command_vx_counts": {
+        "positive": 34928,
+        "zero": 19035,
+        "negative": 0,
+        "positive_fraction": 0.6472583066174972
+      },
+      "continuous_positive_vx_segments": 79,
+      "longest_positive_vx_source_span_s": 5.402,
+      "longest_positive_ge_05_and_full_stationary_source_span_s": 0.034,
+      "recovery_events": 0,
+      "raw_max_full_XYZ_speed_mps": 0.5693280713087254
+    }
+  },
+  "window_comparison": {
+    "source_s": [
+      5,
+      12
+    ],
+    "v57": {
+      "positive_vx_fraction": 0.9094285714285715,
+      "desired_vx_median_mps": 0.13821312986682324,
+      "official_policy_input_vx_median_mps": 0.3201574236154556,
+      "actual_XY_speed_median_mps": 0.0411457582443763,
+      "actual_full_XYZ_speed_median_mps": 0.04382106077792382,
+      "net_XY_m": 0.09902926177458819
+    },
+    "v52": {
+      "positive_vx_fraction": 0.8891428571428571,
+      "desired_vx_median_mps": 0.2274173479252897,
+      "official_policy_input_vx_median_mps": 0.25788716971874237,
+      "actual_XY_speed_median_mps": 0.23237675294432586,
+      "actual_full_XYZ_speed_median_mps": 0.24933085828926294,
+      "net_XY_m": 1.4416220933869495
+    }
+  },
+  "inferences": [
+    "v57 terminal after35s is actual accepted zero highlevel vx and yaw, not sustained authorized WALK with policy refusing to move",
+    "v57 earlier 5-12s exhibits much weaker measured locomotion than its positive desired and official policy input, but longest uninterrupted positive command across run is only .966s",
+    "neither run qualifies the existing one-second fullnorm stationary positive-demand recovery; zero recovery count is consistent with the measured windows",
+    "short positive bursts, genuine hold/braking and history-sensitive gait response must be separated from continuous-command fixed-point stalls"
+  ],
+  "causal_comparison": {
+    "is_single_factor_AB": false,
+    "reason": "v57 cancel/restart and v52 crossing have different commands, task/authority history, scene-time exposure and acquisition settings; identical source-number windows do not identify a unique physical cause"
+  },
+  "recommendations": [
+    "complete authenticated safety ACK scope repair and formally verify sustained fresh positive output before changing locomotion authority",
+    "under the same sealed command/rawXYZ/STOP constraints, measure isolated closed-loop continuous .01/.02/.05/.10/.15/.23 desired inputs and the actual recorded pulse patterns to identify controllable gait-start and stopping regions",
+    "calibrate only the desired-average-to-official-policy-input servo map against measured body response; do not raise highlevel minimum speed, carry WALK through revoked zero, flatten Z or loosen proof leases"
+  ],
+  "physical_acceptance": false
+}

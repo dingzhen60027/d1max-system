@@ -1,0 +1,165 @@
+{
+  "schema": 1,
+  "kind": "offline_geometry_fault_stop_observation",
+  "date": "2026-10-07",
+  "recorded_at_utc": "2026-10-07T13:43:44.579251+00:00",
+  "status": "FORMAL_PENDING",
+  "offline_tests_passed": true,
+  "formal_navigation_pass": false,
+  "formal_shutdown_verified": false,
+  "physical_acceptance": false,
+  "hardware_acceptance": false,
+  "source_sha256": {
+    "simulation/isaacsim/bridge.py": "0c9f53f03aafba4434f8e5edbb9fd1e98c3aa9829b170bae2d805faaa0064c1f",
+    "simulation/isaacsim/nav_prepare.py": "76c0de5a7aedfdf677185685758ea45dc9bf73d3ca89e867d7b08cdb80f9195e",
+    "simulation/isaacsim/test_bridge_measurements.py": "0b656ae855610df455b3ca0ef10099a2c71a616d5d1f9a11966b0dea472848ec",
+    "d1max_nav_ws/src/d1max_pct_scan/d1max_pct_scan/lifecycle_shutdown.py": "ed95d1d663b09cc5508bd879471175457c369de3fb960b5c956fd6dff49cb7a6",
+    "d1max_nav_ws/src/d1max_pct_scan/test/test_lifecycle_shutdown.py": "63beb3507efd15326fc5048e35a5ffc2905b6baacc5fe7b51f1ebbb2faccd0f0"
+  },
+  "tests": {
+    "passed": 56,
+    "failed": 0,
+    "duration_s": 0.32,
+    "scope": "message definitions with replaced Node/socket/tf/executor; no ROS graph or PhysX process",
+    "pytest_files": [
+      "simulation/isaacsim/test_bridge_measurements.py",
+      "simulation/isaacsim/test_bridge_shutdown.py",
+      "simulation/isaacsim/test_native_phase_bridge.py",
+      "simulation/isaacsim/test_nav_prepare.py",
+      "d1max_nav_ws/src/d1max_pct_scan/test/test_lifecycle_shutdown.py"
+    ],
+    "test_file_sha256": {
+      "simulation/isaacsim/test_bridge_measurements.py": "0b656ae855610df455b3ca0ef10099a2c71a616d5d1f9a11966b0dea472848ec",
+      "simulation/isaacsim/test_bridge_shutdown.py": "65c287920462b9f6a72cdf3aaa44c277862ee3039acf60229c263913d83aa59c",
+      "simulation/isaacsim/test_native_phase_bridge.py": "22ebd3297704b7bada79ec6eb6f1e98ccc3993b380ca69f3ff4ad88c519ebcdd",
+      "simulation/isaacsim/test_nav_prepare.py": "1d355bcd8287d3a5dda0197895d0959ab10dffa4568abffd762faefc09eb2c6e",
+      "d1max_nav_ws/src/d1max_pct_scan/test/test_lifecycle_shutdown.py": "63beb3507efd15326fc5048e35a5ffc2905b6baacc5fe7b51f1ebbb2faccd0f0"
+    },
+    "command": "source simulation/isaacsim/env.sh\nPYTHONPATH=\"$PWD/simulation/isaacsim:$PWD/d1max_nav_ws/src/d1max_pct_scan:$PWD/d1max_nav_ws/src/d1max_localization:$PYTHONPATH\" python3 -m pytest -q simulation/isaacsim/test_bridge_measurements.py simulation/isaacsim/test_bridge_shutdown.py simulation/isaacsim/test_native_phase_bridge.py simulation/isaacsim/test_nav_prepare.py d1max_nav_ws/src/d1max_pct_scan/test/test_lifecycle_shutdown.py",
+    "original_log_path": "/home/eric/wjg/d1max-build-isaac/unknown_research/geometry_fault_lifecycle_tests.log",
+    "published_log": "geometry_fault_stop_observation_tests/pytest.log",
+    "log_sha256": "f2bb31a2f6b13cdfd5d9d36152151de96912683b47aeca10a6ad5fbed88dd8e0",
+    "original_log_copied_byte_for_byte": true,
+    "meaningful_contract_cases": [
+      "Actual Bridge callbacks: geometry failure followed by valid measured packets publishes only original Clock and dedicated MC; navigation epoch2 remains unusable even after a later valid geometry attestation.",
+      "Full measured XYZ/world angular velocity, original literal pose, source/posterior stamp and actual original IMU witness survive MC conversion; no command-valued velocity or synthetic IMU time.",
+      "Latched geometry failure hard-sends zero for every SDK applied callback and does not restore nav odometry, TF, rays, published IMU or dynamic authority.",
+      "Epoch change, newer-sequence source rollback and pause irreversibly stop post-fault MC and Clock continuation; NaN and duplicate source samples publish no renewed evidence.",
+      "Stale actual IMU leaves MC unusable; wrong measurement contract, navigation-topic binding and live transport are rejected.",
+      "Late simulation shutdown observer consumes exact original transient-local Clock while built-in ROSClock remains0; zero source and stale/foreign/future inactive status cannot establish retirement.",
+      "Original Clock rollback by1ns permanently rejects confirmation; already-sent request remains recorded.",
+      "request_sent, request_accepted and timeout_stage distinguish clock/service/response/retirement failures within unchanged6-second steady budget.",
+      "Original SIGTERM callback completion-before-context-shutdown and runtime publisher-error propagation remain covered; native LiDAR BEGIN/END and isolated command-domain tests remain covered."
+    ]
+  },
+  "isolation_contract": {
+    "transport": "isolated_mock",
+    "simulation_backend": "isaacsim_physx",
+    "navigation_topics": [
+      "/d1max/localization/navigation/state",
+      "/d1max/localization/navigation/local_state"
+    ],
+    "navigation_revocation": {
+      "localization_epoch": 2,
+      "usable": false,
+      "terminal_latched": true,
+      "original_last_navigation_source_retained": true,
+      "no_geometry_reauthorization": true
+    },
+    "mc_topic": "/d1max/isaacsim/mc_state",
+    "mc_message_type": "d1max_planning_interfaces/msg/LocalNavigationState",
+    "mc_contract": "physx_raw_mc_after_geometry_revocation_v1",
+    "consumer": "existing isolated SDK mock local_navigation_state_topic, explicitly set in sealed mock_sdk.yaml",
+    "mc_localization_identity": "original physical epoch1 and isaac-<original packet epoch> seed; no reset/restamp",
+    "mc_scope": "native measured pose/full velocity plus actual IMU only; no route, grant, permit, stopped result or navigation authorization is produced",
+    "mc_source_gate": "original finite pose/full world linear/angular velocity and unit-near quaternion; matching original packet epoch; strictly advancing sequence/source",
+    "mc_imu_gate": "existing SDK validation unchanged: actual IMU at/before source with original extrapolation<=.1; no stale witness made usable",
+    "fault_scope": "Only explicit geometry revocations continue measurements. Pause, clock/epoch regression or other terminal source fault disables continuation permanently.",
+    "positive_wire_gate": "bridge latched fault always sends an actual bounded zero instead of any applied nonzero command",
+    "clock": {
+      "topic": "/clock",
+      "message_type": "rosgraph_msgs/msg/Clock",
+      "depth": 1,
+      "durability": "TRANSIENT_LOCAL",
+      "source": "fixed original session anchor plus validated native packet sim_time_ns",
+      "postfault_heartbeat_or_restamp": false
+    },
+    "shutdown_observer": {
+      "sim_clock": "independent transient-local subscription retains original integer Clock; no ROSClock set/override",
+      "system_time_default_unchanged": true,
+      "positive_source_barrier_required": true,
+      "original_status_source_barrier_and_freshness_unchanged": true,
+      "steady_budget_s": 6,
+      "request_sent_recorded_separately": true,
+      "physical_stop_confirmation": "only original owner status; SDK MC measurements are not a fabricated stopped result"
+    }
+  },
+  "unchanged_sdk_source_sha256": {
+    "d1max_ros2/sdk_bridge_ws/src/d1max_sdk_bridge/src/execution_mock_telemetry.hpp": "4f0051925074648f5be9456255ba2b44e1870ef728d1f093893b429fdd7b41c8",
+    "d1max_ros2/sdk_bridge_ws/src/d1max_sdk_bridge/src/sdk_execution_mock.cpp": "a5be1fdb045a52a51900f118b2d0eba258efd326f2f6517759307a79f9edfca4",
+    "d1max_ros2/sdk_bridge_ws/src/d1max_sdk_bridge/src/execution_transport_core.hpp": "99764aa5b980d73b440d8dbe049f151fca80cc69e9c2245db326b7d9ff1eb6d6"
+  },
+  "sdk_contract": {
+    "MockTelemetry_modified": false,
+    "MC_stop_cutoff_modified": false,
+    "sdk_single_writer_preserved": true,
+    "original_source_and_receipt_leases_preserved": true,
+    "existing_in_flight_authority": "Original finite permit/grant/proof expiry and revocation remain the SDK contract; dedicated MC does not generate new positive authority. The plant bridge immediately rejects all nonzero after its fault.",
+    "mock_physical_stop_confirmed_scope_not_promoted": true
+  },
+  "original_failure": {
+    "public_record": "campus_restart_v59_actor_overlap_and_body_certificate_failure.json",
+    "public_sha256": "defe01dfe1d77851fdb42b12f1a4fd04b43b4a9be041989d5a76dc8b06e2e0e0",
+    "status": "FAILED",
+    "new_scope_successful_writer_commit_sequences": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19,
+      20,
+      21,
+      22,
+      23,
+      24,
+      25,
+      26,
+      27,
+      28
+    ],
+    "old_three_consumer_watermark_blockers_reproduced": false,
+    "sampled_possible_actor_AABB_overlap": true,
+    "unique_contact_force_cause_proven": false,
+    "measured_full_xyz_peak_mps": 1.0646345352085824,
+    "measured_world_yaw_peak_radps": 0.8869698643684387,
+    "sealed_speed_bound_mps": 0.65,
+    "sealed_yaw_bound_radps": 0.8,
+    "body_cube_conservative_proxy_false_rejection_proven": true,
+    "original_shutdown_request_accepted": false,
+    "original_shutdown_software_retired": false,
+    "phase1_terminal_report_exists": false,
+    "original_failure_reclassified_as_pass": false
+  },
+  "limitations": [
+    "Only lightweight offline callbacks/helper tests were run; no rebuilt installation, new candidate, Kit run, formal goal or owner retirement is claimed by this record.",
+    "Future actual low-speed MC after a real zero write must satisfy the unchanged SDK stop evidence checks. Missing, nonfinite, stale or physically moving samples cannot produce success.",
+    "The6-second wall budget may still expire if the original real stop/retirement evidence does not arrive in time; diagnostics now distinguish an unsent request from an accepted unfinished drain.",
+    "No raw source time, original pose/velocity, geometry margin, UNKNOWN rule, positive authority, model speed/yaw domain or lease was altered.",
+    "Geometry-certificate and v3 servo changes are separate pending components;56 tests do not establish collision-free motion, sustained stopping, continuous collision, hardware or localization acceptance.",
+    "The v59 original FAILED result, whole500 physical-domain failure, unresolved actor AABB overlap and missing phase1 report remain immutable."
+  ]
+}

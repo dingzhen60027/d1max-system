@@ -1,0 +1,333 @@
+{
+  "schema": 1,
+  "scope": "offline_strict_actor_only_floor_contact_selection_closure",
+  "formal_navigation_pass": false,
+  "build_owner": "root",
+  "audit_did_not_rerun_build_or_tests": true,
+  "installed": true,
+  "source_frozen": true,
+  "changes": [
+    {
+      "source": "/home/eric/wjg/d1max-system/d1max_nav_ws/src/scan_planner_vendor/plan_env/src/grid_map.cpp",
+      "sha256": "33eb9eaeb09c304473fd08f3e26cfe1326f68142e312248b80c2164d7162a408",
+      "build_copy": "/home/eric/wjg/d1max-build-isaac/nav-source/src/scan_planner_vendor/plan_env/src/grid_map.cpp",
+      "build_copy_sha256": "33eb9eaeb09c304473fd08f3e26cfe1326f68142e312248b80c2164d7162a408",
+      "byte_equal": true
+    },
+    {
+      "source": "/home/eric/wjg/d1max-system/d1max_nav_ws/src/scan_planner_vendor/plan_env/test/test_projected_rays.cpp",
+      "sha256": "7e160953e672b0f8ef916a0e5d165c0e0c774a7d25bd20cd497aa805e9715d6b",
+      "build_copy": "/home/eric/wjg/d1max-build-isaac/nav-source/src/scan_planner_vendor/plan_env/test/test_projected_rays.cpp",
+      "build_copy_sha256": "7e160953e672b0f8ef916a0e5d165c0e0c774a7d25bd20cd497aa805e9715d6b",
+      "byte_equal": true
+    }
+  ],
+  "installed_native": [
+    {
+      "path": "/home/eric/wjg/d1max-build-isaac/nav/install/plan_env/lib/libplan_env.a",
+      "sha256": "d57981b8f23af5fe4b1cfbe7ac19be6dc0fdaaeccf6c3e793e4c76e14e2aaffa"
+    },
+    {
+      "path": "/home/eric/wjg/d1max-build-isaac/nav/install/scan_planner/lib/scan_planner/scan_planner_node",
+      "sha256": "d487225911e751eed8be0c2ecb5b84b75d79b66e5bf09076978153e2da7c8f6a"
+    }
+  ],
+  "test_results": {
+    "plan_env": {
+      "ctest_passed": 8,
+      "ctest_total": 8,
+      "gtests": 266,
+      "gtest_failures": 0,
+      "gtest_errors": 0
+    },
+    "scan_planner": {
+      "ctest_passed": 18,
+      "ctest_total": 18,
+      "gtests": 183,
+      "gtest_failures": 0,
+      "gtest_errors": 0
+    }
+  },
+  "xml_snapshots": [
+    {
+      "path": "/home/eric/wjg/d1max-build-isaac/v41_contact_retirement_evidence/plan_env_test_dynamic_occupancy_oracle.gtest.xml",
+      "sha256": "cffc271468c79e01fcf490afeb7ba84c794cc708125d1cd4dc804de2fe46d59b",
+      "kind": "gtest",
+      "counts": {
+        "tests": "11",
+        "failures": "0",
+        "errors": "0",
+        "disabled": "0"
+      }
+    },
+    {
+      "path": "/home/eric/wjg/d1max-build-isaac/v41_contact_retirement_evidence/plan_env_test_map_context.gtest.xml",
+      "sha256": "fb524e6f451c9e5f32f47efbe88175d35c0d6997785350eec4d5739b5b9cb001",
+      "kind": "gtest",
+      "counts": {
+        "tests": "23",
+        "failures": "0",
+        "errors": "0",
+        "disabled": "0"
+      }
+    },
+    {
+      "path": "/home/eric/wjg/d1max-build-isaac/v41_contact_retirement_evidence/plan_env_test_near_field_diagnostics.gtest.xml",
+      "sha256": "a25f76741317d2e9cfd5dc2bd552555e1883610293fd6410b80c2e2d429646d5",
+      "kind": "gtest",
+      "counts": {
+        "tests": "17",
+        "failures": "0",
+        "errors": "0",
+        "disabled": "0"
+      }
+    },
+    {
+      "path": "/home/eric/wjg/d1max-build-isaac/v41_contact_retirement_evidence/plan_env_test_official_resolution.gtest.xml",
+      "sha256": "4276724ab64f3cd3510b05f007eeb7d4f1eb5c4ed8496eecef91f467fd6b41f1",
+      "kind": "gtest",
+      "counts": {
+        "tests": "4",
+        "failures": "0",
+        "errors": "0",
+        "disabled": "0"
+      }
+    },
+    {
+      "path": "/home/eric/wjg/d1max-build-isaac/v41_contact_retirement_evidence/plan_env_test_projected_rays.gtest.xml",
+      "sha256": "a4970cb1e9153e42e3deb51ff1ecf76534cea07c080a230fcfff118e3219aab5",
+      "kind": "gtest",
+      "counts": {
+        "tests": "148",
+        "failures": "0",
+        "errors": "0",
+        "disabled": "0"
+      }
+    },
+    {
+      "path": "/home/eric/wjg/d1max-build-isaac/v41_contact_retirement_evidence/plan_env_test_solve_budget.gtest.xml",
+      "sha256": "efe4362979dfc1e5542c73c91516a1cc0f5e2810e00135150cc34fc1862698a6",
+      "kind": "gtest",
+      "counts": {
+        "tests": "5",
+        "failures": "0",
+        "errors": "0",
+        "disabled": "0"
+      }
+    },
+    {
+      "path": "/home/eric/wjg/d1max-build-isaac/v41_contact_retirement_evidence/plan_env_test_static_occupancy_prior.gtest.xml",
+      "sha256": "f1c6c7ba83de71826394830b0a6c5bfa45df210bd2b739faeb3f8e39b4880d0c",
+      "kind": "gtest",
+      "counts": {
+        "tests": "26",
+        "failures": "0",
+        "errors": "0",
+        "disabled": "0"
+      }
+    },
+    {
+      "path": "/home/eric/wjg/d1max-build-isaac/v41_contact_retirement_evidence/plan_env_test_voxel_collision.gtest.xml",
+      "sha256": "64c71b06379bcf1487fcc666053425737ca859598d149cc66c1615fd278b3be7",
+      "kind": "gtest",
+      "counts": {
+        "tests": "32",
+        "failures": "0",
+        "errors": "0",
+        "disabled": "0"
+      }
+    },
+    {
+      "path": "/home/eric/wjg/d1max-build-isaac/v41_contact_retirement_evidence/scan_planner_test_candidate_adoption.gtest.xml",
+      "sha256": "a465c1769c764c29e6b7f7507fadb76a4b8517aa5e7d2d76f85014a41db9f9ac",
+      "kind": "gtest",
+      "counts": {
+        "tests": "19",
+        "failures": "0",
+        "errors": "0",
+        "disabled": "0"
+      }
+    },
+    {
+      "path": "/home/eric/wjg/d1max-build-isaac/v41_contact_retirement_evidence/scan_planner_test_collision_reference.gtest.xml",
+      "sha256": "754e2859fada95492f0c5aad611ee5158f59f0a377689fdb7d65cd0ef68bcbf8",
+      "kind": "gtest",
+      "counts": {
+        "tests": "5",
+        "failures": "0",
+        "errors": "0",
+        "disabled": "0"
+      }
+    },
+    {
+      "path": "/home/eric/wjg/d1max-build-isaac/v41_contact_retirement_evidence/scan_planner_test_execution_ledger.gtest.xml",
+      "sha256": "c437c7ea6f28414b987d05b077366613be9a4280300e62a25cc4cde3b0d03bf8",
+      "kind": "gtest",
+      "counts": {
+        "tests": "39",
+        "failures": "0",
+        "errors": "0",
+        "disabled": "0"
+      }
+    },
+    {
+      "path": "/home/eric/wjg/d1max-build-isaac/v41_contact_retirement_evidence/scan_planner_test_initial_yaw_native.gtest.xml",
+      "sha256": "d04c05e4f52d02aef7569bf66772f301407b478228b275b864e25f9980f94f62",
+      "kind": "gtest",
+      "counts": {
+        "tests": "7",
+        "failures": "0",
+        "errors": "0",
+        "disabled": "0"
+      }
+    },
+    {
+      "path": "/home/eric/wjg/d1max-build-isaac/v41_contact_retirement_evidence/scan_planner_test_input_contract.gtest.xml",
+      "sha256": "b0dd0ba0bd8684f1afa965ea5c1c7a0437a6ab0f4918f123b93e4847911da1c0",
+      "kind": "gtest",
+      "counts": {
+        "tests": "12",
+        "failures": "0",
+        "errors": "0",
+        "disabled": "0"
+      }
+    },
+    {
+      "path": "/home/eric/wjg/d1max-build-isaac/v41_contact_retirement_evidence/scan_planner_test_local_plan_debug.gtest.xml",
+      "sha256": "4410e5f57202daaf8a840f56385775be332d55b6c557c20be90dc2fb80d33cac",
+      "kind": "gtest",
+      "counts": {
+        "tests": "6",
+        "failures": "0",
+        "errors": "0",
+        "disabled": "0"
+      }
+    },
+    {
+      "path": "/home/eric/wjg/d1max-build-isaac/v41_contact_retirement_evidence/scan_planner_test_low_speed_entry_fit.gtest.xml",
+      "sha256": "915092add7fa17d3b70db47c17c80e2504df84f35ecbfa584d3163e19109073f",
+      "kind": "gtest",
+      "counts": {
+        "tests": "10",
+        "failures": "0",
+        "errors": "0",
+        "disabled": "0"
+      }
+    },
+    {
+      "path": "/home/eric/wjg/d1max-build-isaac/v41_contact_retirement_evidence/scan_planner_test_motion_sweep.gtest.xml",
+      "sha256": "f9e7dd93c4e85fb74cc725d2fd1fe094645861acf9a0a7e8977ffdd1c1e3c14d",
+      "kind": "gtest",
+      "counts": {
+        "tests": "36",
+        "failures": "0",
+        "errors": "0",
+        "disabled": "0"
+      }
+    },
+    {
+      "path": "/home/eric/wjg/d1max-build-isaac/v41_contact_retirement_evidence/scan_planner_test_reference_target.gtest.xml",
+      "sha256": "ac67a04f16aaa11e9803e3fd886b473bcc12545fb5c6237ef0be4e8e3078787f",
+      "kind": "gtest",
+      "counts": {
+        "tests": "17",
+        "failures": "0",
+        "errors": "0",
+        "disabled": "0"
+      }
+    },
+    {
+      "path": "/home/eric/wjg/d1max-build-isaac/v41_contact_retirement_evidence/scan_planner_test_test_planner_startup.py.xunit.xml",
+      "sha256": "49d09059da668bed187b8059ea948d2843e876c289c034628ec04ff15c8d69a2",
+      "kind": "xunit",
+      "counts": {
+        "tests": "0",
+        "failures": "0",
+        "errors": "0",
+        "disabled": "0"
+      }
+    },
+    {
+      "path": "/home/eric/wjg/d1max-build-isaac/v41_contact_retirement_evidence/scan_planner_test_test_waypoint_parameters.py.xunit.xml",
+      "sha256": "5a48991bfa1511b1ffc524cad57f7c6d3149032f00b13e90fca6bb5f92c5a39c",
+      "kind": "xunit",
+      "counts": {
+        "tests": "0",
+        "failures": "0",
+        "errors": "0",
+        "disabled": "0"
+      }
+    },
+    {
+      "path": "/home/eric/wjg/d1max-build-isaac/v41_contact_retirement_evidence/scan_planner_test_trajectory_collision.gtest.xml",
+      "sha256": "c5766c25cf2d41a85026b02ad6fa36b1966b21c7e212e7e0a1dba20a786f8194",
+      "kind": "gtest",
+      "counts": {
+        "tests": "25",
+        "failures": "0",
+        "errors": "0",
+        "disabled": "0"
+      }
+    },
+    {
+      "path": "/home/eric/wjg/d1max-build-isaac/v41_contact_retirement_evidence/scan_planner_test_visible_reference_target.gtest.xml",
+      "sha256": "0859c535fefffc15026840ea2788e8dce8829e8f001b26708113e8960bfb1572",
+      "kind": "gtest",
+      "counts": {
+        "tests": "7",
+        "failures": "0",
+        "errors": "0",
+        "disabled": "0"
+      }
+    }
+  ],
+  "logs": [
+    {
+      "path": "/home/eric/wjg/d1max-build-isaac/v41_contact_actor_retirement_build.log",
+      "sha256": "67b82292f3bd6386164be346451fad2ee3e60c6c52392aa2f26418f2b3cd73b2"
+    },
+    {
+      "path": "/home/eric/wjg/d1max-build-isaac/v41_contact_plan_env_ctest.log",
+      "sha256": "aad4f019299160e5f9029554a005cc407b33accca029158fc013942be92232d7"
+    },
+    {
+      "path": "/home/eric/wjg/d1max-build-isaac/v41_contact_scan_ctest.log",
+      "sha256": "4fa6e07f4e88762a6bac105e847e7d98e49799894d97f56e916fa45f2b31bed0"
+    }
+  ],
+  "original_failure_witness": {
+    "path": "/home/eric/wjg/d1max-build-isaac/v40_prior3_actor_witness.log",
+    "sha256": "b29ff8a9fcfe2a1790d0ef62d2b7838bb44a7d1a9526f18f65bbdecb1ffd0fc5"
+  },
+  "source_frozen_record": {
+    "path": "/home/eric/wjg/d1max-build-isaac/v40_prior3_actor_contact_source_frozen.json",
+    "sha256": "2b7a4254da6ee4a28686d44ba5223e15da6f1d37a479171ec06e194e93f74d7d"
+  },
+  "regression_scope": "18 exact contact actor cases + complete original plan_env/scan suites; real weak/occupied raw source unchanged, strict newer complete fullXYZ contact proof, untagged/mixed/prior-poison/overflow/static OCC/unknown/default/freshness retained",
+  "normal_navigation_history_readonly_review": {
+    "source": [
+      {
+        "path": "/home/eric/wjg/d1max-system/simulation/isaacsim/scene.py",
+        "sha256": "0c19567d52dca1e0ed417c35322a98de8e40793dd64a938749b7c5beb89f9988"
+      },
+      {
+        "path": "/home/eric/wjg/d1max-system/simulation/isaacsim/policy_history.py",
+        "sha256": "c3f429204a5d905412be73686a2d4e68be5325ecb6782057d8f876757a1baed5"
+      },
+      {
+        "path": "/home/eric/wjg/d1max-system/simulation/isaacsim/test_policy_history.py",
+        "sha256": "60c8afebd4583aa01a98a92e5f0f485bb696baad2d766ae01ee36539fa909c73"
+      }
+    ],
+    "status": "no_blocker",
+    "review_did_not_execute_Python_tests": true,
+    "parent_reported_python_tests": 63,
+    "default_enabled": false,
+    "strict_bool": true,
+    "component_udp_modes_unchanged": true,
+    "measurements": "original native500Hz pre-policy BEGIN getters with original source, plus terminal current native END getters; no root/joint writes, no physical steps added",
+    "raw_measurement_cap_is_not_a_filter": true,
+    "control_authority_unchanged": true,
+    "limitation": "additional getters and JSON serialization add wall cost; actual proof leases/RTF remain measured constraints"
+  }
+}

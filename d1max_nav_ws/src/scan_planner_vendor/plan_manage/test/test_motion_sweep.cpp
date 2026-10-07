@@ -514,6 +514,23 @@ TEST(MotionSweep,RecordSourceAgeOverridesLegacyDefaultAndCannotRenewEitherSensor
   EXPECT_EQ(motionEvidenceDeadline(t,t,t,t+100000000LL,t+250000000LL,t+250000000LL,
     t+1000000000LL,t,t,0LL),0LL);
 }
+TEST(MotionSweep,PointSixFiveBoundaryPreservesOwnMeasuredDomainAndOriginalReachableSweep) {
+  auto spot=model();spot.isolated_spot_model=true;spot.max_speed=.65;spot.max_yaw=.8;
+  spot.command_max_speed=.15;spot.command_max_yaw=.3;
+  ASSERT_TRUE(spot.valid());
+  auto above=spot;above.max_speed=.6500001;EXPECT_FALSE(above.valid());
+  auto unmarked=model();unmarked.max_speed=.65;EXPECT_FALSE(unmarked.valid());
+  GridMap map;GridMapTestAccess::configure(map);geometry_msgs::msg::Twist command,actual;
+  command.linear.x=.15;actual.linear.x=.616161;
+  const auto admitted=run(map,command,actual,spot,.1);ASSERT_TRUE(admitted.valid)<<admitted.reason;
+  EXPECT_NEAR(admitted.length,.65*.4+.08,1e-12);
+  EXPECT_NEAR(admitted.heading_bound,.8*.4+.2+.03,1e-12);
+  auto old=spot;old.max_speed=.6;
+  const auto outside_old=run(map,command,actual,old,.1);
+  EXPECT_FALSE(outside_old.valid);EXPECT_EQ(outside_old.reason,"command_or_measured_speed_outside_record");
+  actual.linear.x=.65;EXPECT_TRUE(run(map,command,actual,spot,.1).valid);
+  actual.linear.x=.6501;EXPECT_FALSE(run(map,command,actual,spot,.1).valid);
+}
 TEST(MotionSweep,ExplicitSpotRecordBindsActualReachabilityWithoutRaisingCommandAuthority) {
   nlohmann::json j={{"schema_version",3},{"transport_mode","isolated_mock"},{"fixture_only",true},
     {"model","reaction_braking_reachable_v1"},
@@ -543,6 +560,29 @@ TEST(MotionSweep,ExplicitSpotRecordBindsActualReachabilityWithoutRaisingCommandA
   command.linear.x=.15;command.angular.z=.3001;EXPECT_FALSE(run(m,command,actual,spot,.1).valid);
   command.angular.z=0.;actual.linear.x=.6001;EXPECT_FALSE(run(m,command,actual,spot,.1).valid);
   actual.linear.x=.35;actual.angular.z=.8001;EXPECT_FALSE(run(m,command,actual,spot,.1).valid);
+  // The new hard maximum admits only a record whose own measurement and
+  // explicit platform reach agree; the older .6 record above stays bounded.
+  auto higher=j;higher["measurements"]["max_speed_mps"]=.65;
+  higher["isolated_platform_model"]["reachable_max_speed_mps"]=.65;
+  const auto extended=load(higher);ASSERT_TRUE(extended.valid());EXPECT_TRUE(extended.isolated_spot_model);
+  EXPECT_DOUBLE_EQ(extended.max_speed,.65);
+  EXPECT_DOUBLE_EQ(extended.commandMaxSpeed(),.15);EXPECT_DOUBLE_EQ(extended.commandMaxYaw(),.3);
+  EXPECT_DOUBLE_EQ(extended.max_yaw,.8);EXPECT_EQ(extended.sha256,digest(higher.dump()));
+  actual.angular.z=0.;actual.linear.x=.616161;
+  EXPECT_TRUE(run(m,command,actual,extended,.1).valid);
+  const auto outside_old=run(m,command,actual,spot,.1);
+  EXPECT_FALSE(outside_old.valid);EXPECT_EQ(outside_old.reason,"command_or_measured_speed_outside_record");
+  const auto higher_bytes=higher.dump();
+  EXPECT_ANY_THROW(BrakingModel::load(path.string(),std::string(64,'a'),"isolated_mock"));
+  {std::ofstream f(path,std::ios::app);f<<' ';}
+  EXPECT_ANY_THROW(BrakingModel::load(path.string(),digest(higher_bytes),"isolated_mock"));
+  EXPECT_ANY_THROW(load(higher,"live"));
+  auto bad_higher=higher;bad_higher["fixture_only"]=false;EXPECT_ANY_THROW(load(bad_higher));
+  bad_higher=higher;bad_higher["measurements"]["max_speed_mps"]=.6;EXPECT_ANY_THROW(load(bad_higher));
+  bad_higher=higher;bad_higher.erase("isolated_platform_model");EXPECT_ANY_THROW(load(bad_higher));
+  bad_higher=higher;bad_higher["measurements"]["max_speed_mps"]=.6500001;
+  bad_higher["isolated_platform_model"]["reachable_max_speed_mps"]=.6500001;
+  EXPECT_ANY_THROW(load(bad_higher));
   auto bad=j;bad.erase("isolated_platform_model");EXPECT_ANY_THROW(load(bad));
   // The new reference-domain marker independently denies real transport even
   // after every older fixture discriminator is removed from a valid record.
@@ -795,6 +835,45 @@ TEST(MotionSweep, PhysicalSpotRotatedFullVolumeStillFindsFootAndTopLiveObstacles
       EXPECT_GT(blocked.unique_voxels,0U);EXPECT_LE(blocked.unique_voxels,frozen.inside_voxels);
       EXPECT_DOUBLE_EQ(blocked.min_z,frozen.min_z);EXPECT_NEAR(blocked.max_z,frozen.max_z,1e-12);
     }
+}
+
+TEST(MotionSweep, UnknownFloorContactFailureDiagnosticKeepsOriginalCellAndCapturedLease) {
+  GridMap map;GridMapTestAccess::configure(map,{160,160,60});
+  GridMapTestAccess::officialSpotEnvelope(map);GridMapTestAccess::floorContact(map);
+  const auto support=physicalSpotGround();const auto braking=physicalSpotModel();
+  const Eigen::Vector3d body(0.,0.,.48),hit(1.5,.125,.025);
+  geometry_msgs::msg::Twist command,actual;command.linear.x=.01;actual.linear.x=.001;
+  const auto clear=validateMotionSweep(map,support,braking,body,0.,actual,command,"odom",.04);
+  ASSERT_TRUE(clear.valid)<<clear.reason;
+  // A genuine nonfloor hit in a certified floor-contact cell is UNKNOWN,
+  // not an OCCUPIED result. The first failure must remain inspectable even
+  // when the ordinary whole-curve footprint does not contain this future cell.
+  GridMapTestAccess::nonfloorHit(map,hit);
+  const auto blocked=validateMotionSweep(map,support,braking,body,0.,actual,command,"odom",.04);
+  ASSERT_FALSE(blocked.valid);ASSERT_EQ(blocked.reason,"motion_sweep_unknown_or_expired");
+  EXPECT_GT(blocked.unique_voxels,0U);EXPECT_LT(blocked.unique_voxels,clear.unique_voxels);
+  const auto lease=map.describeCollisionLease();
+  const auto deadlines=GridMapTestAccess::proofDeadlines(map);
+  const std::array<std::int64_t,2> sources{{map.integratedRaySourceStamp(0),map.integratedRaySourceStamp(1)}};
+  const std::array<std::int64_t,2> receipts{{GridMapTestAccess::rayReceipt(map,0),GridMapTestAccess::rayReceipt(map,1)}};
+  const auto before=map.describeObservedRawFailure();const auto witness=nlohmann::json::parse(before);
+  ASSERT_TRUE(witness.at("first_cell_available").get<bool>());
+  Eigen::Vector3i cell;map.posToIndex(hit,cell);
+  EXPECT_EQ(witness.at("index"),(std::array<int,3>{{cell.x(),cell.y(),cell.z()}}));
+  EXPECT_EQ(witness.at("native_state"),2);EXPECT_EQ(witness.at("prior_state"),3);
+  EXPECT_EQ(witness.at("raw_state"),1);EXPECT_DOUBLE_EQ(witness.at("raw_log_odds").get<double>(),2.);
+  EXPECT_EQ(witness.at("hit_source_ns"),100100000001LL);
+  EXPECT_TRUE(witness.at("static_query_valid").get<bool>());
+  EXPECT_TRUE(witness.at("dynamic_query_valid").get<bool>());
+  for(unsigned read=0;read<3;++read) {
+    EXPECT_EQ(map.describeObservedRawFailure(),before);
+    EXPECT_EQ(map.describeCollisionLease(),lease);
+    EXPECT_EQ(GridMapTestAccess::proofDeadlines(map),deadlines);
+    for(unsigned sensor=0;sensor<2;++sensor) {
+      EXPECT_EQ(map.integratedRaySourceStamp(sensor),sources[sensor]);
+      EXPECT_EQ(GridMapTestAccess::rayReceipt(map,sensor),receipts[sensor]);
+    }
+  }
 }
 
 TEST(MotionSweep, PhysicalSpotRotatedCountPassCannotRenewEitherRaySourceOrReceipt) {

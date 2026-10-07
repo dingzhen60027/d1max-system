@@ -164,12 +164,42 @@ TEST(TrajectoryCollision, ExplicitIsolatedPlantBoundDoesNotChangeDefaultOrRevers
       Connection::CandidateAdmission,nullptr,Speed::IsolatedOfficialSpot);
   ASSERT_TRUE(domain);EXPECT_NEAR(domain->measured_arc,.7,1e-6);
   EXPECT_LE(curve.evaluateDeBoorT(domain->checked_from_time).x(),.55+1e-6);
-  EXPECT_FALSE(scan_planner::measuredRemainingCurveDomain(curve,advanced,2.,.4,.5,.6001,.15,
+  EXPECT_FALSE(scan_planner::measuredRemainingCurveDomain(curve,advanced,2.,.4,.5,.6500001,.15,
       Connection::CandidateAdmission,nullptr,Speed::IsolatedOfficialSpot));
   EXPECT_FALSE(scan_planner::measuredRemainingCurveDomain(curve,advanced,2.,.5,.5,.6,.15,
       Connection::CandidateAdmission,nullptr,Speed::IsolatedOfficialSpot));
   EXPECT_FALSE(scan_planner::measuredRemainingCurveDomain(curve,advanced,2.,.4,.5,.6,.1,
       Connection::CandidateAdmission,nullptr,Speed::IsolatedOfficialSpot));
+}
+TEST(TrajectoryCollision, IsolatedProjectionAcceptsExactCalibratedCapWithoutChangingDefault) {
+  auto curve=line();const auto advanced=curve.evaluateDeBoorT(2.8);
+  using Speed=scan_planner::MeasuredSpeedProfile;
+  using Connection=scan_planner::MeasuredConnectionPolicy;
+  double residual=std::numeric_limits<double>::quiet_NaN();
+  const auto domain=scan_planner::measuredRemainingCurveDomain(curve,advanced,2.,.4,.5,.65,.15,
+      Connection::CandidateAdmission,&residual,Speed::IsolatedOfficialSpot);
+  ASSERT_TRUE(domain);EXPECT_NEAR(domain->measured_arc,.7,1e-6);
+  EXPECT_NEAR(residual,0.,1e-12);
+  EXPECT_FALSE(scan_planner::measuredRemainingCurveDomain(curve,advanced,2.,.4,.5,
+      std::nextafter(.65,1.),.15,Connection::CandidateAdmission,nullptr,Speed::IsolatedOfficialSpot));
+  // The unmarked production profile retains its exact .3 maximum.
+  const auto nearby=curve.evaluateDeBoorT(2.3);
+  EXPECT_TRUE(scan_planner::measuredRemainingCurveDomain(curve,nearby,2.,.4,.5,.3));
+  EXPECT_FALSE(scan_planner::measuredRemainingCurveDomain(curve,nearby,2.,.4,.5,std::nextafter(.3,1.)));
+  EXPECT_FALSE(scan_planner::measuredRemainingCurveDomain(curve,nearby,2.,.4,.5,.65));
+}
+TEST(TrajectoryCollision, OldProjectionRecordRetainsItsOwnTravelDomainAfterCalibrationCapChange) {
+  auto curve=line();const auto advanced=curve.evaluateDeBoorT(3.08);
+  using Speed=scan_planner::MeasuredSpeedProfile;
+  using Connection=scan_planner::MeasuredConnectionPolicy;
+  // Measured motion is .270m. The unchanged search budgets are .2525m for
+  // the old .6 record and .2725m for the new .65 record, with the original
+  // .0125m candidate residual bound. The old record cannot borrow new reach.
+  EXPECT_FALSE(scan_planner::measuredRemainingCurveDomain(curve,advanced,2.,.4,.5,.6,.15,
+      Connection::CandidateAdmission,nullptr,Speed::IsolatedOfficialSpot));
+  const auto domain=scan_planner::measuredRemainingCurveDomain(curve,advanced,2.,.4,.5,.65,.15,
+      Connection::CandidateAdmission,nullptr,Speed::IsolatedOfficialSpot);
+  ASSERT_TRUE(domain);EXPECT_NEAR(domain->measured_arc,.77,1e-6);
 }
 TEST(TrajectoryCollision, CommittedTrackingRequiresEveryActualConnectorFootprintNotCandidateTolerance) {
   auto curve=line();auto body=bodyAt(curve);body.position=curve.evaluateDeBoorT(2.);

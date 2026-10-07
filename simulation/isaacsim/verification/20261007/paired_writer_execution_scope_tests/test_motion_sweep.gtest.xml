@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites tests="37" failures="0" disabled="0" errors="0" time="0.797" timestamp="2026-10-07T20:45:46" name="AllTests">
+  <testsuite name="MotionSweep" tests="30" failures="0" disabled="0" errors="0" time="0.617" timestamp="2026-10-07T20:45:46">
+    <testcase name="ActualNativeObservedMapProvesMovingAndTurningReachableEnvelope" status="run" result="completed" time="0.002" timestamp="2026-10-07T20:45:46" classname="scan_planner.MotionSweep" />
+    <testcase name="CertifiedFlatContactChecksFullFootSlabAtFixedHeightInCurveAndRawMotion" status="run" result="completed" time="0.007" timestamp="2026-10-07T20:45:46" classname="scan_planner.MotionSweep" />
+    <testcase name="FlatContactCertificateRejectsDifferentSupportHeightInsteadOfFollowingGaitZ" status="run" result="completed" time="0.004" timestamp="2026-10-07T20:45:47" classname="scan_planner.MotionSweep" />
+    <testcase name="FreshOracleLeaseCannotAuthorizeBrakingBeyondItsActorPredictionDuration" status="run" result="completed" time="0.004" timestamp="2026-10-07T20:45:47" classname="scan_planner.MotionSweep" />
+    <testcase name="AsymmetricReflectedEnvelopeDoesNotInventGroundAndCannotMissHeadObstacle" status="run" result="completed" time="0.002" timestamp="2026-10-07T20:45:47" classname="scan_planner.MotionSweep" />
+    <testcase name="FailedEnvelopeDiagnosticsSeparateClassesAndUniqueFromRawOverlap" status="run" result="completed" time="0.002" timestamp="2026-10-07T20:45:47" classname="scan_planner.MotionSweep" />
+    <testcase name="NewBodyOrNewProofDoesNotRenewOriginalDemandBodyOrExpiredRaySource" status="run" result="completed" time="0" timestamp="2026-10-07T20:45:47" classname="scan_planner.MotionSweep" />
+    <testcase name="FreeCurrentBodyAndShortNominalCurveDoNotProveBrakingDistance" status="run" result="completed" time="0.001" timestamp="2026-10-07T20:45:47" classname="scan_planner.MotionSweep" />
+    <testcase name="PlanningCorridorIncludesFutureBrakingAndDoesNotReplaceCommandProof" status="run" result="completed" time="0" timestamp="2026-10-07T20:45:47" classname="scan_planner.MotionSweep" />
+    <testcase name="TurningSweepCoversCylinderRotationAwayFromFreeCurrentPose" status="run" result="completed" time="0.001" timestamp="2026-10-07T20:45:47" classname="scan_planner.MotionSweep" />
+    <testcase name="NeverObservedAndInsufficientEvidenceAreNotAssumedFree" status="run" result="completed" time="0.001" timestamp="2026-10-07T20:45:47" classname="scan_planner.MotionSweep" />
+    <testcase name="TTLExpiryDoesNotClearOccupancyOrRenewFreeEvidence" status="run" result="completed" time="0" timestamp="2026-10-07T20:45:47" classname="scan_planner.MotionSweep" />
+    <testcase name="SourceGroundGapWrongFloorOrMissingBodySupportRejects" status="run" result="completed" time="0" timestamp="2026-10-07T20:45:47" classname="scan_planner.MotionSweep" />
+    <testcase name="DeployedEnvelopeRejectsLowObstacleInsideBrakingSweep" status="run" result="completed" time="0.001" timestamp="2026-10-07T20:45:47" classname="scan_planner.MotionSweep" />
+    <testcase name="DeployedEnvelopeDoesNotClaimContactBelowOrAboveProtectedHeight" status="run" result="completed" time="0.001" timestamp="2026-10-07T20:45:47" classname="scan_planner.MotionSweep" />
+    <testcase name="DeployedEnvelopeRejectsLowUnknownAndInsufficientEvidence" status="run" result="completed" time="0.001" timestamp="2026-10-07T20:45:47" classname="scan_planner.MotionSweep" />
+    <testcase name="DeployedEnvelopeRejectsMissingSupportEvenWhenAllRawVoxelsAreFree" status="run" result="completed" time="0" timestamp="2026-10-07T20:45:47" classname="scan_planner.MotionSweep" />
+    <testcase name="EitherRawRaySourceIndependentlyCapsCommandEvidenceDeadline" status="run" result="completed" time="0" timestamp="2026-10-07T20:45:47" classname="scan_planner.MotionSweep" />
+    <testcase name="BoundsBudgetAndNonForwardCommandFailClosed" status="run" result="completed" time="0.001" timestamp="2026-10-07T20:45:47" classname="scan_planner.MotionSweep" />
+    <testcase name="ExactFileBytesAndTransportAreBoundToMeasuredModel" status="run" result="completed" time="0" timestamp="2026-10-07T20:45:47" classname="scan_planner.MotionSweep" />
+    <testcase name="RecordSourceAgeOverridesLegacyDefaultAndCannotRenewEitherSensor" status="run" result="completed" time="0" timestamp="2026-10-07T20:45:47" classname="scan_planner.MotionSweep" />
+    <testcase name="PointSixFiveBoundaryPreservesOwnMeasuredDomainAndOriginalReachableSweep" status="run" result="completed" time="0.002" timestamp="2026-10-07T20:45:47" classname="scan_planner.MotionSweep" />
+    <testcase name="ExplicitSpotRecordBindsActualReachabilityWithoutRaisingCommandAuthority" status="run" result="completed" time="0.003" timestamp="2026-10-07T20:45:47" classname="scan_planner.MotionSweep" />
+    <testcase name="SpotFutureGaitFromNearZeroCannotEscapeReactionOrYawEnvelope" status="run" result="completed" time="0.005" timestamp="2026-10-07T20:45:47" classname="scan_planner.MotionSweep" />
+    <testcase name="PhysicalSpotEnvelopeRetainsIsotropicReactionFootTopAndBudgetVetoes" status="run" result="completed" time="0.156" timestamp="2026-10-07T20:45:47" classname="scan_planner.MotionSweep" />
+    <testcase name="PhysicalSpotRotatedAabbDoesNotConsumeUnqueriedCornerVoxelBudget" status="run" result="completed" time="0.115" timestamp="2026-10-07T20:45:47" classname="scan_planner.MotionSweep" />
+    <testcase name="PhysicalSpotTrueInsideVoxelOverflowStillRejectsEntireVolume" status="run" result="completed" time="0.063" timestamp="2026-10-07T20:45:47" classname="scan_planner.MotionSweep" />
+    <testcase name="PhysicalSpotRotatedFullVolumeStillFindsFootAndTopLiveObstacles" status="run" result="completed" time="0.109" timestamp="2026-10-07T20:45:47" classname="scan_planner.MotionSweep" />
+    <testcase name="UnknownFloorContactFailureDiagnosticKeepsOriginalCellAndCapturedLease" status="run" result="completed" time="0.027" timestamp="2026-10-07T20:45:47" classname="scan_planner.MotionSweep" />
+    <testcase name="PhysicalSpotRotatedCountPassCannotRenewEitherRaySourceOrReceipt" status="run" result="completed" time="0.109" timestamp="2026-10-07T20:45:47" classname="scan_planner.MotionSweep" />
+  </testsuite>
+  <testsuite name="RawSnapshotColumn" tests="5" failures="0" disabled="0" errors="0" time="0.028" timestamp="2026-10-07T20:45:47">
+    <testcase name="EveryCellAndFirstNonfreeMatchRawQueriesIncludingFootAndTop" status="run" result="completed" time="0.018" timestamp="2026-10-07T20:45:47" classname="scan_planner.RawSnapshotColumn" />
+    <testcase name="PublicBatchRequiresPrivateObservedSnapshot" status="run" result="completed" time="0" timestamp="2026-10-07T20:45:47" classname="scan_planner.RawSnapshotColumn" />
+    <testcase name="DynamicClosedXYAndAllZVetoMatchFirstNonfreeOrdering" status="run" result="completed" time="0.003" timestamp="2026-10-07T20:45:47" classname="scan_planner.RawSnapshotColumn" />
+    <testcase name="OutsideInvalidRangeAndRingAddressReuseNeverBorrowAnotherColumn" status="run" result="completed" time="0" timestamp="2026-10-07T20:45:47" classname="scan_planner.RawSnapshotColumn" />
+    <testcase name="BatchEndChecksOriginalSourceAndSteadyDeadlinesWithoutRenewal" status="run" result="completed" time="0.007" timestamp="2026-10-07T20:45:47" classname="scan_planner.RawSnapshotColumn" />
+  </testsuite>
+  <testsuite name="MotionSupportNearest" tests="1" failures="0" disabled="0" errors="0" time="0.003" timestamp="2026-10-07T20:45:47">
+    <testcase name="ExactLegacyBinOrderRandomQueriesTiesAndWorldBounds" status="run" result="completed" time="0.003" timestamp="2026-10-07T20:45:47" classname="scan_planner.MotionSupportNearest" />
+  </testsuite>
+  <testsuite name="MotionSweepBenchmark" tests="1" failures="0" disabled="0" errors="0" time="0.149" timestamp="2026-10-07T20:45:47">
+    <testcase name="PhysicalSpotColdProofWallP50P95KeepsEveryOriginalCell" status="run" result="completed" time="0.149" timestamp="2026-10-07T20:45:47" classname="scan_planner.MotionSweepBenchmark" />
+  </testsuite>
+</testsuites>

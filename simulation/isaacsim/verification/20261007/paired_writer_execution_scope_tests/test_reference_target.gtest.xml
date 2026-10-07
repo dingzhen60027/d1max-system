@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites tests="17" failures="0" disabled="0" errors="0" time="0" timestamp="2026-10-07T20:45:47" name="AllTests">
+  <testsuite name="ReferenceTarget" tests="17" failures="0" disabled="0" errors="0" time="0" timestamp="2026-10-07T20:45:47">
+    <testcase name="UnobstructedNominalEndpointIsUnchanged" status="run" result="completed" time="0" timestamp="2026-10-07T20:45:47" classname="scan_planner.ReferenceTarget" />
+    <testcase name="HorizonObstacleUsesForwardExitAndVerifiedSideDetour" status="run" result="completed" time="0" timestamp="2026-10-07T20:45:47" classname="scan_planner.ReferenceTarget" />
+    <testcase name="BlockedCorridorCannotBeConvertedToSuccessfulSeed" status="run" result="completed" time="0" timestamp="2026-10-07T20:45:47" classname="scan_planner.ReferenceTarget" />
+    <testcase name="RollingMapBoundaryShortensHorizon" status="run" result="completed" time="0" timestamp="2026-10-07T20:45:47" classname="scan_planner.ReferenceTarget" />
+    <testcase name="DoesNotCrossOutOfMapGapToReenterLaterFreeReference" status="run" result="completed" time="0" timestamp="2026-10-07T20:45:47" classname="scan_planner.ReferenceTarget" />
+    <testcase name="StairsRetainOrderedHeightAndEveryTurn" status="run" result="completed" time="0" timestamp="2026-10-07T20:45:47" classname="scan_planner.ReferenceTarget" />
+    <testcase name="CannotUseBodyProximityAtCrossingAsSuccessfulAdvance" status="run" result="completed" time="0" timestamp="2026-10-07T20:45:47" classname="scan_planner.ReferenceTarget" />
+    <testcase name="FullyBlockedTargetWindowDoesNotRetreatToRobot" status="run" result="completed" time="0" timestamp="2026-10-07T20:45:47" classname="scan_planner.ReferenceTarget" />
+    <testcase name="ShortFinalLegStillRequiresRealNonHoverDisplacement" status="run" result="completed" time="0" timestamp="2026-10-07T20:45:47" classname="scan_planner.ReferenceTarget" />
+    <testcase name="QueryBudgetFailsClosedWithoutUnboundedWork" status="run" result="completed" time="0" timestamp="2026-10-07T20:45:47" classname="scan_planner.ReferenceTarget" />
+    <testcase name="InvalidConfigurationCannotAuthorizeEndpoint" status="run" result="completed" time="0" timestamp="2026-10-07T20:45:47" classname="scan_planner.ReferenceTarget" />
+    <testcase name="FailureReportsActualUnknownOccupiedAndBoundaryQueries" status="run" result="completed" time="0" timestamp="2026-10-07T20:45:47" classname="scan_planner.ReferenceTarget" />
+    <testcase name="DiagnosticPointBudgetCannotChangeSelectionOrQueryCounts" status="run" result="completed" time="0" timestamp="2026-10-07T20:45:47" classname="scan_planner.ReferenceTarget" />
+    <testcase name="SuccessfulTargetKeepsMixedQueryStatisticsWithoutChangingChoice" status="run" result="completed" time="0" timestamp="2026-10-07T20:45:47" classname="scan_planner.ReferenceTarget" />
+    <testcase name="OffCenterlineReissueNeverTargetsTheBodyConnector" status="run" result="completed" time="0" timestamp="2026-10-07T20:45:47" classname="scan_planner.ReferenceTarget" />
+    <testcase name="OnRouteBodyKeepsZeroRouteBegin" status="run" result="completed" time="0" timestamp="2026-10-07T20:45:47" classname="scan_planner.ReferenceTarget" />
+    <testcase name="EndpointMustBeObservedAtTheSearchApproachHeading" status="run" result="completed" time="0" timestamp="2026-10-07T20:45:47" classname="scan_planner.ReferenceTarget" />
+  </testsuite>
+</testsuites>

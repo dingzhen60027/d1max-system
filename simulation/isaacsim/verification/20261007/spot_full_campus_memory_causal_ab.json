@@ -1,0 +1,299 @@
+{
+  "schema": 1,
+  "kind": "full_original_campus_frozen_500hz_memory_only_ab",
+  "formal_navigation_pass": false,
+  "navigation_authorization": false,
+  "hardware_acceptance": false,
+  "baseline": {
+    "run": "/home/eric/wjg/d1max-build-isaac/quadruped-research/campus_v41_memory_baseline_001",
+    "complete_native_500hz": true,
+    "actual_frames": 53660,
+    "actual_samples": 53661,
+    "whole": {
+      "samples": 53661,
+      "source_begin_ns": 0,
+      "source_end_ns": 107320000000,
+      "net_xy_m": 11.846273042610298,
+      "cumulative_xy_m": 12.729909010159767,
+      "mean_full_xyz_mps": 0.1313447476773311,
+      "peak_full_xyz_mps": 0.605385179892875,
+      "positive_consumed_samples": 41649
+    },
+    "former_stall_70_90s": {
+      "samples": 10001,
+      "source_begin_ns": 70000000000,
+      "source_end_ns": 90000000000,
+      "net_xy_m": 0.007272435282626563,
+      "cumulative_xy_m": 0.011331456242439026,
+      "mean_full_xyz_mps": 0.007634831925039578,
+      "peak_full_xyz_mps": 0.0341534390865134,
+      "positive_consumed_samples": 10001
+    },
+    "recovery_events": [],
+    "final_stop": {
+      "zero_source_ns": 100860000000,
+      "window_begin_ns": 102056000000,
+      "confirmation_source_ns": 103056000000,
+      "latency_s": 2.196,
+      "xy_path_m": 0.0999408586236084,
+      "yaw_path_rad": 0.12219779973582302
+    },
+    "original_stop_bounds_met": true,
+    "full_xyz_dot6_met": false,
+    "raw_bindings": [
+      {
+        "path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/campus_v41_memory_baseline_001/summary.json",
+        "sha256": "f4493150d14b65695cad19ebc521eda524facbe0723d607b780e31d2cb58e2aa",
+        "bytes": 31572
+      },
+      {
+        "path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/campus_v41_memory_baseline_001/policy_history_manifest.json",
+        "sha256": "6d379c9f8c6b90e4ce0d5a2aaad8924b931a541dc17d2adac39157ffce0a0184",
+        "bytes": 2134
+      },
+      {
+        "path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/campus_v41_memory_baseline_001/policy_component_state_500hz.jsonl",
+        "sha256": "9240689daf756f94116f5981eb478bf4d003fd8fc0bb4f4344e4247d67db6129",
+        "bytes": 85815711
+      },
+      {
+        "path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/campus_v41_memory_baseline_001/policy_command_events.jsonl",
+        "sha256": "84bf02fdda335041c11f08c906187c16e172db1940e9cf14fba04fa40a2318cc",
+        "bytes": 6932252
+      },
+      {
+        "path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/campus_v41_memory_baseline_001/policy_observations.jsonl",
+        "sha256": "eb6227c22dd8e6e6a4c0cfd7eecb8997050b3ed0fd43becc36ecbfec59929da9",
+        "bytes": 11315805
+      },
+      {
+        "path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/campus_v41_memory_baseline_001/policy_recovery_events.jsonl",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "bytes": 0
+      },
+      {
+        "path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/campus_v41_memory_baseline_001/robot_link_readings.jsonl",
+        "sha256": "b23187eef46df0cf70a2005a4d6f39c6e407acab247b71d3dc0a6cc5ad5d3ea0",
+        "bytes": 50167909
+      }
+    ]
+  },
+  "recovery": {
+    "run": "/home/eric/wjg/d1max-build-isaac/quadruped-research/campus_v41_memory_recovery_001",
+    "complete_native_500hz": true,
+    "actual_frames": 53660,
+    "actual_samples": 53661,
+    "whole": {
+      "samples": 53661,
+      "source_begin_ns": 0,
+      "source_end_ns": 107320000000,
+      "net_xy_m": 20.09414548878497,
+      "cumulative_xy_m": 20.942915635189767,
+      "mean_full_xyz_mps": 0.21069885700802798,
+      "peak_full_xyz_mps": 0.605385179892875,
+      "positive_consumed_samples": 41649
+    },
+    "former_stall_70_90s": {
+      "samples": 10001,
+      "source_begin_ns": 70000000000,
+      "source_end_ns": 90000000000,
+      "net_xy_m": 5.256607277586388,
+      "cumulative_xy_m": 5.311489498366819,
+      "mean_full_xyz_mps": 0.2810985652699535,
+      "peak_full_xyz_mps": 0.49883085865065563,
+      "positive_consumed_samples": 10001
+    },
+    "recovery_events": [
+      {
+        "schema": 1,
+        "kind": "isolated_stall_action_memory_intervention",
+        "source_ns": 71040000000,
+        "episode": 56,
+        "episode_start_ns": 68088000000,
+        "stationary_start_ns": 70030000000,
+        "continuous_static_duration_ns": 1010000000,
+        "command": [
+          0.24719276948401053,
+          -0.03197332331720749
+        ],
+        "full_linear_norm": 0.007749295945837374,
+        "full_angular_norm": 0.004551028822984569,
+        "policy_counter": 36520,
+        "before_previous_action": [
+          -1.07655930519104,
+          1.141871452331543,
+          0.017705999314785004,
+          0.1953277289867401,
+          -0.7241454720497131,
+          0.06891897320747375,
+          0.26819539070129395,
+          -0.510683536529541,
+          0.6445490121841431,
+          0.4019315242767334,
+          1.0260663032531738,
+          0.6837203502655029
+        ],
+        "before_current_action": [
+          -1.07655930519104,
+          1.141871452331543,
+          0.017705999314785004,
+          0.1953277289867401,
+          -0.7241454720497131,
+          0.06891897320747375,
+          0.26819539070129395,
+          -0.510683536529541,
+          0.6445490121841431,
+          0.4019315242767334,
+          1.0260663032531738,
+          0.6837203502655029
+        ],
+        "policy_input": [
+          0.4000000059604645,
+          0.0,
+          -0.07385525107383728
+        ],
+        "integral": [
+          -0.06694057871588491,
+          -0.023321843525296447
+        ],
+        "tick_context": {
+          "phase": "source",
+          "source_tick": 35520,
+          "source_ns": 71040000000,
+          "native_physics_tick": 36530,
+          "native_simulation_time_s": 73.06,
+          "policy_counter": 36520,
+          "acquisition_phase": "actual_pre_policy_PhysX_BEGIN",
+          "epoch": "c9fa2462-79ed-49b4-873a-5a28616f74eb",
+          "clock_anchor_ns": 1791368496349995766,
+          "session_id": "0a2eef7cae13470281215ffafa950f1e",
+          "mode": "isolated_frozen_commands",
+          "authority": {
+            "command_sequence": -1,
+            "command_source_stamp_ns": null,
+            "command_source_deadline_ns": 0,
+            "command_steady_deadline_ns": 0,
+            "command_steady_deadline_s": 0.0,
+            "guard_reason": "isolated_frozen_input",
+            "geometry_fault_latched": false,
+            "policy_input_override": null,
+            "replay_original_authority": {
+              "command_sequence": 4228,
+              "command_source_stamp_ns": 71020000000,
+              "command_source_deadline_ns": 71120000000,
+              "command_steady_deadline_ns": 1215286917196716,
+              "command_steady_deadline_s": 1215286.9171967162,
+              "guard_reason": "accepted_command",
+              "geometry_fault_latched": false,
+              "policy_input_override": null,
+              "replay_original_authority": null
+            }
+          }
+        },
+        "after_previous_action": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "after_current_action": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "after_policy_counter": 36520
+      }
+    ],
+    "final_stop": {
+      "zero_source_ns": 100860000000,
+      "window_begin_ns": 101782000000,
+      "confirmation_source_ns": 102782000000,
+      "latency_s": 1.922,
+      "xy_path_m": 0.08909366557968915,
+      "yaw_path_rad": 0.06988058876998487
+    },
+    "original_stop_bounds_met": true,
+    "full_xyz_dot6_met": false,
+    "raw_bindings": [
+      {
+        "path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/campus_v41_memory_recovery_001/summary.json",
+        "sha256": "ce3bbe15f8befd52e201f40a2eb5911ed7623f25fed3f308244f1b7c69aae576",
+        "bytes": 31734
+      },
+      {
+        "path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/campus_v41_memory_recovery_001/policy_history_manifest.json",
+        "sha256": "cd75e98d5b988ee32c9fc39397b6d51daddcf76b610413eb459c0e2f9d15df9e",
+        "bytes": 2209
+      },
+      {
+        "path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/campus_v41_memory_recovery_001/policy_component_state_500hz.jsonl",
+        "sha256": "59f38c228a69b3ea95e47c004c1e6990f7a5ad18d6a7aa5e585ab90ceb124d7e",
+        "bytes": 85621071
+      },
+      {
+        "path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/campus_v41_memory_recovery_001/policy_command_events.jsonl",
+        "sha256": "1675ff206e1900bb9dfdd789ad0ac16804e2cf5adbf59d06522f837593a47ca3",
+        "bytes": 6932252
+      },
+      {
+        "path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/campus_v41_memory_recovery_001/policy_observations.jsonl",
+        "sha256": "607d4340e58593e84dfe03ef47dfef196e26c2563dc5dce3014b8f72e2bc0b80",
+        "bytes": 11270046
+      },
+      {
+        "path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/campus_v41_memory_recovery_001/policy_recovery_events.jsonl",
+        "sha256": "15ade5e1cf2de5a05b405f44ac5386e50b406133b733bc36a4dd60483006920b",
+        "bytes": 2168
+      },
+      {
+        "path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/campus_v41_memory_recovery_001/robot_link_readings.jsonl",
+        "sha256": "9619bf74bdb2e4b0a5d9972e02bbde992ae27ae6c6a2e3de3fc94aaa24a8c640",
+        "bytes": 50093525
+      }
+    ]
+  },
+  "original_to_baseline_matching_native_BEGIN_rows": 53660,
+  "original_to_baseline_compared_native_BEGIN_rows": 53660,
+  "before_first_memory_intervention_rows": 35520,
+  "before_first_memory_intervention_bit_matching_rows": 35520,
+  "first_memory_event_source_ns": 71040000000,
+  "memory_causal_scope_supported": true,
+  "notes": [
+    "same actual frozen consumed commands and original complete campus/sensor configuration",
+    "component comparison is not navigation success or continuous collision proof",
+    "overspeed and stop-bound failures retained; no physical record clamping",
+    "alternative snapshot uses original positive-demand recovery guard; formal qualification threshold is separate"
+  ],
+  "source_manifest": {
+    "path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/campus_v41_memory_ab_source_001/source_manifest.json",
+    "sha256": "87dfeea07bca783ca7c0d169ffd8c967eb61f2b5634472e709b6a487c6896408",
+    "bytes": 26890
+  },
+  "frozen_input": {
+    "path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/campus_v41_frozen_commands.json",
+    "sha256": "69217413705ff5641f8cb7b2089fb76a76813f53a4847db2061e6bdaf08aee5b",
+    "bytes": 5122251
+  },
+  "analysis_source": {
+    "path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/audit_campus_v41_memory_ab.py",
+    "sha256": "0810c6b5e51148914677bb3373fbf4926b98e326df1612fd61cf9c2492ae3319",
+    "bytes": 6282
+  }
+}

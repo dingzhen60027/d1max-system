@@ -40,7 +40,7 @@ struct BrakingModel {
     if(isolated_spot_model&&(!std::isfinite(command_max_speed)||command_max_speed<=0.||command_max_speed>.3||
         !std::isfinite(command_max_yaw)||command_max_yaw<=0.||command_max_yaw>.5||
         command_max_speed>max_speed||command_max_yaw>max_yaw))return false;
-    return max_speed<=(isolated_spot_model?.6:.3)&&max_yaw<=(isolated_spot_model?.8:.5)&&reaction<=1.&&distance<=1.&&yaw<=1.&&
+    return max_speed<=(isolated_spot_model?.65:.3)&&max_yaw<=(isolated_spot_model?.8:.5)&&reaction<=1.&&distance<=1.&&yaw<=1.&&
       latency<=3.&&tracking_error<=.25&&heading_error<=.5&&sha256.size()==64&&
       std::isfinite(sensor_source_age)&&sensor_source_age>=.001&&sensor_source_age<=.6;
   }

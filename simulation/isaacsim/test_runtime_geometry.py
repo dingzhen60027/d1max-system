@@ -150,6 +150,89 @@ def test_measured_bounds_invalid_transform_still_rejects(matrix):
         measured_bounds([dict(path='/robot/foot', shape=dict(type='Sphere', radius=.035), world_matrix=matrix)])
 
 
+@pytest.mark.parametrize('yaw', [0., np.pi/8, np.pi/4, np.pi/2, -np.pi/4, -np.pi/2, np.pi])
+def test_query_yaw_does_not_enlarge_a_complete_chassis_solid(yaw):
+    from dynamic_collision import certify_robot_in_body_envelope
+    orientation = [0., 0., np.sin(yaw/2), np.cos(yaw/2)]
+    pose = [3., -4., .5, *orientation]
+    matrix = pose_matrix(pose[:3], [orientation[3], *orientation[:3]])
+    matrix[:3, :3] = matrix[:3, :3] @ np.diag([.6, .2, .2])
+    snap = [dict(path='/robot/body', shape=dict(type='Cube', size=1.), world_matrix=matrix.tolist())]
+    registry = dict(colliders=[dict(path='/robot/body', type='Cube')])
+    env = dict(radius=.23, offset=.2, above=.2, support_floor_z=0., support_penetration_m=.02)
+    original = copy.deepcopy(snap)
+    assert body_certificate(snap, pose, registry, env, 100)['body_envelope_valid']
+    assert snap == original
+    if yaw in (np.pi/4, -np.pi/4):
+        # AABB reboxing invents (x=0,y=+/-.4); the physical chassis has
+        # |y|<=.1. Every clipped half of the actual solid fits radius .23.
+        with pytest.raises(ValueError, match='horizontal_query_envelope'):
+            certify_robot_in_body_envelope(measured_bounds(snap), body_position=pose[:3],
+                body_orientation_xyzw=orientation, radius=.23, offset=.2, below=.5,
+                above=.2, floor_z=0.)
+
+
+def test_original_v59_body_cube_false_rejection_uses_same_native_transform():
+    pose = [-.27422767877578735, -5.583821773529053, .4927676022052765,
+        -.03565135598182678, -.06719525158405304, -.3733566999435425, .9245639443397522]
+    matrix = [[.6053522744434968, .13903510722606685, -.013668378491509516, pose[0]],
+        [-.5827541752784, .14373349843260766, .016253932672968072, pose[1]],
+        [.12824287720211927, -.0031496645789143326, .13837985800713723, pose[2]],
+        [0., 0., 0., 1.]]
+    snap = [dict(path='/World/Spot/body/collisions/mesh_0', shape=dict(type='Cube', size=1.), world_matrix=matrix)]
+    registry = dict(colliders=[dict(path=snap[0]['path'], type='Cube')])
+    env = dict(radius=.6078651750202781, offset=.3125, above=.589,
+        support_floor_z=0., support_penetration_m=.02)
+    assert body_certificate(snap, pose, registry, env, 83818000000)['body_envelope_valid']
+    # It remains the same collision box: a real outward displacement must
+    # still revoke the certificate, using the original query dimensions.
+    shifted = copy.deepcopy(snap)
+    shifted[0]['world_matrix'][1][3] += 1.
+    with pytest.raises(ValueError, match='horizontal_query_envelope'):
+        body_certificate(shifted, pose, registry, env, 83818000000)
+
+
+@pytest.mark.parametrize('shape', [dict(type='Cube', size=.2), dict(type='Sphere', radius=.035),
+    dict(type='Capsule', axis='X', radius=.015, height=.35),
+    dict(type='Cylinder', axis='Z', radius=.04, height=.2)])
+@pytest.mark.parametrize('yaw', [np.pi/4, -np.pi/3])
+def test_query_support_box_encloses_complete_affine_solid(shape, yaw):
+    matrix = np.eye(4)
+    matrix[:3, :3] = [[1.2, .3, -.2], [.1, .6, .2], [-.4, .2, 1.3]]
+    matrix[:3, 3] = [1.2, -3.4, 2.1]
+    pose = [.7, -2., .5, 0., 0., np.sin(yaw/2), np.cos(yaw/2)]
+    bounds = measured_bounds([dict(path='/robot/link', shape=shape, world_matrix=matrix)], query_pose=pose)[0]
+    world_corners = np.asarray(bounds['corners_world'])
+    rotation = pose_matrix([0., 0., 0.], [pose[6], *pose[3:6]])[:3, :3]
+    query_corners = (world_corners - pose[:3]) @ rotation
+    lower, upper = query_corners.min(axis=0), query_corners.max(axis=0)
+    query_linear = rotation.T @ matrix[:3, :3]
+    for dimension, row in enumerate(query_linear):
+        if shape['type'] == 'Cube':
+            extremum = np.sign(row) * shape['size']/2
+        elif shape['type'] == 'Cylinder':
+            axis = 'XYZ'.index(shape['axis'])
+            radial = row.copy(); radial[axis] = 0.
+            extremum = shape['radius'] * radial / np.linalg.norm(radial)
+            extremum[axis] = np.sign(row[axis]) * shape['height']/2
+        else:
+            extremum = shape['radius'] * row/np.linalg.norm(row)
+            if shape['type'] == 'Capsule':
+                axis = 'XYZ'.index(shape['axis'])
+                extremum[axis] += np.sign(row[axis]) * shape['height']/2
+        world = np.asarray([-extremum, extremum]) @ matrix[:3, :3].T + matrix[:3, 3]
+        query = (world - pose[:3]) @ rotation
+        np.testing.assert_allclose(query[:, dimension], [lower[dimension], upper[dimension]], atol=1e-14)
+        assert np.all(query >= lower-1e-14) and np.all(query <= upper+1e-14)
+
+
+@pytest.mark.parametrize('pose', [[0.]*7, [0., 0., .5, np.nan, 0., 0., 1.], [0.]*6])
+def test_query_support_box_rejects_invalid_measured_body_pose(pose):
+    snap, _, _ = fixture()
+    with pytest.raises(ValueError):
+        measured_bounds(snap, query_pose=pose)
+
+
 @pytest.mark.parametrize('key,value', [('body_envelope_valid', False), ('body_envelope_checked_sim_time_ns', 99), ('body_envelope_registry_sha256', 'f'*64)])
 def test_bridge_rejects_incomplete_full_body_certificate(key, value):
     contract = dict(static_prior_geometry_sha256='a'*64, max_body_tilt_rad=.35,

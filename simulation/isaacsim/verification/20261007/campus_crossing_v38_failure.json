@@ -1,0 +1,51 @@
+{
+  "passed": false,
+  "action_result_status": 6,
+  "result": {
+    "success": false,
+    "reason": "follow_trajectory_timeout:solve_exception",
+    "retirement_confirmed": true,
+    "physical_stop_confirmed": false
+  },
+  "measured_distance_m": 0.005623523845644574,
+  "measured_final_position": [
+    -7.921586036682129,
+    -5.024755954742432,
+    0.48075202107429504
+  ],
+  "nonzero_applied_count": 0,
+  "schema": 1,
+  "kind": "isolated_campus_v38_failed_before_any_motion",
+  "formal_navigation_pass": false,
+  "physical_acceptance": false,
+  "candidate": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v38-campus-crossing",
+  "root_cause": "sealed reference .6 rejected by residual bspline_optimizer setter hard bound .5; invalid reference derivative speed; FSM masked exception as solve_exception",
+  "new_version_required": true,
+  "evidence": [
+    {
+      "path": "/home/eric/wjg/d1max-build-isaac/runs/campus_crossing_v38_001/run_summary.json",
+      "sha256": "3a0031d51caa7c3733e531b370a701874736a41d0c09b730c515e77acd2a5f89",
+      "bytes": 897
+    },
+    {
+      "path": "/home/eric/wjg/d1max-build-isaac/runs/campus_crossing_v38_001/scenario_suite/execution.json",
+      "sha256": "57a8d8ddb6424c0c4c4b5bca756cdac9ed2a7b515612e90ca4e23d89d31a94b4",
+      "bytes": 1500
+    },
+    {
+      "path": "/home/eric/wjg/d1max-build-isaac/runs/campus_crossing_v38_001/scenario_suite/phase_000_report.json",
+      "sha256": "d3f44730cbcca692c548ef2ba4d23a9ad9adc6c88597e280e0d7197e1fd89c71",
+      "bytes": 1262980
+    },
+    {
+      "path": "/home/eric/wjg/d1max-build-isaac/runs/campus_crossing_v38_001/scenario_suite/phase_000_trace.jsonl",
+      "sha256": "99f02caca43751688e38aa1ea8fdc4bc059b8b636aeab5619dc976d3fe923235",
+      "bytes": 5396072
+    },
+    {
+      "path": "/home/eric/wjg/d1max-build-isaac/runs/campus_crossing_v38_001/scan.log",
+      "sha256": "3e362713c4499f1a9360b8f595d7410ffa21dfb302457344bee14b0fcfa3181e",
+      "bytes": 26157
+    }
+  ]
+}

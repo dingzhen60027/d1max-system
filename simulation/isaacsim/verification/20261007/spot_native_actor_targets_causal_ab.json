@@ -1,0 +1,923 @@
+{
+  "schema": 1,
+  "kind": "isolated_native_actor_kinematic_targets_original_command_causal_ab",
+  "date": "2026-10-07",
+  "status": "COMPONENT_AB_MEASURED; NO_FORMAL_NAVIGATION_OR_RAY_FRESHNESS_ACCEPTANCE",
+  "scope": {
+    "scene_original_bytes_unchanged": true,
+    "scene_sha256": "1b3e06e7b6695119f469e256c010cf9c959073aac4120f2967534ddec3d221da",
+    "static_boxes": 85,
+    "six_original_enabled_actors": [
+      "door_blocking_cart",
+      "office_person",
+      "oncoming_cart",
+      "plaza_cart",
+      "plaza_person",
+      "warehouse_forklift"
+    ],
+    "frozen_500hz_command_sha256": "637691a20054f19a1c8d37b13f990c6bd8d80372bd224f286ab5a4907294f012",
+    "frozen_original_prefix": {
+      "kind": "original_actual_500hz_source_prefix",
+      "explicit_prefix": true,
+      "original_source_tick_count": 28348,
+      "selected_source_tick_count": 6000,
+      "excluded_tail_tick_count": 22348,
+      "source_origin_ns": 0,
+      "excluded_events_count": 3258,
+      "timestamps_modified": false,
+      "original_records_modified": false
+    },
+    "real_physics_ticks_each": 6000,
+    "duration_source_s": 12,
+    "physics_hz": 500,
+    "policy_hz": 50,
+    "all_native_sensors_retained": true,
+    "NAV_SDK_external_UDP_component": false,
+    "external_udp_disabled": true,
+    "qualified_recovery_original_enabled_preserved": true,
+    "actual_recovery_events_each": 0,
+    "original_command_limits": [
+      0.2,
+      0.3
+    ],
+    "original_internal_policy_limits": [
+      0.3,
+      0.5
+    ],
+    "native_backend_experimental_source_override": true,
+    "native_backend_override_declared_in_original_scene": false,
+    "prototype_not_forthcoming_v49_runtime_guards": true
+  },
+  "source_change": {
+    "baseline_backend": "Original per-actor USD translate/rotateZ target writes every 500 Hz pre-step.",
+    "native_backend": "Private source override calls a genuine native rigid-body view set_kinematic_targets once per 500 Hz pre-step, all six actor roots.",
+    "exact_changed_frozen_python_files": [
+      "scene.py",
+      "world_builder.py"
+    ],
+    "all_other_54_python_files_exact_same_hash": true,
+    "view_api": "set_kinematic_targets",
+    "target_dtype": "float32",
+    "target_layout": "N x 7 = world XYZ plus quaternion XYZW",
+    "indices_dtype": "uint32",
+    "target_time_phase": "Original pre-step order -1, original source time + physics dt.",
+    "set_world_poses_or_set_transforms_used": false,
+    "robot_root_joint_or_action_memory_writes_added": false,
+    "scene_bytes_unchanged_does_not_mean_runtime_backend_unchanged": true,
+    "distinct_from_handle_cache_only_ab": true
+  },
+  "comparison": {
+    "body": {
+      "original_full_500hz_rows_each": 6001,
+      "six_measured_fields": [
+        "position",
+        "quaternion_wxyz",
+        "linear_velocity_world",
+        "angular_velocity_world",
+        "full_linear_speed",
+        "full_angular_speed"
+      ],
+      "all_six_fields_exact_every_row": true,
+      "all_original_row_fields_except_epoch_exact_every_row": true,
+      "source_tick_range": [
+        0,
+        6000
+      ],
+      "source_ns_range": [
+        0,
+        12000000000
+      ],
+      "native_tick_range": [
+        1010,
+        7010
+      ],
+      "policy_counter_range": [
+        1000,
+        7000
+      ],
+      "consecutive_real_source_tick_native_tick_counter_checked": true,
+      "measurement_phase": "6000 real pre-policy PhysX BEGIN rows and final actual END; no interpolation or resampling"
+    },
+    "actors": {
+      "full_original_rows_each": 720,
+      "all_rows_literal_bytes_equal": true,
+      "all_rows_parsed_equal": true,
+      "actor_ids": [
+        "door_blocking_cart",
+        "office_person",
+        "oncoming_cart",
+        "plaza_cart",
+        "plaza_person",
+        "warehouse_forklift"
+      ],
+      "all_six_present_every_row": true,
+      "recorded_actor_samples_each": 4320
+    },
+    "lidar_saved_first_and_last_arrays": {
+      "first_scan_0.npz": {
+        "array_count": 8,
+        "same_array_names_order_dtypes_shapes": true,
+        "arrays": {
+          "xyz": {
+            "dtype": "float32",
+            "shape": [
+              8356,
+              3
+            ],
+            "exact_value_equality": false,
+            "differing_component_count": 3,
+            "differing_point_count": 2,
+            "max_abs_component_difference_m": 1.71661376953125e-05,
+            "max_point_l2_difference_m": 1.9637356073354723e-05,
+            "differing_point_actor_ids": {
+              "5": 2
+            },
+            "actor_id_meaning": {
+              "5": "plaza_person"
+            },
+            "non_actor_and_other_actor_point_values_exact": true
+          },
+          "origin": {
+            "dtype": "float64",
+            "shape": [
+              3
+            ],
+            "exact_value_equality": true
+          },
+          "ring": {
+            "dtype": "uint16",
+            "shape": [
+              8356
+            ],
+            "exact_value_equality": true
+          },
+          "pose": {
+            "dtype": "float64",
+            "shape": [
+              7
+            ],
+            "exact_value_equality": true
+          },
+          "sim_time_ns": {
+            "dtype": "int64",
+            "shape": [],
+            "exact_value_equality": true
+          },
+          "native_frame_time_ns": {
+            "dtype": "int64",
+            "shape": [],
+            "exact_value_equality": true
+          },
+          "isaac_actor_id": {
+            "dtype": "uint16",
+            "shape": [
+              8356
+            ],
+            "exact_value_equality": true
+          },
+          "actor_registry_sha256": {
+            "dtype": "<U64",
+            "shape": [],
+            "exact_value_equality": true
+          }
+        },
+        "original_capture_sim_time_ns": 18000000,
+        "original_native_end_time_ns": 20000001,
+        "actor_registry_sha256": "96b092886099b5b2c0904ce86c34d607167c8cee28865d318455c88bc7aea734"
+      },
+      "first_scan_1.npz": {
+        "array_count": 8,
+        "same_array_names_order_dtypes_shapes": true,
+        "arrays": {
+          "xyz": {
+            "dtype": "float32",
+            "shape": [
+              8364,
+              3
+            ],
+            "exact_value_equality": false,
+            "differing_component_count": 2,
+            "differing_point_count": 2,
+            "max_abs_component_difference_m": 5.960464477539063e-08,
+            "max_point_l2_difference_m": 5.960464477539063e-08,
+            "differing_point_actor_ids": {
+              "5": 2
+            },
+            "actor_id_meaning": {
+              "5": "plaza_person"
+            },
+            "non_actor_and_other_actor_point_values_exact": true
+          },
+          "origin": {
+            "dtype": "float64",
+            "shape": [
+              3
+            ],
+            "exact_value_equality": true
+          },
+          "ring": {
+            "dtype": "uint16",
+            "shape": [
+              8364
+            ],
+            "exact_value_equality": true
+          },
+          "pose": {
+            "dtype": "float64",
+            "shape": [
+              7
+            ],
+            "exact_value_equality": true
+          },
+          "sim_time_ns": {
+            "dtype": "int64",
+            "shape": [],
+            "exact_value_equality": true
+          },
+          "native_frame_time_ns": {
+            "dtype": "int64",
+            "shape": [],
+            "exact_value_equality": true
+          },
+          "isaac_actor_id": {
+            "dtype": "uint16",
+            "shape": [
+              8364
+            ],
+            "exact_value_equality": true
+          },
+          "actor_registry_sha256": {
+            "dtype": "<U64",
+            "shape": [],
+            "exact_value_equality": true
+          }
+        },
+        "original_capture_sim_time_ns": 18000000,
+        "original_native_end_time_ns": 20000001,
+        "actor_registry_sha256": "96b092886099b5b2c0904ce86c34d607167c8cee28865d318455c88bc7aea734"
+      },
+      "last_scan_0.npz": {
+        "array_count": 8,
+        "same_array_names_order_dtypes_shapes": true,
+        "arrays": {
+          "xyz": {
+            "dtype": "float32",
+            "shape": [
+              8310,
+              3
+            ],
+            "exact_value_equality": false,
+            "differing_component_count": 7,
+            "differing_point_count": 3,
+            "max_abs_component_difference_m": 4.482269287109375e-05,
+            "max_point_l2_difference_m": 4.6671067252018415e-05,
+            "differing_point_actor_ids": {
+              "5": 3
+            },
+            "actor_id_meaning": {
+              "5": "plaza_person"
+            },
+            "non_actor_and_other_actor_point_values_exact": true
+          },
+          "origin": {
+            "dtype": "float64",
+            "shape": [
+              3
+            ],
+            "exact_value_equality": true
+          },
+          "ring": {
+            "dtype": "uint16",
+            "shape": [
+              8310
+            ],
+            "exact_value_equality": true
+          },
+          "pose": {
+            "dtype": "float64",
+            "shape": [
+              7
+            ],
+            "exact_value_equality": true
+          },
+          "sim_time_ns": {
+            "dtype": "int64",
+            "shape": [],
+            "exact_value_equality": true
+          },
+          "native_frame_time_ns": {
+            "dtype": "int64",
+            "shape": [],
+            "exact_value_equality": true
+          },
+          "isaac_actor_id": {
+            "dtype": "uint16",
+            "shape": [
+              8310
+            ],
+            "exact_value_equality": true
+          },
+          "actor_registry_sha256": {
+            "dtype": "<U64",
+            "shape": [],
+            "exact_value_equality": true
+          }
+        },
+        "original_capture_sim_time_ns": 11918000000,
+        "original_native_end_time_ns": 11920000566,
+        "actor_registry_sha256": "96b092886099b5b2c0904ce86c34d607167c8cee28865d318455c88bc7aea734"
+      },
+      "last_scan_1.npz": {
+        "array_count": 8,
+        "same_array_names_order_dtypes_shapes": true,
+        "arrays": {
+          "xyz": {
+            "dtype": "float32",
+            "shape": [
+              8296,
+              3
+            ],
+            "exact_value_equality": false,
+            "differing_component_count": 9,
+            "differing_point_count": 4,
+            "max_abs_component_difference_m": 2.956390380859375e-05,
+            "max_point_l2_difference_m": 3.078486137864042e-05,
+            "differing_point_actor_ids": {
+              "5": 4
+            },
+            "actor_id_meaning": {
+              "5": "plaza_person"
+            },
+            "non_actor_and_other_actor_point_values_exact": true
+          },
+          "origin": {
+            "dtype": "float64",
+            "shape": [
+              3
+            ],
+            "exact_value_equality": true
+          },
+          "ring": {
+            "dtype": "uint16",
+            "shape": [
+              8296
+            ],
+            "exact_value_equality": true
+          },
+          "pose": {
+            "dtype": "float64",
+            "shape": [
+              7
+            ],
+            "exact_value_equality": true
+          },
+          "sim_time_ns": {
+            "dtype": "int64",
+            "shape": [],
+            "exact_value_equality": true
+          },
+          "native_frame_time_ns": {
+            "dtype": "int64",
+            "shape": [],
+            "exact_value_equality": true
+          },
+          "isaac_actor_id": {
+            "dtype": "uint16",
+            "shape": [
+              8296
+            ],
+            "exact_value_equality": true
+          },
+          "actor_registry_sha256": {
+            "dtype": "<U64",
+            "shape": [],
+            "exact_value_equality": true
+          }
+        },
+        "original_capture_sim_time_ns": 11918000000,
+        "original_native_end_time_ns": 11920000566,
+        "actor_registry_sha256": "96b092886099b5b2c0904ce86c34d607167c8cee28865d318455c88bc7aea734"
+      }
+    },
+    "lidar_all_xyz_fields_exact": false,
+    "lidar_xyz_total_differing_saved_points": 11,
+    "lidar_xyz_total_differing_saved_components": 21,
+    "lidar_xyz_max_point_l2_difference_m": 4.6671067252018415e-05,
+    "floor_hit_audit": {
+      "original_240_rows_literal_bytes_equal": true,
+      "summary_each": {
+        "scans": 240,
+        "native_floor_hits": 595950,
+        "max_abs_error_m": 5.097191434710879e-06,
+        "sealed_error_bound_m": 0.0002,
+        "raw_endpoints_and_source_times_preserved": true
+      }
+    },
+    "registered_body_geometry": {
+      "original_robot_link_rows_literal_bytes_equal": true,
+      "body_attestation_each": {
+        "required": true,
+        "verified_samples": 720,
+        "failures": 0,
+        "envelope": {
+          "radius": 0.6078651750202781,
+          "offset": 0.3125,
+          "above": 0.589,
+          "support_floor_z": 0.0,
+          "support_penetration_m": 0.02
+        }
+      }
+    },
+    "static_certificate": {
+      "original_expected_and_last_sha256_each": "d7138b0cc540a5e53d8640ef17898a4e13ef48f2f03ed6643f74d07a1178af17",
+      "original_attestations_each": 720,
+      "full_stage_audits_each": 1,
+      "cache_hits_each": 719,
+      "faults_each": 0,
+      "stage_notice_counts": {
+        "baseline": 28582,
+        "native": 7082
+      },
+      "performance_timing_fields_not_required_equal": true
+    },
+    "sampled_collision_audit": {
+      "literal_bytes_equal": true,
+      "original_value": {
+        "schema": 1,
+        "scope": "sampled_actual_link_geometry_static_and_actor",
+        "completed": true,
+        "continuous_collision_proof": false,
+        "separation_method": "strict_closed_AABB_separation_of_actual_transformed_primitives",
+        "numerical_outward_margin_m": 1e-06,
+        "floor_contact_scope": "excluded_explicit_support_plane_requires_separate_contact_certificate",
+        "robot_kind": "official_spot_physx",
+        "session_id": "07e56ae46d0b466aa854454d6436d787",
+        "spec_sha256": "1b3e06e7b6695119f469e256c010cf9c959073aac4120f2967534ddec3d221da",
+        "spec_canonical_sha256": "df7600b41e4ed83405b2f33c936e843148e1ad0a30d715dad2420ce64d5cc89c",
+        "trajectory_sha256": "42636ebc9da6747ebe3f8f7931dadebf496c2216c436d3439e6bece344a5efe9",
+        "robot_collision_registry_sha256": "e68b27ca3e0a30c3bdbaeb43414ae4a19674f9661adb167cc6bd0e38ab6ebc76",
+        "actor_collision_registry_sha256": "96b092886099b5b2c0904ce86c34d607167c8cee28865d318455c88bc7aea734",
+        "actor_ids": [
+          "door_blocking_cart",
+          "office_person",
+          "oncoming_cart",
+          "plaza_cart",
+          "plaza_person",
+          "warehouse_forklift"
+        ],
+        "sample_count": 720,
+        "trajectory_sample_count": 720,
+        "trajectory_sources_all_audited": true,
+        "source_begin_ns": 1791370726136476941,
+        "source_end_ns": 1791370738118476941,
+        "max_source_sampling_gap_ns": 20000000,
+        "actual_actor_encounter": {
+          "schema": 1,
+          "rule": "measured_primitive_center_approach_near_depart_v1",
+          "source": "actual_registered_link_and_actor_geometry",
+          "scope": "sampled_same_step_primitive_center_proximity_only",
+          "completed": true,
+          "required_actor_ids": [
+            "door_blocking_cart",
+            "office_person",
+            "oncoming_cart",
+            "plaza_cart",
+            "plaza_person",
+            "warehouse_forklift"
+          ],
+          "contract_sha256": "1720d3e9cae1535dc2fb8f558c40230a36824b1a1bb2cf94026a8979ab3a6643",
+          "observed": false,
+          "actors": [
+            {
+              "actor_id": "door_blocking_cart",
+              "observed": false,
+              "witnesses": []
+            },
+            {
+              "actor_id": "office_person",
+              "observed": false,
+              "witnesses": []
+            },
+            {
+              "actor_id": "oncoming_cart",
+              "observed": false,
+              "witnesses": []
+            },
+            {
+              "actor_id": "plaza_cart",
+              "observed": false,
+              "witnesses": []
+            },
+            {
+              "actor_id": "plaza_person",
+              "observed": false,
+              "witnesses": []
+            },
+            {
+              "actor_id": "warehouse_forklift",
+              "observed": false,
+              "witnesses": []
+            }
+          ],
+          "truncated_actor_ids": [],
+          "maximum_source_sampling_gap_ns": 20000000,
+          "source_begin_ns": 1791370726136476941,
+          "source_end_ns": 1791370738118476941,
+          "source_anchor_ns": 1791370726118476941,
+          "session_id": "07e56ae46d0b466aa854454d6436d787",
+          "scene_sha256": "1b3e06e7b6695119f469e256c010cf9c959073aac4120f2967534ddec3d221da",
+          "robot_collision_registry_sha256": "e68b27ca3e0a30c3bdbaeb43414ae4a19674f9661adb167cc6bd0e38ab6ebc76",
+          "actor_collision_registry_sha256": "96b092886099b5b2c0904ce86c34d607167c8cee28865d318455c88bc7aea734",
+          "observation_status": "completed",
+          "limitations": [
+            "sampled_proximity_only",
+            "not_route_blocking_or_yield_or_contact_evidence",
+            "caller_binds_actual_snapshots_to_same_physics_step"
+          ],
+          "profile": {
+            "body_envelope": {
+              "above": 0.589,
+              "offset": 0.3125,
+              "radius": 0.6078651750202781,
+              "support_floor_z": 0.0,
+              "support_penetration_m": 0.02
+            },
+            "body_envelope_metadata_sha256": "913fe1289cf8ad86926331d6a1ec815b5051b4752766b3637489656ff1bd169b",
+            "body_reference_height_m": 0.481,
+            "interpretation": "actual_sampled_encounter_exposure_only; not_route_blocking",
+            "kind": "isolated_spot_reachable_3m_exposure_v1",
+            "measured_travel_max_speed_mps": 0.6,
+            "rationale": "conservative_stopping_tube_about_2.53m_plus_primitive_center_vertical_offset; legacy_2m_unchanged",
+            "reachable_max_speed_mps": 0.6,
+            "reachable_max_yaw_radps": 0.8,
+            "reference_max_speed_mps": 0.6,
+            "robot_kind": "official_spot_physx",
+            "runtime_exact_model_and_registered_body_binding_required": true,
+            "schema": 1,
+            "source_reference_evidence_sha256": "950433de2887c8cdcc134bd0f200773c5260eeb0e6ac471e87b89d518689fe93"
+          }
+        },
+        "non_floor_static_penetration_count": 0,
+        "dynamic_penetration_count": 0,
+        "possible_overlap_counts": {
+          "static": 0,
+          "dynamic": 0
+        },
+        "possible_overlap_sample_counts": {
+          "static": 0,
+          "dynamic": 0
+        },
+        "checked_pair_counts": {
+          "static": 804960,
+          "dynamic": 159120
+        },
+        "possible_overlap_examples": [],
+        "min_static_separation_lower_bound_m": 2.793978540532494,
+        "min_actor_separation_lower_bound_m": 11.504049563761491,
+        "faults": [],
+        "limitations": [
+          "sampled_times_only",
+          "AABB_overlap_is_unresolved_not_measured_penetration",
+          "encounter_is_sampled_proximity_only",
+          "caller_binds_snapshots_to_same_physics_step"
+        ]
+      }
+    },
+    "forecast_geometry_offline": {
+      "offline_frozen_geometry_helper_only": true,
+      "not_published_as_live_oracle": true,
+      "same_registered_actual_dynamic_input_rows": 720,
+      "per_actor_forecast_evaluations": 4320,
+      "closed_full_xyz_region_count": 12240,
+      "full_horizon_ns": 6000000000,
+      "original_actor_registry_sha256": "96b092886099b5b2c0904ce86c34d607167c8cee28865d318455c88bc7aea734",
+      "all_original_actual_samples_pass_sealed_script_position_orientation_and_velocity_bounds": true,
+      "max_actual_xyz_vs_original_script_position_error_m": 1.9072223125249366e-06,
+      "max_actual_actor_full_xyz_linear_speed_mps": 0.9655951857566833,
+      "geometry_helper_source_same_in_both_source_manifests": true,
+      "original_actor_pose_geometry_functions": {
+        "actor_pose": {
+          "original_function_source_exactly_equal": true,
+          "function_source_sha256": "95f8c79bf98e62998f5d936e59acb2bb1b93a5e983c781602070268369f879e6"
+        },
+        "actor_colliders": {
+          "original_function_source_exactly_equal": true,
+          "function_source_sha256": "3719998b59160c9f9bdb900d9a876212a6d486084f7bf194572869e6d40cb4b5"
+        },
+        "actor_active_during": {
+          "original_function_source_exactly_equal": true,
+          "function_source_sha256": "c1cefc89cd83c85f6b0e5905834894500e71cce008a5447dbebd73dccc96de75"
+        },
+        "actor_possible_centers_bounds": {
+          "original_function_source_exactly_equal": true,
+          "function_source_sha256": "dcdbce8688f8c7160530be7256c30c3fc150cdbb1d909efb238ff3a004225d43"
+        }
+      },
+      "scope": "Recompute original closed all-yaw/full-Z scripted six-second regions for recorded actual samples using unchanged frozen helper and scene; does not measure unrecorded future physical frames or validate forthcoming runtime guards."
+    }
+  },
+  "performance": {
+    "actor_callback_count_each": 6000,
+    "actor_update_total_wall_seconds": {
+      "baseline": 4.148648223374039,
+      "native": 1.0262239712756127
+    },
+    "actor_callback_wall_seconds_saved": 3.1224242520984262,
+    "actor_callback_relative_reduction_percent": 75.26365418273524,
+    "measured_realtime_factor": {
+      "baseline": 0.30449810476170086,
+      "native": 0.3398550034829101
+    },
+    "measured_realtime_factor_relative_increase_percent": 11.611533263525375,
+    "measurement_source_window_s": 11.982,
+    "measurement_wall_window_s": {
+      "baseline": 39.34999861288816,
+      "native": 35.25621184683405
+    },
+    "longest_ray_receipt_wall_gap_s_per_sensor": {
+      "baseline": [
+        0.5515512418933213,
+        0.5514427619054914
+      ],
+      "native": [
+        0.5236259670928121,
+        0.5232492161449045
+      ]
+    },
+    "original_ray_receipt_lease_s": 0.5,
+    "both_runs_each_sensor_max_gap_exceeds_original_lease": true,
+    "receipt_staleness_solved": false,
+    "replicates_each": 1,
+    "realtime_or_statistical_performance_guarantee": false
+  },
+  "bindings": {
+    "analysis_script": {
+      "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/spot_native_actor_targets_causal_ab_analysis.py",
+      "sha256": "f369b76f38060e023a4e9b70da4db68fcaed3ab38be419d378e117df7ac4a975",
+      "bytes": 20724
+    },
+    "private_summary": {
+      "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/spot_native_actor_targets_causal_ab_private_summary.json",
+      "sha256": "6aaeae2970399b42480f82bfa06a0d6ab1d120b03ee1ecc14c9318059cfa51ce",
+      "bytes": 124482
+    },
+    "original_scene": {
+      "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v45-campus-all-actors-response/simulation/assets/scene_config.json",
+      "sha256": "1b3e06e7b6695119f469e256c010cf9c959073aac4120f2967534ddec3d221da",
+      "bytes": 63180
+    },
+    "original_launch_scripts": {
+      "run_campus_v45_actor_native.py": {
+        "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/run_campus_v45_actor_native.py",
+        "sha256": "fa3c321d408bc774ce1f881dced6dbcb07bccfdd5051b4cf8554055e9084734b",
+        "bytes": 806
+      },
+      "run_campus_v45_actor_cache_ab.py": {
+        "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/run_campus_v45_actor_cache_ab.py",
+        "sha256": "4deffe3089739ae6551c2930bb4892c30f8445afdb02592c14259c9549e09074",
+        "bytes": 1136
+      }
+    },
+    "runs": {
+      "baseline": {
+        "frozen_source_manifest": {
+          "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/campus_v45_actor_baseline_source_001/source_manifest.json",
+          "sha256": "93d2d9e0f2405f29bc1481fe245231a583a31d1da3bd00cc5c7d69ee07643e58",
+          "bytes": 5511
+        },
+        "all_56_source_hashes_verified": true,
+        "critical_source_hashes": {
+          "scene.py": "d8c37e43262278f85379675b3ffcdd428c914e679f05b3b51e6644e036fba65a",
+          "world_builder.py": "bf3b7e7898deb35bbc1772b15faa837774b0abfb5091a0bc5a843ca5b54d6972",
+          "dynamic_collision.py": "07098c9debe51cb43bd0308234a085fcc206f4dccafd8d9cb5c4af890ff16045",
+          "truth_map.py": "40ff59bb84b741bb54bda07333ced7220a44a0ff709b90b78b9bb1507750832c",
+          "quadruped.py": "191626991514d1ed2cd8c118ab1e8da4c1c2b99be23b39dc447a6e395cf8dbd2",
+          "full_scene_replay.py": "a17c2ff0c30ae0a0329ece6d61d6b354aa296ad8d9137ebd297e52161bb55163",
+          "policy_history.py": "6ef66b983ed408946a203f0f222ac83052c73745c193e30acbc8c03a29df19ab",
+          "stall_recovery.py": "f0d03abbbce79c18303bc2264e7050b5ebd3e7996df5b9037dd6ca6751e1c53a"
+        },
+        "original_raw_and_summary": {
+          "summary.json": {
+            "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/campus_v45_actor_baseline_001/summary.json",
+            "sha256": "7b9511a9306d9c628723f67d4d9c2dba8e715ecf84d02c297f153303ce399c5d",
+            "bytes": 32950
+          },
+          "policy_history_manifest.json": {
+            "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/campus_v45_actor_baseline_001/policy_history_manifest.json",
+            "sha256": "82d3f2cd12b64addaf96aea427e6b09999e7a40450b4e8bd8f3c4cb99d3e1c9c",
+            "bytes": 2201
+          },
+          "frozen_command_input.json": {
+            "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/campus_v45_actor_baseline_001/frozen_command_input.json",
+            "sha256": "637691a20054f19a1c8d37b13f990c6bd8d80372bd224f286ab5a4907294f012",
+            "bytes": 512809
+          },
+          "policy_component_state_500hz.jsonl": {
+            "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/campus_v45_actor_baseline_001/policy_component_state_500hz.jsonl",
+            "sha256": "07fce3064a6f50e5998c75caeff0c8ea094606c137ee6f6bd8d81186bb13886d",
+            "bytes": 9474638
+          },
+          "dynamic_actor_readings.jsonl": {
+            "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/campus_v45_actor_baseline_001/dynamic_actor_readings.jsonl",
+            "sha256": "f8035534a3db3448c519c5927278a55b16ec557928337d55a4274bd0ee71f9e1",
+            "bytes": 841602
+          },
+          "robot_link_readings.jsonl": {
+            "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/campus_v45_actor_baseline_001/robot_link_readings.jsonl",
+            "sha256": "ac37612a732dd3cc0a5f2c3828d0d8dc178d76af2b3438813076c344d372cbd8",
+            "bytes": 5602279
+          },
+          "floor_hit_audit.jsonl": {
+            "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/campus_v45_actor_baseline_001/floor_hit_audit.jsonl",
+            "sha256": "537cce684cf1c79d7f004965e9c54fe919ebc030ebcfaad4c71e0a61d46406d9",
+            "bytes": 62836
+          },
+          "collision_audit.json": {
+            "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/campus_v45_actor_baseline_001/collision_audit.json",
+            "sha256": "e6c553c53d9e1ab7bb7de1148636bd42e04aacfebe37f23d7c6cf6417724599d",
+            "bytes": 5006
+          },
+          "trajectory.jsonl": {
+            "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/campus_v45_actor_baseline_001/trajectory.jsonl",
+            "sha256": "42636ebc9da6747ebe3f8f7931dadebf496c2216c436d3439e6bece344a5efe9",
+            "bytes": 1580052
+          },
+          "policy_command_events.jsonl": {
+            "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/campus_v45_actor_baseline_001/policy_command_events.jsonl",
+            "sha256": "602aeb1f77ff90f6f78a8ab468ef9bcac4cb6671135519f064251901fbb92219",
+            "bytes": 694317
+          },
+          "policy_recovery_events.jsonl": {
+            "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/campus_v45_actor_baseline_001/policy_recovery_events.jsonl",
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "bytes": 0
+          },
+          "policy_observations.jsonl": {
+            "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/campus_v45_actor_baseline_001/policy_observations.jsonl",
+            "sha256": "8999def89c78bca4d48ac149af62f99583fe22c6493d1ce918b401d23ca828e5",
+            "bytes": 1385715
+          },
+          "imu_readings.jsonl": {
+            "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/campus_v45_actor_baseline_001/imu_readings.jsonl",
+            "sha256": "1c5cbc77a7c31d4ac7d3017f6da934a904f0b95baf656dd643243dae73269ccf",
+            "bytes": 426733
+          },
+          "first_scan_0.npz": {
+            "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/campus_v45_actor_baseline_001/first_scan_0.npz",
+            "sha256": "3df25c74dfcac8ed4ae9cf1375c57ddfcc23875bf2a798755f6e4cb1e661dbbc",
+            "bytes": 136092
+          },
+          "first_scan_1.npz": {
+            "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/campus_v45_actor_baseline_001/first_scan_1.npz",
+            "sha256": "7e76ac3cb32f7427cf3c308da5f40c98eb941b9250f6e0a4ec4f3d6957c7374a",
+            "bytes": 136220
+          },
+          "last_scan_0.npz": {
+            "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/campus_v45_actor_baseline_001/last_scan_0.npz",
+            "sha256": "54c90fc08562a8a47517330d51cf042fd86b5f3b5b97b456b55f28556875da90",
+            "bytes": 135356
+          },
+          "last_scan_1.npz": {
+            "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/campus_v45_actor_baseline_001/last_scan_1.npz",
+            "sha256": "917f6144a7be7366c24b63a012763e9d8b3d9e98c68d005b5f15ac46479d62f8",
+            "bytes": 135132
+          }
+        },
+        "original_launcher_log": {
+          "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/campus_v45_actor_baseline_launcher.log",
+          "sha256": "5e766b73313cd21be204fc081bb2e706435e8f2e98f7d05c502c4dde654b5d28",
+          "bytes": 21743
+        }
+      },
+      "native": {
+        "frozen_source_manifest": {
+          "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/campus_v45_actor_native_source_001/source_manifest.json",
+          "sha256": "7457b0caa1d757283fd03a9acd94ef9d7610bde9a498714638105edd320a8949",
+          "bytes": 5483
+        },
+        "all_56_source_hashes_verified": true,
+        "critical_source_hashes": {
+          "scene.py": "813b0b9b81d662bcf70faac0a278e9c4c145f1e2c53702a60f2284f263b90c0f",
+          "world_builder.py": "17d14acab6b48e9b625236b873f1cd6933f7c235b7eb1d2654fd6721b3dad0ec",
+          "dynamic_collision.py": "07098c9debe51cb43bd0308234a085fcc206f4dccafd8d9cb5c4af890ff16045",
+          "truth_map.py": "40ff59bb84b741bb54bda07333ced7220a44a0ff709b90b78b9bb1507750832c",
+          "quadruped.py": "191626991514d1ed2cd8c118ab1e8da4c1c2b99be23b39dc447a6e395cf8dbd2",
+          "full_scene_replay.py": "a17c2ff0c30ae0a0329ece6d61d6b354aa296ad8d9137ebd297e52161bb55163",
+          "policy_history.py": "6ef66b983ed408946a203f0f222ac83052c73745c193e30acbc8c03a29df19ab",
+          "stall_recovery.py": "f0d03abbbce79c18303bc2264e7050b5ebd3e7996df5b9037dd6ca6751e1c53a"
+        },
+        "original_raw_and_summary": {
+          "summary.json": {
+            "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/campus_v45_actor_native_001/summary.json",
+            "sha256": "5305fb9ae3f891da9105ae768bfb79e7fb8ae79a62a48547b01c9f5049ec53e8",
+            "bytes": 32947
+          },
+          "policy_history_manifest.json": {
+            "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/campus_v45_actor_native_001/policy_history_manifest.json",
+            "sha256": "a7dc0bef8e93412b3ac38b5180047b157f8e3c2df6eb8ec04da617db0c7f52e5",
+            "bytes": 2201
+          },
+          "frozen_command_input.json": {
+            "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/campus_v45_actor_native_001/frozen_command_input.json",
+            "sha256": "637691a20054f19a1c8d37b13f990c6bd8d80372bd224f286ab5a4907294f012",
+            "bytes": 512809
+          },
+          "policy_component_state_500hz.jsonl": {
+            "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/campus_v45_actor_native_001/policy_component_state_500hz.jsonl",
+            "sha256": "469b6bd6136ff1c2e0b5d06d67f73be48b80e0aa2fb8c4862860bff48423abeb",
+            "bytes": 9474638
+          },
+          "dynamic_actor_readings.jsonl": {
+            "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/campus_v45_actor_native_001/dynamic_actor_readings.jsonl",
+            "sha256": "f8035534a3db3448c519c5927278a55b16ec557928337d55a4274bd0ee71f9e1",
+            "bytes": 841602
+          },
+          "robot_link_readings.jsonl": {
+            "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/campus_v45_actor_native_001/robot_link_readings.jsonl",
+            "sha256": "ac37612a732dd3cc0a5f2c3828d0d8dc178d76af2b3438813076c344d372cbd8",
+            "bytes": 5602279
+          },
+          "floor_hit_audit.jsonl": {
+            "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/campus_v45_actor_native_001/floor_hit_audit.jsonl",
+            "sha256": "537cce684cf1c79d7f004965e9c54fe919ebc030ebcfaad4c71e0a61d46406d9",
+            "bytes": 62836
+          },
+          "collision_audit.json": {
+            "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/campus_v45_actor_native_001/collision_audit.json",
+            "sha256": "e6c553c53d9e1ab7bb7de1148636bd42e04aacfebe37f23d7c6cf6417724599d",
+            "bytes": 5006
+          },
+          "trajectory.jsonl": {
+            "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/campus_v45_actor_native_001/trajectory.jsonl",
+            "sha256": "42636ebc9da6747ebe3f8f7931dadebf496c2216c436d3439e6bece344a5efe9",
+            "bytes": 1580052
+          },
+          "policy_command_events.jsonl": {
+            "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/campus_v45_actor_native_001/policy_command_events.jsonl",
+            "sha256": "33dea81ba864262fdbd6b37636fe6c411aef7f1d73c3853ca9fac53e34e35885",
+            "bytes": 694317
+          },
+          "policy_recovery_events.jsonl": {
+            "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/campus_v45_actor_native_001/policy_recovery_events.jsonl",
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "bytes": 0
+          },
+          "policy_observations.jsonl": {
+            "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/campus_v45_actor_native_001/policy_observations.jsonl",
+            "sha256": "84aeee7829d65dffe5924c5c8846026a64ce2b07a1f5b7f3c7ea1cd3d0b67b32",
+            "bytes": 1385715
+          },
+          "imu_readings.jsonl": {
+            "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/campus_v45_actor_native_001/imu_readings.jsonl",
+            "sha256": "1c5cbc77a7c31d4ac7d3017f6da934a904f0b95baf656dd643243dae73269ccf",
+            "bytes": 426733
+          },
+          "first_scan_0.npz": {
+            "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/campus_v45_actor_native_001/first_scan_0.npz",
+            "sha256": "dc3e40fde40b92848294c1d4000d181baa3322d3fb090bae7d14cb0db8982897",
+            "bytes": 136092
+          },
+          "first_scan_1.npz": {
+            "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/campus_v45_actor_native_001/first_scan_1.npz",
+            "sha256": "a36214759dc9b47a21e942def3856b78dc851eca2c3e81ab5fa7f0531a8634a8",
+            "bytes": 136220
+          },
+          "last_scan_0.npz": {
+            "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/campus_v45_actor_native_001/last_scan_0.npz",
+            "sha256": "2d3905928bd85cefb287d602203d341a3820e77e4bfa70144d79e2c384cc2d3b",
+            "bytes": 135356
+          },
+          "last_scan_1.npz": {
+            "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/campus_v45_actor_native_001/last_scan_1.npz",
+            "sha256": "370db37c0098da88f87d2e365d5b5a004324fcd00318a9dd7269aec44c7a816e",
+            "bytes": 135132
+          }
+        },
+        "original_launcher_log": {
+          "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/campus_v45_actor_native_launcher.log",
+          "sha256": "d29e2874f1bb7c61e1db31845a893a62fadd748dbbb76e03ab4ebc3cde0496a0",
+          "bytes": 21743
+        }
+      }
+    }
+  },
+  "limitations": [
+    "The experiment retains original scene bytes but explicitly overrides the actor backend in its private source; this is not the smaller handle-cache-only change.",
+    "6001 actual body rows and 720 complete actor rows match exactly, not through interpolation/tolerance; this does not establish equality of every unrecorded 500 Hz actor state.",
+    "All saved LiDAR array fields except XYZ match exactly. Eleven saved plaza_person endpoint samples differ by up to 46.6711 micrometers; no raw points/timestamps were rewritten and no full LiDAR equivalence is claimed.",
+    "Raw native floor identity audit and registered-body/sampled-collision records are byte-equal, with 720 body/static attestation samples and no recorded certificate fault; these remain sampled evidence, not continuous contact/collision proof.",
+    "The six-second forecast audit is offline evaluation of unchanged original sealed helpers against recorded actual actor samples, not a newly published live oracle or observation of all future physical frames.",
+    "Both sensors still have receipt gaps above the original .5 s lease; no freshness lease, source deadline, geometry margin, UNKNOWN status or safety budget was relaxed.",
+    "Single sequential runs cover only the frozen 12 s v45 prefix; all-actor proximity encounters and goal arrival were not exercised.",
+    "Original recovery=true remains selected with zero interventions in both runs; no recovery behavior is accepted by this experiment.",
+    "The prototype source does not contain the stronger subsequent runtime guards planned for v49. This evidence cannot be presented as testing those new guards or as formal v49 navigation acceptance."
+  ],
+  "acceptance": {
+    "formal_navigation_passed": false,
+    "goal_reached": false,
+    "ray_staleness_solved": false,
+    "full_lidar_xyz_equality": false,
+    "hardware_applicability_claim": false,
+    "raw_failed_evidence_modified": false
+  }
+}

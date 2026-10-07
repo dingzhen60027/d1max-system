@@ -1,0 +1,292 @@
+{
+  "schema": 1,
+  "kind": "offline_exact_zero_policy_withdrawal_contract",
+  "date_utc": "2026-10-07",
+  "scope": "isolated official Spot PhysX v3 policy-input withdrawal and frozen-command replay interface only",
+  "offline_verified": true,
+  "formal_navigation_pass": false,
+  "physical_ab_status": "pending",
+  "physical_stop_verified_by_this_report": false,
+  "hardware_acceptance": false,
+  "source_files": [
+    {
+      "path": "simulation/isaacsim/quadruped.py",
+      "sha256": "46d0bd434d848d5c1e54f47182c386e1058f290b17635c1d29d5805a4f21d798"
+    },
+    {
+      "path": "simulation/isaacsim/scene.py",
+      "sha256": "50710ca27178f5b5d9986c89768c3bb0a90d2979c2b6ed6a7fcd34de0127a836"
+    },
+    {
+      "path": "simulation/isaacsim/full_scene_replay.py",
+      "sha256": "cd6eba11f5ad4f9748ec8465a4902133da1ecab45aec7bca8d9be18f70fcec31"
+    },
+    {
+      "path": "simulation/isaacsim/test_quadruped.py",
+      "sha256": "f76f38eff1835b4a30195054c95237b8c6ff33c3ab0c83612e2273ddf2c45e09"
+    },
+    {
+      "path": "simulation/isaacsim/test_full_scene_replay.py",
+      "sha256": "fafcc85450bb87df551a1a4e381569819b66ad2d35093b4f8d53e609d3ed4154"
+    }
+  ],
+  "tests": {
+    "passed": 90,
+    "failed": 0,
+    "errors": 0,
+    "skipped": 0,
+    "command": "PYTHONPATH=simulation/isaacsim python3 -m pytest -q simulation/isaacsim/test_quadruped.py simulation/isaacsim/test_full_scene_replay.py",
+    "xml": "spot_zero_policy_withdrawal_evidence/tests.xml",
+    "log": "spot_zero_policy_withdrawal_evidence/tests.log",
+    "tested_contracts": [
+      "v2 zero-command residual retained as historical counterexample",
+      "v3 exact zero clears both policy-input axes and matching integral; measured filter remains real",
+      "authorized nonzero axes sample-for-sample match v2 including saturation; no minimum speed",
+      "500Hz zero withdrawal between official50Hz inferences without extra inference or action/counter reset",
+      "frozen replay preserves original scene/command/hash/clock and original-selected memory configuration",
+      "deferred component construction retains v2 bootstrap until original declared source BEGIN tick",
+      "activation source/phase/domain mismatch is rejected; no skipped tick or retimed activation"
+    ]
+  },
+  "original_v59": {
+    "status": "FAILED; original case not re-evaluated",
+    "public_evidence": {
+      "path": "campus_restart_v59_actor_overlap_and_body_certificate_failure.json",
+      "sha256": "defe01dfe1d77851fdb42b12f1a4fd04b43b4a9be041989d5a76dc8b06e2e0e0"
+    },
+    "run_local_path": "/home/eric/wjg/d1max-build-isaac/runs/campus_restart_v59_001",
+    "raw_500hz_sha256": "23eac6beca478fe6e5b0497f37000c6d5367ebe3701c55b5674fc703c27bbbd1",
+    "trajectory_sha256": "a1ed9780bd8981c6df11e1610f841f74272d30f865d7bb3b8b644c947cafdfcb",
+    "original_last_nonzero_highlevel_ns": 72854000000,
+    "complete_true_zero_interval_ns": [
+      72856000000,
+      86824000000
+    ],
+    "all_highlevel_commands_in_interval": [
+      0.0,
+      0.0
+    ],
+    "original_policy_axes_still_nonzero": true,
+    "zero_interval_windows": [
+      {
+        "start_s": 72.856,
+        "end_s": 75,
+        "count": 1073,
+        "source_first_s": 72.856,
+        "source_last_s": 75.0,
+        "highlevel_nonzero": 0,
+        "policy_vx_nonzero": 1073,
+        "policy_wz_nonzero": 1073,
+        "policy_vx_min": -0.00031165522523224354,
+        "policy_vx_max": 0.017797347158193588,
+        "policy_wz_min": 0.02623664401471615,
+        "policy_wz_max": 0.054292190819978714,
+        "full_linear_max": 0.007679072722035443,
+        "world_yaw_max": 0.012619896791875362,
+        "full_linear_median": 0.007327488885905173,
+        "net_xy": 0.0006246559840857777,
+        "xy_path": 0.0009886116473056953
+      },
+      {
+        "start_s": 75,
+        "end_s": 80,
+        "count": 2501,
+        "source_first_s": 75.0,
+        "source_last_s": 80.0,
+        "highlevel_nonzero": 0,
+        "policy_vx_nonzero": 2501,
+        "policy_wz_nonzero": 2501,
+        "policy_vx_min": 2.5342957087559626e-05,
+        "policy_vx_max": 8.80005827639252e-05,
+        "policy_wz_min": 0.03007584996521473,
+        "policy_wz_max": 0.03085210919380188,
+        "full_linear_max": 0.007482728937464876,
+        "world_yaw_max": 0.0018151303520426154,
+        "full_linear_median": 0.0073943958026238136,
+        "net_xy": 0.0004463436515305462,
+        "xy_path": 0.0008434317809515908
+      },
+      {
+        "start_s": 80,
+        "end_s": 83,
+        "count": 1501,
+        "source_first_s": 80.0,
+        "source_last_s": 83.0,
+        "highlevel_nonzero": 0,
+        "policy_vx_nonzero": 1501,
+        "policy_wz_nonzero": 1501,
+        "policy_vx_min": -0.0605672225356102,
+        "policy_vx_max": 3.9583886973559856e-05,
+        "policy_wz_min": 0.030829498544335365,
+        "policy_wz_max": 0.2518576681613922,
+        "full_linear_max": 0.5511952095054874,
+        "world_yaw_max": 0.6177003383636475,
+        "full_linear_median": 0.007422789685666849,
+        "net_xy": 0.04082772016008961,
+        "xy_path": 0.04115445719938232
+      },
+      {
+        "start_s": 83,
+        "end_s": 83.818,
+        "count": 410,
+        "source_first_s": 83.0,
+        "source_last_s": 83.818,
+        "highlevel_nonzero": 0,
+        "policy_vx_nonzero": 410,
+        "policy_wz_nonzero": 410,
+        "policy_vx_min": -0.19443629682064056,
+        "policy_vx_max": -0.0605672225356102,
+        "policy_wz_min": 0.18363820016384125,
+        "policy_wz_max": 0.4237174093723297,
+        "full_linear_max": 1.0646345352085824,
+        "world_yaw_max": 0.881754994392395,
+        "full_linear_median": 0.9058479534913049,
+        "net_xy": 0.699683614528531,
+        "xy_path": 0.7020750583227034
+      },
+      {
+        "start_s": 83.818,
+        "end_s": 86.824,
+        "count": 1504,
+        "source_first_s": 83.818,
+        "source_last_s": 86.824,
+        "highlevel_nonzero": 0,
+        "policy_vx_nonzero": 1504,
+        "policy_wz_nonzero": 1504,
+        "policy_vx_min": -0.21379975974559784,
+        "policy_vx_max": -0.000850810669362545,
+        "policy_wz_min": 0.10886513441801071,
+        "policy_wz_max": 0.4944469630718231,
+        "full_linear_max": 0.9653229047413255,
+        "world_yaw_max": 0.8869698643684387,
+        "full_linear_median": 0.1408759908204626,
+        "net_xy": 0.9226435969623141,
+        "xy_path": 0.9561638304907443
+      }
+    ],
+    "trajectory_zero_interval": {
+      "count": 839,
+      "nonzero_highlevel": 0,
+      "yaw_integral_min": 0.02738076369872726,
+      "yaw_integral_max": 0.15,
+      "max_joint_speed": 15.263847351074219
+    },
+    "exact_raw_full_xyz_peak": {
+      "source_ns": 83198000000,
+      "speed_mps": 1.0646345352085824,
+      "official_policy_input": [
+        -0.14400875568389893,
+        0.0,
+        0.39358142018318176
+      ]
+    },
+    "attribution_limit": "Zero-demand policy residual is directly established. Original actor AABB unresolved overlap precedes83s activity; no contact-force witness, so the peak is not attributed solely to PI or neural policy."
+  },
+  "implemented_change": {
+    "mode": "spot_monotone_measured_v3",
+    "default_changed": false,
+    "old_v2_behavior_retained": true,
+    "exact_zero_axes_independent": true,
+    "zero_axis_integral_cleared": true,
+    "zero_axis_policy_input_exactly_zero": true,
+    "zero_withdrawal_every_original_physics_tick_hz": 500,
+    "official_inference_hz": 50,
+    "original_measured_filter_retained": true,
+    "nonzero_v2_mapping_and_limits_unchanged": true,
+    "no_root_pose_velocity_or_joint_state_write": true,
+    "no_action_memory_or_policy_counter_reset": true,
+    "zero_input_is_not_physical_stop_certificate": true,
+    "command_reference_geometry_c1_source_receipt_stop_authority_unchanged": true
+  },
+  "delayed_frozen_ab": {
+    "status": "pending; no Kit or physical A/B execution performed for this offline report",
+    "original_source_ticks": 43412,
+    "selected_original_prefix_ticks": 43410,
+    "excluded_original_tail_ticks": 2,
+    "excluded_original_tail_ns": 4000000,
+    "prefix_timestamps_or_commands_modified": false,
+    "new_zero_tail_added": false,
+    "activation_source_tick": 36428,
+    "activation_source_ns": 72856000000,
+    "bootstrap_and_pre_activation_controller": "original v2",
+    "intervention": "only servo.mode at actual pre-policy PhysX BEGIN; normal v3 step then withdraws exact-zero axes",
+    "activation_manifest": "actual source/ns/native tick/policy counter/BEGIN phase recorded",
+    "required_comparison": "same frozen full-scene source/command schedule/actors/clocks; measured pre-activation equality and post-activation physical behavior must be checked independently",
+    "plan_only_commands": {
+      "freeze": [
+        "python3",
+        "simulation/isaacsim/full_scene_replay.py",
+        "freeze",
+        "--history-dir",
+        "/home/eric/wjg/d1max-build-isaac/runs/campus_restart_v59_001/physics",
+        "--source-ticks",
+        "43410",
+        "--output",
+        "NEW_FROZEN_PATH"
+      ],
+      "baseline": [
+        "python3",
+        "simulation/isaacsim/full_scene_replay.py",
+        "command",
+        "--session",
+        "/home/eric/wjg/d1max-build-isaac/runs/campus_restart_v59_001",
+        "--result-dir",
+        "NEW_BASELINE_PATH",
+        "--frozen-command-file",
+        "NEW_FROZEN_PATH"
+      ],
+      "alternative": [
+        "python3",
+        "simulation/isaacsim/full_scene_replay.py",
+        "command",
+        "--session",
+        "/home/eric/wjg/d1max-build-isaac/runs/campus_restart_v59_001",
+        "--result-dir",
+        "NEW_ALTERNATIVE_PATH",
+        "--frozen-command-file",
+        "NEW_FROZEN_PATH",
+        "--test-velocity-feedback-mode",
+        "spot_monotone_measured_v3",
+        "--test-velocity-feedback-start-tick",
+        "36428"
+      ]
+    }
+  },
+  "evidence_copies": [
+    {
+      "path": "spot_zero_policy_withdrawal_evidence/tests.log",
+      "sha256": "97e13db88cea888562ae733aa6e732d09f7203defffe86d6f757da89c6fa04e2",
+      "bytes": 269,
+      "original_local_path": "/home/eric/wjg/d1max-build-isaac/v59-zero-servo-offline/tests.log",
+      "byte_identical_copy": true
+    },
+    {
+      "path": "spot_zero_policy_withdrawal_evidence/tests.xml",
+      "sha256": "062f6e8b29c2c94821cdd3e5f98e10d3940cb64828564407153d2d7861842d33",
+      "bytes": 14840,
+      "original_local_path": "/home/eric/wjg/d1max-build-isaac/v59-zero-servo-offline/tests.xml",
+      "byte_identical_copy": true
+    },
+    {
+      "path": "spot_zero_policy_withdrawal_evidence/private_offline_original.json",
+      "sha256": "e45b615c293ab0fc16e124b126265c56c8d9873c1a2e23a1131cf1769fae90fb",
+      "bytes": 3907,
+      "original_local_path": "/home/eric/wjg/d1max-build-isaac/v59-zero-servo-offline/offline.json",
+      "byte_identical_copy": true
+    },
+    {
+      "path": "spot_zero_policy_withdrawal_evidence/v59_true_zero_policy_readonly.json",
+      "sha256": "89e6a6b43997e304d3ad507d7dfa37166cdaec1f7c2144356e66bef0bc4cade9",
+      "bytes": 36003,
+      "original_local_path": "/home/eric/wjg/d1max-build-isaac/v59_true_zero_policy_readonly.json",
+      "byte_identical_copy": true
+    }
+  ],
+  "limitations": [
+    "No new formal navigation, hardware, continuous collision or STOP acceptance claim.",
+    "Policy-input stand request does not immobilize the plant or prevent an actor from physically pushing it.",
+    "Unresolved AABB overlap is not a measured contact-force event.",
+    "Old v59 body-certificate failure and velocity-domain failure remain in their original report.",
+    "The delayed component replay is an explicit runtime-local experiment, not a rewritten sealed scene."
+  ]
+}

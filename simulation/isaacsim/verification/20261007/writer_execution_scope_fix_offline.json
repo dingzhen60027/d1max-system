@@ -1,0 +1,226 @@
+{
+  "schema": 1,
+  "date": "2026-10-07",
+  "scope": "tracker-only offline execution-scope lifecycle repair; no post-fix formal navigation result or hardware acceptance",
+  "original_failure": {
+    "public_evidence": {
+      "path": "simulation/isaacsim/verification/20261007/campus_restart_v53_handoff_failure.json",
+      "sha256": "d6b982cfb04f020323770d807c7075c2894955344a384ee8a73a4d8e7080e740"
+    },
+    "status": "FAILED, unchanged",
+    "causal_facts": [
+      "cancelled execution retained tracker commit_sequence=2 and ACK highwater=4",
+      "fresh SDK armed execution reset writer ledger; its initial ACK sequence=2 recorded commit_sequence=1",
+      "tracker rejected fresh initial ACK and subsequent expected-commit-1 handoffs using the previous execution counters",
+      "phase 1 moved 1.889615644 m before incumbent local endpoint HOLD; late phase had no motion UNKNOWN veto"
+    ]
+  },
+  "implementation": {
+    "sources": [
+      {
+        "path": "/home/eric/wjg/d1max-system/d1max_nav_ws/src/d1max_trajectory_tracker/include/d1max_trajectory_tracker/execution_contract.hpp",
+        "sha256": "e77d4068c1e00d16459be8f1258e96b37e9672c3a8e8e5495f34ddc3da5a94ca"
+      },
+      {
+        "path": "/home/eric/wjg/d1max-system/d1max_nav_ws/src/d1max_trajectory_tracker/test/test_tracker_v2.cpp",
+        "sha256": "4fdbc79bd45a5e795ac7b45a493062384d3cc39371995794bcb2f80cdf33946e"
+      }
+    ],
+    "source_mirror_install_headers": [
+      {
+        "path": "/home/eric/wjg/d1max-system/d1max_nav_ws/src/d1max_trajectory_tracker/include/d1max_trajectory_tracker/execution_contract.hpp",
+        "sha256": "e77d4068c1e00d16459be8f1258e96b37e9672c3a8e8e5495f34ddc3da5a94ca"
+      },
+      {
+        "path": "/home/eric/wjg/d1max-build-isaac/nav-source/src/d1max_trajectory_tracker/include/d1max_trajectory_tracker/execution_contract.hpp",
+        "sha256": "e77d4068c1e00d16459be8f1258e96b37e9672c3a8e8e5495f34ddc3da5a94ca"
+      },
+      {
+        "path": "/home/eric/wjg/d1max-build-isaac/nav/install/d1max_trajectory_tracker/include/d1max_trajectory_tracker/execution_contract.hpp",
+        "sha256": "e77d4068c1e00d16459be8f1258e96b37e9672c3a8e8e5495f34ddc3da5a94ca"
+      }
+    ],
+    "same_header_bytes": true,
+    "scope_identity": [
+      "session_id",
+      "task_id",
+      "route_id",
+      "route_hash",
+      "map_version_id",
+      "localization_epoch",
+      "localization_seed_id",
+      "execution_id",
+      "control_epoch",
+      "sdk_session",
+      "sdk_arm_generation",
+      "transport_mode"
+    ],
+    "rebind_guard": "only successful fresh positive geometry authority after old task retirement, different task/execution and strictly advancing control_epoch; SDK session/arm bind exactly without assuming cross-session arm monotonicity",
+    "ack_guard": "authenticate complete active writer scope before its ACK highwater",
+    "cancel_guard": "ordinary cancellation retains irreversible late same-scope writer facts under HOLD; old-scope ACK cannot restore geometry or mutate the fresh ledger after rebind",
+    "retired_hold": "pure preparation for a successor retires the old applied HOLD in a copy; fresh positive commit repeats original measured XYZ/C1/proof guards and only swaps the successful copy",
+    "unchanged": [
+      "raw XYZ body/source",
+      "C1 .05 tolerance",
+      "absolute join",
+      "whole-curve collision proof",
+      "UNKNOWN veto",
+      "source and receipt leases",
+      "command/ramp/stop limits",
+      "ordinary same-scope heartbeat and replan ledger"
+    ]
+  },
+  "causal_comparison": {
+    "summary": {
+      "path": "/home/eric/wjg/d1max-build-isaac/execution-scope-private/causal_comparison.json",
+      "sha256": "8dc47784666c3c68d3cecaf3cdc114e6be8250672eee65230d4484dab55c7adc"
+    },
+    "reproduction_script": {
+      "path": "/home/eric/wjg/d1max-build-isaac/execution-scope-private/reproduce.py",
+      "sha256": "ba9fa6cc93a151bdf7ee38dd88e95ab6b90bf53b9ac6c9cf757c8716243011f5"
+    },
+    "old_frozen_header": {
+      "path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v53-campus-all-actors-restart/source_snapshot/nav/src/d1max_trajectory_tracker/include/d1max_trajectory_tracker/execution_contract.hpp",
+      "sha256": "3fe794963cd33fdc611ab03cb1ba68729513a8055ccd342c234828c1ae5b2247"
+    },
+    "single_factor": "ExecutionContract header only; identical final test source, configured gcc11 Release flags and link dependencies; private output paths",
+    "identical_test_source": true,
+    "old_cases_failed": 3,
+    "patched_cases_passed": 3,
+    "old_cases": [
+      {
+        "suite": "TrackerWriterCAS",
+        "name": "CancelledCommitTwoAndAckHighWaterCannotBlockNextExecutionCommitOne",
+        "failures": [
+          "/home/eric/wjg/d1max-build-isaac/execution-scope-private/old/test_tracker_v2.cpp:1045\nExpected equality of these values:\n  gate.writerCommitSequence()\n    Which is: 2\n  0U\n    Which is: 0",
+          "/home/eric/wjg/d1max-build-isaac/execution-scope-private/old/test_tracker_v2.cpp:1047\nValue of: gate.commitAck(first,100.12,10.12)\n  Actual: false\nExpected: true"
+        ]
+      },
+      {
+        "suite": "TrackerWriterCAS",
+        "name": "NewWriterScopeRequiresRetiredDifferentTaskExecutionAndForwardControlEpoch",
+        "failures": [
+          "/home/eric/wjg/d1max-build-isaac/execution-scope-private/old/test_tracker_v2.cpp:1094\nValue of: gate.permit(next,100.10,10.10)\n  Actual: true\nExpected: false\nGoogle Test trace:\n/home/eric/wjg/d1max-build-isaac/execution-scope-private/old/test_tracker_v2.cpp:1083: 0",
+          "/home/eric/wjg/d1max-build-isaac/execution-scope-private/old/test_tracker_v2.cpp:1094\nValue of: gate.permit(next,100.10,10.10)\n  Actual: true\nExpected: false\nGoogle Test trace:\n/home/eric/wjg/d1max-build-isaac/execution-scope-private/old/test_tracker_v2.cpp:1083: 1"
+        ]
+      },
+      {
+        "suite": "TrackerWriterCAS",
+        "name": "CancelBeforeLateInitialFactRecordsCommitUnderHoldUntilNewAuthority",
+        "failures": [
+          "/home/eric/wjg/d1max-build-isaac/execution-scope-private/old/test_tracker_v2.cpp:851\nValue of: prepared&&prepared->accepted\n  Actual: false\nExpected: true\ncandidate:foreign_task",
+          "/home/eric/wjg/d1max-build-isaac/execution-scope-private/old/test_tracker_v2.cpp:1112\nValue of: gate.permit(next,100.10,10.10)\n  Actual: false\nExpected: true"
+        ]
+      }
+    ],
+    "patched_case_names": [
+      "CancelledCommitTwoAndAckHighWaterCannotBlockNextExecutionCommitOne",
+      "NewWriterScopeRequiresRetiredDifferentTaskExecutionAndForwardControlEpoch",
+      "CancelBeforeLateInitialFactRecordsCommitUnderHoldUntilNewAuthority"
+    ],
+    "old_xml": {
+      "path": "/home/eric/wjg/d1max-build-isaac/execution-scope-private/old/result.xml",
+      "sha256": "ce9a91b2151de234e292442e4379dccd13464904a7aa1e393ac344f86f1e7785"
+    },
+    "new_xml": {
+      "path": "/home/eric/wjg/d1max-build-isaac/execution-scope-private/new/result.xml",
+      "sha256": "64bbc12b6766a6978fc7d9b3da9e9f3f7cb7e7ff4bd00dc5273b93f4c1e6300a"
+    },
+    "private_full_suite": {
+      "cases": 125,
+      "failures": 0,
+      "xml": {
+        "path": "/home/eric/wjg/d1max-build-isaac/execution-scope-private/new/all_result.xml",
+        "sha256": "3c0529facfb882533f7b925b6f31ac6b84c01761395ff94468d62858531fe8c4"
+      },
+      "log": {
+        "path": "/home/eric/wjg/d1max-build-isaac/execution-scope-private/new/all_test.log",
+        "sha256": "07199753dac9eb47c2a3a22727fa95a06c0974fdf6c8b60112028024f24017ea"
+      }
+    }
+  },
+  "installed_tracker": {
+    "build_and_install": [
+      {
+        "path": "/home/eric/wjg/d1max-build-isaac/nav/build/d1max_trajectory_tracker/trajectory_tracker",
+        "sha256": "02e9de578f707f667b7436571802804bec9af16a1fb3c32db13f56410915a4ee",
+        "gnu_build_id": "0763f0d35665795380789dc9f79d58bb4c10edab",
+        "section_sha256": {
+          ".text": "c61949f642d7826d2279740b5d41a1d7794496d6c229e9dbc0323d1addfcec27",
+          ".rodata": "efb1dc464b222cc7eac825fe5931761e72595d6d079b76d413a3f9f3be21f8b0",
+          ".eh_frame": "008ec839f0dc301a6d0514824b6396194dbff1f99f4672849e1b3cda592645e7"
+        }
+      },
+      {
+        "path": "/home/eric/wjg/d1max-build-isaac/nav/install/d1max_trajectory_tracker/lib/d1max_trajectory_tracker/trajectory_tracker",
+        "sha256": "cc289a47f54f777ad6a8e2a24bf4886dd251365006a060d428958f5fb7d441e7",
+        "gnu_build_id": "0763f0d35665795380789dc9f79d58bb4c10edab",
+        "section_sha256": {
+          ".text": "c61949f642d7826d2279740b5d41a1d7794496d6c229e9dbc0323d1addfcec27",
+          ".rodata": "efb1dc464b222cc7eac825fe5931761e72595d6d079b76d413a3f9f3be21f8b0",
+          ".eh_frame": "008ec839f0dc301a6d0514824b6396194dbff1f99f4672849e1b3cda592645e7"
+        }
+      }
+    ],
+    "matching_build_id_and_executable_sections": true,
+    "whole_file_hashes_differ": true,
+    "note": "Build/install ELF whole-file hashes differ after installation; .text/.rodata/.eh_frame and GNU build ID match."
+  },
+  "root_validation": {
+    "build_log": {
+      "path": "/home/eric/wjg/d1max-build-isaac/execution_scope_tracker_final_build.log",
+      "sha256": "453b75a021e6de0cdf28af1f2677d1b4489714501447c1f8ae62455977d63428"
+    },
+    "ctest_log": {
+      "path": "/home/eric/wjg/d1max-build-isaac/execution_scope_tracker_final_ctest.log",
+      "sha256": "b185b8d130de74d5d4685a4296a7714cba72dff6a734f0c1992ad1cd8b1b26e4"
+    },
+    "ctest_targets_passed": 4,
+    "ctest_targets_failed": 0,
+    "gtest_cases_passed": 207,
+    "targets": [
+      {
+        "path": "/home/eric/wjg/d1max-build-isaac/nav/build/d1max_trajectory_tracker/test_results/d1max_trajectory_tracker/test_fixed_bspline_sampler.gtest.xml",
+        "sha256": "40e585e0d318dfc72b11de13049ed207dcea2f24dd7f86825aaaa785a2093407",
+        "target": "test_fixed_bspline_sampler",
+        "test_cases": 8,
+        "failures": 0,
+        "errors": 0
+      },
+      {
+        "path": "/home/eric/wjg/d1max-build-isaac/nav/build/d1max_trajectory_tracker/test_results/d1max_trajectory_tracker/test_navigation_state_contract.gtest.xml",
+        "sha256": "a752d57091b5bfdb12659562224d15f5bbd7d74e8442f3a3404306e9ca59a52d",
+        "target": "test_navigation_state_contract",
+        "test_cases": 13,
+        "failures": 0,
+        "errors": 0
+      },
+      {
+        "path": "/home/eric/wjg/d1max-build-isaac/nav/build/d1max_trajectory_tracker/test_results/d1max_trajectory_tracker/test_tracker_core.gtest.xml",
+        "sha256": "d08dada7650e00d6cf0f3f10a8ef663fa63216905dd262a64be227450e50721c",
+        "target": "test_tracker_core",
+        "test_cases": 61,
+        "failures": 0,
+        "errors": 0
+      },
+      {
+        "path": "/home/eric/wjg/d1max-build-isaac/nav/build/d1max_trajectory_tracker/test_results/d1max_trajectory_tracker/test_tracker_v2.gtest.xml",
+        "sha256": "889fee31455edff4d98897a639835df896294484f6b3f3bfc52e83ccd0bed9dc",
+        "target": "test_tracker_v2",
+        "test_cases": 125,
+        "failures": 0,
+        "errors": 0
+      }
+    ]
+  },
+  "paired_scan": {
+    "status": "pending_final_source_freeze_and_test_binding",
+    "included_in_this_tracker_only_report": false
+  },
+  "formal_retest": {
+    "v57": "pending actual result",
+    "runtime_pass_claim": false,
+    "old_v53_result_reclassified": false
+  },
+  "physical_acceptance": false
+}

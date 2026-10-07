@@ -1,0 +1,15 @@
+{
+  "original_sha256": "23eac6beca478fe6e5b0497f37000c6d5367ebe3701c55b5674fc703c27bbbd1",
+  "baseline_sha256": "4ae9721022718d5358ccc4b2a82d79c1cf7ca145c037d9e4a8f220eb4b4ab895",
+  "fields": [
+    "position",
+    "quaternion_wxyz",
+    "linear_velocity_world",
+    "angular_velocity_world",
+    "official_policy_input",
+    "highlevel_command"
+  ],
+  "actual_prefix_begin_samples": 43410,
+  "all_selected_fields_exactly_equal": true,
+  "first_difference": null
+}

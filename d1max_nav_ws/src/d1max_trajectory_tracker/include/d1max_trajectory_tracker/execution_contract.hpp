@@ -15,6 +15,7 @@
 #include <optional>
 #include <deque>
 #include <initializer_list>
+#include <type_traits>
 
 namespace d1max_trajectory_tracker {
 namespace wire=d1max_planning_interfaces::msg;
@@ -308,8 +309,19 @@ public:
     else {
       const auto observed=observeCandidateEntry(v,now,reason);
       if(!observed)reason="candidate:"+reason;
-      else if(!core_.admitRevision(task,*observed,preparedSupport(*pending_support_),now,receipt,false))
-        reason="candidate:"+core_.candidateReason();
+      else {
+        // A late irreversible ACK can restore the explicitly retired task
+        // under HOLD. Preparation for its successor is pure: retire that
+        // geometry in a copy, retaining the old writer fact in the live core.
+        std::optional<TrackerCore> retired_trial;
+        auto* admission_core=&core_;
+        if(retiredWriterHoldFor(task)) {
+          retired_trial.emplace(core_);retired_trial->cancel("retired_writer_applied_hold");
+          admission_core=&*retired_trial;
+        }
+        if(!admission_core->admitRevision(task,*observed,preparedSupport(*pending_support_),now,receipt,false))
+          reason="candidate:"+admission_core->candidateReason();
+      }
     }
     a.accepted=reason.empty();
     a.reason=a.accepted?"prepared_not_committed":reason;
@@ -326,16 +338,18 @@ public:
     if(permit_ && p.control_epoch<permit_->control_epoch) return false;
     permit_history_.push_back(p);while(permit_history_.size()>32)permit_history_.pop_front();
     if(retired_task_&&p.version.task_id==*retired_task_&&!p.revoked)return false;
+    const bool new_writer_authority=writer_handoff_&&p.allowed&&writer_authority_&&
+      !writerAuthorityMatches(p)&&writerAuthorityTransitionAllowed(p);
     // Owner heartbeat delivery can lag the writer ACK. Never roll the already
     // applied identity back, even when the old heartbeat has a higher sequence.
-    if(writer_handoff_&&writer_commit_sequence_&&committed_version_&&
+    if(writer_handoff_&&writer_commit_sequence_&&committed_version_&&!new_writer_authority&&
        (p.version!=*committed_version_||p.trajectory_id!=core_.trajectoryId())&&
        p.version.reference_generation<=committed_version_->reference_generation&&!p.revoked)return false;
     if(p.revoked) { cancel("execution_revoked");retired_task_=p.version.task_id;permit_=owner_permit_=p;last_permit_sequence_=p.sequence;capPermitEmissions(p);return true; }
     if(!p.geometry_committed) {permit_=owner_permit_=p;last_permit_sequence_=p.sequence;capPermitEmissions(p);return true;}
     if(p.allowed&&(p.execution_id.empty()||p.confirmation_id.empty()||p.control_epoch==0||p.sdk_session.empty()||p.sdk_arm_generation==0))
       return false;
-    if(writer_handoff_&&writer_commit_sequence_&&committed_version_&&
+    if(writer_handoff_&&writer_commit_sequence_&&committed_version_&&!new_writer_authority&&
        (p.version!=*committed_version_||p.trajectory_id!=core_.trajectoryId())) {
       last_permit_reject_="candidate_requires_writer_applied_ack";return false;
     }
@@ -348,6 +362,8 @@ public:
        p.trajectory_id==core_.trajectoryId()&&p.version.reference_generation==core_.generation()&&
        identity(p.version)==core_.task().identity) {
       if(!proofFor(p,now)) {last_permit_reject_="heartbeat_proof_not_fresh";return false;}
+      if(!writerAuthorityTransitionAllowed(p)) {last_permit_reject_="writer_authority_scope_not_retired_or_forward";return false;}
+      bindWriterAuthority(p);
       permit_=p;last_permit_sequence_=p.sequence;core_.refreshTaskLease(receipt);capPermitEmissions(p);return true;
     }
     // A first geometry commit still binds the exact two-phase admission.
@@ -371,12 +387,21 @@ public:
     if(pending_validation_&&pending_validation_->version==p.version&&pending_validation_->trajectory_id==p.trajectory_id&&
        pending_validation_->sequence>=p.validation_sequence&&!pending_validation_->valid)
       return rejectPermit("commit_newer_invalid_proof");
+    if(!writerAuthorityTransitionAllowed(p))return rejectPermit("writer_authority_scope_not_retired_or_forward");
     const Task task=taskFor(p.version,p.goal_position,sourceTime(bound->source_stamp));
     std::string entry_reason;const auto observed=observeCandidateEntry(*prepared_proof,now,entry_reason);
     if(!observed) {last_permit_reject_="commit_candidate:"+entry_reason;return false;}
-    if(!core_.admitRevision(task,*observed,preparedSupport(*pending_support_),now,receipt,true)) {
-      last_permit_reject_="commit_candidate:"+core_.candidateReason();return false;
+    std::optional<TrackerCore> retired_trial;
+    auto* admission_core=&core_;
+    if(new_writer_authority&&retiredWriterHoldFor(task)) {
+      retired_trial.emplace(core_);retired_trial->cancel("retired_writer_applied_hold");
+      admission_core=&*retired_trial;
     }
+    if(!admission_core->admitRevision(task,*observed,preparedSupport(*pending_support_),now,receipt,true)) {
+      last_permit_reject_="commit_candidate:"+admission_core->candidateReason();return false;
+    }
+    if(retired_trial)core_=std::move(*retired_trial);
+    bindWriterAuthority(p);
     last_permit_reject_.clear();
     active_validation_=*prepared_proof;leased_validation_=active_validation_;active_support_=pending_support_;
     committed_version_=p.version;
@@ -453,7 +478,8 @@ public:
     if(!writer_handoff_||g.schema_version!=2||g.handoff_id.empty()||g.sequence==0||
        !versionValid(g.candidate.version,config_)||g.candidate.transport_mode!=mode_||
        g.candidate.frame_id!=config_.planning_frame||!g.candidate.allowed||g.candidate.geometry_committed||
-       g.expected_commit_sequence!=writer_commit_sequence_)return false;
+       g.expected_commit_sequence!=writer_commit_sequence_||
+       !writerAuthorityMatches(g.incumbent)||!writerAuthorityMatches(g.candidate))return false;
     if(handoff_&&handoff_->grant.handoff_id==g.handoff_id) {
       // Fixed transaction: a duplicate may revoke, never refresh source/lease
       // or replace the candidate geometry under the same transaction ID.
@@ -543,7 +569,8 @@ public:
     handoff_reason_="prepared_waiting_writer";return out;
   }
   bool commitAck(const wire::ExecutionCommitAck& a,SourceTime now,double receipt) {
-    if(!writer_handoff_||a.schema_version!=1||a.sequence<=ack_sequence_||a.transport_mode!=mode_)return false;
+    if(!writer_handoff_||a.schema_version!=1||!writerAuthorityMatches(a)||
+       a.sequence<=ack_sequence_||a.transport_mode!=mode_)return false;
     // The initial ordinary writer call records commit 1 without a handoff.
     if(a.handoff_id.empty()) {
       const auto first=std::find_if(permit_history_.begin(),permit_history_.end(),[&](const auto& p){
@@ -651,6 +678,47 @@ public:
     handoff_reason_="writer_applied";return true;
   }
 private:
+  bool retiredWriterHoldFor(const Task& next)const {
+    return writer_handoff_&&writer_authority_&&retired_task_&&
+      *retired_task_==writer_authority_->version.task_id&&
+      next.identity.task_id!=*retired_task_&&core_.active()&&core_.holding()&&
+      !core_.hasInstalledGeometry()&&core_.task().identity.task_id==*retired_task_;
+  }
+  // SDK commit and ACK counters belong to an armed execution, not this ROS
+  // node's lifetime. Cancel keeps the old scope so an irreversible late fact
+  // can still be recorded under HOLD. Only a new, freshly proved positive
+  // authority for a retired task can replace it; geometry refresh cannot.
+  template<class Authority>
+  bool writerAuthorityMatches(const Authority& p)const {
+    if(!writer_authority_)return false;
+    const auto& current=*writer_authority_;
+    const auto& version=[&]() -> const wire::ExecutionVersion& {
+      if constexpr(std::is_same_v<Authority,wire::ExecutionCommitAck>)return p.candidate_version;
+      else return p.version;
+    }();
+    return version.session_id==current.version.session_id&&version.task_id==current.version.task_id&&
+      version.route_id==current.version.route_id&&version.route_hash==current.version.route_hash&&
+      version.map_version_id==current.version.map_version_id&&
+      version.localization_epoch==current.version.localization_epoch&&
+      version.localization_seed_id==current.version.localization_seed_id&&p.transport_mode==current.transport_mode&&
+      p.execution_id==current.execution_id&&p.control_epoch==current.control_epoch&&
+      p.sdk_session==current.sdk_session&&p.sdk_arm_generation==current.sdk_arm_generation;
+  }
+  bool writerAuthorityTransitionAllowed(const wire::ExecutionPermit& p)const {
+    if(!writer_handoff_||!p.allowed||!writer_authority_||writerAuthorityMatches(p))return true;
+    const auto& previous=*writer_authority_;
+    return retired_task_&&*retired_task_==previous.version.task_id&&
+      p.version.task_id!=previous.version.task_id&&p.execution_id!=previous.execution_id&&
+      p.control_epoch>previous.control_epoch;
+  }
+  void bindWriterAuthority(const wire::ExecutionPermit& p) {
+    if(!writer_handoff_||!p.allowed||writerAuthorityMatches(p))return;
+    writer_authority_=p;
+    writer_commit_sequence_=ack_sequence_=0;initial_writer_ack_.reset();
+    handoff_.reset();tombstone_.reset();handoff_reason_.clear();initial_ack_reason_.clear();
+    // Historical installations, permits and emitted commands retain their
+    // original identities/times. They can never match this new ACK scope.
+  }
   struct ControlEmission {
     wire::MotionDemand demand;
     wire::ExecutionPermit authority;
@@ -951,6 +1019,7 @@ private:
   std::string last_prepare_reason_,last_permit_reject_;
   std::uint64_t last_permit_sequence_{0},demand_sequence_{0},last_motion_sequence_{0},admission_sequence_{0};
   bool writer_handoff_{false};std::optional<PendingHandoff> handoff_,tombstone_;
+  std::optional<wire::ExecutionPermit> writer_authority_;
   std::uint64_t writer_commit_sequence_{0},ack_sequence_{0};std::string handoff_reason_;
   std::optional<Installation> installation_;
   std::deque<Installation> installations_;

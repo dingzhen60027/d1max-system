@@ -1,0 +1,526 @@
+{
+  "schema": 1,
+  "kind": "campus_restart_v63_goal_success_encounter_pending",
+  "date": "2026-10-07",
+  "status": "GOAL_AND_NATIVE_500HZ_DOMAIN_STOP_PASSED_ENCOUNTER_PENDING",
+  "complete_scenario_passed": false,
+  "scope": "Original BT/PCT/SCAN/tracker/safety/isolated mock sole writer, official PhysX Spot, all six original actors, dual native 3D LiDAR and native IMU in the sealed campus fixture. Ground-truth localization fixture; not hardware or LIO validation.",
+  "identity": {
+    "session_id": "40d3d992bfd84b6c83dcba38e19cc829",
+    "epoch": "978b6072-ef0d-4346-ad7b-9ae8b8131569",
+    "clock_anchor_ns": 1791381824773930327,
+    "original_run": "/home/eric/wjg/d1max-build-isaac/runs/campus_restart_v63_001",
+    "sealed_candidate": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v63-campus-v2-lidar25-restart",
+    "session_version_id": "c2defe1a8aeb3e8bbaeeeb289518ff4d64eddb5fb1ca6991f9f32bb0e4ec48c4",
+    "sealed_scene_sha256": "db541949266ee09970c8b60b1cabe5b7bb30f8e51a8372c3cb202efe1b2f6913",
+    "sealed_configuration_sha256": "eef511058d16833c65efe29404b10fb171149277b9a0cc9e2219df8eddaa4073",
+    "sealed_braking_model_sha256": "d1ba2821e8a83afd7b9ab8092b8698d221c5b61bb41aaf5633eab31850b89012",
+    "raw_500hz_sha256": "59764fa13096b85d7e3d2202f858d1bfc85d49caa338926420aa5408c00dbbf4",
+    "raw_500hz_sha256_binding": "Original independent navigation_physics_audit.json and policy_history_manifest.json agree; this record generator did not scan the raw500Hz stream."
+  },
+  "outcome": {
+    "original_run_exit_code": 0,
+    "exit_code_evidence": "Both original scenario execution phase returncodes and run_summary smoke_completed=true, navigation/bridge/smoke exit0; outer exit0 is the parent-observed run outcome.",
+    "phase_count": 2,
+    "phases": [
+      {
+        "index": 0,
+        "original_report": "/home/eric/wjg/d1max-build-isaac/runs/campus_restart_v63_001/scenario_suite/phase_000_report.json",
+        "original_report_sha256": "088bf61d173612b4509be7aecb8fb30c6df308c3d5d94f88936dbaae812184c7",
+        "original_report_byte_count": 1775598,
+        "original_sha256_binding": "Original scenario_suite/execution.json phases[].report_sha256; not recomputed from the large report by this bounded record generator.",
+        "public_summary": "simulation/isaacsim/verification/20261007/campus_restart_v63_goal_success_encounter_pending_evidence/phase_000_summary.json",
+        "public_summary_sha256": "4e28c4eff7eab0fae5d0e7f4bfef358f97a6d690ea04039bacd7eeb065bb7713",
+        "smoke_case": "cancel",
+        "passed": true,
+        "action_result_status": 5,
+        "result": {
+          "success": false,
+          "reason": "action_cancelled",
+          "retirement_confirmed": true,
+          "physical_stop_confirmed": false
+        },
+        "actual_SDK_stop": {
+          "execution_id": "40d3d992bfd84b6c83dcba38e19cc829.1:execution",
+          "stop_submitted": true,
+          "measured_stop_confirmed": true,
+          "physical_acceptance_verified": false,
+          "stationary_samples": 262,
+          "measured_linear_mps": 0.007232735825103102,
+          "measured_angular_radps": 0.004768496850060592,
+          "reason": "task_retired"
+        },
+        "measured_stationary": true,
+        "measured_distance_m": 0.7532314778018516,
+        "measured_final_position": [
+          -7.337636947631836,
+          -4.8966593742370605,
+          0.4902549684047699
+        ],
+        "nonzero_applied_count": 637,
+        "goal_source_stamp_ns": 1791381827151930327,
+        "terminal_source_stamp_ns": 1791381838093930327,
+        "returncode": 0
+      },
+      {
+        "index": 1,
+        "original_report": "/home/eric/wjg/d1max-build-isaac/runs/campus_restart_v63_001/scenario_suite/phase_001_report.json",
+        "original_report_sha256": "4e49194bb173b7be8aeb03309a70e80eda5ed11ad4d819126d44638f2c72a266",
+        "original_report_byte_count": 11370561,
+        "original_sha256_binding": "Original scenario_suite/execution.json phases[].report_sha256; not recomputed from the large report by this bounded record generator.",
+        "public_summary": "simulation/isaacsim/verification/20261007/campus_restart_v63_goal_success_encounter_pending_evidence/phase_001_summary.json",
+        "public_summary_sha256": "66bf31dcd952817b03f54160e15c0ffed1ad412505cf465e2bd535c843d43799",
+        "smoke_case": "goal",
+        "passed": true,
+        "action_result_status": 4,
+        "result": {
+          "success": true,
+          "reason": "measured_goal_reached",
+          "retirement_confirmed": true,
+          "physical_stop_confirmed": false
+        },
+        "actual_SDK_stop": {
+          "execution_id": "40d3d992bfd84b6c83dcba38e19cc829.2:execution",
+          "stop_submitted": true,
+          "measured_stop_confirmed": true,
+          "physical_acceptance_verified": false,
+          "stationary_samples": 282,
+          "measured_linear_mps": 0.007129533487697408,
+          "measured_angular_radps": 0.009568176031917595,
+          "reason": "goal_reached"
+        },
+        "measured_stationary": true,
+        "measured_distance_m": 16.40585428003934,
+        "measured_final_position": [
+          7.8803863525390625,
+          -4.941290855407715,
+          0.4866410195827484
+        ],
+        "nonzero_applied_count": 4865,
+        "goal_source_stamp_ns": 1791381843351930327,
+        "terminal_source_stamp_ns": 1791381943853930327,
+        "returncode": 0
+      }
+    ],
+    "phase_001_goal_xy_error_m": 0.13324484349372506,
+    "clean_shutdown": true,
+    "software_retired": true,
+    "shutdown_elapsed_wall_s": 0.11554714618250728,
+    "child_exit_codes": {
+      "isaac_bridge": 0,
+      "isaac_sim": -15,
+      "navigation": 0,
+      "smoke": 0
+    },
+    "physical_stop_confirmed": false,
+    "physical_robot_acceptance": false
+  },
+  "independent_full_500hz_physics": {
+    "schema": 1,
+    "kind": "sealed_normal_navigation_500hz_physics_audit",
+    "verified": true,
+    "errors": [],
+    "scope": "isolated_simulation_native_PhysX_500Hz_BEGIN_and_actual_final_END",
+    "velocity_domain_scope": "instantaneous full XYZ admission; not a future full XYZ reachability guarantee",
+    "hardware_acceptance": false,
+    "continuous_collision_claim": false,
+    "raw_records_modified": false,
+    "raw_sha256": "59764fa13096b85d7e3d2202f858d1bfc85d49caa338926420aa5408c00dbbf4",
+    "session_id": "40d3d992bfd84b6c83dcba38e19cc829",
+    "epoch": "978b6072-ef0d-4346-ad7b-9ae8b8131569",
+    "clock_anchor_ns": 1791381824773930327,
+    "scene_sha256": "db541949266ee09970c8b60b1cabe5b7bb30f8e51a8372c3cb202efe1b2f6913",
+    "model_sha256": "d1ba2821e8a83afd7b9ab8092b8698d221c5b61bb41aaf5633eab31850b89012",
+    "actual_source_ticks": 61580,
+    "duration_ns": 123160000000,
+    "sample_count": 61581,
+    "complete_native_500hz": true,
+    "native_first_tick": 1010,
+    "native_final_tick": 62590,
+    "policy_first_counter": 1000,
+    "policy_final_counter": 62580,
+    "manifest_policy_hz": 50,
+    "manifest_observation_count": 6258,
+    "observation_count_scope": "original count includes bootstrap; not a reconstructed source-only inference gate",
+    "all_epoch": {
+      "sample_count": 61581,
+      "max_full_xyz_speed_mps": 0.5961021445942337,
+      "peak_source_ns": 1791381911733930327,
+      "peak_source_tick": 43480,
+      "peak_raw_linear_velocity_world": [
+        0.549371063709259,
+        0.2244311422109604,
+        0.056212663650512695
+      ],
+      "max_abs_world_yaw_rate_radps": 0.4952058792114258,
+      "max_full_angular_speed_radps": 0.835251125864741,
+      "full_angular_norm_is_diagnostic_only": true,
+      "speed_bounds": {
+        "reachable_max_speed_mps": 0.65,
+        "reference_max_speed_mps": 0.65,
+        "measured_travel_max_speed_mps": 0.65
+      },
+      "yaw_bound_radps": 0.8,
+      "exceeded_speed_domains": [],
+      "yaw_domain_exceeded": false
+    },
+    "final_stop": {
+      "verified": true,
+      "scope": "final actual zero-consumption episode; native full XYZ and angular norm",
+      "transition_exercised": true,
+      "linear_threshold_mps": 0.03,
+      "angular_threshold_radps": 0.05,
+      "stationary_duration_s": 1.0,
+      "stop_latency_bound_s": 3.0,
+      "stopping_distance_bound_m": 0.5,
+      "stopping_yaw_bound_rad": 0.4,
+      "last_nonzero_consumption_source_ns": 1791381942067930327,
+      "zero_consumption_source_ns": 1791381942069930327,
+      "reason": "recorded_stop_within_original_bounds",
+      "stationary_window_start_source_ns": 1791381942593930327,
+      "confirmation_source_ns": 1791381943593930327,
+      "confirmation_latency_s": 1.524,
+      "extra_xy_path_m": 0.07813225091888684,
+      "extra_absolute_yaw_path_rad": 0.050426412083291766,
+      "actual_zero_tail_duration_s": 5.864,
+      "initial_stationary_window_verified": true,
+      "maintained_stationarity_to_end": true,
+      "post_confirmation_motion_samples": 0,
+      "first_post_confirmation_motion_source_ns": null,
+      "zero_tail_total_xy_path_m": 0.08383951046841219,
+      "zero_tail_total_absolute_yaw_path_rad": 0.10609680556320789
+    }
+  },
+  "actual_collision_observation": {
+    "original_audit_completed": true,
+    "sample_count": 9237,
+    "source_begin_ns": 1791381824791930327,
+    "source_end_ns": 1791381947933930327,
+    "maximum_source_sampling_gap_ns": 20000000,
+    "static_possible_overlap_count": 0,
+    "dynamic_possible_overlap_count": 0,
+    "faults": [],
+    "scope": "sampled_actual_link_geometry_static_and_actor",
+    "continuous_collision_proof": false,
+    "actual_actor_encounter": {
+      "schema": 1,
+      "rule": "measured_primitive_center_approach_near_depart_v1",
+      "source": "actual_registered_link_and_actor_geometry",
+      "scope": "sampled_same_step_primitive_center_proximity_only",
+      "completed": false,
+      "required_actor_ids": [
+        "plaza_person"
+      ],
+      "contract_sha256": "02628470adb3accc5cd7d930fb5a44b1a1420d238eb9996c95bbc100ea6b1c49",
+      "observed": null,
+      "actors": [
+        {
+          "actor_id": "plaza_person",
+          "observed": null,
+          "witnesses": []
+        }
+      ],
+      "truncated_actor_ids": [
+        "plaza_person"
+      ],
+      "maximum_source_sampling_gap_ns": 20000000,
+      "source_begin_ns": 1791381824791930327,
+      "source_end_ns": 1791381947933930327,
+      "source_anchor_ns": 1791381824773930327,
+      "session_id": "40d3d992bfd84b6c83dcba38e19cc829",
+      "scene_sha256": "db541949266ee09970c8b60b1cabe5b7bb30f8e51a8372c3cb202efe1b2f6913",
+      "robot_collision_registry_sha256": "e68b27ca3e0a30c3bdbaeb43414ae4a19674f9661adb167cc6bd0e38ab6ebc76",
+      "actor_collision_registry_sha256": "96b092886099b5b2c0904ce86c34d607167c8cee28865d318455c88bc7aea734",
+      "observation_status": "pending",
+      "limitations": [
+        "sampled_proximity_only",
+        "not_route_blocking_or_yield_or_contact_evidence",
+        "caller_binds_actual_snapshots_to_same_physics_step"
+      ],
+      "profile": {
+        "body_envelope": {
+          "above": 0.589,
+          "offset": 0.3125,
+          "radius": 0.6078651750202781,
+          "support_floor_z": 0.0,
+          "support_penetration_m": 0.02
+        },
+        "body_envelope_metadata_sha256": "913fe1289cf8ad86926331d6a1ec815b5051b4752766b3637489656ff1bd169b",
+        "body_reference_height_m": 0.481,
+        "interpretation": "actual_sampled_encounter_exposure_only; not_route_blocking",
+        "kind": "isolated_spot_reachable65_3m_exposure_v1",
+        "measured_travel_max_speed_mps": 0.65,
+        "rationale": "explicit_recalibrated_.65_fixture_sampled_exposure; legacy_.60_profile_and_2m_unchanged",
+        "reachable_max_speed_mps": 0.65,
+        "reachable_max_yaw_radps": 0.8,
+        "reference_max_speed_mps": 0.65,
+        "robot_kind": "official_spot_physx",
+        "runtime_exact_model_and_registered_body_binding_required": true,
+        "schema": 1,
+        "source_reference_evidence_sha256": "44e56925dd1f4b78a4d3994701b1700429e00c3fd7f80b26ddcb86e321b97262"
+      }
+    }
+  },
+  "scenario_evaluation": {
+    "status": "pending",
+    "passed": false,
+    "checks": [
+      {
+        "name": "sealed_same_scene",
+        "status": "passed",
+        "reason": ""
+      },
+      {
+        "name": "sealed_spot_encounter_profile_model",
+        "status": "passed",
+        "reason": ""
+      },
+      {
+        "name": "single_session_ordered_actions",
+        "status": "passed",
+        "reason": ""
+      },
+      {
+        "name": "phase_000_action_stop_source",
+        "status": "passed",
+        "reason": ""
+      },
+      {
+        "name": "phase_000_test_source_budget",
+        "status": "passed",
+        "reason": ""
+      },
+      {
+        "name": "phase_000_source_cancel",
+        "status": "passed",
+        "reason": ""
+      },
+      {
+        "name": "phase_001_action_stop_source",
+        "status": "passed",
+        "reason": ""
+      },
+      {
+        "name": "phase_001_test_source_budget",
+        "status": "passed",
+        "reason": ""
+      },
+      {
+        "name": "phase_001_goal",
+        "status": "passed",
+        "reason": ""
+      },
+      {
+        "name": "fresh_ordered_task_identities_and_source_deadline",
+        "status": "passed",
+        "reason": ""
+      },
+      {
+        "name": "independent_full_physics_motion_domain_and_stop",
+        "status": "passed",
+        "reason": ""
+      },
+      {
+        "name": "actual_link_static_and_actor_collision",
+        "status": "passed",
+        "reason": ""
+      },
+      {
+        "name": "intended_dynamic_encounter_observed",
+        "status": "pending",
+        "reason": "encounter_sampling_or_audit_incomplete"
+      },
+      {
+        "name": "owned_graph_retirement",
+        "status": "passed",
+        "reason": ""
+      }
+    ],
+    "pending_check": "intended_dynamic_encounter_observed",
+    "pending_reason": "encounter_sampling_or_audit_incomplete",
+    "not_a_complete_negative_encounter_verdict": true
+  },
+  "encounter_history_limit": {
+    "sealed_maximum_history_samples_per_pair": 2048,
+    "sealed_maximum_leg_source_s": 30.0,
+    "configured_actual_body_witness_cadence": "50 Hz plus real 25 Hz acquisition BEGIN witnesses",
+    "configured_nominal_witness_hz": 75,
+    "maximum_leg_nominal_samples": 2250,
+    "observed_truncated_actor_ids": [
+      "plaza_person"
+    ],
+    "observed_encounter": null,
+    "sealed_scope": "sampled_same_step_primitive_center_proximity_only",
+    "near_center_distance_m": 3.0,
+    "interpretation": "The configured 50Hz body states plus real25Hz acquisition-BEGIN witnesses can require 2250 samples over the sealed30s history window, exceeding the sealed2048 per-pair capacity. The producer latched truncation and the original evaluator correctly kept encounter PENDING. This does not prove no encounter and does not certify route blocking.",
+    "source_implementation": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v63-campus-v2-lidar25-restart/simulation/collision_audit.py",
+    "source_implementation_sha256": "881a6880e6adbf133dd55a6750df8762583b1e5892fe81010780d33dcafa1c71",
+    "source_lines": {
+      "capacity_truncation": 222,
+      "latched_truncation": 228,
+      "review_requires_complete": 244
+    }
+  },
+  "performance_limitations": {
+    "realtime_factor": 0.28004249363764694,
+    "wall_seconds_per_sim_second": 3.5708866429889805,
+    "measured_state_wall_hz": 21.00398297280625,
+    "longest_state_wall_gap_s": 0.40470177098177373,
+    "longest_front_rays_wall_gap_s": 0.7587395759765059,
+    "longest_rear_rays_wall_gap_s": 0.7597157661803067,
+    "unchanged_ray_receipt_lease_s": 0.5,
+    "front_gap_exceeds_original_lease": true,
+    "rear_gap_exceeds_original_lease": true,
+    "interpretation": "Task completion does not establish smooth uninterrupted motion or every ray receipt lease remaining fresh. Recorded maximum wall gaps exceed the original.5s lease; this record does not widen it or infer a whole-run command duty cycle."
+  },
+  "sealed_input_facts": {
+    "physics_hz": 500.0,
+    "state_hz": 50.0,
+    "dual_lidar_hz": 25.0,
+    "robot_kind": "official_spot_physx",
+    "navigation_command_limits": [
+      0.23,
+      0.3
+    ],
+    "policy_input_limits": {
+      "schema": 1,
+      "linear": 0.38,
+      "angular": 0.5
+    },
+    "velocity_feedback_mode": "spot_monotone_measured_v2",
+    "full_history_enabled": true,
+    "model_limits": {
+      "max_linear_speed_mps": 0.65,
+      "max_angular_speed_radps": 0.8
+    },
+    "qualified_memory_recovery_enabled": true,
+    "actual_recovery_event_count": 0,
+    "enabled_actor_ids": [
+      "door_blocking_cart",
+      "office_person",
+      "oncoming_cart",
+      "plaza_cart",
+      "plaza_person",
+      "warehouse_forklift"
+    ],
+    "original_actor_clock": "original_simulation_source_time_since_plant_start; never_reset_between_goals",
+    "cancel_source_s": 12,
+    "submit_after_source_s": 18,
+    "event_clock": "seconds_since_first_phase_original_measured_source_stamp",
+    "actor_encounter_profile": "isolated_spot_reachable65_3m_exposure_v1",
+    "unchanged_same_candidate_contract": true
+  },
+  "acceptance_separation": {
+    "actual_SDK_measured_stop_confirmed": [
+      true,
+      true
+    ],
+    "actual_SDK_physical_acceptance_verified": [
+      false,
+      false
+    ],
+    "original_shutdown_physical_stop_confirmed": false,
+    "simulation_500hz_domain_and_stop_verified": true,
+    "hardware_acceptance": false,
+    "localization_validation": false,
+    "continuous_collision_claim": false,
+    "original_hardware_scope_fields_overwritten": false,
+    "explanation": "Actual PhysX measured STOP and independent simulation-domain/stop evidence pass. The isolated_mock SDK and supervisor intentionally retain false physical/hardware acceptance fields. A false hardware-scope flag is not converted into true by this record."
+  },
+  "evidence_bindings": [
+    {
+      "original_path": "/home/eric/wjg/d1max-build-isaac/runs/campus_restart_v63_001/run_summary.json",
+      "public_path": "simulation/isaacsim/verification/20261007/campus_restart_v63_goal_success_encounter_pending_evidence/run_summary.json",
+      "sha256": "ccccf14cea92200b9f868ed5c2e32ef4e30382669a6150157104f578e6ea0835",
+      "byte_count": 1033,
+      "copy_semantics": "exact_original_bytes"
+    },
+    {
+      "original_path": "/home/eric/wjg/d1max-build-isaac/runs/campus_restart_v63_001/shutdown.json",
+      "public_path": "simulation/isaacsim/verification/20261007/campus_restart_v63_goal_success_encounter_pending_evidence/shutdown.json",
+      "sha256": "15ad04898d4d45ea1ad6d039b1a72405764a721c698eaa7368b832b4b2fcc695",
+      "byte_count": 407,
+      "copy_semantics": "exact_original_bytes"
+    },
+    {
+      "original_path": "/home/eric/wjg/d1max-build-isaac/runs/campus_restart_v63_001/scenario_suite/execution.json",
+      "public_path": "simulation/isaacsim/verification/20261007/campus_restart_v63_goal_success_encounter_pending_evidence/execution.json",
+      "sha256": "6bebc6fdfbaadcd670d7b655df9905309bf0c07b0fb21126752da00ea304ba86",
+      "byte_count": 2985,
+      "copy_semantics": "exact_original_bytes"
+    },
+    {
+      "original_path": "/home/eric/wjg/d1max-build-isaac/runs/campus_restart_v63_001/physics/collision_audit.json",
+      "public_path": "simulation/isaacsim/verification/20261007/campus_restart_v63_goal_success_encounter_pending_evidence/collision_audit.json",
+      "sha256": "547146acebab808fedd2295548b68cce6da7757f3c3e16a4e0949f8831b5b744",
+      "byte_count": 4375,
+      "copy_semantics": "exact_original_bytes"
+    },
+    {
+      "original_path": "/home/eric/wjg/d1max-build-isaac/runs/campus_restart_v63_001/physics/policy_history_manifest.json",
+      "public_path": "simulation/isaacsim/verification/20261007/campus_restart_v63_goal_success_encounter_pending_evidence/policy_history_manifest.json",
+      "sha256": "e8262b5c53f0af275585d5e83e375f7d2839d436cd83cd58cf3088a9605853b6",
+      "byte_count": 1149,
+      "copy_semantics": "exact_original_bytes"
+    },
+    {
+      "original_path": "/home/eric/wjg/d1max-build-isaac/runs/campus_restart_v63_001/physics/summary.json",
+      "public_path": "simulation/isaacsim/verification/20261007/campus_restart_v63_goal_success_encounter_pending_evidence/physics_summary.json",
+      "sha256": "c2bd439a2375be811f2656a2705ff9ca7dad8802b35f9cb03b7e9b97d0b151b7",
+      "byte_count": 29639,
+      "copy_semantics": "exact_original_bytes"
+    },
+    {
+      "original_path": "/home/eric/wjg/d1max-build-isaac/runs/campus_restart_v63_001/session.json",
+      "public_path": "simulation/isaacsim/verification/20261007/campus_restart_v63_goal_success_encounter_pending_evidence/session.json",
+      "sha256": "10ff72e3fcd44c9ba275eabfdce0d562ba154bcf90ba75741d6986ffc0c029ca",
+      "byte_count": 14612,
+      "copy_semantics": "exact_original_bytes"
+    },
+    {
+      "original_path": "/home/eric/wjg/d1max-build-isaac/runs/campus_restart_v63_001/braking_model.json",
+      "public_path": "simulation/isaacsim/verification/20261007/campus_restart_v63_goal_success_encounter_pending_evidence/braking_model.json",
+      "sha256": "d1ba2821e8a83afd7b9ab8092b8698d221c5b61bb41aaf5633eab31850b89012",
+      "byte_count": 1905,
+      "copy_semantics": "exact_original_bytes"
+    },
+    {
+      "original_path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v63-campus-v2-lidar25-restart/simulation/assets/scene_config.json",
+      "public_path": "simulation/isaacsim/verification/20261007/campus_restart_v63_goal_success_encounter_pending_evidence/sealed_scene_config.json",
+      "sha256": "db541949266ee09970c8b60b1cabe5b7bb30f8e51a8372c3cb202efe1b2f6913",
+      "byte_count": 65371,
+      "copy_semantics": "exact_original_bytes"
+    },
+    {
+      "original_path": "/home/eric/wjg/d1max-build-isaac/v63_sealed_case_evaluation.json",
+      "public_path": "simulation/isaacsim/verification/20261007/campus_restart_v63_goal_success_encounter_pending_evidence/sealed_case_evaluation.json",
+      "sha256": "a0bd05875dda0281e408390281aca2aa790c437905e2d47ffb39f7aa3a9656b9",
+      "byte_count": 9889,
+      "copy_semantics": "exact_original_bytes"
+    },
+    {
+      "original_path": "/home/eric/wjg/d1max-build-isaac/v63_navigation_physics_audit.json",
+      "public_path": "simulation/isaacsim/verification/20261007/campus_restart_v63_goal_success_encounter_pending_evidence/navigation_physics_audit.json",
+      "sha256": "213adec7d0741886b5d1424fafbd7e91e7f72bc69dca235d1155bb907f7bdbc2",
+      "byte_count": 3087,
+      "copy_semantics": "exact_original_bytes"
+    }
+  ],
+  "record_generation": {
+    "runtime_sources_modified": false,
+    "original_reports_modified": false,
+    "raw_measurements_modified": false,
+    "raw500_stream_scanned": false,
+    "tests_builds_or_Kit_run": false,
+    "small_json_copies_are_exact_bytes": true,
+    "large_phase_reports_bound_by_original_execution_manifest": true
+  },
+  "limitations": [
+    "Entire sealed scenario remains PENDING because original required3m plaza_person encounter evidence is truncated/incomplete.",
+    "Collision evidence is sampled transformed primitive AABB separation at actual snapshot times; it is not a continuous collision certificate or contact-force observation.",
+    "Full angular norm peak is diagnostic; the model yaw bound applies to the recorded world yaw rate, not full angular norm.",
+    "The final zero-consumption physical tail belongs to the sealedv2 measured-feedback plant. It does not mean NN policy input was strict zero as in the separate failedv3 experiment.",
+    "This record does not retrofit an audit capacity or modify the originalv63 contract/results. New cadence-bound auditing requires a newly sealed run.",
+    "No complete-phase numerical duty-cycle or unique source of every hold is reconstructed by this bounded record."
+  ]
+}

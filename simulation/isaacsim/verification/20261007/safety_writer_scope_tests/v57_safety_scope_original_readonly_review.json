@@ -1,0 +1,724 @@
+{
+  "schema": 1,
+  "kind": "v57_safety_scope_original_data_and_frozen_guard_review",
+  "phase0_highest_original_records": {
+    "commit_ack": {
+      "kind": "commit_ack",
+      "receipt_monotonic_ns": 1224045102635687,
+      "source_clock_ns": 1791377444639382334,
+      "data": {
+        "wire": {
+          "schema_version": 1,
+          "handoff_id": "14baf0ed937943d889004b0d0e6c0599.1:execution:handoff:8",
+          "grant_sequence": 8,
+          "sequence": 16,
+          "previous_commit_sequence": 6,
+          "commit_sequence": 7,
+          "incumbent_version": {
+            "schema_version": 3,
+            "session_id": "14baf0ed937943d889004b0d0e6c0599",
+            "task_id": "14baf0ed937943d889004b0d0e6c0599.1",
+            "route_id": "14baf0ed937943d889004b0d0e6c0599.1:12131a81afb9da26c549cdb5284054e63659a6fceb1a3faa7ae3de0b172008a7",
+            "route_hash": "12131a81afb9da26c549cdb5284054e63659a6fceb1a3faa7ae3de0b172008a7",
+            "map_version_id": "3043c9fe91e258f20f94f2a6f0e420769bc54db3e56a458ad65cdc36d5d3a811",
+            "localization_epoch": 1,
+            "localization_seed_id": "isaac-211a931b-9715-4552-8c16-721b25586282",
+            "reference_generation": 1,
+            "segment_id": "floor",
+            "anchor_id": "79db42cf10a81f273fa0c341840965e1acfafff037446e36c7976f86c9bf6e81",
+            "anchor_revision": 1,
+            "context_sequence": 1,
+            "map_geometry_revision": 1
+          },
+          "candidate_version": {
+            "schema_version": 3,
+            "session_id": "14baf0ed937943d889004b0d0e6c0599",
+            "task_id": "14baf0ed937943d889004b0d0e6c0599.1",
+            "route_id": "14baf0ed937943d889004b0d0e6c0599.1:12131a81afb9da26c549cdb5284054e63659a6fceb1a3faa7ae3de0b172008a7",
+            "route_hash": "12131a81afb9da26c549cdb5284054e63659a6fceb1a3faa7ae3de0b172008a7",
+            "map_version_id": "3043c9fe91e258f20f94f2a6f0e420769bc54db3e56a458ad65cdc36d5d3a811",
+            "localization_epoch": 1,
+            "localization_seed_id": "isaac-211a931b-9715-4552-8c16-721b25586282",
+            "reference_generation": 1,
+            "segment_id": "floor",
+            "anchor_id": "79db42cf10a81f273fa0c341840965e1acfafff037446e36c7976f86c9bf6e81",
+            "anchor_revision": 1,
+            "context_sequence": 1,
+            "map_geometry_revision": 1
+          },
+          "incumbent_trajectory_id": 18,
+          "candidate_trajectory_id": 19,
+          "execution_id": "14baf0ed937943d889004b0d0e6c0599.1:execution",
+          "sdk_session": "isolated-14baf0ed937943d889004b0d0e6c0599",
+          "transport_mode": "isolated_mock",
+          "control_epoch": 1,
+          "sdk_arm_generation": 1,
+          "permit_sequence": 327,
+          "demand_sequence": 832,
+          "motion_validation_sequence": 1412,
+          "entry_admission_sequence": 410,
+          "applied_at": {
+            "sec": 1791377444,
+            "nanosec": 639382334
+          },
+          "demand_source_stamp": {
+            "sec": 1791377444,
+            "nanosec": 639382334
+          },
+          "demand_body_source_stamp": {
+            "sec": 1791377444,
+            "nanosec": 639382334
+          },
+          "entry_source_stamp": {
+            "sec": 1791377444,
+            "nanosec": 639382334
+          },
+          "body_source_stamp": {
+            "sec": 1791377444,
+            "nanosec": 639382334
+          },
+          "valid_until": {
+            "sec": 1791377444,
+            "nanosec": 739382334
+          },
+          "measured_pose": {
+            "header": {
+              "stamp": {
+                "sec": 1791377444,
+                "nanosec": 639382334
+              },
+              "frame_id": "d1max_loc_odom"
+            },
+            "pose": {
+              "position": {
+                "x": -7.561639308929443,
+                "y": -4.93638801574707,
+                "z": 0.493563175201416
+              },
+              "orientation": {
+                "x": 0.004105252213776112,
+                "y": 0.012339521199464798,
+                "z": -0.06740439683198929,
+                "w": 0.9976410865783691
+              }
+            }
+          },
+          "measured_twist": {
+            "linear": {
+              "x": -0.007894743271751735,
+              "y": 4.045726828631694e-05,
+              "z": -0.0045231589656091085
+            },
+            "angular": {
+              "x": 0.03476990163351566,
+              "y": 0.052160638452429756,
+              "z": -0.005727672085402681
+            }
+          },
+          "applied_velocity": {
+            "linear": {
+              "x": 0.0,
+              "y": 0.0,
+              "z": 0.0
+            },
+            "angular": {
+              "x": 0.0,
+              "y": 0.0,
+              "z": 0.0
+            }
+          },
+          "curve_time": 0.0,
+          "applied": true,
+          "write_submitted": true,
+          "write_acknowledged": true,
+          "reason": "writer_software_commit_not_physical_confirmation"
+        },
+        "execution_id": "14baf0ed937943d889004b0d0e6c0599.1:execution",
+        "control_epoch": 1,
+        "sequence": 16,
+        "permit_sequence": 327,
+        "motion_validation_sequence": 1412,
+        "demand_sequence": 832,
+        "reason": "writer_software_commit_not_physical_confirmation",
+        "handoff_id": "14baf0ed937943d889004b0d0e6c0599.1:execution:handoff:8",
+        "applied": true,
+        "body_source_stamp_ns": 1791377444639382334,
+        "valid_until_ns": 1791377444739382334,
+        "demand_source_stamp_ns": 1791377444639382334,
+        "demand_body_source_stamp_ns": 1791377444639382334,
+        "applied_at_ns": 1791377444639382334
+      },
+      "original_line_number": 8959
+    },
+    "handoff_grant": {
+      "kind": "handoff_grant",
+      "receipt_monotonic_ns": 1224044740632835,
+      "source_clock_ns": 1791377444539382334,
+      "data": {
+        "schema_version": 2,
+        "transition_mode": 0,
+        "handoff_id": "14baf0ed937943d889004b0d0e6c0599.1:execution:handoff:8",
+        "sequence": 8,
+        "expected_commit_sequence": 6,
+        "incumbent": {
+          "version": {
+            "schema_version": 3,
+            "session_id": "14baf0ed937943d889004b0d0e6c0599",
+            "task_id": "14baf0ed937943d889004b0d0e6c0599.1",
+            "route_id": "14baf0ed937943d889004b0d0e6c0599.1:12131a81afb9da26c549cdb5284054e63659a6fceb1a3faa7ae3de0b172008a7",
+            "route_hash": "12131a81afb9da26c549cdb5284054e63659a6fceb1a3faa7ae3de0b172008a7",
+            "map_version_id": "3043c9fe91e258f20f94f2a6f0e420769bc54db3e56a458ad65cdc36d5d3a811",
+            "localization_epoch": 1,
+            "localization_seed_id": "isaac-211a931b-9715-4552-8c16-721b25586282",
+            "reference_generation": 1,
+            "segment_id": "floor",
+            "anchor_id": "79db42cf10a81f273fa0c341840965e1acfafff037446e36c7976f86c9bf6e81",
+            "anchor_revision": 1,
+            "context_sequence": 1,
+            "map_geometry_revision": 1
+          },
+          "execution_id": "14baf0ed937943d889004b0d0e6c0599.1:execution",
+          "control_epoch": 1,
+          "confirmation_id": "14baf0ed937943d889004b0d0e6c0599.1:isaac-smoke-14baf0ed937943d889004b0d0e6c0599",
+          "sdk_session": "isolated-14baf0ed937943d889004b0d0e6c0599",
+          "sdk_arm_generation": 1,
+          "sequence": 326,
+          "source_stamp": {
+            "sec": 1791377444,
+            "nanosec": 519382334
+          },
+          "valid_until": {
+            "sec": 1791377444,
+            "nanosec": 769382334
+          },
+          "trajectory_id": 18,
+          "validation_sequence": 1325,
+          "frame_id": "d1max_loc_odom",
+          "goal_position": {
+            "x": 8.0,
+            "y": -5.0,
+            "z": 0.48100000000000004
+          },
+          "allowed": true,
+          "geometry_committed": true,
+          "revoked": false,
+          "has_goal_yaw": false,
+          "goal_yaw": 0.0,
+          "goal_yaw_tolerance_rad": 0.15,
+          "phase": "tracking",
+          "transport_mode": "isolated_mock",
+          "reason": "committed_execution_lease"
+        },
+        "candidate": {
+          "version": {
+            "schema_version": 3,
+            "session_id": "14baf0ed937943d889004b0d0e6c0599",
+            "task_id": "14baf0ed937943d889004b0d0e6c0599.1",
+            "route_id": "14baf0ed937943d889004b0d0e6c0599.1:12131a81afb9da26c549cdb5284054e63659a6fceb1a3faa7ae3de0b172008a7",
+            "route_hash": "12131a81afb9da26c549cdb5284054e63659a6fceb1a3faa7ae3de0b172008a7",
+            "map_version_id": "3043c9fe91e258f20f94f2a6f0e420769bc54db3e56a458ad65cdc36d5d3a811",
+            "localization_epoch": 1,
+            "localization_seed_id": "isaac-211a931b-9715-4552-8c16-721b25586282",
+            "reference_generation": 1,
+            "segment_id": "floor",
+            "anchor_id": "79db42cf10a81f273fa0c341840965e1acfafff037446e36c7976f86c9bf6e81",
+            "anchor_revision": 1,
+            "context_sequence": 1,
+            "map_geometry_revision": 1
+          },
+          "execution_id": "14baf0ed937943d889004b0d0e6c0599.1:execution",
+          "control_epoch": 1,
+          "confirmation_id": "14baf0ed937943d889004b0d0e6c0599.1:isaac-smoke-14baf0ed937943d889004b0d0e6c0599",
+          "sdk_session": "isolated-14baf0ed937943d889004b0d0e6c0599",
+          "sdk_arm_generation": 1,
+          "sequence": 327,
+          "source_stamp": {
+            "sec": 1791377444,
+            "nanosec": 539382334
+          },
+          "valid_until": {
+            "sec": 1791377444,
+            "nanosec": 769382334
+          },
+          "trajectory_id": 19,
+          "validation_sequence": 1330,
+          "frame_id": "d1max_loc_odom",
+          "goal_position": {
+            "x": 8.0,
+            "y": -5.0,
+            "z": 0.48100000000000004
+          },
+          "allowed": true,
+          "geometry_committed": false,
+          "revoked": false,
+          "has_goal_yaw": false,
+          "goal_yaw": 0.0,
+          "goal_yaw_tolerance_rad": 0.15,
+          "phase": "tracking",
+          "transport_mode": "isolated_mock",
+          "reason": "committed_execution_lease"
+        },
+        "stationary_evidence": {
+          "schema_version": 0,
+          "version": {
+            "schema_version": 0,
+            "session_id": "",
+            "task_id": "",
+            "route_id": "",
+            "route_hash": "",
+            "map_version_id": "",
+            "localization_epoch": 0,
+            "localization_seed_id": "",
+            "reference_generation": 0,
+            "segment_id": "",
+            "anchor_id": "",
+            "anchor_revision": 0,
+            "context_sequence": 0,
+            "map_geometry_revision": 0
+          },
+          "execution_id": "",
+          "control_epoch": 0,
+          "sdk_session": "",
+          "sdk_arm_generation": 0,
+          "transport_mode": "",
+          "sequence": 0,
+          "writer_commit_sequence": 0,
+          "applied_trajectory_id": 0,
+          "zero_write_sequence": 0,
+          "zero_ack_at": {
+            "sec": 0,
+            "nanosec": 0
+          },
+          "mc_raw_stamp_ns": 0,
+          "mc_clock_epoch": "",
+          "time_basis": "",
+          "source_stamp": {
+            "sec": 0,
+            "nanosec": 0
+          },
+          "received_stamp": {
+            "sec": 0,
+            "nanosec": 0
+          },
+          "capture_lower_bound": {
+            "sec": 0,
+            "nanosec": 0
+          },
+          "capture_upper_bound": {
+            "sec": 0,
+            "nanosec": 0
+          },
+          "mc_capture_delay_bound_sec": 0.0,
+          "valid_until": {
+            "sec": 0,
+            "nanosec": 0
+          },
+          "stationary_samples": 0,
+          "stationary_duration_sec": 0.0,
+          "measured_linear_mps": 0.0,
+          "measured_angular_radps": 0.0,
+          "nonzero_blocked": false,
+          "usable": false,
+          "physical_acceptance_verified": false
+        },
+        "source_stamp": {
+          "sec": 1791377444,
+          "nanosec": 539382334
+        },
+        "valid_until": {
+          "sec": 1791377444,
+          "nanosec": 769382334
+        },
+        "transition_deadline": {
+          "sec": 1791377444,
+          "nanosec": 769382334
+        },
+        "retain_incumbent_until": {
+          "sec": 1791377444,
+          "nanosec": 769382334
+        },
+        "revoked": false,
+        "reason": "conditional_writer_cas"
+      },
+      "original_line_number": 8845
+    }
+  },
+  "phase0_last_original_records": {
+    "commit_ack": {
+      "kind": "commit_ack",
+      "receipt_monotonic_ns": 1224045102635687,
+      "source_clock_ns": 1791377444639382334,
+      "data": {
+        "wire": {
+          "schema_version": 1,
+          "handoff_id": "14baf0ed937943d889004b0d0e6c0599.1:execution:handoff:8",
+          "grant_sequence": 8,
+          "sequence": 16,
+          "previous_commit_sequence": 6,
+          "commit_sequence": 7,
+          "incumbent_version": {
+            "schema_version": 3,
+            "session_id": "14baf0ed937943d889004b0d0e6c0599",
+            "task_id": "14baf0ed937943d889004b0d0e6c0599.1",
+            "route_id": "14baf0ed937943d889004b0d0e6c0599.1:12131a81afb9da26c549cdb5284054e63659a6fceb1a3faa7ae3de0b172008a7",
+            "route_hash": "12131a81afb9da26c549cdb5284054e63659a6fceb1a3faa7ae3de0b172008a7",
+            "map_version_id": "3043c9fe91e258f20f94f2a6f0e420769bc54db3e56a458ad65cdc36d5d3a811",
+            "localization_epoch": 1,
+            "localization_seed_id": "isaac-211a931b-9715-4552-8c16-721b25586282",
+            "reference_generation": 1,
+            "segment_id": "floor",
+            "anchor_id": "79db42cf10a81f273fa0c341840965e1acfafff037446e36c7976f86c9bf6e81",
+            "anchor_revision": 1,
+            "context_sequence": 1,
+            "map_geometry_revision": 1
+          },
+          "candidate_version": {
+            "schema_version": 3,
+            "session_id": "14baf0ed937943d889004b0d0e6c0599",
+            "task_id": "14baf0ed937943d889004b0d0e6c0599.1",
+            "route_id": "14baf0ed937943d889004b0d0e6c0599.1:12131a81afb9da26c549cdb5284054e63659a6fceb1a3faa7ae3de0b172008a7",
+            "route_hash": "12131a81afb9da26c549cdb5284054e63659a6fceb1a3faa7ae3de0b172008a7",
+            "map_version_id": "3043c9fe91e258f20f94f2a6f0e420769bc54db3e56a458ad65cdc36d5d3a811",
+            "localization_epoch": 1,
+            "localization_seed_id": "isaac-211a931b-9715-4552-8c16-721b25586282",
+            "reference_generation": 1,
+            "segment_id": "floor",
+            "anchor_id": "79db42cf10a81f273fa0c341840965e1acfafff037446e36c7976f86c9bf6e81",
+            "anchor_revision": 1,
+            "context_sequence": 1,
+            "map_geometry_revision": 1
+          },
+          "incumbent_trajectory_id": 18,
+          "candidate_trajectory_id": 19,
+          "execution_id": "14baf0ed937943d889004b0d0e6c0599.1:execution",
+          "sdk_session": "isolated-14baf0ed937943d889004b0d0e6c0599",
+          "transport_mode": "isolated_mock",
+          "control_epoch": 1,
+          "sdk_arm_generation": 1,
+          "permit_sequence": 327,
+          "demand_sequence": 832,
+          "motion_validation_sequence": 1412,
+          "entry_admission_sequence": 410,
+          "applied_at": {
+            "sec": 1791377444,
+            "nanosec": 639382334
+          },
+          "demand_source_stamp": {
+            "sec": 1791377444,
+            "nanosec": 639382334
+          },
+          "demand_body_source_stamp": {
+            "sec": 1791377444,
+            "nanosec": 639382334
+          },
+          "entry_source_stamp": {
+            "sec": 1791377444,
+            "nanosec": 639382334
+          },
+          "body_source_stamp": {
+            "sec": 1791377444,
+            "nanosec": 639382334
+          },
+          "valid_until": {
+            "sec": 1791377444,
+            "nanosec": 739382334
+          },
+          "measured_pose": {
+            "header": {
+              "stamp": {
+                "sec": 1791377444,
+                "nanosec": 639382334
+              },
+              "frame_id": "d1max_loc_odom"
+            },
+            "pose": {
+              "position": {
+                "x": -7.561639308929443,
+                "y": -4.93638801574707,
+                "z": 0.493563175201416
+              },
+              "orientation": {
+                "x": 0.004105252213776112,
+                "y": 0.012339521199464798,
+                "z": -0.06740439683198929,
+                "w": 0.9976410865783691
+              }
+            }
+          },
+          "measured_twist": {
+            "linear": {
+              "x": -0.007894743271751735,
+              "y": 4.045726828631694e-05,
+              "z": -0.0045231589656091085
+            },
+            "angular": {
+              "x": 0.03476990163351566,
+              "y": 0.052160638452429756,
+              "z": -0.005727672085402681
+            }
+          },
+          "applied_velocity": {
+            "linear": {
+              "x": 0.0,
+              "y": 0.0,
+              "z": 0.0
+            },
+            "angular": {
+              "x": 0.0,
+              "y": 0.0,
+              "z": 0.0
+            }
+          },
+          "curve_time": 0.0,
+          "applied": true,
+          "write_submitted": true,
+          "write_acknowledged": true,
+          "reason": "writer_software_commit_not_physical_confirmation"
+        },
+        "execution_id": "14baf0ed937943d889004b0d0e6c0599.1:execution",
+        "control_epoch": 1,
+        "sequence": 16,
+        "permit_sequence": 327,
+        "motion_validation_sequence": 1412,
+        "demand_sequence": 832,
+        "reason": "writer_software_commit_not_physical_confirmation",
+        "handoff_id": "14baf0ed937943d889004b0d0e6c0599.1:execution:handoff:8",
+        "applied": true,
+        "body_source_stamp_ns": 1791377444639382334,
+        "valid_until_ns": 1791377444739382334,
+        "demand_source_stamp_ns": 1791377444639382334,
+        "demand_body_source_stamp_ns": 1791377444639382334,
+        "applied_at_ns": 1791377444639382334
+      },
+      "original_line_number": 8959
+    },
+    "handoff_grant": {
+      "kind": "handoff_grant",
+      "receipt_monotonic_ns": 1224045064137912,
+      "source_clock_ns": 1791377444639382334,
+      "data": {
+        "schema_version": 2,
+        "transition_mode": 0,
+        "handoff_id": "14baf0ed937943d889004b0d0e6c0599.1:execution:handoff:8",
+        "sequence": 8,
+        "expected_commit_sequence": 6,
+        "incumbent": {
+          "version": {
+            "schema_version": 3,
+            "session_id": "14baf0ed937943d889004b0d0e6c0599",
+            "task_id": "14baf0ed937943d889004b0d0e6c0599.1",
+            "route_id": "14baf0ed937943d889004b0d0e6c0599.1:12131a81afb9da26c549cdb5284054e63659a6fceb1a3faa7ae3de0b172008a7",
+            "route_hash": "12131a81afb9da26c549cdb5284054e63659a6fceb1a3faa7ae3de0b172008a7",
+            "map_version_id": "3043c9fe91e258f20f94f2a6f0e420769bc54db3e56a458ad65cdc36d5d3a811",
+            "localization_epoch": 1,
+            "localization_seed_id": "isaac-211a931b-9715-4552-8c16-721b25586282",
+            "reference_generation": 1,
+            "segment_id": "floor",
+            "anchor_id": "79db42cf10a81f273fa0c341840965e1acfafff037446e36c7976f86c9bf6e81",
+            "anchor_revision": 1,
+            "context_sequence": 1,
+            "map_geometry_revision": 1
+          },
+          "execution_id": "14baf0ed937943d889004b0d0e6c0599.1:execution",
+          "control_epoch": 1,
+          "confirmation_id": "14baf0ed937943d889004b0d0e6c0599.1:isaac-smoke-14baf0ed937943d889004b0d0e6c0599",
+          "sdk_session": "isolated-14baf0ed937943d889004b0d0e6c0599",
+          "sdk_arm_generation": 1,
+          "sequence": 326,
+          "source_stamp": {
+            "sec": 1791377444,
+            "nanosec": 519382334
+          },
+          "valid_until": {
+            "sec": 1791377444,
+            "nanosec": 769382334
+          },
+          "trajectory_id": 18,
+          "validation_sequence": 1325,
+          "frame_id": "d1max_loc_odom",
+          "goal_position": {
+            "x": 8.0,
+            "y": -5.0,
+            "z": 0.48100000000000004
+          },
+          "allowed": true,
+          "geometry_committed": true,
+          "revoked": false,
+          "has_goal_yaw": false,
+          "goal_yaw": 0.0,
+          "goal_yaw_tolerance_rad": 0.15,
+          "phase": "tracking",
+          "transport_mode": "isolated_mock",
+          "reason": "committed_execution_lease"
+        },
+        "candidate": {
+          "version": {
+            "schema_version": 3,
+            "session_id": "14baf0ed937943d889004b0d0e6c0599",
+            "task_id": "14baf0ed937943d889004b0d0e6c0599.1",
+            "route_id": "14baf0ed937943d889004b0d0e6c0599.1:12131a81afb9da26c549cdb5284054e63659a6fceb1a3faa7ae3de0b172008a7",
+            "route_hash": "12131a81afb9da26c549cdb5284054e63659a6fceb1a3faa7ae3de0b172008a7",
+            "map_version_id": "3043c9fe91e258f20f94f2a6f0e420769bc54db3e56a458ad65cdc36d5d3a811",
+            "localization_epoch": 1,
+            "localization_seed_id": "isaac-211a931b-9715-4552-8c16-721b25586282",
+            "reference_generation": 1,
+            "segment_id": "floor",
+            "anchor_id": "79db42cf10a81f273fa0c341840965e1acfafff037446e36c7976f86c9bf6e81",
+            "anchor_revision": 1,
+            "context_sequence": 1,
+            "map_geometry_revision": 1
+          },
+          "execution_id": "14baf0ed937943d889004b0d0e6c0599.1:execution",
+          "control_epoch": 1,
+          "confirmation_id": "14baf0ed937943d889004b0d0e6c0599.1:isaac-smoke-14baf0ed937943d889004b0d0e6c0599",
+          "sdk_session": "isolated-14baf0ed937943d889004b0d0e6c0599",
+          "sdk_arm_generation": 1,
+          "sequence": 327,
+          "source_stamp": {
+            "sec": 1791377444,
+            "nanosec": 539382334
+          },
+          "valid_until": {
+            "sec": 1791377444,
+            "nanosec": 769382334
+          },
+          "trajectory_id": 19,
+          "validation_sequence": 1330,
+          "frame_id": "d1max_loc_odom",
+          "goal_position": {
+            "x": 8.0,
+            "y": -5.0,
+            "z": 0.48100000000000004
+          },
+          "allowed": true,
+          "geometry_committed": false,
+          "revoked": false,
+          "has_goal_yaw": false,
+          "goal_yaw": 0.0,
+          "goal_yaw_tolerance_rad": 0.15,
+          "phase": "tracking",
+          "transport_mode": "isolated_mock",
+          "reason": "committed_execution_lease"
+        },
+        "stationary_evidence": {
+          "schema_version": 0,
+          "version": {
+            "schema_version": 0,
+            "session_id": "",
+            "task_id": "",
+            "route_id": "",
+            "route_hash": "",
+            "map_version_id": "",
+            "localization_epoch": 0,
+            "localization_seed_id": "",
+            "reference_generation": 0,
+            "segment_id": "",
+            "anchor_id": "",
+            "anchor_revision": 0,
+            "context_sequence": 0,
+            "map_geometry_revision": 0
+          },
+          "execution_id": "",
+          "control_epoch": 0,
+          "sdk_session": "",
+          "sdk_arm_generation": 0,
+          "transport_mode": "",
+          "sequence": 0,
+          "writer_commit_sequence": 0,
+          "applied_trajectory_id": 0,
+          "zero_write_sequence": 0,
+          "zero_ack_at": {
+            "sec": 0,
+            "nanosec": 0
+          },
+          "mc_raw_stamp_ns": 0,
+          "mc_clock_epoch": "",
+          "time_basis": "",
+          "source_stamp": {
+            "sec": 0,
+            "nanosec": 0
+          },
+          "received_stamp": {
+            "sec": 0,
+            "nanosec": 0
+          },
+          "capture_lower_bound": {
+            "sec": 0,
+            "nanosec": 0
+          },
+          "capture_upper_bound": {
+            "sec": 0,
+            "nanosec": 0
+          },
+          "mc_capture_delay_bound_sec": 0.0,
+          "valid_until": {
+            "sec": 0,
+            "nanosec": 0
+          },
+          "stationary_samples": 0,
+          "stationary_duration_sec": 0.0,
+          "measured_linear_mps": 0.0,
+          "measured_angular_radps": 0.0,
+          "nonzero_blocked": false,
+          "usable": false,
+          "physical_acceptance_verified": false
+        },
+        "source_stamp": {
+          "sec": 1791377444,
+          "nanosec": 539382334
+        },
+        "valid_until": {
+          "sec": 1791377444,
+          "nanosec": 769382334
+        },
+        "transition_deadline": {
+          "sec": 1791377444,
+          "nanosec": 769382334
+        },
+        "retain_incumbent_until": {
+          "sec": 1791377444,
+          "nanosec": 769382334
+        },
+        "revoked": false,
+        "reason": "conditional_writer_cas"
+      },
+      "original_line_number": 8947
+    }
+  },
+  "sealed_python_bindings": {
+    "source_snapshot/nav/src/d1max_pct_scan/d1max_pct_scan/execution_handoff.py": {
+      "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v57-campus-execution-scope-restart/source_snapshot/nav/src/d1max_pct_scan/d1max_pct_scan/execution_handoff.py",
+      "sha256": "38d07dc4be21c90612890ec9dcc11e92a1a9404cd1184307a65923fed365999d",
+      "bytes": 19421
+    },
+    "application/install/d1max_pct_scan/lib/python3.10/site-packages/d1max_pct_scan/execution_handoff.py": {
+      "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v57-campus-execution-scope-restart/application/install/d1max_pct_scan/lib/python3.10/site-packages/d1max_pct_scan/execution_handoff.py",
+      "sha256": "38d07dc4be21c90612890ec9dcc11e92a1a9404cd1184307a65923fed365999d",
+      "bytes": 19421
+    },
+    "source_snapshot/nav/src/d1max_pct_scan/d1max_pct_scan/execution_safety_node.py": {
+      "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v57-campus-execution-scope-restart/source_snapshot/nav/src/d1max_pct_scan/d1max_pct_scan/execution_safety_node.py",
+      "sha256": "c8d66e021bf04afdf2f0d0fc60a81cb8c007dace4a70a8af95bbd5b7b7498383",
+      "bytes": 6344
+    }
+  },
+  "findings": [
+    {
+      "path": "source_snapshot/nav/src/d1max_pct_scan/d1max_pct_scan/execution_handoff.py",
+      "line": 179,
+      "guard": "message.sequence<=self.last_ack_sequence rejects before initial ACK branch at lines198-204",
+      "phase1_initial_ack_sequence": 2,
+      "phase0_last_ack_sequence": 16
+    },
+    {
+      "path": "source_snapshot/nav/src/d1max_pct_scan/d1max_pct_scan/execution_handoff.py",
+      "line": 120,
+      "guard": "different task clears applied/commit_sequence/stationary, leaves last_grant_sequence/last_ack_sequence untouched",
+      "phase0_commit_sequence": 7,
+      "phase0_last_grant_sequence": 8
+    }
+  ],
+  "limitations": [
+    "Static code plus preserved raw event order review; callback output rejection counts require the independently executable original safety replay. No claims that sensor leases were always valid."
+  ]
+}

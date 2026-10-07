@@ -6,6 +6,7 @@ come from the existing writer and are cross-checked against PhysX measurements.
 """
 import argparse
 from collections import Counter, deque
+import hashlib
 import json
 import math
 from pathlib import Path
@@ -142,6 +143,95 @@ def body_height_evidence(session, bridge, measured_state_count):
         scope='same_source_actual_whole_body_envelope_attestation; not_complete_contact_or_collision_acceptance')
 
 
+def measured_velocity_components(linear, angular):
+    """Preserve all measured axes; a nonfinite sample cannot disappear in max()."""
+    linear_xyz = [linear.x, linear.y, linear.z]
+    angular_xyz = [angular.x, angular.y, angular.z]
+    speed, angular_speed = math.hypot(*linear_xyz), math.hypot(*angular_xyz)
+    return dict(linear_velocity_xyz=linear_xyz, angular_velocity_xyz=angular_xyz,
+        linear_mps=speed, angular_radps=angular_speed,
+        velocity_finite=all(math.isfinite(v) for v in linear_xyz+angular_xyz+[speed,angular_speed]))
+
+
+def measured_velocity_domain_evidence(session, *, measured_state_count,
+        velocity_sample_count, invalid_velocity_sample_count,
+        max_full_xyz_speed_mps, max_full_angular_speed_radps):
+    """Check the sealed Spot admission domain against every received sample.
+
+    This is a sampled acceptance check, not a continuous 500Hz motion proof.
+    Full angular norm is diagnostic: the model's yaw bound has another meaning.
+    Legacy wheel sessions without either isolated Spot marker keep their gate.
+    """
+    required = Path(session.get('robot_profile') or '').name == 'quadruped_fixture_profile.yaml'
+    evidence = dict(required=required, verified=False,
+        measured_state_count=measured_state_count, velocity_sample_count=velocity_sample_count,
+        invalid_velocity_sample_count=invalid_velocity_sample_count,
+        measured_max_full_xyz_speed_mps=max_full_xyz_speed_mps,
+        measured_max_full_angular_speed_radps=max_full_angular_speed_radps,
+        full_angular_norm_is_diagnostic_only=True,
+        scope='all_received_state_samples; no_clamping; intervening_500Hz_PhysX_peaks_unobserved')
+    try:
+        path_value = session.get('execution_braking_model_record')
+        if not path_value:
+            if required:
+                raise ValueError('spot_velocity_domain_record_missing')
+            return True, dict(evidence, required=False, verified=True, reason='legacy_wheel_domain_gate_unchanged')
+        path = Path(path_value)
+        if not path.is_absolute():
+            raise ValueError('absolute_sealed_velocity_domain_record_required')
+        with path.open('rb') as stream:
+            raw = stream.read(1024*1024+1)
+        if not raw or len(raw) > 1024*1024:
+            raise ValueError('velocity_domain_record_size_invalid')
+        record = json.loads(raw)
+        if not isinstance(record, dict):
+            raise ValueError('velocity_domain_record_not_object')
+        required = required or 'isolated_platform_model' in record or 'isolated_full_xyz_reference_model' in record
+        evidence['required'] = required
+        if not required:
+            return True, dict(evidence, verified=True, reason='legacy_wheel_domain_gate_unchanged')
+        digest = hashlib.sha256(raw).hexdigest()
+        expected = session.get('execution_braking_model_sha256')
+        sealed_inputs = session.get('input_hashes')
+        evidence.update(model_record=str(path), model_record_sha256=digest,
+            expected_model_record_sha256=expected)
+        if (not isinstance(sealed_inputs, dict) or digest != expected
+                or sealed_inputs.get(str(path)) != expected):
+            raise ValueError('sealed_velocity_domain_hash_mismatch')
+        if (not session.get('id') or record.get('session_id') != session['id']
+                or session.get('simulation_backend') != 'isaacsim_physx'
+                or session.get('simulation_clock') != 'isaac_fixed_anchor_v1'
+                or session.get('transport_mode') != 'isolated_mock'
+                or session.get('physical_acceptance') is not False):
+            raise ValueError('isolated_spot_velocity_domain_session_mismatch')
+        # Use the original strict marker and .60/.80 reachable-domain parser.
+        from d1max_pct_scan.braking_model import reference_model_limits
+        limits = reference_model_limits(record, session['transport_mode'])
+        if limits is None:
+            raise ValueError('spot_full_xyz_reference_marker_missing')
+        platform = record['isolated_platform_model']
+        if (session.get('max_speed_mps') != platform['command_max_speed_mps']
+                or session.get('max_yaw_radps') != platform['command_max_yaw_radps']):
+            raise ValueError('spot_velocity_domain_command_authority_mismatch')
+        bounds = dict(reachable_max_speed_mps=platform['reachable_max_speed_mps'],
+            reference_max_speed_mps=limits['reference_max_speed_mps'],
+            measured_travel_max_speed_mps=limits['measured_travel_max_speed_mps'])
+        evidence.update(bounds, reference_evidence_sha256=record['isolated_full_xyz_reference_model']['evidence_sha256'])
+        if (type(measured_state_count) is not int or measured_state_count <= 0
+                or type(velocity_sample_count) is not int or velocity_sample_count != measured_state_count
+                or type(invalid_velocity_sample_count) is not int or invalid_velocity_sample_count != 0
+                or any(type(v) not in (int,float) or not math.isfinite(v) or v < 0
+                    for v in (max_full_xyz_speed_mps,max_full_angular_speed_radps))):
+            raise ValueError('spot_velocity_measurements_missing_or_nonfinite')
+        exceeded = [name for name,bound in bounds.items() if max_full_xyz_speed_mps > bound]
+        evidence['exceeded_domains'] = exceeded
+        if exceeded:
+            raise ValueError('measured_full_xyz_speed_outside_sealed_domain')
+        return True, dict(evidence, verified=True, reason='sampled_full_xyz_speed_within_sealed_domains')
+    except (OSError, ValueError, TypeError, KeyError) as error:
+        return False, dict(evidence, required=required, verified=False, reason=str(error))
+
+
 def drain_imu_witness(observer, spin_once, *, budget=1., monotonic=time.monotonic):
     """Fence measured states, then read their exact independent IMU witnesses.
 
@@ -231,6 +321,9 @@ def main():
             self.motion_execution_id = ''
             self.motion_nonzero = 0
             self.max_measured_speed = 0.
+            self.max_measured_full_angular_speed = 0.
+            self.velocity_sample_count = 0
+            self.invalid_velocity_sample_count = 0
             self.position = None
             self.start_position = None
             self.source_begin_ns = None
@@ -369,14 +462,18 @@ def main():
                 self.distance += math.hypot(p.x-self.position[0], p.y-self.position[1])
             self.position = position
             v, w = message.local_odometry.twist.twist.linear, message.local_odometry.twist.twist.angular
-            linear = math.sqrt(v.x*v.x+v.y*v.y+v.z*v.z)
-            angular = math.sqrt(w.x*w.x+w.y*w.y+w.z*w.z)
-            self.max_measured_speed = max(self.max_measured_speed, linear)
+            velocity = measured_velocity_components(v, w)
+            self.velocity_sample_count += 1
+            if velocity['velocity_finite']:
+                self.max_measured_speed = max(self.max_measured_speed, velocity['linear_mps'])
+                self.max_measured_full_angular_speed = max(self.max_measured_full_angular_speed, velocity['angular_radps'])
+            else:
+                self.invalid_velocity_sample_count += 1
             self.samples.append(dict(elapsed_s=time.monotonic()-begin,
                 source_stamp_ns=message.source_stamp.sec*10**9+message.source_stamp.nanosec,
                 imu_stamp_ns=message.imu_stamp.sec*10**9+message.imu_stamp.nanosec,
                 position=position, orientation_xyzw=[q.x,q.y,q.z,q.w],
-                linear_mps=linear, angular_radps=angular))
+                **velocity))
 
         def imu(self, message):
             self.counts['native_imu_received'] += 1
@@ -583,6 +680,12 @@ def main():
         height_tolerance, whole_body_attestation, body_evidence = body_height_evidence(
             session, observer.bridge, observer.counts['measured_state'])
         body_height_consistent = bool(heights) and max(abs(height-expected_height) for height in heights) <= height_tolerance
+        velocity_domain_verified, velocity_domain_evidence = measured_velocity_domain_evidence(
+            session, measured_state_count=observer.counts['measured_state'],
+            velocity_sample_count=observer.velocity_sample_count,
+            invalid_velocity_sample_count=observer.invalid_velocity_sample_count,
+            max_full_xyz_speed_mps=observer.max_measured_speed,
+            max_full_angular_speed_radps=observer.max_measured_full_angular_speed)
         expected_result = expected_task_result(args.case, result, observer.cancellation_requested,
             observer.action_result_status)
         execution_evidence = (writer_stop and observer.motion_nonzero > 0 and observer.distance > .05)
@@ -592,7 +695,7 @@ def main():
         passed = (not observer.error and expected_result and result.get('retirement_confirmed') is True
             and result.get('physical_stop_confirmed') is False and execution_evidence and measured_stationary
             and imu_source_matching
-            and body_height_consistent and whole_body_attestation)
+            and body_height_consistent and whole_body_attestation and velocity_domain_verified)
         report = dict(schema=1, passed=bool(passed), case=args.case, session_id=session['id'],
             test_scope=('original_BT_PCT_route_preview_cancellation_PhysX_sensor_fixture'
                 if args.case == 'preview_cancel' else
@@ -604,6 +707,9 @@ def main():
             bridge=observer.bridge, stop=observer.stop, measured_stationary=measured_stationary,
             measured_distance_m=observer.distance, measured_final_position=observer.position,
             measured_max_speed_mps=observer.max_measured_speed, nonzero_applied_count=observer.motion_nonzero,
+            measured_max_full_angular_speed_radps=observer.max_measured_full_angular_speed,
+            measured_velocity_domain_verified=velocity_domain_verified,
+            measured_velocity_domain_evidence=velocity_domain_evidence,
             latest_applied=observer.latest_applied, bt_status=observer.status,
             component_status=observer.component_status,
             control_trace=str(observer.control_trace_path),

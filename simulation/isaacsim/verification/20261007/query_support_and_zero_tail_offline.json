@@ -1,0 +1,169 @@
+{
+  "schema": 1,
+  "kind": "query_axis_full_link_geometry_and_sustained_zero_tail_offline_verification",
+  "status": "OFFLINE_VERIFIED_NEW_FORMAL_NAVIGATION_PENDING",
+  "source_files": [
+    {
+      "path": "simulation/isaacsim/runtime_geometry.py",
+      "sha256": "2d4594332ccc2c04647d4c08d4fcf5768257aee3c5c95b5cfdbead127720a834",
+      "size_bytes": 5431
+    },
+    {
+      "path": "simulation/isaacsim/dynamic_collision.py",
+      "sha256": "2e2db3ae0bcbd3a9b116e805d6c33be971aacebecceccbabdb5e1cafb65a05ac",
+      "size_bytes": 23937
+    },
+    {
+      "path": "simulation/isaacsim/test_runtime_geometry.py",
+      "sha256": "9d2e2faa0d344dfc744f4e209093220f828197285de959b3468d8a34724884f2",
+      "size_bytes": 14736
+    },
+    {
+      "path": "simulation/isaacsim/navigation_physics_audit.py",
+      "sha256": "224fc1c11de454c561d04273a7a54bbc07ac1ec332c6e1f42746a4dbd09a12da",
+      "size_bytes": 19462
+    },
+    {
+      "path": "simulation/isaacsim/test_navigation_physics_audit.py",
+      "sha256": "509709ca30162d1071d6377f5c0266babaa76d632bd2ff2379dc71a5942e0018",
+      "size_bytes": 13605
+    }
+  ],
+  "tests": {
+    "passed": 95,
+    "failed": 0,
+    "skipped": 0,
+    "command": "PYTHONPATH=simulation/isaacsim /usr/bin/python3 -m pytest -q simulation/isaacsim/test_runtime_geometry.py simulation/isaacsim/test_dynamic_collision.py simulation/isaacsim/test_navigation_physics_audit.py",
+    "log": {
+      "path": "simulation/isaacsim/verification/20261007/query_support_and_zero_tail_evidence/query_support_and_zero_tail_pytest.log",
+      "sha256": "d60c4273d951631b938f8b5b364cfe90168a2ee524409a16572cd19e69888029",
+      "size_bytes": 179
+    }
+  },
+  "evidence": [
+    {
+      "path": "simulation/isaacsim/verification/20261007/query_support_and_zero_tail_evidence/query_support_original_v59_replay.json",
+      "sha256": "8ac05e4a2f2aee947414c74a141e43fec2a4936c31e9e2ff0dd6099d50483e8a",
+      "size_bytes": 2359
+    },
+    {
+      "path": "simulation/isaacsim/verification/20261007/query_support_and_zero_tail_evidence/v59_body_envelope_original_failure_witnesses.json",
+      "sha256": "8d82b383ff787e9f85987f25e4550002ba82e709747e20cc8cfe300aa2687073",
+      "size_bytes": 70175
+    },
+    {
+      "path": "simulation/isaacsim/verification/20261007/query_support_and_zero_tail_evidence/v59_body_cube_aabb_mathematical_review.json",
+      "sha256": "504713f5da3bf420ac092619270f145ccf9d4e811140d2e6fba9f3d313ee91db",
+      "size_bytes": 2579
+    },
+    {
+      "path": "simulation/isaacsim/verification/20261007/query_support_and_zero_tail_evidence/query_support_and_zero_tail_pytest.log",
+      "sha256": "d60c4273d951631b938f8b5b364cfe90168a2ee524409a16572cd19e69888029",
+      "size_bytes": 179
+    },
+    {
+      "path": "simulation/isaacsim/verification/20261007/query_support_and_zero_tail_evidence/v59_zero_tail_strengthened_audit.json",
+      "sha256": "da884833d2a91a81c0aaf2deba8f526f513bb53704fe516cab4a878611c8cfb9",
+      "size_bytes": 3400
+    },
+    {
+      "path": "simulation/isaacsim/verification/20261007/query_support_and_zero_tail_evidence/v52_zero_tail_strengthened_audit.json",
+      "sha256": "a55dae05f4105f181f639e795c926d94bb224fc95c4119458cac608dd46f5f7d",
+      "size_bytes": 3088
+    }
+  ],
+  "geometry": {
+    "original_failure_source_ns": 83818000000,
+    "actual_links_per_snapshot": 13,
+    "same_raw_snapshots_count": 3,
+    "original_result": [
+      "PASS",
+      "FAIL",
+      "FAIL"
+    ],
+    "query_support_result": [
+      "PASS",
+      "PASS",
+      "PASS"
+    ],
+    "same_query_radius_m": 0.6078651750202781,
+    "same_query_offset_m": 0.3125,
+    "same_query_above_m": 0.589,
+    "complete_link_support_enclosure": true,
+    "bounds_calculated_in_original_pose_yaw_query_axes": true,
+    "world_aabb_api_unchanged": true,
+    "shape_or_envelope_inflated": false,
+    "near_body_voxel_clearing": false,
+    "raw_pose_geometry_or_source_stamps_modified": false,
+    "formal_physical_or_navigation_pass": false
+  },
+  "sustained_zero_tail": {
+    "meaning": "Original STOP confirmation is retained; all later actual BEGIN plus final END samples must remain under the original stationarity limits. Inputs zero alone are insufficient.",
+    "old_v59_still_failed": true,
+    "v59_errors": [
+      "all_epoch:measured_full_xyz_speed_outside_sealed_domain",
+      "all_epoch:measured_world_yaw_rate_outside_sealed_domain",
+      "final_stop:recorded_stop_then_zero_tail_motion"
+    ],
+    "v59_final_stop": {
+      "verified": false,
+      "scope": "final actual zero-consumption episode; native full XYZ and angular norm",
+      "transition_exercised": true,
+      "linear_threshold_mps": 0.03,
+      "angular_threshold_radps": 0.05,
+      "stationary_duration_s": 1.0,
+      "stop_latency_bound_s": 3.0,
+      "stopping_distance_bound_m": 0.5,
+      "stopping_yaw_bound_rad": 0.4,
+      "last_nonzero_consumption_source_ns": 1791378867071157156,
+      "zero_consumption_source_ns": 1791378867073157156,
+      "reason": "recorded_stop_then_zero_tail_motion",
+      "stationary_window_start_source_ns": 1791378867073157156,
+      "confirmation_source_ns": 1791378868073157156,
+      "confirmation_latency_s": 1.0,
+      "extra_xy_path_m": 0.0006089960920905477,
+      "extra_absolute_yaw_path_rad": 0.003132879829290003,
+      "actual_zero_tail_duration_s": 13.968,
+      "initial_stationary_window_verified": true,
+      "maintained_stationarity_to_end": false,
+      "post_confirmation_motion_samples": 1356,
+      "first_post_confirmation_motion_source_ns": 1791378877113157156,
+      "zero_tail_total_xy_path_m": 1.7012253894410867,
+      "zero_tail_total_absolute_yaw_path_rad": 0.9094629286710249
+    },
+    "old_v52_physics_audit_still_passed": true,
+    "v52_final_stop": {
+      "verified": true,
+      "scope": "final actual zero-consumption episode; native full XYZ and angular norm",
+      "transition_exercised": true,
+      "linear_threshold_mps": 0.03,
+      "angular_threshold_radps": 0.05,
+      "stationary_duration_s": 1.0,
+      "stop_latency_bound_s": 3.0,
+      "stopping_distance_bound_m": 0.5,
+      "stopping_yaw_bound_rad": 0.4,
+      "last_nonzero_consumption_source_ns": 1791374427786577949,
+      "zero_consumption_source_ns": 1791374427788577949,
+      "reason": "recorded_stop_within_original_bounds",
+      "stationary_window_start_source_ns": 1791374428926577949,
+      "confirmation_source_ns": 1791374429926577949,
+      "confirmation_latency_s": 2.138,
+      "extra_xy_path_m": 0.07590046682466992,
+      "extra_absolute_yaw_path_rad": 0.07706155473810578,
+      "actual_zero_tail_duration_s": 6.536,
+      "initial_stationary_window_verified": true,
+      "maintained_stationarity_to_end": true,
+      "post_confirmation_motion_samples": 0,
+      "first_post_confirmation_motion_source_ns": null,
+      "zero_tail_total_xy_path_m": 0.08250476022732524,
+      "zero_tail_total_absolute_yaw_path_rad": 0.13720775236644586
+    },
+    "existing_sealed_original_reports_rewritten": false
+  },
+  "limits": {
+    "hardware_acceptance": false,
+    "actor_aabb_overlap_is_contact_force_proof": false,
+    "v59_83s_physical_peak_attributed_uniquely_to_servo": false,
+    "new_code_navigation_acceptance": false
+  }
+}

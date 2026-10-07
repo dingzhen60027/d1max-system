@@ -1,0 +1,475 @@
+{
+  "schema": 1,
+  "kind": "isolated_spot_actor_handle_cache_original_command_causal_ab",
+  "date": "2026-10-07",
+  "status": "COMPONENT_AB_MEASURED; FORMAL_NAVIGATION_AND_RAY_FRESHNESS_NOT_ACCEPTED",
+  "scope": {
+    "full_original_v45_scene": true,
+    "static_box_count": 85,
+    "enabled_dynamic_actor_count": 6,
+    "robot": "official_spot_physx",
+    "physics_hz": 500,
+    "policy_hz": 50,
+    "physics_source_ticks_each": 6000,
+    "duration_source_seconds": 12,
+    "original_500hz_command_prefix": {
+      "kind": "original_actual_500hz_source_prefix",
+      "explicit_prefix": true,
+      "original_source_tick_count": 28348,
+      "selected_source_tick_count": 6000,
+      "excluded_tail_tick_count": 22348,
+      "source_origin_ns": 0,
+      "excluded_events_count": 3258,
+      "timestamps_modified": false,
+      "original_records_modified": false
+    },
+    "navigation_stack_or_sdk_or_udp_running": false,
+    "external_udp_disabled": true,
+    "original_scene_bytes_unchanged": true,
+    "root_joint_or_policy_memory_intervention_added": false,
+    "original_selected_stall_recovery_enabled_preserved": true,
+    "actual_recovery_events_each": 0,
+    "command_limits": [
+      0.2,
+      0.3
+    ],
+    "internal_policy_limits": [
+      0.3,
+      0.5
+    ],
+    "physics_usd_pose_writeback_each": true,
+    "physics_usd_velocity_writeback_each": false,
+    "physics_cpu_threads_each": 8,
+    "target_write_phase": "Original registered actor pre-step callback; same source_time+physics_dt and same translate/rotateZ USD writes every 500 Hz step."
+  },
+  "change": {
+    "only_changed_frozen_python_file": "world_builder.py",
+    "baseline": "Resolve each registered prim and its ordered transform ops on every actor callback.",
+    "cached": "Resolve immutable registered prim/translate/rotateZ handles once for scene lifetime; check handles remain valid and retain both target writes each step.",
+    "not_kinematic_tensor_batch": true,
+    "native_sensor_oracle_geometry_bounds_and_leases_changed": false
+  },
+  "comparison": {
+    "body": {
+      "compared_rows": 6001,
+      "exact_numeric_value_equality": true,
+      "fields": {
+        "position": {
+          "compared_rows": 6001,
+          "mismatch_rows": 0
+        },
+        "quaternion_wxyz": {
+          "compared_rows": 6001,
+          "mismatch_rows": 0
+        },
+        "linear_velocity_world": {
+          "compared_rows": 6001,
+          "mismatch_rows": 0
+        },
+        "angular_velocity_world": {
+          "compared_rows": 6001,
+          "mismatch_rows": 0
+        },
+        "full_linear_speed": {
+          "compared_rows": 6001,
+          "mismatch_rows": 0
+        },
+        "full_angular_speed": {
+          "compared_rows": 6001,
+          "mismatch_rows": 0
+        }
+      },
+      "all_original_row_fields_except_epoch_mismatch_rows": 0,
+      "raw_body_file_bytes_equal": false,
+      "raw_body_file_difference_explanation": "Independent run epochs differ; original files are not rewritten to make their hashes equal.",
+      "source_ticks": [
+        0,
+        6000
+      ],
+      "source_ns": [
+        0,
+        12000000000
+      ],
+      "source_tick_step_ns": 2000000,
+      "source_tick_and_native_tick_and_policy_counter_continuity_checked": true,
+      "measurement_phase": "6000 actual pre-policy PhysX BEGIN rows plus one final measured PhysX END"
+    },
+    "dynamic": {
+      "compared_full_rows": 720,
+      "all_full_parsed_rows_exactly_equal": true,
+      "actor_ids": [
+        "door_blocking_cart",
+        "office_person",
+        "oncoming_cart",
+        "plaza_cart",
+        "plaza_person",
+        "warehouse_forklift"
+      ],
+      "all_six_present_in_each_row": true,
+      "per_actor_compared_samples": 720,
+      "total_actor_samples_each": 4320,
+      "registry_sha256": "96b092886099b5b2c0904ce86c34d607167c8cee28865d318455c88bc7aea734",
+      "source_time_ns_first_last": [
+        18000000,
+        12000000000
+      ],
+      "semantics": "Original full rows include source time, exact registry, all actor XYZ, orientation XYZW and linear velocity; no near-equality tolerance."
+    },
+    "command_and_source": {
+      "frozen_commands_exactly_equal": true,
+      "frozen_command_sha256": "637691a20054f19a1c8d37b13f990c6bd8d80372bd224f286ab5a4907294f012",
+      "original_scene_sha256": "1b3e06e7b6695119f469e256c010cf9c959073aac4120f2967534ddec3d221da",
+      "only_changed_frozen_python_file": "world_builder.py",
+      "all_source_files_verified_against_each_manifest": true,
+      "source_file_count_each": 56,
+      "actual_highlevel_commands_and_policy_inputs_exact": true
+    }
+  },
+  "performance": {
+    "actor_update_callback_count_each": 6000,
+    "actor_update_total_wall_seconds": {
+      "baseline": 4.148648223374039,
+      "cached": 3.550822023767978
+    },
+    "actor_update_wall_seconds_saved": 0.597826199606061,
+    "actor_update_relative_reduction_percent": 14.410144399272713,
+    "measured_realtime_factor": {
+      "baseline": 0.30449810476170086,
+      "cached": 0.3185134779158237
+    },
+    "measured_realtime_factor_relative_increase_percent": 4.60277845246071,
+    "measured_state_window_source_seconds_each": 11.982000000000001,
+    "measured_state_window_wall_seconds": {
+      "baseline": 39.34999861288816,
+      "cached": 37.618502295110375
+    },
+    "longest_ray_receipt_wall_gap_seconds_per_sensor": {
+      "baseline": [
+        0.5515512418933213,
+        0.5514427619054914
+      ],
+      "cached": [
+        0.5220602680929005,
+        0.5225815339945257
+      ]
+    },
+    "original_ray_receipt_lease_seconds_for_comparison": 0.5,
+    "both_runs_each_sensor_maximum_gap_exceeds_original_lease": true,
+    "ray_receipt_staleness_solved": false,
+    "replicate_count_each": 1,
+    "statistical_or_realtime_performance_guarantee": false
+  },
+  "bindings": {
+    "analysis_script": {
+      "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/spot_actor_handle_cache_causal_ab_analysis.py",
+      "bytes": 15866,
+      "sha256": "339c591e53f9674b21a471d65e9016711fb624839aa32e860f5f5c63ce09be95"
+    },
+    "private_summary": {
+      "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/spot_actor_handle_cache_causal_ab_private_summary.json",
+      "bytes": 34608,
+      "sha256": "45c5ba5b0726df5978c7713bd403f647e09187a0e31a7b151739437a8c2afc44"
+    },
+    "sealed_original_scene": {
+      "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v45-campus-all-actors-response/simulation/assets/scene_config.json",
+      "bytes": 63180,
+      "sha256": "1b3e06e7b6695119f469e256c010cf9c959073aac4120f2967534ddec3d221da"
+    },
+    "runs": {
+      "baseline": {
+        "source_manifest": {
+          "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/campus_v45_actor_baseline_source_001/source_manifest.json",
+          "bytes": 5511,
+          "sha256": "93d2d9e0f2405f29bc1481fe245231a583a31d1da3bd00cc5c7d69ee07643e58"
+        },
+        "critical_frozen_sources": {
+          "world_builder.py": {
+            "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/campus_v45_actor_baseline_source_001/world_builder.py",
+            "sha256": "bf3b7e7898deb35bbc1772b15faa837774b0abfb5091a0bc5a843ca5b54d6972"
+          },
+          "scene.py": {
+            "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/campus_v45_actor_baseline_source_001/scene.py",
+            "sha256": "d8c37e43262278f85379675b3ffcdd428c914e679f05b3b51e6644e036fba65a"
+          },
+          "quadruped.py": {
+            "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/campus_v45_actor_baseline_source_001/quadruped.py",
+            "sha256": "191626991514d1ed2cd8c118ab1e8da4c1c2b99be23b39dc447a6e395cf8dbd2"
+          },
+          "full_scene_replay.py": {
+            "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/campus_v45_actor_baseline_source_001/full_scene_replay.py",
+            "sha256": "a17c2ff0c30ae0a0329ece6d61d6b354aa296ad8d9137ebd297e52161bb55163"
+          },
+          "policy_history.py": {
+            "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/campus_v45_actor_baseline_source_001/policy_history.py",
+            "sha256": "6ef66b983ed408946a203f0f222ac83052c73745c193e30acbc8c03a29df19ab"
+          },
+          "stall_recovery.py": {
+            "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/campus_v45_actor_baseline_source_001/stall_recovery.py",
+            "sha256": "f0d03abbbce79c18303bc2264e7050b5ebd3e7996df5b9037dd6ca6751e1c53a"
+          },
+          "dynamic_collision.py": {
+            "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/campus_v45_actor_baseline_source_001/dynamic_collision.py",
+            "sha256": "07098c9debe51cb43bd0308234a085fcc206f4dccafd8d9cb5c4af890ff16045"
+          },
+          "truth_map.py": {
+            "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/campus_v45_actor_baseline_source_001/truth_map.py",
+            "sha256": "40ff59bb84b741bb54bda07333ced7220a44a0ff709b90b78b9bb1507750832c"
+          }
+        },
+        "raw_records_and_summary": {
+          "summary.json": {
+            "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/campus_v45_actor_baseline_001/summary.json",
+            "bytes": 32950,
+            "sha256": "7b9511a9306d9c628723f67d4d9c2dba8e715ecf84d02c297f153303ce399c5d"
+          },
+          "policy_history_manifest.json": {
+            "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/campus_v45_actor_baseline_001/policy_history_manifest.json",
+            "bytes": 2201,
+            "sha256": "82d3f2cd12b64addaf96aea427e6b09999e7a40450b4e8bd8f3c4cb99d3e1c9c"
+          },
+          "frozen_command_input.json": {
+            "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/campus_v45_actor_baseline_001/frozen_command_input.json",
+            "bytes": 512809,
+            "sha256": "637691a20054f19a1c8d37b13f990c6bd8d80372bd224f286ab5a4907294f012"
+          },
+          "policy_component_state_500hz.jsonl": {
+            "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/campus_v45_actor_baseline_001/policy_component_state_500hz.jsonl",
+            "bytes": 9474638,
+            "sha256": "07fce3064a6f50e5998c75caeff0c8ea094606c137ee6f6bd8d81186bb13886d"
+          },
+          "dynamic_actor_readings.jsonl": {
+            "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/campus_v45_actor_baseline_001/dynamic_actor_readings.jsonl",
+            "bytes": 841602,
+            "sha256": "f8035534a3db3448c519c5927278a55b16ec557928337d55a4274bd0ee71f9e1"
+          },
+          "policy_command_events.jsonl": {
+            "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/campus_v45_actor_baseline_001/policy_command_events.jsonl",
+            "bytes": 694317,
+            "sha256": "602aeb1f77ff90f6f78a8ab468ef9bcac4cb6671135519f064251901fbb92219"
+          },
+          "policy_observations.jsonl": {
+            "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/campus_v45_actor_baseline_001/policy_observations.jsonl",
+            "bytes": 1385715,
+            "sha256": "8999def89c78bca4d48ac149af62f99583fe22c6493d1ce918b401d23ca828e5"
+          },
+          "policy_recovery_events.jsonl": {
+            "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/campus_v45_actor_baseline_001/policy_recovery_events.jsonl",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          },
+          "trajectory.jsonl": {
+            "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/campus_v45_actor_baseline_001/trajectory.jsonl",
+            "bytes": 1580052,
+            "sha256": "42636ebc9da6747ebe3f8f7931dadebf496c2216c436d3439e6bece344a5efe9"
+          },
+          "robot_link_readings.jsonl": {
+            "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/campus_v45_actor_baseline_001/robot_link_readings.jsonl",
+            "bytes": 5602279,
+            "sha256": "ac37612a732dd3cc0a5f2c3828d0d8dc178d76af2b3438813076c344d372cbd8"
+          },
+          "floor_hit_audit.jsonl": {
+            "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/campus_v45_actor_baseline_001/floor_hit_audit.jsonl",
+            "bytes": 62836,
+            "sha256": "537cce684cf1c79d7f004965e9c54fe919ebc030ebcfaad4c71e0a61d46406d9"
+          },
+          "imu_readings.jsonl": {
+            "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/campus_v45_actor_baseline_001/imu_readings.jsonl",
+            "bytes": 426733,
+            "sha256": "1c5cbc77a7c31d4ac7d3017f6da934a904f0b95baf656dd643243dae73269ccf"
+          },
+          "collision_audit.json": {
+            "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/campus_v45_actor_baseline_001/collision_audit.json",
+            "bytes": 5006,
+            "sha256": "e6c553c53d9e1ab7bb7de1148636bd42e04aacfebe37f23d7c6cf6417724599d"
+          },
+          "quadruped_asset_metadata.json": {
+            "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/campus_v45_actor_baseline_001/quadruped_asset_metadata.json",
+            "bytes": 15767,
+            "sha256": "adfd709af4b7371fd89238ce26d966ab324f95c0f4dfe6d44bb3d07ac377fb88"
+          },
+          "first_scan_0.npz": {
+            "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/campus_v45_actor_baseline_001/first_scan_0.npz",
+            "bytes": 136092,
+            "sha256": "3df25c74dfcac8ed4ae9cf1375c57ddfcc23875bf2a798755f6e4cb1e661dbbc"
+          },
+          "first_scan_1.npz": {
+            "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/campus_v45_actor_baseline_001/first_scan_1.npz",
+            "bytes": 136220,
+            "sha256": "7e76ac3cb32f7427cf3c308da5f40c98eb941b9250f6e0a4ec4f3d6957c7374a"
+          },
+          "last_scan_0.npz": {
+            "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/campus_v45_actor_baseline_001/last_scan_0.npz",
+            "bytes": 135356,
+            "sha256": "54c90fc08562a8a47517330d51cf042fd86b5f3b5b97b456b55f28556875da90"
+          },
+          "last_scan_1.npz": {
+            "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/campus_v45_actor_baseline_001/last_scan_1.npz",
+            "bytes": 135132,
+            "sha256": "917f6144a7be7366c24b63a012763e9d8b3d9e98c68d005b5f15ac46479d62f8"
+          }
+        },
+        "launcher_log": {
+          "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/campus_v45_actor_baseline_launcher.log",
+          "bytes": 21743,
+          "sha256": "5e766b73313cd21be204fc081bb2e706435e8f2e98f7d05c502c4dde654b5d28"
+        }
+      },
+      "cached": {
+        "source_manifest": {
+          "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/campus_v45_actor_cached_source_001/source_manifest.json",
+          "bytes": 5509,
+          "sha256": "ddf7ad53699595ccdadfa6e070b54d33f3c33830a132ab675d4a42ae02b166e5"
+        },
+        "critical_frozen_sources": {
+          "world_builder.py": {
+            "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/campus_v45_actor_cached_source_001/world_builder.py",
+            "sha256": "12067a87763e8a6dd6b29a738495311f2eb74426f0e77bf3e16ddb341d1ace79"
+          },
+          "scene.py": {
+            "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/campus_v45_actor_cached_source_001/scene.py",
+            "sha256": "d8c37e43262278f85379675b3ffcdd428c914e679f05b3b51e6644e036fba65a"
+          },
+          "quadruped.py": {
+            "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/campus_v45_actor_cached_source_001/quadruped.py",
+            "sha256": "191626991514d1ed2cd8c118ab1e8da4c1c2b99be23b39dc447a6e395cf8dbd2"
+          },
+          "full_scene_replay.py": {
+            "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/campus_v45_actor_cached_source_001/full_scene_replay.py",
+            "sha256": "a17c2ff0c30ae0a0329ece6d61d6b354aa296ad8d9137ebd297e52161bb55163"
+          },
+          "policy_history.py": {
+            "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/campus_v45_actor_cached_source_001/policy_history.py",
+            "sha256": "6ef66b983ed408946a203f0f222ac83052c73745c193e30acbc8c03a29df19ab"
+          },
+          "stall_recovery.py": {
+            "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/campus_v45_actor_cached_source_001/stall_recovery.py",
+            "sha256": "f0d03abbbce79c18303bc2264e7050b5ebd3e7996df5b9037dd6ca6751e1c53a"
+          },
+          "dynamic_collision.py": {
+            "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/campus_v45_actor_cached_source_001/dynamic_collision.py",
+            "sha256": "07098c9debe51cb43bd0308234a085fcc206f4dccafd8d9cb5c4af890ff16045"
+          },
+          "truth_map.py": {
+            "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/campus_v45_actor_cached_source_001/truth_map.py",
+            "sha256": "40ff59bb84b741bb54bda07333ced7220a44a0ff709b90b78b9bb1507750832c"
+          }
+        },
+        "raw_records_and_summary": {
+          "summary.json": {
+            "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/campus_v45_actor_cached_001/summary.json",
+            "bytes": 32947,
+            "sha256": "a7878781d10cf3b87062b9a9bde93d23f03a5fd16cdde0a05716ea2556f8224f"
+          },
+          "policy_history_manifest.json": {
+            "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/campus_v45_actor_cached_001/policy_history_manifest.json",
+            "bytes": 2201,
+            "sha256": "f000d444992d818126c2ebfbcf2dbf935cf72c82fe6a57acf8c3517ae2fb5f16"
+          },
+          "frozen_command_input.json": {
+            "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/campus_v45_actor_cached_001/frozen_command_input.json",
+            "bytes": 512809,
+            "sha256": "637691a20054f19a1c8d37b13f990c6bd8d80372bd224f286ab5a4907294f012"
+          },
+          "policy_component_state_500hz.jsonl": {
+            "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/campus_v45_actor_cached_001/policy_component_state_500hz.jsonl",
+            "bytes": 9474638,
+            "sha256": "56031e52bc651e709c2f9234c12c2bdbde9c2f281f7b9e35ed000dba6ff9b9a9"
+          },
+          "dynamic_actor_readings.jsonl": {
+            "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/campus_v45_actor_cached_001/dynamic_actor_readings.jsonl",
+            "bytes": 841602,
+            "sha256": "f8035534a3db3448c519c5927278a55b16ec557928337d55a4274bd0ee71f9e1"
+          },
+          "policy_command_events.jsonl": {
+            "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/campus_v45_actor_cached_001/policy_command_events.jsonl",
+            "bytes": 694317,
+            "sha256": "957badb5b26829cdfd473f25682b76af13bacb8e1291330923a93a645c074e06"
+          },
+          "policy_observations.jsonl": {
+            "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/campus_v45_actor_cached_001/policy_observations.jsonl",
+            "bytes": 1385715,
+            "sha256": "c8915dca46abdbb7fe85db3012abcdae8fcd2782836d71b7840a7587f90791d7"
+          },
+          "policy_recovery_events.jsonl": {
+            "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/campus_v45_actor_cached_001/policy_recovery_events.jsonl",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          },
+          "trajectory.jsonl": {
+            "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/campus_v45_actor_cached_001/trajectory.jsonl",
+            "bytes": 1580052,
+            "sha256": "42636ebc9da6747ebe3f8f7931dadebf496c2216c436d3439e6bece344a5efe9"
+          },
+          "robot_link_readings.jsonl": {
+            "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/campus_v45_actor_cached_001/robot_link_readings.jsonl",
+            "bytes": 5602279,
+            "sha256": "ac37612a732dd3cc0a5f2c3828d0d8dc178d76af2b3438813076c344d372cbd8"
+          },
+          "floor_hit_audit.jsonl": {
+            "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/campus_v45_actor_cached_001/floor_hit_audit.jsonl",
+            "bytes": 62836,
+            "sha256": "537cce684cf1c79d7f004965e9c54fe919ebc030ebcfaad4c71e0a61d46406d9"
+          },
+          "imu_readings.jsonl": {
+            "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/campus_v45_actor_cached_001/imu_readings.jsonl",
+            "bytes": 426733,
+            "sha256": "1c5cbc77a7c31d4ac7d3017f6da934a904f0b95baf656dd643243dae73269ccf"
+          },
+          "collision_audit.json": {
+            "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/campus_v45_actor_cached_001/collision_audit.json",
+            "bytes": 5006,
+            "sha256": "e6c553c53d9e1ab7bb7de1148636bd42e04aacfebe37f23d7c6cf6417724599d"
+          },
+          "quadruped_asset_metadata.json": {
+            "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/campus_v45_actor_cached_001/quadruped_asset_metadata.json",
+            "bytes": 15767,
+            "sha256": "adfd709af4b7371fd89238ce26d966ab324f95c0f4dfe6d44bb3d07ac377fb88"
+          },
+          "first_scan_0.npz": {
+            "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/campus_v45_actor_cached_001/first_scan_0.npz",
+            "bytes": 136092,
+            "sha256": "3df25c74dfcac8ed4ae9cf1375c57ddfcc23875bf2a798755f6e4cb1e661dbbc"
+          },
+          "first_scan_1.npz": {
+            "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/campus_v45_actor_cached_001/first_scan_1.npz",
+            "bytes": 136220,
+            "sha256": "7e76ac3cb32f7427cf3c308da5f40c98eb941b9250f6e0a4ec4f3d6957c7374a"
+          },
+          "last_scan_0.npz": {
+            "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/campus_v45_actor_cached_001/last_scan_0.npz",
+            "bytes": 135356,
+            "sha256": "54c90fc08562a8a47517330d51cf042fd86b5f3b5b97b456b55f28556875da90"
+          },
+          "last_scan_1.npz": {
+            "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/campus_v45_actor_cached_001/last_scan_1.npz",
+            "bytes": 135132,
+            "sha256": "917f6144a7be7366c24b63a012763e9d8b3d9e98c68d005b5f15ac46479d62f8"
+          }
+        },
+        "launcher_log": {
+          "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/campus_v45_actor_cached_launcher.log",
+          "bytes": 21743,
+          "sha256": "ad07407886831ec7b74c647db1fba69939a60ff28276602f40befb604b395509"
+        }
+      }
+    },
+    "original_v45_history_manifest_sha256": "2b7c101f5f2737b77110ff1c096934de9753bd19626ac0d41bdfc9b3156caf24",
+    "original_v45_command_events_sha256": "005ad75ea6e33bd0751a9e531c4cf7e882e6ff17539bf5c4db7db58802523f3f"
+  },
+  "limitations": [
+    "One sequential baseline/cached component pair measures this host and frozen 12 s prefix; it is not a repeated benchmark or a real-time guarantee.",
+    "No navigation stack, SDK, live UDP command sender, or goal acceptance is exercised by these component runs.",
+    "Both sensors still have receipt gaps above the original 0.5 s lease; no lease, source deadline, geometry, UNKNOWN status, or safety budget was relaxed.",
+    "Body equality covers every original 500 Hz body row (six measured fields and all remaining row fields except run epoch); actor equality covers recorded full rows, not every unrecorded 500 Hz actor state.",
+    "The input is the actual v45 source-tick 0..5999 command prefix, not the entire failed formal run; wall-receipt authority is not reconstructed or renewed from it.",
+    "Original recovery=true remains selected, with zero actual interventions in both runs; this experiment does not evaluate or approve recovery behavior.",
+    "Cache-equivalent PhysX data in this prefix does not by itself establish navigation arrival, future actor collision safety, or all sensor samples being fresh."
+  ],
+  "acceptance": {
+    "formal_navigation_passed": false,
+    "goal_reached": false,
+    "ray_receipt_staleness_solved": false,
+    "hardware_applicable_claim": false,
+    "no_existing_failed_evidence_modified": true
+  }
+}

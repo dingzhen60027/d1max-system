@@ -1,0 +1,751 @@
+{
+  "kind": "isolated_spot_full_xyz_reference_admission_domain_v1",
+  "schema": 1,
+  "physical_acceptance": false,
+  "reference_max_speed_mps": 0.6,
+  "measured_travel_max_speed_mps": 0.6,
+  "observed_max_full_xyz_speed_mps": 0.5701671879157891,
+  "selected_internal_policy_linear_cap": 0.4,
+  "selected_navigation_command_linear_cap": 0.25,
+  "selected_domain_scope": "isolated official Spot whole-campus straight component calibration; navigation validation pending",
+  "samples": [
+    {
+      "schema": 1,
+      "kind": "offline_full_scene_internal_policy_speed_component",
+      "run": "/home/eric/wjg/d1max-build-isaac/quadruped-research/campus_policy_stair_03_001",
+      "internal_forward_policy_input": 0.3,
+      "formal_navigation_pass": false,
+      "navigation_authorization": false,
+      "physical_deployment_acceptance": false,
+      "source_continuity": {
+        "actual_native_steps": 6000,
+        "body_samples": 6001,
+        "physics_hz": 500,
+        "begin_samples": 6000,
+        "terminal_actual_end_samples": 1,
+        "policy_source_inferences": 600,
+        "inference_counter_first_last": [
+          1000,
+          6990
+        ],
+        "counter_and_native_tick_increment_verified": true
+      },
+      "motion_0_8s": {
+        "samples": 4001,
+        "source_begin_ns": 0,
+        "source_end_ns": 8000000000,
+        "net_xy_m": 2.4312406029251545,
+        "net_xyz_m": [
+          2.42634916305542,
+          0.1541447639465332,
+          0.03734534978866577
+        ],
+        "cumulative_xy_m": 2.461781893581022,
+        "mean_measured_xy_speed_mps": 0.30767024600521153,
+        "peak_measured_full_xyz_mps": 0.5080392887497596,
+        "peak_measured_xy_mps": 0.5061954479383678,
+        "peak_measured_full_angular_radps": 0.4944635402452117,
+        "peak_measured_body_yaw_radps": 0.16830441413499211,
+        "peak_tilt_rad": 0.045711590031227774
+      },
+      "motion_last_4s": {
+        "samples": 2001,
+        "source_begin_ns": 4000000000,
+        "source_end_ns": 8000000000,
+        "net_xy_m": 1.3377512124517625,
+        "net_xyz_m": [
+          1.3365817070007324,
+          0.05592536926269531,
+          -0.0060700178146362305
+        ],
+        "cumulative_xy_m": 1.345441588102256,
+        "mean_measured_xy_speed_mps": 0.33637130412557187,
+        "peak_measured_full_xyz_mps": 0.45385538583310653,
+        "peak_measured_xy_mps": 0.433577221359219,
+        "peak_measured_full_angular_radps": 0.4673217048659661,
+        "peak_measured_body_yaw_radps": 0.12023013060478875,
+        "peak_tilt_rad": 0.026047499836463678
+      },
+      "whole_12s": {
+        "samples": 6001,
+        "source_begin_ns": 0,
+        "source_end_ns": 12000000000,
+        "net_xy_m": 2.5078677835888836,
+        "net_xyz_m": [
+          2.503291606903076,
+          0.15143299102783203,
+          0.00196114182472229
+        ],
+        "cumulative_xy_m": 2.560076464941081,
+        "mean_measured_xy_speed_mps": 0.2133168184112312,
+        "peak_measured_full_xyz_mps": 0.5080392887497596,
+        "peak_measured_xy_mps": 0.5061954479383678,
+        "peak_measured_full_angular_radps": 0.5849307665111193,
+        "peak_measured_body_yaw_radps": 0.16830441413499211,
+        "peak_tilt_rad": 0.045711590031227774
+      },
+      "existing_domain_comparison": {
+        "full_xyz_dot50": false,
+        "physical_full_xyz_dot60": true,
+        "physical_body_yaw_dot80": true,
+        "full_angular_dot80_separate": true
+      },
+      "feet": {
+        "cadence": "original50Hz plus native10Hz BEGIN witnesses",
+        "measured_motion_bundles": 479,
+        "exact_registered_sphere_bottom_flight_threshold_m": 0.01,
+        "flight_counts_0_8s": {
+          "fl": 193,
+          "fr": 224,
+          "hl": 224,
+          "hr": 200
+        },
+        "flight_counts_last4s": {
+          "fl": 108,
+          "fr": 120,
+          "hl": 118,
+          "hr": 110
+        },
+        "min_bottom_m": -0.00027272477746009827,
+        "max_bottom_m": 0.09178092703223228
+      },
+      "stop": {
+        "exact_zero_source_ns": 8000000000,
+        "zero_tail_execution_duration_ns": 4000000000,
+        "complete_500hz_measurement_continuity": true,
+        "full_linear_threshold": 0.03,
+        "full_angular_threshold": 0.05,
+        "continuous_window_ns": 1000000000,
+        "completion": {
+          "window_begin_ns": 8574000000,
+          "confirmation_source_ns": 9574000000,
+          "exact_zero_to_confirmation_s": 1.574
+        },
+        "original_three_second_deadline_pass": true,
+        "longest_good_source_span_s": 3.426,
+        "max_zero_displacement_xy_m": 0.08503807172975301,
+        "cumulative_zero_xy_m": 0.09829457136005959,
+        "max_zero_yaw_displacement_rad": 0.13207854376727352
+      },
+      "body_envelope_attestation": {
+        "required": true,
+        "verified_samples": 720,
+        "failures": 0,
+        "envelope": {
+          "radius": 0.6078651750202781,
+          "offset": 0.3125,
+          "above": 0.589,
+          "support_floor_z": 0.0,
+          "support_penetration_m": 0.02
+        }
+      },
+      "static_geometry_attestation": {
+        "expected_sha256": "8b64bb5a2fbaafbb1bf8e8c7da4e33d694baea11d8bce30cbc22c46638ce1130",
+        "cadence": "every actual body state; source timestamp unchanged",
+        "count": 720,
+        "faults": 0,
+        "fault_latched": false,
+        "last_sha256": "8b64bb5a2fbaafbb1bf8e8c7da4e33d694baea11d8bce30cbc22c46638ce1130",
+        "last_fault": "",
+        "total_wall_s": 0.016516114817932248,
+        "max_wall_s": 0.014792067930102348,
+        "full_stage_audits": 1,
+        "notice_timings": {},
+        "cache_hits": 719
+      },
+      "native_floor_hit_audit": {
+        "scans": 240,
+        "native_floor_hits": 597474,
+        "max_abs_error_m": 5.013246066276622e-06,
+        "sealed_error_bound_m": 0.0002,
+        "raw_endpoints_and_source_times_preserved": true
+      },
+      "limitations": [
+        "Single cold bootstrap and straight internal demand; stable minimum response and history-generalized navigation need further evidence.",
+        "Internal policy input is separate from highlevel command and cannot authorize post-safety command floors.",
+        "Fullangular norm and body yaw are distinct; all actual Z/tilt/transient speed retained."
+      ],
+      "evidence": [
+        {
+          "path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/campus_policy_stair_03_001/summary.json",
+          "sha256": "af4e374e7c0752bd12fcc6d431a726eb3f47108af056d380043f0b43ccefb98f",
+          "bytes": 29269
+        },
+        {
+          "path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/campus_policy_stair_03_001/policy_component_state_500hz.jsonl",
+          "sha256": "362b78591792e2b4117248ff486e0cbaa74b29109f55a4a1d8d6c76aeea9ef01",
+          "bytes": 7492147
+        },
+        {
+          "path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/campus_policy_stair_03_001/policy_observations.jsonl",
+          "sha256": "8a9feaeaca72c6f88ead7df2d1c79120bff061698dd71279c2a023c3f8335455",
+          "bytes": 1197232
+        },
+        {
+          "path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/campus_policy_stair_03_001/robot_link_readings.jsonl",
+          "sha256": "2c7354dbae99fe7ca49a01345215c520c4989dc269363541bfbdcf358d52faff",
+          "bytes": 5611248
+        },
+        {
+          "path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/campus_policy_stair_03_001/policy_command_events.jsonl",
+          "sha256": "b73aaddc176d8a0829711d1a96bc14ab695b8d2df6a362906a09d17f075e45ee",
+          "bytes": 1516
+        }
+      ]
+    },
+    {
+      "schema": 1,
+      "kind": "offline_full_scene_internal_policy_speed_component",
+      "run": "/home/eric/wjg/d1max-build-isaac/quadruped-research/campus_policy_stair_04_001",
+      "internal_forward_policy_input": 0.4,
+      "formal_navigation_pass": false,
+      "navigation_authorization": false,
+      "physical_deployment_acceptance": false,
+      "source_continuity": {
+        "actual_native_steps": 6000,
+        "body_samples": 6001,
+        "physics_hz": 500,
+        "begin_samples": 6000,
+        "terminal_actual_end_samples": 1,
+        "policy_source_inferences": 600,
+        "inference_counter_first_last": [
+          1000,
+          6990
+        ],
+        "counter_and_native_tick_increment_verified": true
+      },
+      "motion_0_8s": {
+        "samples": 4001,
+        "source_begin_ns": 0,
+        "source_end_ns": 8000000000,
+        "net_xy_m": 3.2788864762099914,
+        "net_xyz_m": [
+          3.2766194343566895,
+          0.12190818786621094,
+          0.05786162614822388
+        ],
+        "cumulative_xy_m": 3.2979025211972037,
+        "mean_measured_xy_speed_mps": 0.41218142035078037,
+        "peak_measured_full_xyz_mps": 0.5701671879157891,
+        "peak_measured_xy_mps": 0.5698728263439999,
+        "peak_measured_full_angular_radps": 0.49974705204632003,
+        "peak_measured_body_yaw_radps": 0.1496405503930092,
+        "peak_tilt_rad": 0.03467461743295544
+      },
+      "motion_last_4s": {
+        "samples": 2001,
+        "source_begin_ns": 4000000000,
+        "source_end_ns": 8000000000,
+        "net_xy_m": 1.7180983729470076,
+        "net_xyz_m": [
+          1.717000961303711,
+          0.06139802932739258,
+          0.013781905174255371
+        ],
+        "cumulative_xy_m": 1.7241509382477709,
+        "mean_measured_xy_speed_mps": 0.4310512424316135,
+        "peak_measured_full_xyz_mps": 0.5401363269468987,
+        "peak_measured_xy_mps": 0.5245683048291391,
+        "peak_measured_full_angular_radps": 0.37440845096913095,
+        "peak_measured_body_yaw_radps": 0.11170716631372764,
+        "peak_tilt_rad": 0.023733917801670893
+      },
+      "whole_12s": {
+        "samples": 6001,
+        "source_begin_ns": 0,
+        "source_end_ns": 12000000000,
+        "net_xy_m": 3.3749258161759554,
+        "net_xyz_m": [
+          3.373657703399658,
+          0.09250926971435547,
+          0.0033606886863708496
+        ],
+        "cumulative_xy_m": 3.4323153060357208,
+        "mean_measured_xy_speed_mps": 0.2859759544034119,
+        "peak_measured_full_xyz_mps": 0.5701671879157891,
+        "peak_measured_xy_mps": 0.5698728263439999,
+        "peak_measured_full_angular_radps": 0.49974705204632003,
+        "peak_measured_body_yaw_radps": 0.1496405503930092,
+        "peak_tilt_rad": 0.03467461743295544
+      },
+      "existing_domain_comparison": {
+        "full_xyz_dot50": false,
+        "physical_full_xyz_dot60": true,
+        "physical_body_yaw_dot80": true,
+        "full_angular_dot80_separate": true
+      },
+      "feet": {
+        "cadence": "original50Hz plus native10Hz BEGIN witnesses",
+        "measured_motion_bundles": 479,
+        "exact_registered_sphere_bottom_flight_threshold_m": 0.01,
+        "flight_counts_0_8s": {
+          "fl": 221,
+          "fr": 229,
+          "hl": 231,
+          "hr": 223
+        },
+        "flight_counts_last4s": {
+          "fl": 114,
+          "fr": 121,
+          "hl": 122,
+          "hr": 115
+        },
+        "min_bottom_m": -0.00042274966835975647,
+        "max_bottom_m": 0.09392687305808067
+      },
+      "stop": {
+        "exact_zero_source_ns": 8000000000,
+        "zero_tail_execution_duration_ns": 4000000000,
+        "complete_500hz_measurement_continuity": true,
+        "full_linear_threshold": 0.03,
+        "full_angular_threshold": 0.05,
+        "continuous_window_ns": 1000000000,
+        "completion": {
+          "window_begin_ns": 9130000000,
+          "confirmation_source_ns": 10130000000,
+          "exact_zero_to_confirmation_s": 2.13
+        },
+        "original_three_second_deadline_pass": true,
+        "longest_good_source_span_s": 2.87,
+        "max_zero_displacement_xy_m": 0.11306302513355478,
+        "cumulative_zero_xy_m": 0.13441278483851746,
+        "max_zero_yaw_displacement_rad": 0.1334014882801162
+      },
+      "body_envelope_attestation": {
+        "required": true,
+        "verified_samples": 720,
+        "failures": 0,
+        "envelope": {
+          "radius": 0.6078651750202781,
+          "offset": 0.3125,
+          "above": 0.589,
+          "support_floor_z": 0.0,
+          "support_penetration_m": 0.02
+        }
+      },
+      "static_geometry_attestation": {
+        "expected_sha256": "8b64bb5a2fbaafbb1bf8e8c7da4e33d694baea11d8bce30cbc22c46638ce1130",
+        "cadence": "every actual body state; source timestamp unchanged",
+        "count": 720,
+        "faults": 0,
+        "fault_latched": false,
+        "last_sha256": "8b64bb5a2fbaafbb1bf8e8c7da4e33d694baea11d8bce30cbc22c46638ce1130",
+        "last_fault": "",
+        "total_wall_s": 0.018501333659514785,
+        "max_wall_s": 0.0166071648709476,
+        "full_stage_audits": 1,
+        "notice_timings": {},
+        "cache_hits": 719
+      },
+      "native_floor_hit_audit": {
+        "scans": 240,
+        "native_floor_hits": 598104,
+        "max_abs_error_m": 3.019246623603422e-06,
+        "sealed_error_bound_m": 0.0002,
+        "raw_endpoints_and_source_times_preserved": true
+      },
+      "limitations": [
+        "Single cold bootstrap and straight internal demand; stable minimum response and history-generalized navigation need further evidence.",
+        "Internal policy input is separate from highlevel command and cannot authorize post-safety command floors.",
+        "Fullangular norm and body yaw are distinct; all actual Z/tilt/transient speed retained."
+      ],
+      "evidence": [
+        {
+          "path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/campus_policy_stair_04_001/summary.json",
+          "sha256": "9b00b170440a4b859517a3e2b2dc3cc04a776f0848b5606604742ae874643062",
+          "bytes": 29267
+        },
+        {
+          "path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/campus_policy_stair_04_001/policy_component_state_500hz.jsonl",
+          "sha256": "a96e3f651eb23f5049fdf64d8e3065a649a06fd2bb7eee7212d1a0d9dba6b0d2",
+          "bytes": 7484358
+        },
+        {
+          "path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/campus_policy_stair_04_001/policy_observations.jsonl",
+          "sha256": "643fe042bc9b3b71f5d5915eecc7952a34df180c2a974e63f36fe02e5891ec67",
+          "bytes": 1195351
+        },
+        {
+          "path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/campus_policy_stair_04_001/robot_link_readings.jsonl",
+          "sha256": "a55d0c4dbfaad2c437aef4761329a6cebd27a1a874d0aa3230e058c681c5f453",
+          "bytes": 5610999
+        },
+        {
+          "path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/campus_policy_stair_04_001/policy_command_events.jsonl",
+          "sha256": "e637ef0119e321cb7e3c4c1e371fd46187fe97edb2cce454eec7abeb85944b85",
+          "bytes": 1516
+        }
+      ]
+    },
+    {
+      "schema": 1,
+      "kind": "offline_full_scene_internal_policy_speed_component",
+      "run": "/home/eric/wjg/d1max-build-isaac/quadruped-research/campus_policy_stair_05_001",
+      "internal_forward_policy_input": 0.5,
+      "formal_navigation_pass": false,
+      "navigation_authorization": false,
+      "physical_deployment_acceptance": false,
+      "source_continuity": {
+        "actual_native_steps": 6000,
+        "body_samples": 6001,
+        "physics_hz": 500,
+        "begin_samples": 6000,
+        "terminal_actual_end_samples": 1,
+        "policy_source_inferences": 600,
+        "inference_counter_first_last": [
+          1000,
+          6990
+        ],
+        "counter_and_native_tick_increment_verified": true
+      },
+      "motion_0_8s": {
+        "samples": 4001,
+        "source_begin_ns": 0,
+        "source_end_ns": 8000000000,
+        "net_xy_m": 4.027434079748894,
+        "net_xyz_m": [
+          4.025155305862427,
+          0.13546228408813477,
+          0.03482729196548462
+        ],
+        "cumulative_xy_m": 4.040035951671189,
+        "mean_measured_xy_speed_mps": 0.5049430484308135,
+        "peak_measured_full_xyz_mps": 0.6431621600058459,
+        "peak_measured_xy_mps": 0.631307691201016,
+        "peak_measured_full_angular_radps": 0.43362288743831034,
+        "peak_measured_body_yaw_radps": 0.16105976600953426,
+        "peak_tilt_rad": 0.026326755806060472
+      },
+      "motion_last_4s": {
+        "samples": 2001,
+        "source_begin_ns": 4000000000,
+        "source_end_ns": 8000000000,
+        "net_xy_m": 2.093289463672129,
+        "net_xyz_m": [
+          2.0913331508636475,
+          0.09047889709472656,
+          -0.0007538795471191406
+        ],
+        "cumulative_xy_m": 2.0982654589900593,
+        "mean_measured_xy_speed_mps": 0.5245812000570068,
+        "peak_measured_full_xyz_mps": 0.6431621600058459,
+        "peak_measured_xy_mps": 0.631307691201016,
+        "peak_measured_full_angular_radps": 0.40156219612460947,
+        "peak_measured_body_yaw_radps": 0.10951872611637008,
+        "peak_tilt_rad": 0.023260537641217646
+      },
+      "whole_12s": {
+        "samples": 6001,
+        "source_begin_ns": 0,
+        "source_end_ns": 12000000000,
+        "net_xy_m": 4.150319483174718,
+        "net_xyz_m": [
+          4.1486334800720215,
+          0.11828804016113281,
+          -0.0006665587425231934
+        ],
+        "cumulative_xy_m": 4.17870505287111,
+        "mean_measured_xy_speed_mps": 0.3481827657773943,
+        "peak_measured_full_xyz_mps": 0.6431621600058459,
+        "peak_measured_xy_mps": 0.631307691201016,
+        "peak_measured_full_angular_radps": 0.4874284961983445,
+        "peak_measured_body_yaw_radps": 0.16105976600953426,
+        "peak_tilt_rad": 0.04517551392811423
+      },
+      "existing_domain_comparison": {
+        "full_xyz_dot50": false,
+        "physical_full_xyz_dot60": false,
+        "physical_body_yaw_dot80": true,
+        "full_angular_dot80_separate": true
+      },
+      "feet": {
+        "cadence": "original50Hz plus native10Hz BEGIN witnesses",
+        "measured_motion_bundles": 479,
+        "exact_registered_sphere_bottom_flight_threshold_m": 0.01,
+        "flight_counts_0_8s": {
+          "fl": 219,
+          "fr": 239,
+          "hl": 239,
+          "hr": 218
+        },
+        "flight_counts_last4s": {
+          "fl": 112,
+          "fr": 122,
+          "hl": 122,
+          "hr": 112
+        },
+        "min_bottom_m": -0.00043081119656562805,
+        "max_bottom_m": 0.09734969958662987
+      },
+      "stop": {
+        "exact_zero_source_ns": 8000000000,
+        "zero_tail_execution_duration_ns": 4000000000,
+        "complete_500hz_measurement_continuity": true,
+        "full_linear_threshold": 0.03,
+        "full_angular_threshold": 0.05,
+        "continuous_window_ns": 1000000000,
+        "completion": {
+          "window_begin_ns": 8724000000,
+          "confirmation_source_ns": 9724000000,
+          "exact_zero_to_confirmation_s": 1.724
+        },
+        "original_three_second_deadline_pass": true,
+        "longest_good_source_span_s": 3.276,
+        "max_zero_displacement_xy_m": 0.13020716813165045,
+        "cumulative_zero_xy_m": 0.1386691011999214,
+        "max_zero_yaw_displacement_rad": 0.11544913741028139
+      },
+      "body_envelope_attestation": {
+        "required": true,
+        "verified_samples": 720,
+        "failures": 0,
+        "envelope": {
+          "radius": 0.6078651750202781,
+          "offset": 0.3125,
+          "above": 0.589,
+          "support_floor_z": 0.0,
+          "support_penetration_m": 0.02
+        }
+      },
+      "static_geometry_attestation": {
+        "expected_sha256": "8b64bb5a2fbaafbb1bf8e8c7da4e33d694baea11d8bce30cbc22c46638ce1130",
+        "cadence": "every actual body state; source timestamp unchanged",
+        "count": 720,
+        "faults": 0,
+        "fault_latched": false,
+        "last_sha256": "8b64bb5a2fbaafbb1bf8e8c7da4e33d694baea11d8bce30cbc22c46638ce1130",
+        "last_fault": "",
+        "total_wall_s": 0.017934628063812852,
+        "max_wall_s": 0.01622518594376743,
+        "full_stage_audits": 1,
+        "notice_timings": {},
+        "cache_hits": 719
+      },
+      "native_floor_hit_audit": {
+        "scans": 240,
+        "native_floor_hits": 596735,
+        "max_abs_error_m": 4.344900969344145e-06,
+        "sealed_error_bound_m": 0.0002,
+        "raw_endpoints_and_source_times_preserved": true
+      },
+      "limitations": [
+        "Single cold bootstrap and straight internal demand; stable minimum response and history-generalized navigation need further evidence.",
+        "Internal policy input is separate from highlevel command and cannot authorize post-safety command floors.",
+        "Fullangular norm and body yaw are distinct; all actual Z/tilt/transient speed retained."
+      ],
+      "evidence": [
+        {
+          "path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/campus_policy_stair_05_001/summary.json",
+          "sha256": "34a747e002003543aa8c01d3690fca1688df6f80a5f61a6bb1c26583ef2b4f3e",
+          "bytes": 29276
+        },
+        {
+          "path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/campus_policy_stair_05_001/policy_component_state_500hz.jsonl",
+          "sha256": "dc26c55d2cc3763d5e437f5611c3fc9f604a0a77b194a11778691d7636d8f216",
+          "bytes": 7424157
+        },
+        {
+          "path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/campus_policy_stair_05_001/policy_observations.jsonl",
+          "sha256": "40bf4736a0a33bbaecd0e0ddba87dd3d327c2e918b082834632f39e2b3d48c3e",
+          "bytes": 1188754
+        },
+        {
+          "path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/campus_policy_stair_05_001/robot_link_readings.jsonl",
+          "sha256": "6b88565472f9c0e3368ab4ed095cb247a3740018f20ad1a8ec0b0844fddbfbc7",
+          "bytes": 5615687
+        },
+        {
+          "path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/campus_policy_stair_05_001/policy_command_events.jsonl",
+          "sha256": "0f946fe290c755aea34fca8cdb1e083220dcbd87b99f120aff8cce7207ab5415",
+          "bytes": 1516
+        }
+      ]
+    },
+    {
+      "schema": 1,
+      "kind": "offline_full_scene_internal_policy_speed_component",
+      "run": "/home/eric/wjg/d1max-build-isaac/quadruped-research/campus_policy_stair_06_001",
+      "internal_forward_policy_input": 0.6,
+      "formal_navigation_pass": false,
+      "navigation_authorization": false,
+      "physical_deployment_acceptance": false,
+      "source_continuity": {
+        "actual_native_steps": 6000,
+        "body_samples": 6001,
+        "physics_hz": 500,
+        "begin_samples": 6000,
+        "terminal_actual_end_samples": 1,
+        "policy_source_inferences": 600,
+        "inference_counter_first_last": [
+          1000,
+          6990
+        ],
+        "counter_and_native_tick_increment_verified": true
+      },
+      "motion_0_8s": {
+        "samples": 4001,
+        "source_begin_ns": 0,
+        "source_end_ns": 8000000000,
+        "net_xy_m": 4.781448064926037,
+        "net_xyz_m": [
+          4.778860330581665,
+          0.1572880744934082,
+          0.04111945629119873
+        ],
+        "cumulative_xy_m": 4.794329797122154,
+        "mean_measured_xy_speed_mps": 0.5992044385570914,
+        "peak_measured_full_xyz_mps": 0.7363146497444059,
+        "peak_measured_xy_mps": 0.7291551437827226,
+        "peak_measured_full_angular_radps": 0.4356498497678682,
+        "peak_measured_body_yaw_radps": 0.16900761593309027,
+        "peak_tilt_rad": 0.02228585632647288
+      },
+      "motion_last_4s": {
+        "samples": 2001,
+        "source_begin_ns": 4000000000,
+        "source_end_ns": 8000000000,
+        "net_xy_m": 2.482347289625716,
+        "net_xyz_m": [
+          2.4789092540740967,
+          0.13060235977172852,
+          0.0013157129287719727
+        ],
+        "cumulative_xy_m": 2.487300885058753,
+        "mean_measured_xy_speed_mps": 0.621843298930656,
+        "peak_measured_full_xyz_mps": 0.7363146497444059,
+        "peak_measured_xy_mps": 0.7291551437827226,
+        "peak_measured_full_angular_radps": 0.40545124256338055,
+        "peak_measured_body_yaw_radps": 0.11079704933060346,
+        "peak_tilt_rad": 0.02228585632647288
+      },
+      "whole_12s": {
+        "samples": 6001,
+        "source_begin_ns": 0,
+        "source_end_ns": 12000000000,
+        "net_xy_m": 4.921498537784389,
+        "net_xyz_m": [
+          4.9181787967681885,
+          0.18073511123657227,
+          0.002212435007095337
+        ],
+        "cumulative_xy_m": 4.9613433497571835,
+        "mean_measured_xy_speed_mps": 0.41337304453759616,
+        "peak_measured_full_xyz_mps": 0.7363146497444059,
+        "peak_measured_xy_mps": 0.7291551437827226,
+        "peak_measured_full_angular_radps": 0.4356498497678682,
+        "peak_measured_body_yaw_radps": 0.16900761593309027,
+        "peak_tilt_rad": 0.0440802602939537
+      },
+      "existing_domain_comparison": {
+        "full_xyz_dot50": false,
+        "physical_full_xyz_dot60": false,
+        "physical_body_yaw_dot80": true,
+        "full_angular_dot80_separate": true
+      },
+      "feet": {
+        "cadence": "original50Hz plus native10Hz BEGIN witnesses",
+        "measured_motion_bundles": 479,
+        "exact_registered_sphere_bottom_flight_threshold_m": 0.01,
+        "flight_counts_0_8s": {
+          "fl": 226,
+          "fr": 243,
+          "hl": 243,
+          "hr": 222
+        },
+        "flight_counts_last4s": {
+          "fl": 115,
+          "fr": 124,
+          "hl": 124,
+          "hr": 113
+        },
+        "min_bottom_m": -0.0003778226673603058,
+        "max_bottom_m": 0.09731365367770195
+      },
+      "stop": {
+        "exact_zero_source_ns": 8000000000,
+        "zero_tail_execution_duration_ns": 4000000000,
+        "complete_500hz_measurement_continuity": true,
+        "full_linear_threshold": 0.03,
+        "full_angular_threshold": 0.05,
+        "continuous_window_ns": 1000000000,
+        "completion": {
+          "window_begin_ns": 8636000000,
+          "confirmation_source_ns": 9636000000,
+          "exact_zero_to_confirmation_s": 1.636
+        },
+        "original_three_second_deadline_pass": true,
+        "longest_good_source_span_s": 3.364,
+        "max_zero_displacement_xy_m": 0.14910016411573077,
+        "cumulative_zero_xy_m": 0.1670135526350289,
+        "max_zero_yaw_displacement_rad": 0.0970439217466438
+      },
+      "body_envelope_attestation": {
+        "required": true,
+        "verified_samples": 720,
+        "failures": 0,
+        "envelope": {
+          "radius": 0.6078651750202781,
+          "offset": 0.3125,
+          "above": 0.589,
+          "support_floor_z": 0.0,
+          "support_penetration_m": 0.02
+        }
+      },
+      "static_geometry_attestation": {
+        "expected_sha256": "8b64bb5a2fbaafbb1bf8e8c7da4e33d694baea11d8bce30cbc22c46638ce1130",
+        "cadence": "every actual body state; source timestamp unchanged",
+        "count": 720,
+        "faults": 0,
+        "fault_latched": false,
+        "last_sha256": "8b64bb5a2fbaafbb1bf8e8c7da4e33d694baea11d8bce30cbc22c46638ce1130",
+        "last_fault": "",
+        "total_wall_s": 0.018221854465082288,
+        "max_wall_s": 0.01641187001951039,
+        "full_stage_audits": 1,
+        "notice_timings": {},
+        "cache_hits": 719
+      },
+      "native_floor_hit_audit": {
+        "scans": 240,
+        "native_floor_hits": 598726,
+        "max_abs_error_m": 2.271299466061194e-06,
+        "sealed_error_bound_m": 0.0002,
+        "raw_endpoints_and_source_times_preserved": true
+      },
+      "limitations": [
+        "Single cold bootstrap and straight internal demand; stable minimum response and history-generalized navigation need further evidence.",
+        "Internal policy input is separate from highlevel command and cannot authorize post-safety command floors.",
+        "Fullangular norm and body yaw are distinct; all actual Z/tilt/transient speed retained."
+      ],
+      "evidence": [
+        {
+          "path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/campus_policy_stair_06_001/summary.json",
+          "sha256": "074b9b13cd86aff651d7e45e4ca1c7c6d31516785b7d93192ee3ae518842e18c",
+          "bytes": 29271
+        },
+        {
+          "path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/campus_policy_stair_06_001/policy_component_state_500hz.jsonl",
+          "sha256": "6ff673aa7e0e283814b44ab9a5a42bf1d7d3f8a14a89aca17b55598a6df2c26f",
+          "bytes": 7483518
+        },
+        {
+          "path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/campus_policy_stair_06_001/policy_observations.jsonl",
+          "sha256": "3a8c15433885b4dd0eb097e8e683f6d96149f8fda95a09dbe1590bdf622fafeb",
+          "bytes": 1194320
+        },
+        {
+          "path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/campus_policy_stair_06_001/robot_link_readings.jsonl",
+          "sha256": "6a8310e336cc7d6a75b4f4d77007d39f694a549c9bad279fc8ea839495ce6a59",
+          "bytes": 5617255
+        },
+        {
+          "path": "/home/eric/wjg/d1max-build-isaac/quadruped-research/campus_policy_stair_06_001/policy_command_events.jsonl",
+          "sha256": "0f5caf33a5f4dec69b228987c5f36100e25fe6eda2358d1c5cc9ccde1004cee5",
+          "bytes": 1516
+        }
+      ]
+    }
+  ],
+  "source_manifest_sha256": "04ad62deed957cb7b1145a587a18d788d04d0e9aa185c577d3912ccb7a57015e",
+  "limitation": "Sampled admission calibration is not a continuous future-speed guarantee; existing raw current-model guard and XY reachable bound retain actual samples and reject violations."
+}

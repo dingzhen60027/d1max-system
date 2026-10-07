@@ -6,9 +6,9 @@
 
 场景定义 6 个确定性动态演员，默认启用 4 个，关卡按封存配置选择演员；六项系统测试覆盖长距离多点、横穿、迎面会车、临时堵门、取消停车与恢复。约 333 米路线已通过离线静态连通性检查，机器狗大场景物理与传感器测试已完成；整套关卡的实际执行结果单独记录，缺证据保持待验证。见 [园区与测试入口](simulation/isaacsim/CAMPUS_SCENARIOS.md)和 [Spot 验证](simulation/isaacsim/QUADRUPED_VALIDATION.md)。
 
-**当前状态（北京时间 2026-10-07）：本机默认候选为 `isaac-candidate-v31-campus`。** 原 Action 近距离到达实测行程 **1.040435 m**，返回 `measured_goal_reached`；v31 `cancel_and_park` 实测 **1.047985 m** 后取消，最终 **2.018 s 源时间**静止窗口与独立评估通过。两次停车、IMU 与全身检查均通过。v31 `crossing_blocker` 实测累计 **0.403687 m** 后因 `waiting_measured_motion_progress` 超时失败；准备证明预算饥饿已修复，候选入口的低速／方向变化与持续进度仍未解决，其余四关未执行。v30 取消关卡 **1.197793 m / 2.02 s 源时间**通过的历史记录单独保留。约 333 m 仍仅是离线路由，不能宣称动态避障或六关全通过，旧轮式换轨失败也未闭环。见 [仿真说明](simulation/isaacsim/README.md)、[v31 实测证据](simulation/isaacsim/verification/20261006/campus_navigation_v31.json) 和 [当前问题](docs/KNOWN_ISSUES.md)。
+**当前实测状态（北京时间 2026-10-07）：** [v52 广场横穿](simulation/isaacsim/verification/20261007/campus_crossing_v52_all_actors_goal_success.json)原 Action 到达与完整 case gates 通过。[v59 取消重启](simulation/isaacsim/verification/20261007/campus_restart_v59_actor_overlap_and_body_certificate_failure.json)正式复测 **FAILED**：新任务真实 writer commit `1–28` 已跨过 tracker、SCAN 和 Python 安全门三消费者的 execution 水位阻断，但演员／身体采样 AABB 可能重叠后出现 full XYZ 峰值 **1.064634535 m/s**、yaw 峰值 **.886969864 rad/s** 超域；另有身体 Cube 保守代理假拒与停止收尾缺证据。AABB 可能重叠不等于已取得接触力或连续碰撞证明。原关卡失败及缺失第二阶段终态报告保持，不能称六关全部通过。
 
-v30 修正了旋转局部包围盒造成的脚球假穿地；v31 让准备候选证明使用原 50 ms 轮内未用时间，最多沿用原 25 ms motion cap，5 ms 预留和全部证据保护保持。仿真纯 Python 回归 **232 项通过**，v31 原生 ledger **39/39**、非 launch CTest **15/15** 通过；按用户要求不录制视频。证据目录采用 UTC 日期 `20261006`，与上述北京时间日期分别记录。
+新 v3 零需求反馈、身体几何证书修复和 [几何故障停止观测](simulation/isaacsim/verification/20261007/geometry_fault_stop_observation_offline.json)仅完成离线验证，**FORMAL_PENDING**；停止观测 56 项回归通过，新候选整图与停车尚待实测。本机默认仿真 selector 仍为旧 `isaac-candidate-v31-campus`，复现新版本须显式指定封存候选，见 [仿真说明](simulation/isaacsim/README.md)。v31 短程到达与取消等历史结果分别保留，旧失败不会因新修复改为通过；约 333 m 仍仅是离线路由。
 
 近身长期未知阻断的修复依赖认证封闭静态体积与实时障碍融合，仍保留严格未知阻断和证据期限；当前只支持经过验证的固定单位 `map←odom`。定位输入是显式 `groundtruth_fixture`。生产 release、Faster-LIO/ICP 性能、机器狗实机运动、跨层执行与 NUC 实时性均未因此验收。
 

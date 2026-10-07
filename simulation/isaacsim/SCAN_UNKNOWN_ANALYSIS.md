@@ -2,11 +2,35 @@
 
 分支：`isaacsim-simulation`。比较基线：`5dfaf8cddec952b3453a02e3a231de5228bd6017`。本文记录该基线之后的 UNKNOWN 研究、证据融合及任务复测，历史成功不代表当前连续换轨已经稳定。
 
-**最新完成的正式实测（北京时间 2026-10-07）：v37 `crossing_blocker` 仍失败，当前主要阻断已经在真实行走响应。** 原 Action status 6、`execution_blocked_timeout:waiting_measured_motion_progress`；累计 XY **`.471879 m`**、原 owner credit **8 次**、确认路线弧长 **`.302689 m`**，目标仍距 **15.695410 m**。SDK 原状态在场景源时间 **9.74–37.72 s** 连续正向约 **27.98 s**（1572 个 applied 状态、约 78.602 s steady）；15–35 s 的曲线／运动证明为正、tracker 为 tracking，但实际 policy 输入持续 `.3000000119 m/s`，机身 20 s 累计 XY 仅约 `.000241329 m`。20–30 s 的 600 个实际 PhysX command 都非零，净 XY 仅 **8.754 μm**、四脚没有 `.01 m` 以上的实际 solid 离地样本。因此不能把这一长区间归为 UNKNOWN 撤权、C1 换轨中断或 owner 独立死锁；独立动作历史 A/B 已完成，但基线未复现正式停滞，记忆干预未加入默认控制链。新 exact native root 标签已在正式 first／last NPZ 出现非零 actor ordinal，但没有指定动态遭遇、到达或动态旧 HIT 退役关卡通过，**不能宣布 UNKNOWN 已解决或导航丝滑**。完整形体、IMU、地板与实测停车核对成立，原整体 clean shutdown 失败及硬件停止未确认保持。见 [v37 原失败、真实指令及传感器证据](verification/20261007/campus_crossing_v37.json)和 [分析](SCAN_UNKNOWN_ANALYSIS.md)。
+## 最新结论（2026-10-07）
+
+**[v52 广场横穿仍通过](verification/20261007/campus_crossing_v52_all_actors_goal_success.json)，[v59 取消后重新导航整例仍失败](verification/20261007/campus_restart_v59_actor_overlap_and_body_certificate_failure.json)。** v59 phase 1 实际成功 writer commit **1–28**，已经跨过 [v53](verification/20261007/campus_restart_v53_handoff_failure.json) tracker／SCAN 及 [v57](verification/20261007/campus_restart_v57_stationary_handoff_failure.json) Python 安全门的旧 scope 高水位阻断。原失败保持，不把三消费者修复写成完整重启通过；[native 成对回归](verification/20261007/paired_writer_execution_scope_fix_offline.json)与 [安全门回归](verification/20261007/safety_writer_execution_scope_fix_offline.json)单独保存。
+
+v59 full XYZ／world yaw 实测峰值 **`1.064634535 m/s / .886969864 rad/s`**，超出原 `.65/.8` 域，发生在身体证书撤销之前。72.856–86.824 s 原高层需求始终真零，内部 policy 却仍非零；v2 的零 forward P 修正与未撤 yaw 积分是已确认源码缺项。另在 **82.818 s** 有身体与 `plaza_person/body` 的首个可能 AABB 重叠，**82.896 s** 才出现后续运动。没有 contact-force 证据，不能把 83 s 的运动唯一归为演员推动、PI 或神经策略，更不能把它归为 SCAN 未知体素的单一原因。详见 [零需求物理窗口](verification/20261007/spot_zero_policy_withdrawal_offline.json)与 [速度分析](QUADRUPED_SPEED_CALIBRATION.md)。
+
+原 **83.818 s body Cube** 的证书还存在独立保守几何误判：世界 AABB 的人工角点越过 yaw 查询包络约 **36.7 μm**，同一实际 Cube 的八个真实角点通过原判据。新修复在**原 pose yaw 查询轴**中计算完整 link 支撑包络，保留原 radius／offset／height、完整 XYZ／真实形体和 world AABB API；同一 **3×13** 原快照由 `PASS/FAIL/FAIL` 变为全 `PASS`，[95 项离线回归](verification/20261007/query_support_and_zero_tail_offline.json)通过。没有清近身体素、扩大几何或 lease；这一几何闭环不撤销原 v59 的物理超域／可能演员重叠／退役失败，也不是新导航验收。
+
+**默认仍为 `spot_monotone_measured_v2`。** 新 opt-in v3 的 [90 项离线回归](verification/20261007/spot_zero_policy_withdrawal_offline.json)通过，但 [延迟 72.856 s 的同冻结物理 A/B](verification/20261007/spot_zero_policy_withdrawal_causal_ab.json)结果为 **`INPUT_WITHDRAWAL_CONFIRMED_PHYSICS_FAILED`**。前 **36,428** 个 BEGIN 六字段、全 **43,410** 个高层命令、**5,210** 份完整六演员记录以及切换前 **4,371** 份 13-link 快照逐值一致；source 500 Hz／推理 50 Hz 相位和原 memory 配置保持。v3 后 **6,982** 个真零 BEGIN 两轴 policy 输入均精确零，基线每轴这 6,982 个 tick 仍非零。
+
+两组首次一秒停稳确认均成立，却都没有保持至实际 END。基线 **82.896 s** 再次越静止域，全 XYZ／yaw 峰值 **`1.064635/.886970`**；v3 **81.178 s** 再次越静止域，峰值 **`1.334362/1.377489`**，都超过原 `.65/.8` 域。首个采样 possible actor AABB overlap 分别为 **82.818／82.680 s**，没有 contact-force 证据；v3 的首次再运动还早于该采样重叠，不能把迟发运动唯一归于零轴 PI 或演员。**撤回输入已经验证，可靠物理停车没有验证；v3 不能作为已通过的导航改善。** 原完整 43,412 tick 校验后只取 43,410 tick 前缀，排除末 4 ms、不补零、不重时、不改演员。原 launch manifest 未捕获 source-tree SHA，pre／post 源字节快照与 launch log 仅按其实际范围绑定。v61／v62 未物理运行或选用，新 v2／25 Hz 正式任务另行验收；旧 v59 仍失败。
+
+[新版完整 500 Hz zero-tail 审计](verification/20261007/query_support_and_zero_tail_offline.json)要求首次原一秒停稳确认后，余下真实 BEGIN／END 继续满足原 `.03/.05` 范数。v52 仍 PASS；v59 虽首次一秒确认成立，但82.896 s后再运动，durable-tail 为 **FAIL**。旧 reports 未改写。[独立 MC 停车观察的56项离线回归](verification/20261007/geometry_fault_stop_observation_offline.json)只允许 geometry 撤权后继续原测量／Clock 供 SDK 判断停止，导航和正权限保持撤销；物理停稳、owner drain 与正式关闭仍待新运行，不制造 stopped 回执。
+
+地图问题和控制／生命周期问题继续分开：认证静态空体积、平面接触与严格 actor-only HIT 退役均须原完整证据，UNKNOWN／地图外／未来 tube 相交仍拒绝；动态六秒几何预测不能延长 source／steady freshness，真实 ray source／receipt `.5 s` 期限保持。v52 已通过原到达与独立 case gates，但 ray wall 间隔仍超 `.5 s`，不能称所有 UNKNOWN、丝滑导航或全部六关闭环。当前 `.23/.30` 导航、`.38/.50` 内部 policy 和 `.65/.8` 工程域不扩到默认 production／实机；详情见 [配置与物理边界](QUADRUPED_SPEED_CALIBRATION.md)。
+
+旧 scope 修复仅在完整新任务／execution／SDK 身份匹配、旧任务退休且 control epoch 前进，并且原新鲜证明、真实 XYZ 入轨及 `.05` C1 全通过后重绑账本；普通取消保持旧 scope 迟到不可逆 ACK 的 HOLD，同任务 heartbeat／replan 不归零。旧 HOLD 的新候选只在副本中准备，未通过的新授权不改变旧事实。这些修复没有清 UNKNOWN、替换 raw Z 或延长 lease。源码见 [ExecutionContract](../../d1max_nav_ws/src/d1max_trajectory_tracker/include/d1max_trajectory_tracker/execution_contract.hpp)与 [执行验证器](../../d1max_nav_ws/src/scan_planner_vendor/plan_manage/include/plan_manage/execution_validator.hpp)。
+
+**历史正式实测：v45 原六演员横穿仍因真实进度不足失败。** `.20` 导航上限／`.30` 内部上限下累计 XY **`2.672983 m`**，完整 500 Hz 峰值 **`.448181 < .60`**、实际停车 **2.058 s** 独立通过；到达、指定遭遇与整体干净退役未通过。记忆干预为 0，完整资格窗口最长 **`.306 s`**，不足原一秒条件；碎片化需求与 receipt 过期有证据，但未确证全部低进展的单一根因。[v41 的同冻结命令 A/B](verification/20261007/spot_full_campus_memory_causal_ab.json)支持长正需求站立的 memory-only 恢复，不能直接替代 v45 的因果分析。见 [v45 原失败](verification/20261007/campus_crossing_v45_all_actors_response_failure.json)。
+
+[v43](verification/20261007/campus_crossing_v43_goal_with_velocity_failure.json)实际到达但旧 `.60` 整例仍超域失败。新 [`.65` 工程证据](verification/20261007/spot_velocity_domain_v47_native_navigation.json)只用于新隔离候选，保留旧结果及完整 XYZ；[actor 缓存 A/B](verification/20261007/spot_actor_handle_cache_causal_ab.json)验证 12 s 实测字段等价并小幅提速，但 ray wall 最大间隔仍超过 `.5 s`。v47 原封存运行已失败；新 `.65` 投影修复与 v52 结果见下文。v46 未运行。 不能宣布所有 UNKNOWN 或连续导航已闭环。
+
+**历史 v40：原导航 Action 真实到达，旧 `crossing_blocker` 整例仍为 failed。** 原结果为 `measured_goal_reached`，累计 XY **`16.500846 m`**、目标误差 **`.144151 m`**；规定的旧 **2 m** 同一形状中心遭遇没有发生，实际最近中心距离 **`2.345758 m`**，不能把到达改写成整关通过。v40 同时留下 **8.058 s 源时间**的 UNKNOWN 撤权停车，并由原同快照确认了认证地面接触格中干净 actor HIT 的退休缺项。修复已安装并通过离线回归；v40 没有全程 500 Hz 速度验收，也不能代表所有 UNKNOWN 或连续导航问题已解决。见 [v40 原目标成功与旧整例失败](verification/20261007/campus_crossing_v40_goal_and_contact_defect.json)及 [接触格算法缺项与修复条件](#v40同快照确认的地面接触格-actor-hit-退休缺项2026-10-07)。
+
+**历史 v37 正式实测：`crossing_blocker` 仍失败，主要阻断已经在真实行走响应。** 原 Action status 6、`execution_blocked_timeout:waiting_measured_motion_progress`；累计 XY **`.471879 m`**、原 owner credit **8 次**、确认路线弧长 **`.302689 m`**，目标仍距 **15.695410 m**。SDK 原状态在场景源时间 **9.74–37.72 s** 连续正向约 **27.98 s**（1572 个 applied 状态、约 78.602 s steady）；15–35 s 的曲线／运动证明为正、tracker 为 tracking，但实际 policy 输入持续 `.3000000119 m/s`，机身 20 s 累计 XY 仅约 `.000241329 m`。20–30 s 的 600 个实际 PhysX command 都非零，净 XY 仅 **8.754 μm**、四脚没有 `.01 m` 以上的实际 solid 离地样本。因此不能把这一长区间归为 UNKNOWN 撤权、C1 换轨中断或 owner 独立死锁；独立动作历史 A/B 已完成，但基线未复现正式停滞，记忆干预未加入默认控制链。新 exact native root 标签已在正式 first／last NPZ 出现非零 actor ordinal，但没有指定动态遭遇、到达或动态旧 HIT 退役关卡通过，**不能宣布 UNKNOWN 已解决或导航丝滑**。完整形体、IMU、地板与实测停车核对成立，原整体 clean shutdown 失败及硬件停止未确认保持。见 [v37 原失败、真实指令及传感器证据](verification/20261007/campus_crossing_v37.json)和 [分析](SCAN_UNKNOWN_ANALYSIS.md)。
 
 **随后完成的组件 A/B：** [42 秒真实关节回放](verification/20261007/spot_navigation_replay_v37_ab.json)中，基线／动作记忆干预组净前进约 3.47／4.52 m；干预前 4189 次 500 Hz 测量逐值相同，原零命令起点到连续一秒停稳确认分别为 2.056／1.832 s。基线已经能够行走，故未复现正式 v37 的原地站立，不能认定该干预解决了导航。基线 full XYZ 峰值 `.532835 > .50`、实验组 full angular 峰值 `.823027` 均原样保留，后者与 body yaw `.173694` 分开记录。记录仅重构原保存命令事件，在裁剪平地场景执行；默认步态、模型域及选择器未因此改变。
 
-**前次 v36 正式失败保留，实际路线进度与指定演员遭遇已有改善。** 累计 XY 行程 **7.221877 m**、原 owner credit **199 次**、确认路线弧长 **6.643420 m**；终点仍距目标 **9.285196 m**。原 Action status 6，原因 `execution_blocked_timeout:waiting_current_collision_and_tracker_proof`。原 writer 有 **58 段**连续非零输出（原 applied source 首末样本 median **`.570 s`**／max **`5.560 s`**）；27 个精确 handoff ID 中 **13 成功／14 未成功**，初始 ACK 另计。指定行人接近—近距离—离开实际被观察到，137 个 near 样本、采样形体分离下界最低 `.568772 m`；这不证明让行、绕行或到达。完整身体、地板、原生 IMU 同源和实测停车成立，但最终持续 hold、整体 clean shutdown 失败、原硬件停止未确认保留，**当前管线仍未达到连续、丝滑导航，也没有正式横穿通过结论**。见 [v36 原失败及完整证据](verification/20261007/campus_crossing_v36.json)与 [剩余问题分析](SCAN_UNKNOWN_ANALYSIS.md)。
+**前次 v36 正式失败保留，实际路线进度与指定演员遭遇已有改善。** 累计 XY 行程 **7.221877 m**、原 owner credit **199 次**、确认路线弧长 **6.643420 m**；终点仍距目标 **9.285196 m**。原 Action status 6，原因 `execution_blocked_timeout:waiting_current_collision_and_tracker_proof`。原 writer 有 **58 段**连续非零输出（原 applied source 首末样本 median **`.570 s`**／max **`5.560 s`**）；27 个精确 handoff ID 中 **13 成功／14 未成功**，初始 ACK 另计。指定行人接近—近距离—离开实际被观察到，137 个 near 样本、采样形体分离下界最低 `.568772 m`；这不证明让行、绕行或到达。完整身体、地板、原生 IMU 同源和实测停车成立，但最终持续 hold、整体 clean shutdown 失败、原硬件停止未确认保留，**该次运行未达到连续、丝滑导航，原横穿仍失败**。见 [v36 原失败及完整证据](verification/20261007/campus_crossing_v36.json)与 [剩余问题分析](SCAN_UNKNOWN_ANALYSIS.md)。
 
 **历史 v33 正式任务失败记录保留。** `.481/.589 m` 标定和原 XYZ 空间前视已实际启用，但累计行程仅 **0.013900 m**，原 owner credit 始终 **0**，任务以 `execution_blocked_timeout:waiting_current_collision_and_tracker_proof` 结束；完整曲线、局部 cap 和 proof 的剩余原因继续审查。v32 的 **0.056649 m** 失败与时间前视证据完整保留。见 [v33 失败证据](verification/20261007/campus_crossing_v33.json)、[v32 失败证据](verification/20261007/campus_crossing_v32.json)及 [下文审查](#v32-横穿失败与-v33-复测结果2026-10-07)。
 
@@ -307,3 +331,53 @@ Phase 全身证书 **5364**、较晚 bridge **5466**、最终 physics **5477** �
 Phase／较晚bridge／最终physics全身证书 **2522／2629／2633**组零失败，所有2633个原body／link／actor同source tick、13primitive仿射AABB残差0、原envelope全部重算通过；rawZ **`.479576–.510891m`**，coldstand `.481/.589`和固定floor `−.02m`保持。原sampled static/dynamic AABB overlap为0，actor分离下界最低6.904087m，encounter false，所以没有动态让行或碰撞接触验收。Nativefloor878帧／2,174,302hit最大误差 **`4.834187μm`**，小于原200μm；双LiDAR各439帧，源／原END和所有点不改。NativeIMU21942／output4389约500／100Hz，无invalid／duplicate且每次方向不同。352原BEGIN→END姿态对误差max **`5.162×10⁻⁸rad`**、1753同tick gyro按原IMUframe误差max **`1.589×10⁻⁸rad/s`**；native stamp离线2ms关联余差最大1862ns，原native时间不重写。
 
 原owner stop **210个stationary samples**当前完整线／角速度 **`.007215418m/s / .006073334rad/s`**；另原2.018s source fence的122条raw记录速度最大 **`.007230361/.011367265`**，均满足原`.03/.05`阈值，最大source间隔20ms。实际RTF **`.357868`**、原43.862s source／122.564577s state wall，双cloud最大wall gap **`.476505/.476631s`**；callback与notice profiling没有开启，显式verify `.023541s`仍不含listener。已有修改范围Python350项及focused37项通过属于重叠验证，不累加；本次只读审计未重测／重建。正式失败、未发生遭遇、原硬件未验收及旧失败证据全部保留。
+
+## v40：同快照确认的地面接触格 actor HIT 退休缺项（2026-10-07）
+
+v40 运行的是原 BT→PCT→SCAN→tracker→safety→唯一 writer，原目标成功与原旧整例失败分别保存。原 applied 事件在场景源时间 **30.460–38.518 s** 保持零输出，原因是 `safety_hold:command_sweep_rejected:motion_sweep_unknown_or_expired`，随后恢复执行；**8.058 s** 是这段真实源时间停车，不能当作连续 proof 检查耗时。原轨迹、trace、日志与命令因果摘要的 SHA 均绑定在 [v40 公开报告](verification/20261007/campus_crossing_v40_goal_and_contact_defect.json)。后来的实际新 MISS 能清掉旧冲突并恢复行走，解释了这次能够重启；它不消除恢复依赖后续射线历史的算法缺项。
+
+[原同快照捕获](verification/20261007/spot_actor_contact_original_capture.json)保存原 `scan.log` 第 1341／1353 行及逐行 SHA，没有用后继查询替换失败证据。第 1353 行 demand **2898** 的首个失败格是索引 **`[-6,-78,0]`**，对应完整闭 XYZ 体素 **`[-.30,-.25]×[-3.90,-3.85]×[0,.05] m`**。原 native 结果为 UNKNOWN、静态 prior 为 **3（认证平地接触）**，raw 为 `observed_insufficient`、log-odds **`−1.8724141608491083`**。原 nonfloor HIT 及其归属时间同为 **`1791366372650873492 ns`**，干净 actor ordinal **1** 对应 `plaza_person`；严格更新的动态源为 **`1791366373392873492 ns`**，该演员完整闭格状态 **0（无动态否决）**。静态上下文、静态 query lease、完整动态 query lease 均有效，原双雷达源完全相等；metadata 未关闭、未溢出。这是旧 actor 残留冲突的直接证据，不能再只从 UNKNOWN reason 猜测预算耗尽、扫描整体过期或真实障碍占据。诊断中的全局 `prior_poison_events=10` 不代表这个仍为非零 ordinal 的格已混入未知 HIT。
+
+旧规则已允许满足严格 actor 身份和更新完整动态证明的冲突选择独立静态 FREE，但没有把同一条件接到 **prior3 接触证书**：只要 `static_prior_live_hits_` 保留原 nonfloor HIT，该地面格仍返回 UNKNOWN。prior3 不是“地板附近视为空白”；加载器逐格验证整个闭体素与授权平面相交、完整 XY 在授权边界内，并与全部非地面静态实体及不确定边界分离。原 actor 离开后，这份接触证书仍存在，旧 HIT 的动态冲突也已有更新证据证明退役，因此继续等待偶然的新 MISS 不是必要的地图保护。
+
+修复只在原 **prior3**、原接触证书和静态双雷达双时钟 lease 有效时，复用原 `retiredDynamicActorHit` 条件选择 **`certified_flat_floor_support_contact`**，不把它标成空体积。完整注册演员的动态 veto 仍先执行：任何 OCC／UNKNOWN、完整闭格 XYZ 边界或未来 tube 相交都会拒绝。HIT 必须来自同一干净非零 actor；零标签、混合演员、原弱态／占据冲突 poison、同源／更老 oracle、缺项、来源或接收过期、registry/context 失配、地图外与 100,000 条 metadata 溢出均保持拒绝。原六秒未来体积、实际身体 XYZ、偏航扫掠、碰撞包络、source／receipt 时间、deadline 和 raw log-odds／HIT history 都保留；本次没有缩小 UNKNOWN 区域或放宽 lease。[安装与离线回归证据](verification/20261007/spot_actor_contact_retirement_offline.json)记录源与构建副本一致、plan_env **266** 和 SCAN **183** 个 XML 用例零失败；这些是离线验证，不是 v41 正式通过结论。
+
+地图证据和官方机器狗策略响应应分别判断。v37 已有长期正命令和正证明却站立的实测反例；极小请求不能保证稳定脚步，较早裁剪场景的动作记忆单因素实验未复现其原停滞。[原完整场景速度标定](verification/20261007/spot_velocity_domain_v38.json)及 [`.25 m/s` 导航请求、`.4` 内部 policy 上限的闭环组件](verification/20261007/spot_velocity_domain_v38_closed_loop.json)是当时隔离配置的依据：原 6001 个 500 Hz 真实身体样本峰值 **`.575947059 m/s`**、原真零起点至完整范数连续一秒停稳为 **1.972 s**；完整 XYZ reference／measured-travel admission 域为 **`.60 m/s`**，与高层 command、内部 policy 和未来实际可达域的含义分开。该组件时间积分跟踪误差 **`.322157 m`** 仍未通过既有 `.10 m` 跟踪验收，组件数据不能证明正式曲线跟踪或未来全 XYZ 速度保证。v40 到达表明管线实际能够执行任务，但采样峰值 **`.595607940 m/s`** 不能补成未记录的全程 500 Hz 峰值。v41 已完成每个 native BEGIN 加真实末 END 的完整记录并保留失败；后续速度域、动态遭遇、停车和取消／重启仍须分别验收，见下节。
+
+## v41／v43：完整物理记录与动作记忆因果证据（2026-10-07）
+
+[v41 正式失败](verification/20261007/campus_crossing_v41_stand_and_velocity_failure.json)在接触格退休修复后产生 **`12.720190 m`** 实际 XY 行程，但原 Action status **6**、`execution_blocked_timeout:waiting_measured_motion_progress`，终点距目标 **`4.076640 m`**。完整原 **53,664 次 BEGIN＋1 次真实 END** 的全 XYZ 峰值 **`.605385180 m/s`** 超出 `.60`，实测停车 **2.196 s** 成立不覆盖超域。70–90 s 的 **10,001** 次实际消费命令全部为正，forward **`.247192769`**、内部 policy 输入 **`.40000000596`**，净 XY 仅 **`.007272435 m`**、完整速度平均约 `.00763 m/s`。这段有真实正命令却站立，不能再用 UNKNOWN、writer 零命令或假路线进度解释。
+
+[全原园区同冻结命令 A/B](verification/20261007/spot_full_campus_memory_causal_ab.json)选择 v41 原 **53,664 ticks** 的显式 **53,660 ticks** 前缀，仅排除末 **4 ticks／8 ms**；完整原 manifest／事件 hash 与未选尾段均先检查，不补、裁剪数值或重标源时间。基线与原 v41 的 **53,660 个 BEGIN** 在六组原字段逐值相同；A/B 在唯一干预源 **71.040 s** 之前的 **35,520** 个样本中，position、quaternion、完整世界线／角速度、official policy input 和 highlevel command 逐值相同。比较范围是这六组真实字段，**不是整个 JSON 文件字节相同**；epoch、回放 authority 和实验元数据另行保存。
+
+实验组在原推理边界清零一次 12 维 previous/current action memory，保留原 counter、PI、控制输入及所有物理 root／joint 状态。70–90 s 实际净 XY 为实验组 **`5.256607278 m`**、基线 **`.007272435 m`**，停止确认分别 **1.922／2.196 s**，均从原真零消费源计时，包含完整线／角范数连续一秒窗口。这支持该历史下动作记忆驻留参与站立，并支持一次 memory-only 恢复的因果作用；不是全局策略逆模型或正式导航授权，两组全流峰值 **`.605385180 > .60`** 仍失败，冻结命令回放也没有验证恢复后在线规划／碰撞／换轨整条链。
+
+新正式资格门仅在原 forward 需求 **≥`.05 m/s` 连续一秒**、真实完整线范数 **≤`.03`** 与完整角范数 **≤`.05` 连续一秒**时，于原 counter `%10==0` 边界允许每个资格 episode 最多一次记忆处理。source tick／2 ms／原纳秒、native tick 和 counter 增量及 session／epoch／anchor 必须一致；身份或计数错误、回退永久关闭干预，合法缺样重新累计完整窗口。微小目标修正不触发，原命令不抬高，实测 XYZ、C1、路线进度、未知 veto、lease 和 STOP 规则都不改变。**60 项资格门＋24 项 quadruped，共 84 项回归通过**只证明代码条件；全园区 A/B 使用较早冻结的正请求实验 guard，新正式门还需实际事件验证。
+
+[v43](verification/20261007/campus_crossing_v43_goal_with_velocity_failure.json)原 Action status **4**、真实到达，累计 XY **`16.427680 m`**、goal 误差 **`.190184 m`**；完整 **48,031** 个样本的全 XYZ 峰值 **`.616161871 > .60`**，整 case 仍 failed。原停车 **1.368 s** 与指定 3 m 采样遭遇成立，但记忆干预事件 **0**，不能把到达归因于已验证的正式恢复。旧失败与源记录保留，新候选分别验收。
+
+## v45：低响应、资格不足和原 receipt 过期（2026-10-07）
+
+[原六演员 v45](verification/20261007/campus_crossing_v45_all_actors_response_failure.json)未到达，终点仍距目标 **`14.682844 m`**。原六个演员实际存在且按封存脚本运动，但规定的同 pair 接近—near—离开没有发生；演员存在不等于动态遭遇通过。完整 500 Hz 物理域和停止成立不覆盖原 Action／退役失败。
+
+v41 的 70–90 s 是连续正消费需求、饱和内部输入下的站立，其固定历史已由完整园区同命令 A/B 复现并恢复。v45 的 forward ≥`.05` 最长只有 **`.790 s`**，同时满足真实完整线范数 ≤`.03`、完整角范数 ≤`.05` 的正需求资格最长 **`.306 s`**，未达到一秒，0 次正式记忆事件符合原保护门。20–30 s／40–48 s 正消费需求虽约占 86%／87%，净 XY 只有 **`.043249/.004663 m`**；这些记录支持历史相关低响应，但没有证实与 v41 相同的固定点或通用最低步速。
+
+原 ray wall 最大间隔 **`.712242/.709844 s`** 大于 **`.5 s`** receipt 租期；捕获证明中，一侧原 receipt age 为 **`500.000209 ms`**、source age 为 **`252.888185 ms`**，完整 dynamic query 仍有效。这支持该次证明按原接收期限失效，不能当作动态几何 UNKNOWN 或反推每段命令中断的唯一原因。原 source/steady 双时钟、完整碰撞体积和期限不放宽。
+
+[句柄缓存 A/B](verification/20261007/spot_actor_handle_cache_causal_ab.json)共用 v45 原场景与 12 s 冻结命令，6001 个机身样本六组实测字段相同、720 组完整演员读回相同，唯一源改动是 actor USD 句柄缓存。RTF **`.304498→.318513`**、actor callback wall **`4.148648→3.550822 s`**，最大 ray wall gap **`.551551→.522582 s`**；两雷达仍超过原 `.5 s`。这只证明该组件回放等价与约 4.6% RTF 改善，没有消除 receipt 风险，也没有在线导航成功结论。
+
+[新 `.65` 隔离模型证据](verification/20261007/spot_velocity_domain_v47_native_navigation.json)取自 v43 原完整 native 500 Hz 峰值 **`.616161871`** 加明确工程裕量，只用于新封存 reference／measured-travel／reachable 域；旧 `.60` v43 failed 保持。新配置仍用 `.23/.30` 高层权限与 `.38/.50` 内部输入上限，原 XYZ/C1、身体包络、动态六秒、UNKNOWN veto、STOP 和 source/receipt 期限保持。新版 3 m exposure token 精确绑定 `.65/.8` 模型、原证据 hash 和实际身体 registry；旧 `.60` token 与旧 2 m 记录不重新解释。v47 原封存运行已失败；新 `.65` 投影修复与 v52 结果见下文。v46 未运行。
+
+## v47 原失败与新 `.65` 投影修复
+
+[v47 原失败](verification/20261007/campus_crossing_v47_projection_domain_failure.json)保留：记录和调用方均为 `.65`，冻结 native measured projection helper 却仍限制隔离 Spot 为 `.60`，在实际投影和地图查询之前拒绝，留下 residual NaN／queries 0。这是命令、参考域、实测搜索域之间的遗漏，不能把所有后继 `source_expired` 归因于真实传感器过期。原 68 个小幅非零消费 ticks／10 个 applied 状态保留，未称全部命令为零，原目标和整例仍失败。
+
+[新投影离线闭环](verification/20261007/spot_reachable65_projection_fix_offline.json)核对 source、mirror、installed header 与实际重新编译的消费者。59 个 CTest wrapper targets 通过，其中 38 个 gtest targets 的 **990 个用例**通过；另有 5 个无 ROS harness 的 **170 项检查**、**14 个 SDK assert executable targets**及 **67 项 installed Python**通过。这些计数口径不同，不相加；两个启动 wrapper 退出成功但 `Ran 0 tests`，不提供启动行为覆盖。新上界只允许完整同 hash、显式隔离 Spot 标记中的 `.65`，旧 `.60` record 仍使用自身域，default/live 不变；原全 XYZ、`.05` C1、绝对 join、UNKNOWN、STOP 和双时钟期限保持。离线报告没有正式通过声明；v52 是另一次新封存候选的实际验证，不重算 v47 或旧 `.60` 失败。
+
+## 原生演员目标与物理等价的边界
+
+[原生 kinematic target 组件 A/B](verification/20261007/spot_native_actor_targets_causal_ab.json)复用同一原 v45 场景、冻结 12 s／6000 ticks 输入和 `actor_pose(t+dt)`。6001 个机身样本的六组完整字段与 720 组演员读回相同，epoch 等元数据不同；actor callback 从 **4.148648** 降到 **1.026224 s**，RTF 从 **`.304498`** 到 **`.339855`**。原 NPZ 的 11 个演员点 XYZ 有差异，最大 **46.671 μm**；其余七组 array fields 相同，不能写全部雷达数组逐字相同。该组件最大 ray wall 间隔 **`.523626 s > .5`**，没有证明实时期限已解决。
+
+新后端 `physics.dynamic_actor_target_backend='native_kinematic_v1'` 显式选用真实 native kinematic targets，原 `t+dt`／order `-1`、CPU view 身份、完整 stage／形体审计与失败关闭保留；当前生成器／默认大型资产显式选择 native 后端；外部 spec 缺少该字段时仍按缓存 USD 分支，无 teleport 回退、无机器人 root／joint 写入。上述组件 A/B 不等于加强 guard 后源码或在线导航的物理验收；v52 的实际几何、速度、到达与停车按其独立运行记录判断。
+
+新 author 的 `scenario.actor_ids` 是必须遭遇的集合，`scenario.background_actor_ids` 是同一物理会话中仍启用的背景集合；两者必须已知、唯一且不相交。准备配置封存 union，动态 registry、完整未来形体和碰撞审计仍覆盖六演员，只对原 required 集合检查遭遇。v52／v53 显式选 `plaza_person`＋五个背景，旧未配置字段的 case 规则不变；未运行的 v49／v50 封存候选也不改写。

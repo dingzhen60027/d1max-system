@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites tests="13" failures="0" disabled="0" errors="0" time="0" timestamp="2026-10-07T20:36:24" name="AllTests">
+  <testsuite name="NavigationStateContract" tests="8" failures="0" disabled="0" errors="0" time="0" timestamp="2026-10-07T20:36:24">
+    <testcase name="UsesLocalSourcePoseNeverGlobalCorrectionOrTaskEpoch" status="run" result="completed" time="0" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.NavigationStateContract" />
+    <testcase name="RejectsUnpairedStampsFramesIdentityAndUnusableState" status="run" result="completed" time="0" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.NavigationStateContract" />
+    <testcase name="RotatesMeasuredChildTwistToLocalFrameNotGlobalFrame" status="run" result="completed" time="0" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.NavigationStateContract" />
+    <testcase name="InvalidGlobalHalfCannotHideBehindValidLocalHalf" status="run" result="completed" time="0" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.NavigationStateContract" />
+    <testcase name="IndependentLocalTransportHasNoGlobalDependencyOrRestamping" status="run" result="completed" time="0" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.NavigationStateContract" />
+    <testcase name="LocalTransportRejectsInvalidIdentitySourceFrameAndGeometry" status="run" result="completed" time="0" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.NavigationStateContract" />
+    <testcase name="UnixSourceNanosecondsArePreservedIndependentlyOfDoubleArithmetic" status="run" result="completed" time="0" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.NavigationStateContract" />
+    <testcase name="ExactUnixFutureBoundaryCannotPoisonIngressOrAuthorizeContextReset" status="run" result="completed" time="0" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.NavigationStateContract" />
+  </testsuite>
+  <testsuite name="NavigationStateIngress" tests="5" failures="0" disabled="0" errors="0" time="0" timestamp="2026-10-07T20:36:24">
+    <testcase name="OldUnusableEpochAndExpiredDuplicateCannotClearNewObservation" status="run" result="completed" time="0" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.NavigationStateIngress" />
+    <testcase name="NewFaultCreatesSourceBarrierButFutureClockCannotPoisonRecovery" status="run" result="completed" time="0" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.NavigationStateIngress" />
+    <testcase name="EpochClockResetIsNotAnOldPacketAndForeignStreamCannotPoisonWatermark" status="run" result="completed" time="0" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.NavigationStateIngress" />
+    <testcase name="ForeignMapSessionOrSchemaNeverReachesFaultHandlingButOwnMalformedInputDoes" status="run" result="completed" time="0" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.NavigationStateIngress" />
+    <testcase name="UnusableFreshResetIsHardButForeignOrFutureEnvelopeIsNotAnEstimatorReset" status="run" result="completed" time="0" timestamp="2026-10-07T20:36:24" classname="d1max_trajectory_tracker.NavigationStateIngress" />
+  </testsuite>
+</testsuites>

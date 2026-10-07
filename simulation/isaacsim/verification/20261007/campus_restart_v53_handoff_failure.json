@@ -1,0 +1,2152 @@
+{
+  "schema": 1,
+  "kind": "campus_restart_v53_handoff_failure",
+  "date": "2026-10-07",
+  "status": "FAILED_RESTART_GOAL; CANCEL_AND_NATIVE_PHYSICS_AUDIT_PASSED",
+  "scope": "Original sealed mainline BT/PCT/SCAN/tracker/safety/isolated writer and official PhysX Spot; cancel followed by a new goal in one unchanged scene/source timeline.",
+  "identity": {
+    "session_id": "1d5aa12cc30942d88b1e3f0d1dc841cc",
+    "epoch": "d0f41605-bca0-471c-b6da-ab65e2bf74ef",
+    "clock_anchor_ns": 1791374784633868749,
+    "run": "/home/eric/wjg/d1max-build-isaac/runs/campus_restart_v53_001",
+    "candidate": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v53-campus-all-actors-restart",
+    "sealed_scene_sha256": "d4c6e98b520c6530f35b1924eecccb90ae7d8d37a49e2b55b27c6e59093702c5",
+    "sealed_braking_model_sha256": "6c8d42d6f1ce547e5887179d5fc8ecbca2f6c2068e1ed6c01013a0af8f141e63"
+  },
+  "outcome": {
+    "case_evaluation_passed": false,
+    "case_evaluation_exit_code": 1,
+    "phase_outcomes": [
+      {
+        "index": 0,
+        "original_case": "cancel",
+        "passed": true,
+        "original_result": {
+          "success": false,
+          "reason": "action_cancelled",
+          "retirement_confirmed": true,
+          "physical_stop_confirmed": false
+        },
+        "goal_xyz": [
+          8.0,
+          -5.0,
+          0.0
+        ],
+        "measured_final_position": [
+          -6.038985252380371,
+          -5.076230525970459,
+          0.4862440228462219
+        ],
+        "measured_cumulative_distance_m": 1.9682593844290048,
+        "nonzero_applied_count": 356,
+        "execution_id": "1d5aa12cc30942d88b1e3f0d1dc841cc.1:execution",
+        "measured_progress_credit_samples": 51
+      },
+      {
+        "index": 1,
+        "original_case": "goal",
+        "passed": false,
+        "original_result": {
+          "success": false,
+          "reason": "execution_blocked_timeout:waiting_admitted_nonzero_command",
+          "retirement_confirmed": true,
+          "physical_stop_confirmed": false
+        },
+        "goal_xyz": [
+          8.0,
+          -5.0,
+          0.0
+        ],
+        "measured_final_position": [
+          -4.204832553863525,
+          -5.086808204650879,
+          0.48921969532966614
+        ],
+        "measured_cumulative_distance_m": 1.8896156440281244,
+        "nonzero_applied_count": 359,
+        "execution_id": "1d5aa12cc30942d88b1e3f0d1dc841cc.2:execution",
+        "measured_progress_credit_samples": 49
+      }
+    ],
+    "second_goal_xy_error_m": 12.205141266377934,
+    "software_retired": true,
+    "clean_shutdown": false,
+    "physical_stop_confirmed": false,
+    "child_exit_codes": {
+      "isaac_bridge": 0,
+      "isaac_sim": -15,
+      "navigation": 0,
+      "smoke": 1
+    }
+  },
+  "causal_evidence": {
+    "confirmed": [
+      "Cancel phase passed with its original action_cancelled result; phase1 received a new task .2/control epoch2 and genuinely walked before failing.",
+      "Tracker writer ledger is inherited from cancelled task. New task SDK initial writer commit is 1, while tracker retains previous task writer commit 2. Every subsequent expected1 grant fails the original handoff equality guard before preparation; continuing geometry is never installed, so the current local segment ends and output stays zero.",
+      "Phase1 current curve28/reference generation4 stayed collision-free with repeatedly renewed remaining-curve proof during the prolonged zero-command interval.",
+      "The current spatial lookahead reached the local segment endpoint with exactly zero endpoint derivative; tracker reports local_segment_finished_waiting_replan.",
+      "The alternating waiting_trajectory_clock witness has geometry available, before_start=false and duplicate_source=true; it is not evidence that the incumbent start time was moved into the future.",
+      "Only one phase1 writer commit ACK is applied; 101 subsequent candidate handoffs report handoff_deadline_expired and nine report owner withdrawal. Incumbent remains curve28 while newer generation5 candidates are produced.",
+      "No phase1 trajectory/motion message reports UNKNOWN or OCCUPIED. Motion negatives are 25 spatial-resource rejections during early movement; 991 motion sweeps are positive.",
+      "Native sensor receipt maxima .36715/.36722 s remain below the original .5 s lease; this failed run does not establish that raising LiDAR frequency repairs the persistent handoff failure."
+    ],
+    "root_cause_boundary": "Tracker writer ledger is inherited from cancelled task. New task SDK initial writer commit is 1, while tracker retains previous task writer commit 2. Every subsequent expected1 grant fails the original handoff equality guard before preparation; continuing geometry is never installed, so the current local segment ends and output stays zero. Exact evidence binds original phase0/phase1 traces and original sealed execution_contract.hpp; no source fix or new run is represented by this failed-case record.",
+    "persistent_UNKNOWN_or_OCCUPIED_claim": false,
+    "all_phase1_source_expired_is_primary_cause_claim": false,
+    "cancel_semantic_context_leak_confirmed": false,
+    "native_policy_standing_despite_sustained_nonzero_primary_cause_claim": false,
+    "handoff_reason_counts": {
+      "writer_software_commit_not_physical_confirmation": 1,
+      "owner_handoff_withdrawn:waiting_writer_handoff_outcome": 9,
+      "handoff_deadline_expired": 101
+    },
+    "trajectory_reason_counts": {
+      "observed_free": 7215,
+      "source_expired_during_check": 105
+    },
+    "motion_reason_counts": {
+      "observed_free_motion_sweep": 991,
+      "motion_volume_budget_exhausted": 25
+    },
+    "tracker_reason_counts": {
+      "handoff_retired_or_applied_uncertain": 65,
+      "tracking": 450,
+      "source_clock_paused_command_expired": 2,
+      "permission_or_native_proof_expired": 443,
+      "waiting_trajectory_clock": 1732,
+      "local_segment_finished_waiting_replan": 1618
+    },
+    "applied_reason_counts": {
+      "tracking": 402,
+      "": 3,
+      "safety_hold:command_sweep_rejected:motion_volume_budget_exhausted": 8,
+      "safety_hold:native_swept_collision_proof_missing_or_revoked": 1,
+      "source_clock_paused_command_expired": 4,
+      "waiting_trajectory_clock": 1004,
+      "local_segment_finished_waiting_replan": 659
+    },
+    "original_phase1_trace_kind_counts": {
+      "bt_progress": 1017,
+      "applied": 2081,
+      "demand": 4737,
+      "tracking_progress": 4737,
+      "geometry_receipt": 5751,
+      "tracker": 4310,
+      "permit": 1028,
+      "safety": 81,
+      "reference_proposal": 2,
+      "native_spline": 58,
+      "trajectory_validation": 7320,
+      "route_progress": 2301,
+      "motion_validation": 1016,
+      "safe_demand": 4338,
+      "commit_ack": 111,
+      "handoff_grant": 750
+    },
+    "last_nonzero_applied": {
+      "kind": "applied",
+      "receipt_monotonic_ns": 1221414578446768,
+      "source_clock_ns": 1791374811893868749,
+      "data": {
+        "wire": {
+          "version": {
+            "schema_version": 3,
+            "session_id": "1d5aa12cc30942d88b1e3f0d1dc841cc",
+            "task_id": "1d5aa12cc30942d88b1e3f0d1dc841cc.2",
+            "route_id": "1d5aa12cc30942d88b1e3f0d1dc841cc.2:4fe09043d6d5633836517603ce2d2101e945dfcd2ba648bb9eea933317dd79a8",
+            "route_hash": "4fe09043d6d5633836517603ce2d2101e945dfcd2ba648bb9eea933317dd79a8",
+            "map_version_id": "ca87b73923d7458efec4fb5ecde2ca8b90c758ab5103e4c657fbabad62dab30e",
+            "localization_epoch": 1,
+            "localization_seed_id": "isaac-d0f41605-bca0-471c-b6da-ab65e2bf74ef",
+            "reference_generation": 4,
+            "segment_id": "floor",
+            "anchor_id": "00fcf8b3e20c39ef2c038b735a0c4b2485bd76f552ddf8e6946959c90633ca22",
+            "anchor_revision": 1,
+            "context_sequence": 1,
+            "map_geometry_revision": 1
+          },
+          "execution_id": "1d5aa12cc30942d88b1e3f0d1dc841cc.2:execution",
+          "control_epoch": 2,
+          "sdk_session": "isolated-1d5aa12cc30942d88b1e3f0d1dc841cc",
+          "sdk_arm_generation": 2,
+          "sequence": 2043,
+          "permit_sequence": 550,
+          "validation_sequence": 2527,
+          "motion_validation_sequence": 2298,
+          "braking_model_sha256": "6c8d42d6f1ce547e5887179d5fc8ecbca2f6c2068e1ed6c01013a0af8f141e63",
+          "trajectory_id": 28,
+          "source_stamp": {
+            "sec": 1791374811,
+            "nanosec": 853868749
+          },
+          "body_source_stamp": {
+            "sec": 1791374811,
+            "nanosec": 853868749
+          },
+          "valid_until": {
+            "sec": 1791374811,
+            "nanosec": 903868749
+          },
+          "velocity": {
+            "linear": {
+              "x": 0.03901321838124026,
+              "y": 0.0,
+              "z": 0.0
+            },
+            "angular": {
+              "x": 0.0,
+              "y": 0.0,
+              "z": 0.0
+            }
+          },
+          "hold": false,
+          "safety_checked": true,
+          "safety_source_stamp": {
+            "sec": 1791374811,
+            "nanosec": 751868749
+          },
+          "transport_mode": "isolated_mock",
+          "reason": "local_segment_finished_waiting_replan"
+        },
+        "execution_id": "1d5aa12cc30942d88b1e3f0d1dc841cc.2:execution",
+        "trajectory_id": 28,
+        "control_epoch": 2,
+        "sequence": 2043,
+        "permit_sequence": 550,
+        "validation_sequence": 2527,
+        "motion_validation_sequence": 2298,
+        "hold": false,
+        "reason": "local_segment_finished_waiting_replan",
+        "source_stamp_ns": 1791374811853868749,
+        "body_source_stamp_ns": 1791374811853868749,
+        "valid_until_ns": 1791374811903868749,
+        "safety_source_stamp_ns": 1791374811751868749,
+        "velocity": [
+          0.03901321838124026,
+          0.0
+        ]
+      },
+      "original_line_number": 7091
+    },
+    "last_nonzero_demand": {
+      "kind": "demand",
+      "receipt_monotonic_ns": 1221414591652637,
+      "source_clock_ns": 1791374811893868749,
+      "data": {
+        "wire": {
+          "version": {
+            "schema_version": 3,
+            "session_id": "1d5aa12cc30942d88b1e3f0d1dc841cc",
+            "task_id": "1d5aa12cc30942d88b1e3f0d1dc841cc.2",
+            "route_id": "1d5aa12cc30942d88b1e3f0d1dc841cc.2:4fe09043d6d5633836517603ce2d2101e945dfcd2ba648bb9eea933317dd79a8",
+            "route_hash": "4fe09043d6d5633836517603ce2d2101e945dfcd2ba648bb9eea933317dd79a8",
+            "map_version_id": "ca87b73923d7458efec4fb5ecde2ca8b90c758ab5103e4c657fbabad62dab30e",
+            "localization_epoch": 1,
+            "localization_seed_id": "isaac-d0f41605-bca0-471c-b6da-ab65e2bf74ef",
+            "reference_generation": 4,
+            "segment_id": "floor",
+            "anchor_id": "00fcf8b3e20c39ef2c038b735a0c4b2485bd76f552ddf8e6946959c90633ca22",
+            "anchor_revision": 1,
+            "context_sequence": 1,
+            "map_geometry_revision": 1
+          },
+          "execution_id": "1d5aa12cc30942d88b1e3f0d1dc841cc.2:execution",
+          "control_epoch": 2,
+          "sdk_session": "isolated-1d5aa12cc30942d88b1e3f0d1dc841cc",
+          "sdk_arm_generation": 2,
+          "sequence": 2045,
+          "permit_sequence": 551,
+          "validation_sequence": 2534,
+          "motion_validation_sequence": 0,
+          "braking_model_sha256": "",
+          "trajectory_id": 28,
+          "source_stamp": {
+            "sec": 1791374811,
+            "nanosec": 893868749
+          },
+          "body_source_stamp": {
+            "sec": 1791374811,
+            "nanosec": 893868749
+          },
+          "valid_until": {
+            "sec": 1791374811,
+            "nanosec": 903868749
+          },
+          "velocity": {
+            "linear": {
+              "x": 0.0044064583280983664,
+              "y": 0.0,
+              "z": 0.0
+            },
+            "angular": {
+              "x": 0.0,
+              "y": 0.0,
+              "z": 0.0
+            }
+          },
+          "hold": false,
+          "safety_checked": false,
+          "safety_source_stamp": {
+            "sec": 0,
+            "nanosec": 0
+          },
+          "transport_mode": "isolated_mock",
+          "reason": "local_segment_finished_waiting_replan"
+        },
+        "execution_id": "1d5aa12cc30942d88b1e3f0d1dc841cc.2:execution",
+        "trajectory_id": 28,
+        "control_epoch": 2,
+        "sequence": 2045,
+        "permit_sequence": 551,
+        "validation_sequence": 2534,
+        "motion_validation_sequence": 0,
+        "hold": false,
+        "reason": "local_segment_finished_waiting_replan",
+        "source_stamp_ns": 1791374811893868749,
+        "body_source_stamp_ns": 1791374811893868749,
+        "valid_until_ns": 1791374811903868749,
+        "safety_source_stamp_ns": 0,
+        "velocity": [
+          0.0044064583280983664,
+          0.0
+        ]
+      },
+      "original_line_number": 7095
+    },
+    "same_original_trace_witnesses": {
+      "last_positive_motion": {
+        "kind": "motion_validation",
+        "receipt_monotonic_ns": 1221414595173161,
+        "source_clock_ns": 1791374811893868749,
+        "data": {
+          "wire": {
+            "version": {
+              "schema_version": 3,
+              "session_id": "1d5aa12cc30942d88b1e3f0d1dc841cc",
+              "task_id": "1d5aa12cc30942d88b1e3f0d1dc841cc.2",
+              "route_id": "1d5aa12cc30942d88b1e3f0d1dc841cc.2:4fe09043d6d5633836517603ce2d2101e945dfcd2ba648bb9eea933317dd79a8",
+              "route_hash": "4fe09043d6d5633836517603ce2d2101e945dfcd2ba648bb9eea933317dd79a8",
+              "map_version_id": "ca87b73923d7458efec4fb5ecde2ca8b90c758ab5103e4c657fbabad62dab30e",
+              "localization_epoch": 1,
+              "localization_seed_id": "isaac-d0f41605-bca0-471c-b6da-ab65e2bf74ef",
+              "reference_generation": 4,
+              "segment_id": "floor",
+              "anchor_id": "00fcf8b3e20c39ef2c038b735a0c4b2485bd76f552ddf8e6946959c90633ca22",
+              "anchor_revision": 1,
+              "context_sequence": 1,
+              "map_geometry_revision": 1
+            },
+            "execution_id": "1d5aa12cc30942d88b1e3f0d1dc841cc.2:execution",
+            "control_epoch": 2,
+            "sdk_session": "isolated-1d5aa12cc30942d88b1e3f0d1dc841cc",
+            "sdk_arm_generation": 2,
+            "trajectory_id": 28,
+            "permit_sequence": 551,
+            "trajectory_validation_sequence": 2534,
+            "demand_sequence": 2044,
+            "demand_source_stamp": {
+              "sec": 1791374811,
+              "nanosec": 873868749
+            },
+            "demand_valid_until": {
+              "sec": 1791374811,
+              "nanosec": 903868749
+            },
+            "demand_body_source_stamp": {
+              "sec": 1791374811,
+              "nanosec": 873868749
+            },
+            "body_source_stamp": {
+              "sec": 1791374811,
+              "nanosec": 873868749
+            },
+            "sequence": 2300,
+            "front_ray_source_stamp": {
+              "sec": 1791374811,
+              "nanosec": 751868749
+            },
+            "rear_ray_source_stamp": {
+              "sec": 1791374811,
+              "nanosec": 751868749
+            },
+            "map_snapshot_revision": 2327156,
+            "check_begin": {
+              "sec": 1791374811,
+              "nanosec": 893868749
+            },
+            "check_end": {
+              "sec": 1791374811,
+              "nanosec": 893868749
+            },
+            "valid_until": {
+              "sec": 1791374811,
+              "nanosec": 903868749
+            },
+            "velocity": {
+              "linear": {
+                "x": 0.01824699014203651,
+                "y": 0.0,
+                "z": 0.0
+              },
+              "angular": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": 0.0
+              }
+            },
+            "frame_id": "d1max_loc_odom",
+            "valid": true,
+            "reason": "observed_free_motion_sweep",
+            "transport_mode": "isolated_mock",
+            "braking_model_sha256": "6c8d42d6f1ce547e5887179d5fc8ecbca2f6c2068e1ed6c01013a0af8f141e63",
+            "handoff_id": "",
+            "entry_admission_sequence": 0,
+            "entry_curve_pose": {
+              "position": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": 0.0
+              },
+              "orientation": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": 0.0,
+                "w": 1.0
+              }
+            },
+            "entry_curve_twist": {
+              "linear": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": 0.0
+              },
+              "angular": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": 0.0
+              }
+            },
+            "entry_curve_time": 0.0,
+            "entry_position_error_m": 0.0,
+            "entry_velocity_error_mps": 0.0
+          },
+          "execution_id": "1d5aa12cc30942d88b1e3f0d1dc841cc.2:execution",
+          "trajectory_id": 28,
+          "control_epoch": 2,
+          "sequence": 2300,
+          "permit_sequence": 551,
+          "trajectory_validation_sequence": 2534,
+          "demand_sequence": 2044,
+          "valid": true,
+          "reason": "observed_free_motion_sweep",
+          "handoff_id": "",
+          "body_source_stamp_ns": 1791374811873868749,
+          "valid_until_ns": 1791374811903868749,
+          "demand_source_stamp_ns": 1791374811873868749,
+          "demand_valid_until_ns": 1791374811903868749,
+          "demand_body_source_stamp_ns": 1791374811873868749,
+          "front_ray_source_stamp_ns": 1791374811751868749,
+          "rear_ray_source_stamp_ns": 1791374811751868749,
+          "check_begin_ns": 1791374811893868749,
+          "check_end_ns": 1791374811893868749,
+          "velocity": [
+            0.01824699014203651,
+            0.0
+          ]
+        },
+        "original_line_number": 7100
+      },
+      "first_expired_ack": {
+        "kind": "commit_ack",
+        "receipt_monotonic_ns": 1221414629395200,
+        "source_clock_ns": 1791374811913868749,
+        "data": {
+          "wire": {
+            "schema_version": 1,
+            "handoff_id": "1d5aa12cc30942d88b1e3f0d1dc841cc.2:execution:handoff:2",
+            "grant_sequence": 2,
+            "sequence": 4,
+            "previous_commit_sequence": 1,
+            "commit_sequence": 1,
+            "incumbent_version": {
+              "schema_version": 3,
+              "session_id": "1d5aa12cc30942d88b1e3f0d1dc841cc",
+              "task_id": "1d5aa12cc30942d88b1e3f0d1dc841cc.2",
+              "route_id": "1d5aa12cc30942d88b1e3f0d1dc841cc.2:4fe09043d6d5633836517603ce2d2101e945dfcd2ba648bb9eea933317dd79a8",
+              "route_hash": "4fe09043d6d5633836517603ce2d2101e945dfcd2ba648bb9eea933317dd79a8",
+              "map_version_id": "ca87b73923d7458efec4fb5ecde2ca8b90c758ab5103e4c657fbabad62dab30e",
+              "localization_epoch": 1,
+              "localization_seed_id": "isaac-d0f41605-bca0-471c-b6da-ab65e2bf74ef",
+              "reference_generation": 4,
+              "segment_id": "floor",
+              "anchor_id": "00fcf8b3e20c39ef2c038b735a0c4b2485bd76f552ddf8e6946959c90633ca22",
+              "anchor_revision": 1,
+              "context_sequence": 1,
+              "map_geometry_revision": 1
+            },
+            "candidate_version": {
+              "schema_version": 3,
+              "session_id": "1d5aa12cc30942d88b1e3f0d1dc841cc",
+              "task_id": "1d5aa12cc30942d88b1e3f0d1dc841cc.2",
+              "route_id": "1d5aa12cc30942d88b1e3f0d1dc841cc.2:4fe09043d6d5633836517603ce2d2101e945dfcd2ba648bb9eea933317dd79a8",
+              "route_hash": "4fe09043d6d5633836517603ce2d2101e945dfcd2ba648bb9eea933317dd79a8",
+              "map_version_id": "ca87b73923d7458efec4fb5ecde2ca8b90c758ab5103e4c657fbabad62dab30e",
+              "localization_epoch": 1,
+              "localization_seed_id": "isaac-d0f41605-bca0-471c-b6da-ab65e2bf74ef",
+              "reference_generation": 5,
+              "segment_id": "floor",
+              "anchor_id": "00fcf8b3e20c39ef2c038b735a0c4b2485bd76f552ddf8e6946959c90633ca22",
+              "anchor_revision": 1,
+              "context_sequence": 1,
+              "map_geometry_revision": 1
+            },
+            "incumbent_trajectory_id": 28,
+            "candidate_trajectory_id": 53,
+            "execution_id": "1d5aa12cc30942d88b1e3f0d1dc841cc.2:execution",
+            "sdk_session": "isolated-1d5aa12cc30942d88b1e3f0d1dc841cc",
+            "transport_mode": "isolated_mock",
+            "control_epoch": 2,
+            "sdk_arm_generation": 2,
+            "permit_sequence": 546,
+            "demand_sequence": 0,
+            "motion_validation_sequence": 0,
+            "entry_admission_sequence": 0,
+            "applied_at": {
+              "sec": 1791374811,
+              "nanosec": 913868749
+            },
+            "demand_source_stamp": {
+              "sec": 0,
+              "nanosec": 0
+            },
+            "demand_body_source_stamp": {
+              "sec": 0,
+              "nanosec": 0
+            },
+            "entry_source_stamp": {
+              "sec": 0,
+              "nanosec": 0
+            },
+            "body_source_stamp": {
+              "sec": 0,
+              "nanosec": 0
+            },
+            "valid_until": {
+              "sec": 1791374811,
+              "nanosec": 903868749
+            },
+            "measured_pose": {
+              "header": {
+                "stamp": {
+                  "sec": 0,
+                  "nanosec": 0
+                },
+                "frame_id": ""
+              },
+              "pose": {
+                "position": {
+                  "x": 0.0,
+                  "y": 0.0,
+                  "z": 0.0
+                },
+                "orientation": {
+                  "x": 0.0,
+                  "y": 0.0,
+                  "z": 0.0,
+                  "w": 1.0
+                }
+              }
+            },
+            "measured_twist": {
+              "linear": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": 0.0
+              },
+              "angular": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": 0.0
+              }
+            },
+            "applied_velocity": {
+              "linear": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": 0.0
+              },
+              "angular": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": 0.0
+              }
+            },
+            "curve_time": 0.0,
+            "applied": false,
+            "write_submitted": false,
+            "write_acknowledged": false,
+            "reason": "handoff_deadline_expired"
+          },
+          "execution_id": "1d5aa12cc30942d88b1e3f0d1dc841cc.2:execution",
+          "control_epoch": 2,
+          "sequence": 4,
+          "permit_sequence": 546,
+          "motion_validation_sequence": 0,
+          "demand_sequence": 0,
+          "reason": "handoff_deadline_expired",
+          "handoff_id": "1d5aa12cc30942d88b1e3f0d1dc841cc.2:execution:handoff:2",
+          "applied": false,
+          "body_source_stamp_ns": 0,
+          "valid_until_ns": 1791374811903868749,
+          "demand_source_stamp_ns": 0,
+          "demand_body_source_stamp_ns": 0,
+          "applied_at_ns": 1791374811913868749
+        },
+        "original_line_number": 7109
+      },
+      "last_expired_ack": {
+        "kind": "commit_ack",
+        "receipt_monotonic_ns": 1221488780538002,
+        "source_clock_ns": 1791374842393868749,
+        "data": {
+          "wire": {
+            "schema_version": 1,
+            "handoff_id": "1d5aa12cc30942d88b1e3f0d1dc841cc.2:execution:handoff:110",
+            "grant_sequence": 110,
+            "sequence": 112,
+            "previous_commit_sequence": 1,
+            "commit_sequence": 1,
+            "incumbent_version": {
+              "schema_version": 3,
+              "session_id": "1d5aa12cc30942d88b1e3f0d1dc841cc",
+              "task_id": "1d5aa12cc30942d88b1e3f0d1dc841cc.2",
+              "route_id": "1d5aa12cc30942d88b1e3f0d1dc841cc.2:4fe09043d6d5633836517603ce2d2101e945dfcd2ba648bb9eea933317dd79a8",
+              "route_hash": "4fe09043d6d5633836517603ce2d2101e945dfcd2ba648bb9eea933317dd79a8",
+              "map_version_id": "ca87b73923d7458efec4fb5ecde2ca8b90c758ab5103e4c657fbabad62dab30e",
+              "localization_epoch": 1,
+              "localization_seed_id": "isaac-d0f41605-bca0-471c-b6da-ab65e2bf74ef",
+              "reference_generation": 4,
+              "segment_id": "floor",
+              "anchor_id": "00fcf8b3e20c39ef2c038b735a0c4b2485bd76f552ddf8e6946959c90633ca22",
+              "anchor_revision": 1,
+              "context_sequence": 1,
+              "map_geometry_revision": 1
+            },
+            "candidate_version": {
+              "schema_version": 3,
+              "session_id": "1d5aa12cc30942d88b1e3f0d1dc841cc",
+              "task_id": "1d5aa12cc30942d88b1e3f0d1dc841cc.2",
+              "route_id": "1d5aa12cc30942d88b1e3f0d1dc841cc.2:4fe09043d6d5633836517603ce2d2101e945dfcd2ba648bb9eea933317dd79a8",
+              "route_hash": "4fe09043d6d5633836517603ce2d2101e945dfcd2ba648bb9eea933317dd79a8",
+              "map_version_id": "ca87b73923d7458efec4fb5ecde2ca8b90c758ab5103e4c657fbabad62dab30e",
+              "localization_epoch": 1,
+              "localization_seed_id": "isaac-d0f41605-bca0-471c-b6da-ab65e2bf74ef",
+              "reference_generation": 5,
+              "segment_id": "floor",
+              "anchor_id": "00fcf8b3e20c39ef2c038b735a0c4b2485bd76f552ddf8e6946959c90633ca22",
+              "anchor_revision": 1,
+              "context_sequence": 1,
+              "map_geometry_revision": 1
+            },
+            "incumbent_trajectory_id": 28,
+            "candidate_trajectory_id": 84,
+            "execution_id": "1d5aa12cc30942d88b1e3f0d1dc841cc.2:execution",
+            "sdk_session": "isolated-1d5aa12cc30942d88b1e3f0d1dc841cc",
+            "transport_mode": "isolated_mock",
+            "control_epoch": 2,
+            "sdk_arm_generation": 2,
+            "permit_sequence": 1412,
+            "demand_sequence": 0,
+            "motion_validation_sequence": 0,
+            "entry_admission_sequence": 0,
+            "applied_at": {
+              "sec": 1791374842,
+              "nanosec": 393868749
+            },
+            "demand_source_stamp": {
+              "sec": 0,
+              "nanosec": 0
+            },
+            "demand_body_source_stamp": {
+              "sec": 0,
+              "nanosec": 0
+            },
+            "entry_source_stamp": {
+              "sec": 0,
+              "nanosec": 0
+            },
+            "body_source_stamp": {
+              "sec": 0,
+              "nanosec": 0
+            },
+            "valid_until": {
+              "sec": 1791374842,
+              "nanosec": 383868749
+            },
+            "measured_pose": {
+              "header": {
+                "stamp": {
+                  "sec": 0,
+                  "nanosec": 0
+                },
+                "frame_id": ""
+              },
+              "pose": {
+                "position": {
+                  "x": 0.0,
+                  "y": 0.0,
+                  "z": 0.0
+                },
+                "orientation": {
+                  "x": 0.0,
+                  "y": 0.0,
+                  "z": 0.0,
+                  "w": 1.0
+                }
+              }
+            },
+            "measured_twist": {
+              "linear": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": 0.0
+              },
+              "angular": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": 0.0
+              }
+            },
+            "applied_velocity": {
+              "linear": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": 0.0
+              },
+              "angular": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": 0.0
+              }
+            },
+            "curve_time": 0.0,
+            "applied": false,
+            "write_submitted": false,
+            "write_acknowledged": false,
+            "reason": "handoff_deadline_expired"
+          },
+          "execution_id": "1d5aa12cc30942d88b1e3f0d1dc841cc.2:execution",
+          "control_epoch": 2,
+          "sequence": 112,
+          "permit_sequence": 1412,
+          "motion_validation_sequence": 0,
+          "demand_sequence": 0,
+          "reason": "handoff_deadline_expired",
+          "handoff_id": "1d5aa12cc30942d88b1e3f0d1dc841cc.2:execution:handoff:110",
+          "applied": false,
+          "body_source_stamp_ns": 0,
+          "valid_until_ns": 1791374842383868749,
+          "demand_source_stamp_ns": 0,
+          "demand_body_source_stamp_ns": 0,
+          "applied_at_ns": 1791374842393868749
+        },
+        "original_line_number": 37704
+      },
+      "late_current_free": {
+        "kind": "trajectory_validation",
+        "receipt_monotonic_ns": 1221421260246711,
+        "source_clock_ns": 1791374814651868749,
+        "data": {
+          "wire": {
+            "version": {
+              "schema_version": 3,
+              "session_id": "1d5aa12cc30942d88b1e3f0d1dc841cc",
+              "task_id": "1d5aa12cc30942d88b1e3f0d1dc841cc.2",
+              "route_id": "1d5aa12cc30942d88b1e3f0d1dc841cc.2:4fe09043d6d5633836517603ce2d2101e945dfcd2ba648bb9eea933317dd79a8",
+              "route_hash": "4fe09043d6d5633836517603ce2d2101e945dfcd2ba648bb9eea933317dd79a8",
+              "map_version_id": "ca87b73923d7458efec4fb5ecde2ca8b90c758ab5103e4c657fbabad62dab30e",
+              "localization_epoch": 1,
+              "localization_seed_id": "isaac-d0f41605-bca0-471c-b6da-ab65e2bf74ef",
+              "reference_generation": 4,
+              "segment_id": "floor",
+              "anchor_id": "00fcf8b3e20c39ef2c038b735a0c4b2485bd76f552ddf8e6946959c90633ca22",
+              "anchor_revision": 1,
+              "context_sequence": 1,
+              "map_geometry_revision": 1
+            },
+            "proposal_id": "1d5aa12cc30942d88b1e3f0d1dc841cc.2.4",
+            "trajectory_id": 28,
+            "sequence": 3047,
+            "source_stamp": {
+              "sec": 1791374814,
+              "nanosec": 651868749
+            },
+            "check_begin": {
+              "sec": 1791374814,
+              "nanosec": 651868749
+            },
+            "check_end": {
+              "sec": 1791374814,
+              "nanosec": 651868749
+            },
+            "valid_until": {
+              "sec": 1791374814,
+              "nanosec": 851617612
+            },
+            "body_source_stamp": {
+              "sec": 1791374814,
+              "nanosec": 651868749
+            },
+            "front_ray_source_stamp": {
+              "sec": 1791374814,
+              "nanosec": 551868749
+            },
+            "rear_ray_source_stamp": {
+              "sec": 1791374814,
+              "nanosec": 551868749
+            },
+            "map_snapshot_revision": 2358816,
+            "support_reference_id": "1d5aa12cc30942d88b1e3f0d1dc841cc.2.4",
+            "support_hash": "2fbbe97bdf186f3d3fbb4307e73a41c902741d1c37a2bffa15fc2e448146902b",
+            "valid": true,
+            "whole_curve": false,
+            "remaining_curve": true,
+            "checked_from_time": 6.594858532815206,
+            "checked_to_time": 9.372692884516155,
+            "curve_duration": 9.372692884516155,
+            "reverse_margin_m": 0.15,
+            "goal_yaw_checked": false,
+            "checked_goal_yaw": 0.0,
+            "valid_start_time": 7.238835016122143,
+            "valid_start_arc_length": 1.8440965685118016,
+            "frame_id": "d1max_loc_odom",
+            "collision_policy": "observed_free",
+            "transport_mode": "isolated_mock",
+            "reason": "observed_free"
+          },
+          "trajectory_id": 28,
+          "sequence": 3047,
+          "valid": true,
+          "reason": "observed_free",
+          "source_stamp_ns": 1791374814651868749,
+          "body_source_stamp_ns": 1791374814651868749,
+          "valid_until_ns": 1791374814851617612,
+          "front_ray_source_stamp_ns": 1791374814551868749,
+          "rear_ray_source_stamp_ns": 1791374814551868749,
+          "check_begin_ns": 1791374814651868749,
+          "check_end_ns": 1791374814651868749
+        },
+        "original_line_number": 9812
+      },
+      "last_current_free": {
+        "kind": "trajectory_validation",
+        "receipt_monotonic_ns": 1221488826699736,
+        "source_clock_ns": 1791374842413868749,
+        "data": {
+          "wire": {
+            "version": {
+              "schema_version": 3,
+              "session_id": "1d5aa12cc30942d88b1e3f0d1dc841cc",
+              "task_id": "1d5aa12cc30942d88b1e3f0d1dc841cc.2",
+              "route_id": "1d5aa12cc30942d88b1e3f0d1dc841cc.2:4fe09043d6d5633836517603ce2d2101e945dfcd2ba648bb9eea933317dd79a8",
+              "route_hash": "4fe09043d6d5633836517603ce2d2101e945dfcd2ba648bb9eea933317dd79a8",
+              "map_version_id": "ca87b73923d7458efec4fb5ecde2ca8b90c758ab5103e4c657fbabad62dab30e",
+              "localization_epoch": 1,
+              "localization_seed_id": "isaac-d0f41605-bca0-471c-b6da-ab65e2bf74ef",
+              "reference_generation": 4,
+              "segment_id": "floor",
+              "anchor_id": "00fcf8b3e20c39ef2c038b735a0c4b2485bd76f552ddf8e6946959c90633ca22",
+              "anchor_revision": 1,
+              "context_sequence": 1,
+              "map_geometry_revision": 1
+            },
+            "proposal_id": "1d5aa12cc30942d88b1e3f0d1dc841cc.2.4",
+            "trajectory_id": 28,
+            "sequence": 8689,
+            "source_stamp": {
+              "sec": 1791374842,
+              "nanosec": 413868749
+            },
+            "check_begin": {
+              "sec": 1791374842,
+              "nanosec": 413868749
+            },
+            "check_end": {
+              "sec": 1791374842,
+              "nanosec": 413868749
+            },
+            "valid_until": {
+              "sec": 1791374842,
+              "nanosec": 593614760
+            },
+            "body_source_stamp": {
+              "sec": 1791374842,
+              "nanosec": 413868749
+            },
+            "front_ray_source_stamp": {
+              "sec": 1791374842,
+              "nanosec": 251868749
+            },
+            "rear_ray_source_stamp": {
+              "sec": 1791374842,
+              "nanosec": 251868749
+            },
+            "map_snapshot_revision": 2375272,
+            "support_reference_id": "1d5aa12cc30942d88b1e3f0d1dc841cc.2.4",
+            "support_hash": "2fbbe97bdf186f3d3fbb4307e73a41c902741d1c37a2bffa15fc2e448146902b",
+            "valid": true,
+            "whole_curve": false,
+            "remaining_curve": true,
+            "checked_from_time": 6.5748741130187955,
+            "checked_to_time": 9.372692884516155,
+            "curve_duration": 9.372692884516155,
+            "reverse_margin_m": 0.15,
+            "goal_yaw_checked": false,
+            "checked_goal_yaw": 0.0,
+            "valid_start_time": 7.200313552816825,
+            "valid_start_arc_length": 1.8364578624682224,
+            "frame_id": "d1max_loc_odom",
+            "collision_policy": "observed_free",
+            "transport_mode": "isolated_mock",
+            "reason": "observed_free"
+          },
+          "trajectory_id": 28,
+          "sequence": 8689,
+          "valid": true,
+          "reason": "observed_free",
+          "source_stamp_ns": 1791374842413868749,
+          "body_source_stamp_ns": 1791374842413868749,
+          "valid_until_ns": 1791374842593614760,
+          "front_ray_source_stamp_ns": 1791374842251868749,
+          "rear_ray_source_stamp_ns": 1791374842251868749,
+          "check_begin_ns": 1791374842413868749,
+          "check_end_ns": 1791374842413868749
+        },
+        "original_line_number": 37714
+      },
+      "local_segment_finished_waiting_replan": {
+        "kind": "tracker",
+        "receipt_monotonic_ns": 1221445613176514,
+        "source_clock_ns": 1791374824651868749,
+        "data": {
+          "reason": "local_segment_finished_waiting_replan",
+          "permit_reject_reason": "",
+          "prepare_reason": "prepared_not_committed",
+          "handoff_reason": "writer_applied",
+          "maneuver_phase": "following",
+          "trajectory_id": 28,
+          "installation_sequence": 3,
+          "writer_commit_sequence": 2,
+          "finished": false,
+          "preparation_pending": false,
+          "execution_frozen": true,
+          "active": true,
+          "control_diagnostic": {
+            "before_trajectory_start": false,
+            "body_present": true,
+            "body_source_stamp_ns": 1791374824651868749,
+            "curve_duration": 9.372692884516155,
+            "duplicate_source": false,
+            "geometry_available": true,
+            "installed_trajectory_start_ns": 1791374804073868749,
+            "lookahead_curve_time": 9.372692884516155,
+            "lookahead_from_xyz_arc_m": 1.8368604931520842,
+            "lookahead_position": [
+              -4.040902201761613,
+              -5.065541195046007,
+              0.481
+            ],
+            "lookahead_requested_distance_m": 0.18400000000000002,
+            "lookahead_target_xyz_arc_m": 2.000481932220732,
+            "lookahead_velocity": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "measured_arc_m": 1.8368604931520842,
+            "measured_xy_speed_mps": 0.00019239671898105796,
+            "planar_acceleration_limit_mps2": 0.34606987727761473,
+            "planar_speed_limit_mps": 0.2274173479252897,
+            "previous_step_source_ns": 1791374824633868749,
+            "projected_curve_time": 7.20232362927029,
+            "receipt_interval_s": 0.01999659091234207,
+            "source_interval_s": 0.018000000000000002,
+            "spatial_control_lookahead": true,
+            "spatial_planar_braking_envelope": true,
+            "step_seen": true,
+            "step_source_ns": 1791374824651868749,
+            "step_trajectory_id": 28,
+            "step_trajectory_start_ns": 1791374804073868749
+          }
+        },
+        "original_line_number": 19830
+      },
+      "waiting_trajectory_clock": {
+        "kind": "tracker",
+        "receipt_monotonic_ns": 1221445653223344,
+        "source_clock_ns": 1791374824653868749,
+        "data": {
+          "reason": "waiting_trajectory_clock",
+          "permit_reject_reason": "",
+          "prepare_reason": "prepared_not_committed",
+          "handoff_reason": "writer_applied",
+          "maneuver_phase": "following",
+          "trajectory_id": 28,
+          "installation_sequence": 3,
+          "writer_commit_sequence": 2,
+          "finished": false,
+          "preparation_pending": false,
+          "execution_frozen": true,
+          "active": true,
+          "control_diagnostic": {
+            "before_trajectory_start": false,
+            "body_present": true,
+            "body_source_stamp_ns": 1791374824653868749,
+            "curve_duration": 9.372692884516155,
+            "duplicate_source": true,
+            "geometry_available": true,
+            "installed_trajectory_start_ns": 1791374804073868749,
+            "lookahead_curve_time": 9.372692884516155,
+            "lookahead_from_xyz_arc_m": 1.8368604931520842,
+            "lookahead_position": [
+              -4.040902201761613,
+              -5.065541195046007,
+              0.481
+            ],
+            "lookahead_requested_distance_m": 0.18400000000000002,
+            "lookahead_target_xyz_arc_m": 2.000481932220732,
+            "lookahead_velocity": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "measured_arc_m": 1.8368604931520842,
+            "measured_xy_speed_mps": 0.00018848735530886101,
+            "planar_acceleration_limit_mps2": 0.34606987727761473,
+            "planar_speed_limit_mps": 0.2274173479252897,
+            "previous_step_source_ns": 1791374824653868749,
+            "projected_curve_time": 7.20232362927029,
+            "receipt_interval_s": 0.020018107956275344,
+            "source_interval_s": 0.0,
+            "spatial_control_lookahead": true,
+            "spatial_planar_braking_envelope": true,
+            "step_seen": true,
+            "step_source_ns": 1791374824653868749,
+            "step_trajectory_id": 28,
+            "step_trajectory_start_ns": 1791374804073868749
+          }
+        },
+        "original_line_number": 19849
+      }
+    },
+    "witness_semantics": "Original trace rows retain source clock, receipt clock, IDs, fields and exact one-based line numbers; a later callback or different candidate is not substituted as the cause.",
+    "writer_ledger_lifecycle_root_cause": {
+      "confirmed_root_cause": "Tracker writer ledger is inherited from cancelled task. New task SDK initial writer commit is 1, while tracker retains previous task writer commit 2. Every subsequent expected1 grant fails the original handoff equality guard before preparation; continuing geometry is never installed, so the current local segment ends and output stays zero.",
+      "original_phase0_tracker_writer_sequence_counts": {
+        "0": 111,
+        "1": 482,
+        "2": 248
+      },
+      "original_phase1_tracker_writer_sequence_counts": {
+        "2": 4310
+      },
+      "original_phase1_grant_expected_sequence_counts": {
+        "1": 750
+      },
+      "original_phase1_motion_identity_counts": [
+        {
+          "trajectory_id": 28,
+          "reference_generation": 4,
+          "count": 1016
+        }
+      ],
+      "prepared_candidate_motion_count": 0,
+      "new_sdk_initial_ack": {
+        "original_line_number": 572,
+        "source_clock_ns": 1791374804213868749,
+        "previous_commit_sequence": 0,
+        "commit_sequence": 1,
+        "applied": true,
+        "task_id": "1d5aa12cc30942d88b1e3f0d1dc841cc.2",
+        "control_epoch": 2,
+        "sdk_arm_generation": 2
+      },
+      "sealed_source_excerpts": [
+        {
+          "path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v53-campus-all-actors-restart/application/install/d1max_trajectory_tracker/include/d1max_trajectory_tracker/execution_contract.hpp",
+          "start_line": 125,
+          "end_line": 133,
+          "lines": [
+            "  void cancel(const std::string& reason) {",
+            "    if(permit_)retired_task_=permit_->version.task_id;",
+            "    else if(candidate_)retired_task_=candidate_->identity.task_id;",
+            "    candidate_.reset();candidate_entry_curve_.reset();admission_.reset();committed_version_.reset();demands_.clear();",
+            "    preparation_failure_.clear();",
+            "    blocked_entry_.reset();last_emission_.reset();paused_source_ns_=0;core_.cancel(reason);",
+            "    if(worker_)worker_->invalidate();",
+            "    preparation_request_.reset();",
+            "    if(handoff_)handoff_->retired=true;"
+          ],
+          "meaning": "cancel clears geometry/admission but leaves writer_commit_sequence_, initial_writer_ack_ and ack_sequence_ unchanged"
+        },
+        {
+          "path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v53-campus-all-actors-restart/application/install/d1max_trajectory_tracker/include/d1max_trajectory_tracker/execution_contract.hpp",
+          "start_line": 452,
+          "end_line": 456,
+          "lines": [
+            "  bool handoff(const wire::ExecutionHandoffGrant& g,SourceTime now,double receipt) {",
+            "    if(!writer_handoff_||g.schema_version!=2||g.handoff_id.empty()||g.sequence==0||",
+            "       !versionValid(g.candidate.version,config_)||g.candidate.transport_mode!=mode_||",
+            "       g.candidate.frame_id!=config_.planning_frame||!g.candidate.allowed||g.candidate.geometry_committed||",
+            "       g.expected_commit_sequence!=writer_commit_sequence_)return false;"
+          ],
+          "meaning": "expected1 vs retained2 rejects before any preparation or timed proof"
+        },
+        {
+          "path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v53-campus-all-actors-restart/application/install/d1max_trajectory_tracker/include/d1max_trajectory_tracker/execution_contract.hpp",
+          "start_line": 559,
+          "end_line": 567,
+          "lines": [
+            "      if(!a.applied||a.previous_commit_sequence||a.commit_sequence!=1||first==permit_history_.end()||",
+            "         installed==installations_.rend()) {initial_ack_reason_=\"initial_writer_fact_not_bound_to_installed_geometry\";return false;}",
+            "      if(writer_commit_sequence_) {",
+            "        if(writer_commit_sequence_!=1||!initial_writer_ack_)return false;",
+            "        auto expected=*initial_writer_ack_,actual=a;",
+            "        expected.sequence=actual.sequence=0;expected.write_acknowledged=actual.write_acknowledged=false;",
+            "        expected.reason.clear();actual.reason.clear();",
+            "        if(expected!=actual)return false;",
+            "        ack_sequence_=a.sequence;initial_ack_reason_=\"initial_writer_callback_fact_updated\";return true;"
+          ],
+          "meaning": "new-task initial commit1 ACK also rejects when local writer_commit_sequence_ is inherited2"
+        }
+      ],
+      "witnesses": {
+        "phase0_last_tracker_commit2": {
+          "original_line_number": 9328,
+          "kind": "tracker",
+          "receipt_monotonic_ns": 1221387791894523,
+          "source_clock_ns": 1791374800693868749,
+          "data": {
+            "reason": "handoff_retired_or_applied_uncertain",
+            "permit_reject_reason": "",
+            "prepare_reason": "prepared_not_committed",
+            "handoff_reason": "writer_applied",
+            "maneuver_phase": "following",
+            "trajectory_id": 27,
+            "installation_sequence": 2,
+            "writer_commit_sequence": 2,
+            "finished": false,
+            "preparation_pending": false,
+            "execution_frozen": true,
+            "active": false,
+            "control_diagnostic": {
+              "before_trajectory_start": false,
+              "body_present": true,
+              "body_source_stamp_ns": 1791374800693868749,
+              "curve_duration": 5.6978574821157,
+              "duplicate_source": false,
+              "geometry_available": false,
+              "installed_trajectory_start_ns": 1791374796533868749,
+              "lookahead_curve_time": 0.0,
+              "lookahead_from_xyz_arc_m": 0.0,
+              "lookahead_position": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "lookahead_requested_distance_m": 0.0,
+              "lookahead_target_xyz_arc_m": 0.0,
+              "lookahead_velocity": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "measured_arc_m": 0.005774928603041889,
+              "measured_xy_speed_mps": 0.0011317918997850273,
+              "planar_acceleration_limit_mps2": 0.0,
+              "planar_speed_limit_mps": 0.0,
+              "previous_step_source_ns": 1791374796953868749,
+              "projected_curve_time": 0.09098817457505767,
+              "receipt_interval_s": 0.05999618303030729,
+              "source_interval_s": 0.02,
+              "spatial_control_lookahead": false,
+              "spatial_planar_braking_envelope": false,
+              "step_seen": true,
+              "step_source_ns": 1791374796973868749,
+              "step_trajectory_id": 27,
+              "step_trajectory_start_ns": 1791374796533868749
+            }
+          }
+        },
+        "phase1_last_tracker_commit2": {
+          "original_line_number": 39635,
+          "kind": "tracker",
+          "receipt_monotonic_ns": 1221497334157470,
+          "source_clock_ns": 1791374845993868749,
+          "data": {
+            "reason": "permission_or_native_proof_expired",
+            "permit_reject_reason": "",
+            "prepare_reason": "prepared_not_committed",
+            "handoff_reason": "writer_applied",
+            "maneuver_phase": "following",
+            "trajectory_id": 28,
+            "installation_sequence": 3,
+            "writer_commit_sequence": 2,
+            "finished": false,
+            "preparation_pending": false,
+            "execution_frozen": true,
+            "active": false,
+            "control_diagnostic": {
+              "before_trajectory_start": false,
+              "body_present": true,
+              "body_source_stamp_ns": 1791374845993868749,
+              "curve_duration": 9.372692884516155,
+              "duplicate_source": true,
+              "geometry_available": false,
+              "installed_trajectory_start_ns": 1791374804073868749,
+              "lookahead_curve_time": 0.0,
+              "lookahead_from_xyz_arc_m": 0.0,
+              "lookahead_position": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "lookahead_requested_distance_m": 0.0,
+              "lookahead_target_xyz_arc_m": 0.0,
+              "lookahead_velocity": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "measured_arc_m": 1.8364578624682224,
+              "measured_xy_speed_mps": 8.908177021761893e-05,
+              "planar_acceleration_limit_mps2": 0.0,
+              "planar_speed_limit_mps": 0.0,
+              "previous_step_source_ns": 1791374842373868749,
+              "projected_curve_time": 7.200313552816825,
+              "receipt_interval_s": 0.01999181997962296,
+              "source_interval_s": 0.0,
+              "spatial_control_lookahead": false,
+              "spatial_planar_braking_envelope": false,
+              "step_seen": true,
+              "step_source_ns": 1791374842373868749,
+              "step_trajectory_id": 28,
+              "step_trajectory_start_ns": 1791374804073868749
+            }
+          }
+        },
+        "phase1_first_tracker_commit2": {
+          "original_line_number": 6,
+          "kind": "tracker",
+          "receipt_monotonic_ns": 1221393331756352,
+          "source_clock_ns": 1791374803073868749,
+          "data": {
+            "reason": "handoff_retired_or_applied_uncertain",
+            "permit_reject_reason": "",
+            "prepare_reason": "prepared_not_committed",
+            "handoff_reason": "writer_applied",
+            "maneuver_phase": "following",
+            "trajectory_id": 27,
+            "installation_sequence": 2,
+            "writer_commit_sequence": 2,
+            "finished": false,
+            "preparation_pending": false,
+            "execution_frozen": true,
+            "active": false,
+            "control_diagnostic": {
+              "before_trajectory_start": false,
+              "body_present": true,
+              "body_source_stamp_ns": 1791374803073868749,
+              "curve_duration": 5.6978574821157,
+              "duplicate_source": false,
+              "geometry_available": false,
+              "installed_trajectory_start_ns": 1791374796533868749,
+              "lookahead_curve_time": 0.0,
+              "lookahead_from_xyz_arc_m": 0.0,
+              "lookahead_position": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "lookahead_requested_distance_m": 0.0,
+              "lookahead_target_xyz_arc_m": 0.0,
+              "lookahead_velocity": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "measured_arc_m": 0.005774928603041889,
+              "measured_xy_speed_mps": 0.0005565799115817232,
+              "planar_acceleration_limit_mps2": 0.0,
+              "planar_speed_limit_mps": 0.0,
+              "previous_step_source_ns": 1791374796953868749,
+              "projected_curve_time": 0.09098817457505767,
+              "receipt_interval_s": 0.05999618303030729,
+              "source_interval_s": 0.02,
+              "spatial_control_lookahead": false,
+              "spatial_planar_braking_envelope": false,
+              "step_seen": true,
+              "step_source_ns": 1791374796973868749,
+              "step_trajectory_id": 27,
+              "step_trajectory_start_ns": 1791374796533868749
+            }
+          }
+        },
+        "phase1_new_task_initial_writer_ack": {
+          "original_line_number": 572,
+          "kind": "commit_ack",
+          "receipt_monotonic_ns": 1221396028532510,
+          "source_clock_ns": 1791374804213868749,
+          "data": {
+            "wire": {
+              "schema_version": 1,
+              "handoff_id": "",
+              "grant_sequence": 0,
+              "sequence": 2,
+              "previous_commit_sequence": 0,
+              "commit_sequence": 1,
+              "incumbent_version": {
+                "schema_version": 3,
+                "session_id": "1d5aa12cc30942d88b1e3f0d1dc841cc",
+                "task_id": "1d5aa12cc30942d88b1e3f0d1dc841cc.2",
+                "route_id": "1d5aa12cc30942d88b1e3f0d1dc841cc.2:4fe09043d6d5633836517603ce2d2101e945dfcd2ba648bb9eea933317dd79a8",
+                "route_hash": "4fe09043d6d5633836517603ce2d2101e945dfcd2ba648bb9eea933317dd79a8",
+                "map_version_id": "ca87b73923d7458efec4fb5ecde2ca8b90c758ab5103e4c657fbabad62dab30e",
+                "localization_epoch": 1,
+                "localization_seed_id": "isaac-d0f41605-bca0-471c-b6da-ab65e2bf74ef",
+                "reference_generation": 4,
+                "segment_id": "floor",
+                "anchor_id": "00fcf8b3e20c39ef2c038b735a0c4b2485bd76f552ddf8e6946959c90633ca22",
+                "anchor_revision": 1,
+                "context_sequence": 1,
+                "map_geometry_revision": 1
+              },
+              "candidate_version": {
+                "schema_version": 3,
+                "session_id": "1d5aa12cc30942d88b1e3f0d1dc841cc",
+                "task_id": "1d5aa12cc30942d88b1e3f0d1dc841cc.2",
+                "route_id": "1d5aa12cc30942d88b1e3f0d1dc841cc.2:4fe09043d6d5633836517603ce2d2101e945dfcd2ba648bb9eea933317dd79a8",
+                "route_hash": "4fe09043d6d5633836517603ce2d2101e945dfcd2ba648bb9eea933317dd79a8",
+                "map_version_id": "ca87b73923d7458efec4fb5ecde2ca8b90c758ab5103e4c657fbabad62dab30e",
+                "localization_epoch": 1,
+                "localization_seed_id": "isaac-d0f41605-bca0-471c-b6da-ab65e2bf74ef",
+                "reference_generation": 4,
+                "segment_id": "floor",
+                "anchor_id": "00fcf8b3e20c39ef2c038b735a0c4b2485bd76f552ddf8e6946959c90633ca22",
+                "anchor_revision": 1,
+                "context_sequence": 1,
+                "map_geometry_revision": 1
+              },
+              "incumbent_trajectory_id": 0,
+              "candidate_trajectory_id": 28,
+              "execution_id": "1d5aa12cc30942d88b1e3f0d1dc841cc.2:execution",
+              "sdk_session": "isolated-1d5aa12cc30942d88b1e3f0d1dc841cc",
+              "transport_mode": "isolated_mock",
+              "control_epoch": 2,
+              "sdk_arm_generation": 2,
+              "permit_sequence": 355,
+              "demand_sequence": 1578,
+              "motion_validation_sequence": 1145,
+              "entry_admission_sequence": 0,
+              "applied_at": {
+                "sec": 1791374804,
+                "nanosec": 213868749
+              },
+              "demand_source_stamp": {
+                "sec": 1791374804,
+                "nanosec": 193868749
+              },
+              "demand_body_source_stamp": {
+                "sec": 1791374804,
+                "nanosec": 193868749
+              },
+              "entry_source_stamp": {
+                "sec": 0,
+                "nanosec": 0
+              },
+              "body_source_stamp": {
+                "sec": 1791374804,
+                "nanosec": 213868749
+              },
+              "valid_until": {
+                "sec": 1791374804,
+                "nanosec": 293868749
+              },
+              "measured_pose": {
+                "header": {
+                  "stamp": {
+                    "sec": 1791374804,
+                    "nanosec": 213868749
+                  },
+                  "frame_id": "d1max_loc_odom"
+                },
+                "pose": {
+                  "position": {
+                    "x": -6.041214466094971,
+                    "y": -5.076452732086182,
+                    "z": 0.4855518043041229
+                  },
+                  "orientation": {
+                    "x": 0.0009529042872600257,
+                    "y": 0.0072876871563494205,
+                    "z": 0.008869713172316551,
+                    "w": 0.9999337196350098
+                  }
+                }
+              },
+              "measured_twist": {
+                "linear": {
+                  "x": -0.0004664613666503897,
+                  "y": 8.009839493019128e-05,
+                  "z": 0.007320156321965724
+                },
+                "angular": {
+                  "x": -0.00012127134339486109,
+                  "y": -0.00016491273679691457,
+                  "z": -0.002148829400372791
+                }
+              },
+              "applied_velocity": {
+                "linear": {
+                  "x": 0.017846361916540755,
+                  "y": 0.0,
+                  "z": 0.0
+                },
+                "angular": {
+                  "x": 0.0,
+                  "y": 0.0,
+                  "z": -0.019331569708773283
+                }
+              },
+              "curve_time": 0.0,
+              "applied": true,
+              "write_submitted": true,
+              "write_acknowledged": true,
+              "reason": "writer_software_commit_not_physical_confirmation"
+            },
+            "execution_id": "1d5aa12cc30942d88b1e3f0d1dc841cc.2:execution",
+            "control_epoch": 2,
+            "sequence": 2,
+            "permit_sequence": 355,
+            "motion_validation_sequence": 1145,
+            "demand_sequence": 1578,
+            "reason": "writer_software_commit_not_physical_confirmation",
+            "handoff_id": "",
+            "applied": true,
+            "body_source_stamp_ns": 1791374804213868749,
+            "valid_until_ns": 1791374804293868749,
+            "demand_source_stamp_ns": 1791374804193868749,
+            "demand_body_source_stamp_ns": 1791374804193868749,
+            "applied_at_ns": 1791374804213868749
+          }
+        },
+        "phase1_first_nonrevoked_expected1_grant": {
+          "original_line_number": 5836,
+          "kind": "handoff_grant",
+          "receipt_monotonic_ns": 1221411025818065,
+          "source_clock_ns": 1791374810433868749,
+          "data": {
+            "schema_version": 2,
+            "transition_mode": 0,
+            "handoff_id": "1d5aa12cc30942d88b1e3f0d1dc841cc.2:execution:handoff:1",
+            "sequence": 1,
+            "expected_commit_sequence": 1,
+            "incumbent": {
+              "version": {
+                "schema_version": 3,
+                "session_id": "1d5aa12cc30942d88b1e3f0d1dc841cc",
+                "task_id": "1d5aa12cc30942d88b1e3f0d1dc841cc.2",
+                "route_id": "1d5aa12cc30942d88b1e3f0d1dc841cc.2:4fe09043d6d5633836517603ce2d2101e945dfcd2ba648bb9eea933317dd79a8",
+                "route_hash": "4fe09043d6d5633836517603ce2d2101e945dfcd2ba648bb9eea933317dd79a8",
+                "map_version_id": "ca87b73923d7458efec4fb5ecde2ca8b90c758ab5103e4c657fbabad62dab30e",
+                "localization_epoch": 1,
+                "localization_seed_id": "isaac-d0f41605-bca0-471c-b6da-ab65e2bf74ef",
+                "reference_generation": 4,
+                "segment_id": "floor",
+                "anchor_id": "00fcf8b3e20c39ef2c038b735a0c4b2485bd76f552ddf8e6946959c90633ca22",
+                "anchor_revision": 1,
+                "context_sequence": 1,
+                "map_geometry_revision": 1
+              },
+              "execution_id": "1d5aa12cc30942d88b1e3f0d1dc841cc.2:execution",
+              "control_epoch": 2,
+              "confirmation_id": "1d5aa12cc30942d88b1e3f0d1dc841cc.2:isaac-smoke-1d5aa12cc30942d88b1e3f0d1dc841cc",
+              "sdk_session": "isolated-1d5aa12cc30942d88b1e3f0d1dc841cc",
+              "sdk_arm_generation": 2,
+              "sequence": 513,
+              "source_stamp": {
+                "sec": 1791374810,
+                "nanosec": 393868749
+              },
+              "valid_until": {
+                "sec": 1791374810,
+                "nanosec": 643868749
+              },
+              "trajectory_id": 28,
+              "validation_sequence": 2280,
+              "frame_id": "d1max_loc_odom",
+              "goal_position": {
+                "x": 8.0,
+                "y": -4.999999999999999,
+                "z": 0.4809999999999999
+              },
+              "allowed": true,
+              "geometry_committed": true,
+              "revoked": false,
+              "has_goal_yaw": false,
+              "goal_yaw": 0.0,
+              "goal_yaw_tolerance_rad": 0.15,
+              "phase": "tracking",
+              "transport_mode": "isolated_mock",
+              "reason": "committed_execution_lease"
+            },
+            "candidate": {
+              "version": {
+                "schema_version": 3,
+                "session_id": "1d5aa12cc30942d88b1e3f0d1dc841cc",
+                "task_id": "1d5aa12cc30942d88b1e3f0d1dc841cc.2",
+                "route_id": "1d5aa12cc30942d88b1e3f0d1dc841cc.2:4fe09043d6d5633836517603ce2d2101e945dfcd2ba648bb9eea933317dd79a8",
+                "route_hash": "4fe09043d6d5633836517603ce2d2101e945dfcd2ba648bb9eea933317dd79a8",
+                "map_version_id": "ca87b73923d7458efec4fb5ecde2ca8b90c758ab5103e4c657fbabad62dab30e",
+                "localization_epoch": 1,
+                "localization_seed_id": "isaac-d0f41605-bca0-471c-b6da-ab65e2bf74ef",
+                "reference_generation": 5,
+                "segment_id": "floor",
+                "anchor_id": "00fcf8b3e20c39ef2c038b735a0c4b2485bd76f552ddf8e6946959c90633ca22",
+                "anchor_revision": 1,
+                "context_sequence": 1,
+                "map_geometry_revision": 1
+              },
+              "execution_id": "1d5aa12cc30942d88b1e3f0d1dc841cc.2:execution",
+              "control_epoch": 2,
+              "confirmation_id": "1d5aa12cc30942d88b1e3f0d1dc841cc.2:isaac-smoke-1d5aa12cc30942d88b1e3f0d1dc841cc",
+              "sdk_session": "isolated-1d5aa12cc30942d88b1e3f0d1dc841cc",
+              "sdk_arm_generation": 2,
+              "sequence": 514,
+              "source_stamp": {
+                "sec": 1791374810,
+                "nanosec": 433868749
+              },
+              "valid_until": {
+                "sec": 1791374810,
+                "nanosec": 643868749
+              },
+              "trajectory_id": 47,
+              "validation_sequence": 2282,
+              "frame_id": "d1max_loc_odom",
+              "goal_position": {
+                "x": 8.0,
+                "y": -4.999999999999999,
+                "z": 0.4809999999999999
+              },
+              "allowed": true,
+              "geometry_committed": false,
+              "revoked": false,
+              "has_goal_yaw": false,
+              "goal_yaw": 0.0,
+              "goal_yaw_tolerance_rad": 0.15,
+              "phase": "tracking",
+              "transport_mode": "isolated_mock",
+              "reason": "committed_execution_lease"
+            },
+            "stationary_evidence": {
+              "schema_version": 0,
+              "version": {
+                "schema_version": 0,
+                "session_id": "",
+                "task_id": "",
+                "route_id": "",
+                "route_hash": "",
+                "map_version_id": "",
+                "localization_epoch": 0,
+                "localization_seed_id": "",
+                "reference_generation": 0,
+                "segment_id": "",
+                "anchor_id": "",
+                "anchor_revision": 0,
+                "context_sequence": 0,
+                "map_geometry_revision": 0
+              },
+              "execution_id": "",
+              "control_epoch": 0,
+              "sdk_session": "",
+              "sdk_arm_generation": 0,
+              "transport_mode": "",
+              "sequence": 0,
+              "writer_commit_sequence": 0,
+              "applied_trajectory_id": 0,
+              "zero_write_sequence": 0,
+              "zero_ack_at": {
+                "sec": 0,
+                "nanosec": 0
+              },
+              "mc_raw_stamp_ns": 0,
+              "mc_clock_epoch": "",
+              "time_basis": "",
+              "source_stamp": {
+                "sec": 0,
+                "nanosec": 0
+              },
+              "received_stamp": {
+                "sec": 0,
+                "nanosec": 0
+              },
+              "capture_lower_bound": {
+                "sec": 0,
+                "nanosec": 0
+              },
+              "capture_upper_bound": {
+                "sec": 0,
+                "nanosec": 0
+              },
+              "mc_capture_delay_bound_sec": 0.0,
+              "valid_until": {
+                "sec": 0,
+                "nanosec": 0
+              },
+              "stationary_samples": 0,
+              "stationary_duration_sec": 0.0,
+              "measured_linear_mps": 0.0,
+              "measured_angular_radps": 0.0,
+              "nonzero_blocked": false,
+              "usable": false,
+              "physical_acceptance_verified": false
+            },
+            "source_stamp": {
+              "sec": 1791374810,
+              "nanosec": 433868749
+            },
+            "valid_until": {
+              "sec": 1791374810,
+              "nanosec": 643868749
+            },
+            "transition_deadline": {
+              "sec": 1791374810,
+              "nanosec": 643868749
+            },
+            "retain_incumbent_until": {
+              "sec": 1791374810,
+              "nanosec": 643868749
+            },
+            "revoked": false,
+            "reason": "conditional_writer_cas"
+          }
+        }
+      },
+      "observation_boundary": "Trace records original identities/commit numbers, not an instrumented C++ return. The before-preparation rejection follows directly from the sealed equality predicate. Deadline_expired ACKs are downstream outcomes, not proof of a sensor-expiry cause.",
+      "independent_review": "framework_audit independently confirmed the same original ledger mismatch and reported it to root; this record independently recounts the original traces and binds sealed source bytes.",
+      "remediation_status": "Root authorized a separate ledger-lifecycle fix. Its tests and a new formal run are required; this original sealed v53 run remains FAILED.",
+      "leases_geometry_sensor_changes_for_this_evidence": false
+    },
+    "cancel_writer_ledger_leak_confirmed": true
+  },
+  "native_500hz_domain_and_final_zero_stop": {
+    "schema": 1,
+    "kind": "sealed_normal_navigation_500hz_physics_audit",
+    "verified": true,
+    "errors": [],
+    "scope": "isolated_simulation_native_PhysX_500Hz_BEGIN_and_actual_final_END",
+    "velocity_domain_scope": "instantaneous full XYZ admission; not a future full XYZ reachability guarantee",
+    "hardware_acceptance": false,
+    "continuous_collision_claim": false,
+    "raw_records_modified": false,
+    "raw_sha256": "8c30cbb1eb3fb44cefe848c174400b97b8c89bad7a965794dd544f71c88ad490",
+    "session_id": "1d5aa12cc30942d88b1e3f0d1dc841cc",
+    "epoch": "d0f41605-bca0-471c-b6da-ab65e2bf74ef",
+    "clock_anchor_ns": 1791374784633868749,
+    "scene_sha256": "d4c6e98b520c6530f35b1924eecccb90ae7d8d37a49e2b55b27c6e59093702c5",
+    "model_sha256": "6c8d42d6f1ce547e5887179d5fc8ecbca2f6c2068e1ed6c01013a0af8f141e63",
+    "actual_source_ticks": 31650,
+    "duration_ns": 63300000000,
+    "sample_count": 31651,
+    "complete_native_500hz": true,
+    "native_first_tick": 1010,
+    "native_final_tick": 32660,
+    "policy_first_counter": 1000,
+    "policy_final_counter": 32650,
+    "manifest_policy_hz": 50,
+    "manifest_observation_count": 3265,
+    "observation_count_scope": "original count includes bootstrap; not a reconstructed source-only inference gate",
+    "all_epoch": {
+      "sample_count": 31651,
+      "max_full_xyz_speed_mps": 0.5692541727545726,
+      "peak_source_ns": 1791374789653868749,
+      "peak_source_tick": 2510,
+      "peak_raw_linear_velocity_world": [
+        0.5570507049560547,
+        0.1134173572063446,
+        0.029687175527215004
+      ],
+      "max_abs_world_yaw_rate_radps": 0.22425250709056854,
+      "max_full_angular_speed_radps": 0.7206188086872937,
+      "full_angular_norm_is_diagnostic_only": true,
+      "speed_bounds": {
+        "reachable_max_speed_mps": 0.65,
+        "reference_max_speed_mps": 0.65,
+        "measured_travel_max_speed_mps": 0.65
+      },
+      "yaw_bound_radps": 0.8,
+      "exceeded_speed_domains": [],
+      "yaw_domain_exceeded": false
+    },
+    "final_stop": {
+      "verified": true,
+      "scope": "final actual zero-consumption episode; native full XYZ and angular norm",
+      "transition_exercised": true,
+      "linear_threshold_mps": 0.03,
+      "angular_threshold_radps": 0.05,
+      "stationary_duration_s": 1.0,
+      "stop_latency_bound_s": 3.0,
+      "stopping_distance_bound_m": 0.5,
+      "stopping_yaw_bound_rad": 0.4,
+      "last_nonzero_consumption_source_ns": 1791374811897868749,
+      "zero_consumption_source_ns": 1791374811899868749,
+      "reason": "recorded_stop_within_original_bounds",
+      "stationary_window_start_source_ns": 1791374812429868749,
+      "confirmation_source_ns": 1791374813429868749,
+      "confirmation_latency_s": 1.53,
+      "extra_xy_path_m": 0.017530137865986343,
+      "extra_absolute_yaw_path_rad": 0.06537011411418443,
+      "actual_zero_tail_duration_s": 36.034
+    }
+  },
+  "all_actor_and_geometry_evidence": {
+    "all_six_actor_ids": [
+      "door_blocking_cart",
+      "office_person",
+      "oncoming_cart",
+      "plaza_cart",
+      "plaza_person",
+      "warehouse_forklift"
+    ],
+    "sampled_source_rows": 3798,
+    "presence_counts": {
+      "door_blocking_cart": 3798,
+      "office_person": 3798,
+      "oncoming_cart": 3798,
+      "plaza_cart": 3798,
+      "plaza_person": 3798,
+      "warehouse_forklift": 3798
+    },
+    "first_last_source_ns": [
+      18000000,
+      63300000000
+    ],
+    "max_sampling_gap_ns": 20000000,
+    "body_attestation": {
+      "required": true,
+      "verified_samples": 3798,
+      "failures": 0,
+      "envelope": {
+        "radius": 0.6078651750202781,
+        "offset": 0.3125,
+        "above": 0.589,
+        "support_floor_z": 0.0,
+        "support_penetration_m": 0.02
+      }
+    },
+    "static_attestation": {
+      "expected_sha256": "d7138b0cc540a5e53d8640ef17898a4e13ef48f2f03ed6643f74d07a1178af17",
+      "cadence": "every actual body state; source timestamp unchanged",
+      "count": 3798,
+      "faults": 0,
+      "fault_latched": false,
+      "last_sha256": "d7138b0cc540a5e53d8640ef17898a4e13ef48f2f03ed6643f74d07a1178af17",
+      "last_fault": "",
+      "total_wall_s": 0.0055321897380054,
+      "max_wall_s": 4.978850483894348e-06,
+      "full_stage_audits": 1,
+      "notice_timings": {},
+      "cache_hits": 35448
+    },
+    "sampled_collision_possible_overlap_counts": {
+      "static": 0,
+      "dynamic": 0
+    },
+    "sampled_collision_faults": [],
+    "required_actor_encounter_observed": false,
+    "native_floor_hit_audit": {
+      "scans": 1266,
+      "native_floor_hits": 3139855,
+      "max_abs_error_m": 4.896228440298689e-06,
+      "sealed_error_bound_m": 0.0002,
+      "raw_endpoints_and_source_times_preserved": true
+    },
+    "actual_recovery_events": 0
+  },
+  "performance": {
+    "original_timing": {
+      "measured_state_samples": 3798,
+      "measured_state_wall_seconds": 152.08876191987656,
+      "measured_state_sim_seconds": 63.282000000000004,
+      "wall_seconds_per_sim_second": 2.4033494819992502,
+      "realtime_factor": 0.4160859698058312,
+      "state_wall_hz": 24.96568419697135,
+      "longest_state_wall_gap_s": 0.1741214010398835,
+      "longest_rays_wall_gap_s": [
+        0.3671501809731126,
+        0.3672187679912895
+      ]
+    },
+    "original_ray_receipt_lease_s": 0.5,
+    "longest_ray_receipt_gap_exceeds_lease": false,
+    "original_sensor_source_frequency_hz": 10,
+    "higher_sensor_rate_solves_this_failure_claim": false
+  },
+  "independent_audit": {
+    "physics_audit_exit_code": 0,
+    "native_500hz_verified": true,
+    "case_check_results": [
+      {
+        "name": "sealed_same_scene",
+        "status": "passed",
+        "reason": ""
+      },
+      {
+        "name": "sealed_spot_encounter_profile_model",
+        "status": "passed",
+        "reason": ""
+      },
+      {
+        "name": "single_session_ordered_actions",
+        "status": "failed",
+        "reason": "original_smoke_phase_failed:1"
+      },
+      {
+        "name": "phase_000_action_stop_source",
+        "status": "passed",
+        "reason": ""
+      },
+      {
+        "name": "phase_000_test_source_budget",
+        "status": "passed",
+        "reason": ""
+      },
+      {
+        "name": "phase_000_source_cancel",
+        "status": "passed",
+        "reason": ""
+      },
+      {
+        "name": "phase_001_action_stop_source",
+        "status": "failed",
+        "reason": "original_action_or_measured_stop_failed"
+      },
+      {
+        "name": "phase_001_test_source_budget",
+        "status": "passed",
+        "reason": ""
+      },
+      {
+        "name": "phase_001_goal",
+        "status": "failed",
+        "reason": ""
+      },
+      {
+        "name": "fresh_ordered_task_identities_and_source_deadline",
+        "status": "passed",
+        "reason": ""
+      },
+      {
+        "name": "independent_full_physics_motion_domain_and_stop",
+        "status": "passed",
+        "reason": ""
+      },
+      {
+        "name": "actual_link_static_and_actor_collision",
+        "status": "passed",
+        "reason": ""
+      },
+      {
+        "name": "intended_dynamic_encounter_observed",
+        "status": "failed",
+        "reason": "intended_sampled_proximity_encounter_not_exercised_during_original_action_interval"
+      },
+      {
+        "name": "owned_graph_retirement",
+        "status": "failed",
+        "reason": "Navigation test failed; inspect smoke.log and its original reports"
+      }
+    ]
+  },
+  "bindings": {
+    "private_readonly_summary": {
+      "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/v53_restart_failure_private_summary.json",
+      "sha256": "b846e3ce282abe8427fcdc204f291d655d06c2e938f3ca7d208bc75be44bbd8e",
+      "bytes": 103133
+    },
+    "analysis_script": {
+      "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/v53_restart_failure_readonly_summary.py",
+      "sha256": "80c5298eeeb1677757e5a9aaa3ef3af69c42fa14a0f41f6b75c730f16079806a",
+      "bytes": 15557
+    },
+    "independent_sealed_case_evaluation": {
+      "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/v53_sealed_case_evaluation.json",
+      "sha256": "a6a3a91b3d1f9669b6e11a2b837f0b6b549e8efb916d6b88d1daa7fa407efea3",
+      "bytes": 9620
+    },
+    "independent_native_500hz_audit": {
+      "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/v53_navigation_physics_audit.json",
+      "sha256": "74b5cd5ca02cf6242b33705fd9f54dd638d87ef472b3ae09c02b148c3af090ae",
+      "bytes": 2779
+    },
+    "original_candidate_integrity": {
+      "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v53-campus-all-actors-restart/isaac_candidate_integrity.json",
+      "sha256": "2bacfb3675a187a2e3011754c505c47f46069a710d398f11bfcc0534891b8668",
+      "bytes": 778601
+    },
+    "original_sealed_code": {
+      "simulation/assets/scene_config.json": {
+        "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v53-campus-all-actors-restart/simulation/assets/scene_config.json",
+        "sha256": "d4c6e98b520c6530f35b1924eecccb90ae7d8d37a49e2b55b27c6e59093702c5",
+        "bytes": 64682,
+        "matches_original_candidate_integrity": true
+      },
+      "simulation/scenario_suite.py": {
+        "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v53-campus-all-actors-restart/simulation/scenario_suite.py",
+        "sha256": "8ed66f2a99c27ea530cd478d9c8094db3d40e9f3fee5f026da5572d774bf8f4f",
+        "bytes": 47102,
+        "matches_original_candidate_integrity": true
+      },
+      "simulation/navigation_physics_audit.py": {
+        "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v53-campus-all-actors-restart/simulation/navigation_physics_audit.py",
+        "sha256": "93042f7962c8d2fb5fa78a2d9a7934b8b8c52ddb241b641152f566f30c5263a8",
+        "bytes": 18468,
+        "matches_original_candidate_integrity": true
+      },
+      "simulation/scene.py": {
+        "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v53-campus-all-actors-restart/simulation/scene.py",
+        "sha256": "c2d07718f6e27d0e254bc614e780ddbe0847fbdd57c33b2cec2a9736d7c73f87",
+        "bytes": 86033,
+        "matches_original_candidate_integrity": true
+      },
+      "simulation/world_builder.py": {
+        "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v53-campus-all-actors-restart/simulation/world_builder.py",
+        "sha256": "cad9ddf602080499017e940ec6b5807c23acb708cdbe0bb1d3de620000abe88d",
+        "bytes": 56226,
+        "matches_original_candidate_integrity": true
+      },
+      "simulation/quadruped.py": {
+        "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v53-campus-all-actors-restart/simulation/quadruped.py",
+        "sha256": "191626991514d1ed2cd8c118ab1e8da4c1c2b99be23b39dc447a6e395cf8dbd2",
+        "bytes": 40630,
+        "matches_original_candidate_integrity": true
+      },
+      "simulation/truth_map.py": {
+        "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v53-campus-all-actors-restart/simulation/truth_map.py",
+        "sha256": "40ff59bb84b741bb54bda07333ced7220a44a0ff709b90b78b9bb1507750832c",
+        "bytes": 53324,
+        "matches_original_candidate_integrity": true
+      },
+      "application/install/scan_planner/include/plan_manage/trajectory_collision.hpp": {
+        "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v53-campus-all-actors-restart/application/install/scan_planner/include/plan_manage/trajectory_collision.hpp",
+        "sha256": "4ff22c6293be20cad924ef56428ca88d94a19642147c470f5c05c98bf25f9b4f",
+        "bytes": 17663,
+        "matches_original_candidate_integrity": true
+      },
+      "application/install/scan_planner/include/plan_manage/execution_validator.hpp": {
+        "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v53-campus-all-actors-restart/application/install/scan_planner/include/plan_manage/execution_validator.hpp",
+        "sha256": "8e37973bf3505f239119b6f2d8771aab89c7cfc4e915953a8d6f1a2a46b73376",
+        "bytes": 69699,
+        "matches_original_candidate_integrity": true
+      },
+      "application/install/scan_planner/lib/scan_planner/scan_planner_node": {
+        "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v53-campus-all-actors-restart/application/install/scan_planner/lib/scan_planner/scan_planner_node",
+        "sha256": "e1d01483651d6e0836f61c8cfcb6cadd3df4194eb0de052e6e752e3277fed002",
+        "bytes": 9047680,
+        "matches_original_candidate_integrity": true
+      },
+      "application/install/d1max_trajectory_tracker/include/d1max_trajectory_tracker/tracker_core.hpp": {
+        "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v53-campus-all-actors-restart/application/install/d1max_trajectory_tracker/include/d1max_trajectory_tracker/tracker_core.hpp",
+        "sha256": "7eed42768212f24a400082f36f52b1d6779760d24b84edc0a1b27d9fc8398a18",
+        "bytes": 98402,
+        "matches_original_candidate_integrity": true
+      },
+      "application/install/d1max_trajectory_tracker/include/d1max_trajectory_tracker/execution_contract.hpp": {
+        "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v53-campus-all-actors-restart/application/install/d1max_trajectory_tracker/include/d1max_trajectory_tracker/execution_contract.hpp",
+        "sha256": "3fe794963cd33fdc611ab03cb1ba68729513a8055ccd342c234828c1ae5b2247",
+        "bytes": 65589,
+        "matches_original_candidate_integrity": true
+      },
+      "source_snapshot/nav/src/d1max_trajectory_tracker/src/trajectory_tracker.cpp": {
+        "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v53-campus-all-actors-restart/source_snapshot/nav/src/d1max_trajectory_tracker/src/trajectory_tracker.cpp",
+        "sha256": "154dc29520b05f38c4d4742e736f61377c9c068606a993e453d5295fc2a1941e",
+        "bytes": 27252,
+        "matches_original_candidate_integrity": true
+      }
+    },
+    "original_raw_records": {
+      "session.json": {
+        "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/runs/campus_restart_v53_001/session.json",
+        "sha256": "5dbd5004a118b0efc9864397c3aebf1d807088059f33deef650013cbf1cb2d9d",
+        "bytes": 14390
+      },
+      "braking_model.json": {
+        "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/runs/campus_restart_v53_001/braking_model.json",
+        "sha256": "6c8d42d6f1ce547e5887179d5fc8ecbca2f6c2068e1ed6c01013a0af8f141e63",
+        "bytes": 1905
+      },
+      "run_summary.json": {
+        "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/runs/campus_restart_v53_001/run_summary.json",
+        "sha256": "84647584d76bc32d2999506f9302b46518bd157383007e63ef9a922785574efa",
+        "bytes": 905
+      },
+      "shutdown.json": {
+        "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/runs/campus_restart_v53_001/shutdown.json",
+        "sha256": "3fe61a410c5d6b5612b0d52f4e3d44baf25616fd3071278af34b5cfb1ada2eef",
+        "bytes": 273
+      },
+      "runtime_bundle.json": {
+        "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/runs/campus_restart_v53_001/runtime_bundle.json",
+        "sha256": "8daa040c137ad48e02e7786510f4bab6505cd421bec08b4a204b90db198e708d",
+        "bytes": 744773
+      },
+      "runtime_inputs.json": {
+        "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/runs/campus_restart_v53_001/runtime_inputs.json",
+        "sha256": "160292ce377e5ed5d467e3163645f947aad289bb3fb3827e4590504c05b35b25",
+        "bytes": 311159
+      },
+      "tracker.yaml": {
+        "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/runs/campus_restart_v53_001/tracker.yaml",
+        "sha256": "8ba3d594f12859fbcd2cd4c6b5805936112710a96546626127b313a284d38db1",
+        "bytes": 1548
+      },
+      "scan.yaml": {
+        "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/runs/campus_restart_v53_001/scan.yaml",
+        "sha256": "ae51532f39f2f35e97036f343bd548f38399b63d1ff039d1d87ded51b0e2b8ad",
+        "bytes": 5090
+      },
+      "mock_sdk.yaml": {
+        "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/runs/campus_restart_v53_001/mock_sdk.yaml",
+        "sha256": "5651b5ed2bc9657a0ae3f83a4e1297a2efaca5ce5787498c3149a82542f24c9c",
+        "bytes": 601
+      },
+      "scan.log": {
+        "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/runs/campus_restart_v53_001/scan.log",
+        "sha256": "149aeb228f2522627e11f40c19537ae517b3283d5a4446a40c40b77d873398e6",
+        "bytes": 131825
+      },
+      "tracker.log": {
+        "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/runs/campus_restart_v53_001/tracker.log",
+        "sha256": "84b2d6ce5ea724379153fd11c7e3f51af825576bd846d360364cd7f413718ce1",
+        "bytes": 197
+      },
+      "mock_sdk.log": {
+        "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/runs/campus_restart_v53_001/mock_sdk.log",
+        "sha256": "e2e65161f0000438f14e91b053617fcd1831ca6fb0102021714f96750398c0f2",
+        "bytes": 66
+      },
+      "scenario_suite/execution.json": {
+        "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/runs/campus_restart_v53_001/scenario_suite/execution.json",
+        "sha256": "d52fe9e3b033495d32548a78830eaeabf33db9d10ab525583a82d014291c7966",
+        "bytes": 2998
+      },
+      "scenario_suite/phase_000_report.json": {
+        "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/runs/campus_restart_v53_001/scenario_suite/phase_000_report.json",
+        "sha256": "fe5a01ebf237d6517be8321cb1f6c557a7651d585e2843ac2bc42e1079ee3f5a",
+        "bytes": 1602272
+      },
+      "scenario_suite/phase_000_trace.jsonl": {
+        "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/runs/campus_restart_v53_001/scenario_suite/phase_000_trace.jsonl",
+        "sha256": "bba45a00586aa3a4cff10c28faa9fa3464ee11ab18df462499ee07ab496cba04",
+        "bytes": 16886528
+      },
+      "scenario_suite/phase_001_report.json": {
+        "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/runs/campus_restart_v53_001/scenario_suite/phase_001_report.json",
+        "sha256": "cd23b62e265174b405b9df522c4b00136bb20ce0869f096ad0babe21a9575adc",
+        "bytes": 4320488
+      },
+      "scenario_suite/phase_001_trace.jsonl": {
+        "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/runs/campus_restart_v53_001/scenario_suite/phase_001_trace.jsonl",
+        "sha256": "23f372c03ba8c9ba58ed69d68fe78e6dbae59c3d903f27aa8912253ecc6b22f3",
+        "bytes": 70484447
+      },
+      "physics/summary.json": {
+        "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/runs/campus_restart_v53_001/physics/summary.json",
+        "sha256": "e4896f3717d7debadd656cf8d698db0bb56018128fd349c162e8f930ad2e8f2a",
+        "bytes": 29568
+      },
+      "physics/policy_history_manifest.json": {
+        "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/runs/campus_restart_v53_001/physics/policy_history_manifest.json",
+        "sha256": "bbec6ab281f1ce1f87d54d432b52f88055a36e5e8d88b4a590be353955b7d564",
+        "bytes": 1147
+      },
+      "physics/policy_component_state_500hz.jsonl": {
+        "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/runs/campus_restart_v53_001/physics/policy_component_state_500hz.jsonl",
+        "sha256": "8c30cbb1eb3fb44cefe848c174400b97b8c89bad7a965794dd544f71c88ad490",
+        "bytes": 41144779
+      },
+      "physics/policy_command_events.jsonl": {
+        "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/runs/campus_restart_v53_001/physics/policy_command_events.jsonl",
+        "sha256": "524c20ce151cfd53d1bbc4c4f6ea98d70f4de6eb0a3a0949c45d1f9ca95146b2",
+        "bytes": 2293215
+      },
+      "physics/policy_observations.jsonl": {
+        "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/runs/campus_restart_v53_001/physics/policy_observations.jsonl",
+        "sha256": "8f2710b3dfd921b1c10be3f4283c40e798668ff25378726798c42f3b23f50107",
+        "bytes": 5862310
+      },
+      "physics/policy_recovery_events.jsonl": {
+        "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/runs/campus_restart_v53_001/physics/policy_recovery_events.jsonl",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "bytes": 0
+      },
+      "physics/trajectory.jsonl": {
+        "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/runs/campus_restart_v53_001/physics/trajectory.jsonl",
+        "sha256": "a764b8c2e287fdb10777e3aa77cab2e90099acb46c946cf61836559be93a7d3f",
+        "bytes": 8338349
+      },
+      "physics/dynamic_actor_readings.jsonl": {
+        "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/runs/campus_restart_v53_001/physics/dynamic_actor_readings.jsonl",
+        "sha256": "eb22ed8af7d7c96ba8fd9305c44e3e2fa0343c8ff1296ce329d36860a01838b1",
+        "bytes": 4564880
+      },
+      "physics/robot_link_readings.jsonl": {
+        "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/runs/campus_restart_v53_001/physics/robot_link_readings.jsonl",
+        "sha256": "8216d30b68af8bfa694044a8df0b5dc8de505326cd684d66463ad31c2a7cde73",
+        "bytes": 29603792
+      },
+      "physics/floor_hit_audit.jsonl": {
+        "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/runs/campus_restart_v53_001/physics/floor_hit_audit.jsonl",
+        "sha256": "a2ba105b2623911c1157813f77518939fd6a0ac19b152980eaab969c76ae8f14",
+        "bytes": 334489
+      },
+      "physics/imu_readings.jsonl": {
+        "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/runs/campus_restart_v53_001/physics/imu_readings.jsonl",
+        "sha256": "f7e49c22e9ed880bdbbe3c855d45f2865aafcf6b8da0abed5da31df53ad995b3",
+        "bytes": 2277176
+      },
+      "physics/collision_audit.json": {
+        "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/runs/campus_restart_v53_001/physics/collision_audit.json",
+        "sha256": "8965cfada35276fd53d35d2ce184d531e074f2fa6a8048b2e41e8b9bf2a2b3d6",
+        "bytes": 4349
+      }
+    },
+    "writer_ledger_causal_review": {
+      "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/v53_writer_ledger_causal_review.json",
+      "sha256": "f63ce9e16935b7b471ca5b95ea11616723a05e87d3ca3829fa25e106bbcad1ad",
+      "bytes": 26294
+    },
+    "writer_ledger_review_script": {
+      "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/v53_writer_ledger_readonly_review.py",
+      "sha256": "288b334bc1ceac6571d62034372c3df54b435668d77224434b2aa645a941a72a",
+      "bytes": 7231
+    },
+    "prior_public_evidence_revision": {
+      "local_evidence_path": "/home/eric/wjg/d1max-system/simulation/isaacsim/verification/20261007/campus_restart_v53_handoff_failure.json",
+      "sha256": "286e46a18def9e559b7f8badc553e451b3a5ab60e38956993f8002451eae1f5a",
+      "bytes": 63785
+    }
+  },
+  "limitations": [
+    "The successful cancel and independent native speed/stop audits do not convert the failed restart goal into a pass.",
+    "Published proof/ACK counts are exact event counts, not durations. Persistent-zero diagnosis uses the preserved current-curve/control/candidate witnesses, not a reason string alone.",
+    "Later terminal permission expiry follows task failure and is not relabeled as the cause of the earlier prolonged local-segment stop.",
+    "New task identity and genuine phase1 movement do not exclude lifecycle defects: the original tracker demonstrably retains the cancelled task writer sequence2 while new SDK/Owner uses1.",
+    "Original handoff_deadline_expired ACKs follow the writer sequence mismatch, before any prepared candidate motion. A separate corrected lifecycle implementation still requires tests and a new formal case; no lease, proof, C1, geometry or SDK CAS gate is weakened.",
+    "All six actors are physically present, but no required sampled proximity encounter is accepted in this run.",
+    "Actual source .56925 full XYZ maximum and final true-zero STOP1.53s are simulator sample evidence, not hardware or continuous future collision/reachability certification.",
+    "Original clean_shutdown=false, isaac_sim exit-15 and physical_stop_confirmed=false are preserved; raw records and candidate bytes are unchanged."
+  ],
+  "revision": 2
+}

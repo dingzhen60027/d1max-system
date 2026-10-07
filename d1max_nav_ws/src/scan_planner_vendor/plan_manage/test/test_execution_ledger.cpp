@@ -13,6 +13,10 @@ struct ExecutionValidatorTestAccess {
   static bool supersedes(const ew::TrajectoryValidation& a,const ew::TrajectoryValidation& b){return ExecutionValidator::proofSupersedes(a,b);}
   static auto preparedCurve(const ExecutionValidator& v){return v.prepared_?v.prepared_->spline.trajectory.traj_id:-1;}
   static auto writerSequence(const ExecutionValidator& v){return v.writer_commit_sequence_;}
+  static auto ackSequence(const ExecutionValidator& v){return v.ack_sequence_;}
+  static const auto& writerAuthority(const ExecutionValidator& v){return v.writer_authority_;}
+  static bool preparedRetired(const ExecutionValidator& v){return v.grant_retired_;}
+  static auto candidateCurve(const ExecutionValidator& v){return v.candidate_?v.candidate_->spline.trajectory.traj_id:-1;}
   static bool activeProof(const ExecutionValidator& v){return v.active_&&v.active_->proof.has_value();}
   static bool activeProgress(const ExecutionValidator& v){return v.active_&&v.active_->progress.has_value();}
   static auto bodySource(const ExecutionValidator& v){return measuredBodySourceNs(v.body_);}
@@ -706,4 +710,202 @@ TEST(ExecutionLedger,ActuallyCheckedRevisionCanSatisfyNewerOwnerFloorWithoutChan
   d.validation_sequence=40;using A=scan_planner::ExecutionValidatorTestAccess;
   EXPECT_FALSE(A::matches(d,p));EXPECT_TRUE(A::matches(d,p,41));
   EXPECT_FALSE(A::matches(d,p,39));++p.control_epoch;EXPECT_FALSE(A::matches(d,p,41));
+}
+namespace {
+using ScopeAccess=scan_planner::ExecutionValidatorTestAccess;
+struct WriterScopeFixture {
+  Fixture f;
+  scan_planner::ExecutionValidator ledger{scan_planner::ExecutionValidator::PassiveLedger{},f.pool,"odom","isolated_mock",true};
+  w::ExecutionPermit old;
+  w::ExecutionCommitAck initial, replacement;
+  w::ExecutionHandoffGrant grant;
+  WriterScopeFixture() {
+    f.proposal.version.map_geometry_revision=1;
+    old=f.permit();old.allowed=true;old.execution_id="exec-old";old.confirmation_id="confirmation-old";
+    old.control_epoch=old.sdk_arm_generation=1;old.sdk_session="sdk";old.frame_id="odom";old.phase="tracking";
+    old.source_stamp=rclcpp::Time(10000000000LL);old.valid_until=rclcpp::Time(10500000000LL);
+    initial=initialAck(old,2,10010000000LL);
+  }
+  static w::ExecutionCommitAck initialAck(const w::ExecutionPermit& p,std::uint64_t sequence,std::int64_t at) {
+    w::ExecutionCommitAck a;a.schema_version=1;a.sequence=sequence;a.applied=a.write_submitted=true;
+    a.commit_sequence=1;a.candidate_version=p.version;a.candidate_trajectory_id=p.trajectory_id;
+    a.execution_id=p.execution_id;a.control_epoch=p.control_epoch;a.sdk_session=p.sdk_session;
+    a.sdk_arm_generation=p.sdk_arm_generation;a.permit_sequence=p.sequence;a.transport_mode=p.transport_mode;
+    a.applied_at=rclcpp::Time(at);a.valid_until=rclcpp::Time(at+100000000LL);return a;
+  }
+  void candidate(const w::ExecutionPermit& p,bool complete=true) {
+    auto proposal=f.proposal;proposal.version=p.version;
+    auto spline=f.spline;spline.generation=p.version.reference_generation;spline.trajectory.traj_id=p.trajectory_id;
+    const auto& v=p.version;spline.schema_version=2;spline.session_id=v.session_id;spline.task_id=v.task_id;
+    spline.route_id=v.route_id;spline.route_hash=v.route_hash;spline.map_version_id=v.map_version_id;
+    spline.segment_id=v.segment_id;spline.segment_kind="floor";spline.required_mode="general";
+    spline.anchor_id=v.anchor_id;spline.anchor_revision=v.anchor_revision;spline.context_sequence=v.context_sequence;
+    spline.map_geometry_revision=v.map_geometry_revision;spline.localization_epoch=v.localization_epoch;
+    spline.localization_seed_id=v.localization_seed_id;spline.frame_id="odom";spline.point_reference="body_center";
+    spline.join_source_stamp=p.source_stamp;spline.join_pose.orientation.w=1.;spline.join_pose.position.z=.55;
+    spline.trajectory.start_time=p.source_stamp;spline.trajectory.order=3;
+    for(int i=0;i<4;++i){geometry_msgs::msg::Point point;point.x=(i-1)*.05;point.z=.55;spline.trajectory.pos_pts.push_back(point);}
+    for(int i=0;i<8;++i)spline.trajectory.knots.push_back((i-3)*.1);
+    if(!complete)spline.frame_id="foreign";
+    ledger.candidate(spline,proposal);
+  }
+  bool initialize() {
+    candidate(old);return ledger.commitAt(old,10000000000LL)&&ledger.commitAckAt(initial,10020000000LL);
+  }
+  bool prepareOldReplacement() {
+    auto p=old;p.trajectory_id=2;p.sequence=2;p.geometry_committed=false;candidate(p);
+    grant.schema_version=2;grant.handoff_id="old-handoff";grant.sequence=1;grant.expected_commit_sequence=1;
+    grant.incumbent=old;grant.candidate=p;grant.source_stamp=rclcpp::Time(10030000000LL);
+    grant.valid_until=grant.transition_deadline=rclcpp::Time(10300000000LL);
+    if(!ledger.handoffAt(grant,10030000000LL))return false;
+    w::MotionValidation proof;proof.handoff_id=grant.handoff_id;proof.sequence=30;proof.valid=true;
+    proof.demand_sequence=7;proof.entry_admission_sequence=8;proof.demand_source_stamp=rclcpp::Time(10040000000LL);
+    proof.demand_body_source_stamp=proof.demand_source_stamp;proof.entry_curve_time=.1;ScopeAccess::record(ledger,proof);
+    replacement=initial;replacement.sequence=4;replacement.handoff_id=grant.handoff_id;replacement.grant_sequence=1;
+    replacement.previous_commit_sequence=1;replacement.commit_sequence=2;replacement.incumbent_version=old.version;
+    replacement.incumbent_trajectory_id=1;replacement.candidate_version=p.version;replacement.candidate_trajectory_id=2;
+    replacement.permit_sequence=2;replacement.motion_validation_sequence=30;replacement.demand_sequence=7;
+    replacement.entry_admission_sequence=8;replacement.demand_source_stamp=proof.demand_source_stamp;
+    replacement.demand_body_source_stamp=proof.demand_body_source_stamp;replacement.curve_time=.1;
+    replacement.valid_until=rclcpp::Time(10140000000LL);return true;
+  }
+  bool advanceOldWriter() {
+    return prepareOldReplacement()&&ledger.commitAckAt(replacement,10050000000LL);
+  }
+  bool retire() {auto barrier=old.version;++barrier.reference_generation;return ledger.cancelReference(barrier);}
+  w::ExecutionPermit next()const {
+    auto p=old;p.version.task_id="task-next";p.version.route_id="route-next";p.version.route_hash="hash-next";
+    p.version.reference_generation=3;p.trajectory_id=3;p.sequence=10;p.execution_id="exec-next";
+    p.confirmation_id="confirmation-next";p.control_epoch=p.sdk_arm_generation=2;
+    p.source_stamp=rclcpp::Time(10300000000LL);p.valid_until=rclcpp::Time(10700000000LL);return p;
+  }
+};
+}
+TEST(ExecutionLedger,NewRetiredTaskAuthorityStartsIndependentWriterAndAckSequence) {
+  WriterScopeFixture f;ASSERT_TRUE(f.initialize());ASSERT_TRUE(f.advanceOldWriter());
+  ASSERT_EQ(ScopeAccess::writerSequence(f.ledger),2U);ASSERT_EQ(ScopeAccess::ackSequence(f.ledger),4U);
+  ASSERT_TRUE(f.retire());EXPECT_EQ(ScopeAccess::writerSequence(f.ledger),2U);
+  auto next=f.next();f.candidate(next);ASSERT_TRUE(f.ledger.commitAt(next,10310000000LL));
+  EXPECT_EQ(ScopeAccess::writerSequence(f.ledger),0U);EXPECT_EQ(ScopeAccess::ackSequence(f.ledger),0U);
+  auto first=WriterScopeFixture::initialAck(next,2,10320000000LL);
+  ASSERT_TRUE(f.ledger.commitAckAt(first,10330000000LL));EXPECT_EQ(ScopeAccess::writerSequence(f.ledger),1U);
+  auto replacement=next;replacement.trajectory_id=4;replacement.sequence=11;replacement.geometry_committed=false;
+  f.candidate(replacement);w::ExecutionHandoffGrant g;g.schema_version=2;g.handoff_id="new-handoff";
+  g.sequence=1;g.expected_commit_sequence=1;g.incumbent=next;g.candidate=replacement;
+  g.source_stamp=rclcpp::Time(10340000000LL);g.valid_until=g.transition_deadline=rclcpp::Time(10600000000LL);
+  EXPECT_TRUE(f.ledger.handoffAt(g,10340000000LL));EXPECT_EQ(ScopeAccess::preparedCurve(f.ledger),4);
+}
+TEST(ExecutionLedger,OldInitialOrHandoffAckCannotRestoreOrPoisonNewAuthority) {
+  for(const bool after_new_ack:{false,true}) {
+    WriterScopeFixture f;ASSERT_TRUE(f.initialize());ASSERT_TRUE(f.advanceOldWriter());ASSERT_TRUE(f.retire());
+    auto next=f.next();f.candidate(next);ASSERT_TRUE(f.ledger.commitAt(next,10310000000LL));
+    if(after_new_ack)ASSERT_TRUE(f.ledger.commitAckAt(WriterScopeFixture::initialAck(next,2,10320000000LL),10330000000LL));
+    const auto barrier=ScopeAccess::barrier(f.ledger);
+    for(int variant=0;variant<3;++variant) {
+      auto old=variant==0?f.initial:f.replacement;old.sequence=100+variant;
+      if(variant==2) {old.applied=old.write_submitted=old.write_acknowledged=false;old.commit_sequence=old.previous_commit_sequence;}
+      EXPECT_FALSE(f.ledger.commitAckAt(old,10340000000LL))<<variant;
+      EXPECT_EQ(f.ledger.committedTrajectory(),3);EXPECT_EQ(ScopeAccess::barrier(f.ledger),barrier);
+      EXPECT_EQ(ScopeAccess::writerSequence(f.ledger),after_new_ack?1U:0U);
+      EXPECT_EQ(ScopeAccess::ackSequence(f.ledger),after_new_ack?2U:0U);
+      ASSERT_TRUE(ScopeAccess::latest(f.ledger));EXPECT_EQ(ScopeAccess::latest(f.ledger)->execution_id,next.execution_id);
+    }
+    if(!after_new_ack)EXPECT_TRUE(f.ledger.commitAckAt(WriterScopeFixture::initialAck(next,2,10320000000LL),10340000000LL));
+  }
+}
+TEST(ExecutionLedger,CancellationAloneStillAcceptsSameAuthorityLateAppliedFactAndHolds) {
+  WriterScopeFixture f;ASSERT_TRUE(f.initialize());ASSERT_TRUE(f.prepareOldReplacement());ASSERT_TRUE(f.retire());
+  EXPECT_EQ(ScopeAccess::writerSequence(f.ledger),1U);EXPECT_EQ(ScopeAccess::ackSequence(f.ledger),2U);
+  ASSERT_TRUE(f.ledger.commitAckAt(f.replacement,10600000000LL));
+  EXPECT_EQ(ScopeAccess::writerSequence(f.ledger),2U);EXPECT_EQ(f.ledger.committedTrajectory(),2);
+  EXPECT_TRUE(ScopeAccess::preparedRetired(f.ledger));
+  EXPECT_FALSE(ScopeAccess::activeProof(f.ledger));EXPECT_FALSE(ScopeAccess::activeProgress(f.ledger));
+  ASSERT_TRUE(ScopeAccess::latest(f.ledger));
+  EXPECT_EQ(ScopeAccess::latest(f.ledger)->source_stamp,f.grant.candidate.source_stamp);
+  EXPECT_EQ(ScopeAccess::latest(f.ledger)->valid_until,f.grant.candidate.valid_until);
+}
+TEST(ExecutionLedger,NewCompleteAuthorityCanReplaceCanceledIdentityRestoredByLateAck) {
+  WriterScopeFixture f;ASSERT_TRUE(f.initialize());ASSERT_TRUE(f.prepareOldReplacement());ASSERT_TRUE(f.retire());
+  ASSERT_TRUE(f.ledger.commitAckAt(f.replacement,10310000000LL));
+  ASSERT_EQ(f.ledger.committedTrajectory(),2);ASSERT_EQ(ScopeAccess::writerSequence(f.ledger),2U);
+  auto next=f.next();f.candidate(next);ASSERT_TRUE(f.ledger.commitAt(next,10310000000LL));
+  EXPECT_EQ(f.ledger.committedTrajectory(),3);EXPECT_EQ(ScopeAccess::writerSequence(f.ledger),0U);
+  EXPECT_EQ(ScopeAccess::ackSequence(f.ledger),0U);
+  EXPECT_TRUE(f.ledger.commitAckAt(WriterScopeFixture::initialAck(next,2,10320000000LL),10330000000LL));
+}
+TEST(ExecutionLedger,SameExecutionHeartbeatOrReplanCannotResetWriterScope) {
+  WriterScopeFixture f;ASSERT_TRUE(f.initialize());ASSERT_TRUE(f.advanceOldWriter());
+  auto heartbeat=f.grant.candidate;heartbeat.geometry_committed=true;heartbeat.sequence=10;
+  ASSERT_TRUE(f.ledger.commitAt(heartbeat,10060000000LL));
+  EXPECT_EQ(ScopeAccess::writerSequence(f.ledger),2U);EXPECT_EQ(ScopeAccess::ackSequence(f.ledger),4U);
+  auto replan=heartbeat;++replan.version.reference_generation;replan.trajectory_id=3;++replan.sequence;f.candidate(replan);
+  EXPECT_FALSE(f.ledger.commitAt(replan,10060000000LL));
+  EXPECT_EQ(ScopeAccess::writerSequence(f.ledger),2U);EXPECT_EQ(ScopeAccess::ackSequence(f.ledger),4U);
+}
+TEST(ExecutionLedger,InvalidUnretiredOrUnmatchedNewAuthorityNeverResetsWriterFacts) {
+  for(int variant=0;variant<15;++variant) {
+    WriterScopeFixture f;ASSERT_TRUE(f.initialize());ASSERT_TRUE(f.advanceOldWriter());
+    if(variant!=0)ASSERT_TRUE(f.retire());
+    auto next=f.next();
+    if(variant==1)next.version.task_id=f.old.version.task_id;
+    if(variant==2)next.execution_id=f.old.execution_id;
+    if(variant==3)next.control_epoch=f.old.control_epoch;
+    if(variant==4)next.allowed=false;if(variant==5)next.revoked=true;
+    if(variant==6)next.geometry_committed=false;if(variant==7)next.confirmation_id.clear();
+    if(variant==8)next.sdk_session.clear();if(variant==9)next.sdk_arm_generation=0;
+    if(variant==10)next.version.session_id="foreign";if(variant==11)next.version.map_geometry_revision=0;
+    if(variant==12)next.source_stamp=rclcpp::Time(10331000000LL);
+    if(variant==13)next.valid_until=rclcpp::Time(10310000000LL);
+    if(variant!=14)f.candidate(next);
+    EXPECT_FALSE(f.ledger.commitAt(next,10310000000LL))<<variant;
+    EXPECT_EQ(ScopeAccess::writerSequence(f.ledger),2U);EXPECT_EQ(ScopeAccess::ackSequence(f.ledger),4U);
+    ASSERT_TRUE(ScopeAccess::writerAuthority(f.ledger));
+    EXPECT_EQ(ScopeAccess::writerAuthority(f.ledger)->execution_id,f.old.execution_id);
+  }
+}
+TEST(ExecutionLedger,SdkArmGenerationIsExactIdentityAcrossNewSessionNotGlobalCounter) {
+  WriterScopeFixture f;ASSERT_TRUE(f.initialize());ASSERT_TRUE(f.advanceOldWriter());ASSERT_TRUE(f.retire());
+  auto next=f.next();next.sdk_session="new-sdk-session";next.sdk_arm_generation=1;
+  f.candidate(next);ASSERT_TRUE(f.ledger.commitAt(next,10310000000LL));
+  auto first=WriterScopeFixture::initialAck(next,2,10320000000LL);auto wrong=first;wrong.sdk_arm_generation=2;
+  EXPECT_FALSE(f.ledger.commitAckAt(wrong,10330000000LL));EXPECT_EQ(ScopeAccess::ackSequence(f.ledger),0U);
+  EXPECT_TRUE(f.ledger.commitAckAt(first,10330000000LL));EXPECT_EQ(ScopeAccess::writerSequence(f.ledger),1U);
+}
+TEST(ExecutionLedger,SuccessorCandidateBeforeLateInitialFactSurvivesWithoutAuthorityOrLeaseRenewal) {
+  WriterScopeFixture f;f.candidate(f.old);ASSERT_TRUE(f.ledger.commitAt(f.old,10000000000LL));
+  ASSERT_TRUE(f.retire());auto next=f.next();f.candidate(next);
+  ASSERT_EQ(ScopeAccess::candidateCurve(f.ledger),3);
+  ASSERT_TRUE(f.ledger.commitAckAt(f.initial,10310000000LL));
+  EXPECT_EQ(f.ledger.committedTrajectory(),1);EXPECT_EQ(ScopeAccess::writerSequence(f.ledger),1U);
+  EXPECT_EQ(ScopeAccess::candidateCurve(f.ledger),3);ASSERT_TRUE(ScopeAccess::latest(f.ledger));
+  EXPECT_FALSE(ScopeAccess::latest(f.ledger)->allowed);EXPECT_EQ(ScopeAccess::latest(f.ledger)->phase,"holding");
+  EXPECT_EQ(ScopeAccess::latest(f.ledger)->source_stamp,f.old.source_stamp);
+  EXPECT_EQ(ScopeAccess::latest(f.ledger)->valid_until,f.old.valid_until);
+  ASSERT_TRUE(f.ledger.commitAt(next,10310000000LL));EXPECT_EQ(ScopeAccess::writerSequence(f.ledger),0U);
+  EXPECT_TRUE(f.ledger.commitAckAt(WriterScopeFixture::initialAck(next,2,10320000000LL),10330000000LL));
+}
+TEST(ExecutionLedger,SuccessorCandidateBeforeLateHandoffFactSurvivesWhileOldPreparedIsRetired) {
+  WriterScopeFixture f;ASSERT_TRUE(f.initialize());ASSERT_TRUE(f.prepareOldReplacement());ASSERT_TRUE(f.retire());
+  auto next=f.next();f.candidate(next);ASSERT_TRUE(f.ledger.commitAckAt(f.replacement,10310000000LL));
+  EXPECT_EQ(f.ledger.committedTrajectory(),2);EXPECT_EQ(ScopeAccess::writerSequence(f.ledger),2U);
+  EXPECT_EQ(ScopeAccess::candidateCurve(f.ledger),3);EXPECT_TRUE(ScopeAccess::preparedRetired(f.ledger));
+  ASSERT_TRUE(ScopeAccess::latest(f.ledger));
+  EXPECT_EQ(ScopeAccess::latest(f.ledger)->source_stamp,f.grant.candidate.source_stamp);
+  EXPECT_EQ(ScopeAccess::latest(f.ledger)->valid_until,f.grant.candidate.valid_until);
+  ASSERT_TRUE(f.ledger.commitAt(next,10310000000LL));EXPECT_EQ(ScopeAccess::writerSequence(f.ledger),0U);
+  EXPECT_TRUE(f.ledger.commitAckAt(WriterScopeFixture::initialAck(next,2,10320000000LL),10330000000LL));
+}
+TEST(ExecutionLedger,LateWriterFactStillClearsSameTaskOrIncompleteSuccessorData) {
+  for(const bool handoff:{false,true})for(const bool same_task:{false,true}) {
+    WriterScopeFixture f;f.candidate(f.old);ASSERT_TRUE(f.ledger.commitAt(f.old,10000000000LL));
+    if(handoff){ASSERT_TRUE(f.ledger.commitAckAt(f.initial,10020000000LL));ASSERT_TRUE(f.prepareOldReplacement());}
+    ASSERT_TRUE(f.retire());auto candidate=f.next();
+    if(same_task)candidate.version=f.old.version;
+    candidate.version.reference_generation=3;f.candidate(candidate,same_task);
+    ASSERT_EQ(ScopeAccess::candidateCurve(f.ledger),3);
+    ASSERT_TRUE(f.ledger.commitAckAt(handoff?f.replacement:f.initial,10310000000LL));
+    EXPECT_EQ(ScopeAccess::candidateCurve(f.ledger),-1);
+    EXPECT_EQ(ScopeAccess::writerSequence(f.ledger),handoff?2U:1U);
+    EXPECT_EQ(f.ledger.committedTrajectory(),handoff?2:1);
+  }
 }

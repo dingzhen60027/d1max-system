@@ -50,6 +50,20 @@ def parse_args():
     parser.add_argument("--test-linear-speed", type=float, default=0.0,
                         help="Bounded physics calibration only; requires --test-frames")
     parser.add_argument("--test-angular-speed", type=float, default=0.0)
+    parser.add_argument('--frozen-command-file', type=Path,
+                        help='Bounded full-scene component replay of exact recorded 500Hz commands; disables external UDP')
+    parser.add_argument('--test-action-memory-recovery', action='store_true',
+                        help='Isolated frozen-command action-memory experiment only; baseline defaults disabled')
+    parser.add_argument('--test-velocity-feedback-mode', choices=['spot_monotone_measured_v3'],
+                        help='Isolated frozen v2 command replay with v3 exact-zero controller only')
+    parser.add_argument('--test-velocity-feedback-start-tick', type=int, default=0,
+                        help='Activate at this original source BEGIN tick; preceding ticks and bootstrap stay v2')
+    parser.add_argument('--test-policy-linear-speed', type=float,
+                        help='Isolated official internal forward policy input, 0..0.6; never navigation authorization')
+    parser.add_argument('--test-navigation-linear-speed', type=float,
+                        help='Isolated desired velocity through unchanged measured servo; requires sealed scene domain and zero tail')
+    parser.add_argument('--test-policy-motion-frames', type=int, default=0,
+                        help='500Hz policy-input motion ticks, followed by true zero until test-frames')
     parser.add_argument("--profile-physics-callbacks", action="store_true",
                         help="Read-only per-callback wall timing for a bounded component probe")
     parser.add_argument("--audit-native-hit-identities", action="store_true",
@@ -70,6 +84,20 @@ def parse_args():
         parser.error("callback profiling requires a bounded --test-frames run")
     if args.audit_native_hit_identities and not args.test_frames:
         parser.error("hit identity audit requires a bounded --test-frames run")
+    from policy_history import check_component_options
+    try:
+        check_component_options(args.test_frames, args.frozen_command_file, args.test_policy_linear_speed,
+            args.test_policy_motion_frames, args.test_linear_speed, args.test_angular_speed, args.control_file,
+            navigation_speed=args.test_navigation_linear_speed,command_limits=(.3,.5))
+        from full_scene_replay import (validate_action_memory_experiment,
+                                       validate_velocity_feedback_experiment)
+        validate_action_memory_experiment(args.test_action_memory_recovery, args.frozen_command_file,
+            args.test_policy_linear_speed, args.test_navigation_linear_speed)
+        validate_velocity_feedback_experiment(args.test_velocity_feedback_mode, args.frozen_command_file,
+            args.test_policy_linear_speed, args.test_navigation_linear_speed, args.test_action_memory_recovery,
+            args.test_velocity_feedback_start_tick, args.test_frames)
+    except ValueError as error:
+        parser.error(str(error))
     if args.static_prior_geometry_sha256 and (len(args.static_prior_geometry_sha256) != 64
             or any(c not in "0123456789abcdef" for c in args.static_prior_geometry_sha256)):
         parser.error("static-prior-geometry-sha256 must be a lower-case SHA256")
@@ -81,9 +109,54 @@ SCENE_BYTES = ARGS.scene_file.read_bytes()
 if ARGS.scene_sha256 and hashlib.sha256(SCENE_BYTES).hexdigest() != ARGS.scene_sha256:
     raise SystemExit("Scene specification does not match the sealed navigation session")
 CONFIG = json.loads(SCENE_BYTES)
+COMMAND_LIMITS = [float(CONFIG['robot'].get('max_linear_speed', .25)),
+                  float(CONFIG['robot'].get('max_angular_speed', .4))]
 IS_QUADRUPED = CONFIG['robot'].get('kind') in ('quadruped', 'official_go2_physx', 'official_spot_physx')
+IS_POLICY_COMPONENT = ARGS.frozen_command_file is not None or ARGS.test_policy_linear_speed is not None
+IS_POLICY_COMPONENT = IS_POLICY_COMPONENT or ARGS.test_navigation_linear_speed is not None
+from policy_history import check_component_options
+check_component_options(ARGS.test_frames,ARGS.frozen_command_file,ARGS.test_policy_linear_speed,
+    ARGS.test_policy_motion_frames,ARGS.test_linear_speed,ARGS.test_angular_speed,ARGS.control_file,
+    navigation_speed=ARGS.test_navigation_linear_speed,command_limits=COMMAND_LIMITS)
+if IS_POLICY_COMPONENT and CONFIG['robot'].get('kind') != 'official_spot_physx':
+    raise SystemExit('Full-scene policy component mode requires the exact official Spot fixture')
+RUNTIME_ROBOT_CONFIG = CONFIG['robot']
+if IS_POLICY_COMPONENT:
+    from full_scene_replay import component_runtime_robot
+    RUNTIME_ROBOT_CONFIG = component_runtime_robot(CONFIG['robot'],
+        action_memory_recovery=ARGS.test_action_memory_recovery, frozen_file=ARGS.frozen_command_file,
+        policy_speed=ARGS.test_policy_linear_speed, navigation_speed=ARGS.test_navigation_linear_speed,
+        velocity_feedback_mode=ARGS.test_velocity_feedback_mode)
+from stall_recovery import enabled_for as source_stall_recovery_enabled
+COMPONENT_EXPERIMENT = dict(schema=1, kind='full_scene_component_action_memory_configuration',
+    requested=ARGS.test_action_memory_recovery,
+    source_spec_stall_recovery=CONFIG['robot'].get('stall_recovery'),
+    source_resolved_stall_recovery_enabled=source_stall_recovery_enabled(CONFIG['robot']) if IS_POLICY_COMPONENT else None,
+    runtime_local_override=RUNTIME_ROBOT_CONFIG.get('stall_recovery') if ARGS.test_action_memory_recovery else None,
+    source_scene_bytes_modified=False, navigation_authorization=False,
+    intervention_scope='existing StallRecovery; action-memory only; no root/joint writes or counter reset')
+COMPONENT_VELOCITY_FEEDBACK_EXPERIMENT = dict(schema=1,
+    requested=ARGS.test_velocity_feedback_mode is not None,
+    source_mode=CONFIG['robot'].get('velocity_feedback_mode', 'legacy_pi_v1'),
+    runtime_mode=CONFIG['robot'].get('velocity_feedback_mode', 'legacy_pi_v1'),
+    requested_mode=ARGS.test_velocity_feedback_mode,
+    activation_source_tick=ARGS.test_velocity_feedback_start_tick, applied=False,
+    runtime_local_override=ARGS.test_velocity_feedback_mode,
+    source_scene_bytes_modified=False, navigation_authorization=False,
+    intervention_scope='exact-zero policy input/integral withdrawal only; no root/joint writes or counter reset')
 PLANT = None
 ARGS.physics_hz = ARGS.physics_hz or float(CONFIG.get("physics", {}).get("frequency_hz", 120.0))
+FROZEN_COMMANDS = None
+FROZEN_COMMAND_BYTES = None
+if IS_POLICY_COMPONENT and ARGS.physics_hz != 500:
+    raise SystemExit('Full-scene policy component mode requires original 500Hz physics')
+if ARGS.frozen_command_file is not None:
+    from policy_history import FrozenCommands
+    FROZEN_COMMAND_BYTES = ARGS.frozen_command_file.read_bytes()
+    if len(FROZEN_COMMAND_BYTES) > 32*1024*1024:
+        raise SystemExit('Frozen command resource limit exceeded')
+    FROZEN_COMMANDS = FrozenCommands(json.loads(FROZEN_COMMAND_BYTES),
+        hashlib.sha256(SCENE_BYTES).hexdigest(), ARGS.test_frames,COMMAND_LIMITS)
 if ARGS.physics_hz < CONFIG["imu"]["frequency_hz"]:
     raise SystemExit("Physics frequency must cover the configured native IMU sampling frequency")
 if ARGS.render_fps > ARGS.physics_hz / 2:
@@ -91,6 +164,8 @@ if ARGS.render_fps > ARGS.physics_hz / 2:
 EPOCH = ARGS.epoch or str(uuid.uuid4())
 RESULT_DIR = ARGS.result_dir.expanduser().resolve()
 RESULT_DIR.mkdir(parents=True, exist_ok=True)
+if FROZEN_COMMAND_BYTES is not None:
+    (RESULT_DIR/'frozen_command_input.json').write_bytes(FROZEN_COMMAND_BYTES)
 sys.argv = [sys.argv[0]]  # Keep standalone options out of Kit's own parser.
 
 from isaacsim import SimulationApp
@@ -245,13 +320,19 @@ def external_hit_mask(points, capture=None):
 class WireInterface:
     def __init__(self, robot, controller, dynamic_view=None):
         self.robot, self.controller = robot, controller
-        self.sender = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        self.receiver = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        self.receiver.bind(("127.0.0.1", ARGS.command_port))
-        self.receiver.setblocking(False)
+        # Bounded component replay/calibration has no external writer or
+        # network sensor consumer. Native sensors and geometry audits stay on.
+        self.sender = self.receiver = None
+        if not IS_POLICY_COMPONENT:
+            self.sender = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            self.receiver = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            self.receiver.bind(("127.0.0.1", ARGS.command_port))
+            self.receiver.setblocking(False)
         self.command = np.zeros(2)
         self.command_until = 0.0
         self.command_source_deadline_ns = 0
+        self.command_source_stamp_ns = None
+        self.command_guard_reason = 'startup_no_command'
         self.last_command_sequence = -1
         self.commands_received = self.commands_rejected = 0
         self.state_sequence = 0
@@ -339,6 +420,11 @@ class WireInterface:
         item["max_wall_s"] = max(item["max_wall_s"], elapsed)
 
     def receive_command(self, paused=False):
+        if IS_POLICY_COMPONENT:
+            if paused or self.geometry_fault_latched:
+                self.command[:] = 0
+                self.command_guard_reason = 'paused' if paused else 'geometry_fault'
+            return
         for _ in range(128):
             try:
                 packet, address = self.receiver.recvfrom(60001)
@@ -359,27 +445,40 @@ class WireInterface:
                     raise ValueError("stale_command_source_time")
                 self.command[:] = command
                 self.command_source_deadline_ns = value["sim_time_ns"] + round(lifetime * 1e9)
+                self.command_source_stamp_ns = value['sim_time_ns']
                 self.command_until = time.monotonic() + lifetime - max(0, source_age_ns) * 1e-9
+                self.command_guard_reason = 'accepted_command'
                 self.last_command_sequence = value["sequence"]
                 self.commands_received += 1
             except (KeyError, ValueError, TypeError, json.JSONDecodeError):
                 self.commands_rejected += 1
-        if paused or self.geometry_fault_latched or time.monotonic() >= self.command_until or self.sim_time_ns >= self.command_source_deadline_ns:
+        steady_expired = time.monotonic() >= self.command_until
+        source_expired = self.sim_time_ns >= self.command_source_deadline_ns
+        if paused or self.geometry_fault_latched or steady_expired or source_expired:
             self.command[:] = 0
+            self.command_guard_reason = ('paused' if paused else 'geometry_fault' if self.geometry_fault_latched
+                else 'steady_deadline_expired' if steady_expired else 'source_deadline_expired')
         if not paused and not self.geometry_fault_latched and ARGS.test_frames and (ARGS.test_linear_speed or ARGS.test_angular_speed):
             self.command[:] = [ARGS.test_linear_speed, ARGS.test_angular_speed]
+            self.command_guard_reason = 'bounded_highlevel_calibration'
         self.apply_motion(self.command)
 
     def guard_command_expiry(self, step_dt, source_start_time):
+        if IS_POLICY_COMPONENT:
+            return
         if ARGS.test_frames and (ARGS.test_linear_speed or ARGS.test_angular_speed):
             return
         next_step_ns = round((SimulationManager.get_simulation_time() - source_start_time + step_dt) * 1e9)
-        if (time.monotonic() >= self.command_until or next_step_ns >= self.command_source_deadline_ns) and np.any(self.command):
+        steady_expired = time.monotonic() >= self.command_until
+        if (steady_expired or next_step_ns >= self.command_source_deadline_ns) and np.any(self.command):
             self.command[:] = 0
+            self.command_guard_reason = ('steady_deadline_expired_prephysics'
+                if steady_expired else 'source_deadline_expired_prephysics')
             self.apply_motion(self.command)
 
     def send(self, packet):
-        self.sender.sendto(packet, ("127.0.0.1", ARGS.state_port))
+        if self.sender is not None:
+            self.sender.sendto(packet, ("127.0.0.1", ARGS.state_port))
 
     def status(self, playing):
         # Pausing must revoke the graph promptly, including a short GUI pause.
@@ -425,6 +524,7 @@ class WireInterface:
                 self.geometry_last_fault = fault
             if self.geometry_fault_latched:
                 self.command[:] = 0
+                self.command_guard_reason = 'static_geometry_fault:'+self.geometry_last_fault
                 self.apply_motion(self.command)
             metadata = dict(static_prior_geometry_sha256=actual_hash,
                 static_prior_geometry_valid=not self.geometry_fault_latched,
@@ -447,6 +547,7 @@ class WireInterface:
                         body_envelope_fault=self.geometry_last_fault, static_prior_geometry_valid=False,
                         static_prior_geometry_fault=self.geometry_last_fault)
                     self.command[:] = 0
+                    self.command_guard_reason = 'body_envelope_fault:'+self.geometry_last_fault
                     self.apply_motion(self.command)
                 self.last_body_certificate = {k:v for k,v in metadata.items() if k.startswith('body_envelope_')}
         self.send(state_packet(EPOCH, self.state_sequence, sim_time_ns, pose, linear.tolist(), angular.tolist(), metadata=metadata))
@@ -576,6 +677,7 @@ class WireInterface:
             if IS_QUADRUPED and (capture is None or capture['physics_step'] + 1 != frame['physics_step']):
                 self.geometry_fault_latched = True
                 self.command[:] = 0
+                self.command_guard_reason = 'native_lidar_prephysics_witness_fault'
                 raise RuntimeError('native_lidar_prephysics_witness_missing_or_mismatched')
             expected_step = round(sim_time_ns * ARGS.physics_hz / 1e9)
             # The native sensor sums its float step sizes; preserve that clock
@@ -604,6 +706,7 @@ class WireInterface:
                 if hit_paths.shape != (len(cloud),):
                     self.geometry_fault_latched = True
                     self.command[:] = 0
+                    self.command_guard_reason = 'native_lidar_hit_identity_fault'
                     raise RuntimeError('native_lidar_hit_identity_layout_changed')
                 try:
                     floor_evidence = floor_endpoint_certificate(
@@ -612,6 +715,7 @@ class WireInterface:
                 except ValueError:
                     self.geometry_fault_latched = True
                     self.command[:] = 0
+                    self.command_guard_reason = 'native_floor_endpoint_fault'
                     raise
                 self.floor_hit_audits += 1
                 self.floor_hit_samples += floor_evidence['native_floor_hits']
@@ -702,8 +806,10 @@ class WireInterface:
             self.link_snapshot_stream.close()
         self.command[:] = 0
         self.apply_motion(self.command)
-        self.sender.close()
-        self.receiver.close()
+        if self.sender is not None:
+            self.sender.close()
+        if self.receiver is not None:
+            self.receiver.close()
         for sensor_id, capture in enumerate(self.last_scan_data):
             if capture is not None:
                 np.savez(RESULT_DIR / f"last_scan_{sensor_id}.npz", **capture)
@@ -733,7 +839,11 @@ def main():
     if IS_QUADRUPED:
         app_utils.enable_extension('isaacsim.robot.policy.examples')
         from quadruped import QuadrupedPlant
-        quad_config = dict(robot_config, initial_position=[x, y, z], initial_yaw=yaw)
+        quad_config = dict(RUNTIME_ROBOT_CONFIG, initial_position=[x, y, z], initial_yaw=yaw)
+        if ARGS.test_velocity_feedback_mode is not None:
+            # A/B bootstrap is the original v2 plant. Only the declared
+            # source BEGIN boundary changes the local controller mode.
+            quad_config['velocity_feedback_mode'] = CONFIG['robot']['velocity_feedback_mode']
         robot = QuadrupedPlant(omni.usd.get_context().get_stage(), quad_config, RESULT_DIR)
         PLANT = robot
         body_path = robot.body_path
@@ -815,14 +925,93 @@ def main():
     policy_subscription = None
     dynamic_subscription = None
     wire_holder = {'wire': None}
+    policy_history = None
+    record_full_physics_history = False
+    policy_source_steps = None
+    bootstrap_source_steps = None
     if IS_QUADRUPED:
         APP.update()  # Establish the native tensor view before policy initialization.
         robot.initialize()
+        from policy_history import PolicyHistory, full_physics_history_enabled
+        record_full_physics_history = full_physics_history_enabled(CONFIG['robot'], IS_POLICY_COMPONENT)
+        policy_history = PolicyHistory(RESULT_DIR, hashlib.sha256(SCENE_BYTES).hexdigest(),
+            component=record_full_physics_history,command_limits=COMMAND_LIMITS)
+        robot.set_policy_observers(policy_history.observation, policy_history.memory_event)
+        from full_scene_replay import apply_velocity_feedback_experiment
+        if ARGS.test_policy_linear_speed is not None:
+            robot.enable_component_policy_calibration()
+
+        def official_policy_step(step_dt, _context):
+            native_tick = SimulationManager.get_num_physics_steps()
+            source_phase = policy_source_steps is not None
+            tick = native_tick-(policy_source_steps if source_phase else bootstrap_source_steps)
+            context = dict(phase='source' if source_phase else 'bootstrap', source_tick=tick,
+                source_ns=round(tick*1e9/ARGS.physics_hz), native_physics_tick=native_tick,
+                native_simulation_time_s=SimulationManager.get_simulation_time(),
+                policy_counter=int(robot.controller._policy_counter),
+                acquisition_phase='actual_pre_policy_PhysX_BEGIN',
+                epoch=EPOCH,clock_anchor_ns=ARGS.clock_anchor_ns,session_id=ARGS.session_id,
+                mode=('isolated_policy_calibration' if ARGS.test_policy_linear_speed is not None
+                    else 'isolated_navigation_servo_calibration' if ARGS.test_navigation_linear_speed is not None
+                    else 'isolated_frozen_commands' if FROZEN_COMMANDS is not None else 'navigation_wire'))
+            if source_phase and tick == 0 and IS_POLICY_COMPONENT:
+                COMPONENT_EXPERIMENT.update(actual_source_begin_ns=context['source_ns'],
+                    actual_source_begin_native_tick=native_tick,
+                    actual_source_begin_policy_counter=context['policy_counter'],
+                    actual_source_begin_native_simulation_time_s=context['native_simulation_time_s'])
+            current_wire = wire_holder['wire']
+            override = None
+            original_event = None
+            if source_phase and FROZEN_COMMANDS is not None:
+                original_event = FROZEN_COMMANDS.at_tick(tick)
+                if not current_wire.geometry_fault_latched:
+                    current_wire.command[:] = original_event['command']
+                    current_wire.command_guard_reason = 'isolated_frozen_input'
+            if source_phase and ARGS.test_policy_linear_speed is not None:
+                moving = tick < ARGS.test_policy_motion_frames and not current_wire.geometry_fault_latched
+                override = [ARGS.test_policy_linear_speed if moving else 0., 0., 0.]
+                current_wire.command[:] = 0.  # no navigation demand or external authority in this probe
+                current_wire.command_guard_reason = ('geometry_fault:'+current_wire.geometry_last_fault
+                    if current_wire.geometry_fault_latched else 'isolated_internal_policy_motion'
+                    if moving else 'isolated_internal_policy_true_zero')
+            if source_phase and ARGS.test_navigation_linear_speed is not None:
+                moving=tick<ARGS.test_policy_motion_frames and not current_wire.geometry_fault_latched
+                current_wire.command[:] = [ARGS.test_navigation_linear_speed if moving else 0.,0.]
+                current_wire.command_guard_reason = ('geometry_fault:'+current_wire.geometry_last_fault
+                    if current_wire.geometry_fault_latched else 'isolated_navigation_servo_motion'
+                    if moving else 'isolated_navigation_servo_true_zero')
+            command = current_wire.command.tolist() if current_wire is not None else [0.,0.]
+            if source_phase:
+                authority = dict(command_sequence=current_wire.last_command_sequence,
+                    command_source_stamp_ns=current_wire.command_source_stamp_ns,
+                    command_source_deadline_ns=current_wire.command_source_deadline_ns,
+                    command_steady_deadline_ns=round(current_wire.command_until*1e9),
+                    command_steady_deadline_s=current_wire.command_until,
+                    guard_reason=current_wire.command_guard_reason,
+                    geometry_fault_latched=current_wire.geometry_fault_latched,
+                    policy_input_override=override,
+                    replay_original_authority=original_event.get('authority') if original_event else None)
+                policy_history.command(context, command, authority)
+                context = dict(context, authority=authority)
+            measured_component = None
+            if source_phase and record_full_physics_history:
+                measured_component = ([array(v)[0].tolist() for v in robot.get_world_poses()],
+                    [array(v)[0].tolist() for v in robot.get_velocities()])
+            if IS_POLICY_COMPONENT:
+                apply_velocity_feedback_experiment(robot.velocity_feedback, context,
+                    COMPONENT_VELOCITY_FEEDBACK_EXPERIMENT)
+            robot.step(step_dt, *command, tick_context=context, policy_command_override=override)
+            if measured_component is not None:
+                (position,quaternion), (linear,angular) = measured_component
+                policy_history.component_state(context, command, robot._command.detach().cpu().tolist(),
+                    position,quaternion,linear,angular)
+
+        bootstrap_source_steps = SimulationManager.get_num_physics_steps()
         policy_subscription = physics_core.get_physics_simulation_interface().subscribe_physics_on_step_events(
             pre_step=True, order=3, on_update=profile_callback('official_policy',
-                lambda step_dt, _context: robot.step(step_dt,
-                *(wire_holder['wire'].command if wire_holder['wire'] is not None else (0., 0.)))))
-        from world_builder import update_actors, update_follow_camera
+                official_policy_step))
+        from world_builder import (dynamic_actor_target_backend, make_actor_updater,
+                                   make_native_actor_updater, update_follow_camera)
         stage = omni.usd.get_context().get_stage()
         if not ARGS.headless or ARGS.screenshot_path:
             from omni.kit.viewport.utility import get_active_viewport
@@ -843,13 +1032,19 @@ def main():
     wire_holder['wire'] = wire
     initial_positions, initial_orientations = [array(v)[0].tolist() for v in robot.get_world_poses()]
     source_steps = SimulationManager.get_num_physics_steps()
+    policy_source_steps = source_steps
     source_start_time = SimulationManager.get_simulation_time()
     state_period_ns = round(1e9/CONFIG.get('physics', {}).get('state_frequency_hz', 50. if IS_QUADRUPED else ARGS.physics_hz/2))
     next_state_ns = state_period_ns if IS_QUADRUPED else 0
     if IS_QUADRUPED:
+        if dynamic_actor_target_backend(CONFIG) == 'native_kinematic_v1':
+            actor_updater = make_native_actor_updater(stage, CONFIG, dynamic_view,
+                wire.stage_geometry_verifier)
+        else:
+            actor_updater = make_actor_updater(stage, CONFIG)
         dynamic_subscription = physics_core.get_physics_simulation_interface().subscribe_physics_on_step_events(
             pre_step=True, order=-1, on_update=profile_callback('dynamic_actor_updates',
-                lambda step_dt, _context: update_actors(stage, CONFIG,
+                lambda step_dt, _context: actor_updater(
                 SimulationManager.get_simulation_time()-source_start_time+step_dt)))
     # The application can render at 60 Hz while physics advances at 120 Hz.
     # Read the native IMU after each physical step so its 100 Hz source does
@@ -996,6 +1191,7 @@ def main():
                     if requested != pause_requested:
                         pause_requested = requested
                         wire.command[:] = 0
+                        wire.command_guard_reason = 'control_file_pause_or_resume'
                         wire.command_until = 0
                         wire.receive_command(paused=True)
                         app_utils.pause() if requested else app_utils.play()
@@ -1092,12 +1288,43 @@ def main():
                     next_render_ns += render_period_ns
             if ARGS.test_frames and frame >= ARGS.test_frames:
                 break
+        if record_full_physics_history and policy_source_steps is not None:
+            # Navigation can stop between the slower ROS body publications.
+            # Read the actual terminal END at this native tick, without a
+            # further physical step or retimestamping an older body bundle.
+            terminal_steps = SimulationManager.get_num_physics_steps()
+            terminal_tick = terminal_steps-policy_source_steps
+            terminal_position, terminal_quaternion = [array(v)[0].tolist() for v in robot.get_world_poses()]
+            linear, angular = [array(v)[0].tolist() for v in robot.get_velocities()]
+            policy_history.component_state(dict(phase='source',source_tick=terminal_tick,
+                source_ns=round(terminal_tick*1e9/ARGS.physics_hz),native_physics_tick=terminal_steps,
+                policy_counter=int(robot.controller._policy_counter),acquisition_phase='actual_final_PhysX_END',
+                epoch=EPOCH,clock_anchor_ns=ARGS.clock_anchor_ns,session_id=ARGS.session_id),
+                wire.command.tolist(),robot._command.detach().cpu().tolist(),terminal_position,
+                terminal_quaternion,linear,angular)
     finally:
         imu_subscription = None
         command_expiry_subscription = None
         lidar_gate_subscription = None
         dynamic_subscription = None
         policy_subscription = None
+        policy_history_summary = policy_history.close() if policy_history is not None else None
+        if policy_history_summary is not None and IS_POLICY_COMPONENT:
+            COMPONENT_EXPERIMENT.update(session_id=ARGS.session_id, epoch=EPOCH,
+                clock_anchor_ns=ARGS.clock_anchor_ns, source_scene_sha256=hashlib.sha256(SCENE_BYTES).hexdigest(),
+                frozen_command_sha256=hashlib.sha256(FROZEN_COMMAND_BYTES).hexdigest()
+                    if FROZEN_COMMAND_BYTES is not None else None)
+            policy_history_summary['component_experiment'] = dict(COMPONENT_EXPERIMENT)
+            COMPONENT_VELOCITY_FEEDBACK_EXPERIMENT.update(
+                session_id=ARGS.session_id, epoch=EPOCH, clock_anchor_ns=ARGS.clock_anchor_ns,
+                source_scene_sha256=hashlib.sha256(SCENE_BYTES).hexdigest(),
+                frozen_command_sha256=hashlib.sha256(FROZEN_COMMAND_BYTES).hexdigest()
+                    if FROZEN_COMMAND_BYTES is not None else None,
+                actual_source_begin_ns=COMPONENT_EXPERIMENT.get('actual_source_begin_ns'),
+                actual_source_begin_native_tick=COMPONENT_EXPERIMENT.get('actual_source_begin_native_tick'),
+                actual_source_begin_policy_counter=COMPONENT_EXPERIMENT.get('actual_source_begin_policy_counter'))
+            policy_history_summary['velocity_feedback_experiment'] = dict(COMPONENT_VELOCITY_FEEDBACK_EXPERIMENT)
+            (RESULT_DIR/'policy_history_manifest.json').write_text(json.dumps(policy_history_summary, indent=2)+'\n')
         trajectory.close()
         if wire.collision_audit is not None:
             audit = wire.collision_audit.finish(RESULT_DIR/'trajectory.jsonl', completed=not wire.geometry_fault_latched)
@@ -1116,6 +1343,18 @@ def main():
                    "joint_velocities": array(robot.get_dof_velocities())[0].tolist(),
                    "robot_kind": robot_config.get('kind', 'wheel_fixture'),
                    "robot_asset": robot.asset_metadata() if IS_QUADRUPED else None,
+                   "policy_history": policy_history_summary,
+                   "policy_component": dict(enabled=IS_POLICY_COMPONENT, external_udp_disabled=IS_POLICY_COMPONENT,
+                       action_memory_experiment=dict(COMPONENT_EXPERIMENT) if IS_POLICY_COMPONENT else None,
+                       velocity_feedback_experiment=dict(COMPONENT_VELOCITY_FEEDBACK_EXPERIMENT) if IS_POLICY_COMPONENT else None,
+                       frozen_command_sha256=hashlib.sha256(FROZEN_COMMAND_BYTES).hexdigest()
+                           if FROZEN_COMMAND_BYTES is not None else None,
+                       internal_policy_linear_speed=ARGS.test_policy_linear_speed,
+                       desired_navigation_linear_speed=ARGS.test_navigation_linear_speed,
+                       internal_policy_motion_frames=ARGS.test_policy_motion_frames,
+                       true_zero_begin_source_ns=ARGS.test_policy_motion_frames*2_000_000
+                           if ARGS.test_policy_linear_speed is not None or ARGS.test_navigation_linear_speed is not None else None,
+                       navigation_authorization=False if IS_POLICY_COMPONENT else None),
                    "dynamic_actor_count": len(wire.dynamic_registry),
                    "dynamic_measurement_samples": wire.dynamic_samples,
                    "native_floor_hit_audit": dict(scans=wire.floor_hit_audits,
@@ -1149,10 +1388,10 @@ def main():
                        notice_timings=wire.stage_geometry_verifier.notice_timings if wire.stage_geometry_verifier else None,
                        cache_hits=wire.stage_geometry_verifier.cache_hits if wire.stage_geometry_verifier else None),
                    "native_lidar_captures_per_sensor": lidar_capture_count,
-                   "lidar_acquisition_mode": "full native snapshot on each real 10 Hz acquisition step",
+                   "lidar_acquisition_mode": f"full native snapshot on each real {lidar_config['frequency_hz']:g} Hz acquisition step",
                    "lidar_pose_phase": ('actual physics BEGIN witness; original native wrapper END retained'
                        if IS_QUADRUPED else 'legacy wheel snapshot'),
-                   "body_state_cadence": ('50 Hz plus real 10 Hz acquisition BEGIN witnesses'
+                   "body_state_cadence": (f"{CONFIG.get('physics', {}).get('state_frequency_hz', 50.):g} Hz plus real {lidar_config['frequency_hz']:g} Hz acquisition BEGIN witnesses"
                        if IS_QUADRUPED else 'legacy wheel cadence'),
                    "headless_viewport_disabled": viewport_disabled,
                    "viewport_disabled_at_physics_frame": viewport_disabled_at_frame,

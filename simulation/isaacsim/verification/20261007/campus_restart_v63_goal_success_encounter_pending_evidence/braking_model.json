@@ -1,0 +1,56 @@
+{
+  "schema_version": 3,
+  "transport_mode": "isolated_mock",
+  "fixture_only": true,
+  "model": "reaction_braking_reachable_v1",
+  "session_id": "40d3d992bfd84b6c83dcba38e19cc829",
+  "note": "Conservative Spot simulation fixture bounds; sampled official-policy tests, not a real robot calibration or continuous contact proof.",
+  "execution_timing": {
+    "sensor_source_age_bound_s": 0.5,
+    "command_pipeline_bound_s": 0.1,
+    "writer_period_s": 0.05,
+    "source_time_uncertainty_s": 0.02
+  },
+  "stationary_evidence": {
+    "profile": "general_low_speed",
+    "linear_threshold_mps": 0.03,
+    "angular_threshold_radps": 0.05,
+    "stationary_duration_s": 1.0,
+    "reentry_duration_s": 0.6,
+    "minimum_new_samples": 3,
+    "mc_expected_hz": 50.0,
+    "mc_min_hz": 40.0,
+    "mc_max_hz": 60.0,
+    "measured_static_linear_bound_mps": 0.01,
+    "measured_static_angular_bound_radps": 0.02
+  },
+  "measurements": {
+    "model": "reaction_braking_reachable_v1",
+    "max_speed_mps": 0.65,
+    "max_yaw_radps": 0.8,
+    "reaction_bound_s": 0.67,
+    "stopping_distance_m": 0.5,
+    "stopping_yaw_rad": 0.4,
+    "stop_latency_bound_s": 3.0,
+    "tracking_error_bound_m": 0.1,
+    "heading_error_bound_rad": 0.1
+  },
+  "isolated_platform_model": {
+    "schema": 1,
+    "kind": "official_spot_physx",
+    "command_max_speed_mps": 0.23,
+    "command_max_yaw_radps": 0.3,
+    "reachable_max_speed_mps": 0.65,
+    "reachable_max_yaw_radps": 0.8,
+    "source_scope": "isolated_simulation_physx_measured_model"
+  },
+  "isolated_full_xyz_reference_model": {
+    "schema": 1,
+    "kind": "official_spot_physx",
+    "reference_max_speed_mps": 0.65,
+    "measured_travel_max_speed_mps": 0.65,
+    "observed_max_full_xyz_speed_mps": 0.6161618714728023,
+    "evidence_sha256": "44e56925dd1f4b78a4d3994701b1700429e00c3fd7f80b26ddcb86e321b97262",
+    "source_scope": "isolated_simulation_physx_measured_model"
+  }
+}

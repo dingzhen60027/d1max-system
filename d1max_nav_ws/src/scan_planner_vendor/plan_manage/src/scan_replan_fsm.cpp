@@ -1924,6 +1924,10 @@ namespace scan_planner
           result.failure=solve_worker_->lastFailurePhase();
         } catch (const std::bad_alloc &) {
           throw; // Resource exhaustion is not a recoverable/safe planning result.
+        } catch (const std::exception &error) {
+          RCLCPP_WARN(node_->get_logger(),"NativeSolve exception stage=worker what=%.256s",error.what());
+          result.candidate.reset();
+          result.failure="solve_exception";
         } catch (...) {
           result.candidate.reset();
           result.failure="solve_exception";
@@ -2023,6 +2027,10 @@ namespace scan_planner
       if (budget) budget->cancel();
       solve_predecessor_.reset();
       throw; // Fail-stop; never continue with a purported safe incumbent after OOM.
+    } catch (const std::exception &error) {
+      RCLCPP_WARN(node_->get_logger(),"NativeSolve exception stage=future what=%.256s",error.what());
+      result.candidate.reset();
+      result.failure="solve_exception";
     } catch (...) {
       result.candidate.reset();
       result.failure="solve_exception";

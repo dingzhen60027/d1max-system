@@ -1,0 +1,66 @@
+{
+  "schema": 1,
+  "case_id": "resume_after_block",
+  "session_id": "40d3d992bfd84b6c83dcba38e19cc829",
+  "configuration_sha256": "eef511058d16833c65efe29404b10fb171149277b9a0cc9e2219df8eddaa4073",
+  "status": "completed",
+  "phases": [
+    {
+      "index": 0,
+      "goal": [
+        8.0,
+        -5.0,
+        0.0
+      ],
+      "smoke_case": "cancel",
+      "returncode": 0,
+      "source_timeout_s": 60.0,
+      "timeout_clock": "seconds_since_phase_first_original_measured_source_stamp",
+      "phase_launch_source_stamp_ns": 1791381824951930327,
+      "phase_launch_scene_elapsed_s": 0.17800000000000002,
+      "phase_event_source_origin_ns": 1791381825031930327,
+      "report": "scenario_suite/phase_000_report.json",
+      "trace": "scenario_suite/phase_000_trace.jsonl",
+      "report_sha256": "088bf61d173612b4509be7aecb8fb30c6df308c3d5d94f88936dbaae812184c7",
+      "trace_sha256": "9ca110034fb4cddfb7b3a7f748fe80d2eac11e22bc101df2550789e47f1db598",
+      "goal_source_stamp_ns": 1791381827151930327,
+      "terminal_source_stamp_ns": 1791381838093930327
+    },
+    {
+      "index": 1,
+      "goal": [
+        8.0,
+        -5.0,
+        0.0
+      ],
+      "smoke_case": "goal",
+      "returncode": 0,
+      "source_timeout_s": 225.0,
+      "timeout_clock": "seconds_since_phase_first_original_measured_source_stamp",
+      "phase_launch_source_stamp_ns": 1791381843031930327,
+      "phase_launch_scene_elapsed_s": 18.258000000000003,
+      "phase_event_source_origin_ns": 1791381843093930327,
+      "report": "scenario_suite/phase_001_report.json",
+      "trace": "scenario_suite/phase_001_trace.jsonl",
+      "report_sha256": "4e49194bb173b7be8aeb03309a70e80eda5ed11ad4d819126d44638f2c72a266",
+      "trace_sha256": "99f77cf1ce9ed4e8df0ad45a0fd9c5fdfa7298f7b5bbbc608c7a9dc315ce89ac",
+      "goal_source_stamp_ns": 1791381843351930327,
+      "terminal_source_stamp_ns": 1791381943853930327
+    }
+  ],
+  "source_origin_ns": 1791381825031930327,
+  "physical_robot_acceptance": false,
+  "event_clock": "seconds_since_first_phase_original_measured_source_stamp",
+  "actor_clock": "original_simulation_source_time_since_plant_start; never_reset_between_goals",
+  "scene_clock_anchor_ns": 1791381824773930327,
+  "timeout_scope": "test_observation_only; original_BT_watchdogs_and_motion_leases_unchanged",
+  "encounter_profile_model_binding": {
+    "profile": "isolated_spot_reachable65_3m_exposure_v1",
+    "session_id": "40d3d992bfd84b6c83dcba38e19cc829",
+    "execution_braking_model_sha256": "d1ba2821e8a83afd7b9ab8092b8698d221c5b61bb41aaf5633eab31850b89012",
+    "source_reference_evidence_sha256": "44e56925dd1f4b78a4d3994701b1700429e00c3fd7f80b26ddcb86e321b97262",
+    "body_envelope_metadata_sha256": "913fe1289cf8ad86926331d6a1ec815b5051b4752766b3637489656ff1bd169b",
+    "actual_robot_collision_registry_sha256": "e68b27ca3e0a30c3bdbaeb43414ae4a19674f9661adb167cc6bd0e38ab6ebc76",
+    "interpretation": "actual_sampled_encounter_exposure_only; not_route_blocking"
+  }
+}

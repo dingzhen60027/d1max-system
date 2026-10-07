@@ -38,31 +38,58 @@ def floor_endpoint_certificate(points_body, pose, hit_paths, contact):
     return dict(native_floor_hits=int(floor.sum()), floor_endpoint_max_abs_error_m=error)
 
 
-def measured_bounds(snapshot):
-    """Enclose each complete measured solid in its world-axis tight AABB.
+def measured_bounds(snapshot, *, query_pose=None):
+    """Enclose each complete measured solid using primitive support bounds.
 
     Transforming a sphere's or capsule's *local AABB* rotates artificial box
     corners outside the solid. Use the primitive support function after the
     measured affine transform instead: row norms for the ball, plus the axial
     segment for a capsule, and row-wise absolute sums for a cube. Those bounds
-    include rotation, nonuniform scale and shear. Their eight world corners
-    conservatively enclose the complete solid for the body-envelope proof.
+    include rotation, nonuniform scale and shear. For an envelope query, take
+    those bounds in its yaw-aligned axes first. Rotating a world AABB back into
+    query axes creates artificial corners, even when the chassis only yaws.
+    The resulting box still encloses the complete solid, including its Z
+    support; no primitive, query margin or measured transform is changed.
     """
     from quadruped import primitive_aabb
+    world_to_query = query_to_world = None
+    if query_pose is not None:
+        pose = np.asarray(query_pose, dtype=float)
+        if pose.shape != (7,) or not np.isfinite(pose).all():
+            raise ValueError('invalid_body_query_pose')
+        norm = np.linalg.norm(pose[3:])
+        if norm < 1e-8:
+            raise ValueError('invalid_body_orientation')
+        x, y, z, w = pose[3:] / norm
+        heading = np.asarray([1-2*(y*y+z*z), 2*(x*y+z*w)])
+        heading_norm = np.linalg.norm(heading)
+        if heading_norm < 1e-8:
+            raise ValueError('vertical_body_heading')
+        cosine, sine = heading / heading_norm
+        query_to_world = np.eye(4)
+        query_to_world[:3, :3] = [[cosine, -sine, 0.], [sine, cosine, 0.], [0., 0., 1.]]
+        query_to_world[:3, 3] = pose[:3]
+        world_to_query = np.eye(4)
+        world_to_query[:3, :3] = query_to_world[:3, :3].T
+        world_to_query[:3, 3] = -world_to_query[:3, :3] @ pose[:3]
     result = []
     for item in snapshot:
         matrix = np.asarray(item['world_matrix'], dtype=float)
         if matrix.shape != (4, 4) or not np.isfinite(matrix).all():
             raise ValueError('invalid_actual_link_transform')
-        lower, upper = primitive_aabb(item['shape'], matrix)
+        lower, upper = primitive_aabb(item['shape'],
+            matrix if world_to_query is None else world_to_query @ matrix)
         corners = np.asarray(list(itertools.product(*zip(lower, upper))))
+        if query_to_world is not None:
+            corners = corners @ query_to_world[:3, :3].T + query_to_world[:3, 3]
+            lower, upper = corners.min(axis=0), corners.max(axis=0)
         result.append(dict(path=item['path'], min=lower.tolist(),
             max=upper.tolist(), corners_world=corners.tolist()))
     return result
 
 
 def body_certificate(snapshot, pose, registry, envelope, source_ns):
-    bounds = measured_bounds(snapshot)
+    bounds = measured_bounds(snapshot, query_pose=pose)
     if {v['path'] for v in bounds} != {v['path'] for v in registry['colliders']}:
         raise ValueError('actual_link_registry_incomplete')
     # Explicit sphere support solids from this sealed model only. Capsules and

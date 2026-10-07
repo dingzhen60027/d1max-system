@@ -1,0 +1,1637 @@
+{
+  "schema": 1,
+  "kind": "isolated_simulation_future_dynamic_space_union_diagnostic",
+  "date": "2026-10-07",
+  "status": "READ_ONLY_DIAGNOSTIC; NO_RUNTIME_CHANGE; NO_NEW_NAVIGATION_PASS",
+  "run": "/home/eric/wjg/d1max-build-isaac/runs/campus_restart_v59_001",
+  "sealed_candidate": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v59-campus-all-writer-scopes-restart",
+  "clock_anchor_ns": 1791378794217157156,
+  "exact_original_review": {
+    "relative_file": "v59_time_union_readonly_review.json",
+    "sha256": "8fea56bb66214ec70b54bd39347999f7e5a594a67ea09ef976b8f3b0c768141d",
+    "bytes": 24298,
+    "copied_verbatim": true
+  },
+  "confirmed_implementation": {
+    "script_interval": "[simulation source-2ms, simulation source+6s+2ms]",
+    "space_union": true,
+    "per_query_physical_time_argument": false,
+    "full_xyz_closed_veto_precedes_independent_static_contact": true,
+    "spline_parameter_is_measured_spatial_progress_not_physical_arrival": true
+  },
+  "original_actor_witnesses": {
+    "scope": "Five unchanged actual same-step actor-reading records, all six enrolled actors retained in each record; future tube reconstruction is offline geometry, not a new native sensor/proof.",
+    "full_original_raw_binding": {
+      "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/runs/campus_restart_v59_001/physics/dynamic_actor_readings.jsonl",
+      "sha256": "0559e6310e61971689b08ba3d346f47c7deb4d99112ce1c5277f7702f454d68a",
+      "bytes": 6328696
+    },
+    "selected_count": 5,
+    "selected_original_lines_aggregate_sha256": "e2e701dcb8895d8ba6a610a8af98412724807f4a9bac39a44a65dbf704b49d2f",
+    "selected_records": [
+      {
+        "original_line": 4608,
+        "sha256": "9a774b897d4220ed008c7d8855cfb32460a8da0eb694635d90bfaf3a167dc571",
+        "bytes": 1300,
+        "record": {
+          "sim_time_ns": 76800000000,
+          "registry_sha256": "96b092886099b5b2c0904ce86c34d607167c8cee28865d318455c88bc7aea734",
+          "samples": {
+            "door_blocking_cart": {
+              "present": true,
+              "position": [
+                13.090228080749512,
+                -25.0,
+                -8.940696716308594e-08
+              ],
+              "orientation_xyzw": [
+                3.725290298461914e-09,
+                0.0,
+                0.9595432281494141,
+                0.2815614938735962
+              ],
+              "linear_velocity": [
+                0.28467175364494324,
+                -0.0009536742581985891,
+                -0.00010430812108097598
+              ]
+            },
+            "office_person": {
+              "present": true,
+              "position": [
+                -25.709606170654297,
+                20.0,
+                0.0
+              ],
+              "orientation_xyzw": [
+                0.0,
+                0.0,
+                0.0,
+                1.0
+              ],
+              "linear_velocity": [
+                -0.7305144667625427,
+                0.0,
+                0.0
+              ]
+            },
+            "oncoming_cart": {
+              "present": true,
+              "position": [
+                2.0,
+                -25.0,
+                0.0
+              ],
+              "orientation_xyzw": [
+                0.0,
+                0.0,
+                1.0,
+                6.123234924670329e-17
+              ],
+              "linear_velocity": [
+                0.0,
+                0.0,
+                0.0
+              ]
+            },
+            "plaza_cart": {
+              "present": true,
+              "position": [
+                5.0,
+                -7.535664081573486,
+                5.960464477539063e-08
+              ],
+              "orientation_xyzw": [
+                0.0,
+                0.0,
+                0.7071068286895752,
+                0.7071068286895752
+              ],
+              "linear_velocity": [
+                0.0,
+                0.6709098219871521,
+                0.0
+              ]
+            },
+            "plaza_person": {
+              "present": true,
+              "position": [
+                0.0,
+                1.7123520374298096,
+                0.0
+              ],
+              "orientation_xyzw": [
+                0.0,
+                0.0,
+                0.7071068286895752,
+                0.7071068286895752
+              ],
+              "linear_velocity": [
+                0.0,
+                -0.9865164160728455,
+                0.0
+              ]
+            },
+            "warehouse_forklift": {
+              "present": true,
+              "position": [
+                32.0,
+                32.74052047729492,
+                -2.980232238769531e-07
+              ],
+              "orientation_xyzw": [
+                0.0,
+                0.0,
+                0.70710688829422,
+                0.70710688829422
+              ],
+              "linear_velocity": [
+                0.0,
+                -0.3566741645336151,
+                0.0
+              ]
+            }
+          }
+        }
+      },
+      {
+        "original_line": 4650,
+        "sha256": "a864b68eba71ae3d1fc545f14c21d06e06b9e59c076b16fbeca791b80fb11842",
+        "bytes": 1259,
+        "record": {
+          "sim_time_ns": 77500000000,
+          "registry_sha256": "96b092886099b5b2c0904ce86c34d607167c8cee28865d318455c88bc7aea734",
+          "samples": {
+            "door_blocking_cart": {
+              "present": true,
+              "position": [
+                13.295999526977539,
+                -25.0,
+                0.0
+              ],
+              "orientation_xyzw": [
+                0.0,
+                0.0,
+                0.9429905414581299,
+                0.33281955122947693
+              ],
+              "linear_velocity": [
+                0.3013610541820526,
+                -0.0009536742581985891,
+                -1.4901160284352954e-05
+              ]
+            },
+            "office_person": {
+              "present": true,
+              "position": [
+                -26.223892211914062,
+                20.0,
+                0.0
+              ],
+              "orientation_xyzw": [
+                0.0,
+                0.0,
+                0.0,
+                1.0
+              ],
+              "linear_velocity": [
+                -0.7381438612937927,
+                0.0,
+                0.0
+              ]
+            },
+            "oncoming_cart": {
+              "present": true,
+              "position": [
+                2.0,
+                -25.0,
+                0.0
+              ],
+              "orientation_xyzw": [
+                0.0,
+                0.0,
+                1.0,
+                6.123234924670329e-17
+              ],
+              "linear_velocity": [
+                0.0,
+                0.0,
+                0.0
+              ]
+            },
+            "plaza_cart": {
+              "present": true,
+              "position": [
+                5.0,
+                -7.048104763031006,
+                5.960464477539063e-08
+              ],
+              "orientation_xyzw": [
+                0.0,
+                0.0,
+                0.7071068286895752,
+                0.7071068286895752
+              ],
+              "linear_velocity": [
+                0.0,
+                0.7216929793357849,
+                0.0
+              ]
+            },
+            "plaza_person": {
+              "present": true,
+              "position": [
+                0.0,
+                1.01806640625,
+                0.0
+              ],
+              "orientation_xyzw": [
+                0.0,
+                0.0,
+                0.7071068286895752,
+                0.7071068286895752
+              ],
+              "linear_velocity": [
+                0.0,
+                -0.9966492056846619,
+                0.0
+              ]
+            },
+            "warehouse_forklift": {
+              "present": true,
+              "position": [
+                32.0,
+                32.485206604003906,
+                -2.980232238769531e-07
+              ],
+              "orientation_xyzw": [
+                0.0,
+                0.0,
+                0.70710688829422,
+                0.70710688829422
+              ],
+              "linear_velocity": [
+                0.0,
+                -0.3738403022289276,
+                0.0
+              ]
+            }
+          }
+        }
+      },
+      {
+        "original_line": 4680,
+        "sha256": "9a84a7857df1a11233946bab297f6964975c162df8f8ebef231833fdcd45aa42",
+        "bytes": 1281,
+        "record": {
+          "sim_time_ns": 78000000000,
+          "registry_sha256": "96b092886099b5b2c0904ce86c34d607167c8cee28865d318455c88bc7aea734",
+          "samples": {
+            "door_blocking_cart": {
+              "present": true,
+              "position": [
+                13.449983596801758,
+                -25.0,
+                1.1920928955078125e-07
+              ],
+              "orientation_xyzw": [
+                0.0,
+                0.0,
+                0.9288111329078674,
+                0.37055352330207825
+              ],
+              "linear_velocity": [
+                0.3123283088207245,
+                -0.0009536742581985891,
+                -7.450579869328067e-05
+              ]
+            },
+            "office_person": {
+              "present": true,
+              "position": [
+                -26.594308853149414,
+                20.0,
+                0.0
+              ],
+              "orientation_xyzw": [
+                0.0,
+                0.0,
+                0.0,
+                1.0
+              ],
+              "linear_velocity": [
+                -0.7438659071922302,
+                0.0,
+                0.0
+              ]
+            },
+            "oncoming_cart": {
+              "present": true,
+              "position": [
+                2.0,
+                -25.0,
+                0.0
+              ],
+              "orientation_xyzw": [
+                0.0,
+                0.0,
+                1.0,
+                6.123234924670329e-17
+              ],
+              "linear_velocity": [
+                0.0,
+                0.0,
+                0.0
+              ]
+            },
+            "plaza_cart": {
+              "present": true,
+              "position": [
+                5.0,
+                -6.678717136383057,
+                5.960464477539063e-08
+              ],
+              "orientation_xyzw": [
+                0.0,
+                0.0,
+                0.7071068286895752,
+                0.7071068286895752
+              ],
+              "linear_velocity": [
+                0.0,
+                0.7555484175682068,
+                0.0
+              ]
+            },
+            "plaza_person": {
+              "present": true,
+              "position": [
+                0.0,
+                0.5182499885559082,
+                0.0
+              ],
+              "orientation_xyzw": [
+                0.0,
+                0.0,
+                0.7071068286895752,
+                0.7071068286895752
+              ],
+              "linear_velocity": [
+                0.0,
+                -1.0023711919784546,
+                0.0
+              ]
+            },
+            "warehouse_forklift": {
+              "present": true,
+              "position": [
+                32.0,
+                32.29600143432617,
+                -2.980232238769531e-07
+              ],
+              "orientation_xyzw": [
+                0.0,
+                0.0,
+                0.70710688829422,
+                0.70710688829422
+              ],
+              "linear_velocity": [
+                0.0,
+                -0.3833770453929901,
+                0.0
+              ]
+            }
+          }
+        }
+      },
+      {
+        "original_line": 4800,
+        "sha256": "3a4ab4abd1d7f0ec2dd2dd08aeb8e8ace46e07e26bf8e06ee27a74375fe2d27a",
+        "bytes": 1265,
+        "record": {
+          "sim_time_ns": 80000000000,
+          "registry_sha256": "96b092886099b5b2c0904ce86c34d607167c8cee28865d318455c88bc7aea734",
+          "samples": {
+            "door_blocking_cart": {
+              "present": true,
+              "position": [
+                14.112000465393066,
+                -25.0,
+                0.0
+              ],
+              "orientation_xyzw": [
+                0.0,
+                3.725290298461914e-09,
+                0.8509944677352905,
+                0.525174617767334
+              ],
+              "linear_velocity": [
+                0.344753235578537,
+                -0.0009536742581985891,
+                -1.4901160284352954e-05
+              ]
+            },
+            "office_person": {
+              "present": true,
+              "position": [
+                -28.096168518066406,
+                20.0,
+                0.0
+              ],
+              "orientation_xyzw": [
+                0.0,
+                0.0,
+                0.0,
+                1.0
+              ],
+              "linear_velocity": [
+                -0.7572173476219177,
+                0.0,
+                0.0
+              ]
+            },
+            "oncoming_cart": {
+              "present": true,
+              "position": [
+                2.0,
+                -25.0,
+                0.0
+              ],
+              "orientation_xyzw": [
+                0.0,
+                0.0,
+                1.0,
+                6.123234924670329e-17
+              ],
+              "linear_velocity": [
+                0.0,
+                0.0,
+                0.0
+              ]
+            },
+            "plaza_cart": {
+              "present": true,
+              "position": [
+                5.0,
+                -5.043731689453125,
+                5.960464477539063e-08
+              ],
+              "orientation_xyzw": [
+                0.0,
+                0.0,
+                0.7071068286895752,
+                0.7071068286895752
+              ],
+              "linear_velocity": [
+                0.0,
+                0.8745192885398865,
+                0.0
+              ]
+            },
+            "plaza_person": {
+              "present": true,
+              "position": [
+                0.0,
+                -1.5,
+                0.0
+              ],
+              "orientation_xyzw": [
+                0.0,
+                0.0,
+                0.7071068286895752,
+                0.7071068286895752
+              ],
+              "linear_velocity": [
+                0.0,
+                -1.012503981590271,
+                0.0
+              ]
+            },
+            "warehouse_forklift": {
+              "present": true,
+              "position": [
+                32.0,
+                31.485206604003906,
+                -2.980232238769531e-07
+              ],
+              "orientation_xyzw": [
+                0.0,
+                0.0,
+                0.70710688829422,
+                0.70710688829422
+              ],
+              "linear_velocity": [
+                0.0,
+                -0.42629238963127136,
+                0.0
+              ]
+            }
+          }
+        }
+      },
+      {
+        "original_line": 4962,
+        "sha256": "80fdec2c6d497de335b123b5e470a48294fc929bda9e875ab28117431722c929",
+        "bytes": 1264,
+        "record": {
+          "sim_time_ns": 82700000000,
+          "registry_sha256": "96b092886099b5b2c0904ce86c34d607167c8cee28865d318455c88bc7aea734",
+          "samples": {
+            "door_blocking_cart": {
+              "present": true,
+              "position": [
+                15.071993827819824,
+                -25.0,
+                -5.960464477539063e-08
+              ],
+              "orientation_xyzw": [
+                0.0,
+                0.0,
+                0.693654477596283,
+                0.7203078866004944
+              ],
+              "linear_velocity": [
+                0.35905835032463074,
+                0.0,
+                -1.4901160284352954e-05
+              ]
+            },
+            "office_person": {
+              "present": true,
+              "position": [
+                -30.152725219726562,
+                20.0,
+                0.0
+              ],
+              "orientation_xyzw": [
+                0.0,
+                0.0,
+                0.0,
+                1.0
+              ],
+              "linear_velocity": [
+                -0.7638930678367615,
+                0.0,
+                0.0
+              ]
+            },
+            "oncoming_cart": {
+              "present": true,
+              "position": [
+                2.0,
+                -25.0,
+                0.0
+              ],
+              "orientation_xyzw": [
+                0.0,
+                0.0,
+                1.0,
+                6.123234924670329e-17
+              ],
+              "linear_velocity": [
+                0.0,
+                0.0,
+                0.0
+              ]
+            },
+            "plaza_cart": {
+              "present": true,
+              "position": [
+                5.0,
+                -2.5138869285583496,
+                5.960464477539063e-08
+              ],
+              "orientation_xyzw": [
+                0.0,
+                0.0,
+                0.7071068286895752,
+                0.7071068286895752
+              ],
+              "linear_velocity": [
+                0.0,
+                0.9907483458518982,
+                0.0
+              ]
+            },
+            "plaza_person": {
+              "present": true,
+              "position": [
+                0.0,
+                -4.217142581939697,
+                0.0
+              ],
+              "orientation_xyzw": [
+                0.0,
+                0.0,
+                0.7071068286895752,
+                0.7071068286895752
+              ],
+              "linear_velocity": [
+                0.0,
+                -0.9942054152488708,
+                0.0
+              ]
+            },
+            "warehouse_forklift": {
+              "present": true,
+              "position": [
+                32.0,
+                30.266170501708984,
+                -2.980232238769531e-07
+              ],
+              "orientation_xyzw": [
+                0.0,
+                0.0,
+                0.70710688829422,
+                0.70710688829422
+              ],
+              "linear_velocity": [
+                0.0,
+                -0.4749297797679901,
+                0.0
+              ]
+            }
+          }
+        }
+      }
+    ]
+  },
+  "original_after_failure_diagnostics": {
+    "scope": "92 unchanged original scan log warning lines in original check-end source70..82.818s. The label diagnostic_after_failure is retained: these are subsequent diagnostic queries, not the original checks.",
+    "full_original_raw_binding": {
+      "local_evidence_path": "/home/eric/wjg/d1max-build-isaac/runs/campus_restart_v59_001/scan.log",
+      "sha256": "4333e33432e1bbec33e3adbe35a25b673b27de155727d6176de5721e0e2bc095",
+      "bytes": 924304
+    },
+    "original_selected_line_count": 92,
+    "selected_original_lines_aggregate_sha256": "93d7b605f5896523c6a5d390165bb9e9cccf40de0ad1d3fdef63b6821d3a61d3",
+    "after_failure_lease_domains_valid_count": 68,
+    "first_curve127_fresh_domain_diagnostic_source_s": 77.48,
+    "selected_line_bindings": [
+      {
+        "original_scan_log_line": 2209,
+        "sha256": "9e532dd183451d8a0a1e280498a6ac5862ac41c3fa4d1c3a90a4c939458ba82d",
+        "bytes": 3042,
+        "original_check_end_ns": 1791378864337157156,
+        "original_check_end_relative_source_s": 70.12,
+        "curve": 125,
+        "query_index": 1,
+        "after_failure_lease_domains_valid": false
+      },
+      {
+        "original_scan_log_line": 2211,
+        "sha256": "686ec620d725198b0e0c13aff3d3f58d65d6d6bed91049c3df8291e9e0b46a20",
+        "bytes": 3042,
+        "original_check_end_ns": 1791378864397157156,
+        "original_check_end_relative_source_s": 70.18,
+        "curve": 125,
+        "query_index": 1,
+        "after_failure_lease_domains_valid": false
+      },
+      {
+        "original_scan_log_line": 2214,
+        "sha256": "4ced19d1af4a38b996741d208105b2f4645d36e6575e1d2c83cb70b4d78e7f3c",
+        "bytes": 3071,
+        "original_check_end_ns": 1791378865397157156,
+        "original_check_end_relative_source_s": 71.18,
+        "curve": 125,
+        "query_index": 337,
+        "after_failure_lease_domains_valid": true
+      },
+      {
+        "original_scan_log_line": 2227,
+        "sha256": "3002d7d992a9bf8e7eca85e4835918799dca6bd47f1032b31a7a4cfc35b7c12b",
+        "bytes": 3041,
+        "original_check_end_ns": 1791378865457157156,
+        "original_check_end_relative_source_s": 71.24000000000001,
+        "curve": 125,
+        "query_index": 1,
+        "after_failure_lease_domains_valid": false
+      },
+      {
+        "original_scan_log_line": 2229,
+        "sha256": "ac32f799b2e75cda1fd259e1790cce0f1d38b17de85d5a21b942bfe655d012e2",
+        "bytes": 3042,
+        "original_check_end_ns": 1791378865517157156,
+        "original_check_end_relative_source_s": 71.30000000000001,
+        "curve": 125,
+        "query_index": 1,
+        "after_failure_lease_domains_valid": false
+      },
+      {
+        "original_scan_log_line": 2232,
+        "sha256": "1c49844507cfbda4a8ddbe420097a0c3d112bd4c7bcf27b5cfc4140300fb689c",
+        "bytes": 3042,
+        "original_check_end_ns": 1791378865557157156,
+        "original_check_end_relative_source_s": 71.34,
+        "curve": 125,
+        "query_index": 1,
+        "after_failure_lease_domains_valid": false
+      },
+      {
+        "original_scan_log_line": 2234,
+        "sha256": "6db86e0a95629b7e675b4eb163457a7217e0589991de264f2405691973d0b15b",
+        "bytes": 3038,
+        "original_check_end_ns": 1791378865597157156,
+        "original_check_end_relative_source_s": 71.38000000000001,
+        "curve": 125,
+        "query_index": 1,
+        "after_failure_lease_domains_valid": false
+      },
+      {
+        "original_scan_log_line": 2236,
+        "sha256": "6b7efb32de45290e04f4533598b2fdcdb5603c4a32bf99a24034e06f58a83a4d",
+        "bytes": 3071,
+        "original_check_end_ns": 1791378866097157156,
+        "original_check_end_relative_source_s": 71.88000000000001,
+        "curve": 125,
+        "query_index": 303,
+        "after_failure_lease_domains_valid": true
+      },
+      {
+        "original_scan_log_line": 2238,
+        "sha256": "1fd99af34506f6454d0aca96aadb7bf4784806931f2ae52f37ce57db29aa567f",
+        "bytes": 3042,
+        "original_check_end_ns": 1791378866157157156,
+        "original_check_end_relative_source_s": 71.94,
+        "curve": 126,
+        "query_index": 1,
+        "after_failure_lease_domains_valid": false
+      },
+      {
+        "original_scan_log_line": 2240,
+        "sha256": "dcbdf91866e2e27b98b45f0ee351f70731d171777cedf8357676636bd6033ef7",
+        "bytes": 3042,
+        "original_check_end_ns": 1791378866197157156,
+        "original_check_end_relative_source_s": 71.98,
+        "curve": 126,
+        "query_index": 1,
+        "after_failure_lease_domains_valid": false
+      },
+      {
+        "original_scan_log_line": 2253,
+        "sha256": "429725273cdf239260ee04bcf58fb45a334cabe87452b514386e6019bd9ad57d",
+        "bytes": 3042,
+        "original_check_end_ns": 1791378867035157156,
+        "original_check_end_relative_source_s": 72.818,
+        "curve": 126,
+        "query_index": 1,
+        "after_failure_lease_domains_valid": false
+      },
+      {
+        "original_scan_log_line": 2256,
+        "sha256": "fe133a37018b2899904ef5b34f068453434e135cfc1be3969181a0c6395f8c85",
+        "bytes": 3042,
+        "original_check_end_ns": 1791378867077157156,
+        "original_check_end_relative_source_s": 72.86,
+        "curve": 127,
+        "query_index": 1,
+        "after_failure_lease_domains_valid": false
+      },
+      {
+        "original_scan_log_line": 2260,
+        "sha256": "d3686cda52607bb988d58f1d92bf6a4c9cfe8bc3c7755db2aee00a0572782daa",
+        "bytes": 3098,
+        "original_check_end_ns": 1791378871697157156,
+        "original_check_end_relative_source_s": 77.48,
+        "curve": 127,
+        "query_index": 1,
+        "after_failure_lease_domains_valid": true
+      },
+      {
+        "original_scan_log_line": 2267,
+        "sha256": "460da5047bc041c6fd35eb184ecd87c1030598593219bc5d63854cd592e8644b",
+        "bytes": 3100,
+        "original_check_end_ns": 1791378871737157156,
+        "original_check_end_relative_source_s": 77.52000000000001,
+        "curve": 127,
+        "query_index": 1,
+        "after_failure_lease_domains_valid": true
+      },
+      {
+        "original_scan_log_line": 2269,
+        "sha256": "71ad385ab941e0e75ed4fa7cdd336ebe71f02661386eaf591fa09ec834a6457c",
+        "bytes": 3040,
+        "original_check_end_ns": 1791378871777157156,
+        "original_check_end_relative_source_s": 77.56,
+        "curve": 127,
+        "query_index": 1,
+        "after_failure_lease_domains_valid": false
+      },
+      {
+        "original_scan_log_line": 2277,
+        "sha256": "c725fca230c9e678c60e2e700561042b7b43e80c38af744d92fb431776ed8665",
+        "bytes": 3099,
+        "original_check_end_ns": 1791378871997157156,
+        "original_check_end_relative_source_s": 77.78,
+        "curve": 127,
+        "query_index": 1,
+        "after_failure_lease_domains_valid": true
+      },
+      {
+        "original_scan_log_line": 2283,
+        "sha256": "848d9901fcf202f8d71d9a4440560d4a63867e2a792cce08178042a03a0271ad",
+        "bytes": 3099,
+        "original_check_end_ns": 1791378872057157156,
+        "original_check_end_relative_source_s": 77.84,
+        "curve": 127,
+        "query_index": 1,
+        "after_failure_lease_domains_valid": true
+      },
+      {
+        "original_scan_log_line": 2285,
+        "sha256": "abb7c8d66e5869353e42bcd2e96d92f36376a97e598a6a65277f0b3a738294b4",
+        "bytes": 3099,
+        "original_check_end_ns": 1791378872135157156,
+        "original_check_end_relative_source_s": 77.918,
+        "curve": 127,
+        "query_index": 1,
+        "after_failure_lease_domains_valid": true
+      },
+      {
+        "original_scan_log_line": 2291,
+        "sha256": "46a8715ee9ce0410ba82337840d18b931309f4cf4b465db89a7b320ac0b78182",
+        "bytes": 3099,
+        "original_check_end_ns": 1791378872177157156,
+        "original_check_end_relative_source_s": 77.96000000000001,
+        "curve": 127,
+        "query_index": 1,
+        "after_failure_lease_domains_valid": true
+      },
+      {
+        "original_scan_log_line": 2293,
+        "sha256": "07ca86b2e650903de89146219a0cf7b092b87ecba4d22f4e8c182920bacf2841",
+        "bytes": 3099,
+        "original_check_end_ns": 1791378872237157156,
+        "original_check_end_relative_source_s": 78.02000000000001,
+        "curve": 127,
+        "query_index": 1,
+        "after_failure_lease_domains_valid": true
+      },
+      {
+        "original_scan_log_line": 2300,
+        "sha256": "4b2f93d7903630a8d4e6e1b6d5e2ef8ca9d00ef74894e9f577f9752098a2ea91",
+        "bytes": 3041,
+        "original_check_end_ns": 1791378872277157156,
+        "original_check_end_relative_source_s": 78.06,
+        "curve": 127,
+        "query_index": 1,
+        "after_failure_lease_domains_valid": false
+      },
+      {
+        "original_scan_log_line": 2303,
+        "sha256": "c3f1d37e62e074dd13c16a87d62d6f16eb3db68d7eb80fda1705a25cf19c8c34",
+        "bytes": 3097,
+        "original_check_end_ns": 1791378872417157156,
+        "original_check_end_relative_source_s": 78.2,
+        "curve": 127,
+        "query_index": 1,
+        "after_failure_lease_domains_valid": true
+      },
+      {
+        "original_scan_log_line": 2308,
+        "sha256": "93ea360c269087bdb66ca87225f96c2cab99a5cb2eb7fb32291cedcba7357581",
+        "bytes": 3099,
+        "original_check_end_ns": 1791378872457157156,
+        "original_check_end_relative_source_s": 78.24000000000001,
+        "curve": 127,
+        "query_index": 1,
+        "after_failure_lease_domains_valid": true
+      },
+      {
+        "original_scan_log_line": 2310,
+        "sha256": "e290f9ce00688a71c3095b93c8c34954594a9ee33ca7828b7d44951917c0e870",
+        "bytes": 3099,
+        "original_check_end_ns": 1791378872517157156,
+        "original_check_end_relative_source_s": 78.30000000000001,
+        "curve": 127,
+        "query_index": 1,
+        "after_failure_lease_domains_valid": true
+      },
+      {
+        "original_scan_log_line": 2317,
+        "sha256": "c59b77a29ba1292bdfd9aafc8925da4aead23ed8755b0f9b9d560ec9706390b1",
+        "bytes": 3099,
+        "original_check_end_ns": 1791378872557157156,
+        "original_check_end_relative_source_s": 78.34,
+        "curve": 127,
+        "query_index": 1,
+        "after_failure_lease_domains_valid": true
+      },
+      {
+        "original_scan_log_line": 2319,
+        "sha256": "98a45294c07a2c8d8f9a1a7fb2f76b8ad84f06c02b88b08e5a938d8ca9891145",
+        "bytes": 3099,
+        "original_check_end_ns": 1791378872617157156,
+        "original_check_end_relative_source_s": 78.4,
+        "curve": 127,
+        "query_index": 1,
+        "after_failure_lease_domains_valid": true
+      },
+      {
+        "original_scan_log_line": 2325,
+        "sha256": "5ccfd6a4f118641829b86b3a59d9617bd22c808427f0dceafdbe14e4f9890d18",
+        "bytes": 3098,
+        "original_check_end_ns": 1791378872677157156,
+        "original_check_end_relative_source_s": 78.46000000000001,
+        "curve": 127,
+        "query_index": 1,
+        "after_failure_lease_domains_valid": true
+      },
+      {
+        "original_scan_log_line": 2327,
+        "sha256": "cdb550d7369991e5207eec23892a159e79fac07f1889e0cba4a49816c244d735",
+        "bytes": 3099,
+        "original_check_end_ns": 1791378872737157156,
+        "original_check_end_relative_source_s": 78.52000000000001,
+        "curve": 127,
+        "query_index": 1,
+        "after_failure_lease_domains_valid": true
+      },
+      {
+        "original_scan_log_line": 2330,
+        "sha256": "7117420196f68241e10b575d67f7c1a8440fae1127a54b72206f53c4cbbe4620",
+        "bytes": 3042,
+        "original_check_end_ns": 1791378872797157156,
+        "original_check_end_relative_source_s": 78.58,
+        "curve": 127,
+        "query_index": 1,
+        "after_failure_lease_domains_valid": false
+      },
+      {
+        "original_scan_log_line": 2337,
+        "sha256": "3a7f1842ead31de4c80cefbbef1f6a0e624ccf0c0db47dc2704429827579fff5",
+        "bytes": 3099,
+        "original_check_end_ns": 1791378872837157156,
+        "original_check_end_relative_source_s": 78.62,
+        "curve": 127,
+        "query_index": 1,
+        "after_failure_lease_domains_valid": true
+      },
+      {
+        "original_scan_log_line": 2339,
+        "sha256": "1c599ec25749fc8f0090714883d51286f11f4cc6ee4d0f821e0a6efd6aa7ee77",
+        "bytes": 3038,
+        "original_check_end_ns": 1791378872897157156,
+        "original_check_end_relative_source_s": 78.68,
+        "curve": 127,
+        "query_index": 1,
+        "after_failure_lease_domains_valid": false
+      },
+      {
+        "original_scan_log_line": 2345,
+        "sha256": "079ffcc1612e9030e0a4045ae5ef53ab3ce4b19e8a2bed909462d0d94b97efb3",
+        "bytes": 3099,
+        "original_check_end_ns": 1791378872957157156,
+        "original_check_end_relative_source_s": 78.74000000000001,
+        "curve": 127,
+        "query_index": 1,
+        "after_failure_lease_domains_valid": true
+      },
+      {
+        "original_scan_log_line": 2348,
+        "sha256": "5caa44d7a4a6aaeca520458d4f3fa414b32354d3198d2852274711ca517455a0",
+        "bytes": 3099,
+        "original_check_end_ns": 1791378873017157156,
+        "original_check_end_relative_source_s": 78.80000000000001,
+        "curve": 127,
+        "query_index": 1,
+        "after_failure_lease_domains_valid": true
+      },
+      {
+        "original_scan_log_line": 2355,
+        "sha256": "4e76527cfa76d709b3662c0d25a3c8013c1e713a8cf4c5e477e78d04a32f54c2",
+        "bytes": 3042,
+        "original_check_end_ns": 1791378873077157156,
+        "original_check_end_relative_source_s": 78.86,
+        "curve": 127,
+        "query_index": 1,
+        "after_failure_lease_domains_valid": false
+      },
+      {
+        "original_scan_log_line": 2357,
+        "sha256": "f02e12f7ff034889fb46811cdaa55fb9a03b839424ea53d8fa5e6d6b2e939fa2",
+        "bytes": 3099,
+        "original_check_end_ns": 1791378873137157156,
+        "original_check_end_relative_source_s": 78.92,
+        "curve": 127,
+        "query_index": 1,
+        "after_failure_lease_domains_valid": true
+      },
+      {
+        "original_scan_log_line": 2362,
+        "sha256": "0f1aa64b32be2a4db321092b3502f8ae16ec75b755c98e43eee053b044de2bf9",
+        "bytes": 3099,
+        "original_check_end_ns": 1791378873217157156,
+        "original_check_end_relative_source_s": 79.0,
+        "curve": 127,
+        "query_index": 1,
+        "after_failure_lease_domains_valid": true
+      },
+      {
+        "original_scan_log_line": 2367,
+        "sha256": "114163027d9b5eb605c62bc63a8060033b1ae01a526bf105d84204c4a3b793d5",
+        "bytes": 3098,
+        "original_check_end_ns": 1791378873277157156,
+        "original_check_end_relative_source_s": 79.06,
+        "curve": 127,
+        "query_index": 1,
+        "after_failure_lease_domains_valid": true
+      },
+      {
+        "original_scan_log_line": 2369,
+        "sha256": "d4c72df7501be87a9b0d575c82bf1e65eaf6ec2db149f955482dbac661dd29d6",
+        "bytes": 3099,
+        "original_check_end_ns": 1791378873357157156,
+        "original_check_end_relative_source_s": 79.14,
+        "curve": 127,
+        "query_index": 1,
+        "after_failure_lease_domains_valid": true
+      },
+      {
+        "original_scan_log_line": 2376,
+        "sha256": "f5753f39a7b6b482700768da73203845f5de6295c72e7ae1585709284bce757e",
+        "bytes": 3095,
+        "original_check_end_ns": 1791378873435157156,
+        "original_check_end_relative_source_s": 79.218,
+        "curve": 127,
+        "query_index": 1,
+        "after_failure_lease_domains_valid": true
+      },
+      {
+        "original_scan_log_line": 2378,
+        "sha256": "a605ef59debaa7a42086c422754818d4b0d72708554bb93965396efc66cbb291",
+        "bytes": 3099,
+        "original_check_end_ns": 1791378873497157156,
+        "original_check_end_relative_source_s": 79.28,
+        "curve": 127,
+        "query_index": 1,
+        "after_failure_lease_domains_valid": true
+      },
+      {
+        "original_scan_log_line": 2384,
+        "sha256": "ecdaf0c0b4195dda63125c58f3fcca7d97932fd2d0f400e321c45c66cf95bcd0",
+        "bytes": 3099,
+        "original_check_end_ns": 1791378873557157156,
+        "original_check_end_relative_source_s": 79.34,
+        "curve": 127,
+        "query_index": 1,
+        "after_failure_lease_domains_valid": true
+      },
+      {
+        "original_scan_log_line": 2386,
+        "sha256": "a90830899b866d9509d13f59c7ff2bfe16143dfb608d55adc08dca8082bfe7b1",
+        "bytes": 3099,
+        "original_check_end_ns": 1791378873637157156,
+        "original_check_end_relative_source_s": 79.42,
+        "curve": 127,
+        "query_index": 1,
+        "after_failure_lease_domains_valid": true
+      },
+      {
+        "original_scan_log_line": 2393,
+        "sha256": "f3ad1600a677aab82a4224957041ec354f13bf9023e5295b66aa491c7ed396ed",
+        "bytes": 3042,
+        "original_check_end_ns": 1791378873697157156,
+        "original_check_end_relative_source_s": 79.48,
+        "curve": 127,
+        "query_index": 1,
+        "after_failure_lease_domains_valid": false
+      },
+      {
+        "original_scan_log_line": 2395,
+        "sha256": "63701a0226d3627eac9ffcd52772d956dfd4d9959e87d6cc0527b8fc419e7ad9",
+        "bytes": 3099,
+        "original_check_end_ns": 1791378873757157156,
+        "original_check_end_relative_source_s": 79.54,
+        "curve": 127,
+        "query_index": 1,
+        "after_failure_lease_domains_valid": true
+      },
+      {
+        "original_scan_log_line": 2402,
+        "sha256": "f6e29962a8280085ec1c472299b721edd12843ad0ad62ae7d302770649288a2b",
+        "bytes": 3099,
+        "original_check_end_ns": 1791378873835157156,
+        "original_check_end_relative_source_s": 79.61800000000001,
+        "curve": 127,
+        "query_index": 1,
+        "after_failure_lease_domains_valid": true
+      },
+      {
+        "original_scan_log_line": 2404,
+        "sha256": "4df82c62e1e9f838f88228963b93e4151a4eaa3762c50cd5060b53e035f7114d",
+        "bytes": 3099,
+        "original_check_end_ns": 1791378873917157156,
+        "original_check_end_relative_source_s": 79.7,
+        "curve": 127,
+        "query_index": 1,
+        "after_failure_lease_domains_valid": true
+      },
+      {
+        "original_scan_log_line": 2411,
+        "sha256": "e03646e1f46f095c7128fb8fee0eb2ec981d95085155b8b8b6f91ca12a60adb2",
+        "bytes": 3098,
+        "original_check_end_ns": 1791378873977157156,
+        "original_check_end_relative_source_s": 79.76,
+        "curve": 127,
+        "query_index": 1,
+        "after_failure_lease_domains_valid": true
+      },
+      {
+        "original_scan_log_line": 2413,
+        "sha256": "ac8bcef90f2cda28df7c5461158605e99b74c2a7e1a079181360a87bd72f497b",
+        "bytes": 3099,
+        "original_check_end_ns": 1791378874037157156,
+        "original_check_end_relative_source_s": 79.82000000000001,
+        "curve": 127,
+        "query_index": 1,
+        "after_failure_lease_domains_valid": true
+      },
+      {
+        "original_scan_log_line": 2415,
+        "sha256": "522516901768db605c05459fee4152749e99f2a5bdd7bafe97403994f3843bfe",
+        "bytes": 3041,
+        "original_check_end_ns": 1791378874097157156,
+        "original_check_end_relative_source_s": 79.88000000000001,
+        "curve": 127,
+        "query_index": 1,
+        "after_failure_lease_domains_valid": false
+      },
+      {
+        "original_scan_log_line": 2421,
+        "sha256": "68e10018bc029f15aed29e25d862e04f050fbd417b6662c3d1d4b9d3d1740b81",
+        "bytes": 3099,
+        "original_check_end_ns": 1791378874137157156,
+        "original_check_end_relative_source_s": 79.92,
+        "curve": 127,
+        "query_index": 1,
+        "after_failure_lease_domains_valid": true
+      },
+      {
+        "original_scan_log_line": 2423,
+        "sha256": "3cc6aee5b43cdb2f3cd6bb48c35358208785a38c36105ec1ab8694fa0f500898",
+        "bytes": 3041,
+        "original_check_end_ns": 1791378874177157156,
+        "original_check_end_relative_source_s": 79.96000000000001,
+        "curve": 127,
+        "query_index": 1,
+        "after_failure_lease_domains_valid": false
+      },
+      {
+        "original_scan_log_line": 2430,
+        "sha256": "23f5580df9392958100303bb4139ec3eb3966ecb4f9edffad511e2bc556abb9c",
+        "bytes": 3099,
+        "original_check_end_ns": 1791378874297157156,
+        "original_check_end_relative_source_s": 80.08,
+        "curve": 127,
+        "query_index": 1,
+        "after_failure_lease_domains_valid": true
+      },
+      {
+        "original_scan_log_line": 2436,
+        "sha256": "c9c1fb995283ea212fd27b57e15ee549cb3daa69e6f4cb396f3ec402d665169f",
+        "bytes": 3099,
+        "original_check_end_ns": 1791378874377157156,
+        "original_check_end_relative_source_s": 80.16000000000001,
+        "curve": 127,
+        "query_index": 1,
+        "after_failure_lease_domains_valid": true
+      },
+      {
+        "original_scan_log_line": 2438,
+        "sha256": "8565131c5980d94ab73eea16830b1714e593913b90a8c20bdf010cc18fbe8f73",
+        "bytes": 3099,
+        "original_check_end_ns": 1791378874457157156,
+        "original_check_end_relative_source_s": 80.24000000000001,
+        "curve": 127,
+        "query_index": 1,
+        "after_failure_lease_domains_valid": true
+      },
+      {
+        "original_scan_log_line": 2446,
+        "sha256": "3c7c5413ee187d3a3d66240b0be633e1afc2952c8299103796cab02dd5074865",
+        "bytes": 3099,
+        "original_check_end_ns": 1791378874517157156,
+        "original_check_end_relative_source_s": 80.30000000000001,
+        "curve": 127,
+        "query_index": 1,
+        "after_failure_lease_domains_valid": true
+      },
+      {
+        "original_scan_log_line": 2448,
+        "sha256": "5ffe4f03e0a0dc2b1a62439a662df2c956c9637941441850190fb7867895ccc2",
+        "bytes": 3099,
+        "original_check_end_ns": 1791378874597157156,
+        "original_check_end_relative_source_s": 80.38000000000001,
+        "curve": 127,
+        "query_index": 1,
+        "after_failure_lease_domains_valid": true
+      },
+      {
+        "original_scan_log_line": 2454,
+        "sha256": "cdd597449021e45fdc1281902b5ac69941a27d8a55add15b0336139aaae4677c",
+        "bytes": 3099,
+        "original_check_end_ns": 1791378874677157156,
+        "original_check_end_relative_source_s": 80.46000000000001,
+        "curve": 127,
+        "query_index": 1,
+        "after_failure_lease_domains_valid": true
+      },
+      {
+        "original_scan_log_line": 2456,
+        "sha256": "79eeb3ce9ecc36025a043b43f8c38a1338c13da4c080f2ff607dd92d39720c05",
+        "bytes": 3095,
+        "original_check_end_ns": 1791378874737157156,
+        "original_check_end_relative_source_s": 80.52000000000001,
+        "curve": 127,
+        "query_index": 1,
+        "after_failure_lease_domains_valid": true
+      },
+      {
+        "original_scan_log_line": 2459,
+        "sha256": "52dad0b4b6b468bc8d14290e99274dfdfc2bb7c631189cea972c69be2f99b43f",
+        "bytes": 3042,
+        "original_check_end_ns": 1791378874797157156,
+        "original_check_end_relative_source_s": 80.58,
+        "curve": 127,
+        "query_index": 1,
+        "after_failure_lease_domains_valid": false
+      },
+      {
+        "original_scan_log_line": 2466,
+        "sha256": "e56104ba7ac0c220555797ab3d4b9b461d4b324b60b7cb1111b2efe73404c27c",
+        "bytes": 3099,
+        "original_check_end_ns": 1791378874857157156,
+        "original_check_end_relative_source_s": 80.64,
+        "curve": 127,
+        "query_index": 1,
+        "after_failure_lease_domains_valid": true
+      },
+      {
+        "original_scan_log_line": 2468,
+        "sha256": "c3e65c9337a24fdc43cca45d6b38428e289de57109b3ff80dfcb31cacca1530e",
+        "bytes": 3099,
+        "original_check_end_ns": 1791378874937157156,
+        "original_check_end_relative_source_s": 80.72,
+        "curve": 127,
+        "query_index": 1,
+        "after_failure_lease_domains_valid": true
+      },
+      {
+        "original_scan_log_line": 2474,
+        "sha256": "cca9134a789fa6ef7b75a37fd1e886c7f18a1887c191464965898111053ca224",
+        "bytes": 3099,
+        "original_check_end_ns": 1791378875017157156,
+        "original_check_end_relative_source_s": 80.80000000000001,
+        "curve": 127,
+        "query_index": 1,
+        "after_failure_lease_domains_valid": true
+      },
+      {
+        "original_scan_log_line": 2476,
+        "sha256": "22d0959702a487fe5d8979f97b1efaf46ff2c509a160386dc8d48631557bf2d7",
+        "bytes": 3099,
+        "original_check_end_ns": 1791378875077157156,
+        "original_check_end_relative_source_s": 80.86,
+        "curve": 127,
+        "query_index": 1,
+        "after_failure_lease_domains_valid": true
+      },
+      {
+        "original_scan_log_line": 2483,
+        "sha256": "a31dafda6c9b061a5de436fd5673a7e8c66546fe75d7370079c59f535fedcadf",
+        "bytes": 3099,
+        "original_check_end_ns": 1791378875137157156,
+        "original_check_end_relative_source_s": 80.92,
+        "curve": 127,
+        "query_index": 1,
+        "after_failure_lease_domains_valid": true
+      },
+      {
+        "original_scan_log_line": 2485,
+        "sha256": "fd7e04f19ce1420e15a568bd2f8703130d0154dae0f3bac13db8309180a6e3e6",
+        "bytes": 3099,
+        "original_check_end_ns": 1791378875235157156,
+        "original_check_end_relative_source_s": 81.018,
+        "curve": 127,
+        "query_index": 1,
+        "after_failure_lease_domains_valid": true
+      },
+      {
+        "original_scan_log_line": 2491,
+        "sha256": "f99e3e48c9b39b09e3dd539523f44a0a63dc764ff48bf422dbedda040c8f88eb",
+        "bytes": 3099,
+        "original_check_end_ns": 1791378875297157156,
+        "original_check_end_relative_source_s": 81.08,
+        "curve": 127,
+        "query_index": 1,
+        "after_failure_lease_domains_valid": true
+      },
+      {
+        "original_scan_log_line": 2493,
+        "sha256": "f5eda31cec263c0ee78dd1095dadf58df5b69d199b5185a932ea054abd041003",
+        "bytes": 3095,
+        "original_check_end_ns": 1791378875357157156,
+        "original_check_end_relative_source_s": 81.14,
+        "curve": 127,
+        "query_index": 1,
+        "after_failure_lease_domains_valid": true
+      },
+      {
+        "original_scan_log_line": 2500,
+        "sha256": "33d92a9cd5196bc2d3d29bdc068714255c0b5a9259b39bf588103405df5b130a",
+        "bytes": 3099,
+        "original_check_end_ns": 1791378875417157156,
+        "original_check_end_relative_source_s": 81.2,
+        "curve": 127,
+        "query_index": 1,
+        "after_failure_lease_domains_valid": true
+      },
+      {
+        "original_scan_log_line": 2502,
+        "sha256": "76c37e217648e07e21f114593b8960465ba10373fc5cee99b27569e1af18c311",
+        "bytes": 3098,
+        "original_check_end_ns": 1791378875477157156,
+        "original_check_end_relative_source_s": 81.26,
+        "curve": 127,
+        "query_index": 1,
+        "after_failure_lease_domains_valid": true
+      },
+      {
+        "original_scan_log_line": 2505,
+        "sha256": "80020b237fe55849f9974136ca46af1cca8dbc31d8344d349dd456c80d5dc36e",
+        "bytes": 3099,
+        "original_check_end_ns": 1791378875537157156,
+        "original_check_end_relative_source_s": 81.32000000000001,
+        "curve": 127,
+        "query_index": 1,
+        "after_failure_lease_domains_valid": true
+      },
+      {
+        "original_scan_log_line": 2510,
+        "sha256": "80564e1a40ef63e99d92f15d133ac3a9f3f9c51abc6ab01e2712b98b8f3826bc",
+        "bytes": 3099,
+        "original_check_end_ns": 1791378875617157156,
+        "original_check_end_relative_source_s": 81.4,
+        "curve": 127,
+        "query_index": 1,
+        "after_failure_lease_domains_valid": true
+      },
+      {
+        "original_scan_log_line": 2512,
+        "sha256": "c566d4d3b3ecdb20968477b4d05cd7effb2ff611335d821d6f245b54976bad87",
+        "bytes": 3098,
+        "original_check_end_ns": 1791378875677157156,
+        "original_check_end_relative_source_s": 81.46000000000001,
+        "curve": 127,
+        "query_index": 1,
+        "after_failure_lease_domains_valid": true
+      },
+      {
+        "original_scan_log_line": 2519,
+        "sha256": "db81fe4dad57d75cc5e56c93035226ae6f85c746454d161b17fd8f83736c75de",
+        "bytes": 3099,
+        "original_check_end_ns": 1791378875737157156,
+        "original_check_end_relative_source_s": 81.52000000000001,
+        "curve": 127,
+        "query_index": 1,
+        "after_failure_lease_domains_valid": true
+      },
+      {
+        "original_scan_log_line": 2522,
+        "sha256": "f6dab4d67973ff45fa1e0a0b75dcf6139d2346986d428a7141310a031ff4ca54",
+        "bytes": 3099,
+        "original_check_end_ns": 1791378875797157156,
+        "original_check_end_relative_source_s": 81.58,
+        "curve": 127,
+        "query_index": 1,
+        "after_failure_lease_domains_valid": true
+      },
+      {
+        "original_scan_log_line": 2529,
+        "sha256": "5a496277be34d2cb2812272ed239e4ad5421ce8d2655d5171f811d2a5f61e56e",
+        "bytes": 3099,
+        "original_check_end_ns": 1791378875877157156,
+        "original_check_end_relative_source_s": 81.66000000000001,
+        "curve": 127,
+        "query_index": 1,
+        "after_failure_lease_domains_valid": true
+      },
+      {
+        "original_scan_log_line": 2531,
+        "sha256": "5d73e111d5d858f999fecf9a11280ff973ebda5be9b079d762e13437cb431d08",
+        "bytes": 3042,
+        "original_check_end_ns": 1791378875935157156,
+        "original_check_end_relative_source_s": 81.718,
+        "curve": 127,
+        "query_index": 1,
+        "after_failure_lease_domains_valid": false
+      },
+      {
+        "original_scan_log_line": 2534,
+        "sha256": "dce584af98be0bf3efd65b5701e15abc4d2d1e3bf250cb5984c9d5481a2cb445",
+        "bytes": 3042,
+        "original_check_end_ns": 1791378875957157156,
+        "original_check_end_relative_source_s": 81.74000000000001,
+        "curve": 127,
+        "query_index": 1,
+        "after_failure_lease_domains_valid": false
+      },
+      {
+        "original_scan_log_line": 2540,
+        "sha256": "96d54bb155568290f70d9e81cbc0e9e45f36b6df663e828df3d2e9ed609699ed",
+        "bytes": 3099,
+        "original_check_end_ns": 1791378876035157156,
+        "original_check_end_relative_source_s": 81.81800000000001,
+        "curve": 127,
+        "query_index": 1,
+        "after_failure_lease_domains_valid": true
+      },
+      {
+        "original_scan_log_line": 2542,
+        "sha256": "edc7b140a32bef8ee1b022c880db4cee278aba4aea61128f664ae958a3f5f9a7",
+        "bytes": 3099,
+        "original_check_end_ns": 1791378876097157156,
+        "original_check_end_relative_source_s": 81.88000000000001,
+        "curve": 127,
+        "query_index": 1,
+        "after_failure_lease_domains_valid": true
+      },
+      {
+        "original_scan_log_line": 2548,
+        "sha256": "e348015e50d2273069cf7e3eb23d088f0adb1201d8df1ae55b86bffd8b7c9984",
+        "bytes": 3043,
+        "original_check_end_ns": 1791378876157157156,
+        "original_check_end_relative_source_s": 81.94000000000001,
+        "curve": 127,
+        "query_index": 1,
+        "after_failure_lease_domains_valid": false
+      },
+      {
+        "original_scan_log_line": 2550,
+        "sha256": "036124ecc8a6aa7594f66c25f72aa875da9210ee9b8071a49dd0751489a52099",
+        "bytes": 3100,
+        "original_check_end_ns": 1791378876237157156,
+        "original_check_end_relative_source_s": 82.02000000000001,
+        "curve": 127,
+        "query_index": 1,
+        "after_failure_lease_domains_valid": true
+      },
+      {
+        "original_scan_log_line": 2557,
+        "sha256": "17749e486aa7a1fd534cb1169981ca3cbd726fa7758f51a02e6613df9be1de4a",
+        "bytes": 3100,
+        "original_check_end_ns": 1791378876297157156,
+        "original_check_end_relative_source_s": 82.08,
+        "curve": 127,
+        "query_index": 1,
+        "after_failure_lease_domains_valid": true
+      },
+      {
+        "original_scan_log_line": 2559,
+        "sha256": "cd9e453b8d3c44af06fb49207048e6f91f7b156e03c0fdc50aef6277fa919a6a",
+        "bytes": 3099,
+        "original_check_end_ns": 1791378876397157156,
+        "original_check_end_relative_source_s": 82.18,
+        "curve": 127,
+        "query_index": 1,
+        "after_failure_lease_domains_valid": true
+      },
+      {
+        "original_scan_log_line": 2565,
+        "sha256": "69787c0b10def0bf7f3a9d4075524db1b0b102b87405e2fb1764b3aaf1e2ef1f",
+        "bytes": 3100,
+        "original_check_end_ns": 1791378876457157156,
+        "original_check_end_relative_source_s": 82.24000000000001,
+        "curve": 127,
+        "query_index": 1,
+        "after_failure_lease_domains_valid": true
+      },
+      {
+        "original_scan_log_line": 2567,
+        "sha256": "90cd185044f26abeb54aaf6ddb2d185f2bc34a00419c2f941a87d7f99ff0a6ad",
+        "bytes": 3096,
+        "original_check_end_ns": 1791378876535157156,
+        "original_check_end_relative_source_s": 82.31800000000001,
+        "curve": 127,
+        "query_index": 1,
+        "after_failure_lease_domains_valid": true
+      },
+      {
+        "original_scan_log_line": 2570,
+        "sha256": "05b733ea8312f878107bb1da4af37ababcfe23f93f296e44097f184dc61a0179",
+        "bytes": 3044,
+        "original_check_end_ns": 1791378876597157156,
+        "original_check_end_relative_source_s": 82.38000000000001,
+        "curve": 127,
+        "query_index": 1,
+        "after_failure_lease_domains_valid": false
+      },
+      {
+        "original_scan_log_line": 2576,
+        "sha256": "60ae594b63791894ccb353bec83f6e2179c17d6ca5051c0c33532cb41ce83a9f",
+        "bytes": 3101,
+        "original_check_end_ns": 1791378876637157156,
+        "original_check_end_relative_source_s": 82.42,
+        "curve": 127,
+        "query_index": 1,
+        "after_failure_lease_domains_valid": true
+      },
+      {
+        "original_scan_log_line": 2578,
+        "sha256": "6bbf14c19e669f841e5b07a5e8627d2945dc1af7413bd1065f95f5cb9138b390",
+        "bytes": 3044,
+        "original_check_end_ns": 1791378876697157156,
+        "original_check_end_relative_source_s": 82.48,
+        "curve": 127,
+        "query_index": 1,
+        "after_failure_lease_domains_valid": false
+      },
+      {
+        "original_scan_log_line": 2582,
+        "sha256": "00a04778ff068e42e98f3aea8106f9355cf6e6f9cbdf097a876d9666e80ee49c",
+        "bytes": 3101,
+        "original_check_end_ns": 1791378876797157156,
+        "original_check_end_relative_source_s": 82.58,
+        "curve": 127,
+        "query_index": 1,
+        "after_failure_lease_domains_valid": true
+      },
+      {
+        "original_scan_log_line": 2587,
+        "sha256": "47635de01cc078a653025ef71067de003956b545455d2add4e7f14c9fa02d410",
+        "bytes": 3101,
+        "original_check_end_ns": 1791378876837157156,
+        "original_check_end_relative_source_s": 82.62,
+        "curve": 127,
+        "query_index": 1,
+        "after_failure_lease_domains_valid": true
+      },
+      {
+        "original_scan_log_line": 2590,
+        "sha256": "6dbc963bb7d56c87aac17655bdc7e10e5115ec11bd11776c9dde87411f36f778",
+        "bytes": 3101,
+        "original_check_end_ns": 1791378876917157156,
+        "original_check_end_relative_source_s": 82.7,
+        "curve": 127,
+        "query_index": 1,
+        "after_failure_lease_domains_valid": true
+      },
+      {
+        "original_scan_log_line": 2596,
+        "sha256": "a33861ace32ffc91905e060a16d640554c1c8444a085da3e68531fe3d2796204",
+        "bytes": 3100,
+        "original_check_end_ns": 1791378876977157156,
+        "original_check_end_relative_source_s": 82.76,
+        "curve": 127,
+        "query_index": 1,
+        "after_failure_lease_domains_valid": true
+      }
+    ]
+  },
+  "sealed_code_sha256": {
+    "simulation/dynamic_collision.py": "07098c9debe51cb43bd0308234a085fcc206f4dccafd8d9cb5c4af890ff16045",
+    "application/install/plan_env/include/plan_env/dynamic_occupancy_oracle.hpp": "9e43c30836bd8cea4a7d60accf7ebfc35427aa745d46b83747a3dddf4d3c4f8c",
+    "source_snapshot/nav/src/scan_planner_vendor/plan_env/src/grid_map.cpp": "33eb9eaeb09c304473fd08f3e26cfe1326f68142e312248b80c2164d7162a408",
+    "application/install/scan_planner/include/plan_manage/trajectory_collision.hpp": "4ff22c6293be20cad924ef56428ca88d94a19642147c470f5c05c98bf25f9b4f",
+    "application/install/scan_planner/include/plan_manage/motion_sweep.hpp": "a1dbc1e5ea5b25d43ec264f2d12278e44940efd8da952a2308431959415a0884"
+  },
+  "mathematical_reconstruction": {
+    "scope": "Original sealed code and original actual actor samples; same complete closed XYZ voxel, all6s and original margins; never a retrospective accepted collision proof.",
+    "cell_index": [
+      2,
+      -91,
+      -1
+    ],
+    "closed_xyz_bounds": [
+      [
+        0.1,
+        -4.55,
+        -0.05
+      ],
+      [
+        0.15,
+        -4.5,
+        0
+      ]
+    ],
+    "first_selected_source_s": 76.8,
+    "current_actor_position_at_76_8_s": [
+      0.0,
+      1.7123520374298096,
+      0.0
+    ],
+    "future6s_veto_at_all_five_selected_sources": true,
+    "independent_review_file": "v59_time_union_readonly_review.json"
+  },
+  "causal_limits": [
+    "The last actually consumed nonzero-to-zero command transition was source72.856s. It precedes the77.48s fresh-domain curve127 subsequent diagnostic; future-space union is not established as the sole cause of that initial zero transition.",
+    "The original same-capture motion first-cell warning at source71.34s had static_query_valid=false and original proof deadlines1; it cannot be attributed to a fresh dynamic tube solely from the reason string.",
+    "Earlier source71.18/71.88 curve125 later-query diagnostics had only4.524072ms/0.015005ms remaining receipt lease before subsequent diagnostic work. They cannot substitute for an original fresh dynamic-only causal witness.",
+    "Future-space union conservatism is geometrically reproduced for the chosen cell while the actual actor is still distant at source76.8s. This does not prove a safe escaping trajectory exists or authorize clearing UNKNOWN.",
+    "The sealed0.65m/s fullXYZ upper bound provides a bound on earliest arrival, not a guaranteed latest arrival or positive progress. Measured spatial spline parameter is not an independently proved physical arrival clock; stopping/stalling remains possible.",
+    "A time-indexed collision permission would require original absolute earliest/latest intervals, complete closedXYZ actor forecast, controller/ACK/reaction/stop and terminal occupancy bounds. Without those witnesses retain the complete original6s veto; do not shrink6s, widen0.65, refresh leases or alter actor scripts.",
+    "No new build, test, Kit, ROS, source edit, formal navigation acceptance or sensor replay occurred during this evidence publication."
+  ]
+}

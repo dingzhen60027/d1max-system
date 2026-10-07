@@ -5,6 +5,9 @@ import copy
 import math
 import tempfile
 import unittest
+from contextlib import nullcontext
+from types import SimpleNamespace
+from unittest.mock import patch
 from pathlib import Path
 
 import numpy as np
@@ -117,6 +120,31 @@ class QuadrupedGeometryTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             q.VelocityFeedback(mode='unsealed')
 
+    def test_separate_input_bound_can_leave_old_standing_saturation(self):
+        legacy = q.VelocityFeedback(mode='spot_monotone_measured_v2')
+        limits = q.policy_input_limits({'policy_input_limits': {'schema': 1, 'linear': .4, 'angular': .5}})
+        calibrated = q.VelocityFeedback(*limits, mode='spot_monotone_measured_v2')
+        # The actual v37 demand is retained; no minimum navigation demand is
+        # introduced. Zero measured velocity models the observed standing.
+        for _ in range(200):
+            old = legacy.update(.02, [.13886, 0.], [0., 0.])
+            new = calibrated.update(.02, [.13886, 0.], [0., 0.])
+        self.assertEqual(old[0], .3)
+        self.assertGreater(new[0], .39)
+        self.assertLessEqual(new[0], .4)
+        # Withdrawal excludes stored forward integral/feedforward immediately.
+        np.testing.assert_array_equal(calibrated.update(.02, [0., 0.], [0., 0.]), [0., 0.])
+
+    def test_policy_input_configuration_retains_historical_default(self):
+        self.assertEqual(q.policy_input_limits({}), (.3, .5))
+        for bad in (False, {}, {'schema': 1, 'linear': .4, 'angular': .5, 'extra': 1},
+                    {'schema': True, 'linear': .4, 'angular': .5}):
+            with self.subTest(bad=bad), self.assertRaises(ValueError):
+                q.policy_input_limits({'policy_input_limits': bad})
+        for bad in (0., -.1, .600001, True, float('nan'), float('inf')):
+            with self.subTest(bad=bad), self.assertRaises(ValueError):
+                q.policy_input_limits({'policy_input_limits': {'schema': 1, 'linear': bad, 'angular': .5}})
+
     def test_nonlinear_feedback_is_smooth_signed_and_preserves_desired(self):
         outputs = []
         for desired_value in [-.01,-1e-8,0.,1e-8,.01]:
@@ -193,6 +221,94 @@ class QuadrupedGeometryTests(unittest.TestCase):
         np.testing.assert_array_equal(servo.integral, [0., 0.])
         with self.assertRaises(ValueError):
             servo.update(.02, [.31, 0.], [0., 0.])
+
+    def test_v2_zero_axis_residual_is_preserved_as_historical_counterexample(self):
+        servo = q.VelocityFeedback(.38, .5, mode='spot_monotone_measured_v2')
+        servo.integral[:] = [.2, .03]
+        # A measured push/rotation must not be confused with a fresh WALK
+        # request. v2 nevertheless asks for both nonzero policy axes.
+        result = servo.update(.02, [0., 0.], [.4, -.1])
+        np.testing.assert_allclose(result, [-.14, .0807], rtol=0, atol=1e-15)
+        self.assertAlmostEqual(servo.integral[1], .0307)
+
+    def test_v3_true_zero_withdraws_two_axes_and_history_without_zeroing_measurement(self):
+        servo = q.VelocityFeedback(.38, .5, mode='spot_monotone_measured_v3')
+        servo.integral[:] = [.2, .15]
+        desired, measured = np.zeros(2), np.array([.4, -.7])
+        before = measured.copy()
+        for _ in range(100):
+            np.testing.assert_array_equal(servo.update(.02, desired, measured), [0., 0.])
+            np.testing.assert_array_equal(servo.integral, [0., 0.])
+        np.testing.assert_array_equal(servo.filtered, measured)
+        np.testing.assert_array_equal(measured, before)
+        np.testing.assert_array_equal(desired, [0., 0.])
+
+    def test_v3_axis_withdrawal_preserves_authorized_other_axis_and_no_minimum(self):
+        for desired, measured, zero_axis in [([.1, 0.], [0., -.3], 1),
+                                             ([0., .1], [.4, 0.], 0)]:
+            servo = q.VelocityFeedback(.38, .5, mode='spot_monotone_measured_v3')
+            servo.integral[:] = [.15, .1]
+            result = servo.update(.02, desired, measured)
+            self.assertEqual(result[zero_axis], 0.)
+            self.assertEqual(servo.integral[zero_axis], 0.)
+            self.assertGreater(result[1-zero_axis], 0.)
+        tiny = q.VelocityFeedback(mode='spot_monotone_measured_v3').update(.02, [1e-10, 1e-10], [0., 0.])
+        self.assertTrue(np.all(tiny > 0.))
+        self.assertTrue(np.all(tiny < 1e-8))
+
+    def test_v3_nonzero_authority_matches_v2_sample_for_sample_with_original_limits(self):
+        old = q.VelocityFeedback(.38, .5, mode='spot_monotone_measured_v2')
+        new = q.VelocityFeedback(.38, .5, mode='spot_monotone_measured_v3')
+        for i in range(200):
+            desired = [.23 if i < 120 else -.05, .3 if i < 150 else -.2]
+            measured = [.4*math.sin(i/7), .6*math.cos(i/11)]
+            np.testing.assert_array_equal(new.update(.02, desired, measured), old.update(.02, desired, measured))
+            np.testing.assert_array_equal(new.integral, old.integral)
+            np.testing.assert_array_equal(new.filtered, old.filtered)
+
+    def test_v3_resumes_from_real_filter_without_inherited_drive_integral(self):
+        servo = q.VelocityFeedback(mode='spot_monotone_measured_v3')
+        servo.integral[:] = [.2, .1]
+        servo.update(.02, [0., 0.], [.04, .02])
+        expected = q.VelocityFeedback(mode='spot_monotone_measured_v3')
+        expected.filtered = servo.filtered.copy()
+        np.testing.assert_array_equal(servo.update(.02, [.01, .01], [.03, .01]),
+                                      expected.update(.02, [.01, .01], [.03, .01]))
+
+    def test_v3_zero_between_inferences_withdraws_input_without_extra_inference_or_state_write(self):
+        def plant(mode):
+            result = object.__new__(q.QuadrupedPlant)
+            result._initialized, result._steps = True, 0
+            result.max_linear_speed, result.max_angular_speed = .23, .3
+            result.stall_recovery_enabled = False
+            result.velocity_feedback_enabled = True
+            result.velocity_feedback = q.VelocityFeedback(.38, .5, mode=mode)
+            result.velocity_feedback.integral[:] = [.1, .1]
+            result._command = np.array([.2, 0., .15])
+            action = np.arange(12, dtype=float)
+            result.controller = SimpleNamespace(_policy_counter=1, _current_action=action,
+                _previous_action=action, calls=[])
+            def forward(dt, command):
+                result.controller.calls.append((dt, command.copy()))
+                result.controller._policy_counter += 1
+            result.controller.forward = forward
+            # No filtered-reading substitution, root setter or joint setter
+            # exists in this non-inference test plant.
+            result.get_world_poses = result.get_velocities = lambda: self.fail('extra measurement/inference')
+            return result, action
+        backend = SimpleNamespace(use_backend=lambda *args, **kwargs: nullcontext())
+        with patch.dict('sys.modules', {'isaacsim.core.experimental.utils':SimpleNamespace(backend=backend)}):
+            old, _ = plant('spot_monotone_measured_v2')
+            new, action = plant('spot_monotone_measured_v3')
+            old.step(.002, 0., 0.)
+            new.step(.002, 0., 0.)
+            np.testing.assert_array_equal(old.controller.calls[0][1], [.2, 0., .15])
+            np.testing.assert_array_equal(new.controller.calls[0][1], [0., 0., 0.])
+            np.testing.assert_array_equal(new.velocity_feedback.integral, [0., 0.])
+            self.assertEqual(new.controller._policy_counter, 2)
+            self.assertIs(new.controller._current_action, action)
+            self.assertIs(new.controller._previous_action, action)
+            self.assertEqual(new._steps, 1)
 
     def test_policy_joint_reading_is_same_source_finite_readonly_state(self):
         class TensorRead:

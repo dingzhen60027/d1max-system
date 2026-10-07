@@ -47,7 +47,8 @@ def main(args=None):
             self.status=self.create_publisher(String,'/d1max/live_planning/execution/safety_status',1)
             self.accepted=self.rejected=0
             self.reason='waiting_evidence'
-            self.create_subscription(ExecutionPermit,'/d1max/live_planning/execution/permit',self.handoff.on_permit,5)
+            self.create_subscription(ExecutionPermit,'/d1max/live_planning/execution/permit',
+                lambda m:self.handoff.on_permit(m,self.get_clock().now().nanoseconds),5)
             self.create_subscription(ExecutionHandoffGrant,'/d1max/live_planning/execution/handoff_grant',
                 lambda m:self.handoff.on_grant(m,self.get_clock().now().nanoseconds),5)
             self.create_subscription(ExecutionCommitAck,'/d1max/live_planning/execution/commit_ack',

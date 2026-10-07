@@ -7,6 +7,7 @@ actual BT, global/native local planners, tracker and safety contracts are kept.
 import argparse
 import hashlib
 import json
+import math
 import os
 from pathlib import Path
 import time
@@ -15,6 +16,35 @@ import yaml
 
 def sha(path):
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+
+
+def quadruped_command_limits(robot):
+    """Use the sealed plant demand domain throughout the same navigation graph.
+
+    These are navigation demands, distinct from policy inputs and measured
+    gait velocity. The existing isolated writer/safety limits remain bounds.
+    """
+    result = {}
+    for field, target, cap in (("max_linear_speed", "max_speed_mps", .30),
+                              ("max_angular_speed", "max_yaw_radps", .50)):
+        value = robot[field]
+        if type(value) not in (int, float) or not math.isfinite(value) or not 0 < value <= cap:
+            raise ValueError("quadruped_navigation_command_domain:" + field)
+        result[target] = float(value)
+    return result
+
+
+def spot_reachable_limits(robot):
+    """Read the isolated plant domain separately from navigation authority."""
+    limits = robot['model_limits']
+    result = []
+    for key, low, high in (('max_linear_speed_mps', .15, .65),
+                           ('max_angular_speed_radps', .30, .8)):
+        value = limits[key]
+        if type(value) not in (int, float) or not math.isfinite(value) or not low <= value <= high:
+            raise ValueError('invalid_spot_isolated_reachable_bounds')
+        result.append(float(value))
+    return tuple(result)
 
 
 def validate_prior_body_domain(spec, resolution, exclusion=.10):
@@ -79,7 +109,7 @@ def prepare_isaac_session(output, release, map_directory=None, session_id=None, 
     if quadruped:
         # Command limits leave room for the measured oscillating gait. The
         # reachable model bounds actual velocity, separately from demands.
-        session.update(max_speed_mps=.15, max_yaw_radps=.30)
+        session.update(quadruped_command_limits(robot))
         braking_path = Path(session['execution_braking_model_record'])
         braking = json.loads(braking_path.read_text())
         braking['note'] = ('Conservative Spot simulation fixture bounds; sampled official-policy tests, '
@@ -91,11 +121,7 @@ def prepare_isaac_session(output, release, map_directory=None, session_id=None, 
             # An articulated plant's instantaneous reachable velocity is
             # distinct from its permitted navigation command. This opt-in
             # record is accepted only by the isolated simulation transport.
-            limits = robot['model_limits']
-            reachable_speed = float(limits['max_linear_speed_mps'])
-            reachable_yaw = float(limits['max_angular_speed_radps'])
-            if not (0.15 <= reachable_speed <= .6 and .30 <= reachable_yaw <= .8):
-                raise ValueError('invalid_spot_isolated_reachable_bounds')
+            reachable_speed, reachable_yaw = spot_reachable_limits(robot)
             braking['measurements'].update(max_speed_mps=reachable_speed, max_yaw_radps=reachable_yaw)
             braking['isolated_platform_model'] = dict(schema=1, kind='official_spot_physx',
                 command_max_speed_mps=session['max_speed_mps'],
@@ -113,7 +139,8 @@ def prepare_isaac_session(output, release, map_directory=None, session_id=None, 
                 observed = float(evidence['observed_max_full_xyz_speed_mps'])
                 if (evidence.get('kind') != 'isolated_spot_full_xyz_reference_admission_domain_v1'
                         or evidence.get('physical_acceptance') is not False
-                        or not 0 < observed <= min(reference_cap, travel_cap) <= max(reference_cap, travel_cap) <= .50
+                        or not 0 < observed <= min(reference_cap, travel_cap) <= max(reference_cap, travel_cap) <= reachable_speed
+                        or session['max_speed_mps'] > min(reference_cap, travel_cap)
                         or evidence['reference_max_speed_mps'] != reference_cap
                         or evidence['measured_travel_max_speed_mps'] != travel_cap):
                     raise ValueError('invalid_spot_full_xyz_reference_evidence')
@@ -158,6 +185,9 @@ def prepare_isaac_session(output, release, map_directory=None, session_id=None, 
             source_clock='isaac_physics_time', reset_policy='revoke_require_new_session',
             pause_policy='revoke_require_new_session', localization='groundtruth_fixture',
             command_source='/d1max/live_planning/execution/applied_motion',
+            mc_measurement_topic='/d1max/isaacsim/mc_state',
+            mc_measurement_contract='physx_raw_mc_after_geometry_revocation_v1',
+            mc_measurement_scope='isolated_mock_original_physx_only_not_navigation_authority',
             state_port=18741, command_port=18742, measured_velocity=True,
             scene_config=str(config_path), scene_sha256=sha(config_path)),
         simulation_initial_pose=robot['initial_pose'],
@@ -222,6 +252,8 @@ def prepare_isaac_session(output, release, map_directory=None, session_id=None, 
         'reference.yaml': {'body_height_m':height,
             'body_height_calibration_id':session['body_height_calibration_id'],**prior_params},
         'bt_adapter.yaml': {'body_height':height},
+        'mock_sdk.yaml': {'local_state_enabled':True,
+            'local_navigation_state_topic':session['isaac_bridge_contract']['mc_measurement_topic']},
     }
     updates['scan.yaml'].update({'grid_map.'+k:v for k,v in prior_params.items()})
     updates['scan.yaml'].update({'grid_map.static_prior_manifest_path':str(prior_path),

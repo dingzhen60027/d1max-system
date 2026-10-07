@@ -1,0 +1,91 @@
+{
+  "schema": 1,
+  "scope": "One actual source83.818s Cube geometry mathematical replay; no physical re-simulation, no certificate relaxation, no all-link or navigation pass claim",
+  "original_source_sim_time_ns": 83818000000,
+  "actual_body_pose": [
+    -0.27422767877578735,
+    -5.583821773529053,
+    0.4927676022052765,
+    -0.03565135598182678,
+    -0.06719525158405304,
+    -0.3733566999435425,
+    0.9245639443397522
+  ],
+  "original_body_Cube": {
+    "path": "/World/Spot/body/collisions/mesh_0",
+    "rigid_body_path": "/World/Spot/body",
+    "shape": {
+      "type": "Cube",
+      "size": 1.0
+    },
+    "world_matrix": [
+      [
+        0.6053522744434968,
+        0.13903510722606685,
+        -0.013668378491509516,
+        -0.27422767877578735
+      ],
+      [
+        -0.5827541752784,
+        0.14373349843260766,
+        0.016253932672968072,
+        -5.583821773529053
+      ],
+      [
+        0.12824287720211927,
+        -0.0031496645789143326,
+        0.13837985800713723,
+        0.4927676022052765
+      ],
+      [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    ],
+    "aabb_min": [
+      -0.6532555588563239,
+      -5.955192576721041,
+      0.3578814023111911
+    ],
+    "aabb_max": [
+      0.10480020130474921,
+      -5.2124509703370645,
+      0.6276538020993618
+    ]
+  },
+  "comparison": [
+    {
+      "geometry": "original_world_AABB",
+      "result": {
+        "valid": false,
+        "reason": "robot_link_outside_horizontal_query_envelope:/World/Spot/body/collisions/mesh_0"
+      },
+      "maximum_clipped_half_distance_m": 0.6079018754549159,
+      "radius_m": 0.6078651750202781,
+      "same_actual_Cube_complete_solid": true
+    },
+    {
+      "geometry": "actual_affine_Cube_8corners",
+      "result": {
+        "valid": true,
+        "checked_paths": [
+          "/World/Spot/body/collisions/mesh_0"
+        ],
+        "source_scope": "actual_full_link_world_AABBs_inside_yaw_query_envelope",
+        "nominal_tilt_not_used_as_geometry_proof": true,
+        "floor_support_does_not_clear_obstacle_voxels": true
+      },
+      "maximum_clipped_half_distance_m": 0.32844779938962115,
+      "radius_m": 0.6078651750202781,
+      "same_actual_Cube_complete_solid": true
+    }
+  ],
+  "sealed_code": {
+    "runtime_geometry.py": "9a5b4e3860fd310a5468393914ef749c11e1bd1f47554b54c60e094ecaa293b6",
+    "dynamic_collision.py": "07098c9debe51cb43bd0308234a085fcc206f4dccafd8d9cb5c4af890ff16045",
+    "quadruped.py": "191626991514d1ed2cd8c118ab1e8da4c1c2b99be23b39dc447a6e395cf8dbd2"
+  },
+  "whole_500_domain_failure_retained": true
+}

@@ -81,10 +81,10 @@ inline BrakingModel loadBrakingModel(const std::string&path,const std::string&ex
      const double v=field.get<double>();
      if(!std::isfinite(v)||v<=0.||v>cap)throw std::runtime_error("invalid_isolated_platform_bound");
      return v;};
-   r=brakingMeasurements(j.at("measurements"),.6,.8);
+   r=brakingMeasurements(j.at("measurements"),.65,.8);
    r.command_max_speed=bounded("command_max_speed_mps",.3);
    r.command_max_yaw=bounded("command_max_yaw_radps",.5);
-   if(bounded("reachable_max_speed_mps",.6)!=r.max_speed||bounded("reachable_max_yaw_radps",.8)!=r.max_yaw||
+   if(bounded("reachable_max_speed_mps",.65)!=r.max_speed||bounded("reachable_max_yaw_radps",.8)!=r.max_yaw||
       r.command_max_speed>r.max_speed||r.command_max_yaw>r.max_yaw)
      throw std::runtime_error("isolated_platform_measurement_mismatch");
    r.isolated_spot_model=true;

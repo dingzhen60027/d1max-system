@@ -8,7 +8,7 @@ import unittest
 
 import scenario_suite as suite
 import world_builder as world
-from collision_audit import Audit
+from collision_audit import Audit, SPOT_EXPOSURE_PROFILE, SPOT_EXPOSURE_PROFILE_65, encounter_contract
 from quadruped import pose_matrix
 
 
@@ -31,7 +31,7 @@ class ScenarioInputTests(unittest.TestCase):
         long = next(r for r in rows if r["id"] == "long_distance_multi_goal")
         self.assertGreater(long["static_route_length_m"], 300.)
         self.assertEqual(long["timeout_source_s"], 3600)
-        self.assertEqual(long["phase_timeout_source_s"], [618, 1062, 651, 819, 782])
+        self.assertEqual(long["phase_timeout_source_s"], [446, 735, 467, 576, 552])
         self.assertTrue(all(r["execution_status"] == "pending" for r in rows))
         self.assertTrue(all(p[2] == 0. for r in rows for p in r["ground_goals"]))
 
@@ -50,15 +50,105 @@ class ScenarioInputTests(unittest.TestCase):
                          envelope["top_z_offset_m"])
         self.assertEqual(contract["enabled_actor_ids"], ["door_blocking_cart"])
         self.assertEqual([a["id"] for a in spec["dynamic_actors"] if a["enabled"]], ["door_blocking_cart"])
-        self.assertEqual(contract["fixture_goal_annotations_xyz"], [[20, -25, .52]])
+        self.assertEqual(contract["fixture_goal_annotations_xyz"], [[20, -25, 0.]])
         self.assertTrue(contract["candidate_seal_required"])
         self.assertFalse(contract["runtime_pose_or_actor_switching_allowed"])
         self.assertEqual(contract["execution_status"], "pending")
         encounter = contract["actor_encounter_contract"]
         self.assertEqual(encounter["required_actor_ids"], ["door_blocking_cart"])
-        self.assertEqual(encounter["near_center_distance_m"], 2.)
+        self.assertEqual(encounter["near_center_distance_m"], 3.)
         self.assertEqual(encounter["maximum_source_sampling_gap_s"], .12)
         self.assertIn("collision_audit.py", contract["input_code_sha256"])
+
+    def background_actor_source(self):
+        original = world.load_world()
+        case = next(c for c in original['scenarios'] if c['id'] == 'crossing_blocker')
+        case['actor_ids'] = ['plaza_person']
+        case['background_actor_ids'] = sorted(a['id'] for a in original['dynamic_actors']
+            if a['id'] != 'plaza_person')
+        return original, case
+
+    def prepare_background_actor_case(self):
+        original, _ = self.background_actor_source()
+        source = self.root/'background_author.json'; source.write_text(json.dumps(original))
+        target = self.root/'background_prepared.json'
+        suite.prepare_case(source, 'crossing_blocker', target)
+        return original, json.loads(target.read_text())
+
+    def test_background_actors_preserve_all_six_physical_actors_but_require_only_selected_encounter(self):
+        from dynamic_collision import actor_registry
+        legacy = self.prepare('crossing_blocker')
+        legacy_bytes = (self.root/'prepared.json').read_bytes()
+        original, spec = self.prepare_background_actor_case()
+        contract = suite.verify_prepared(spec)
+        all_ids = sorted(a['id'] for a in original['dynamic_actors'])
+        self.assertEqual(contract['enabled_actor_ids'], all_ids)
+        self.assertEqual(contract['background_actor_ids'], [v for v in all_ids if v != 'plaza_person'])
+        self.assertEqual(contract['actor_encounter_contract']['required_actor_ids'], ['plaza_person'])
+        self.assertEqual(contract['actor_encounter_contract'], legacy['scenario_suite_contract']['actor_encounter_contract'])
+        self.assertTrue(all(a['enabled'] for a in spec['dynamic_actors']))
+        enabled_original = copy.deepcopy(original)
+        for actor in enabled_original['dynamic_actors']:
+            actor['enabled'] = True
+        self.assertEqual(spec['dynamic_actors'], enabled_original['dynamic_actors'])
+        self.assertEqual(actor_registry(spec), actor_registry(enabled_original))
+        row = next(r for r in suite.list_cases(original) if r['id'] == 'crossing_blocker')
+        self.assertEqual(row['enabled_actor_ids'], all_ids)
+        self.assertEqual(row['actor_ids'], ['plaza_person'])
+        self.assertEqual((self.root/'prepared.json').read_bytes(), legacy_bytes)
+        self.assertNotIn('background_actor_ids', legacy['scenario_suite_contract'])
+        self.assertNotIn('background_actor_ids', next(c for c in legacy['scenarios'] if c['id']=='crossing_blocker'))
+        self.assertNotIn('background_actor_ids', suite.list_cases(world.load_world())[1])
+
+    def test_invalid_background_author_identity_is_rejected_before_preparation(self):
+        original, case = self.background_actor_source()
+        for index, values in enumerate((None, 'office_person', [False], ['unknown'],
+                ['office_person', 'office_person'], ['plaza_person'])):
+            bad = copy.deepcopy(original)
+            selected = next(c for c in bad['scenarios'] if c['id'] == 'crossing_blocker')
+            selected['background_actor_ids'] = values
+            source = self.root/f'bad_background_{index}.json';source.write_text(json.dumps(bad))
+            target = self.root/f'bad_prepared_{index}.json'
+            with self.subTest(values=values), self.assertRaises(ValueError):
+                suite.prepare_case(source, 'crossing_blocker', target)
+            self.assertFalse(target.exists())
+        for required in (['plaza_person','plaza_person'], [1], 'plaza_person', None):
+            invalid = copy.deepcopy(case); invalid['actor_ids'] = required
+            with self.subTest(required=required), self.assertRaises(ValueError):
+                suite.case_actor_scope(original, invalid)
+
+    def test_sealed_background_union_and_required_membership_cannot_drift(self):
+        _, good = self.prepare_background_actor_case()
+        def case(spec):
+            return next(c for c in spec['scenarios'] if c['id'] == 'crossing_blocker')
+        mutations = (
+            lambda s:s['scenario_suite_contract'].pop('background_actor_ids'),
+            lambda s:case(s).pop('background_actor_ids'),
+            lambda s:case(s)['background_actor_ids'].pop(),
+            lambda s:s['scenario_suite_contract']['background_actor_ids'].pop(),
+            lambda s:s['scenario_suite_contract']['enabled_actor_ids'].pop(),
+            lambda s:next(a for a in s['dynamic_actors'] if a['id']=='office_person').update(enabled=False),
+            lambda s:s['scenario_suite_contract']['actor_encounter_contract']['required_actor_ids'].append('office_person'),
+            lambda s:case(s).update(actor_ids=['office_person']),
+        )
+        for mutate in mutations:
+            bad = copy.deepcopy(good); mutate(bad)
+            bad['scenario_suite_contract']['configuration_sha256'] = suite.configuration_digest(bad)
+            with self.subTest(mutate=mutate), self.assertRaises(ValueError):suite.verify_prepared(bad)
+        bad = copy.deepcopy(good)
+        case(bad)['background_actor_ids'].pop()
+        with self.assertRaisesRegex(ValueError, 'configuration_changed'):suite.verify_prepared(bad)
+
+    def test_background_actor_absence_still_rejects_full_actual_geometry_audit(self):
+        _, spec = self.prepare_background_actor_case()
+        spec['robot_collision_registry'] = dict(root='/World/Spot', colliders=[dict(
+            path='/World/Spot/body/collision', type='Sphere', local_geometry=dict(radius=.1), world_scale=[1.,1.,1.])])
+        audit = Audit(spec, 'synthetic_background_scope_test', 'a'*64, 1_000_000_000)
+        robot = [dict(path='/World/Spot/body/collision', shape=dict(type='Sphere',radius=.1),
+            world_matrix=pose_matrix([-8.,-5.,.481], [1.,0.,0.,0.]).tolist())]
+        selected_only = dict(plaza_person=dict(present=True,position=[0.,-15.,0.],
+            orientation_xyzw=[0.,0.,0.,1.],source_stamp_ns=1_000_000_000))
+        with self.assertRaises(ValueError):audit.sample(0, robot, selected_only)
 
     def test_prepare_never_overwrites_or_accepts_modified_input(self):
         spec = self.prepare()
@@ -79,7 +169,7 @@ class ScenarioInputTests(unittest.TestCase):
         self.assertEqual([p["goal"] for p in contract["phases"]], contract["goals"])
         self.assertTrue(all(p["smoke_case"] == "goal" for p in contract["phases"]))
         self.assertEqual(contract["actor_clock"], "original_simulation_source_time_since_plant_start; never_reset_between_goals")
-        self.assertEqual(contract["navigation_command_limit_mps"], .15)
+        self.assertEqual(contract["navigation_command_limit_mps"], .23)
         self.assertTrue(all("watchdogs_and_motion_leases_unchanged" in p["budget_scope"] for p in contract["phases"]))
         self.assertEqual(contract["actor_encounter_contract"]["required_actor_ids"], [])
 
@@ -104,7 +194,7 @@ class ScenarioInputTests(unittest.TestCase):
         self.assertEqual(phases[0]["cancel_source_time_s"], 65)
         self.assertEqual(phases[0]["timeout_source_s"], 95.)
         self.assertEqual(phases[1]["submit_after_source_s"], 110)
-        self.assertEqual(phases[1]["timeout_source_s"], 435)
+        self.assertEqual(phases[1]["timeout_source_s"], 326)
 
     def test_run_plan_rejects_unprepared_candidate_or_reused_session(self):
         spec = self.prepare()
@@ -122,13 +212,51 @@ class ScenarioInputTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             suite.run_command(candidate, self.root / "other_run", "cancel_and_park")
 
+    def test_new_input_explicitly_seals_spot_exposure_without_changing_legacy(self):
+        original = world.load_world()
+        # The campus default now explicitly selects the .65/3m profile. Freeze
+        # a separate missing-profile source to keep the historical 2m branch
+        # tested; preparing a new input must never mutate that earlier seal.
+        original["robot"].pop("actor_encounter_profile")
+        legacy_source = self.root / "legacy_source.json"
+        legacy_source.write_text(json.dumps(original))
+        legacy_target = self.root / "prepared.json"
+        suite.prepare_case(legacy_source, "crossing_blocker", legacy_target)
+        legacy = json.loads(legacy_target.read_text())
+        self.assertEqual(legacy["scenario_suite_contract"]["actor_encounter_contract"]["near_center_distance_m"], 2.)
+        original["robot"]["actor_encounter_profile"] = SPOT_EXPOSURE_PROFILE
+        original["robot"]["model_limits"]["max_linear_speed_mps"] = .6
+        original["robot"]["full_xyz_reference_model"].update(reference_max_speed_mps=.6,
+            measured_travel_max_speed_mps=.6,evidence_sha256="b"*64)
+        source=self.root/"new_source.json";source.write_text(json.dumps(original))
+        target=self.root/"new_prepared.json"
+        suite.prepare_case(source,"crossing_blocker",target)
+        spec=json.loads(target.read_text())
+        contract=suite.verify_prepared(spec)["actor_encounter_contract"]
+        self.assertEqual(contract["near_center_distance_m"],3.)
+        self.assertEqual(contract["profile"]["source_reference_evidence_sha256"],"b"*64)
+        self.assertEqual(contract["minimum_near_source_s"],.5)
+        self.assertNotIn("execution_braking_model_sha256",contract["profile"])
+        self.assertEqual(json.loads((self.root/"prepared.json").read_text()),legacy)
+        spec["robot"]["navigation_envelope"]["width_m"] += .01
+        spec["scenario_suite_contract"]["configuration_sha256"]=suite.configuration_digest(spec)
+        with self.assertRaisesRegex(ValueError,"invalid_actor_encounter_contract"):
+            suite.verify_prepared(spec)
+
 
 class EvidenceEvaluationTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.root = Path(self.temp.name)
         self.config = self.root / "prepared.json"
-        suite.prepare_case(world.DEFAULT_WORLD, "crossing_blocker", self.config)
+        # These synthetic sampled-record tests explicitly exercise the legacy
+        # evidence branch, independent of the new campus full500Hz/.65 defaults.
+        legacy = world.load_world()
+        legacy["robot"].pop("actor_encounter_profile")
+        legacy["robot"]["record_full_physics_history"] = False
+        source = self.root / "unit_legacy_source.json"
+        source.write_text(json.dumps(legacy))
+        suite.prepare_case(source, "crossing_blocker", self.config)
         self.spec = json.loads(self.config.read_text())
         # Unit-only actual-geometry registry; this is never an official Spot
         # acceptance experiment. Candidate preparation adds its real registry.
@@ -178,13 +306,69 @@ class EvidenceEvaluationTests(unittest.TestCase):
         self.write("run_summary.json", dict(clean_shutdown=True, navigation_shutdown=dict(session_id=session_id, request_accepted=True, software_retired=True)))
         return report, execution
 
+    def enable_spot_profile_fixture(self, token=SPOT_EXPOSURE_PROFILE, speed=.6):
+        robot=self.spec["robot"]
+        robot["actor_encounter_profile"]=token
+        robot["model_limits"]["max_linear_speed_mps"]=speed
+        robot["full_xyz_reference_model"].update(reference_max_speed_mps=speed,
+            measured_travel_max_speed_mps=speed,evidence_sha256="b"*64)
+        self.spec["scenario_suite_contract"]["actor_encounter_contract"]=encounter_contract(
+            self.contract["enabled_actor_ids"],self.spec)
+        self.spec["scenario_suite_contract"]["configuration_sha256"]=suite.configuration_digest(self.spec)
+        self.config.write_text(json.dumps(self.spec));self.contract=suite.verify_prepared(self.spec)
+
+    def bind_spot_session_fixture(self, execution):
+        profile=self.contract["actor_encounter_contract"]["profile"]
+        speed=profile['reachable_max_speed_mps']
+        session=json.loads((self.session/"session.json").read_text())
+        robot=self.spec["robot"]
+        session.update(simulation_clock="isaac_fixed_anchor_v1",physical_acceptance=False,
+            max_speed_mps=robot["max_linear_speed"],max_yaw_radps=robot["max_angular_speed"],
+            body_height=robot["body_reference_height"])
+        session["static_collision_prior_contract"]["body_envelope"]=profile["body_envelope"]
+        record=dict(schema_version=3,model="reaction_braking_reachable_v1",fixture_only=True,
+            transport_mode="isolated_mock",session_id=session["id"],measurements=dict(max_speed_mps=speed,max_yaw_radps=.8),
+            isolated_platform_model=dict(schema=1,kind="official_spot_physx",command_max_speed_mps=session["max_speed_mps"],
+                command_max_yaw_radps=session["max_yaw_radps"],reachable_max_speed_mps=speed,reachable_max_yaw_radps=.8,
+                source_scope="isolated_simulation_physx_measured_model"),
+            isolated_full_xyz_reference_model=dict(schema=1,kind="official_spot_physx",reference_max_speed_mps=speed,
+                measured_travel_max_speed_mps=speed,observed_max_full_xyz_speed_mps=.575947,
+                evidence_sha256=profile["source_reference_evidence_sha256"],source_scope="isolated_simulation_physx_measured_model"))
+        path=self.write("braking_model.json",record)
+        session.update(execution_braking_model_record=str(path),execution_braking_model_sha256=suite._sha(path),
+            input_hashes={str(path):suite._sha(path)})
+        execution["encounter_profile_model_binding"]=suite.encounter_profile_model_binding(self.spec,session)
+        self.write("session.json",session);self.write("scenario_suite/execution.json",execution)
+        return session,record,path
+
+    def test_recalibrated_profile_binds_exact_65_model_and_rejects_resealed_old_domain(self):
+        self.enable_spot_profile_fixture(SPOT_EXPOSURE_PROFILE_65, .65)
+        _, execution = self.complete_action_fixture()
+        session, record, path = self.bind_spot_session_fixture(execution)
+        self.assertEqual(execution['encounter_profile_model_binding']['profile'], SPOT_EXPOSURE_PROFILE_65)
+        for marker, field, invalid in (('measurements', 'max_speed_mps', .6),
+                ('isolated_platform_model', 'reachable_max_speed_mps', .6),
+                ('isolated_platform_model', 'reachable_max_yaw_radps', .7),
+                ('isolated_full_xyz_reference_model', 'reference_max_speed_mps', .6),
+                ('isolated_full_xyz_reference_model', 'measured_travel_max_speed_mps', .6),
+                ('isolated_full_xyz_reference_model', 'evidence_sha256', 'c'*64)):
+            bad = copy.deepcopy(record)
+            bad[marker][field] = invalid
+            self.write('braking_model.json', bad)
+            session.update(execution_braking_model_sha256=suite._sha(path), input_hashes={str(path):suite._sha(path)})
+            with self.subTest(field=field), self.assertRaises(ValueError):
+                suite.encounter_profile_model_binding(self.spec, session)
+
     def collision_fixture(self, exercise_encounter=True):
         trajectory = self.session / "physics/trajectory.jsonl"
         audit = Audit(self.spec, "unit_synthetic_session", suite._sha(self.config), 1_000_000_000)
         times = [i*20_000_000 for i in range(201)]
+        # The 3m fixture also needs its entire 1s approach after goal admission.
+        # Keep the legacy trajectory literal unchanged.
+        outside = 4.5 if "profile" in self.contract["actor_encounter_contract"] else 3.
         for ns in times:
             t = ns*1e-9
-            distance = (3. if t <= 1. else 3.-1.5*(t-1.) if t <= 2. else 1.5 if t <= 2.5 else 1.5+3.*(t-2.5)) if exercise_encounter else 6.
+            distance = (outside if t <= 1. else outside-(outside-1.5)*(t-1.) if t <= 2. else 1.5 if t <= 2.5 else 1.5+3.*(t-2.5)) if exercise_encounter else 6.
             audit.sample(ns, [dict(path="/World/Spot/body/collision", shape=dict(type="Sphere", radius=.1),
                 world_matrix=pose_matrix([0.,-5.,.52],[1.,0.,0.,0.]).tolist())],
                 dict(plaza_person=dict(present=True, position=[distance,-5.,0.], orientation_xyzw=[0.,0.,0.,1.],
@@ -278,6 +462,49 @@ class EvidenceEvaluationTests(unittest.TestCase):
         self.assertTrue(all(c["status"] == "passed" for c in result["checks"]))
         self.assertFalse(result["continuous_collision_certificate"])
         self.assertFalse(result["physical_robot_acceptance"])
+
+    def test_new_profile_requires_exact_session_model_hash_source_and_actual_body(self):
+        self.enable_spot_profile_fixture()
+        _,execution=self.complete_action_fixture()
+        self.write("physics/collision_audit.json",self.collision_fixture())
+        result=suite.evaluate_case(self.spec,self.session)
+        self.assertEqual(next(c for c in result["checks"] if c["name"]=="sealed_spot_encounter_profile_model")["status"],"failed")
+        session,record,path=self.bind_spot_session_fixture(execution)
+        self.assertEqual(suite.evaluate_case(self.spec,self.session)["status"],"passed")
+        for mutate in (lambda s:s.update(execution_braking_model_sha256="f"*64),
+                lambda s:s.update(input_hashes={}),lambda s:s.update(id="foreign"),
+                lambda s:s["static_collision_prior_contract"]["body_envelope"].update(radius=.5),
+                lambda s:s["static_collision_prior_contract"].update(body_envelope_registry_sha256="f"*64)):
+            bad=copy.deepcopy(session);mutate(bad);self.write("session.json",bad)
+            result=suite.evaluate_case(self.spec,self.session)
+            check=next(c for c in result["checks"] if c["name"]=="sealed_spot_encounter_profile_model")
+            self.assertEqual(check["status"],"failed")
+        self.write("session.json",session)
+        record["isolated_full_xyz_reference_model"]["evidence_sha256"]="c"*64
+        self.write("braking_model.json",record)
+        session.update(execution_braking_model_sha256=suite._sha(path),input_hashes={str(path):suite._sha(path)})
+        self.write("session.json",session)
+        check=next(c for c in suite.evaluate_case(self.spec,self.session)["checks"] if c["name"]=="sealed_spot_encounter_profile_model")
+        self.assertEqual(check["status"],"failed")
+        self.assertIn("source_domain_mismatch",check["reason"])
+
+    def test_new_execution_cannot_reuse_foreign_model_binding(self):
+        self.enable_spot_profile_fixture();_,execution=self.complete_action_fixture()
+        self.bind_spot_session_fixture(execution)
+        self.write("physics/collision_audit.json",self.collision_fixture())
+        execution["encounter_profile_model_binding"]["execution_braking_model_sha256"]="f"*64
+        self.write("scenario_suite/execution.json",execution)
+        check=next(c for c in suite.evaluate_case(self.spec,self.session)["checks"] if c["name"]=="sealed_spot_encounter_profile_model")
+        self.assertEqual(check["status"],"failed")
+
+    def test_explicit_full_physics_record_cannot_pass_on_only_sampled_action_evidence(self):
+        self.spec["robot"]["record_full_physics_history"]=True
+        self.spec["scenario_suite_contract"]["configuration_sha256"]=suite.configuration_digest(self.spec)
+        self.config.write_text(json.dumps(self.spec));self.contract=suite.verify_prepared(self.spec)
+        self.complete_action_fixture();self.write("physics/collision_audit.json",self.collision_fixture())
+        check=next(c for c in suite.evaluate_case(self.spec,self.session)["checks"] if c["name"]=="independent_full_physics_motion_domain_and_stop")
+        self.assertEqual(check["status"],"pending")
+        self.assertEqual(suite.evaluate_case(self.spec,self.session)["status"],"pending")
 
     def test_execution_goal_claim_cannot_replace_producer_or_incomplete_actual_encounter(self):
         _, execution = self.complete_action_fixture()
