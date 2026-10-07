@@ -4,23 +4,29 @@
 
 ## 最新状态（2026-10-07）
 
-**v52 广场横穿仍通过，v59 取消后重新导航整例仍失败。** [v52 原验收](verification/20261007/campus_crossing_v52_all_actors_goal_success.json)记录累计 XY `16.647589 m`、目标误差 `.154777 m`、53,963 个完整 500 Hz 样本峰值 `.569328 < .65 m/s`，实测停车确认 `2.138 s`。六演员全部启用，只有 `plaza_person` 必须遭遇，另五个为背景。v52 ray wall 间隔仍超过原 `.5 s` receipt 期限，不能称丝滑、全部动态关卡或硬件通过。
+**[v65 取消后重新导航整例通过](verification/20261007/campus_restart_v65_all_actors_goal_success.json)，14/14 原检查通过。** 原取消阶段行程 `2.3507 m`；同一物理会话中的新任务行程 `13.958468 m`、目标误差 `.190361 m`，实际同 pair 的 3 m 曝光、完整身体采样和干净退役均成立。[v64 广场横穿](verification/20261007/campus_crossing_v64_all_actors_goal_success.json)也已 **11/11 原检查通过**，行程 `16.636568 m`、目标误差 `.097536 m`。[v63](verification/20261007/campus_restart_v63_goal_success_encounter_pending.json)到达与完整物理审计通过，但原相遇历史截断，整例保持 PENDING。
 
-[v59 原失败](verification/20261007/campus_restart_v59_actor_overlap_and_body_certificate_failure.json)中，phase 1 已有 **28 次真实 writer commit，序号完整 1–28**；v53 的 tracker／SCAN 和 v57 的 Python 安全门旧 ACK scope 阻断已实际跨过。[native 成对离线回归](verification/20261007/paired_writer_execution_scope_fix_offline.json)与 [安全门离线回归](verification/20261007/safety_writer_execution_scope_fix_offline.json)分别保存，三个消费者的局部修复不等于整个任务通过。原 [v53](verification/20261007/campus_restart_v53_handoff_failure.json)、[v57](verification/20261007/campus_restart_v57_stationary_handoff_failure.json)保持失败，不重算封存记录。
+| 完整原生物理记录 | v64 横穿 | v65 取消重启 |
+| --- | ---: | ---: |
+| 500 Hz BEGIN＋真实 END 样本 | 55,391 | 53,293 |
+| full XYZ 峰值（域 `.65 m/s`） | `.592872` | `.577411` |
+| world yaw 峰值（域 `.8 rad/s`） | `.416219` | `.457694` |
+| 最终停车确认（含一秒静止窗） | `2.068 s` | `1.772 s` |
+| 确认前额外 XY／绝对 yaw | `.117834 m / .073140 rad` | `.033116 m / .080269 rad` |
+| 最终零消费尾部、保持至 END | `6.400 s`，通过 | `5.996 s`，通过 |
 
-v59 完整 500 Hz 记录的 full XYZ 峰值 **`1.064634535 m/s`**、world yaw 峰值 **`.886969864 rad/s`**，分别超出原 `.65/.8` 域；超域发生在身体证书撤销之前，不能因几何误判修复把它改为通过。原高层 `[vx,wz]` 从 **72.856 s** 到 **86.824 s** 始终为真实零，但内部 policy 两轴仍非零。75–80 s 转向输入约 `.0301–.0309 rad/s`；83.198 s 实际输入为 `[-.144009,0,.393581]`。原 v2 在 forward=0 时仍输出测量 P 修正、yaw 积分未撤回，因此**已撤回的高层需求并没有成为两轴精确零策略输入**。见 [原零尾及 v3 离线证据](verification/20261007/spot_zero_policy_withdrawal_offline.json)。后续同冻结物理 A/B 确认 v3 输入撤回，但两组持续停车与速度域均失败，**v3 未被选为导航改进或默认模式**。
+full angular norm 峰值分别 `.844533/.854957 rad/s`，仅诊断，不与 yaw `.8` 混比。实测停车读取完整线／角范数，独立仿真审计与原 SDK `measured_stop_confirmed=true`、software retirement 分别表达；原 hardware／physical acceptance 和 supervisor `physical_stop_confirmed=false` 不覆写。此次 body／collision 采样不是连续碰撞证书，也不证明未来速度域保证。
 
-该源码缺项与后期物理运动的唯一成因分开。原首个可能演员 AABB 重叠发生于 **82.818 s**，对象为身体与 `plaza_person/body`；当时机器人仍满足静止阈值，82.896 s 才出现后续运动。未记录 contact force，不能仅由这个时间顺序或 policy 非零，把 83 s 峰值唯一归为演员推动、PI 失稳或神经策略。原动态 possible overlap、缺少 phase 1 terminal report 与 owner drain 失败均保持。
+当前正式配置是 **v2、25 Hz 双 LiDAR、`.23/.30` 导航上限、`.38/.50` 内部 policy 上限和 `.65/.8` 隔离工程域**。可移植 `campus_navigation_regression.json` 现显式为 25 Hz／2254；通用大型资产和 `create_large_world()` 仍为 v2／10 Hz。复现须匹配实际封存候选，新源码配置不自动继承旧成功。新 2254 相遇历史容量只匹配 50＋25 Hz 实际快照格的离线采样窗口，不改变在线碰撞、租约、原 `.5 s` 近距或 legacy 指标。v64／v65 RTF `.324902/.323385`，双 ray 最长 wall gap 分别 `.315716/.314679 s` 与 `.302693/.302377 s`；v63 曾超原 `.5 s` receipt 期限，不保证其他负载下丝滑运动。长程多点、楼梯／跨层、实机制动与原厂 SDK 尚未验收。
 
-## 三项新修复的证据范围
+## 修复与实验的当前边界
 
-| 修改 | 已核对 | 尚未证明 |
-| --- | --- | --- |
-| 查询 yaw 轴下的完整 link 支撑包络 | [原同快照重放](verification/20261007/query_support_and_zero_tail_offline.json)：同一 3×13 个真实 link 快照，旧 `PASS/FAIL/FAIL` 变为 `PASS/PASS/PASS`；95 项回归通过，query radius／offset／height、原 pose／形体／source 均不改 | 新正式导航或速度域通过；修复不抵消 v59 已发生的超域 |
-| opt-in `spot_monotone_measured_v3` | [90 项离线回归](verification/20261007/spot_zero_policy_withdrawal_offline.json)与 [同冻结物理 A/B](verification/20261007/spot_zero_policy_withdrawal_causal_ab.json)：6982 个真零 BEGIN 的两轴输入均精确零；官方 50 Hz 相位、filter、action memory／counter 不重置，无 root／joint 状态写入 | 两组 durable-tail 和原速度域均失败；本次 v3 峰值更高，没有证明可靠停车或导航改善 |
-| geometry 撤销后的独立 MC 停车观察 | [56 项离线回调回归](verification/20261007/geometry_fault_stop_observation_offline.json)：导航保持撤销，只把原 native 位姿／完整速度、实际 IMU 与严格原 Clock 交给独立停止观察；原 SDK／单 writer／租约不改 | 新物理停稳、owner 退役或正式关闭通过；MC 不产生正权限或假 stopped 结果 |
+- 查询轴内完整真实 link 支撑包络修复了 world-AABB 人工角点的保守假拒；原身体 XYZ、形体、radius／height 和演员审核不缩减。v64／v65 的 8,309／7,994 份实际身体快照均通过，原 v59 超域／可能重叠和关闭失败仍保留。
+- [三个 execution 消费者的账本隔离](verification/20261007/paired_writer_execution_scope_fix_offline.json)与 [Python 安全门修复](verification/20261007/safety_writer_execution_scope_fix_offline.json)已在 v65 完整取消／新任务中生效；旧 v53／v57／v59 失败不重判。许可、原 XYZ/C1 与停车限额未放宽。
+- [geometry 撤权后的独立 Clock／MC 观察](verification/20261007/geometry_fault_stop_observation_offline.json)只提供原测量供 SDK 判断停止，不能恢复导航或正权限。该故障路径有 56 项离线回归；此次无故障到达／关闭不替代故障注入验收。
+- **v3 没有被选择。** [真零输入组件 A/B](verification/20261007/spot_zero_policy_withdrawal_causal_ab.json)确证输入撤回，但两组持续停车／速度域均失败；v3 不能称官方 STAND 或可靠 park。v2 的最终零高层消费仍可能产生测量反馈 policy 输入，不能称 NN 两轴精确零。
 
-**默认资产仍选择 v2，没有切到 v3。** 本次组件在 **tick 36428／72.856 s 的真实 BEGIN** 才切换 v3，bootstrap 和之前所有 tick 保持 v2，不 reset filter／memory／counter。原 43,412 ticks 只取完整校验后的 43,410 tick 前缀，排除原末 2 tick／4 ms，不补零尾、不重打时间戳、不更改演员时钟或轨迹。v61／v62 的 v3 候选虽已构建，但没有物理运行或被选用；后续 v2／25 Hz 正式任务另行判断，不能继承组件结论。
+[v59 原失败](verification/20261007/campus_restart_v59_actor_overlap_and_body_certificate_failure.json)的 full XYZ／yaw 峰值 `1.064634535/.886969864`、body Cube 假拒、可能演员 AABB 重叠和未确认退役各自保留。没有 contact-force，不能唯一归因于 PI、NN 或演员。以下旧组件与正式试验只适用于其原封存版本，不用新域或容量反算通过。
 
 ## 同冻结真零 A/B：输入撤回成立，物理验收失败
 
@@ -49,7 +55,7 @@ v59 完整 500 Hz 记录的 full XYZ 峰值 **`1.064634535 m/s`**、world yaw �
 
 ## 当前配置与历史响应
 
-当前生成器与 [默认大型资产](assets/large_quadruped_scene.json)采用导航 `.23/.30`、内部 policy `.38/.50`、完整 XYZ reference／measured-travel／reachable `.65` 与 yaw `.8`，绑定 [原工程模型证据](verification/20261007/spot_velocity_domain_v47_native_navigation.json)。native actor targets、500 Hz pose／完整物理记录和双 LiDAR 10 Hz 均显式封存。`.65` 是新隔离候选的工程接纳域，不是未来 full XYZ 保证，不重算旧 `.50/.60` 失败。约 332.84 m 离线路由不继承 v52 的短程成功。
+通用生成器与 [大型资产](assets/large_quadruped_scene.json)采用导航 `.23/.30`、内部 policy `.38/.50`、完整 XYZ reference／measured-travel／reachable `.65` 与 yaw `.8`，绑定 [原工程模型证据](verification/20261007/spot_velocity_domain_v47_native_navigation.json)。native actor targets、500 Hz pose／完整物理记录均显式封存；通用场景双 LiDAR 为 10 Hz，最新 v65 作者配置与更新后的可移植回归输入显式为 25 Hz。`.65` 是新隔离候选的工程接纳域，不是未来 full XYZ 保证，不重算旧 `.50/.60` 失败。约 332.84 m 离线路由不继承 v52 的短程成功。
 
 UNKNOWN、完整三维碰撞、`.05` C1、绝对 join 与 source／receipt 有效期都未放宽。v59 地图证明中的 UNKNOWN／过期与本节零轴伺服缺项各自取证；不能用修改 policy 输入绕过原权限撤销。正请求 `.05` 是 memory-only 恢复资格门，**不是最低行走速度**。历史 v41 长正需求固定点、v45 碎片化需求与低速响应的证据范围见后文。
 
@@ -62,7 +68,7 @@ v57 物理记录把两类现象分开：32,887 个真实 500 Hz 样本中，正 
 3. 巡航需求、策略输入、实际机身速度是不同量。步态中的真实 Z 速度必须保留；单看平均前进速度会漏掉瞬时峰值。
 4. 完整 XYZ 参考域原 `.50` 小于部分正常步态瞬时速度。历史候选把 reference／measured-travel 与同一封存平台 reachable 域分别绑定为 `.60`；新 v47 工程候选依据完整原 v43 测量绑定 `.65`，完整标记、hash、命令上限和实机拒绝规则保留。原 `.60` 超域运行不重新判定。
 5. v38 的优化器 setter 仍拒绝大于 `.5` 的参考域，导致 `.6` 配置在初始求解即抛异常，零 SDK 运动。后续版本修复这处遗漏，并记录异常原因。v38 失败记录保留。
-6. v53 取消后重新导航的末段零输出已确证为跨 execution 的 writer commit／ACK 高水位残留，不能归为低级 policy 站立、速度域拒绝或 motion UNKNOWN。跟踪器与 SCAN 已按完整新授权身份隔离账本并保留取消后的迟到 ACK HOLD；离线修复不改变速度、ramp、完整 XYZ/C1 或停车限额，v57 已跨过 native scope 旧阻断；Python 安全门同类遗漏随后修复，v59 phase 1 实际成功 commit 1–28，三个旧 scope 阻断未复现。v59 整例仍因后述物理域／证书／退役问题失败，不能把局部修复写成正式取消重启通过。
+6. v53 取消后重新导航的末段零输出已确证为跨 execution 的 writer commit／ACK 高水位残留，不能归为低级 policy 站立、速度域拒绝或 motion UNKNOWN。跟踪器与 SCAN 已按完整新授权身份隔离账本并保留取消后的迟到 ACK HOLD；离线修复不改变速度、ramp、完整 XYZ/C1 或停车限额。v57 已跨过 native scope 旧阻断；Python 安全门随后修复，v59 phase 1 实际成功 commit 1–28 但整例仍失败。最新 v65 完整取消／新任务按其原 14 项检查通过，不能据此回改旧失败。
 
 ## 原始实测
 

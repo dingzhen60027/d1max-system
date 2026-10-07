@@ -1,0 +1,8 @@
+{
+  "schema": 1,
+  "kind": "isolated_isaac_fixture_selection",
+  "candidate": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v65-campus-v2-lidar25-restart",
+  "integrity_sha256": "b1eeb09f777978c484e0733fc132f3b5ca470dbd26eac07206792d1463e608c9",
+  "physical_acceptance": false,
+  "production_release": false
+}

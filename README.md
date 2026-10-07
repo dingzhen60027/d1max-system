@@ -1,16 +1,16 @@
 # D1 Max 导航系统 · Isaac Sim 仿真分支
 
-定位、建图、地图处理和室内外多楼层导航的统一源码仓库。只有一条 BehaviorTree.CPP 导航主线；PCT、SCAN 是当前算法后端，单楼层是当前验收范围。
+本分支 `isaacsim-simulation` 接入 Isaac Sim 6.0.1-rc.7，保留原 **BT → PCT 三维全局路线 → 连续参考 → SCAN 三维局部规划 → tracker → 安全门 → 唯一 writer**。使用 ROS 2 Humble 和 Zenoh，当前验收范围为单楼层。
 
-本分支为 `isaacsim-simulation`，基于最初克隆的 `5dfaf8cddec952b3453a02e3a231de5228bd6017`，保存原导航框架的 Isaac Sim 三维导航测试版本。当前默认场景为 **100×80 米综合园区＋官方 Spot 机器狗**：真实关节行走、双三维雷达、原生 IMU，以及办公区、仓储区、广场、狭窄通道和动态障碍。原有 BT/PCT/SCAN 主线继续使用，旧轮式场景保留用于历史回归。
+100×80 m 园区使用官方 Spot、真实关节行走、双三维雷达和原生 IMU。最新横穿／取消重启关卡启用六个原动态演员；旧 12×10 m 轮式夹具保留作历史回归。定位是明确标记的 PhysX 真值夹具，不代替 LIO、生产 release 或机器狗实机验收。
 
-场景定义 6 个确定性动态演员，默认启用 4 个，关卡按封存配置选择演员；六项系统测试覆盖长距离多点、横穿、迎面会车、临时堵门、取消停车与恢复。约 333 米路线已通过离线静态连通性检查，机器狗大场景物理与传感器测试已完成；整套关卡的实际执行结果单独记录，缺证据保持待验证。见 [园区与测试入口](simulation/isaacsim/CAMPUS_SCENARIOS.md)和 [Spot 验证](simulation/isaacsim/QUADRUPED_VALIDATION.md)。
+**最新实测（2026-10-07）：** [v64 广场横穿](simulation/isaacsim/verification/20261007/campus_crossing_v64_all_actors_goal_success.json) **11/11**、[v65 取消后重新导航](simulation/isaacsim/verification/20261007/campus_restart_v65_all_actors_goal_success.json) **14/14** 原检查通过，目标误差分别 `.097536/.190361 m`。两例均完成完整 500 Hz 域、实际 3 m 相遇曝光、最终持续停车和干净软件退役；取消重启在同一物理会话中执行。[v63](simulation/isaacsim/verification/20261007/campus_restart_v63_goal_success_encounter_pending.json)到达与物理审计通过，但原相遇历史截断，整例仍 PENDING。
 
-**当前实测状态（北京时间 2026-10-07）：** [v52 广场横穿](simulation/isaacsim/verification/20261007/campus_crossing_v52_all_actors_goal_success.json)原 Action 到达与完整 case gates 通过。[v59 取消重启](simulation/isaacsim/verification/20261007/campus_restart_v59_actor_overlap_and_body_certificate_failure.json)正式复测 **FAILED**：新任务真实 writer commit `1–28` 已跨过 tracker、SCAN 和 Python 安全门三消费者的 execution 水位阻断，但演员／身体采样 AABB 可能重叠后出现 full XYZ 峰值 **1.064634535 m/s**、yaw 峰值 **.886969864 rad/s** 超域；另有身体 Cube 保守代理假拒与停止收尾缺证据。AABB 可能重叠不等于已取得接触力或连续碰撞证明。原关卡失败及缺失第二阶段终态报告保持，不能称六关全部通过。
+最新封存任务采用 **25 Hz 双 LiDAR、v2 实测反馈、`.23/.30` 导航上限、`.38/.50` 内部 policy 上限、full XYZ `.65`／yaw `.8` 隔离工程域**。新 case 显式按采样频率封存相遇历史容量 2254；旧容量与历史结果不改。[可移植回归输入](simulation/isaacsim/assets/campus_navigation_regression.json)现显式设置 25 Hz／2254；通用大型场景生成器仍为 v2／10 Hz。新配置须重新组装封存，不自动继承旧成功。[本机隔离仿真 selector](simulation/isaacsim/verification/20261007/local_fixture_selection_v65.json)已核验后选用 v65，生产 release selector 不改；复现时明确指定候选，见 [仿真配置与启动](simulation/isaacsim/README.md)。
 
-新 v3 零需求反馈、身体几何证书修复和 [几何故障停止观测](simulation/isaacsim/verification/20261007/geometry_fault_stop_observation_offline.json)仅完成离线验证，**FORMAL_PENDING**；停止观测 56 项回归通过，新候选整图与停车尚待实测。本机默认仿真 selector 仍为旧 `isaac-candidate-v31-campus`，复现新版本须显式指定封存候选，见 [仿真说明](simulation/isaacsim/README.md)。v31 短程到达与取消等历史结果分别保留，旧失败不会因新修复改为通过；约 333 m 仍仅是离线路由。
+主线已修复静态地图与实时障碍融合、原始纳秒时间、真实路线进度及三个执行消费者的账本隔离；未知、真实 HIT、完整 XYZ 身体／动态体积、C1 和原租约继续参与拒绝。v3 真零 policy 的物理 A/B 失败，**没有选作默认或正式改善**。实际 500 Hz 停车通过与 SDK 的硬件验收标志 `false` 分开记录，历史失败不重算成成功。
 
-近身长期未知阻断的修复依赖认证封闭静态体积与实时障碍融合，仍保留严格未知阻断和证据期限；当前只支持经过验证的固定单位 `map←odom`。定位输入是显式 `groundtruth_fixture`。生产 release、Faster-LIO/ICP 性能、机器狗实机运动、跨层执行与 NUC 实时性均未因此验收。
+本机仍慢于实时：v64／v65 RTF `.324902/.323385`，该两例双雷达最长 wall gap 均低于 `.316 s`；v63 曾超过原 `.5 s` receipt 期限，不能保证不同负载下持续授权或丝滑运动。约 333 m 仅有离线路由证据，长距离多点、楼梯／坡地／跨层、自由行人、原厂 SDK 与实机停车尚未验收。离散形体分离也不是连续碰撞证书。完整边界与历史见 [UNKNOWN 算法分析](simulation/isaacsim/SCAN_UNKNOWN_ANALYSIS.md)和 [物理速度标定](simulation/isaacsim/QUADRUPED_SPEED_CALIBRATION.md)。
 
 ## 导航主线
 
@@ -51,7 +51,7 @@ bash tools/build-source.sh --scope nav --output /absolute/path/to/new-build
 
 最后一条**只打印构建计划**。补齐目标机依赖、核对计划后，加 `--apply` 才会在全新隔离目录编译；不会启动 ROS 服务、连接 SDK、修改默认 release 或授权运动。构建完成仍需按既有版本合同整套封存和验证，不能把 build 目录当成正式 release。
 
-地图、录包、厂商 SDK、Zenoh/Livox/fast_gicp 安装环境、封存运行包与本机凭据不在 Git 中。它们需要另行提供或在目标机重建。默认选择器指向的旧本机运行包未上传，直接 clone 后启动导航会明确失败，不能回退到旧预览或自动选择最新目录。
+地图、录包、厂商 SDK、Zenoh/Livox/fast_gicp 安装环境、封存运行包与本机凭据不在 Git 中。它们需要另行提供或在目标机重建。生产默认选择器指向的本机运行包未上传，隔离仿真候选也须在目标机重建；直接 clone 后启动导航会明确失败，不能回退到旧预览或自动选择最新目录。
 
 ## 目录
 

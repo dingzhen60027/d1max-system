@@ -1,0 +1,28 @@
+{
+  "schema": 1,
+  "kind": "actual_500hz_pre_policy_history",
+  "scene_sha256": "c713e5bde588135b42281c9551fe784b10298551f5490878dbc3894f91208a61",
+  "physics_hz": 500,
+  "policy_hz": 50,
+  "source_tick_ns": 2000000,
+  "command_limits": [
+    0.23,
+    0.3
+  ],
+  "actual_source_ticks": 55390,
+  "duration_ns": 110780000000,
+  "first_source_tick": 0,
+  "last_source_tick": 55389,
+  "consecutive_tick_invocations_checked": true,
+  "command_event_count": 6326,
+  "observation_count": 5639,
+  "recovery_count": 0,
+  "component_measurement_count": 55391,
+  "component_last_source_ns": 110780000000,
+  "component_measurements_file": "policy_component_state_500hz.jsonl",
+  "component_measurements_sha256": "e6958a898ad7e20b96b2f0a896793aaa1dbad32764e11d91b035aefaaac837e2",
+  "component_measurement_cadence": "every real500Hz BEGIN plus final measured END",
+  "command_events_file": "policy_command_events.jsonl",
+  "command_events_sha256": "ed8398c1819795c614eae45c64d5d864f7c9c089ef4759d49df4d3d4b146deb8",
+  "semantics": "actual BEGIN command consumed on every physical tick; sparse exact command/authority changes; no sampled-state reconstruction"
+}

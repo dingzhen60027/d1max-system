@@ -1,0 +1,29 @@
+{
+  "schema": 1,
+  "kind": "isolated_fixture_selection_after_complete_case_and_native_physics_pass",
+  "selected_candidate": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v65-campus-v2-lidar25-restart",
+  "candidate_integrity_sha256": "b1eeb09f777978c484e0733fc132f3b5ca470dbd26eac07206792d1463e608c9",
+  "all_3111_sealed_artifacts_verified": true,
+  "selection_sha256": "cd9115f34a0c853daa8a691bf700718d4eefa4d2f196fd305010ebf830247f2c",
+  "selection_evidence": "local_fixture_selection_v65_evidence/isaac_fixture.json",
+  "complete_case_evidence": {
+    "path": "campus_restart_v65_all_actors_goal_success.json",
+    "sha256": "7b68f41cc5d392faf42cc446d2deb048c3f7034aa3b0a30191405c2b816020aa"
+  },
+  "portable_reproduction": {
+    "path": "../../assets/campus_navigation_regression.json",
+    "sha256": "c983b519f8309aac51d57a4c805c851b573630fb999d8767fc8d91e1cd656bb2",
+    "prospective_changes_from_commit_308bb26": [
+      "lidar.frequency_hz: 10.0 -> 25.0",
+      "robot.actor_encounter_history_profile: actual_snapshot_cadence_v1"
+    ],
+    "matches_actual_candidate_author_after_removing_only_two_experiment_annotations": true,
+    "original_candidate_author_sha256": "ee2b1d5e7b38815bdd6e78b5f53a71113132ffe1be4ebdcb593b791e041cefb4",
+    "original_candidate_author_path": "/home/eric/wjg/d1max-build-isaac/scene_inputs/campus_v64_v2_lidar25_cadence_history_author.json",
+    "old_10hz_author_preserved_in_git_commit": "308bb26"
+  },
+  "production_selector_sha256": "6aeb6dd5b57a97de146fbf36260ad78210678f0befe6e1eee0be5f6524085f4a",
+  "production_release": false,
+  "physical_acceptance": false,
+  "scope": "select only isolated v65 after 14/14 sealed-case and full native 500Hz durable-stop PASS; no hardware authorization or long-route/stairs acceptance; candidate bytes and old verification reports unchanged"
+}

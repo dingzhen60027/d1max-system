@@ -1,0 +1,92 @@
+{
+  "schema": 1,
+  "passed": true,
+  "case": "goal",
+  "session_id": "0b104cc265894067a603a636d3f9afe1",
+  "test_scope": "original_BT_PCT_SCAN_tracker_safety_mock_writer_PhysX_robot_fixture",
+  "physical_acceptance": false,
+  "localization": "groundtruth_fixture_not_LIO_localization_validation",
+  "goal": [
+    8.0,
+    -5.0,
+    0.0
+  ],
+  "result": {
+    "success": true,
+    "reason": "measured_goal_reached",
+    "retirement_confirmed": true,
+    "physical_stop_confirmed": false
+  },
+  "error": "",
+  "action_result_status": 4,
+  "stop": {
+    "execution_id": "0b104cc265894067a603a636d3f9afe1.2:execution",
+    "stop_submitted": true,
+    "measured_stop_confirmed": true,
+    "physical_acceptance_verified": false,
+    "stationary_samples": 280,
+    "measured_linear_mps": 0.007153683384474654,
+    "measured_angular_radps": 0.01155773759610303,
+    "reason": "goal_reached"
+  },
+  "measured_stationary": true,
+  "measured_distance_m": 13.958467971337774,
+  "measured_final_position": [
+    7.809645652770996,
+    -4.998435020446777,
+    0.48876693844795227
+  ],
+  "measured_max_speed_mps": 0.5735032553593892,
+  "nonzero_applied_count": 3492,
+  "measured_max_full_angular_speed_radps": 0.8549565079632774,
+  "measured_velocity_domain_verified": true,
+  "measured_velocity_domain_evidence": {
+    "required": true,
+    "verified": true,
+    "measured_state_count": 6506,
+    "velocity_sample_count": 6506,
+    "invalid_velocity_sample_count": 0,
+    "measured_max_full_xyz_speed_mps": 0.5735032553593892,
+    "measured_max_full_angular_speed_radps": 0.8549565079632774,
+    "full_angular_norm_is_diagnostic_only": true,
+    "scope": "all_received_state_samples; no_clamping; intervening_500Hz_PhysX_peaks_unobserved",
+    "model_record": "/home/eric/wjg/d1max-build-isaac/runs/campus_restart_v65_001/braking_model.json",
+    "model_record_sha256": "598bbeb7d1e001d2efa30a859edbd5c7e7ba6154a48d64df99f24db29baf96db",
+    "expected_model_record_sha256": "598bbeb7d1e001d2efa30a859edbd5c7e7ba6154a48d64df99f24db29baf96db",
+    "reachable_max_speed_mps": 0.65,
+    "reference_max_speed_mps": 0.65,
+    "measured_travel_max_speed_mps": 0.65,
+    "reference_evidence_sha256": "44e56925dd1f4b78a4d3994701b1700429e00c3fd7f80b26ddcb86e321b97262",
+    "exceeded_domains": [],
+    "reason": "sampled_full_xyz_speed_within_sealed_domains"
+  },
+  "source_origin_ns": 1791383454268529723,
+  "source_duration_s": 225.0,
+  "source_budget_scope": "test_observation_only; original_BT_watchdogs_and_motion_leases_unchanged",
+  "cancel_source_time_s": null,
+  "imu_source_matching": true,
+  "original_report_binding": {
+    "private_path": "/home/eric/wjg/d1max-build-isaac/runs/campus_restart_v65_001/scenario_suite/phase_001_report.json",
+    "bytes": 9560147,
+    "sha256": "b46ad3daba24f30d5296e6fd1bfe9f256b735a588fcda17048bf1070665ca925"
+  },
+  "projection_scope": "selected original report fields; original raw report unmodified",
+  "bridge": {
+    "body_envelope_verified_samples": 7880,
+    "body_envelope_failures": 0,
+    "dynamic_oracle_samples": 7723,
+    "fault": "",
+    "measurement_fault": "",
+    "incomplete_scans_dropped": 0
+  },
+  "task_identity": {
+    "task_id": "0b104cc265894067a603a636d3f9afe1.2",
+    "execution_id": "0b104cc265894067a603a636d3f9afe1.2:execution",
+    "control_epoch": 2,
+    "phase": "terminal",
+    "execution_progress_credit_samples": 390,
+    "lifecycle_draining": false,
+    "lifecycle_quarantined": false
+  },
+  "measured_goal_xy_error_m": 0.19036078028307774
+}

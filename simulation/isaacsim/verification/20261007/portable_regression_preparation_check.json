@@ -1,0 +1,48 @@
+{
+  "schema": 1,
+  "kind": "portable_regression_input_preparation_check",
+  "author_sha256": "c983b519f8309aac51d57a4c805c851b573630fb999d8767fc8d91e1cd656bb2",
+  "cases": [
+    {
+      "case_id": "crossing_blocker",
+      "prepared_config": "/home/eric/wjg/d1max-build-isaac/scene_inputs/portable_final_crossing_blocker_prepared.json",
+      "prepared_config_sha256": "1cc8bf3e915b97f32e9421d69d1b61efa10f6d5ff16032ecac00046edd941a4b",
+      "canonical_configuration_sha256": "3a547f11f74b56b59c35f7a6db6e38cfb89014c0a7439600fa8956e22959447f",
+      "world_source_sha256": "c983b519f8309aac51d57a4c805c851b573630fb999d8767fc8d91e1cd656bb2",
+      "exact_original_prepared_field_match_after_removing_only_two_experiment_annotations_and_two_recomputed_digests": true,
+      "maximum_history_samples_per_pair": 2254,
+      "enabled_actor_ids": [
+        "door_blocking_cart",
+        "office_person",
+        "oncoming_cart",
+        "plaza_cart",
+        "plaza_person",
+        "warehouse_forklift"
+      ],
+      "offline_only": true,
+      "actual_execution_performed": false
+    },
+    {
+      "case_id": "resume_after_block",
+      "prepared_config": "/home/eric/wjg/d1max-build-isaac/scene_inputs/portable_final_resume_after_block_prepared.json",
+      "prepared_config_sha256": "3a44a764eb84ae30be581f92a631ec2559b6560765631a7020bb071553bac101",
+      "canonical_configuration_sha256": "e4493e614bad6c2bcaec427dbfe36e4cc9e0b72a54e1f628b613876ac848e178",
+      "world_source_sha256": "c983b519f8309aac51d57a4c805c851b573630fb999d8767fc8d91e1cd656bb2",
+      "exact_original_prepared_field_match_after_removing_only_two_experiment_annotations_and_two_recomputed_digests": true,
+      "maximum_history_samples_per_pair": 2254,
+      "enabled_actor_ids": [
+        "door_blocking_cart",
+        "office_person",
+        "oncoming_cart",
+        "plaza_cart",
+        "plaza_person",
+        "warehouse_forklift"
+      ],
+      "offline_only": true,
+      "actual_execution_performed": false
+    }
+  ],
+  "comparison_note": "Portable author omits private experiment annotations, so original world_source_sha256 and canonical configuration_sha256 necessarily differ. Both new digests were independently verified; no physical or actor field differs.",
+  "scope": "offline prepare and seal verification; does not replay or reclassify any formal run",
+  "physical_acceptance": false
+}

@@ -1,0 +1,32 @@
+{
+  "session": "/home/eric/wjg/d1max-build-isaac/runs/campus_restart_v65_001",
+  "candidate": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v65-campus-v2-lidar25-restart",
+  "transport": "rmw_zenoh_cpp",
+  "domain": 219,
+  "fixture_only": true,
+  "localization": "Isaac PhysX ground truth",
+  "physical_robot_acceptance": false,
+  "smoke_completed": true,
+  "scenario_case": "resume_after_block",
+  "navigation_shutdown": {
+    "request_sent": true,
+    "request_accepted": true,
+    "software_retired": true,
+    "physical_stop_confirmed": false,
+    "reason": "software_retired_not_physical_stop",
+    "requested_at": 1791383541.2085297,
+    "requested_source_ns": 1791383541208529723,
+    "timeout_stage": null,
+    "elapsed_s": 0.1093790209852159,
+    "session_id": "0b104cc265894067a603a636d3f9afe1",
+    "recorded_at_unix": 1791383787.117532
+  },
+  "clean_shutdown": true,
+  "child_exit_codes": {
+    "isaac_bridge": 0,
+    "isaac_sim": -15,
+    "navigation": 0,
+    "smoke": 0
+  },
+  "wall_seconds": 349.6637877090834
+}

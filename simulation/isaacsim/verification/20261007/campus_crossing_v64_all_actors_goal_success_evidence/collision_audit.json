@@ -1,0 +1,208 @@
+{
+  "schema": 1,
+  "scope": "sampled_actual_link_geometry_static_and_actor",
+  "completed": true,
+  "continuous_collision_proof": false,
+  "separation_method": "strict_closed_AABB_separation_of_actual_transformed_primitives",
+  "numerical_outward_margin_m": 1e-06,
+  "floor_contact_scope": "excluded_explicit_support_plane_requires_separate_contact_certificate",
+  "robot_kind": "official_spot_physx",
+  "session_id": "4545affcdd384e8f932d8997e05018db",
+  "spec_sha256": "c713e5bde588135b42281c9551fe784b10298551f5490878dbc3894f91208a61",
+  "spec_canonical_sha256": "0196db68b3f37a11b6680094f5cdba271b6f91d862b31024a18bd5d2750a8168",
+  "trajectory_sha256": "dbd5d37637ae1e01c561f7b13e010e354ab825543643bfca0777ad60386362b7",
+  "robot_collision_registry_sha256": "e68b27ca3e0a30c3bdbaeb43414ae4a19674f9661adb167cc6bd0e38ab6ebc76",
+  "actor_collision_registry_sha256": "96b092886099b5b2c0904ce86c34d607167c8cee28865d318455c88bc7aea734",
+  "actor_ids": [
+    "door_blocking_cart",
+    "office_person",
+    "oncoming_cart",
+    "plaza_cart",
+    "plaza_person",
+    "warehouse_forklift"
+  ],
+  "sample_count": 8309,
+  "trajectory_sample_count": 8309,
+  "trajectory_sources_all_audited": true,
+  "source_begin_ns": 1791383931806717176,
+  "source_end_ns": 1791384042568717176,
+  "max_source_sampling_gap_ns": 20000000,
+  "actual_actor_encounter": {
+    "schema": 1,
+    "rule": "measured_primitive_center_approach_near_depart_v1",
+    "source": "actual_registered_link_and_actor_geometry",
+    "scope": "sampled_same_step_primitive_center_proximity_only",
+    "completed": true,
+    "required_actor_ids": [
+      "plaza_person"
+    ],
+    "contract_sha256": "53cd46e9a005417ecf3c67b97a270f39e1b11aabf22aedc3c638c35c3655edf3",
+    "observed": true,
+    "actors": [
+      {
+        "actor_id": "plaza_person",
+        "observed": true,
+        "witnesses": [
+          {
+            "actor_id": "plaza_person",
+            "robot_path": "/World/Spot/fr_uleg/collisions/mesh_0",
+            "actor_shape_path": "/World/Dynamic/plaza_person/head",
+            "approach_start": {
+              "sim_time_ns": 33618000000,
+              "source_stamp_ns": 1791383965406717176,
+              "actor_id": "plaza_person",
+              "robot_path": "/World/Spot/fr_uleg/collisions/mesh_0",
+              "actor_shape_path": "/World/Dynamic/plaza_person/head",
+              "robot_center_m": [
+                -2.153911467951547,
+                -5.181745941669632,
+                0.41586123217992094
+              ],
+              "actor_center_m": [
+                0.0,
+                -7.742452144622803,
+                1.7
+              ],
+              "center_distance_m": 3.584070764456877
+            },
+            "near_begin": {
+              "sim_time_ns": 34618000000,
+              "source_stamp_ns": 1791383966406717176,
+              "actor_id": "plaza_person",
+              "robot_path": "/World/Spot/fr_uleg/collisions/mesh_0",
+              "actor_shape_path": "/World/Dynamic/plaza_person/head",
+              "robot_center_m": [
+                -2.1556984227078684,
+                -5.182566560978507,
+                0.4149871631877602
+              ],
+              "actor_center_m": [
+                0.0,
+                -6.817739009857178,
+                1.7
+              ],
+              "center_distance_m": 2.995343489152672
+            },
+            "near_end": {
+              "sim_time_ns": 37960000000,
+              "source_stamp_ns": 1791383969748717176,
+              "actor_id": "plaza_person",
+              "robot_path": "/World/Spot/fr_uleg/collisions/mesh_0",
+              "actor_shape_path": "/World/Dynamic/plaza_person/head",
+              "robot_center_m": [
+                -2.1587155680502037,
+                -5.183966580000959,
+                0.41349999805142346
+              ],
+              "actor_center_m": [
+                0.0,
+                -3.5583367347717285,
+                1.7
+              ],
+              "center_distance_m": 2.9929596643550034
+            },
+            "closest": {
+              "sim_time_ns": 36320000000,
+              "source_stamp_ns": 1791383968108717176,
+              "actor_id": "plaza_person",
+              "robot_path": "/World/Spot/fr_uleg/collisions/mesh_0",
+              "actor_shape_path": "/World/Dynamic/plaza_person/head",
+              "robot_center_m": [
+                -2.1576545380101297,
+                -5.1834765267564125,
+                0.414028846389548
+              ],
+              "actor_center_m": [
+                0.0,
+                -5.183950901031494,
+                1.7
+              ],
+              "center_distance_m": 2.5118111271241825
+            },
+            "departure_end": {
+              "sim_time_ns": 38000000000,
+              "source_stamp_ns": 1791383969788717176,
+              "actor_id": "plaza_person",
+              "robot_path": "/World/Spot/fr_uleg/collisions/mesh_0",
+              "actor_shape_path": "/World/Dynamic/plaza_person/head",
+              "robot_center_m": [
+                -2.1587359330728617,
+                -5.183973512466733,
+                0.4134912054850454
+              ],
+              "actor_center_m": [
+                0.0,
+                -3.518249988555908,
+                1.7
+              ],
+              "center_distance_m": 3.014942879262255
+            },
+            "near_sample_count": 252,
+            "near_maximum_center_distance_m": 2.995343489152672
+          }
+        ]
+      }
+    ],
+    "truncated_actor_ids": [],
+    "maximum_source_sampling_gap_ns": 20000000,
+    "source_begin_ns": 1791383931806717176,
+    "source_end_ns": 1791384042568717176,
+    "source_anchor_ns": 1791383931788717176,
+    "session_id": "4545affcdd384e8f932d8997e05018db",
+    "scene_sha256": "c713e5bde588135b42281c9551fe784b10298551f5490878dbc3894f91208a61",
+    "robot_collision_registry_sha256": "e68b27ca3e0a30c3bdbaeb43414ae4a19674f9661adb167cc6bd0e38ab6ebc76",
+    "actor_collision_registry_sha256": "96b092886099b5b2c0904ce86c34d607167c8cee28865d318455c88bc7aea734",
+    "observation_status": "completed",
+    "limitations": [
+      "sampled_proximity_only",
+      "not_route_blocking_or_yield_or_contact_evidence",
+      "caller_binds_actual_snapshots_to_same_physics_step"
+    ],
+    "profile": {
+      "body_envelope": {
+        "above": 0.589,
+        "offset": 0.3125,
+        "radius": 0.6078651750202781,
+        "support_floor_z": 0.0,
+        "support_penetration_m": 0.02
+      },
+      "body_envelope_metadata_sha256": "913fe1289cf8ad86926331d6a1ec815b5051b4752766b3637489656ff1bd169b",
+      "body_reference_height_m": 0.481,
+      "interpretation": "actual_sampled_encounter_exposure_only; not_route_blocking",
+      "kind": "isolated_spot_reachable65_3m_exposure_v1",
+      "measured_travel_max_speed_mps": 0.65,
+      "rationale": "explicit_recalibrated_.65_fixture_sampled_exposure; legacy_.60_profile_and_2m_unchanged",
+      "reachable_max_speed_mps": 0.65,
+      "reachable_max_yaw_radps": 0.8,
+      "reference_max_speed_mps": 0.65,
+      "robot_kind": "official_spot_physx",
+      "runtime_exact_model_and_registered_body_binding_required": true,
+      "schema": 1,
+      "source_reference_evidence_sha256": "44e56925dd1f4b78a4d3994701b1700429e00c3fd7f80b26ddcb86e321b97262"
+    }
+  },
+  "non_floor_static_penetration_count": 0,
+  "dynamic_penetration_count": 0,
+  "possible_overlap_counts": {
+    "static": 0,
+    "dynamic": 0
+  },
+  "possible_overlap_sample_counts": {
+    "static": 0,
+    "dynamic": 0
+  },
+  "checked_pair_counts": {
+    "static": 9289462,
+    "dynamic": 1836289
+  },
+  "possible_overlap_examples": [],
+  "min_static_separation_lower_bound_m": 2.7818784026229357,
+  "min_actor_separation_lower_bound_m": 0.18512777770930547,
+  "faults": [],
+  "limitations": [
+    "sampled_times_only",
+    "AABB_overlap_is_unresolved_not_measured_penetration",
+    "encounter_is_sampled_proximity_only",
+    "caller_binds_snapshots_to_same_physics_step"
+  ]
+}

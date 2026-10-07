@@ -1,0 +1,45 @@
+{
+  "schema": 1,
+  "case_id": "crossing_blocker",
+  "session_id": "4545affcdd384e8f932d8997e05018db",
+  "configuration_sha256": "47748336afe93e11f1db19bd9ad8ef0771ee7b2b63397c305c80de26722e4df2",
+  "status": "completed",
+  "phases": [
+    {
+      "index": 0,
+      "goal": [
+        8.0,
+        -5.0,
+        0.0
+      ],
+      "smoke_case": "goal",
+      "returncode": 0,
+      "source_timeout_s": 225.0,
+      "timeout_clock": "seconds_since_phase_first_original_measured_source_stamp",
+      "phase_launch_source_stamp_ns": 1791383932006717176,
+      "phase_launch_scene_elapsed_s": 0.21800000000000003,
+      "phase_event_source_origin_ns": 1791383932068717176,
+      "report": "scenario_suite/phase_000_report.json",
+      "trace": "scenario_suite/phase_000_trace.jsonl",
+      "report_sha256": "10d15c7c37e988395e63027cc32e2e8f2c22a70dd098d17ec6a99a75fc6ca80e",
+      "trace_sha256": "0965ab614dd0a963ed74ffb81c798e1cb21f110a3a7245afd35978e1e67e6d60",
+      "goal_source_stamp_ns": 1791383934668717176,
+      "terminal_source_stamp_ns": 1791384038526717176
+    }
+  ],
+  "source_origin_ns": 1791383932068717176,
+  "physical_robot_acceptance": false,
+  "event_clock": "seconds_since_first_phase_original_measured_source_stamp",
+  "actor_clock": "original_simulation_source_time_since_plant_start; never_reset_between_goals",
+  "scene_clock_anchor_ns": 1791383931788717176,
+  "timeout_scope": "test_observation_only; original_BT_watchdogs_and_motion_leases_unchanged",
+  "encounter_profile_model_binding": {
+    "profile": "isolated_spot_reachable65_3m_exposure_v1",
+    "session_id": "4545affcdd384e8f932d8997e05018db",
+    "execution_braking_model_sha256": "8612e3687cb11f24284f366ef3e02c1adfa5036619b3d29696422852b92851a7",
+    "source_reference_evidence_sha256": "44e56925dd1f4b78a4d3994701b1700429e00c3fd7f80b26ddcb86e321b97262",
+    "body_envelope_metadata_sha256": "913fe1289cf8ad86926331d6a1ec815b5051b4752766b3637489656ff1bd169b",
+    "actual_robot_collision_registry_sha256": "e68b27ca3e0a30c3bdbaeb43414ae4a19674f9661adb167cc6bd0e38ab6ebc76",
+    "interpretation": "actual_sampled_encounter_exposure_only; not_route_blocking"
+  }
+}

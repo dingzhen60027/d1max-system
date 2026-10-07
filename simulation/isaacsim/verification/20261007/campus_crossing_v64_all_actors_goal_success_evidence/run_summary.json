@@ -1,0 +1,32 @@
+{
+  "session": "/home/eric/wjg/d1max-build-isaac/runs/campus_crossing_v64_001",
+  "candidate": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v64-campus-v2-lidar25-crossing",
+  "transport": "rmw_zenoh_cpp",
+  "domain": 219,
+  "fixture_only": true,
+  "localization": "Isaac PhysX ground truth",
+  "physical_robot_acceptance": false,
+  "smoke_completed": true,
+  "scenario_case": "crossing_blocker",
+  "navigation_shutdown": {
+    "request_sent": true,
+    "request_accepted": true,
+    "software_retired": true,
+    "physical_stop_confirmed": false,
+    "reason": "software_retired_not_physical_stop",
+    "requested_at": 1791384041.248717,
+    "requested_source_ns": 1791384041248717176,
+    "timeout_stage": null,
+    "elapsed_s": 0.08944785501807928,
+    "session_id": "4545affcdd384e8f932d8997e05018db",
+    "recorded_at_unix": 1791384294.3344388
+  },
+  "clean_shutdown": true,
+  "child_exit_codes": {
+    "isaac_bridge": 0,
+    "isaac_sim": -15,
+    "navigation": 0,
+    "smoke": 0
+  },
+  "wall_seconds": 360.9744503221009
+}

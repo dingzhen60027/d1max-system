@@ -1630,7 +1630,12 @@
       "enabled": true,
       "isolated_fixture": true
     },
-    "actor_encounter_history_profile": "actual_snapshot_cadence_v1"
+    "actor_encounter_history_profile": "actual_snapshot_cadence_v1",
+    "asset_root": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v65-campus-v2-lidar25-restart/simulation/robot_assets",
+    "asset_manifest_path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v65-campus-v2-lidar25-restart/simulation/robot_assets/asset_manifest.json",
+    "usd_path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v65-campus-v2-lidar25-restart/simulation/robot_assets/Isaac/Robots/BostonDynamics/spot/spot.usd",
+    "policy_path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v65-campus-v2-lidar25-restart/simulation/robot_assets/Isaac/Samples/Policies/Spot_Policies/spot_policy.pt",
+    "env_config_path": "/home/eric/wjg/d1max-build-isaac/isaac-candidate-v65-campus-v2-lidar25-restart/simulation/robot_assets/Isaac/Samples/Policies/Spot_Policies/spot_env.yaml"
   },
   "lidar": {
     "origins": [
@@ -2741,9 +2746,9 @@
       ],
       "goals": [
         [
-          8,
-          -5,
-          0
+          8.0,
+          -5.0,
+          0.0
         ]
       ],
       "actor_ids": [
@@ -2780,10 +2785,17 @@
         "plaza_cart",
         "warehouse_forklift"
       ],
-      "authored_actor_role_scope": "all six original actors enabled and covered by collision/forecast; this plaza case requires actual measured encounter with plaza_person; other regions are not claimed traversed"
+      "authored_actor_role_scope": "all six original actors enabled and covered by collision/forecast; this plaza case requires actual measured encounter with plaza_person; other regions are not claimed traversed",
+      "fixture_goal_annotations_xyz": [
+        [
+          8,
+          -5,
+          0
+        ]
+      ]
     }
   ],
-  "active_scenario": "crossing_blocker",
+  "active_scenario": "resume_after_block",
   "test_fixture_actor_timing": {
     "scope": "fixed authored input before candidate creation; no runtime robot-relative retiming",
     "reason": "fixed plaza encounter timing for the authored .23mps navigation profile; unchanged between goals",
@@ -2803,5 +2815,502 @@
     "formal_acceptance_pending": true,
     "scope": "100x80m campus with all six original actors; one required plaza encounter and five background actors; official asset paths and exact collision registry are bound at build time",
     "actual_long_route_execution_verified": false
+  },
+  "lidar_frequency_experiment": {
+    "schema": 1,
+    "status": "prepared_not_run",
+    "parent_source_sha256": "60bc2f82fb70bf530856525d750d85c1a6c344c2c3109f61c4832bf070e63390",
+    "change": "25Hz acquisition aligns each 20 native500Hz ticks and each two real50Hz body-state periods; original source clock, scan points, full500Hz physics, leases, command/policy/body/model/actor inputs unchanged",
+    "physical_acceptance": false
+  },
+  "encounter_history_capacity_experiment": {
+    "schema": 1,
+    "kind": "explicit_cadence_bound_75hz_actual_snapshot_history",
+    "parent_author_sha256": "52850a25a94d7a8bdd6bbee1b5fa0da7883ccf93e192d8610d5928cefabba342",
+    "change": "audit history capacity sealed from actual50Hz body plus25Hz scan-BEGIN snapshots; original navigation and physical inputs unchanged",
+    "original_v63_2048_history_result": "PENDING preserved; no reclassification",
+    "formal_acceptance_pending": true
+  },
+  "scenario_suite_contract": {
+    "schema": 1,
+    "kind": "isolated_isaac_scenario_input_v1",
+    "case_id": "resume_after_block",
+    "world_source_sha256": "ee2b1d5e7b38815bdd6e78b5f53a71113132ffe1be4ebdcb593b791e041cefb4",
+    "input_code_sha256": {
+      "world_builder.py": "b90bb503024aa0ede575fa8488c3b165c2f830114224991c40c3220843856433",
+      "scenario_suite.py": "8ed66f2a99c27ea530cd478d9c8094db3d40e9f3fee5f026da5572d774bf8f4f",
+      "collision_audit.py": "95dd9f9e999a7eb7399dfdfcf990494874b5d59aff2394cdb041202f54676e00"
+    },
+    "seed": 60027,
+    "enabled_actor_ids": [
+      "door_blocking_cart",
+      "office_person",
+      "oncoming_cart",
+      "plaza_cart",
+      "plaza_person",
+      "warehouse_forklift"
+    ],
+    "start_pose": [
+      -8,
+      -5,
+      0.8,
+      0
+    ],
+    "goals": [
+      [
+        8.0,
+        -5.0,
+        0.0
+      ]
+    ],
+    "fixture_goal_annotations_xyz": [
+      [
+        8,
+        -5,
+        0
+      ]
+    ],
+    "phases": [
+      {
+        "index": 0,
+        "smoke_case": "cancel",
+        "goal": [
+          8.0,
+          -5.0,
+          0.0
+        ],
+        "static_route_length_m": 16.0,
+        "timeout_source_s": 60.0,
+        "timeout_clock": "seconds_since_phase_first_original_measured_source_stamp",
+        "budget_scope": "test_observation_only; original_BT_watchdogs_and_motion_leases_unchanged",
+        "cancel_source_time_s": 12,
+        "submit_after_source_s": 0.0
+      },
+      {
+        "index": 1,
+        "smoke_case": "goal",
+        "goal": [
+          8.0,
+          -5.0,
+          0.0
+        ],
+        "static_route_length_m": 16.0,
+        "timeout_source_s": 225,
+        "timeout_clock": "seconds_since_phase_first_original_measured_source_stamp",
+        "budget_scope": "test_observation_only; original_BT_watchdogs_and_motion_leases_unchanged",
+        "submit_after_source_s": 18
+      }
+    ],
+    "timeout_source_s": 360,
+    "event_clock": "seconds_since_first_phase_original_measured_source_stamp",
+    "actor_clock": "original_simulation_source_time_since_plant_start; never_reset_between_goals",
+    "navigation_command_limit_mps": 0.23,
+    "timeout_scope": "test_observation_only; original_BT_watchdogs_and_motion_leases_unchanged",
+    "stationarity_window_source_s": 2.0,
+    "goal_tolerance_xy_m": 0.35,
+    "actor_encounter_contract": {
+      "schema": 1,
+      "rule": "measured_primitive_center_approach_near_depart_v1",
+      "required_actor_ids": [
+        "plaza_person"
+      ],
+      "near_center_distance_m": 3.0,
+      "minimum_near_source_s": 0.5,
+      "minimum_distance_change_m": 0.5,
+      "minimum_leg_source_s": 1.0,
+      "minimum_mean_distance_rate_mps": 0.05,
+      "maximum_leg_source_s": 30.0,
+      "maximum_source_sampling_gap_s": 0.12,
+      "maximum_history_samples_per_pair": 2254,
+      "maximum_witnesses_per_actor": 128,
+      "approach_starts_outside_near": true,
+      "departure_ends_outside_near": true,
+      "identity_scope": "same_exact_robot_path_and_actor_shape_path_for_all_three_legs",
+      "scope": "sampled_same_step_primitive_center_proximity_only",
+      "profile": {
+        "schema": 1,
+        "kind": "isolated_spot_reachable65_3m_exposure_v1",
+        "robot_kind": "official_spot_physx",
+        "source_reference_evidence_sha256": "44e56925dd1f4b78a4d3994701b1700429e00c3fd7f80b26ddcb86e321b97262",
+        "reference_max_speed_mps": 0.65,
+        "measured_travel_max_speed_mps": 0.65,
+        "reachable_max_speed_mps": 0.65,
+        "reachable_max_yaw_radps": 0.8,
+        "body_reference_height_m": 0.481,
+        "body_envelope": {
+          "radius": 0.6078651750202781,
+          "offset": 0.3125,
+          "above": 0.589,
+          "support_floor_z": 0.0,
+          "support_penetration_m": 0.02
+        },
+        "body_envelope_metadata_sha256": "913fe1289cf8ad86926331d6a1ec815b5051b4752766b3637489656ff1bd169b",
+        "runtime_exact_model_and_registered_body_binding_required": true,
+        "interpretation": "actual_sampled_encounter_exposure_only; not_route_blocking",
+        "rationale": "explicit_recalibrated_.65_fixture_sampled_exposure; legacy_.60_profile_and_2m_unchanged"
+      },
+      "history_capacity_binding": {
+        "schema": 1,
+        "kind": "actual_snapshot_cadence_v1",
+        "robot_kind": "official_spot_physx",
+        "physics_frequency_hz": 500.0,
+        "state_frequency_hz": 50.0,
+        "lidar_acquisition_frequency_hz": 25.0,
+        "maximum_leg_source_s": 30.0,
+        "maximum_actual_snapshot_rate_hz": 75.0,
+        "boundary_allowance_samples": 4,
+        "derived_history_samples_per_pair": 2254,
+        "maximum_history_samples_per_pair": 2254,
+        "source_exposure_profile_sha256": "3654c7e31245503de20ac6cbd7d8ea69236a79f887721aa03547bb5b90c2c9cc",
+        "derivation": "max(2048,ceil((state_frequency_hz+lidar_acquisition_frequency_hz)*maximum_leg_source_s)+4)",
+        "scope": "offline_encounter_audit_history_only; no_online_collision_or_lease_change"
+      }
+    },
+    "candidate_seal_required": true,
+    "runtime_pose_or_actor_switching_allowed": false,
+    "input_seal_scope": "canonical_configuration_only; new_candidate_static_geometry_robot_and_runtime_seals_required",
+    "execution_status": "pending",
+    "physical_robot_acceptance": false,
+    "background_actor_ids": [
+      "door_blocking_cart",
+      "office_person",
+      "oncoming_cart",
+      "plaza_cart",
+      "warehouse_forklift"
+    ],
+    "configuration_sha256": "5b194f0232f4f9a48e419fef0c2573a95b5b6a21bf53d8a9be4486aae71464ce"
+  },
+  "robot_collision_registry": {
+    "root": "/World/Spot",
+    "colliders": [
+      {
+        "path": "/World/Spot/body/collisions/mesh_0",
+        "type": "Cube",
+        "local_geometry": {
+          "size": 1.0
+        },
+        "local_bounds": {
+          "min": [
+            -0.5,
+            -0.5,
+            -0.5
+          ],
+          "max": [
+            0.5,
+            0.5,
+            0.5
+          ]
+        },
+        "world_scale": [
+          0.8500000238418579,
+          0.2,
+          0.14
+        ]
+      },
+      {
+        "path": "/World/Spot/fl_foot/collisions/mesh_0",
+        "type": "Sphere",
+        "local_geometry": {
+          "radius": 0.03500000014901161
+        },
+        "local_bounds": {
+          "min": [
+            -0.03500000014901161,
+            -0.03500000014901161,
+            -0.03500000014901161
+          ],
+          "max": [
+            0.03500000014901161,
+            0.03500000014901161,
+            0.03500000014901161
+          ]
+        },
+        "world_scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      {
+        "path": "/World/Spot/fl_lleg/collisions/mesh_1",
+        "type": "Capsule",
+        "local_geometry": {
+          "radius": 0.014999999664723873,
+          "height": 0.3499999940395355,
+          "axis": "Z"
+        },
+        "local_bounds": {
+          "min": [
+            -0.014999999664723873,
+            -0.014999999664723873,
+            -0.18999999668449163
+          ],
+          "max": [
+            0.014999999664723873,
+            0.014999999664723873,
+            0.18999999668449163
+          ]
+        },
+        "world_scale": [
+          0.9999999999999999,
+          1.0,
+          0.9999999999999999
+        ]
+      },
+      {
+        "path": "/World/Spot/fl_uleg/collisions/mesh_0",
+        "type": "Capsule",
+        "local_geometry": {
+          "radius": 0.035,
+          "height": 0.3,
+          "axis": "Z"
+        },
+        "local_bounds": {
+          "min": [
+            -0.035,
+            -0.035,
+            -0.185
+          ],
+          "max": [
+            0.035,
+            0.035,
+            0.185
+          ]
+        },
+        "world_scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      {
+        "path": "/World/Spot/fr_foot/collisions/mesh_0",
+        "type": "Sphere",
+        "local_geometry": {
+          "radius": 0.03500000014901161
+        },
+        "local_bounds": {
+          "min": [
+            -0.03500000014901161,
+            -0.03500000014901161,
+            -0.03500000014901161
+          ],
+          "max": [
+            0.03500000014901161,
+            0.03500000014901161,
+            0.03500000014901161
+          ]
+        },
+        "world_scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      {
+        "path": "/World/Spot/fr_lleg/collisions/mesh_1",
+        "type": "Capsule",
+        "local_geometry": {
+          "radius": 0.014999999664723873,
+          "height": 0.3499999940395355,
+          "axis": "Z"
+        },
+        "local_bounds": {
+          "min": [
+            -0.014999999664723873,
+            -0.014999999664723873,
+            -0.18999999668449163
+          ],
+          "max": [
+            0.014999999664723873,
+            0.014999999664723873,
+            0.18999999668449163
+          ]
+        },
+        "world_scale": [
+          0.9999999999999999,
+          1.0,
+          0.9999999999999999
+        ]
+      },
+      {
+        "path": "/World/Spot/fr_uleg/collisions/mesh_0",
+        "type": "Capsule",
+        "local_geometry": {
+          "radius": 0.035,
+          "height": 0.3,
+          "axis": "Z"
+        },
+        "local_bounds": {
+          "min": [
+            -0.035,
+            -0.035,
+            -0.185
+          ],
+          "max": [
+            0.035,
+            0.035,
+            0.185
+          ]
+        },
+        "world_scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      {
+        "path": "/World/Spot/hl_foot/collisions/mesh_0",
+        "type": "Sphere",
+        "local_geometry": {
+          "radius": 0.03500000014901161
+        },
+        "local_bounds": {
+          "min": [
+            -0.03500000014901161,
+            -0.03500000014901161,
+            -0.03500000014901161
+          ],
+          "max": [
+            0.03500000014901161,
+            0.03500000014901161,
+            0.03500000014901161
+          ]
+        },
+        "world_scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      {
+        "path": "/World/Spot/hl_lleg/collisions/mesh_1",
+        "type": "Capsule",
+        "local_geometry": {
+          "radius": 0.014999999664723873,
+          "height": 0.3499999940395355,
+          "axis": "Z"
+        },
+        "local_bounds": {
+          "min": [
+            -0.014999999664723873,
+            -0.014999999664723873,
+            -0.18999999668449163
+          ],
+          "max": [
+            0.014999999664723873,
+            0.014999999664723873,
+            0.18999999668449163
+          ]
+        },
+        "world_scale": [
+          0.9999999999999999,
+          1.0,
+          0.9999999999999999
+        ]
+      },
+      {
+        "path": "/World/Spot/hl_uleg/collisions/mesh_0",
+        "type": "Capsule",
+        "local_geometry": {
+          "radius": 0.035,
+          "height": 0.3,
+          "axis": "Z"
+        },
+        "local_bounds": {
+          "min": [
+            -0.035,
+            -0.035,
+            -0.185
+          ],
+          "max": [
+            0.035,
+            0.035,
+            0.185
+          ]
+        },
+        "world_scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      {
+        "path": "/World/Spot/hr_foot/collisions/mesh_0",
+        "type": "Sphere",
+        "local_geometry": {
+          "radius": 0.03500000014901161
+        },
+        "local_bounds": {
+          "min": [
+            -0.03500000014901161,
+            -0.03500000014901161,
+            -0.03500000014901161
+          ],
+          "max": [
+            0.03500000014901161,
+            0.03500000014901161,
+            0.03500000014901161
+          ]
+        },
+        "world_scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      {
+        "path": "/World/Spot/hr_lleg/collisions/mesh_1",
+        "type": "Capsule",
+        "local_geometry": {
+          "radius": 0.014999999664723873,
+          "height": 0.3499999940395355,
+          "axis": "Z"
+        },
+        "local_bounds": {
+          "min": [
+            -0.014999999664723873,
+            -0.014999999664723873,
+            -0.18999999668449163
+          ],
+          "max": [
+            0.014999999664723873,
+            0.014999999664723873,
+            0.18999999668449163
+          ]
+        },
+        "world_scale": [
+          0.9999999999999999,
+          1.0,
+          0.9999999999999999
+        ]
+      },
+      {
+        "path": "/World/Spot/hr_uleg/collisions/mesh_0",
+        "type": "Capsule",
+        "local_geometry": {
+          "radius": 0.035,
+          "height": 0.3,
+          "axis": "Z"
+        },
+        "local_bounds": {
+          "min": [
+            -0.035,
+            -0.035,
+            -0.185
+          ],
+          "max": [
+            0.035,
+            0.035,
+            0.185
+          ]
+        },
+        "world_scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      }
+    ]
   }
 }
