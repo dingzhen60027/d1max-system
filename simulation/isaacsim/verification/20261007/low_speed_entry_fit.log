@@ -1,0 +1,29 @@
+Running main() from /opt/ros/humble/src/gtest_vendor/src/gtest_main.cc
+[==========] Running 10 tests from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 10 tests from LowSpeedEntryFit
+[ RUN      ] LowSpeedEntryFit.CandidateDerivativeChoiceDoesNotModifyOriginalXYZBoundaryInputs
+[       OK ] LowSpeedEntryFit.CandidateDerivativeChoiceDoesNotModifyOriginalXYZBoundaryInputs (0 ms)
+[ RUN      ] LowSpeedEntryFit.DefaultsAndUncertifiedNonGuidedFloorPreserveOriginalBoundary
+[       OK ] LowSpeedEntryFit.DefaultsAndUncertifiedNonGuidedFloorPreserveOriginalBoundary (0 ms)
+[ RUN      ] LowSpeedEntryFit.OriginalMeasurementSourceIsRequired
+[       OK ] LowSpeedEntryFit.OriginalMeasurementSourceIsRequired (0 ms)
+[ RUN      ] LowSpeedEntryFit.UsesFullXYZNormForBothIncomingAndOriginalMeasuredVelocity
+[       OK ] LowSpeedEntryFit.UsesFullXYZNormForBothIncomingAndOriginalMeasuredVelocity (0 ms)
+[ RUN      ] LowSpeedEntryFit.ExistingLowSpeedBoundaryHasNoNewToleranceOrMinimumSpeed
+[       OK ] LowSpeedEntryFit.ExistingLowSpeedBoundaryHasNoNewToleranceOrMinimumSpeed (0 ms)
+[ RUN      ] LowSpeedEntryFit.EveryNonzeroAccelerationBoundaryRetainsItsOldDerivativeEvenWhenTiny
+[       OK ] LowSpeedEntryFit.EveryNonzeroAccelerationBoundaryRetainsItsOldDerivativeEvenWhenTiny (0 ms)
+[ RUN      ] LowSpeedEntryFit.NonfiniteInputsAreNeverConvertedToPlausibleZeroMeasurements
+[       OK ] LowSpeedEntryFit.NonfiniteInputsAreNeverConvertedToPlausibleZeroMeasurements (0 ms)
+[ RUN      ] LowSpeedEntryFit.FullXYZFixedBoundaryKeepsStartAndFutureZAndPublishesOriginalRawJoin
+[       OK ] LowSpeedEntryFit.FullXYZFixedBoundaryKeepsStartAndFutureZAndPublishesOriginalRawJoin (0 ms)
+[ RUN      ] LowSpeedEntryFit.NativeAdoptionStillRejectsLatestVelocityOutsideOriginalC1Tolerance
+[       OK ] LowSpeedEntryFit.NativeAdoptionStillRejectsLatestVelocityOutsideOriginalC1Tolerance (0 ms)
+[ RUN      ] LowSpeedEntryFit.ChoosingZeroBoundaryNeverBypassesWholeCurveCollisionOrFinalSourceGate
+[       OK ] LowSpeedEntryFit.ChoosingZeroBoundaryNeverBypassesWholeCurveCollisionOrFinalSourceGate (0 ms)
+[----------] 10 tests from LowSpeedEntryFit (0 ms total)
+
+[----------] Global test environment tear-down
+[==========] 10 tests from 1 test suite ran. (0 ms total)
+[  PASSED  ] 10 tests.

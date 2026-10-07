@@ -1,0 +1,46 @@
+Internal ctest changing into directory: /home/eric/wjg/d1max-build-isaac/nav/build/scan_planner
+Test project /home/eric/wjg/d1max-build-isaac/nav/build/scan_planner
+      Start  1: test_async_worker_no_ros
+ 1/18 Test  #1: test_async_worker_no_ros ...........   Passed    0.47 sec
+      Start  2: test_replan_handoff_no_ros
+ 2/18 Test  #2: test_replan_handoff_no_ros .........   Passed    0.92 sec
+      Start  3: test_replan_recovery_no_ros
+ 3/18 Test  #3: test_replan_recovery_no_ros ........   Passed    1.14 sec
+      Start  4: test_reference_callback_no_ros
+ 4/18 Test  #4: test_reference_callback_no_ros .....   Passed    0.97 sec
+      Start  5: test_preview_revalidation_no_ros
+ 5/18 Test  #5: test_preview_revalidation_no_ros ...   Passed    0.31 sec
+      Start  6: test_input_contract
+ 6/18 Test  #6: test_input_contract ................   Passed    0.04 sec
+      Start  7: test_local_plan_debug
+ 7/18 Test  #7: test_local_plan_debug ..............   Passed    0.04 sec
+      Start  8: test_collision_reference
+ 8/18 Test  #8: test_collision_reference ...........   Passed    0.04 sec
+      Start  9: test_trajectory_collision
+ 9/18 Test  #9: test_trajectory_collision ..........   Passed    0.05 sec
+      Start 10: test_initial_yaw_native
+10/18 Test #10: test_initial_yaw_native ............   Passed    0.09 sec
+      Start 11: test_candidate_adoption
+11/18 Test #11: test_candidate_adoption ............   Passed    0.09 sec
+      Start 12: test_low_speed_entry_fit
+12/18 Test #12: test_low_speed_entry_fit ...........   Passed    0.04 sec
+      Start 13: test_execution_ledger
+13/18 Test #13: test_execution_ledger ..............   Passed    0.04 sec
+      Start 14: test_motion_sweep
+14/18 Test #14: test_motion_sweep ..................   Passed    0.89 sec
+      Start 15: test_reference_target
+15/18 Test #15: test_reference_target ..............   Passed    0.05 sec
+      Start 16: test_visible_reference_target
+16/18 Test #16: test_visible_reference_target ......   Passed    0.16 sec
+      Start 17: test_test_planner_startup.py
+17/18 Test #17: test_test_planner_startup.py .......   Passed    0.23 sec
+      Start 18: test_test_waypoint_parameters.py
+18/18 Test #18: test_test_waypoint_parameters.py ...   Passed    0.23 sec
+
+100% tests passed, 0 tests failed out of 18
+
+Label Time Summary:
+gtest          =   1.55 sec*proc (11 tests)
+launch_test    =   0.46 sec*proc (2 tests)
+
+Total Test time (real) =   5.82 sec

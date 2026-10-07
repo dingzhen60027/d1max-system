@@ -1,0 +1,17 @@
+Internal ctest changing into directory: /home/eric/wjg/d1max-build-isaac/nav/build/d1max_trajectory_tracker
+Test project /home/eric/wjg/d1max-build-isaac/nav/build/d1max_trajectory_tracker
+    Start 1: test_fixed_bspline_sampler
+1/4 Test #1: test_fixed_bspline_sampler .......   Passed    0.08 sec
+    Start 2: test_tracker_core
+2/4 Test #2: test_tracker_core ................   Passed    0.05 sec
+    Start 3: test_tracker_v2
+3/4 Test #3: test_tracker_v2 ..................   Passed    0.23 sec
+    Start 4: test_navigation_state_contract
+4/4 Test #4: test_navigation_state_contract ...   Passed    0.04 sec
+
+100% tests passed, 0 tests failed out of 4
+
+Label Time Summary:
+gtest    =   0.40 sec*proc (4 tests)
+
+Total Test time (real) =   0.40 sec

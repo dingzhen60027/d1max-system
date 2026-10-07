@@ -1,0 +1,460 @@
+........................................................................ [ 30%]
+........................................................................ [ 61%]
+.........................................EEEEEEEE..........EEEEEEEEEEEEE [ 92%]
+EEEEEEEEEEEEEEEEEE                                                       [100%]
+==================================== ERRORS ====================================
+_ ERROR at setup of test_geometry_fault_keeps_only_real_clock_and_sdk_mc_stop_measurements _
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x71ab1eee93c0>
+tmp_path = PosixPath('/tmp/pytest-of-eric/pytest-121/test_geometry_fault_keeps_only0')
+
+    @pytest.fixture
+    def measured_bridge(monkeypatch, tmp_path):
+        # Import only message/runtime definitions. The replaced Node/socket/tf and
+        # run_bridge below never initialise ROS, bind UDP or create an executor.
+>       import rclpy.node
+E       ModuleNotFoundError: No module named 'rclpy'
+
+simulation/isaacsim/test_bridge_measurements.py:20: ModuleNotFoundError
+_ ERROR at setup of test_post_geometry_measurements_cannot_cross_epoch_rollback_or_pause[epoch] _
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x71ab1a4cafe0>
+tmp_path = PosixPath('/tmp/pytest-of-eric/pytest-121/test_post_geometry_measurement0')
+
+    @pytest.fixture
+    def measured_bridge(monkeypatch, tmp_path):
+        # Import only message/runtime definitions. The replaced Node/socket/tf and
+        # run_bridge below never initialise ROS, bind UDP or create an executor.
+>       import rclpy.node
+E       ModuleNotFoundError: No module named 'rclpy'
+
+simulation/isaacsim/test_bridge_measurements.py:20: ModuleNotFoundError
+_ ERROR at setup of test_post_geometry_measurements_cannot_cross_epoch_rollback_or_pause[regression] _
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x71ab1eee9060>
+tmp_path = PosixPath('/tmp/pytest-of-eric/pytest-121/test_post_geometry_measurement1')
+
+    @pytest.fixture
+    def measured_bridge(monkeypatch, tmp_path):
+        # Import only message/runtime definitions. The replaced Node/socket/tf and
+        # run_bridge below never initialise ROS, bind UDP or create an executor.
+>       import rclpy.node
+E       ModuleNotFoundError: No module named 'rclpy'
+
+simulation/isaacsim/test_bridge_measurements.py:20: ModuleNotFoundError
+_ ERROR at setup of test_post_geometry_measurements_cannot_cross_epoch_rollback_or_pause[pause] _
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x71ab1a4ca0b0>
+tmp_path = PosixPath('/tmp/pytest-of-eric/pytest-121/test_post_geometry_measurement2')
+
+    @pytest.fixture
+    def measured_bridge(monkeypatch, tmp_path):
+        # Import only message/runtime definitions. The replaced Node/socket/tf and
+        # run_bridge below never initialise ROS, bind UDP or create an executor.
+>       import rclpy.node
+E       ModuleNotFoundError: No module named 'rclpy'
+
+simulation/isaacsim/test_bridge_measurements.py:20: ModuleNotFoundError
+_ ERROR at setup of test_bad_duplicate_or_imu_missing_measurements_do_not_invent_mc_freshness _
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x71ab1eee8c40>
+tmp_path = PosixPath('/tmp/pytest-of-eric/pytest-121/test_bad_duplicate_or_imu_miss0')
+
+    @pytest.fixture
+    def measured_bridge(monkeypatch, tmp_path):
+        # Import only message/runtime definitions. The replaced Node/socket/tf and
+        # run_bridge below never initialise ROS, bind UDP or create an executor.
+>       import rclpy.node
+E       ModuleNotFoundError: No module named 'rclpy'
+
+simulation/isaacsim/test_bridge_measurements.py:20: ModuleNotFoundError
+_ ERROR at setup of test_stop_measurement_topic_cannot_be_bound_to_navigation_or_live_mode[transport_mode-live-isaac_isolated_session_required] _
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x71ab1a4c86d0>
+tmp_path = PosixPath('/tmp/pytest-of-eric/pytest-121/test_stop_measurement_topic_ca0')
+
+    @pytest.fixture
+    def measured_bridge(monkeypatch, tmp_path):
+        # Import only message/runtime definitions. The replaced Node/socket/tf and
+        # run_bridge below never initialise ROS, bind UDP or create an executor.
+>       import rclpy.node
+E       ModuleNotFoundError: No module named 'rclpy'
+
+simulation/isaacsim/test_bridge_measurements.py:20: ModuleNotFoundError
+_ ERROR at setup of test_stop_measurement_topic_cannot_be_bound_to_navigation_or_live_mode[mc_measurement_topic-/d1max/localization/navigation/local_state-invalid_isaac_mc_measurement_contract] _
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x71ab1eee8a00>
+tmp_path = PosixPath('/tmp/pytest-of-eric/pytest-121/test_stop_measurement_topic_ca1')
+
+    @pytest.fixture
+    def measured_bridge(monkeypatch, tmp_path):
+        # Import only message/runtime definitions. The replaced Node/socket/tf and
+        # run_bridge below never initialise ROS, bind UDP or create an executor.
+>       import rclpy.node
+E       ModuleNotFoundError: No module named 'rclpy'
+
+simulation/isaacsim/test_bridge_measurements.py:20: ModuleNotFoundError
+_ ERROR at setup of test_stop_measurement_topic_cannot_be_bound_to_navigation_or_live_mode[mc_measurement_contract-unbound-invalid_isaac_mc_measurement_contract] _
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x71ab1a4c80a0>
+tmp_path = PosixPath('/tmp/pytest-of-eric/pytest-121/test_stop_measurement_topic_ca2')
+
+    @pytest.fixture
+    def measured_bridge(monkeypatch, tmp_path):
+        # Import only message/runtime definitions. The replaced Node/socket/tf and
+        # run_bridge below never initialise ROS, bind UDP or create an executor.
+>       import rclpy.node
+E       ModuleNotFoundError: No module named 'rclpy'
+
+simulation/isaacsim/test_bridge_measurements.py:20: ModuleNotFoundError
+_ ERROR at setup of test_software_retirement_does_not_require_or_invent_physical_stop _
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x71ab1ee6cbb0>
+
+    @pytest.fixture(autouse=True)
+    def no_ros_graph_in_unit_tests(monkeypatch):
+>       import rclpy
+E       ModuleNotFoundError: No module named 'rclpy'
+
+d1max_nav_ws/src/d1max_pct_scan/test/conftest.py:7: ModuleNotFoundError
+_ ERROR at setup of test_stale_foreign_active_or_quarantined_is_not_drained[schema-1] _
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x71ab1eee9030>
+
+    @pytest.fixture(autouse=True)
+    def no_ros_graph_in_unit_tests(monkeypatch):
+>       import rclpy
+E       ModuleNotFoundError: No module named 'rclpy'
+
+d1max_nav_ws/src/d1max_pct_scan/test/conftest.py:7: ModuleNotFoundError
+_ ERROR at setup of test_stale_foreign_active_or_quarantined_is_not_drained[session_id-old] _
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x71ab1a596710>
+
+    @pytest.fixture(autouse=True)
+    def no_ros_graph_in_unit_tests(monkeypatch):
+>       import rclpy
+E       ModuleNotFoundError: No module named 'rclpy'
+
+d1max_nav_ws/src/d1max_pct_scan/test/conftest.py:7: ModuleNotFoundError
+_ ERROR at setup of test_stale_foreign_active_or_quarantined_is_not_drained[stamp-9.9] _
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x71ab1a595f60>
+
+    @pytest.fixture(autouse=True)
+    def no_ros_graph_in_unit_tests(monkeypatch):
+>       import rclpy
+E       ModuleNotFoundError: No module named 'rclpy'
+
+d1max_nav_ws/src/d1max_pct_scan/test/conftest.py:7: ModuleNotFoundError
+_ ERROR at setup of test_stale_foreign_active_or_quarantined_is_not_drained[stamp-10.9] _
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x71ab1a5969e0>
+
+    @pytest.fixture(autouse=True)
+    def no_ros_graph_in_unit_tests(monkeypatch):
+>       import rclpy
+E       ModuleNotFoundError: No module named 'rclpy'
+
+d1max_nav_ws/src/d1max_pct_scan/test/conftest.py:7: ModuleNotFoundError
+_ ERROR at setup of test_stale_foreign_active_or_quarantined_is_not_drained[stamp-nan] _
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x71ab1a594970>
+
+    @pytest.fixture(autouse=True)
+    def no_ros_graph_in_unit_tests(monkeypatch):
+>       import rclpy
+E       ModuleNotFoundError: No module named 'rclpy'
+
+d1max_nav_ws/src/d1max_pct_scan/test/conftest.py:7: ModuleNotFoundError
+_ ERROR at setup of test_stale_foreign_active_or_quarantined_is_not_drained[lifecycle_active-True] _
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x71ab1a595540>
+
+    @pytest.fixture(autouse=True)
+    def no_ros_graph_in_unit_tests(monkeypatch):
+>       import rclpy
+E       ModuleNotFoundError: No module named 'rclpy'
+
+d1max_nav_ws/src/d1max_pct_scan/test/conftest.py:7: ModuleNotFoundError
+_ ERROR at setup of test_stale_foreign_active_or_quarantined_is_not_drained[lifecycle_draining-True] _
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x71ab1a594c10>
+
+    @pytest.fixture(autouse=True)
+    def no_ros_graph_in_unit_tests(monkeypatch):
+>       import rclpy
+E       ModuleNotFoundError: No module named 'rclpy'
+
+d1max_nav_ws/src/d1max_pct_scan/test/conftest.py:7: ModuleNotFoundError
+_ ERROR at setup of test_stale_foreign_active_or_quarantined_is_not_drained[lifecycle_quarantined-True] _
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x71ab1a596aa0>
+
+    @pytest.fixture(autouse=True)
+    def no_ros_graph_in_unit_tests(monkeypatch):
+>       import rclpy
+E       ModuleNotFoundError: No module named 'rclpy'
+
+d1max_nav_ws/src/d1max_pct_scan/test/conftest.py:7: ModuleNotFoundError
+_ ERROR at setup of test_shutdown_defaults_to_explicit_system_clock_and_ignores_global_ros_arguments _
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x71ab1a597e20>
+
+    @pytest.fixture(autouse=True)
+    def no_ros_graph_in_unit_tests(monkeypatch):
+>       import rclpy
+E       ModuleNotFoundError: No module named 'rclpy'
+
+d1max_nav_ws/src/d1max_pct_scan/test/conftest.py:7: ModuleNotFoundError
+_ ERROR at setup of test_simulated_shutdown_waits_for_clock_then_fences_old_inactive_status _
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x71ab1a595360>
+
+    @pytest.fixture(autouse=True)
+    def no_ros_graph_in_unit_tests(monkeypatch):
+>       import rclpy
+E       ModuleNotFoundError: No module named 'rclpy'
+
+d1max_nav_ws/src/d1max_pct_scan/test/conftest.py:7: ModuleNotFoundError
+_ ERROR at setup of test_simulated_shutdown_clock_stays_zero_consumes_original_wall_budget _
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x71ab1a323ac0>
+
+    @pytest.fixture(autouse=True)
+    def no_ros_graph_in_unit_tests(monkeypatch):
+>       import rclpy
+E       ModuleNotFoundError: No module named 'rclpy'
+
+d1max_nav_ws/src/d1max_pct_scan/test/conftest.py:7: ModuleNotFoundError
+_ ERROR at setup of test_late_joined_original_clock_drains_while_builtin_ros_clock_stays_zero _
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x71ab1a320220>
+
+    @pytest.fixture(autouse=True)
+    def no_ros_graph_in_unit_tests(monkeypatch):
+>       import rclpy
+E       ModuleNotFoundError: No module named 'rclpy'
+
+d1max_nav_ws/src/d1max_pct_scan/test/conftest.py:7: ModuleNotFoundError
+_ ERROR at setup of test_simulated_regression_after_request_cannot_use_retained_clock_or_old_status _
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x71ab1a3230a0>
+
+    @pytest.fixture(autouse=True)
+    def no_ros_graph_in_unit_tests(monkeypatch):
+>       import rclpy
+E       ModuleNotFoundError: No module named 'rclpy'
+
+d1max_nav_ws/src/d1max_pct_scan/test/conftest.py:7: ModuleNotFoundError
+_ ERROR at setup of test_simulated_regression_before_request_prevents_sending __
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x71ab1a3214e0>
+
+    @pytest.fixture(autouse=True)
+    def no_ros_graph_in_unit_tests(monkeypatch):
+>       import rclpy
+E       ModuleNotFoundError: No module named 'rclpy'
+
+d1max_nav_ws/src/d1max_pct_scan/test/conftest.py:7: ModuleNotFoundError
+_ ERROR at setup of test_timeout_stage_preserves_original_six_second_wall_budget[False-True-service-False-False] _
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x71ab1a320af0>
+
+    @pytest.fixture(autouse=True)
+    def no_ros_graph_in_unit_tests(monkeypatch):
+>       import rclpy
+E       ModuleNotFoundError: No module named 'rclpy'
+
+d1max_nav_ws/src/d1max_pct_scan/test/conftest.py:7: ModuleNotFoundError
+_ ERROR at setup of test_timeout_stage_preserves_original_six_second_wall_budget[True-False-response-True-False] _
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x71ab1a3220e0>
+
+    @pytest.fixture(autouse=True)
+    def no_ros_graph_in_unit_tests(monkeypatch):
+>       import rclpy
+E       ModuleNotFoundError: No module named 'rclpy'
+
+d1max_nav_ws/src/d1max_pct_scan/test/conftest.py:7: ModuleNotFoundError
+_ ERROR at setup of test_timeout_stage_preserves_original_six_second_wall_budget[True-True-retirement-True-True] _
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x71ab1a320bb0>
+
+    @pytest.fixture(autouse=True)
+    def no_ros_graph_in_unit_tests(monkeypatch):
+>       import rclpy
+E       ModuleNotFoundError: No module named 'rclpy'
+
+d1max_nav_ws/src/d1max_pct_scan/test/conftest.py:7: ModuleNotFoundError
+_ ERROR at setup of test_original_clock_rejects_invalid_stamp_without_inventing_source[0-0] _
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x71ab1a320fd0>
+
+    @pytest.fixture(autouse=True)
+    def no_ros_graph_in_unit_tests(monkeypatch):
+>       import rclpy
+E       ModuleNotFoundError: No module named 'rclpy'
+
+d1max_nav_ws/src/d1max_pct_scan/test/conftest.py:7: ModuleNotFoundError
+_ ERROR at setup of test_original_clock_rejects_invalid_stamp_without_inventing_source[-1-0] _
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x71ab1a323550>
+
+    @pytest.fixture(autouse=True)
+    def no_ros_graph_in_unit_tests(monkeypatch):
+>       import rclpy
+E       ModuleNotFoundError: No module named 'rclpy'
+
+d1max_nav_ws/src/d1max_pct_scan/test/conftest.py:7: ModuleNotFoundError
+_ ERROR at setup of test_original_clock_rejects_invalid_stamp_without_inventing_source[2147483648-0] _
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x71ab1a323e80>
+
+    @pytest.fixture(autouse=True)
+    def no_ros_graph_in_unit_tests(monkeypatch):
+>       import rclpy
+E       ModuleNotFoundError: No module named 'rclpy'
+
+d1max_nav_ws/src/d1max_pct_scan/test/conftest.py:7: ModuleNotFoundError
+_ ERROR at setup of test_original_clock_rejects_invalid_stamp_without_inventing_source[True-0] _
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x71ab1a53a830>
+
+    @pytest.fixture(autouse=True)
+    def no_ros_graph_in_unit_tests(monkeypatch):
+>       import rclpy
+E       ModuleNotFoundError: No module named 'rclpy'
+
+d1max_nav_ws/src/d1max_pct_scan/test/conftest.py:7: ModuleNotFoundError
+_ ERROR at setup of test_original_clock_rejects_invalid_stamp_without_inventing_source[1.0-0] _
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x71ab1a53bcd0>
+
+    @pytest.fixture(autouse=True)
+    def no_ros_graph_in_unit_tests(monkeypatch):
+>       import rclpy
+E       ModuleNotFoundError: No module named 'rclpy'
+
+d1max_nav_ws/src/d1max_pct_scan/test/conftest.py:7: ModuleNotFoundError
+_ ERROR at setup of test_original_clock_rejects_invalid_stamp_without_inventing_source[1--1] _
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x71ab1a538970>
+
+    @pytest.fixture(autouse=True)
+    def no_ros_graph_in_unit_tests(monkeypatch):
+>       import rclpy
+E       ModuleNotFoundError: No module named 'rclpy'
+
+d1max_nav_ws/src/d1max_pct_scan/test/conftest.py:7: ModuleNotFoundError
+_ ERROR at setup of test_original_clock_rejects_invalid_stamp_without_inventing_source[1-1000000000] _
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x71ab1a53b880>
+
+    @pytest.fixture(autouse=True)
+    def no_ros_graph_in_unit_tests(monkeypatch):
+>       import rclpy
+E       ModuleNotFoundError: No module named 'rclpy'
+
+d1max_nav_ws/src/d1max_pct_scan/test/conftest.py:7: ModuleNotFoundError
+_ ERROR at setup of test_original_clock_rejects_invalid_stamp_without_inventing_source[1-False] _
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x71ab1a53bd90>
+
+    @pytest.fixture(autouse=True)
+    def no_ros_graph_in_unit_tests(monkeypatch):
+>       import rclpy
+E       ModuleNotFoundError: No module named 'rclpy'
+
+d1max_nav_ws/src/d1max_pct_scan/test/conftest.py:7: ModuleNotFoundError
+_ ERROR at setup of test_original_clock_rejects_invalid_stamp_without_inventing_source[1-1.0] _
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x71ab1a53b6d0>
+
+    @pytest.fixture(autouse=True)
+    def no_ros_graph_in_unit_tests(monkeypatch):
+>       import rclpy
+E       ModuleNotFoundError: No module named 'rclpy'
+
+d1max_nav_ws/src/d1max_pct_scan/test/conftest.py:7: ModuleNotFoundError
+_ ERROR at setup of test_original_clock_retains_exact_integers_but_regression_cannot_recover _
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x71ab1a5390c0>
+
+    @pytest.fixture(autouse=True)
+    def no_ros_graph_in_unit_tests(monkeypatch):
+>       import rclpy
+E       ModuleNotFoundError: No module named 'rclpy'
+
+d1max_nav_ws/src/d1max_pct_scan/test/conftest.py:7: ModuleNotFoundError
+_ ERROR at setup of test_shutdown_contract_rejects_empty_identity_or_unbounded_wall_budget[-6.0] _
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x71ab1a53b0d0>
+
+    @pytest.fixture(autouse=True)
+    def no_ros_graph_in_unit_tests(monkeypatch):
+>       import rclpy
+E       ModuleNotFoundError: No module named 'rclpy'
+
+d1max_nav_ws/src/d1max_pct_scan/test/conftest.py:7: ModuleNotFoundError
+_ ERROR at setup of test_shutdown_contract_rejects_empty_identity_or_unbounded_wall_budget[s-0.0] _
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x71ab1a53bc40>
+
+    @pytest.fixture(autouse=True)
+    def no_ros_graph_in_unit_tests(monkeypatch):
+>       import rclpy
+E       ModuleNotFoundError: No module named 'rclpy'
+
+d1max_nav_ws/src/d1max_pct_scan/test/conftest.py:7: ModuleNotFoundError
+_ ERROR at setup of test_shutdown_contract_rejects_empty_identity_or_unbounded_wall_budget[s-10.01] _
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x71ab1a53c970>
+
+    @pytest.fixture(autouse=True)
+    def no_ros_graph_in_unit_tests(monkeypatch):
+>       import rclpy
+E       ModuleNotFoundError: No module named 'rclpy'
+
+d1max_nav_ws/src/d1max_pct_scan/test/conftest.py:7: ModuleNotFoundError
+=========================== short test summary info ============================
+ERROR simulation/isaacsim/test_bridge_measurements.py::test_geometry_fault_keeps_only_real_clock_and_sdk_mc_stop_measurements
+ERROR simulation/isaacsim/test_bridge_measurements.py::test_post_geometry_measurements_cannot_cross_epoch_rollback_or_pause[epoch]
+ERROR simulation/isaacsim/test_bridge_measurements.py::test_post_geometry_measurements_cannot_cross_epoch_rollback_or_pause[regression]
+ERROR simulation/isaacsim/test_bridge_measurements.py::test_post_geometry_measurements_cannot_cross_epoch_rollback_or_pause[pause]
+ERROR simulation/isaacsim/test_bridge_measurements.py::test_bad_duplicate_or_imu_missing_measurements_do_not_invent_mc_freshness
+ERROR simulation/isaacsim/test_bridge_measurements.py::test_stop_measurement_topic_cannot_be_bound_to_navigation_or_live_mode[transport_mode-live-isaac_isolated_session_required]
+ERROR simulation/isaacsim/test_bridge_measurements.py::test_stop_measurement_topic_cannot_be_bound_to_navigation_or_live_mode[mc_measurement_topic-/d1max/localization/navigation/local_state-invalid_isaac_mc_measurement_contract]
+ERROR simulation/isaacsim/test_bridge_measurements.py::test_stop_measurement_topic_cannot_be_bound_to_navigation_or_live_mode[mc_measurement_contract-unbound-invalid_isaac_mc_measurement_contract]
+ERROR d1max_nav_ws/src/d1max_pct_scan/test/test_lifecycle_shutdown.py::test_software_retirement_does_not_require_or_invent_physical_stop
+ERROR d1max_nav_ws/src/d1max_pct_scan/test/test_lifecycle_shutdown.py::test_stale_foreign_active_or_quarantined_is_not_drained[schema-1]
+ERROR d1max_nav_ws/src/d1max_pct_scan/test/test_lifecycle_shutdown.py::test_stale_foreign_active_or_quarantined_is_not_drained[session_id-old]
+ERROR d1max_nav_ws/src/d1max_pct_scan/test/test_lifecycle_shutdown.py::test_stale_foreign_active_or_quarantined_is_not_drained[stamp-9.9]
+ERROR d1max_nav_ws/src/d1max_pct_scan/test/test_lifecycle_shutdown.py::test_stale_foreign_active_or_quarantined_is_not_drained[stamp-10.9]
+ERROR d1max_nav_ws/src/d1max_pct_scan/test/test_lifecycle_shutdown.py::test_stale_foreign_active_or_quarantined_is_not_drained[stamp-nan]
+ERROR d1max_nav_ws/src/d1max_pct_scan/test/test_lifecycle_shutdown.py::test_stale_foreign_active_or_quarantined_is_not_drained[lifecycle_active-True]
+ERROR d1max_nav_ws/src/d1max_pct_scan/test/test_lifecycle_shutdown.py::test_stale_foreign_active_or_quarantined_is_not_drained[lifecycle_draining-True]
+ERROR d1max_nav_ws/src/d1max_pct_scan/test/test_lifecycle_shutdown.py::test_stale_foreign_active_or_quarantined_is_not_drained[lifecycle_quarantined-True]
+ERROR d1max_nav_ws/src/d1max_pct_scan/test/test_lifecycle_shutdown.py::test_shutdown_defaults_to_explicit_system_clock_and_ignores_global_ros_arguments
+ERROR d1max_nav_ws/src/d1max_pct_scan/test/test_lifecycle_shutdown.py::test_simulated_shutdown_waits_for_clock_then_fences_old_inactive_status
+ERROR d1max_nav_ws/src/d1max_pct_scan/test/test_lifecycle_shutdown.py::test_simulated_shutdown_clock_stays_zero_consumes_original_wall_budget
+ERROR d1max_nav_ws/src/d1max_pct_scan/test/test_lifecycle_shutdown.py::test_late_joined_original_clock_drains_while_builtin_ros_clock_stays_zero
+ERROR d1max_nav_ws/src/d1max_pct_scan/test/test_lifecycle_shutdown.py::test_simulated_regression_after_request_cannot_use_retained_clock_or_old_status
+ERROR d1max_nav_ws/src/d1max_pct_scan/test/test_lifecycle_shutdown.py::test_simulated_regression_before_request_prevents_sending
+ERROR d1max_nav_ws/src/d1max_pct_scan/test/test_lifecycle_shutdown.py::test_timeout_stage_preserves_original_six_second_wall_budget[False-True-service-False-False]
+ERROR d1max_nav_ws/src/d1max_pct_scan/test/test_lifecycle_shutdown.py::test_timeout_stage_preserves_original_six_second_wall_budget[True-False-response-True-False]
+ERROR d1max_nav_ws/src/d1max_pct_scan/test/test_lifecycle_shutdown.py::test_timeout_stage_preserves_original_six_second_wall_budget[True-True-retirement-True-True]
+ERROR d1max_nav_ws/src/d1max_pct_scan/test/test_lifecycle_shutdown.py::test_original_clock_rejects_invalid_stamp_without_inventing_source[0-0]
+ERROR d1max_nav_ws/src/d1max_pct_scan/test/test_lifecycle_shutdown.py::test_original_clock_rejects_invalid_stamp_without_inventing_source[-1-0]
+ERROR d1max_nav_ws/src/d1max_pct_scan/test/test_lifecycle_shutdown.py::test_original_clock_rejects_invalid_stamp_without_inventing_source[2147483648-0]
+ERROR d1max_nav_ws/src/d1max_pct_scan/test/test_lifecycle_shutdown.py::test_original_clock_rejects_invalid_stamp_without_inventing_source[True-0]
+ERROR d1max_nav_ws/src/d1max_pct_scan/test/test_lifecycle_shutdown.py::test_original_clock_rejects_invalid_stamp_without_inventing_source[1.0-0]
+ERROR d1max_nav_ws/src/d1max_pct_scan/test/test_lifecycle_shutdown.py::test_original_clock_rejects_invalid_stamp_without_inventing_source[1--1]
+ERROR d1max_nav_ws/src/d1max_pct_scan/test/test_lifecycle_shutdown.py::test_original_clock_rejects_invalid_stamp_without_inventing_source[1-1000000000]
+ERROR d1max_nav_ws/src/d1max_pct_scan/test/test_lifecycle_shutdown.py::test_original_clock_rejects_invalid_stamp_without_inventing_source[1-False]
+ERROR d1max_nav_ws/src/d1max_pct_scan/test/test_lifecycle_shutdown.py::test_original_clock_rejects_invalid_stamp_without_inventing_source[1-1.0]
+ERROR d1max_nav_ws/src/d1max_pct_scan/test/test_lifecycle_shutdown.py::test_original_clock_retains_exact_integers_but_regression_cannot_recover
+ERROR d1max_nav_ws/src/d1max_pct_scan/test/test_lifecycle_shutdown.py::test_shutdown_contract_rejects_empty_identity_or_unbounded_wall_budget[-6.0]
+ERROR d1max_nav_ws/src/d1max_pct_scan/test/test_lifecycle_shutdown.py::test_shutdown_contract_rejects_empty_identity_or_unbounded_wall_budget[s-0.0]
+ERROR d1max_nav_ws/src/d1max_pct_scan/test/test_lifecycle_shutdown.py::test_shutdown_contract_rejects_empty_identity_or_unbounded_wall_budget[s-10.01]
+195 passed, 39 errors in 0.88s

@@ -1,0 +1,270 @@
+Running main() from /opt/ros/humble/src/gtest_vendor/src/gtest_main.cc
+[==========] Running 114 tests from 12 test suites.
+[----------] Global test environment set-up.
+[----------] 31 tests from TrackerV2
+[ RUN      ] TrackerV2.LegacyInputsCannotManufactureControlIdentity
+[       OK ] TrackerV2.LegacyInputsCannotManufactureControlIdentity (0 ms)
+[ RUN      ] TrackerV2.MissingOrDifferentMapGeometryRevisionCannotEnterTheAdmittedCurve
+[       OK ] TrackerV2.MissingOrDifferentMapGeometryRevisionCannotEnterTheAdmittedCurve (0 ms)
+[ RUN      ] TrackerV2.PredictedStateHeadersDoNotManufactureIndependentTurnRestSamples
+[       OK ] TrackerV2.PredictedStateHeadersDoNotManufactureIndependentTurnRestSamples (0 ms)
+[ RUN      ] TrackerV2.WrongEpochOdometryInvalidatesWholeTask
+[       OK ] TrackerV2.WrongEpochOdometryInvalidatesWholeTask (0 ms)
+[ RUN      ] TrackerV2.RetiredExpiredAndDuplicateObservationsCannotStopNewTaskOrRenewItsBody
+[       OK ] TrackerV2.RetiredExpiredAndDuplicateObservationsCannotStopNewTaskOrRenewItsBody (0 ms)
+[ RUN      ] TrackerV2.RetiredEpochWithNewerTimestampCannotCancelRelocalizedTask
+[       OK ] TrackerV2.RetiredEpochWithNewerTimestampCannotCancelRelocalizedTask (0 ms)
+[ RUN      ] TrackerV2.FreshEvidenceFaultCannotBeClearedByOlderValidPacket
+[       OK ] TrackerV2.FreshEvidenceFaultCannotBeClearedByOlderValidPacket (1 ms)
+[ RUN      ] TrackerV2.NewEpochWithResetClockRevokesInsteadOfHidingBehindPriorSourceFloor
+[       OK ] TrackerV2.NewEpochWithResetClockRevokesInsteadOfHidingBehindPriorSourceFloor (0 ms)
+[ RUN      ] TrackerV2.ForeignAndFutureFaultsCannotPoisonNextExpectedSource
+[       OK ] TrackerV2.ForeignAndFutureFaultsCannotPoisonNextExpectedSource (0 ms)
+[ RUN      ] TrackerV2.NewerForeignSessionMapOrSchemaDoesNotStopFreshTrajectoryOrEraseMeasuredProgress
+[       OK ] TrackerV2.NewerForeignSessionMapOrSchemaDoesNotStopFreshTrajectoryOrEraseMeasuredProgress (0 ms)
+[ RUN      ] TrackerV2.MatchingXYZProgressUsesRealSourceTimeNotControlTicks
+[       OK ] TrackerV2.MatchingXYZProgressUsesRealSourceTimeNotControlTicks (0 ms)
+[ RUN      ] TrackerV2.SmallPhysicalBacktrackPreservesOnlyCommittedHighWater
+[       OK ] TrackerV2.SmallPhysicalBacktrackPreservesOnlyCommittedHighWater (0 ms)
+[ RUN      ] TrackerV2.VerticalMeasurementIsNotLostByXYProjection
+[       OK ] TrackerV2.VerticalMeasurementIsNotLostByXYProjection (0 ms)
+[ RUN      ] TrackerV2.DifferentSegmentOrAnchorNeverReplacesCurve
+[       OK ] TrackerV2.DifferentSegmentOrAnchorNeverReplacesCurve (1 ms)
+[ RUN      ] TrackerV2.HigherIdCannotHideOlderSolveOrDistantJoin
+[       OK ] TrackerV2.HigherIdCannotHideOlderSolveOrDistantJoin (0 ms)
+[ RUN      ] TrackerV2.ValidReplacementPreservesLimiterAndDoesNotInventGlobalProgress
+[       OK ] TrackerV2.ValidReplacementPreservesLimiterAndDoesNotInventGlobalProgress (0 ms)
+[ RUN      ] TrackerV2.CancelNeedsSameIdentityNotMerelyMatchingGeneration
+[       OK ] TrackerV2.CancelNeedsSameIdentityNotMerelyMatchingGeneration (0 ms)
+[ RUN      ] TrackerV2.FreshPublishStampCannotLeaseOldOrFutureMeasurementEvidence
+[       OK ] TrackerV2.FreshPublishStampCannotLeaseOldOrFutureMeasurementEvidence (1 ms)
+[ RUN      ] TrackerV2.FreshBodyStateCannotHideReorderedInputs
+[       OK ] TrackerV2.FreshBodyStateCannotHideReorderedInputs (0 ms)
+[ RUN      ] TrackerV2.SourceEvidenceExpiresWithoutAnyNewCallback
+[       OK ] TrackerV2.SourceEvidenceExpiresWithoutAnyNewCallback (0 ms)
+[ RUN      ] TrackerV2.MovingBodyAdmitsMeasuredNonzeroCurveParameterWithoutRestarting
+[       OK ] TrackerV2.MovingBodyAdmitsMeasuredNonzeroCurveParameterWithoutRestarting (0 ms)
+[ RUN      ] TrackerV2.DeliveryTimeDoesNotAdvanceAStationaryJoin
+[       OK ] TrackerV2.DeliveryTimeDoesNotAdvanceAStationaryJoin (1 ms)
+[ RUN      ] TrackerV2.InvalidHandoffProofNeverReplacesIncumbent
+[       OK ] TrackerV2.InvalidHandoffProofNeverReplacesIncumbent (1 ms)
+[ RUN      ] TrackerV2.MatchingPositionCannotHideVelocityMismatchOrUnboundedCurveDynamics
+[       OK ] TrackerV2.MatchingPositionCannotHideVelocityMismatchOrUnboundedCurveDynamics (0 ms)
+[ RUN      ] TrackerV2.ActualVendorCurveAllowsDistantBendButRejectsUnbrakeableEntryWithoutResettingLimiter
+[       OK ] TrackerV2.ActualVendorCurveAllowsDistantBendButRejectsUnbrakeableEntryWithoutResettingLimiter (1 ms)
+[ RUN      ] TrackerV2.HandoffCannotJumpPastBoundedArcWindowOrOntoOtherFloor
+[       OK ] TrackerV2.HandoffCannotJumpPastBoundedArcWindowOrOntoOtherFloor (0 ms)
+[ RUN      ] TrackerV2.VerifiedFloorSpatialProfileDoesNotFlattenOrGloballyThrottleXYZCurve
+[       OK ] TrackerV2.VerifiedFloorSpatialProfileDoesNotFlattenOrGloballyThrottleXYZCurve (2 ms)
+[ RUN      ] TrackerV2.RemainingDomainIncludesMeasuredBacktrackingNotHighWaterCutoff
+[       OK ] TrackerV2.RemainingDomainIncludesMeasuredBacktrackingNotHighWaterCutoff (0 ms)
+[ RUN      ] TrackerV2.LocalEndpointRetainsFreshMeasuredCurveWhileSuccessorIsOnlyPrepared
+[       OK ] TrackerV2.LocalEndpointRetainsFreshMeasuredCurveWhileSuccessorIsOnlyPrepared (2 ms)
+[ RUN      ] TrackerV2.RecoverableSourceGapRetainsCurveAndNeedsDistinctSamplesOverPointSixSeconds
+[       OK ] TrackerV2.RecoverableSourceGapRetainsCurveAndNeedsDistinctSamplesOverPointSixSeconds (0 ms)
+[ RUN      ] TrackerV2.SupportRelativeHeightAllowsVerifiedCorridorButNotCrossFloorSupport
+[       OK ] TrackerV2.SupportRelativeHeightAllowsVerifiedCorridorButNotCrossFloorSupport (1 ms)
+[----------] 31 tests from TrackerV2 (11 ms total)
+
+[----------] 2 tests from TrackerJoinDiagnostic
+[ RUN      ] TrackerJoinDiagnostic.EveryEvidencePredicateReportsItsOriginalReasonWithoutChangingVerdict
+[       OK ] TrackerJoinDiagnostic.EveryEvidencePredicateReportsItsOriginalReasonWithoutChangingVerdict (0 ms)
+[ RUN      ] TrackerJoinDiagnostic.FailedTrialPreservesOriginalFineNanosecondEvidenceAndSafeIncumbent
+[       OK ] TrackerJoinDiagnostic.FailedTrialPreservesOriginalFineNanosecondEvidenceAndSafeIncumbent (0 ms)
+[----------] 2 tests from TrackerJoinDiagnostic (0 ms total)
+
+[----------] 5 tests from TrackerMovingEntry
+[ RUN      ] TrackerMovingEntry.ReverseMeasuredPrefixReproducesTurnaroundButCannotReplaceMovingIncumbent
+[       OK ] TrackerMovingEntry.ReverseMeasuredPrefixReproducesTurnaroundButCannotReplaceMovingIncumbent (6 ms)
+[ RUN      ] TrackerMovingEntry.ExistingHeadingThresholdAllowsContinuousDirectionAndRejectsOnlyItsOtherSide
+[       OK ] TrackerMovingEntry.ExistingHeadingThresholdAllowsContinuousDirectionAndRejectsOnlyItsOtherSide (18 ms)
+[ RUN      ] TrackerMovingEntry.ZeroOutputMayAlignButPositiveNearZeroOutputDoesNotInventAMovingThreshold
+[       OK ] TrackerMovingEntry.ZeroOutputMayAlignButPositiveNearZeroOutputDoesNotInventAMovingThreshold (12 ms)
+[ RUN      ] TrackerMovingEntry.PreparedEntryRechecksDirectionAfterIncumbentResumesWithoutPromotingGeometry
+[       OK ] TrackerMovingEntry.PreparedEntryRechecksDirectionAfterIncumbentResumesWithoutPromotingGeometry (3 ms)
+[ RUN      ] TrackerMovingEntry.IncumbentAlreadyOutsideHeadingGateCannotClaimContinuousForwardEntry
+[       OK ] TrackerMovingEntry.IncumbentAlreadyOutsideHeadingGateCannotClaimContinuousForwardEntry (4 ms)
+[----------] 5 tests from TrackerMovingEntry (43 ms total)
+
+[----------] 5 tests from TrackerSpatialLookahead
+[ RUN      ] TrackerSpatialLookahead.ExactV32XYZCurveRequestsForwardWithoutAdvancingMeasuredPhaseOrRaisingItsCap
+[       OK ] TrackerSpatialLookahead.ExactV32XYZCurveRequestsForwardWithoutAdvancingMeasuredPhaseOrRaisingItsCap (5 ms)
+[ RUN      ] TrackerSpatialLookahead.DefaultRequiresVerifiedFloorAndPureVerticalHasNoPlanarAuthority
+[       OK ] TrackerSpatialLookahead.DefaultRequiresVerifiedFloorAndPureVerticalHasNoPlanarAuthority (0 ms)
+[ RUN      ] TrackerSpatialLookahead.OriginalCurvatureAndMovingHeadingGuardsStillConstrainAForwardLookPoint
+[       OK ] TrackerSpatialLookahead.OriginalCurvatureAndMovingHeadingGuardsStillConstrainAForwardLookPoint (10 ms)
+[ RUN      ] TrackerSpatialLookahead.TerminalZeroArcSpanKeepsEndpointFeedForwardAndOriginalMeasuredPhase
+[       OK ] TrackerSpatialLookahead.TerminalZeroArcSpanKeepsEndpointFeedForwardAndOriginalMeasuredPhase (1 ms)
+[ RUN      ] TrackerSpatialLookahead.RecordedNearCuspKeepsFullXYZAndItsOriginalTinyBrakingCap
+[       OK ] TrackerSpatialLookahead.RecordedNearCuspKeepsFullXYZAndItsOriginalTinyBrakingCap (3 ms)
+[----------] 5 tests from TrackerSpatialLookahead (19 ms total)
+
+[----------] 4 tests from TrackerGeometryReceipt
+[ RUN      ] TrackerGeometryReceipt.PreparationAndUnconnectedFreshBodyCannotClaimSoftwareInstallation
+[       OK ] TrackerGeometryReceipt.PreparationAndUnconnectedFreshBodyCannotClaimSoftwareInstallation (0 ms)
+[ RUN      ] TrackerGeometryReceipt.InstalledFactsStayFixedAcrossProofRenewalHoldingAndRepeatedBody
+[       OK ] TrackerGeometryReceipt.InstalledFactsStayFixedAcrossProofRenewalHoldingAndRepeatedBody (0 ms)
+[ RUN      ] TrackerGeometryReceipt.MotionFencePreservesActualInstallationAndCannotBorrowMovingHandoff
+[       OK ] TrackerGeometryReceipt.MotionFencePreservesActualInstallationAndCannotBorrowMovingHandoff (1 ms)
+[ RUN      ] TrackerGeometryReceipt.UnixOriginalBodyFactsAreExactAtInstallationAndDoNotRenewWithTimer
+[       OK ] TrackerGeometryReceipt.UnixOriginalBodyFactsAreExactAtInstallationAndDoNotRenewWithTimer (0 ms)
+[----------] 4 tests from TrackerGeometryReceipt (1 ms total)
+
+[----------] 3 tests from TrackerEntryReobservation
+[ RUN      ] TrackerEntryReobservation.FreshWholeProofUsesActualNewBoundaryNotAnExpiredWorkerSample
+[       OK ] TrackerEntryReobservation.FreshWholeProofUsesActualNewBoundaryNotAnExpiredWorkerSample (0 ms)
+[ RUN      ] TrackerEntryReobservation.CurrentMeasurementAndFiniteNativeDomainRemainStrict
+[       OK ] TrackerEntryReobservation.CurrentMeasurementAndFiniteNativeDomainRemainStrict (0 ms)
+[ RUN      ] TrackerEntryReobservation.StaleOrNegativeWholeProofCannotRefreshEntry
+[       OK ] TrackerEntryReobservation.StaleOrNegativeWholeProofCannotRefreshEntry (1 ms)
+[----------] 3 tests from TrackerEntryReobservation (1 ms total)
+
+[----------] 10 tests from TrackerWriterCAS
+[ RUN      ] TrackerWriterCAS.InitialAckBindsActualInstallationNotLatestIntentAndCannotRollback
+[       OK ] TrackerWriterCAS.InitialAckBindsActualInstallationNotLatestIntentAndCannotRollback (1 ms)
+[ RUN      ] TrackerWriterCAS.InitialFactRequiresSignedLeaseAndRealInstallationButAcceptsExpiredReceiptTime
+[       OK ] TrackerWriterCAS.InitialFactRequiresSignedLeaseAndRealInstallationButAcceptsExpiredReceiptTime (1 ms)
+[ RUN      ] TrackerWriterCAS.ConditionalGrantNeverChangesIncumbentBeforeActualWriterFact
+[       OK ] TrackerWriterCAS.ConditionalGrantNeverChangesIncumbentBeforeActualWriterFact (1 ms)
+[ RUN      ] TrackerWriterCAS.FixedGrantRejectsOverwriteAndPreparationUsesActualMovingBoundary
+[       OK ] TrackerWriterCAS.FixedGrantRejectsOverwriteAndPreparationUsesActualMovingBoundary (1 ms)
+[ RUN      ] TrackerWriterCAS.PreparedExpiryCopiesOriginalFineNanosecondCapsWithoutRoundTrip
+[       OK ] TrackerWriterCAS.PreparedExpiryCopiesOriginalFineNanosecondCapsWithoutRoundTrip (2 ms)
+[ RUN      ] TrackerWriterCAS.LateAppliedFactMovesIdentityForwardAndHoldsWithoutRollback
+[       OK ] TrackerWriterCAS.LateAppliedFactMovesIdentityForwardAndHoldsWithoutRollback (1 ms)
+[ RUN      ] TrackerWriterCAS.NegativeFactReleasesSlotButLateAppliedTombstoneCannotResume
+[       OK ] TrackerWriterCAS.NegativeFactReleasesSlotButLateAppliedTombstoneCannotResume (0 ms)
+[ RUN      ] TrackerWriterCAS.SameReferenceDifferentCurveNegativeFactResolvesOnlyExactUnchangedWriter
+[       OK ] TrackerWriterCAS.SameReferenceDifferentCurveNegativeFactResolvesOnlyExactUnchangedWriter (1 ms)
+[ RUN      ] TrackerWriterCAS.WrongAppliedOwnerOrChangedCommandNeverReplacesGeometry
+[       OK ] TrackerWriterCAS.WrongAppliedOwnerOrChangedCommandNeverReplacesGeometry (5 ms)
+[ RUN      ] TrackerWriterCAS.StationaryReentryRequiresOriginalSdkWitnessAndNewCurveProofNotOldProof
+[       OK ] TrackerWriterCAS.StationaryReentryRequiresOriginalSdkWitnessAndNewCurveProofNotOldProof (34 ms)
+[----------] 10 tests from TrackerWriterCAS (47 ms total)
+
+[----------] 7 tests from TrackerTimeContract
+[ RUN      ] TrackerTimeContract.RealUnixLeaseFactsRemainExactAndCanOnlyCapFreshDeadline
+[       OK ] TrackerTimeContract.RealUnixLeaseFactsRemainExactAndCanOnlyCapFreshDeadline (0 ms)
+[ RUN      ] TrackerTimeContract.V10EqualUnixSourceIsAdmittedAndTrueFutureNanosecondIsRejected
+[       OK ] TrackerTimeContract.V10EqualUnixSourceIsAdmittedAndTrueFutureNanosecondIsRejected (0 ms)
+[ RUN      ] TrackerTimeContract.IntegerFreshnessUsesOriginalLimitsAtNanosecondBoundary
+[       OK ] TrackerTimeContract.IntegerFreshnessUsesOriginalLimitsAtNanosecondBoundary (0 ms)
+[ RUN      ] TrackerTimeContract.OriginalNanosecondOrderingDoesNotCollapseAdjacentBodySources
+[       OK ] TrackerTimeContract.OriginalNanosecondOrderingDoesNotCollapseAdjacentBodySources (0 ms)
+[ RUN      ] TrackerTimeContract.ExactUnixClockFlowsThroughPrepareCommitDemandAndInstallation
+[       OK ] TrackerTimeContract.ExactUnixClockFlowsThroughPrepareCommitDemandAndInstallation (0 ms)
+[ RUN      ] TrackerTimeContract.WholeCurveProofAbsoluteExpiryDoesNotGainOneNanosecond
+[       OK ] TrackerTimeContract.WholeCurveProofAbsoluteExpiryDoesNotGainOneNanosecond (0 ms)
+[ RUN      ] TrackerTimeContract.PreparedDemandAndAdmissionKeepActualClockNanoseconds
+[       OK ] TrackerTimeContract.PreparedDemandAndAdmissionKeepActualClockNanoseconds (1 ms)
+[----------] 7 tests from TrackerTimeContract (1 ms total)
+
+[----------] 25 tests from TrackerExecution
+[ RUN      ] TrackerExecution.CandidatePreparationDoesNotActivateBeforeMatchingOwnerCommit
+[       OK ] TrackerExecution.CandidatePreparationDoesNotActivateBeforeMatchingOwnerCommit (0 ms)
+[ RUN      ] TrackerExecution.NewCandidateCannotBeActivatedWithPredecessorAdmissionAndProof
+[       OK ] TrackerExecution.NewCandidateCannotBeActivatedWithPredecessorAdmissionAndProof (1 ms)
+[ RUN      ] TrackerExecution.GeometryOnlyCommitNeverProducesMotionAndCanLaterAuthorize
+[       OK ] TrackerExecution.GeometryOnlyCommitNeverProducesMotionAndCanLaterAuthorize (0 ms)
+[ RUN      ] TrackerExecution.ArmingHeartbeatDoesNotEraseCommittedGeometryOrNeedOldAdmission
+[       OK ] TrackerExecution.ArmingHeartbeatDoesNotEraseCommittedGeometryOrNeedOldAdmission (1 ms)
+[ RUN      ] TrackerExecution.ProofGapStopsImmediatelyButDoesNotInventOdometryRecoveryDelay
+[       OK ] TrackerExecution.ProofGapStopsImmediatelyButDoesNotInventOdometryRecoveryDelay (0 ms)
+[ RUN      ] TrackerExecution.ThirtySecondStationaryPreviewCanExecuteOnlyWithCurrentExactProof
+[       OK ] TrackerExecution.ThirtySecondStationaryPreviewCanExecuteOnlyWithCurrentExactProof (8 ms)
+[ RUN      ] TrackerExecution.NativeUnknownExpiredProofWrongOwnerAndMockLeakCannotCommit
+[       OK ] TrackerExecution.NativeUnknownExpiredProofWrongOwnerAndMockLeakCannotCommit (2 ms)
+[ RUN      ] TrackerExecution.FreshNextProofDoesNotRevokeStillFreshLeasedPredecessor
+[       OK ] TrackerExecution.FreshNextProofDoesNotRevokeStillFreshLeasedPredecessor (0 ms)
+[ RUN      ] TrackerExecution.TwoHundredMillisecondProofRefreshDoesNotWaitForOwnerHeartbeat
+[       OK ] TrackerExecution.TwoHundredMillisecondProofRefreshDoesNotWaitForOwnerHeartbeat (1 ms)
+[ RUN      ] TrackerExecution.ProofFloorCannotBorrowForeignGeometryOrCrossLatestInvalidFence
+[       OK ] TrackerExecution.ProofFloorCannotBorrowForeignGeometryOrCrossLatestInvalidFence (2 ms)
+[ RUN      ] TrackerExecution.FreshCollisionProofCannotRenewAuthorityOrResumeHoldingPhase
+[       OK ] TrackerExecution.FreshCollisionProofCannotRenewAuthorityOrResumeHoldingPhase (0 ms)
+[ RUN      ] TrackerExecution.OwnerCanCommitAdmittedProofWhenNextValidSequenceArrivesFirst
+[       OK ] TrackerExecution.OwnerCanCommitAdmittedProofWhenNextValidSequenceArrivesFirst (1 ms)
+[ RUN      ] TrackerExecution.MissingSupportAndStairSemanticsNeverBecomeFlatFloorByDefault
+[       OK ] TrackerExecution.MissingSupportAndStairSemanticsNeverBecomeFlatFloorByDefault (2 ms)
+[ RUN      ] TrackerExecution.RemainingProofIsOnlyForCommittedCurveAndRecomputesArcCoverage
+[       OK ] TrackerExecution.RemainingProofIsOnlyForCommittedCurveAndRecomputesArcCoverage (1 ms)
+[ RUN      ] TrackerExecution.OlderFreshHeartbeatCanUseExactProofHistoryButNeverMaskNewInvalid
+[       OK ] TrackerExecution.OlderFreshHeartbeatCanUseExactProofHistoryButNeverMaskNewInvalid (1 ms)
+[ RUN      ] TrackerExecution.GeometryPreviewProjectsOnlyNewMeasuredPositionWhileDemandStaysZero
+[       OK ] TrackerExecution.GeometryPreviewProjectsOnlyNewMeasuredPositionWhileDemandStaysZero (0 ms)
+[ RUN      ] TrackerExecution.ControlDeadlineDoesNotFreezeThePriorCollisionSnapshotsDeadline
+[       OK ] TrackerExecution.ControlDeadlineDoesNotFreezeThePriorCollisionSnapshotsDeadline (1 ms)
+[ RUN      ] TrackerExecution.IndependentControlDeadlineNeverExtendsOriginalOwnerLease
+[       OK ] TrackerExecution.IndependentControlDeadlineNeverExtendsOriginalOwnerLease (1 ms)
+[ RUN      ] TrackerExecution.OnlyOwnExactFreshBlockedForwardTurnCanRequestDifferentManeuver
+[       OK ] TrackerExecution.OnlyOwnExactFreshBlockedForwardTurnCanRequestDifferentManeuver (0 ms)
+[ RUN      ] TrackerExecution.UnknownStaleForeignOrMutatedSweepCannotRequestTurn
+[       OK ] TrackerExecution.UnknownStaleForeignOrMutatedSweepCannotRequestTurn (8 ms)
+[ RUN      ] TrackerExecution.NeverGeneratedOrRevokedDemandCannotRequestTurn
+[       OK ] TrackerExecution.NeverGeneratedOrRevokedDemandCannotRequestTurn (0 ms)
+[ RUN      ] TrackerExecution.BlockedEntryReportsExactOriginalSweepOnceWithoutRestampingOrAuthority
+[       OK ] TrackerExecution.BlockedEntryReportsExactOriginalSweepOnceWithoutRestampingOrAuthority (1 ms)
+[ RUN      ] TrackerExecution.OccupiedInPlaceAlignTurnReportsBlockedEntryInsteadOfRepeatingIt
+[       OK ] TrackerExecution.OccupiedInPlaceAlignTurnReportsBlockedEntryInsteadOfRepeatingIt (1 ms)
+[ RUN      ] TrackerExecution.NewerProposalCannotRedatePreparedCurveTask
+[       OK ] TrackerExecution.NewerProposalCannotRedatePreparedCurveTask (1 ms)
+[ RUN      ] TrackerExecution.FailedCommitStillFollowsOwnerLeaseForSuccessorProposal
+[       OK ] TrackerExecution.FailedCommitStillFollowsOwnerLeaseForSuccessorProposal (1 ms)
+[----------] 25 tests from TrackerExecution (34 ms total)
+
+[----------] 4 tests from TrackerSpatialBudget
+[ RUN      ] TrackerSpatialBudget.FlatSlopeAndReversedOrRotatedTravelUseTheSameSpatialLimit
+[       OK ] TrackerSpatialBudget.FlatSlopeAndReversedOrRotatedTravelUseTheSameSpatialLimit (0 ms)
+[ RUN      ] TrackerSpatialBudget.UndefinedAndVerticalDirectionsCannotBecomeFlatGround
+[       OK ] TrackerSpatialBudget.UndefinedAndVerticalDirectionsCannotBecomeFlatGround (0 ms)
+[ RUN      ] TrackerSpatialBudget.ProductionCurveControllerPreservesTrueVerticalVelocityAndAcceleration
+[       OK ] TrackerSpatialBudget.ProductionCurveControllerPreservesTrueVerticalVelocityAndAcceleration (3 ms)
+[ RUN      ] TrackerSpatialBudget.UncommittedCandidateCannotChangeTheIncumbentBudgetOrLimiter
+[       OK ] TrackerSpatialBudget.UncommittedCandidateCannotChangeTheIncumbentBudgetOrLimiter (0 ms)
+[----------] 4 tests from TrackerSpatialBudget (3 ms total)
+
+[----------] 9 tests from TrackerPreparationWorker
+[ RUN      ] TrackerPreparationWorker.LatestPendingIsBoundedAndOldCompletionCannotWin
+[       OK ] TrackerPreparationWorker.LatestPendingIsBoundedAndOldCompletionCannotWin (2 ms)
+[ RUN      ] TrackerPreparationWorker.CancelNeverQueuesBehindBuildAndRetiredResultCannotReturn
+[       OK ] TrackerPreparationWorker.CancelNeverQueuesBehindBuildAndRetiredResultCannotReturn (1 ms)
+[ RUN      ] TrackerPreparationWorker.ExceptionsBecomeFailedCompletionNotSharedControllerMutation
+[       OK ] TrackerPreparationWorker.ExceptionsBecomeFailedCompletionNotSharedControllerMutation (1 ms)
+[ RUN      ] TrackerPreparationWorker.ProductionGeometryPreparesOffOwnerButOnlyExactPermitCommits
+[       OK ] TrackerPreparationWorker.ProductionGeometryPreparesOffOwnerButOnlyExactPermitCommits (1 ms)
+[ RUN      ] TrackerPreparationWorker.CancelAndDuplicateCannotInstallRetiredCandidateOrMutateCachedCurve
+[       OK ] TrackerPreparationWorker.CancelAndDuplicateCannotInstallRetiredCandidateOrMutateCachedCurve (1 ms)
+[ RUN      ] TrackerPreparationWorker.CachedGeometryCannotBeReusedForMutatedShapeOrRelaxedConfiguration
+[       OK ] TrackerPreparationWorker.CachedGeometryCannotBeReusedForMutatedShapeOrRelaxedConfiguration (1 ms)
+[ RUN      ] TrackerPreparationWorker.CachedSupportCannotAuthorizeDifferentEvidenceWithReusedHash
+[       OK ] TrackerPreparationWorker.CachedSupportCannotAuthorizeDifferentEvidenceWithReusedHash (0 ms)
+[ RUN      ] TrackerPreparationWorker.RejectedCandidatePreservesIncumbentAndWorkerNeverPredictsActualEntry
+[       OK ] TrackerPreparationWorker.RejectedCandidatePreservesIncumbentAndWorkerNeverPredictsActualEntry (4 ms)
+[ RUN      ] TrackerPreparationWorker.FreshContextResetRetiresPreparedCandidateAndPriorPermit
+[       OK ] TrackerPreparationWorker.FreshContextResetRetiresPreparedCandidateAndPriorPermit (1 ms)
+[----------] 9 tests from TrackerPreparationWorker (12 ms total)
+
+[----------] 9 tests from TrackerDuplicateTick
+[ RUN      ] TrackerDuplicateTick.Skips20msTimersWithoutNewDemandOrLimiterResetAndResumesContinuously
+[       OK ] TrackerDuplicateTick.Skips20msTimersWithoutNewDemandOrLimiterResetAndResumesContinuously (1 ms)
+[ RUN      ] TrackerDuplicateTick.OriginalDemandExpiresBySteadyReceiptAndSameSourceCannotRenewIt
+[       OK ] TrackerDuplicateTick.OriginalDemandExpiresBySteadyReceiptAndSameSourceCannotRenewIt (0 ms)
+[ RUN      ] TrackerDuplicateTick.OriginalTwoMicrosecondCurveProofIsNotRenewedByLongerNewProof
+[       OK ] TrackerDuplicateTick.OriginalTwoMicrosecondCurveProofIsNotRenewedByLongerNewProof (1 ms)
+[ RUN      ] TrackerDuplicateTick.NewMatchingShorterProofAndPermitPermanentlyShortenOriginalLease
+[       OK ] TrackerDuplicateTick.NewMatchingShorterProofAndPermitPermanentlyShortenOriginalLease (0 ms)
+[ RUN      ] TrackerDuplicateTick.ExactOwnMotionProofOnlyShortensAndNeverRefreshesEmissionReceipt
+[       OK ] TrackerDuplicateTick.ExactOwnMotionProofOnlyShortensAndNeverRefreshesEmissionReceipt (1 ms)
+[ RUN      ] TrackerDuplicateTick.RevocationInvalidProofHoldingAndNewBodyFaultCannotBeSkipped
+[       OK ] TrackerDuplicateTick.RevocationInvalidProofHoldingAndNewBodyFaultCannotBeSkipped (1 ms)
+[ RUN      ] TrackerDuplicateTick.ChangedAuthorityAndControlPhaseRequireOrdinaryControlPath
+[       OK ] TrackerDuplicateTick.ChangedAuthorityAndControlPhaseRequireOrdinaryControlPath (2 ms)
+[ RUN      ] TrackerDuplicateTick.AppliedAckSameNowUsesOriginalPreparedCommandDeadline
+[       OK ] TrackerDuplicateTick.AppliedAckSameNowUsesOriginalPreparedCommandDeadline (1 ms)
+[ RUN      ] TrackerDuplicateTick.OneNanosecondRegressionAtUnixScaleStopsEvenWhenDoubleCannotDistinguishIt
+[       OK ] TrackerDuplicateTick.OneNanosecondRegressionAtUnixScaleStopsEvenWhenDoubleCannotDistinguishIt (0 ms)
+[----------] 9 tests from TrackerDuplicateTick (7 ms total)
+
+[----------] Global test environment tear-down
+[==========] 114 tests from 12 test suites ran. (179 ms total)
+[  PASSED  ] 114 tests.

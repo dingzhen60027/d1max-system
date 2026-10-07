@@ -462,6 +462,22 @@ class CollisionAuditTests(unittest.TestCase):
             with self.subTest(value=value), self.assertRaises(ValueError):
                 validate_encounter_contract(value["scenario_suite_contract"]["actor_encounter_contract"], ["person"], value)
 
+    def test_new_history_binding_preserves_exact_json_types_without_changing_legacy_equality(self):
+        good = self.cadence_history_spec()
+        for mutate in (lambda c: c["history_capacity_binding"].update(schema=True),
+                lambda c: c["history_capacity_binding"].update(maximum_history_samples_per_pair=2254.),
+                lambda c: c["history_capacity_binding"].update(physics_frequency_hz=500),
+                lambda c: c.update(approach_starts_outside_near=1)):
+            value = copy.deepcopy(good); mutate(value["scenario_suite_contract"]["actor_encounter_contract"])
+            # Python equality alone hides these different sealed JSON types.
+            self.assertEqual(value["scenario_suite_contract"]["actor_encounter_contract"],
+                good["scenario_suite_contract"]["actor_encounter_contract"])
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                validate_encounter_contract(value["scenario_suite_contract"]["actor_encounter_contract"], ["person"], value)
+        legacy = self.spot_exposure_spec()
+        legacy["scenario_suite_contract"]["actor_encounter_contract"]["schema"] = True
+        validate_encounter_contract(legacy["scenario_suite_contract"]["actor_encounter_contract"], ["person"], legacy)
+
     def test_new_capacity_actual_overflow_remains_pending_even_after_certificate(self):
         value = self.cadence_history_spec()
         audit, _ = self.measured_encounter(value, lambda t: 4.-1.65*t if t <= 1. else 2.35 if t <= 2. else 2.35+1.65*(t-2.))

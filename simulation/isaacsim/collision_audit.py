@@ -173,8 +173,11 @@ def validate_encounter_contract(value, enabled_actor_ids, spec=None):
     ids = value.get("required_actor_ids")
     if (not isinstance(ids, list) or not all(isinstance(v, str) for v in ids)
             or ids != sorted(set(ids))
-            or not set(ids).issubset(enabled_actor_ids)
-            or value != encounter_contract(ids, spec)):
+            or not set(ids).issubset(enabled_actor_ids)):
+        raise ValueError("invalid_actor_encounter_contract")
+    expected = encounter_contract(ids, spec)
+    if (value != expected or ("history_capacity_binding" in expected
+            and canonical(value) != canonical(expected))):
         raise ValueError("invalid_actor_encounter_contract")
     return value
 

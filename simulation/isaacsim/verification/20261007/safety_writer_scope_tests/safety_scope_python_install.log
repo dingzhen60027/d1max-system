@@ -1,0 +1,14 @@
+Starting >>> d1max_pct_scan
+[0.247s] colcon.colcon_core.shell WARNING The following packages are in the workspace but haven't been built:
+- livox_ros_driver2
+- faster_lio
+- d1max_localization
+They are being used from the following locations instead:
+- /home/eric/wjg/d1max-build-isaac/localization/install/livox_ros_driver2
+- /home/eric/wjg/d1max-build-isaac/localization/install/faster_lio
+- /home/eric/wjg/d1max-build-isaac/localization/install/d1max_localization
+To suppress this warning ignore these packages in the workspace:
+--packages-ignore livox_ros_driver2 faster_lio d1max_localization
+Finished <<< d1max_pct_scan [0.62s]
+
+Summary: 1 package finished [0.81s]

@@ -1,0 +1,141 @@
+{
+  "schema": 1,
+  "kind": "explicit_offline_actor_encounter_history_capacity",
+  "date": "2026-10-07",
+  "status": "OFFLINE_VERIFIED_NEW_CANDIDATE_RUNTIME_PENDING",
+  "scope": "offline actual-snapshot encounter audit RAM only",
+  "runtime_navigation_passed": false,
+  "old_case_reclassified": false,
+  "rationale": {
+    "original_history_samples_per_pair": 2048,
+    "maximum_leg_source_s": 30,
+    "actual_state_hz": 50,
+    "actual_acquisition_begin_hz": 25,
+    "closed_interval_lattice_bound_samples": 2252,
+    "selected_history_samples_per_pair": 2254,
+    "derivation": "max(2048,ceil((50+25)*30)+4)",
+    "boundary_allowance_samples": 4,
+    "boundary_allowance_scope": "storage slots only; no synthetic snapshots or source-time changes"
+  },
+  "enrollment": {
+    "robot_field": "robot.actor_encounter_history_profile",
+    "token": "actual_snapshot_cadence_v1",
+    "requirements": [
+      "official_spot_physx",
+      "original fully validated isolated Spot exposure profile",
+      "exact physics 500Hz / state 50Hz / native LiDAR acquisition 25Hz",
+      "maximum source leg window 30 seconds"
+    ],
+    "metadata_validation": "new opt-in contract canonical JSON bytes must equal regeneration from the sealed scene, including exact JSON types",
+    "binding_fields": "history_capacity_binding and maximum_history_samples_per_pair",
+    "old_opt_out": "original 2048 and original Python equality semantics retained"
+  },
+  "unchanged": [
+    "3m explicit exposure threshold / legacy 2m",
+    "approach-near-depart requirements",
+    "actual full XYZ primitive centers and exact primitive identity",
+    "minimum near source duration .5s / leg 1s / mean rate .05mps",
+    "maximum source sample gap .12s",
+    "30s normal history expiry",
+    "128-witness cap",
+    "online 200000 actual-volume budget",
+    "all source/receipt leases and collision UNKNOWN rules"
+  ],
+  "tests": {
+    "command": "source simulation/isaacsim/env.sh; python3 -m pytest -q simulation/isaacsim/test_collision_audit.py --junitxml=NEW_PRIVATE_PATH",
+    "exit_code": 0,
+    "total": 29,
+    "failures": 0,
+    "errors": 0,
+    "new_focused": [
+      {
+        "name": "test_closed_window_endpoint_bound_does_not_require_phase_alignment",
+        "result": "passed",
+        "time_s": 0.007
+      },
+      {
+        "name": "test_history_binding_capacity_and_cadence_metadata_cannot_be_forged",
+        "result": "passed",
+        "time_s": 0.001
+      },
+      {
+        "name": "test_history_cadence_binding_is_exact_bounded_and_opt_out_is_unchanged",
+        "result": "passed",
+        "time_s": 0.0
+      },
+      {
+        "name": "test_history_capacity_change_preserves_original_three_leg_encounter_rule",
+        "result": "passed",
+        "time_s": 0.336
+      },
+      {
+        "name": "test_history_profile_rejects_wrong_fixture_missing_exposure_or_bad_actual_cadence",
+        "result": "passed",
+        "time_s": 0.001
+      },
+      {
+        "name": "test_new_capacity_actual_overflow_remains_pending_even_after_certificate",
+        "result": "passed",
+        "time_s": 0.318
+      },
+      {
+        "name": "test_new_history_binding_preserves_exact_json_types_without_changing_legacy_equality",
+        "result": "passed",
+        "time_s": 0.001
+      },
+      {
+        "name": "test_same_75hz_window_overflows_legacy_but_fits_explicit_cadence_history",
+        "result": "passed",
+        "time_s": 0.648
+      }
+    ],
+    "coverage": [
+      "same 2251 actual 75Hz source snapshots / 30s: original cap truncates and returns PENDING; new cap preserves completed no-encounter false",
+      "complete original approach/near/depart remains observed true at original 3m rule",
+      "2252 closed-lattice endpoint bound fits without phase alignment",
+      "over 2254 actual samples stays PENDING even after a prior valid encounter witness",
+      "unknown/missing profile, incorrect cadence, nonfinite/bool cadence reject",
+      "altered binding capacity/rate/profile digest rejects",
+      "new exact JSON metadata types reject Boolean/numeric lookalikes; opt-out equality unchanged"
+    ]
+  },
+  "evidence": {
+    "source": [
+      {
+        "path": "/home/eric/wjg/d1max-system/simulation/isaacsim/collision_audit.py",
+        "bytes": 39336,
+        "sha256": "95dd9f9e999a7eb7399dfdfcf990494874b5d59aff2394cdb041202f54676e00"
+      },
+      {
+        "path": "/home/eric/wjg/d1max-system/simulation/isaacsim/test_collision_audit.py",
+        "bytes": 32374,
+        "sha256": "a499bc7ca9cc29d5ddc1ad5a5598268962173150b864ff47184996e2b8c02b05"
+      }
+    ],
+    "tests_xml": {
+      "public_path": "actor_encounter_history_capacity_evidence/tests.xml",
+      "path": "/home/eric/wjg/d1max-build-isaac/encounter_history_capacity_offline_tests_final.xml",
+      "bytes": 5281,
+      "sha256": "1dad4050a0b04ae0369476af9efe1b6c8dbf0c87978071c5533c035388debaa5"
+    },
+    "test_output": {
+      "public_path": "actor_encounter_history_capacity_evidence/test_output.txt",
+      "path": "/home/eric/wjg/d1max-build-isaac/encounter_history_capacity_offline_tests_final.log",
+      "bytes": 207,
+      "sha256": "f16b3c66da45e63b8160ad221662d2edb7383ec03ee7b37394991f9a648f17ef"
+    },
+    "old_v63_public_record": {
+      "public_path": "campus_restart_v63_goal_success_encounter_pending.json",
+      "path": "/home/eric/wjg/d1max-system/simulation/isaacsim/verification/20261007/campus_restart_v63_goal_success_encounter_pending.json",
+      "bytes": 23836,
+      "sha256": "d72253da5886ab8b1faea303e3482ae9b8ae245aa4d47a9555a4369eef1b982c"
+    }
+  },
+  "limitations": [
+    "No old scene, original raw measurement, old audit or case verdict was modified.",
+    "v63 original required encounter remains PENDING under its sealed 2048 cap, despite independent goal and native domain/STOP success.",
+    "No Kit, ROS, native build or new navigation replay was run for this change.",
+    "New opt-in must be explicitly authored, sealed and run in a new candidate; this offline result does not certify encounter or goal success in that candidate.",
+    "Actual excess sampling or missing/faulted geometry still invalidates the encounter conclusion."
+  ]
+}

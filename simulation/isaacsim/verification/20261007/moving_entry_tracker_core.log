@@ -1,0 +1,123 @@
+Running main() from /opt/ros/humble/src/gtest_vendor/src/gtest_main.cc
+[==========] Running 57 tests from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 57 tests from Tracker
+[ RUN      ] Tracker.DoesNotStartWithoutExplicitTask
+[       OK ] Tracker.DoesNotStartWithoutExplicitTask (0 ms)
+[ RUN      ] Tracker.RuntimeRequiresVersionedControlContractEvenIfStandalone
+[       OK ] Tracker.RuntimeRequiresVersionedControlContractEvenIfStandalone (0 ms)
+[ RUN      ] Tracker.OutOfOrderAndDuplicateOdomCannotRewindOrRefreshSource
+[       OK ] Tracker.OutOfOrderAndDuplicateOdomCannotRewindOrRefreshSource (1 ms)
+[ RUN      ] Tracker.LegacyMapCorrectionChangesCommandWithoutPhysicalMotion
+[       OK ] Tracker.LegacyMapCorrectionChangesCommandWithoutPhysicalMotion (0 ms)
+[ RUN      ] Tracker.UsesVendorCurveAndOutputsBoundedSI
+[       OK ] Tracker.UsesVendorCurveAndOutputsBoundedSI (0 ms)
+[ RUN      ] Tracker.ControlDiagnosticsDistinguishClockBranchesAndDoNotAdvanceTheController
+[       OK ] Tracker.ControlDiagnosticsDistinguishClockBranchesAndDoNotAdvanceTheController (0 ms)
+[ RUN      ] Tracker.AcceptedRouteYawToleranceRangeIsNotSilentlyRejectedAtAlignment
+[       OK ] Tracker.AcceptedRouteYawToleranceRangeIsNotSilentlyRejectedAtAlignment (0 ms)
+[ RUN      ] Tracker.SessionGenerationAndIdAreEnforced
+[       OK ] Tracker.SessionGenerationAndIdAreEnforced (1 ms)
+[ RUN      ] Tracker.EmptyInvalidOrWrongFrameCandidateDoesNotWithdrawIncumbent
+[       OK ] Tracker.EmptyInvalidOrWrongFrameCandidateDoesNotWithdrawIncumbent (0 ms)
+[ RUN      ] Tracker.CandidateDiagnosticsSeparateFormatClockAndGeometryWithoutChangingAdmission
+[       OK ] Tracker.CandidateDiagnosticsSeparateFormatClockAndGeometryWithoutChangingAdmission (0 ms)
+[ RUN      ] Tracker.ExpiredPendingCandidateDoesNotWithdrawOrRestampAcceptedCurve
+[       OK ] Tracker.ExpiredPendingCandidateDoesNotWithdrawOrRestampAcceptedCurve (0 ms)
+[ RUN      ] Tracker.OdomFramesQuaternionAndSpeedCannotBypassSafety
+[       OK ] Tracker.OdomFramesQuaternionAndSpeedCannotBypassSafety (1 ms)
+[ RUN      ] Tracker.StaleOdometryStopsAndRevokesCurrentTrajectory
+[       OK ] Tracker.StaleOdometryStopsAndRevokesCurrentTrajectory (0 ms)
+[ RUN      ] Tracker.HeartbeatTimeoutCannotResumeSameGeneration
+[       OK ] Tracker.HeartbeatTimeoutCannotResumeSameGeneration (0 ms)
+[ RUN      ] Tracker.CancelCannotResumeSameGeneration
+[       OK ] Tracker.CancelCannotResumeSameGeneration (0 ms)
+[ RUN      ] Tracker.InvalidMutableHeartbeatIsNotAccepted
+[       OK ] Tracker.InvalidMutableHeartbeatIsNotAccepted (0 ms)
+[ RUN      ] Tracker.RotatesAndFreezesBeforeForwardMotion
+[       OK ] Tracker.RotatesAndFreezesBeforeForwardMotion (0 ms)
+[ RUN      ] Tracker.OccupiedForwardTurnRequestsControlledStopBeforePureMeasuredTurn
+[       OK ] Tracker.OccupiedForwardTurnRequestsControlledStopBeforePureMeasuredTurn (0 ms)
+[ RUN      ] Tracker.TurnFirstNeedsDistinctMeasuredAlignmentSamplesAndHasHysteresis
+[       OK ] Tracker.TurnFirstNeedsDistinctMeasuredAlignmentSamplesAndHasHysteresis (0 ms)
+[ RUN      ] Tracker.TurnRestUsesRecordLimitsAndFreshMovingSampleRestartsDuration
+[       OK ] Tracker.TurnRestUsesRecordLimitsAndFreshMovingSampleRestartsDuration (0 ms)
+[ RUN      ] Tracker.TurnRestSampleMinimumCannotBeSatisfiedByTimerOrReplayedSource
+[       OK ] Tracker.TurnRestSampleMinimumCannotBeSatisfiedByTimerOrReplayedSource (0 ms)
+[ RUN      ] Tracker.WrongOldZeroFeedbackCannotRequestManeuverAndStaleBodyCannotTurn
+[       OK ] Tracker.WrongOldZeroFeedbackCannotRequestManeuverAndStaleBodyCannotTurn (0 ms)
+[ RUN      ] Tracker.SameTaskCandidateAndTemporaryProofHoldDoNotResetTurnPhase
+[       OK ] Tracker.SameTaskCandidateAndTemporaryProofHoldDoNotResetTurnPhase (1 ms)
+[ RUN      ] Tracker.OccupiedAlignedEntryWaitsWithoutRepeatedForwardAndRetainsTask
+[       OK ] Tracker.OccupiedAlignedEntryWaitsWithoutRepeatedForwardAndRetainsTask (0 ms)
+[ RUN      ] Tracker.OccupiedInPlaceAlignTurnWaitsForAnotherEntryInsteadOfRepeatingIt
+[       OK ] Tracker.OccupiedInPlaceAlignTurnWaitsForAnotherEntryInsteadOfRepeatingIt (0 ms)
+[ RUN      ] Tracker.InPlaceTurnFeedbackOutsideAligningCannotRequestManeuver
+[       OK ] Tracker.InPlaceTurnFeedbackOutsideAligningCannotRequestManeuver (0 ms)
+[ RUN      ] Tracker.OnlyAdmittedReplacementCanRetryBlockedEntryAndStillMustStopAndAlign
+[       OK ] Tracker.OnlyAdmittedReplacementCanRetryBlockedEntryAndStillMustStopAndAlign (0 ms)
+[ RUN      ] Tracker.RealProgressAfterAlignedEntryDistinguishesANewObstacle
+[       OK ] Tracker.RealProgressAfterAlignedEntryDistinguishesANewObstacle (0 ms)
+[ RUN      ] Tracker.RealSplineCurvatureConstrainsForwardSpeedWithoutGuessingLateralAcceleration
+[       OK ] Tracker.RealSplineCurvatureConstrainsForwardSpeedWithoutGuessingLateralAcceleration (0 ms)
+[ RUN      ] Tracker.FutureBendIsReachedThroughBrakingEnvelopeNotWholeCurveMinimum
+[       OK ] Tracker.FutureBendIsReachedThroughBrakingEnvelopeNotWholeCurveMinimum (0 ms)
+[ RUN      ] Tracker.SpatialPlanarProfileRequiresSupportAndDefaultsToLegacy
+[       OK ] Tracker.SpatialPlanarProfileRequiresSupportAndDefaultsToLegacy (0 ms)
+[ RUN      ] Tracker.QuadraticPlanarDirectionBoundCoversInteriorAndZeroSpeedEnds
+[       OK ] Tracker.QuadraticPlanarDirectionBoundCoversInteriorAndZeroSpeedEnds (0 ms)
+[ RUN      ] Tracker.SpatialPlanarBrakingUsesLocalHorizontalTravelAndPreservesVerticalZeros
+[       OK ] Tracker.SpatialPlanarBrakingUsesLocalHorizontalTravelAndPreservesVerticalZeros (0 ms)
+[ RUN      ] Tracker.SlopedCurvedSpatialProfileKeepsLocalSpeedYawAndBrakingBounds
+[       OK ] Tracker.SlopedCurvedSpatialProfileKeepsLocalSpeedYawAndBrakingBounds (0 ms)
+[ RUN      ] Tracker.BrakingEnvelopeCannotBorrowVerticalDistanceOrIgnoreCloseTurn
+[       OK ] Tracker.BrakingEnvelopeCannotBorrowVerticalDistanceOrIgnoreCloseTurn (0 ms)
+[ RUN      ] Tracker.NormalCurvatureControlNeverHardClipsThroughTheAccelerationLimit
+[       OK ] Tracker.NormalCurvatureControlNeverHardClipsThroughTheAccelerationLimit (0 ms)
+[ RUN      ] Tracker.PoseJumpIntoUnreachableCurveSpeedRequestsExplicitStopAndPreservesAppliedGeometry
+[       OK ] Tracker.PoseJumpIntoUnreachableCurveSpeedRequestsExplicitStopAndPreservesAppliedGeometry (0 ms)
+[ RUN      ] Tracker.DoesNotChaseAPlanInADifferentHeightOrFarAway
+[       OK ] Tracker.DoesNotChaseAPlanInADifferentHeightOrFarAway (0 ms)
+[ RUN      ] Tracker.GoalCompletionStopsAndRemainsTerminal
+[       OK ] Tracker.GoalCompletionStopsAndRemainsTerminal (0 ms)
+[ RUN      ] Tracker.TrajectoryLeaseStopsEvenWithFreshTaskAndOdom
+[       OK ] Tracker.TrajectoryLeaseStopsEvenWithFreshTaskAndOdom (1 ms)
+[ RUN      ] Tracker.ClockJumpStopsInsteadOfExtrapolating
+[       OK ] Tracker.ClockJumpStopsInsteadOfExtrapolating (0 ms)
+[ RUN      ] Tracker.PausedRosClockCannotKeepAdvancingAPlan
+[       OK ] Tracker.PausedRosClockCannotKeepAdvancingAPlan (0 ms)
+[ RUN      ] Tracker.FutureTrajectoryDoesNotExecuteEarly
+[       OK ] Tracker.FutureTrajectoryDoesNotExecuteEarly (0 ms)
+[ RUN      ] Tracker.ConfigurationCannotRelaxHardCeiling
+[       OK ] Tracker.ConfigurationCannotRelaxHardCeiling (0 ms)
+[ RUN      ] Tracker.StationaryRecordThresholdsAreBoundedAndStricterValuesRemainValid
+[       OK ] Tracker.StationaryRecordThresholdsAreBoundedAndStricterValuesRemainValid (0 ms)
+[ RUN      ] Tracker.SameXYOnAnotherFloorDoesNotCompleteOrResume
+[       OK ] Tracker.SameXYOnAnotherFloorDoesNotCompleteOrResume (0 ms)
+[ RUN      ] Tracker.GoalRequiresHeightToleranceWithinSingleFloorEnvelope
+[       OK ] Tracker.GoalRequiresHeightToleranceWithinSingleFloorEnvelope (0 ms)
+[ RUN      ] Tracker.GoalThresholdsMatchMeasuredReferenceXYZCompletion
+[       OK ] Tracker.GoalThresholdsMatchMeasuredReferenceXYZCompletion (0 ms)
+[ RUN      ] Tracker.ReplansCannotMoveTheSingleFloorHeightAnchor
+[       OK ] Tracker.ReplansCannotMoveTheSingleFloorHeightAnchor (0 ms)
+[ RUN      ] Tracker.EntireSplineHeightHullIsCheckedBeforeExecution
+[       OK ] Tracker.EntireSplineHeightHullIsCheckedBeforeExecution (0 ms)
+[ RUN      ] Tracker.IdealSingleFloorClosedLoopReachesGoalWithoutRobot
+[       OK ] Tracker.IdealSingleFloorClosedLoopReachesGoalWithoutRobot (0 ms)
+[ RUN      ] Tracker.LocalEndpointIsNotTheGlobalGoal
+[       OK ] Tracker.LocalEndpointIsNotTheGlobalGoal (0 ms)
+[ RUN      ] Tracker.ValidReplanPreservesLinearAndAngularAccelerationHistory
+[       OK ] Tracker.ValidReplanPreservesLinearAndAngularAccelerationHistory (0 ms)
+[ RUN      ] Tracker.InvalidCandidateRetainsEstablishedCurveAndLimiter
+[       OK ] Tracker.InvalidCandidateRetainsEstablishedCurveAndLimiter (0 ms)
+[ RUN      ] Tracker.ForwardOnlyControllerSteersTowardBothSidesOfParallelPath
+[       OK ] Tracker.ForwardOnlyControllerSteersTowardBothSidesOfParallelPath (0 ms)
+[ RUN      ] Tracker.ParallelOffsetsConvergeWithReplansAndBoundedForwardOnlyCommands
+[       OK ] Tracker.ParallelOffsetsConvergeWithReplansAndBoundedForwardOnlyCommands (2 ms)
+[ RUN      ] Tracker.BoundedSpatialSearchDoesNotJumpToDistantSplineEnd
+[       OK ] Tracker.BoundedSpatialSearchDoesNotJumpToDistantSplineEnd (0 ms)
+[----------] 57 tests from Tracker (7 ms total)
+
+[----------] Global test environment tear-down
+[==========] 57 tests from 1 test suite ran. (7 ms total)
+[  PASSED  ] 57 tests.
