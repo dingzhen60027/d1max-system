@@ -591,6 +591,129 @@ class CollisionStageTests(unittest.TestCase):
             verifier.verify()
         verifier.close()
 
+    def scripted_actor_stage(self):
+        from pxr import Gf, UsdGeom, UsdPhysics
+        from test_dynamic_collision import ACTOR
+        actor = copy.deepcopy(ACTOR)
+        actor.update(start_time_s=0., end_time_s=4., trajectory=dict(
+            mode="once", interpolation="c1_smoothstep", waypoints=[
+                dict(time_s=0., position=[-4., -3., 0.], yaw=0.),
+                dict(time_s=2., position=[-2., -3., 0.], yaw=math.pi/2),
+                dict(time_s=4., position=[-4., -3., 0.], yaw=0.)]),
+            future_motion_contract=dict(schema=1, kind="sealed_c1_smoothstep_kinematic_v1",
+                source_scope="isolated_simulation_enforced_kinematic_script",
+                actual_pose_error_bound_m=.0001, actual_tilt_error_bound_rad=.000001,
+                physics_dt_ns=2_000_000))
+        stage = self.stage();spec = copy.deepcopy(SPEC);spec["dynamic_actors"] = [actor]
+        UsdGeom.Xform.Define(stage, "/World/Dynamic")
+        root = UsdGeom.Xform.Define(stage, "/World/Dynamic/person").GetPrim()
+        UsdPhysics.RigidBodyAPI.Apply(root).CreateKinematicEnabledAttr(True)
+        transform = UsdGeom.Xformable(root)
+        translate = transform.AddTranslateOp();translate.Set(Gf.Vec3d(-4., -3., 0.))
+        rotate = transform.AddRotateZOp();rotate.Set(0.)
+        cube = UsdGeom.Cube.Define(stage, "/World/Dynamic/person/torso");cube.CreateSizeAttr(1.)
+        child_transform = UsdGeom.Xformable(cube)
+        child_transform.AddTranslateOp().Set(Gf.Vec3d(0., 0., .9))
+        child_transform.AddScaleOp(UsdGeom.XformOp.PrecisionDouble).Set(Gf.Vec3d(.5, .5, 1.8))
+        UsdPhysics.CollisionAPI.Apply(cube.GetPrim()).CreateCollisionEnabledAttr(True)
+        return stage, spec, root, translate, rotate
+
+    def test_scripted_actor_original_world_script_and_pose_notice_cache_remain_valid(self):
+        from world_builder import update_actors
+        stage, spec, root, _, _ = self.scripted_actor_stage()
+        verifier = truth.StageGeometryVerifier(stage, spec)
+        original = verifier.verify()
+        for source in (0., 1., 2., 3., 4., 6.):
+            update_actors(stage, spec, source)
+            self.assertEqual(truth.verify_stage_geometry(stage, spec), original)
+            self.assertEqual(verifier.verify(), original)
+        self.assertEqual(verifier.full_audits, 1)
+        verifier.close()
+
+    def test_scripted_actor_parent_pivot_can_preserve_current_pose_but_redirect_future(self):
+        from pxr import Gf, UsdGeom
+        from world_builder import actor_pose, update_actors
+        stage, spec, root, _, _ = self.scripted_actor_stage()
+        verifier = truth.StageGeometryVerifier(stage, spec);verifier.verify()
+        pivot = Gf.Vec3d(-4., -3., 0.)
+        around_pivot = (Gf.Matrix4d(1.).SetTranslate(-pivot)
+                        * Gf.Matrix4d(1.).SetRotate(Gf.Rotation(Gf.Vec3d(0., 0., 1.), 90.))
+                        * Gf.Matrix4d(1.).SetTranslate(pivot))
+        UsdGeom.Xformable(stage.GetPrimAtPath("/World/Dynamic")).AddTransformOp().Set(around_pivot)
+        current = UsdGeom.XformCache().GetLocalToWorldTransform(root).Transform(Gf.Vec3d(0.))
+        self.assertLess((current-pivot).GetLength(), 1e-12)
+        with self.assertRaisesRegex(ValueError, "scripted_actor_parent_world_transform_changed"):
+            verifier.verify()
+        update_actors(stage, spec, 1.)
+        actual_future = UsdGeom.XformCache().GetLocalToWorldTransform(root).Transform(Gf.Vec3d(0.))
+        expected_future = Gf.Vec3d(*actor_pose(spec["dynamic_actors"][0], 1.)["position"])
+        self.assertGreater((actual_future-expected_future).GetLength(), 1.)
+        verifier.close()
+
+    def test_scripted_actor_parent_or_world_time_samples_revoke_even_with_identity_default(self):
+        from pxr import Gf, Usd, UsdGeom
+        for path in ("/World/Dynamic", "/World"):
+            with self.subTest(path=path):
+                stage, spec, root, _, _ = self.scripted_actor_stage()
+                verifier = truth.StageGeometryVerifier(stage, spec);verifier.verify()
+                op = UsdGeom.Xformable(stage.GetPrimAtPath(path)).AddTranslateOp()
+                op.Set(Gf.Vec3d(0.));op.Set(Gf.Vec3d(0.), Usd.TimeCode(1.))
+                with self.assertRaisesRegex(ValueError, "scripted_actor_ancestor_time_samples"):
+                    truth._audit_scripted_actor_transform(root, UsdGeom.XformCache())
+                expected = ("time_varying_static_collider" if path == "/World"
+                            else "scripted_actor_ancestor_time_samples")
+                with self.assertRaisesRegex(ValueError, expected):
+                    verifier.verify()
+                verifier.close()
+
+    def test_scripted_actor_root_extra_inverse_reset_order_and_time_samples_revoke(self):
+        from pxr import Gf, Usd, UsdGeom
+        for change in ("extra", "inverse", "reset", "order", "order_time", "pose_time"):
+            with self.subTest(change=change):
+                stage, spec, root, translate, rotate = self.scripted_actor_stage()
+                verifier = truth.StageGeometryVerifier(stage, spec);verifier.verify()
+                transform = UsdGeom.Xformable(root)
+                if change == "extra":
+                    transform.AddRotateZOp(opSuffix="extra").Set(0.)
+                elif change == "inverse":
+                    transform.AddTranslateOp(isInverseOp=True)
+                elif change == "reset":
+                    transform.SetResetXformStack(True)
+                elif change == "order":
+                    transform.SetXformOpOrder([rotate, translate])
+                    # At current yaw zero the measured root position still
+                    # agrees; the future rotateZ would rotate its translation.
+                    current = UsdGeom.XformCache().GetLocalToWorldTransform(root).Transform(Gf.Vec3d(0.))
+                    self.assertEqual(current, Gf.Vec3d(-4., -3., 0.))
+                elif change == "order_time":
+                    transform.GetXformOpOrderAttr().Set(["xformOp:translate", "xformOp:rotateZ"], Usd.TimeCode(1.))
+                else:
+                    translate.Set(Gf.Vec3d(-4., -3., 0.), Usd.TimeCode(1.))
+                with self.assertRaisesRegex(ValueError, "scripted_actor_root_transform_contract_changed"):
+                    verifier.verify()
+                verifier.close()
+
+    def test_generic_actor_parent_transform_keeps_original_non_scripted_domain(self):
+        from pxr import Gf, UsdGeom
+        stage, spec, _, _, _ = self.scripted_actor_stage()
+        spec["dynamic_actors"][0].pop("future_motion_contract")
+        original = truth.verify_stage_geometry(stage, spec)
+        UsdGeom.Xformable(stage.GetPrimAtPath("/World/Dynamic")).AddTranslateOp().Set(Gf.Vec3d(1., 2., 0.))
+        self.assertEqual(truth.verify_stage_geometry(stage, spec), original)
+
+    def test_scripted_actor_root_new_enabled_collider_revokes_complete_shape_registry(self):
+        from pxr import UsdGeom, UsdPhysics
+        stage, spec, root, _, _ = self.scripted_actor_stage()
+        verifier = truth.StageGeometryVerifier(stage, spec)
+        original = verifier.verify()
+        rogue = UsdGeom.Cube.Define(stage, str(root.GetPath()) + "/rogue").GetPrim()
+        enabled = UsdPhysics.CollisionAPI.Apply(rogue).CreateCollisionEnabledAttr(False)
+        self.assertEqual(verifier.verify(), original)
+        enabled.Set(True)
+        with self.assertRaisesRegex(ValueError, "unlisted_static_collider"):
+            verifier.verify()
+        verifier.close()
+
     def test_new_instanced_collision_child_cannot_evade_attestation(self):
         from pxr import Usd, UsdGeom, UsdPhysics
         with tempfile.TemporaryDirectory() as folder:

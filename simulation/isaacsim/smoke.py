@@ -12,6 +12,24 @@ from pathlib import Path
 import time
 
 
+def trace_wire_value(value):
+    """Lossless JSON view of received ROS fields, including full 3D splines.
+
+    This is read-only evidence. It never normalizes a quaternion, truncates a
+    curve, replaces a source stamp, or constructs an execution message.
+    """
+    if hasattr(value, 'get_fields_and_field_types'):
+        return {field: trace_wire_value(getattr(value, field))
+            for field in value.get_fields_and_field_types()}
+    if isinstance(value, (str, bool, int, float)) or value is None:
+        return value
+    if hasattr(value, 'tolist'):
+        return trace_wire_value(value.tolist())
+    if isinstance(value, dict):
+        return {key: trace_wire_value(item) for key, item in value.items()}
+    return [trace_wire_value(item) for item in value]
+
+
 def navigation_goal(session, xyz, source_stamp):
     from d1max_navigation_bt_interfaces.action import Navigate
     command=Navigate.Goal(schema_version=2, goal_kind='3d', has_goal_yaw=False,
@@ -186,7 +204,8 @@ def main():
     from rclpy.action import ActionClient
     from d1max_planning_interfaces.msg import (LocalNavigationState, MotionDemand,
         ExecutionPermit, StopReport, ExecutionCommitAck, MotionValidation,
-        TrajectoryValidation, RouteProgress)
+        TrajectoryValidation, RouteProgress, TaggedBspline, ReferenceProposal,
+        TrackingProgress, ExecutionHandoffGrant, TrackerGeometryReceipt)
     from d1max_navigation_bt_interfaces.action import Navigate
     from d1max_navigation_bt_interfaces.srv import ConfirmExecution
     from std_msgs.msg import String
@@ -260,6 +279,18 @@ def main():
                     lambda m,n=name:self.trace_message(n,m), 64)
             self.create_subscription(RouteProgress, prefix+'execution/route_progress',
                 self.route_progress, 64)
+            # Keep the complete received control points/knots and fixed entry
+            # identity. Both original native and execution spline topics are
+            # observed; only the installed receipt/ACK identifies active use.
+            for name, kind, topic in (
+                    ('native_spline', TaggedBspline, 'scan_tagged_bspline'),
+                    ('execution_spline', TaggedBspline, 'execution_bspline'),
+                    ('reference_proposal', ReferenceProposal, 'execution/reference_proposal'),
+                    ('tracking_progress', TrackingProgress, 'tracking_progress'),
+                    ('handoff_grant', ExecutionHandoffGrant, 'execution/handoff_grant'),
+                    ('geometry_receipt', TrackerGeometryReceipt, 'execution/tracker_geometry_receipt')):
+                self.create_subscription(kind, prefix+topic,
+                    lambda m,n=name:self.trace(n, trace_wire_value(m)), 64)
             self.create_subscription(String, prefix+'bt/status', self.bt_status,
                 QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL))
             self.create_subscription(String, '/d1max/isaacsim/status', self.bridge_status, 10)
@@ -280,7 +311,10 @@ def main():
             self.control_trace.flush()
 
         def trace_message(self, kind, message):
-            data = {}
+            # The flat fields preserve earlier audit compatibility; full wire
+            # evidence binds ACK candidate/incumbent identities, commit sequence
+            # and actual applied output without inferring them from a heartbeat.
+            data = dict(wire=trace_wire_value(message))
             for field in ('execution_id', 'trajectory_id', 'control_epoch',
                     'sequence', 'permit_sequence', 'validation_sequence',
                     'trajectory_validation_sequence', 'motion_validation_sequence',
@@ -389,6 +423,15 @@ def main():
 
         def bt_status(self, message):
             self.status = json.loads(message.data)
+            fields = ('execution_id', 'control_epoch', 'execution_progress_reason',
+                'execution_blocked_age_s', 'execution_progress_credit_samples',
+                'execution_last_progress_source_s', 'execution_last_admitted_motion_source_s',
+                'execution_progress_body_source_ns', 'writer_commit_sequence',
+                'handoff_reason', 'prepared_handoff_id')
+            data = {field:self.status[field] for field in fields if field in self.status}
+            if data != self.last_component_trace.get('bt_progress'):
+                self.trace('bt_progress', data)
+                self.last_component_trace['bt_progress'] = data
 
         def bridge_status(self, message):
             self.bridge = json.loads(message.data)

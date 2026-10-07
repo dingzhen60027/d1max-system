@@ -102,6 +102,25 @@ def prepare_isaac_session(output, release, map_directory=None, session_id=None, 
                 command_max_yaw_radps=session['max_yaw_radps'],
                 reachable_max_speed_mps=reachable_speed, reachable_max_yaw_radps=reachable_yaw,
                 source_scope='isolated_simulation_physx_measured_model')
+            reference = robot.get('full_xyz_reference_model')
+            if reference is not None:
+                evidence_path = (release/'simulation'/reference['evidence_file']).resolve(strict=True)
+                if not evidence_path.is_relative_to(release/'simulation') or sha(evidence_path) != reference['evidence_sha256']:
+                    raise ValueError('spot_full_xyz_reference_evidence_changed')
+                evidence = json.loads(evidence_path.read_text())
+                reference_cap = float(reference['reference_max_speed_mps'])
+                travel_cap = float(reference['measured_travel_max_speed_mps'])
+                observed = float(evidence['observed_max_full_xyz_speed_mps'])
+                if (evidence.get('kind') != 'isolated_spot_full_xyz_reference_admission_domain_v1'
+                        or evidence.get('physical_acceptance') is not False
+                        or not 0 < observed <= min(reference_cap, travel_cap) <= max(reference_cap, travel_cap) <= .50
+                        or evidence['reference_max_speed_mps'] != reference_cap
+                        or evidence['measured_travel_max_speed_mps'] != travel_cap):
+                    raise ValueError('invalid_spot_full_xyz_reference_evidence')
+                braking['isolated_full_xyz_reference_model'] = dict(schema=1, kind='official_spot_physx',
+                    reference_max_speed_mps=reference_cap, measured_travel_max_speed_mps=travel_cap,
+                    observed_max_full_xyz_speed_mps=observed, evidence_sha256=reference['evidence_sha256'],
+                    source_scope='isolated_simulation_physx_measured_model')
         braking_path.write_text(json.dumps(braking, indent=2)+'\n')
         session['execution_braking_model_sha256'] = sha(braking_path)
         session['input_hashes'][str(braking_path)] = sha(braking_path)
@@ -162,7 +181,7 @@ def prepare_isaac_session(output, release, map_directory=None, session_id=None, 
         dynamic_topic = '/d1max/localization/perception/dynamic_occupancy'
         dynamic_params = dict(dynamic_oracle_registry_sha256=registry_digest(registry),
             dynamic_oracle_actor_ids=[a['id'] for a in registry], dynamic_oracle_topic=dynamic_topic,
-            projected_ray_exact_pair=True,
+            projected_ray_exact_pair=True, dynamic_hit_provenance_enabled=True,
             static_prior_support_contact_enabled=True,
             static_prior_support_floor_z=float(spec['floor']['z']), static_prior_support_penetration_m=.02,
             static_prior_support_floor_endpoint_error_bound_m=float(spec['flat_support_contact']['floor_endpoint_error_bound_m']))
@@ -175,6 +194,8 @@ def prepare_isaac_session(output, release, map_directory=None, session_id=None, 
         session['dynamic_oracle_contract']['reachable_horizon_ns'] = 6_000_000_000
         session['dynamic_oracle_contract']['maximum_reachable_horizon_s'] = 6.
         session['dynamic_oracle_contract']['message_source_lifetime_s'] = .30
+        session['dynamic_oracle_contract']['native_hit_provenance'] = dict(schema=1,
+            kind='physx_exact_hit_prim_ordinal_v1', point_step=72, registry_sha256=registry_digest(registry))
         session['static_collision_prior_contract'].update(body_envelope_attestation_required=True,
             body_envelope_registry_sha256=hashlib.sha256(canonical(spec['robot_collision_registry'])).hexdigest(),
             body_envelope=dict(radius=radius, offset=offset, above=above_base,
@@ -208,10 +229,13 @@ def prepare_isaac_session(output, release, map_directory=None, session_id=None, 
     if quadruped:
         updates['scan.yaml'].update({'grid_map.'+k:v for k,v in dynamic_params.items()})
         updates['scan.yaml'].update({'manager.max_vel':session['max_speed_mps'],
+            'manager.fit_low_speed_entry_velocity':True,
             'optimization.max_vel':session['max_speed_mps']})
         updates['tracker.yaml'] = dict(max_speed=session['max_speed_mps'], max_yaw_rate=session['max_yaw_radps'],
-            spatial_planar_braking_envelope=True)
-        updates['safety.yaml'] = dict(max_speed=session['max_speed_mps'], max_yaw=session['max_yaw_radps'])
+            spatial_planar_braking_envelope=True, spatial_control_lookahead=True,
+            execution_braking_model_record=session['execution_braking_model_record'])
+        updates['safety.yaml'] = dict(max_speed=session['max_speed_mps'], max_yaw=session['max_yaw_radps'],
+            maximum_isaac_actor_id=len(registry))
         # Carry the exact geometric certificate to the plant before sealing.
         session['isaac_bridge_contract']['body_envelope'] = session['static_collision_prior_contract']['body_envelope']
     for path in directory.glob('*.yaml'):

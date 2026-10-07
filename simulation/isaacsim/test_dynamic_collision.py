@@ -2,7 +2,7 @@
 import copy
 import math
 import unittest
-from dynamic_collision import actor_registry, oracle_payload, shape_radius, voxel_veto, certify_robot_in_body_envelope
+from dynamic_collision import actor_registry, oracle_payload, shape_radius, voxel_veto, region_voxel_intersects, certify_robot_in_body_envelope
 
 
 ACTOR = dict(id="person", enabled=True, max_linear_speed_mps=1., max_linear_acceleration_mps2=2.,
@@ -50,6 +50,8 @@ class DynamicCollisionTests(unittest.TestCase):
                     for z in [0., 1.8]:
                         point = [.3 + x * math.cos(yaw) - y * math.sin(yaw), x * math.sin(yaw) + y * math.cos(yaw), z]
                         self.assertTrue(all(a <= p <= b for a, p, b in zip(region["min"], point, region["max"])))
+                        self.assertLessEqual(math.sqrt(sum(p * p for p in point)), region["radius"])
+                        self.assertEqual(voxel_veto(payload, [math.floor(p / .05) for p in point]), 2)
 
     def test_reachable_duration_covers_complete_reaction_and_stop_without_renewing_lease(self):
         from dynamic_collision import reachable_actor_region
@@ -81,6 +83,53 @@ class DynamicCollisionTests(unittest.TestCase):
         packet = dict(actors=[dict(regions=[dict(state=2, min=[0., 0., 0.], max=[.1, .1, 1.])])])
         self.assertEqual(voxel_veto(packet, [-1, 0, 0]), 2)
         self.assertEqual(voxel_veto(packet, [2, 0, 0]), 2)
+
+    def test_sphere_removes_only_unreachable_box_corners_and_keeps_full_xyz_contact(self):
+        region = dict(state=2, min=[-1., -1., -1.], max=[1., 1., 1.],
+                      enclosure="sphere_v1", center=[0., 0., 0.], radius=1.)
+        packet = dict(actors=[dict(regions=[region])])
+        for cell in [[20, 0, 0], [-21, 0, 0], [0, 0, 20], [0, 0, -21]]:
+            self.assertEqual(voxel_veto(packet, cell), 2, cell)
+        self.assertEqual(voxel_veto(packet, [19, 19, 19]), 0)
+        self.assertEqual(voxel_veto(packet, [0, 0, 19]), 2)
+        legacy = {key: value for key, value in region.items() if key not in ("enclosure", "center", "radius")}
+        self.assertEqual(voxel_veto(dict(actors=[dict(regions=[legacy])]), [19, 19, 19]), 2)
+        # Negative offset and a non-grid sphere boundary retain closed tangency.
+        offset = [-43.123, -17.719, .387]
+        shifted = dict(region, center=offset, min=[v - 1. for v in offset], max=[v + 1. for v in offset])
+        self.assertTrue(region_voxel_intersects(shifted, [offset[0] + 1., offset[1], offset[2]],
+            [offset[0] + 1.05, offset[1] + .05, offset[2] + .05]))
+
+    def test_v31_false_corner_is_outside_original_complete_six_second_sphere(self):
+        region = dict(state=2, center=[0., -12.808781623840332, 0.], radius=7.166098359546661,
+                      enclosure="sphere_v1")
+        region["min"] = [v - region["radius"] for v in region["center"]]
+        region["max"] = [v + region["radius"] for v in region["center"]]
+        packet = dict(actors=[dict(regions=[region])])
+        self.assertEqual(voxel_veto(packet, [-144, -113, -1]), 0)
+        self.assertEqual(voxel_veto(packet, [-120, -240, -1]), 2)
+        self.assertEqual(voxel_veto(packet, [0, -257, 140]), 2) # Same sphere retains elevated future volume.
+        self.assertEqual(voxel_veto(packet, [0, -257, 145]), 0)
+
+    def test_declared_sphere_must_be_complete_and_exactly_match_its_outer_box(self):
+        region = dict(state=2, min=[-1., -1., -1.], max=[1., 1., 1.],
+                      enclosure="sphere_v1", center=[0., 0., 0.], radius=1.)
+        for variant in range(11):
+            changed = copy.deepcopy(region)
+            if variant == 0: changed.pop("center")
+            if variant == 1: changed.pop("radius")
+            if variant == 2: changed["enclosure"] = None
+            if variant == 3: changed["enclosure"] = "unproved_shape"
+            if variant == 4: changed["radius"] = 0.
+            if variant == 5: changed["radius"] = math.inf
+            if variant == 6: changed["radius"] = True
+            if variant == 7: changed["center"] = [0., 0.]
+            if variant == 8: changed["max"][0] += .001
+            if variant == 9: changed.pop("enclosure")
+            if variant == 10: changed["center"][0] = math.nan
+            with self.subTest(variant=variant), self.assertRaises((ValueError, KeyError)):
+                # Validate malformed geometry even for a spatially distant query.
+                region_voxel_intersects(changed, [100., 100., 100.], [101., 101., 101.])
 
 
 class BodyEnvelopeTests(unittest.TestCase):

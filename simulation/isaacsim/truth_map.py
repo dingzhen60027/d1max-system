@@ -305,6 +305,36 @@ def geometry_from_spec(spec: dict) -> dict:
         closed_world_bounds=dict(min=list(lower), max=list(upper), semantics="whole_closed_cell_strictly_inside"))
 
 
+def _audit_scripted_actor_transform(actor_prim, cache):
+    """The sealed world-space script must remain the sole root transform.
+
+    Checking one measured pose cannot certify future positions: a reordered
+    root stack or a parent rotation about that pose can agree now and change
+    the next scripted translation. Generic actors retain their former domain.
+    """
+    from pxr import Gf, UsdGeom
+    transform = UsdGeom.Xformable(actor_prim)
+    order = transform.GetXformOpOrderAttr()
+    if (not order or order.GetNumTimeSamples()
+            or list(order.Get() or []) != ["xformOp:translate", "xformOp:rotateZ"]
+            or transform.GetResetXformStack()):
+        raise ValueError("scripted_actor_root_transform_contract_changed:" + str(actor_prim.GetPath()))
+    ops = transform.GetOrderedXformOps()
+    if (any(op.IsInverseOp() or op.GetAttr().GetNumTimeSamples() for op in ops)
+            or len(ops) != 2):
+        raise ValueError("scripted_actor_root_transform_contract_changed:" + str(actor_prim.GetPath()))
+    parent = actor_prim.GetParent()
+    ancestor = parent
+    while ancestor and not ancestor.IsPseudoRoot():
+        if any(attribute.GetNumTimeSamples() for attribute in ancestor.GetAttributes()):
+            raise ValueError("scripted_actor_ancestor_time_samples:" + str(ancestor.GetPath()))
+        ancestor = ancestor.GetParent()
+    # Exact identity is authored by this fixture. A tolerance here would turn
+    # an unsealed parent motion into an additional future position error.
+    if cache.GetLocalToWorldTransform(parent) != Gf.Matrix4d(1.):
+        raise ValueError("scripted_actor_parent_world_transform_changed:" + str(actor_prim.GetPath()))
+
+
 def _audit_stage_geometry(stage, geometry) -> dict:
     """Check all colliders against exact static/robot/actor registrations."""
     from pxr import Gf, Usd, UsdGeom, UsdShade
@@ -355,6 +385,8 @@ def _audit_stage_geometry(stage, geometry) -> dict:
             actor_prim = stage.GetPrimAtPath(actor["path"])
             if not actor_prim or "PhysicsRigidBodyAPI" not in actor_prim.GetAppliedSchemas() or actor_prim.GetAttribute("physics:kinematicEnabled").Get() is not True or actor_prim.GetAttribute("physics:rigidBodyEnabled").Get() is False:
                 raise ValueError("registered_actor_not_dynamic:" + path)
+            if "scripted_motion" in actor:
+                _audit_scripted_actor_transform(actor_prim, cache)
             ancestor = prim
             while ancestor and not ancestor.IsPseudoRoot():
                 if any(stack.layer != root for stack in ancestor.GetPrimStack()):
@@ -470,13 +502,14 @@ class StageGeometryVerifier:
     Actual full-body corners and same-step actor oracle still need validation
     on every source step.
     """
-    def __init__(self, stage, spec):
+    def __init__(self, stage, spec, profile_notices=False):
         from pxr import Sdf, Tf, Usd, UsdGeom, UsdPhysics
         self.stage = stage
         self.geometry = geometry_from_spec(copy.deepcopy(spec))
         self._digest = hashlib.sha256(_canonical(self.geometry)).hexdigest()
         self._dirty, self._serial, self._closed = True, 0, False
         self.full_audits, self.cache_hits = 0, 0
+        self.notice_timings = {}
         self._robot_pose_nodes = {self.geometry["robot_collision_registry"]["root"]}
         root = stage.GetPrimAtPath(self.geometry["robot_collision_registry"]["root"])
         robot_prims = list(Usd.PrimRange(root, Usd.TraverseInstanceProxies())) if root else []
@@ -524,7 +557,21 @@ class StageGeometryVerifier:
                 if (attribute and attribute.GetTypeName() in value_types and not attribute.GetNumTimeSamples()
                         and all(kind in {str(value_type) for value_type in value_types} for kind in authored_types)):
                     self._measurement_attributes[str(attribute.GetPath())] = (attribute.GetTypeName(), prim.GetTypeName(), role, authored_types)
-        self._listener = Tf.Notice.Register(Usd.Notice.ObjectsChanged, self._on_change, stage)
+        self._listener = Tf.Notice.Register(Usd.Notice.ObjectsChanged,
+            self._on_change_timed if profile_notices else self._on_change, stage)
+
+    def _on_change_timed(self, notice, sender):
+        import time
+        started = time.monotonic()
+        try:
+            return self._on_change(notice, sender)
+        finally:
+            elapsed = time.monotonic() - started
+            item = self.notice_timings.setdefault('usd_objects_changed',
+                dict(count=0, total_wall_s=0., max_wall_s=0.))
+            item['count'] += 1
+            item['total_wall_s'] += elapsed
+            item['max_wall_s'] = max(item['max_wall_s'], elapsed)
 
     def _measurement_update_allowed(self, path):
         from pxr import Usd, UsdPhysics

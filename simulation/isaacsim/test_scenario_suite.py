@@ -40,7 +40,14 @@ class ScenarioInputTests(unittest.TestCase):
         contract = suite.verify_prepared(spec, "temporary_door_block")
         self.assertEqual(contract["goals"], [[20., -25., 0.]])
         self.assertEqual(spec["robot"]["initial_pose"][2], .80)
-        self.assertEqual(spec["robot"]["body_reference_height"], .52)
+        self.assertEqual(spec["robot"]["body_reference_height"], .481)
+        # The calibrated standing reference must propagate through a fresh seal;
+        # the real spawn and historical goal annotations remain distinct.
+        envelope = spec["robot"]["offline_collision_envelope"]
+        self.assertAlmostEqual(envelope["bottom_z_offset_m"] + .481, 0.)
+        self.assertAlmostEqual(envelope["top_z_offset_m"] + .481, 1.07)
+        self.assertEqual(spec["robot"]["navigation_envelope"]["above_body_m"],
+                         envelope["top_z_offset_m"])
         self.assertEqual(contract["enabled_actor_ids"], ["door_blocking_cart"])
         self.assertEqual([a["id"] for a in spec["dynamic_actors"] if a["enabled"]], ["door_blocking_cart"])
         self.assertEqual(contract["fixture_goal_annotations_xyz"], [[20, -25, .52]])

@@ -6,6 +6,35 @@ from protocol import (RayAssembler, decode, ray_packets, state_packet, command_p
                       NATIVE_RAY_PHASE, native_ray_metadata, encode)
 
 
+def test_native_actor_identity_reassembly_preserves_ray_and_registry_bytes():
+    import numpy as np
+    xyz=np.arange(7500,dtype=np.float32).reshape(2500,3)*.001
+    rings=np.arange(2500,dtype=np.uint16)%33;actors=np.arange(2500,dtype=np.uint16)%5
+    kwargs=dict(actor_registry_sha256='a'*64)
+    binary=list(ray_packets('epoch-a',7,18_000_000,0,[.2,0.,.2],xyz,rings=rings,actor_ids=actors,**kwargs))
+    scalar=list(ray_packets('epoch-a',7,18_000_000,0,[.2,0.,.2],xyz.tolist(),rings=rings.tolist(),actor_ids=actors.tolist(),**kwargs))
+    assert binary==scalar
+    assembler=RayAssembler();result=None
+    for i in (2,0,1):result=assembler.add(decode(binary[i]),now=.01*i)
+    assert result['sim_time_ns']==18_000_000 and result['actor_registry_sha256']=='a'*64
+    assert result['actor_ids']==actors.tolist() and result['rings']==rings.tolist()
+    np.testing.assert_array_equal(np.asarray(result['xyz'],dtype=np.float32),xyz)
+
+
+@pytest.mark.parametrize('change',['registry','conflicting_actor','missing_actor'])
+def test_native_actor_identity_cannot_change_within_original_scan(change):
+    parts=[decode(data) for data in ray_packets('epoch-a',1,10,0,[0.,0.,0.],
+        [[1.,0.,0.]]*2500,actor_ids=[1]*2500,actor_registry_sha256='a'*64)]
+    assembler=RayAssembler();assembler.add(parts[0],now=0.)
+    altered=dict(parts[1])
+    if change=='registry':altered['actor_registry_sha256']='b'*64
+    if change=='missing_actor':altered.pop('actor_ids')
+    if change=='conflicting_actor':
+        altered=dict(parts[0]);altered['actor_ids']=[0]*len(altered['xyz'])
+    with pytest.raises(ValueError):assembler.add(altered,now=.01)
+    assert not assembler.pending
+
+
 def packets(count=2500, sequence=1):
     return [decode(data) for data in ray_packets('epoch-a', sequence, 100000000,
         0, [.42, 0., .15], [[i*.01, 1., -.15] for i in range(count)])]

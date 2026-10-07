@@ -161,6 +161,65 @@ class QuadrupedGeometryTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             q.VelocityFeedback().update(.02, [0., 0.], [0., float('nan')])
 
+    def test_monotone_candidate_mapping_has_bounded_gain_and_strict_zero(self):
+        servo = q.VelocityFeedback(mode='spot_monotone_measured_v2')
+        desired = np.linspace(-.15, .15, 301)
+        outputs = np.asarray([servo.base_linear_policy_demand(v) for v in desired])
+        self.assertTrue(np.all(np.diff(outputs) > 0.))
+        np.testing.assert_allclose(np.diff(outputs) / np.diff(desired), 2., atol=1e-12)
+        np.testing.assert_allclose(outputs, -outputs[::-1], atol=1e-15)
+        self.assertEqual(servo.base_linear_policy_demand(0.), 0.)
+        # Existing map's nonmonotone .02/.075 reversal must not recur.
+        self.assertLess(servo.base_linear_policy_demand(.02), servo.base_linear_policy_demand(.075))
+        self.assertLess(abs(servo.base_linear_policy_demand(1e-9)), 1e-8)
+
+    def test_monotone_candidate_preserves_demand_zero_parking_and_antiwindup(self):
+        servo = q.VelocityFeedback(mode='spot_monotone_measured_v2')
+        desired = np.array([.075, .1])
+        copy_desired = desired.copy()
+        result = servo.update(.02, desired, [0., 0.])
+        np.testing.assert_array_equal(desired, copy_desired)
+        self.assertLess(result[0], .2)
+        self.assertGreater(result[0], .15)
+        servo.integral[0] = .2
+        servo.filtered = None
+        self.assertEqual(servo.update(.02, [0., 0.], [0., 0.])[0], 0.)
+        self.assertLess(servo.integral[0], .2)
+        servo.filtered = None
+        self.assertLess(servo.update(.02, [0., 0.], [.1, 0.])[0], 0.)
+        servo.reset()
+        for _ in range(100):
+            np.testing.assert_array_equal(servo.update(.02, [.15, .3], [-5., -5.]), [.3, .5])
+        np.testing.assert_array_equal(servo.integral, [0., 0.])
+        with self.assertRaises(ValueError):
+            servo.update(.02, [.31, 0.], [0., 0.])
+
+    def test_policy_joint_reading_is_same_source_finite_readonly_state(self):
+        class TensorRead:
+            def __init__(self, value): self.value = np.asarray(value)
+            def detach(self): return self
+            def cpu(self): return self
+            def numpy(self): return self.value
+        class ControllerRead:
+            _policy_counter = 10
+            _current_action = TensorRead(np.arange(12) * .1)
+            _previous_action = TensorRead(np.arange(12) * .1)
+        plant = object.__new__(q.QuadrupedPlant)
+        plant.controller = ControllerRead()
+        plant._steps = 10
+        plant._last_inference_previous_action = [0.] * 12
+        plant.get_dof_positions = lambda: np.ones((1, 12))
+        plant.get_dof_velocities = lambda: np.zeros((1, 12))
+        original = plant.controller._current_action.value.copy()
+        result = plant.policy_joint_reading(20_000_000)
+        self.assertEqual(result['source_sim_time_ns'], 20_000_000)
+        self.assertEqual(result['joint_positions'], [1.] * 12)
+        self.assertEqual(result['last_inference_previous_action'], [0.] * 12)
+        np.testing.assert_array_equal(plant.controller._current_action.value, original)
+        plant.get_dof_positions = lambda: np.ones((1, 11))
+        with self.assertRaisesRegex(ValueError, 'invalid_actual_policy_joint_reading'):
+            plant.policy_joint_reading(20_000_000)
+
     def test_capsule_half_sphere_spine_and_rotated_aabb(self):
         shape = dict(type='Capsule', axis='X', height=.2, radius=.02)
         self.assertEqual(q.primitive_contains([[.12, 0, 0], [.121, 0, 0], [.11, .02, 0]], shape, np.eye(4)).tolist(), [True, False, False])

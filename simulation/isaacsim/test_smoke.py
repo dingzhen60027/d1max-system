@@ -6,7 +6,8 @@ from builtin_interfaces.msg import Time
 from d1max_pct_scan.bt_adapter_contract import valid_compute_request
 from smoke import (navigation_goal, expected_task_result, drain_imu_witness,
     trace_output_path, cancellation_due, terminal_observation_complete,
-    stationarity_window, body_height_evidence, source_observation_expired)
+    stationarity_window, body_height_evidence, source_observation_expired,
+    trace_wire_value)
 
 
 def test_navigation_goal_survives_unchanged_compute_action_validation():
@@ -137,3 +138,29 @@ def test_model_height_tolerance_needs_independent_whole_body_certificate():
     session['static_collision_prior_contract']['max_body_height_error_m']=math.nan
     with pytest.raises(ValueError):
         body_height_evidence(session,bridge,100)
+
+
+def test_causal_trace_preserves_complete_received_curve_and_exact_entry():
+    from d1max_planning_interfaces.msg import TaggedBspline
+    from geometry_msgs.msg import Point
+    import json
+    message = TaggedBspline(session_id='source-session', generation=17,
+        frame_id='d1max_loc_odom', valid_start_time=.027123456789,
+        valid_start_arc_length=.002031, join_source_stamp=Time(sec=29,nanosec=123456789))
+    message.trajectory.order=3
+    message.trajectory.traj_id=11
+    message.trajectory.knots=[-1.,-.5,0.,.5,1.,1.5,2.,2.5]
+    message.trajectory.pos_pts=[Point(x=-7.84,y=-5.01,z=.49964001),
+        Point(x=-7.845,y=-5.011,z=.50498002),
+        Point(x=-7.78,y=-5.012,z=.51371003),
+        Point(x=-7.72,y=-5.01,z=.48900004)]
+    message.join_twist.linear.x=-.0108
+    message.join_twist.linear.z=.00612
+    wire=json.loads(json.dumps(trace_wire_value(message)))
+    assert wire['trajectory']['knots']==list(message.trajectory.knots)
+    assert [p['z'] for p in wire['trajectory']['pos_pts']]==[p.z for p in message.trajectory.pos_pts]
+    assert wire['join_source_stamp']==dict(sec=29,nanosec=123456789)
+    assert wire['join_twist']['linear']['x']==-.0108
+    assert wire['join_twist']['linear']['z']==.00612
+    assert wire['valid_start_time']==.027123456789
+    assert message.join_source_stamp.nanosec==123456789

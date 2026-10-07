@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+from collections import Counter
 import hashlib
 import json
 import math
@@ -49,6 +50,10 @@ def parse_args():
     parser.add_argument("--test-linear-speed", type=float, default=0.0,
                         help="Bounded physics calibration only; requires --test-frames")
     parser.add_argument("--test-angular-speed", type=float, default=0.0)
+    parser.add_argument("--profile-physics-callbacks", action="store_true",
+                        help="Read-only per-callback wall timing for a bounded component probe")
+    parser.add_argument("--audit-native-hit-identities", action="store_true",
+                        help="Bounded component probe of original native hit prim strings")
     parser.add_argument("--screenshot-path", type=Path)
     parser.add_argument("--screenshot-frame", type=int, default=90)
     parser.add_argument("--export-scene", type=Path)
@@ -61,6 +66,10 @@ def parse_args():
         parser.error("physics-hz must be positive and test-frames nonnegative")
     if (args.test_linear_speed or args.test_angular_speed) and not args.test_frames:
         parser.error("calibration motion requires a bounded --test-frames run")
+    if args.profile_physics_callbacks and not args.test_frames:
+        parser.error("callback profiling requires a bounded --test-frames run")
+    if args.audit_native_hit_identities and not args.test_frames:
+        parser.error("hit identity audit requires a bounded --test-frames run")
     if args.static_prior_geometry_sha256 and (len(args.static_prior_geometry_sha256) != 64
             or any(c not in "0123456789abcdef" for c in args.static_prior_geometry_sha256)):
         parser.error("static-prior-geometry-sha256 must be a lower-case SHA256")
@@ -91,6 +100,7 @@ APP = SimulationApp({"headless": ARGS.headless, "width": 1280, "height": 900,
                      "disable_viewport_updates": bool(ARGS.headless and ARGS.screenshot_path is None)})
 
 import carb
+import omni.physx.bindings._physx as physx_bindings
 import isaacsim.core.experimental.utils.app as app_utils
 import isaacsim.core.experimental.utils.stage as stage_utils
 import omni.usd
@@ -102,6 +112,21 @@ from isaacsim.core.simulation_manager import SimulationManager
 from isaacsim.robot.experimental.wheeled_robots.controllers import DifferentialController
 from isaacsim.robot.experimental.wheeled_robots.robots import WheeledRobot
 from pxr import Gf, Sdf, Usd, UsdGeom, UsdPhysics
+
+# Native worker scheduling changes throughput, not dt, solver settings,
+# geometry, or policy. It is an explicit sealed fixture option. Restore the
+# process's previous persistent setting before Kit teardown.
+PHYSICS_CPU_THREADS_ORIGINAL = carb.settings.get_settings().get(physx_bindings.SETTING_NUM_THREADS)
+PHYSICS_CPU_THREADS = CONFIG.get('physics', {}).get('cpu_threads')
+if PHYSICS_CPU_THREADS is not None:
+    if type(PHYSICS_CPU_THREADS) is not int or not 0 <= PHYSICS_CPU_THREADS <= 64:
+        raise ValueError('invalid_sealed_physics_cpu_threads')
+    carb.settings.get_settings().set(physx_bindings.SETTING_NUM_THREADS, PHYSICS_CPU_THREADS)
+PHYSICS_CPU_THREADS_READBACK = carb.settings.get_settings().get(physx_bindings.SETTING_NUM_THREADS)
+PHYSICS_USD_VELOCITY_WRITEBACK_ORIGINAL = carb.settings.get_settings().get(physx_bindings.SETTING_UPDATE_VELOCITIES_TO_USD)
+PHYSICS_USD_VELOCITY_WRITEBACK = CONFIG.get('physics', {}).get('usd_velocity_writeback')
+if PHYSICS_USD_VELOCITY_WRITEBACK is not None and type(PHYSICS_USD_VELOCITY_WRITEBACK) is not bool:
+    raise ValueError('invalid_sealed_physics_usd_velocity_writeback')
 
 
 def array(value):
@@ -267,12 +292,15 @@ class WireInterface:
         self.stage_geometry_verifier = None
         if ARGS.static_prior_geometry_sha256:
             from truth_map import StageGeometryVerifier
-            self.stage_geometry_verifier = StageGeometryVerifier(omni.usd.get_context().get_stage(), CONFIG)
+            self.stage_geometry_verifier = StageGeometryVerifier(omni.usd.get_context().get_stage(), CONFIG,
+                profile_notices=ARGS.profile_physics_callbacks)
         from dynamic_collision import actor_registry, registry_digest
         self.dynamic_registry = actor_registry(CONFIG)
         self.dynamic_registry_sha256 = registry_digest(self.dynamic_registry)
         self.dynamic_samples = 0
         self.dynamic_stream = (RESULT_DIR/'dynamic_actor_readings.jsonl').open('w') if IS_QUADRUPED else None
+        self.native_hit_identity_stream = ((RESULT_DIR/'native_hit_identity_audit.jsonl').open('w')
+            if IS_QUADRUPED and ARGS.audit_native_hit_identities else None)
         self.last_body_certificate = None
         self.collision_audit = None
         if IS_QUADRUPED and CONFIG.get('robot_collision_registry'):
@@ -597,8 +625,25 @@ class WireInterface:
                     **floor_evidence), separators=(',', ':'))+'\n')
             points = cloud[valid] + origin
             rings = rings[valid]
+            actor_ids = None
+            if IS_QUADRUPED and self.dynamic_registry:
+                from dynamic_collision import native_hit_actor_ids
+                actor_ids = np.asarray(native_hit_actor_ids(hit_paths[valid], self.dynamic_registry), dtype=np.uint16)
             external = external_hit_mask(points, capture)
             points, rings = points[external], rings[external]
+            if actor_ids is not None:
+                actor_ids = np.ascontiguousarray(actor_ids[external], dtype=np.uint16)
+            audited_hit_paths = None
+            if self.native_hit_identity_stream is not None:
+                audited_hit_paths = np.asarray([str(path) for path in hit_paths[valid][external]], dtype=np.str_)
+                counts = Counter(audited_hit_paths.tolist())
+                self.native_hit_identity_stream.write(json.dumps(dict(sensor_id=sensor_id,
+                    acquisition_begin_ns=source_scan_ns, native_frame_time_ns=measured_scan_ns,
+                    native_frame_physics_step=frame['physics_step'], capture_physics_step=capture['physics_step'],
+                    registry_sha256=self.dynamic_registry_sha256, point_count=len(points),
+                    unique_path_count=len(counts), original_hit_prim_counts=counts.most_common(128),
+                    actor_id_counts=Counter(actor_ids.tolist()).most_common() if actor_ids is not None else []),
+                    separators=(',', ':'))+'\n')
             self.ray_phase("exact_self_and_depth_filter", phase_start)
             if not len(points):
                 continue
@@ -611,7 +656,10 @@ class WireInterface:
                 native_frame_physics_step=int(frame['physics_step']),
                 capture_physics_step=capture['physics_step']) if capture else {}
             for packet in ray_packets(EPOCH, self.scan_sequence, source_scan_ns, sensor_id,
-                                      origin.tolist(), points, rings=rings, **phase_metadata):
+                                      origin.tolist(), points, rings=rings,
+                                      actor_ids=actor_ids,
+                                      actor_registry_sha256=self.dynamic_registry_sha256 if actor_ids is not None else None,
+                                      **phase_metadata):
                 self.send(packet)
             self.ray_phase("binary_pack_and_udp", phase_start)
             now_wall = time.monotonic()
@@ -624,6 +672,11 @@ class WireInterface:
             self.last_scan_data[sensor_id] = dict(xyz=points, origin=origin, ring=rings,
                 pose=np.asarray(capture_pose), sim_time_ns=source_scan_ns,
                 native_frame_time_ns=measured_scan_ns)
+            if actor_ids is not None:
+                self.last_scan_data[sensor_id].update(isaac_actor_id=actor_ids,
+                    actor_registry_sha256=self.dynamic_registry_sha256)
+            if audited_hit_paths is not None:
+                self.last_scan_data[sensor_id]['native_hit_prim'] = audited_hit_paths
             if self.first_hits[sensor_id] is None:
                 self.first_hits[sensor_id] = {"count": len(points), "body_min": points.min(axis=0).tolist(),
                                                "body_max": points.max(axis=0).tolist(),
@@ -633,9 +686,7 @@ class WireInterface:
                                                "native_scan_physics_step": frame["physics_step"],
                                                "zenith": array(frame["zenith"]).tolist()}
                 phase_start = time.monotonic()
-                np.savez(RESULT_DIR / f"first_scan_{sensor_id}.npz", xyz=points, origin=origin, ring=rings,
-                                    pose=np.asarray(capture_pose), sim_time_ns=source_scan_ns,
-                                    native_frame_time_ns=measured_scan_ns)
+                np.savez(RESULT_DIR / f"first_scan_{sensor_id}.npz", **self.last_scan_data[sensor_id])
                 self.ray_phase("first_scan_evidence_save", phase_start)
         self.scan_sequence += 1
 
@@ -643,6 +694,8 @@ class WireInterface:
         self.imu_stream.close()
         if self.dynamic_stream is not None:
             self.dynamic_stream.close()
+        if self.native_hit_identity_stream is not None:
+            self.native_hit_identity_stream.close()
         if self.floor_hit_stream is not None:
             self.floor_hit_stream.close()
         if self.link_snapshot_stream is not None:
@@ -742,6 +795,23 @@ def main():
         dynamic_view = RigidPrim([actor['path'] for actor in actor_registry(CONFIG)], reset_xform_op_properties=False)
     app_utils.play()
     from omni.physics import core as physics_core
+    callback_timings = {}
+
+    def profile_callback(name, callback):
+        if not ARGS.profile_physics_callbacks:
+            return callback
+        def timed(*args):
+            started = time.monotonic()
+            try:
+                return callback(*args)
+            finally:
+                elapsed = time.monotonic() - started
+                item = callback_timings.setdefault(name, dict(count=0, total_wall_s=0., max_wall_s=0.))
+                item['count'] += 1
+                item['total_wall_s'] += elapsed
+                item['max_wall_s'] = max(item['max_wall_s'], elapsed)
+        return timed
+
     policy_subscription = None
     dynamic_subscription = None
     wire_holder = {'wire': None}
@@ -749,8 +819,9 @@ def main():
         APP.update()  # Establish the native tensor view before policy initialization.
         robot.initialize()
         policy_subscription = physics_core.get_physics_simulation_interface().subscribe_physics_on_step_events(
-            pre_step=True, order=3, on_update=lambda step_dt, _context: robot.step(step_dt,
-                *(wire_holder['wire'].command if wire_holder['wire'] is not None else (0., 0.))))
+            pre_step=True, order=3, on_update=profile_callback('official_policy',
+                lambda step_dt, _context: robot.step(step_dt,
+                *(wire_holder['wire'].command if wire_holder['wire'] is not None else (0., 0.)))))
         from world_builder import update_actors, update_follow_camera
         stage = omni.usd.get_context().get_stage()
         if not ARGS.headless or ARGS.screenshot_path:
@@ -764,6 +835,11 @@ def main():
     for lidar, _ in lidars:
         lidar.initialize()
     wire = WireInterface(robot, controller, dynamic_view)
+    if PHYSICS_USD_VELOCITY_WRITEBACK is not None:
+        # Enroll the real native properties after the original settle. Pose
+        # updates stay native at 500 Hz for LiDAR/IMU. Navigation and sensor
+        # velocity readers use actual tensors, without duplicate USD output.
+        carb.settings.get_settings().set(physx_bindings.SETTING_UPDATE_VELOCITIES_TO_USD, PHYSICS_USD_VELOCITY_WRITEBACK)
     wire_holder['wire'] = wire
     initial_positions, initial_orientations = [array(v)[0].tolist() for v in robot.get_world_poses()]
     source_steps = SimulationManager.get_num_physics_steps()
@@ -772,18 +848,19 @@ def main():
     next_state_ns = state_period_ns if IS_QUADRUPED else 0
     if IS_QUADRUPED:
         dynamic_subscription = physics_core.get_physics_simulation_interface().subscribe_physics_on_step_events(
-            pre_step=True, order=-1, on_update=lambda step_dt, _context: update_actors(stage, CONFIG,
-                SimulationManager.get_simulation_time()-source_start_time+step_dt))
+            pre_step=True, order=-1, on_update=profile_callback('dynamic_actor_updates',
+                lambda step_dt, _context: update_actors(stage, CONFIG,
+                SimulationManager.get_simulation_time()-source_start_time+step_dt)))
     # The application can render at 60 Hz while physics advances at 120 Hz.
     # Read the native IMU after each physical step so its 100 Hz source does
     # not get undersampled by viewport rendering; state is still emitted once
     # per application update (normally 60 Hz).
     imu_subscription = physics_core.get_physics_simulation_interface().subscribe_physics_on_step_events(
         pre_step=False, order=2,
-        on_update=lambda _dt, _context: wire.imu(imu_sensor, source_start_time))
+        on_update=profile_callback('native_imu', lambda _dt, _context: wire.imu(imu_sensor, source_start_time)))
     command_expiry_subscription = physics_core.get_physics_simulation_interface().subscribe_physics_on_step_events(
         pre_step=True, order=0,
-        on_update=lambda _dt, _context: wire.guard_command_expiry(_dt, source_start_time))
+        on_update=profile_callback('command_expiry', lambda _dt, _context: wire.guard_command_expiry(_dt, source_start_time)))
     next_lidar_capture_ns = state_period_ns if IS_QUADRUPED else round(2 * dt * 1e9)
     lidar_capture_count = 0
     lidar_native_enabled = True
@@ -816,7 +893,7 @@ def main():
                 next_lidar_capture_ns += round(1e9 / lidar_config["frequency_hz"])
 
     lidar_gate_subscription = physics_core.get_physics_simulation_interface().subscribe_physics_on_step_events(
-        pre_step=True, order=1, on_update=gate_lidar_capture)
+        pre_step=True, order=1, on_update=profile_callback('native_lidar_gate_and_begin_witness', gate_lidar_capture))
     previous_steps = source_steps
     next_scan_ns = state_period_ns if IS_QUADRUPED else 0
     stop_requested = False
@@ -848,7 +925,8 @@ def main():
             command=wire.command.tolist(), linear_velocity_world=state[1],
             angular_velocity_world=state[2], body_envelope_certificate=wire.last_body_certificate,
             policy_input_velocity=wire.robot._command.tolist() if IS_QUADRUPED else None,
-            velocity_feedback_integral=wire.robot.velocity_feedback.integral.tolist() if IS_QUADRUPED else None),
+            velocity_feedback_integral=wire.robot.velocity_feedback.integral.tolist() if IS_QUADRUPED else None,
+            policy_joint_reading=wire.robot.policy_joint_reading(source_ns) if IS_QUADRUPED else None),
             separators=(',', ':'), allow_nan=False)+'\n')
         return state
 
@@ -939,8 +1017,12 @@ def main():
                     direct_step_wall_anchor = time.monotonic()
                     direct_step_source_anchor = SimulationManager.get_simulation_time()
                 phase_start = time.monotonic()
+                prior_lidar_capture_count = lidar_capture_count
                 SimulationManager.step(steps=2, update_fabric=render_uses_fabric if recording_render_mode else False)
                 record_phase("physics_only_two_steps", phase_start)
+                if ARGS.profile_physics_callbacks:
+                    record_phase('physics_two_steps_with_native_capture' if lidar_capture_count != prior_lidar_capture_count
+                        else 'physics_two_steps_without_native_capture', phase_start)
                 source_elapsed = SimulationManager.get_simulation_time() - direct_step_source_anchor
                 remaining = direct_step_wall_anchor + source_elapsed - time.monotonic()
                 if remaining > 0:
@@ -1049,6 +1131,13 @@ def main():
                    "imu": wire.imu_summary(),
                    "timing": wire.timing_summary(),
                    "phase_timings": phase_timings,
+                   "physics_callback_timings": callback_timings,
+                   "physics_cpu_threads": dict(requested=PHYSICS_CPU_THREADS,
+                       original=PHYSICS_CPU_THREADS_ORIGINAL, readback=PHYSICS_CPU_THREADS_READBACK),
+                   "physics_usd_state_writeback": dict(readback=carb.settings.get_settings().get(physx_bindings.SETTING_UPDATE_TO_USD)),
+                   "physics_usd_velocity_writeback": dict(requested=PHYSICS_USD_VELOCITY_WRITEBACK,
+                       original=PHYSICS_USD_VELOCITY_WRITEBACK_ORIGINAL,
+                       readback=carb.settings.get_settings().get(physx_bindings.SETTING_UPDATE_VELOCITIES_TO_USD)),
                    "ray_phase_timings": wire.ray_phase_timings,
                    "static_geometry_attestation": dict(expected_sha256=ARGS.static_prior_geometry_sha256,
                        cadence="every actual body state; source timestamp unchanged",
@@ -1057,6 +1146,7 @@ def main():
                        last_fault=wire.geometry_last_fault, total_wall_s=wire.geometry_audit_total_wall_s,
                        max_wall_s=wire.geometry_audit_max_wall_s,
                        full_stage_audits=wire.stage_geometry_verifier.full_audits if wire.stage_geometry_verifier else None,
+                       notice_timings=wire.stage_geometry_verifier.notice_timings if wire.stage_geometry_verifier else None,
                        cache_hits=wire.stage_geometry_verifier.cache_hits if wire.stage_geometry_verifier else None),
                    "native_lidar_captures_per_sensor": lidar_capture_count,
                    "lidar_acquisition_mode": "full native snapshot on each real 10 Hz acquisition step",
@@ -1094,4 +1184,8 @@ if __name__ == "__main__":
         print(failure, file=sys.stderr, flush=True)
         raise
     finally:
+        if PHYSICS_CPU_THREADS is not None:
+            carb.settings.get_settings().set(physx_bindings.SETTING_NUM_THREADS, PHYSICS_CPU_THREADS_ORIGINAL)
+        if PHYSICS_USD_VELOCITY_WRITEBACK is not None:
+            carb.settings.get_settings().set(physx_bindings.SETTING_UPDATE_VELOCITIES_TO_USD, PHYSICS_USD_VELOCITY_WRITEBACK_ORIGINAL)
         APP.close()

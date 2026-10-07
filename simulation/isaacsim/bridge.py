@@ -63,7 +63,8 @@ def dynamic_measurement_payload(packet, registry, context, anchor_ns, horizon_ns
     return oracle_payload(registry, samples, session_id=context['session_id'],
         epoch=context['epoch'], seed_id=context['seed_id'],
         context_sequence=context['sequence'], sequence=packet['sequence'],
-        source_stamp_ns=source, reachable_horizon_ns=horizon_ns)
+        source_stamp_ns=source, reachable_horizon_ns=horizon_ns,
+        simulation_source_stamp_ns=packet['sim_time_ns'])
 
 
 def native_phase_contract(session):
@@ -176,7 +177,7 @@ def main():
     from rclpy.clock import Clock, ClockType
     from rclpy.qos import qos_profile_sensor_data, QoSProfile, DurabilityPolicy
     from d1max_planning_interfaces.msg import NavigationState, LocalNavigationState, MotionDemand
-    from d1max_pct_scan.ray_projection import FIELDS, RAY_DTYPE
+    from d1max_pct_scan.ray_projection import FIELDS, RAY_DTYPE, ISAAC_FIELDS, ISAAC_RAY_DTYPE
     from geometry_msgs.msg import TransformStamped
     from nav_msgs.msg import Odometry
     from rosgraph_msgs.msg import Clock as ClockMessage
@@ -238,7 +239,8 @@ def main():
                 from dynamic_collision import actor_registry, registry_digest
                 spec = json.loads(Path(contract['scene_config']).read_text())
                 self.dynamic_registry = actor_registry(spec)
-                if registry_digest(self.dynamic_registry) != dynamic_contract['registry_sha256']:
+                self.dynamic_registry_sha256 = registry_digest(self.dynamic_registry)
+                if self.dynamic_registry_sha256 != dynamic_contract['registry_sha256']:
                     raise ValueError('isaac_dynamic_actor_registry_changed')
                 self.dynamic_pub = self.create_publisher(String, dynamic_contract['topic'], 10)
                 self.dynamic_markers = self.create_publisher(MarkerArray, '/d1max/isaacsim/dynamic_actors', 1)
@@ -540,7 +542,19 @@ def main():
             if self.last_state_sim_ns-scan['sim_time_ns'] > 500000000:
                 return
             xyz = np.asarray(scan['xyz'], dtype=np.float32)
-            points = np.zeros(len(xyz), dtype=RAY_DTYPE)
+            actor_ids = scan.get('actor_ids')
+            fields, dtype = FIELDS, RAY_DTYPE
+            if actor_ids is not None:
+                proof = session.get('dynamic_oracle_contract', {}).get('native_hit_provenance')
+                if (proof != dict(schema=1, kind='physx_exact_hit_prim_ordinal_v1', point_step=72,
+                        registry_sha256=self.dynamic_registry_sha256)
+                        or scan['actor_registry_sha256'] != self.dynamic_registry_sha256
+                        or any(value > len(self.dynamic_registry) for value in actor_ids)):
+                    raise ValueError('native_hit_provenance_registry_mismatch')
+                fields, dtype = ISAAC_FIELDS, ISAAC_RAY_DTYPE
+            points = np.zeros(len(xyz), dtype=dtype)
+            if actor_ids is not None:
+                points['isaac_actor_id'] = np.asarray(actor_ids, dtype=np.uint16)
             for name, values in zip(('x', 'y', 'z'), xyz.T):
                 points[name] = values
             for name, value in zip(('origin_x', 'origin_y', 'origin_z'), scan['origin']):
@@ -555,8 +569,8 @@ def main():
             points['timestamp'] = points['source_timestamp'] = times['source_timestamp_s']
             points['raw_timestamp'] = times['raw_timestamp_s']
             cloud = PointCloud2(height=1, width=len(xyz),
-                fields=[PointField(name=n, offset=o, datatype=d, count=c) for n,o,d,c in FIELDS],
-                is_bigendian=False, point_step=64, row_step=64*len(xyz),
+                fields=[PointField(name=n, offset=o, datatype=d, count=c) for n,o,d,c in fields],
+                is_bigendian=False, point_step=dtype.itemsize, row_step=dtype.itemsize*len(xyz),
                 data=points.tobytes(), is_dense=True)
             stamp(cloud.header.stamp, source_ns)
             cloud.header.frame_id = 'd1max_loc_lidar'

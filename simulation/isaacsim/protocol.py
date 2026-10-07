@@ -55,16 +55,27 @@ def decode(data):
         raise ValueError("invalid_source_time")
     if payload is not None:
         count, rings_present = value.get('point_count'),value.get('rings_present')
+        actors_present = value.get('actor_ids_present', False)
         if (value['type'] != 'rays' or type(count) is not int or not 1 <= count <= POINTS_PER_CHUNK
-                or type(rings_present) is not bool or len(payload) != count*(14 if rings_present else 12)):
+                or type(rings_present) is not bool or type(actors_present) is not bool
+                or len(payload) != count*(12 + 2*int(rings_present) + 2*int(actors_present))):
             raise ValueError('invalid_binary_ray_payload')
         xyz = array('f');xyz.frombytes(payload[:count*12])
         if sys.byteorder != 'little':xyz.byteswap()
         value['xyz'] = [list(xyz[i:i+3]) for i in range(0,len(xyz),3)]
         if rings_present:
-            rings = array('H');rings.frombytes(payload[count*12:])
+            rings = array('H');rings.frombytes(payload[count*12:count*14])
             if sys.byteorder != 'little':rings.byteswap()
             value['rings'] = list(rings)
+        if actors_present:
+            digest = value.get('actor_registry_sha256')
+            if not isinstance(digest, str) or len(digest) != 64 or any(c not in '0123456789abcdef' for c in digest):
+                raise ValueError('invalid_native_hit_actor_registry')
+            actor_ids = array('H');actor_ids.frombytes(payload[count*(14 if rings_present else 12):])
+            if sys.byteorder != 'little':actor_ids.byteswap()
+            if any(v > 64 for v in actor_ids):
+                raise ValueError('invalid_native_hit_actor_ids')
+            value['actor_ids'] = list(actor_ids)
     if value['type'] == 'rays':
         native_ray_metadata(value)
     return value
@@ -172,7 +183,8 @@ def dynamic_packet(epoch, sequence, sim_time_ns, registry_sha256, samples):
 
 def ray_packets(epoch, scan_sequence, sim_time_ns, sensor_id, origin, xyz, rings=None,
                 *, native_frame_time_ns=None, native_frame_time_s=None, phase=None,
-                native_frame_physics_step=None, capture_physics_step=None):
+                native_frame_physics_step=None, capture_physics_step=None,
+                actor_ids=None, actor_registry_sha256=None):
     """Emit finite actual hits; optional native wrapper END leaves BEGIN intact.
 
     With explicit prephysics phase, provide the original native time float and
@@ -212,6 +224,22 @@ def ray_packets(epoch, scan_sequence, sim_time_ns, sensor_id, origin, xyz, rings
             rings = list(rings)
             if len(rings)!=len(points) or any(type(r) is not int or not 0 <= r < 65536 for r in rings):
                 raise ValueError("invalid_native_ring_indices")
+    if actor_ids is not None:
+        if (not isinstance(actor_registry_sha256, str) or len(actor_registry_sha256) != 64
+                or any(c not in '0123456789abcdef' for c in actor_registry_sha256)):
+            raise ValueError('invalid_native_hit_actor_registry')
+        if array_input:
+            actor_ids = np.asarray(actor_ids)
+            if (actor_ids.ndim != 1 or len(actor_ids) != len(points) or actor_ids.dtype.kind not in 'iu'
+                    or actor_ids.min() < 0 or actor_ids.max() > 64):
+                raise ValueError('invalid_native_hit_actor_ids')
+            actor_ids = np.asarray(actor_ids, dtype='<u2', order='C')
+        else:
+            actor_ids = list(actor_ids)
+            if len(actor_ids) != len(points) or any(type(v) is not int or not 0 <= v <= 64 for v in actor_ids):
+                raise ValueError('invalid_native_hit_actor_ids')
+    elif actor_registry_sha256 is not None:
+        raise ValueError('native_hit_actor_ids_required')
     count = (len(points) + POINTS_PER_CHUNK - 1) // POINTS_PER_CHUNK
     for index in range(count):
         chunk=points[index*POINTS_PER_CHUNK:(index+1)*POINTS_PER_CHUNK]
@@ -220,6 +248,8 @@ def ray_packets(epoch, scan_sequence, sim_time_ns, sensor_id, origin, xyz, rings
             sensor_id=sensor_id, origin=origin, chunk_index=index, chunk_count=count,
             point_count=len(chunk),rings_present=rings is not None)
         packet.update(metadata)
+        if actor_ids is not None:
+            packet.update(actor_ids_present=True, actor_registry_sha256=actor_registry_sha256)
         # Match the eventual PointCloud2 XYZ precision without a JSON float
         # burst exceeding the host's capped UDP receive buffer. Acquisition
         # identity, source time and origin remain explicit JSON metadata.
@@ -237,6 +267,14 @@ def ray_packets(epoch, scan_sequence, sim_time_ns, sensor_id, origin, xyz, rings
                 ring_data=array('H',ring_chunk)
                 if sys.byteorder != 'little':ring_data.byteswap()
                 payload+=ring_data.tobytes()
+        if actor_ids is not None:
+            actor_chunk = actor_ids[index*POINTS_PER_CHUNK:(index+1)*POINTS_PER_CHUNK]
+            if array_input:
+                payload += actor_chunk.tobytes(order='C')
+            else:
+                actor_data = array('H', actor_chunk)
+                if sys.byteorder != 'little':actor_data.byteswap()
+                payload += actor_data.tobytes()
         header=encode(packet)
         if len(header)>1024:
             raise ValueError('binary_ray_header_too_large')
@@ -286,6 +324,16 @@ class RayAssembler:
         if rings is not None and (not isinstance(rings,list) or len(rings)!=len(rows)
                 or any(type(r) is not int or not 0 <= r < 65536 for r in rings)):
             raise ValueError('invalid_native_ring_indices')
+        actor_ids, actor_digest = packet.get('actor_ids'), packet.get('actor_registry_sha256')
+        if (actor_ids is not None and (not isinstance(actor_ids, list) or len(actor_ids) != len(rows)
+                or any(type(v) is not int or not 0 <= v <= 64 for v in actor_ids)
+                or not isinstance(actor_digest, str) or len(actor_digest) != 64
+                or any(c not in '0123456789abcdef' for c in actor_digest))):
+            self.pending.pop(key, None)
+            raise ValueError('invalid_native_hit_actor_provenance')
+        if actor_ids is None and actor_digest is not None:
+            self.pending.pop(key, None)
+            raise ValueError('native_hit_actor_ids_required')
         try:
             metadata = native_ray_metadata(packet)
         except ValueError:
@@ -294,26 +342,28 @@ class RayAssembler:
                 self.dropped += 1
             raise
         native_identity = tuple((key, metadata[key]) for key in NATIVE_RAY_FIELDS if key in metadata)
-        identity = (count, packet["sim_time_ns"], origin, rings is not None, native_identity)
+        identity = (count, packet["sim_time_ns"], origin, rings is not None, native_identity,
+                    actor_ids is not None, actor_digest)
         scan = self.pending.get(key)
         if scan is None:
             if len(self.pending) >= MAX_PENDING_SCANS:
                 oldest = min(self.pending, key=lambda k: self.pending[k]["began"])
                 del self.pending[oldest]
                 self.dropped += 1
-            scan = dict(began=now, identity=identity, chunks={}, ring_chunks={})
+            scan = dict(began=now, identity=identity, chunks={}, ring_chunks={}, actor_chunks={})
             self.pending[key] = scan
         if identity != scan["identity"]:
             del self.pending[key]
             self.dropped += 1
             raise ValueError("inconsistent_scan_chunks")
         if index in scan["chunks"] and (scan["chunks"][index] != rows
-                or scan['ring_chunks'][index] != rings):
+                or scan['ring_chunks'][index] != rings or scan['actor_chunks'][index] != actor_ids):
             del self.pending[key]
             self.dropped += 1
             raise ValueError("conflicting_scan_chunk")
         scan["chunks"][index] = rows
         scan['ring_chunks'][index] = rings
+        scan['actor_chunks'][index] = actor_ids
         if len(scan["chunks"]) != count:
             return None
         result = [row for i in range(count) for row in scan["chunks"][i]]
@@ -324,4 +374,6 @@ class RayAssembler:
         return dict(epoch=key[0], sensor_id=sensor, scan_sequence=sequence,
             sim_time_ns=identity[1], origin=origin, xyz=result,
             rings=[ring for i in range(count) for ring in scan['ring_chunks'][i]]
-                if identity[3] else None, **metadata)
+                if identity[3] else None,
+            actor_ids=[value for i in range(count) for value in scan['actor_chunks'][i]] if identity[5] else None,
+            actor_registry_sha256=actor_digest, **metadata)
