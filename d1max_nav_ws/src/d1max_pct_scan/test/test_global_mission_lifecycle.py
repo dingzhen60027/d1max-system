@@ -242,3 +242,90 @@ def test_old_result_after_hold_cannot_commit_and_new_user_request_gets_new_budge
     assert node.pause.intent is not INTENT and node.pause.intent.xyz[:2] == (4.,2.)
     assert node.current is not None and node.recovery_hold is None and len(attempts) == 2
     assert node.goal_deadline_monotonic == clock.mono+45.
+
+
+def _operator_goal(clock, x=4.):
+    message = PoseStamped()
+    message.header.frame_id = 'd1max_loc_map'
+    message.header.stamp = Time(sec=int(clock.wall),
+        nanosec=round((clock.wall % 1)*1e9))
+    message.pose.position.x, message.pose.position.y = x, 2.
+    return message
+
+
+def test_one_shot_goal_pose_gap_waits_without_spending_native_calculation_budget(monkeypatch):
+    node, clock, _, _, _, attempts = lifecycle(monkeypatch)
+    node._last_confirmed_identity = IDENTITY
+    node.planning_context = lambda: (_ for _ in ()).throw(ValueError('pose_callback_gap'))
+    message = _operator_goal(clock)
+    LiveGlobalPlanner._new_goal(node, message, kind='2d')
+    assert node.state == 'waiting_for_goal_localization'
+    assert node.waiting_goal['stamp'] == 160. and node.pause.intent is None
+    assert node.goal_deadline_monotonic is None and not attempts
+    # Callback-owned input is copied; later mutation cannot change the request.
+    message.pose.position.x = 999.
+    clock.mono += 11.; clock.wall += 11.
+    node.planning_context = lambda: (4, 'seed-a')
+    LiveGlobalPlanner._start_waiting_goal(node)
+    assert node.waiting_goal is None and len(attempts) == 1
+    assert node.pause.intent.xyz == (4., 2., 0.)
+    assert node.pause.intent.user_stamp == 160.  # user time is never re-stamped
+    assert node.current.goal_stamp == 171.  # fresh start snapshot attempt
+    assert node.goal_deadline_monotonic == clock.mono+45.
+
+
+def test_pending_goal_wait_is_finite_and_does_not_retry_after_expiry(monkeypatch):
+    node, clock, _, _, _, attempts = lifecycle(monkeypatch)
+    node.p['readiness_timeout_s'] = 3.
+    node.planning_context = lambda: (_ for _ in ()).throw(ValueError('pose_callback_gap'))
+    LiveGlobalPlanner._new_goal(node, _operator_goal(clock), kind='2d')
+    clock.mono += 3.; clock.wall += 3.
+    LiveGlobalPlanner._start_waiting_goal(node)
+    assert node.waiting_goal is None and node.reason == 'goal_localization_wait_expired'
+    node.planning_context = lambda: (4, 'seed-a')
+    for _ in range(5): LiveGlobalPlanner._start_waiting_goal(node)
+    assert not attempts and node.goal_deadline_monotonic is None
+
+
+@pytest.mark.parametrize('change', ['epoch', 'seed', 'map', 'fault'])
+def test_waiting_goal_never_rebinds_to_changed_localization_identity(monkeypatch, change):
+    node, clock, _, _, _, attempts = lifecycle(monkeypatch)
+    node._last_confirmed_identity = IDENTITY
+    node.planning_context = lambda: (_ for _ in ()).throw(ValueError('pose_callback_gap'))
+    LiveGlobalPlanner._new_goal(node, _operator_goal(clock), kind='2d')
+    if change == 'epoch': node.localizer['local_epoch'] += 1
+    if change == 'seed': node.localizer['confirmed_seed_ns'] = 'changed'
+    if change == 'map': node.localizer['map_version_id'] = 'changed'
+    if change == 'fault': node.navigation['fault'] = 'hard_failure'
+    node.planning_context = lambda: (4, 'seed-a')
+    LiveGlobalPlanner._start_waiting_goal(node)
+    assert node.waiting_goal is None and not attempts and node.pause.intent is None
+    assert node.state == 'goal_rejected'
+
+
+def test_cancel_and_newer_goal_replace_only_the_waiting_operator_request(monkeypatch):
+    node, clock, _, _, _, attempts = lifecycle(monkeypatch)
+    node.planning_context = lambda: (_ for _ in ()).throw(ValueError('pose_callback_gap'))
+    LiveGlobalPlanner._new_goal(node, _operator_goal(clock), kind='2d')
+    clock.mono += 1.; clock.wall += 1.
+    LiveGlobalPlanner._new_goal(node, _operator_goal(clock, x=6.), kind='2d')
+    node.planning_context = lambda: (4, 'seed-a')
+    LiveGlobalPlanner._start_waiting_goal(node)
+    assert len(attempts) == 1 and node.pause.intent.xyz[0] == 6.
+    node.planning_context = lambda: (_ for _ in ()).throw(ValueError('pose_callback_gap'))
+    clock.mono += 1.; clock.wall += 1.
+    LiveGlobalPlanner._new_goal(node, _operator_goal(clock, x=8.), kind='2d')
+    LiveGlobalPlanner.on_cancel(node, None)
+    node.planning_context = lambda: (4, 'seed-a')
+    LiveGlobalPlanner._start_waiting_goal(node)
+    assert len(attempts) == 1 and node.waiting_goal is None
+
+
+def test_recovery_readiness_race_keeps_committed_route_and_task(monkeypatch):
+    node, _, _, _, visuals, attempts = lifecycle(monkeypatch)
+    geometry = node.cached_result
+    node.confirmed_identity = lambda: (_ for _ in ()).throw(ValueError('pose_expired_on_boundary'))
+    node.resume_intent()
+    assert node.pause.intent is INTENT and node.cached_result is geometry
+    assert node.route_committed and not attempts and not visuals
+    assert node.pause.paused_at is not None

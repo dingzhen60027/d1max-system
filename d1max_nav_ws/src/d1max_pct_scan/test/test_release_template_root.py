@@ -16,6 +16,7 @@ TEMPLATES = (
     'src/d1max_scan_planner/config/d1max_scan_planner.yaml',
     'src/d1max_navigation_bt/trees/navigate_with_global_relocalization.xml',
     'src/d1max_navigation/rviz/localization_test.rviz',
+    'src/d1max_pct_scan/config/navigation_runtime.yaml',
 )
 
 
@@ -73,7 +74,7 @@ def test_optional_same_byte_localization_component_root_is_fail_closed(tmp_path)
         paths.localization_dependencies_root(release)
 
 
-def test_prepare_pins_all_seven_actual_copied_templates_without_ros(tmp_path, monkeypatch):
+def test_prepare_pins_all_actual_copied_templates_without_ros(tmp_path, monkeypatch):
     from test_source_identity_package import package
     release, map_directory=package(tmp_path)
     descriptor(release, template_source_root='source_snapshot/nav_ws')
@@ -95,4 +96,5 @@ def test_prepare_pins_all_seven_actual_copied_templates_without_ros(tmp_path, mo
     assert Path(session['robot_profile'])==copied/TEMPLATES[3]
     assert Path(session['global_relocalization_template'])==copied/TEMPLATES[1]
     assert Path(session['realtime_navigation_template'])==copied/TEMPLATES[2]
+    assert Path(session['runtime_policy_source'])==copied/TEMPLATES[7]
     assert session['physical_acceptance'] is False

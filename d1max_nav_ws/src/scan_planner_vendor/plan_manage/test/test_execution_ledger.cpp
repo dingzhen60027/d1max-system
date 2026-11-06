@@ -9,16 +9,41 @@ struct ExecutionValidatorTestAccess {
   static auto barrier(const ExecutionValidator& v){return v.motion_stop_barrier_;}
   static const auto& latest(const ExecutionValidator& v){return v.latest_permit_;}
   static void record(ExecutionValidator& v,const ew::MotionValidation& p){v.motion_proofs_.push_back(p);}
+  // The prepared validation lane records both transaction-scoped evidence
+  // and bounded published history. A generic current-motion proof alone is
+  // intentionally insufficient for a writer's replacement ACK.
+  static void recordPrepared(ExecutionValidator& v,const ew::MotionValidation& p){
+    v.prepared_motion_proofs_.push_back(p);v.motion_proofs_.push_back(p);}
   static void recordWhole(ExecutionValidator& v,const ew::TrajectoryValidation& p){v.proofs_.push_back(p);}
   static bool supersedes(const ew::TrajectoryValidation& a,const ew::TrajectoryValidation& b){return ExecutionValidator::proofSupersedes(a,b);}
   static auto preparedCurve(const ExecutionValidator& v){return v.prepared_?v.prepared_->spline.trajectory.traj_id:-1;}
   static auto writerSequence(const ExecutionValidator& v){return v.writer_commit_sequence_;}
   static bool activeProof(const ExecutionValidator& v){return v.active_&&v.active_->proof.has_value();}
   static bool activeProgress(const ExecutionValidator& v){return v.active_&&v.active_->progress.has_value();}
+  static SplineHeadingContract candidateHeading(const ExecutionValidator& v){return v.candidate_->heading;}
+  static SplineHeadingContract activeHeading(const ExecutionValidator& v){return v.active_->heading;}
   static bool entry(const ew::PreparedMotionDemand& x,const ew::ExecutionHandoffGrant& g,std::int64_t now){
     return ExecutionValidator::preparedEntryMatches(x,g,"odom",now);}
 };
 }
+// Native GridMap with deterministic inputs. This does not implement another
+// collision map or clear any real occupancy; the production inflated query
+// is used below, including occupied rotation sweeps.
+struct GridMapTestAccess {
+  static GridMap::Ptr headingFixture() {
+    auto map=std::make_shared<GridMap>();auto& p=map->mp_;auto& d=map->md_;
+    p.resolution_=.05;p.resolution_inv_=20.;p.map_voxel_num_={64,64,32};
+    p.map_origin_idx_.setZero();map->updateMapBoundaryFromIndex();
+    p.clamp_min_log_=-1.;p.min_occupancy_log_=1.;p.clamp_max_log_=2.;p.unknown_flag_=.01;
+    p.require_observed_free_=true;p.planning_collision_policy_="official";
+    p.double_cylinder_radius_=.29;p.double_cylinder_offset_=.2;
+    p.obstacles_inflation_z_up=.45;p.obstacles_inflation_z_down=.45;
+    d.occupancy_buffer_.assign(64*64*32,-1.01);
+    d.occupancy_buffer_inflate_.assign(64*64*32,0);
+    d.occupancy_buffer_inflate_cnt_.assign(64*64*32,0);
+    map->rebuildInflationOffsets();return map;
+  }
+};
 namespace {
 namespace w=scan_planner::ew;
 struct Fixture {
@@ -34,7 +59,11 @@ struct Fixture {
   }
   w::ExecutionPermit permit(std::uint64_t sequence=1)const {
     w::ExecutionPermit p;p.version=proposal.version;p.geometry_committed=true;
-    p.trajectory_id=spline.trajectory.traj_id;p.sequence=sequence;p.transport_mode="isolated_mock";return p;
+    p.trajectory_id=spline.trajectory.traj_id;p.sequence=sequence;p.transport_mode="isolated_mock";
+    // A typed owner ingress establishes the task only with its real source
+    // lease. PassiveLedger injects this clock rather than manufacturing now.
+    p.source_stamp=rclcpp::Time(10000000000LL);p.valid_until=rclcpp::Time(10500000000LL);
+    p.frame_id="odom";p.phase="holding";return p;
   }
   w::TrackingProgress progress()const {
     const auto& v=proposal.version;w::TrackingProgress p;p.schema_version=2;p.valid=true;p.holding=true;
@@ -46,6 +75,64 @@ struct Fixture {
     p.pose.orientation.w=1.;return p;
   }
 };
+}
+TEST(ExecutionLedger,FrozenPreviewHeadingIsCopiedWithCurveAndNotReplacedByLatestBodyOrCandidate) {
+  using A=scan_planner::ExecutionValidatorTestAccess;
+  Fixture f;scan_planner::SplineHeadingContract heading;
+  heading.preview_only_enabled=true;heading.measured_yaw=.4;
+  f.ledger.candidate(f.spline,f.proposal,heading);
+  heading.measured_yaw=2.;  // Caller mutation cannot change the accepted seed.
+  EXPECT_DOUBLE_EQ(A::candidateHeading(f.ledger).measured_yaw,.4);
+  ASSERT_TRUE(f.ledger.commit(f.permit()));
+  scan_planner::MeasuredBodyPose body{{0.,0.,.55},Eigen::Quaterniond(
+      Eigen::AngleAxisd(1.2,Eigen::Vector3d::UnitZ())),10.,"odom"};
+  f.ledger.body(body);
+  EXPECT_DOUBLE_EQ(A::activeHeading(f.ledger).measured_yaw,.4);
+  f.spline.trajectory.traj_id=2;
+  f.ledger.candidate(f.spline,f.proposal,heading);
+  EXPECT_DOUBLE_EQ(A::candidateHeading(f.ledger).measured_yaw,2.);
+  EXPECT_DOUBLE_EQ(A::activeHeading(f.ledger).measured_yaw,.4);
+  f.ledger.cancelPending();
+  EXPECT_EQ(f.ledger.committedTrajectory(),1);
+  EXPECT_DOUBLE_EQ(A::activeHeading(f.ledger).measured_yaw,.4);
+}
+TEST(ExecutionLedger,PreviewHeadingCannotEnterWriterOrReplaceGoodCandidateWithInvalidSeed) {
+  using A=scan_planner::ExecutionValidatorTestAccess;
+  Fixture f;scan_planner::SplineHeadingContract heading;heading.preview_only_enabled=true;
+  f.ledger.candidate(f.spline,f.proposal,heading);
+  heading.measured_yaw=std::numeric_limits<double>::quiet_NaN();
+  EXPECT_THROW(f.ledger.candidate(f.spline,f.proposal,heading),std::invalid_argument);
+  EXPECT_DOUBLE_EQ(A::candidateHeading(f.ledger).measured_yaw,0.);
+  scan_planner::ExecutionValidator writer{scan_planner::ExecutionValidator::PassiveLedger{},f.pool,"odom","isolated_mock",true};
+  heading.measured_yaw=0.;
+  EXPECT_THROW(writer.candidate(f.spline,f.proposal,heading),std::invalid_argument);
+  writer.candidate(f.spline,f.proposal);
+  EXPECT_FALSE(A::candidateHeading(writer).preview_only_enabled);
+}
+TEST(ExecutionLedger,IndependentPreviewUsesSolverHeadingButStillRejectsActualRotationAndNewOccupancy) {
+  using A=scan_planner::ExecutionValidatorTestAccess;
+  Fixture f;scan_planner::SplineHeadingContract heading;heading.preview_only_enabled=true;
+  f.ledger.candidate(f.spline,f.proposal,heading);
+  auto map=GridMapTestAccess::headingFixture();
+  map->setOccupied({.025,.425,.225});
+  Eigen::MatrixXd points(3,7);
+  for(int i=0;i<points.cols();++i)points.col(i)=Eigen::Vector3d(.025,.025+.009*((i-1)*.25),.55);
+  scan_planner::UniformBspline curve(points,3,.25);
+  scan_planner::MeasuredBodyPose body{{.025,.025,.55},Eigen::Quaterniond::Identity(),10.,"odom"};
+  const auto check=[&](const scan_planner::SplineHeadingContract& h) {
+    return scan_planner::wholeCurveCollisionFree(curve,.05,.49,
+      [&](const Eigen::Vector3d& p,double yaw){return map->getPlanningInflateOccupancy(p,yaw);},
+      body,"odom",10.,.5,50000,0.,0.,h);
+  };
+  EXPECT_FALSE(check({}));  // Old independent reader inferred 90deg from 9mm/s.
+  EXPECT_TRUE(check(A::candidateHeading(f.ledger)));
+  body.position=curve.evaluateDeBoorT(.2);  // Physical progress does not reseed yaw.
+  EXPECT_TRUE(check(A::candidateHeading(f.ledger)));
+  body.orientation=Eigen::AngleAxisd(std::acos(-1.)/2.,Eigen::Vector3d::UnitZ());
+  EXPECT_FALSE(check(A::candidateHeading(f.ledger)));
+  body.orientation=Eigen::Quaterniond::Identity();
+  map->setOccupied({.025,.025,.225});
+  EXPECT_FALSE(check(A::candidateHeading(f.ledger)));
 }
 TEST(ExecutionLedger,WriterCASPinsPreparedUntilMatchedAckAndNeverRollsBack) {
   Fixture f;scan_planner::ExecutionValidator ledger{scan_planner::ExecutionValidator::PassiveLedger{},f.pool,"odom","isolated_mock",true};
@@ -75,13 +162,13 @@ TEST(ExecutionLedger,WriterCASPinsPreparedUntilMatchedAckAndNeverRollsBack) {
   auto premature=g.candidate;premature.geometry_committed=true;EXPECT_FALSE(ledger.commit(premature));
   w::MotionValidation proof;proof.handoff_id=g.handoff_id;proof.sequence=30;proof.valid=true;
   proof.demand_sequence=7;proof.entry_admission_sequence=8;proof.demand_source_stamp=rclcpp::Time(10040000000LL);
-  proof.demand_body_source_stamp=rclcpp::Time(10040000000LL);proof.entry_curve_time=.1;A::record(ledger,proof);
+  proof.demand_body_source_stamp=rclcpp::Time(10040000000LL);proof.entry_curve_time=.1;A::recordPrepared(ledger,proof);
   auto ack=first;ack.sequence=2;ack.handoff_id=g.handoff_id;ack.grant_sequence=1;
   ack.previous_commit_sequence=1;ack.commit_sequence=2;ack.incumbent_version=g.incumbent.version;
   ack.incumbent_trajectory_id=1;ack.candidate_version=g.candidate.version;ack.candidate_trajectory_id=2;
   ack.permit_sequence=3;ack.motion_validation_sequence=30;ack.demand_sequence=7;ack.entry_admission_sequence=8;
   ack.demand_source_stamp=proof.demand_source_stamp;ack.demand_body_source_stamp=proof.demand_body_source_stamp;
-  ack.curve_time=.1;ack.valid_until=rclcpp::Time(10140000000LL);
+  ack.curve_time=.1;ack.applied_at=proof.demand_source_stamp;ack.valid_until=rclcpp::Time(10140000000LL);
   ASSERT_TRUE(ledger.commitAckAt(ack,10050000000LL));EXPECT_EQ(ledger.committedTrajectory(),2);
   EXPECT_EQ(A::writerSequence(ledger),2U);EXPECT_TRUE(A::latest(ledger)->geometry_committed);
   heartbeat.sequence=9;EXPECT_FALSE(ledger.commit(heartbeat));EXPECT_EQ(ledger.committedTrajectory(),2);
@@ -104,6 +191,15 @@ TEST(ExecutionLedger,LateInitialAckRestoresOnlyBoundedOriginalGeometryAndHoldsWi
     a.execution_id=original.execution_id;a.control_epoch=a.sdk_arm_generation=1;a.sdk_session="sdk";
     a.permit_sequence=1;a.transport_mode="isolated_mock";a.applied_at=rclcpp::Time(10010000000LL);
     a.valid_until=rclcpp::Time(10110000000LL);
+    if(canceled) {
+      // Explicit task revocation is not a soft hold. A late physical fact
+      // cannot restore geometry or task ownership in this retired ledger.
+      EXPECT_FALSE(ledger.commitAckAt(a,10200000000LL));EXPECT_FALSE(ledger.committedView());
+      ++a.sequence;a.write_acknowledged=true;
+      EXPECT_FALSE(ledger.commitAckAt(a,10210000000LL));EXPECT_FALSE(ledger.committedView());
+      next.revoked=false;next.trajectory_id=2;++next.sequence;EXPECT_FALSE(ledger.commit(next));
+      continue;
+    }
     ASSERT_TRUE(ledger.commitAckAt(a,10200000000LL));
     EXPECT_EQ(A::writerSequence(ledger),1U);EXPECT_EQ(ledger.committedTrajectory(),1);
     ASSERT_TRUE(A::latest(ledger));EXPECT_FALSE(A::latest(ledger)->allowed);EXPECT_EQ(A::latest(ledger)->phase,"holding");

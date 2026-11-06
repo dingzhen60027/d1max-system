@@ -73,6 +73,40 @@ struct ConfirmationDecision {
   std::string confirmation_id, reason;
 };
 
+// A goal's explicit execution intent belongs to the existing BT task, not to
+// RViz's lifetime or a second authorization owner. Pin the first committed
+// route once; a changed route/cancel cannot inherit the old user's request.
+class GoalExecutionIntent {
+public:
+  GoalExecutionIntent(bool requested=false, std::string request_id={})
+      : requested_(requested), request_id_(std::move(request_id)) {
+    if(requested_&&(request_id_.empty()||request_id_.size()>128))
+      throw std::invalid_argument("invalid_goal_execution_request_id");
+  }
+  bool prepare(const RouteBinding& current, bool active) {
+    if(!requested_||consumed_||revoked_||!active)return false;
+    if(current.session.empty()||current.task.empty()||current.route.empty()||current.hash.empty())return false;
+    if(!bound_){binding_=current;bound_=true;}
+    if(!(binding_==current)){revoke("goal_execution_route_changed");return false;}
+    return true;
+  }
+  bool consume(const RouteBinding& current) {
+    if(consumed_)return bound_&&binding_==current&&!revoked_;
+    if(!prepare(current,true))return false;
+    consumed_=true;reason_="goal_execution_intent_consumed";return true;
+  }
+  void wait(std::string reason){if(!consumed_&&!revoked_)reason_=std::move(reason);}
+  void revoke(std::string reason="goal_execution_intent_revoked"){revoked_=true;reason_=std::move(reason);}
+  bool requested()const{return requested_;}
+  bool consumed()const{return consumed_;}
+  const std::string& requestId()const{return request_id_;}
+  const std::string& reason()const{return reason_;}
+private:
+  bool requested_{false},bound_{false},consumed_{false},revoked_{false};
+  std::string request_id_,reason_;
+  RouteBinding binding_;
+};
+
 // ROS-independent authorization contract. A remembered rejected request is NOT
 // an execution lease. The preview runtime always supplies physical_available=false.
 class ConfirmationLedger {

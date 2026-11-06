@@ -52,12 +52,16 @@ static void refreshBody(Transport&t,double now) {
  assert(t.trajectoryValidation(c,now));
 }
 int main(){
- // A tighter physical source-age record must reach the FINAL writer, not
- // merely the Python/native validators. A later proof check cannot renew it.
- {auto policy=testExecutionPolicy();policy.sensor_source_age_bound_s=.2;auto t=ready(policy);
+ // SCAN owns the physical source-age policy. The writer binds its unchanged
+ // effective deadline and does not veto the same verdict by metadata ages.
+ for(bool expired:{false,true}) {auto policy=testExecutionPolicy();policy.sensor_source_age_bound_s=.2;auto t=ready(policy);
   auto command=d();command.sequence=command.motion_validation_sequence=2;command.safety_source_stamp=stamp(9.7);
-  auto old=proof(command,10.,2);old.front_ray_source_stamp=old.rear_ray_source_stamp=stamp(9.7);
-  assert(t.motionValidation(old,10.));assert(!t.demand(command,10.));assert(t.tick(10.,h())->linear.x==0.);}
+  auto verdict=proof(command,10.,2);verdict.body_source_stamp=verdict.front_ray_source_stamp=verdict.rear_ray_source_stamp=stamp(9.7);
+  verdict.valid_until=stamp(expired?9.99:10.04);
+  assert(t.motionValidation(verdict,10.));
+  assert(t.demand(command,10.)==!expired);
+  assert(t.tick(10.,h())->linear.x==(expired?0.:.2));
+  assert(t.tick(10.041,h())->linear.x==0.);} // Never extend SCAN's original deadline.
  // Production admission core + a deliberately blocked diagnostic consumer.
  // The writer still expires the ORIGINAL proof and processes revoke; no ROS
  // executor, SDK connection, fabricated heartbeat or sleep-based timing.

@@ -7,6 +7,7 @@
 #include <plan_env/grid_map.h>
 #include <queue>
 #include <chrono>
+#include <functional>
 #include <path_searching/search_lattice.hpp>
 #include <plan_env/solve_budget.hpp>
 
@@ -68,6 +69,10 @@ class AStar
 private:
 	GridMap::Ptr grid_map_;
     scan_planner::SolveBudget::Ptr solve_budget_;
+    using SearchClock=std::chrono::steady_clock;
+    using SearchNow=std::function<SearchClock::time_point()>;
+    SearchNow search_now_;
+    bool last_search_timed_out_{false};
 
 	inline void coord2gridIndexFast(const double x, const double y, const double z, int &id_x, int &id_y, int &id_z);
 
@@ -85,7 +90,7 @@ private:
 
 	//bool (*checkOccupancyPtr)( const Eigen::Vector3d &pos );
 
-	inline int checkOccupancy(const Eigen::Vector3d &pos, const double yaw) { return grid_map_->getInflateOccupancy(pos, yaw); }
+	inline int checkOccupancy(const Eigen::Vector3d &pos, const double yaw) { return grid_map_->getPlanningInflateOccupancy(pos, yaw); }
 
 	std::vector<GridNodePtr> retrievePath(GridNodePtr current);
 
@@ -109,11 +114,14 @@ public:
     // is retained; occupancy belongs to the exclusive snapshot lease.
     void setEnvironment(const GridMap::Ptr &map) { grid_map_=map; }
 
-	AStar(){};
+    // Injectable monotonic clock only for deterministic native regression;
+    // production keeps the unchanged steady-clock 200 ms search quota.
+    explicit AStar(SearchNow now=[] {return SearchClock::now();}) : search_now_(std::move(now)) {}
 	~AStar();
 
 	void initGridMap(GridMap::Ptr occ_map, const Eigen::Vector3i pool_size);
     void setSolveBudget(const scan_planner::SolveBudget::Ptr &budget) { solve_budget_=budget; }
+    bool lastSearchTimedOut() const { return last_search_timed_out_; }
 
 		ASTAR_RET AstarSearch(const double step_size, Eigen::Vector3d start_pt, Eigen::Vector3d end_pt,
                          bool adjust_endpoints = true, bool recover_reference_lattice = false);

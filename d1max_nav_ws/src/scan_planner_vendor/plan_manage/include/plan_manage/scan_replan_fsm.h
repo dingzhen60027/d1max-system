@@ -7,6 +7,8 @@
 #include <iostream>
 #include <optional>
 #include <future>
+#include <deque>
+#include <iterator>
 #include <plan_env/collision_snapshot_pool.hpp>
 #include <plan_env/pending_snapshot_request.hpp>
 #include <plan_manage/execution_validator.hpp>
@@ -97,6 +99,15 @@ namespace scan_planner
     double snapshot_copy_ms_{0.};
     d1max_planning_interfaces::msg::ReferencePath reference_metadata_;
     std::optional<d1max_planning_interfaces::msg::TrackingProgress> tracking_progress_;
+    // Both inputs retain acquisition time. Callback order is not a motion
+    // residual: keep a bounded source history for progress/odometry pairing.
+    struct OdomSourceSample {
+      std::int64_t source_ns;
+      Eigen::Vector3d position;
+      std::string frame;
+    };
+    std::deque<OdomSourceSample> odom_source_history_;
+    d1max_planning_interfaces::msg::TrackingProgress::ConstSharedPtr pending_tracking_progress_;
     bool require_schema_v2_{false};
     PlanningVisualization::Ptr visualization_;
     scan_planner_msgs::msg::DataDisp data_disp_;
@@ -210,6 +221,9 @@ namespace scan_planner
     bool snapshotAcquisitionCurrent();
     void publishCommittedTrajectory();
     void trackingProgressCallback(const d1max_planning_interfaces::msg::TrackingProgress::ConstSharedPtr &msg);
+    void consumeTrackingProgress(const d1max_planning_interfaces::msg::TrackingProgress::ConstSharedPtr &msg);
+    std::optional<Eigen::Vector3d> odometryPositionAtSource(std::int64_t source_ns,
+                                                         const std::string &frame) const;
     bool callEmergencyStop(Eigen::Vector3d stop_pos);                          // front-end and back-end method
     bool planFromCurrentTraj();
     void setStartStateFromOdomOrCurrentTraj();

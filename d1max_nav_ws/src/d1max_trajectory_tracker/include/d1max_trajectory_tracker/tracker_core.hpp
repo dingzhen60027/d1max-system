@@ -96,6 +96,10 @@ struct Config
 {
   std::string session_id, planning_frame{"d1max_loc_odom"}, base_frame{"d1max_loc_base_link"};
   std::string map_version_id, map_frame{"d1max_loc_map"};
+  // Explicit certificate contract. Legacy callers keep observed-free curves;
+  // the mainline can select the official geometry certificate while executable
+  // demands continue through their independent native motion sweep.
+  std::string trajectory_geometry_policy{"observed_free"};
   double max_speed{0.30}, max_yaw_rate{0.50};
   double max_acceleration{0.35}, max_yaw_acceleration{0.80};
   double task_timeout{0.75}, odom_timeout{0.40}, trajectory_timeout{5.0};
@@ -119,6 +123,9 @@ struct Config
         (require_versioned_identity && (map_version_id.empty() || map_frame.empty() ||
          planning_frame == map_frame)))
       throw std::invalid_argument("session and frames must be explicit");
+    if(trajectory_geometry_policy!="observed_free"&&
+       trajectory_geometry_policy!="official_inflated_geometry")
+      throw std::invalid_argument("unknown trajectory geometry policy");
     const auto bound = [](double value, double ceiling) {
       return finite(value) && value > 0.0 && value <= ceiling;
     };
@@ -637,7 +644,8 @@ public:
     return true;
   }
 
-  bool receiveTrajectory(const Trajectory &trajectory, double ros_now, double received)
+  bool receiveTrajectory(const Trajectory &trajectory, double ros_now, double received,
+                         bool fresh_external_curve_lease=false)
   {
     recordJoinDiagnostic(trajectory,ros_now,0.,{});
     // Unrelated or obsolete context is not allowed to replace a current plan.
@@ -660,7 +668,15 @@ public:
     if (trajectory.frame_id != config_.planning_frame) return candidateReject("trajectory_frame_mismatch");
     if (trajectory.start_time + 1e-6 < task_.issued_at) return candidateReject("trajectory_predates_task");
     if (trajectory.start_time > ros_now + 0.2) return candidateReject("trajectory_start_in_future");
-    if (ros_now - trajectory.start_time > config_.trajectory_timeout) return candidateReject("trajectory_start_expired");
+    // A typed caller can recertify immutable geometry against the current map
+    // and reobserve its entry from actual state. That live certificate, not
+    // elapsed time since the original solve, supplies its collision lifetime.
+    // Keep original timestamps and all measured-entry predicates; legacy
+    // callers (or a candidate without an actual reobserved entry) retain TTL.
+    const bool externally_recertified=fresh_external_curve_lease&&
+      config_.require_versioned_identity&&trajectory.entry_reobserved;
+    if (!externally_recertified&&ros_now-trajectory.start_time>config_.trajectory_timeout)
+      return candidateReject("trajectory_start_expired");
     if (trajectory.order != 3) return candidateReject("trajectory_order_unsupported");
     if (trajectory.points.size() < 4 || trajectory.points.size() > 10000)
       return candidateReject("trajectory_control_point_count");
@@ -693,7 +709,8 @@ public:
                             trajectory.knots[trajectory.order];
     if (!finite(duration)) return candidateReject("trajectory_duration_nonfinite");
     if (duration <= 0.01 || duration > 120.0) return candidateReject("trajectory_duration_out_of_range");
-    if (ros_now - trajectory.start_time > duration) return candidateReject("trajectory_duration_elapsed");
+    if (!externally_recertified&&ros_now-trajectory.start_time>duration)
+      return candidateReject("trajectory_duration_elapsed");
     auto prepared=trajectory.prepared;
     if(prepared&&!prepared->matches(config_,trajectory))return candidateReject("prepared_geometry_identity_mismatch");
     if(!prepared)prepared=PreparedGeometry::build(config_,trajectory,support_?*support_:SupportEvidence{});
@@ -781,11 +798,21 @@ public:
       double now,double forward,double yaw_rate) {
     const bool in_place=turn_phase_==TurnPhase::Aligning;
     if(!active_||!trajectory_||!have_odom_||trajectory_id!=last_trajectory_id_||
-       !finite(forward)||forward<0.||(forward<=1e-6&&!in_place)||!finite(yaw_rate)||std::abs(yaw_rate)<=1e-6||
+       !finite(forward)||forward<0.||(forward<=1e-6&&!in_place)||!finite(yaw_rate)||
+       (forward<=1e-6&&std::abs(yaw_rate)<=1e-6)||
        !fresh(now,demand_source_stamp,.1)||demand_source_stamp<=last_turn_feedback_stamp_||
        !fresh(now,odom_.stamp,.1,.02)||turn_phase_==TurnPhase::WaitingEntry)return false;
     last_turn_feedback_stamp_=demand_source_stamp;
     turn_first_engaged_=true;
+    if(forward>1e-6&&std::abs(yaw_rate)<=1e-6) {
+      // A blocked straight entry cannot be repaired by aligning to the same
+      // heading. Retain task/geometry, stop this entry, and request a different
+      // native local curve. The wrapper has already matched real occupied
+      // evidence; unknown, reverse and zero commands never reach this branch.
+      turn_phase_=TurnPhase::WaitingEntry;resetTurnStationaryWindow();
+      last_output_=Output{};last_output_.frozen=true;
+      reason_="waiting_executable_entry";return true;
+    }
     if(in_place&&forward<=1e-6) {
       // The in-place turn toward this curve itself collides. Re-aligning would
       // repeat the same rejected rotation; native must choose another entry.
@@ -1064,7 +1091,7 @@ public:
   // Preparation is pure with respect to the current controller. At commit we
   // repeat admission against the latest body and retain the limiter history.
   bool admitRevision(const Task& task,const Trajectory& trajectory,const SupportEvidence& support,
-                     double now,double receipt,bool commit) {
+                     double now,double receipt,bool commit,bool fresh_external_curve_lease=false) {
     if(active_ && !task.identity.sameTask(task_.identity)) return candidateReject("foreign_task");
     if(task.session_id!=config_.session_id || !task.active || !task.identity.valid() ||
        task.frame_id!=config_.planning_frame || !task.goal.allFinite() ||
@@ -1080,12 +1107,28 @@ public:
       trial.support_index_=trajectory.prepared->support_index;
     } else trial.setSupport(support);
     if(trajectory.generation!=task_.generation) trial.last_trajectory_id_=-1;
-    if(!trial.receiveTrajectory(trajectory,now,receipt)) {
+    if(!trial.receiveTrajectory(trajectory,now,receipt,fresh_external_curve_lease)) {
       candidate_reason_=trial.candidate_reason_.empty()?"candidate_rejected":trial.candidate_reason_;
       join_diagnostic_=trial.join_diagnostic_;
       return false;
     }
     if(commit) *this=std::move(trial); else candidate_reason_.clear();
+    return true;
+  }
+  // Restore only the exact identity already selected by the writer, after its
+  // expired ACK forced HOLD and cleared geometry. The caller binds that fact;
+  // this still performs the normal fresh support, derivative, actual-entry
+  // and limiter admission. It neither resumes authority nor re-dates a source.
+  bool admitAppliedGeometry(const Task& task,const Trajectory& trajectory,const SupportEvidence& support,
+      double now,double receipt,bool commit) {
+    if(!active_||hasInstalledGeometry()||trajectory.id!=last_trajectory_id_||
+       trajectory.generation!=task_.generation||!(task.identity==task_.identity)||
+       !trajectory.entry_reobserved)return candidateReject("applied_geometry_recovery_identity_mismatch");
+    TrackerCore trial(*this);trial.last_trajectory_id_=-1;
+    if(!trial.admitRevision(task,trajectory,support,now,receipt,true,true)) {
+      candidate_reason_=trial.candidate_reason_;join_diagnostic_=trial.join_diagnostic_;return false;
+    }
+    if(commit)*this=std::move(trial);else candidate_reason_.clear();
     return true;
   }
   const Task& task() const { return task_; }

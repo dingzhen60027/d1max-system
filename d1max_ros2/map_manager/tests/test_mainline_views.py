@@ -85,8 +85,9 @@ class MainlineViewTests(unittest.TestCase):
             if self.bad_launch_identity:
                 self.units[unit]['InvocationID'] = ''
         if command[:3] == ['systemctl', '--user', 'stop']:
-            self.units[command[3]].update(ActiveState='inactive', MainPID='0',
-                                         populated='1' if self.stop_residual else '0')
+            for name in command[3:]:
+                self.units[name].update(ActiveState='inactive', MainPID='0',
+                                       populated='1' if self.stop_residual else '0')
         self.assertTrue(options.get('check'))
         self.assertLessEqual(options['timeout'], 16)
         return subprocess.CompletedProcess(command, 0, '')
@@ -390,6 +391,29 @@ class MainlineViewTests(unittest.TestCase):
         self.views.stop(self.state)
         self.assertEqual(len(self.stops()), 1)
 
+    def test_changed_entry_does_not_block_exact_owned_view_cleanup(self):
+        entry = self.nav / 'tools/navigation_entry.sh'
+        entry.write_text('mock public entry');entry.chmod(0o700)
+        self.state.update(entrypoint=str(entry),entrypoint_sha256=hashlib.sha256(entry.read_bytes()).hexdigest(),
+            compatibility_entrypoint_sha256=hashlib.sha256(self.entry.read_bytes()).hexdigest())
+        self.open()
+        entry.write_text('new public entry')
+        with self.assertRaisesRegex(ValueError,'view_entrypoint_changed'):
+            self.views.open(self.state,'global')
+        self.entry.unlink();entry.unlink();self.release.rmdir()
+        self.views.stop(self.state)
+        self.assertEqual(len(self.stops()),1)
+        self.assertEqual(self.units[CORE_UNIT]['ActiveState'],'active')
+
+    def test_cleanup_still_requires_immutable_session_and_view_identity(self):
+        path=self.directory/'session.json';path.write_text('{"id":"session-1"}')
+        self.state['session_sha256']=hashlib.sha256(path.read_bytes()).hexdigest()
+        self.open();self.entry.write_text('new dispatcher')
+        path.write_text('{"id":"other"}')
+        with self.assertRaisesRegex(ValueError,'view_session_binding_changed'):
+            self.views.stop(self.state)
+        self.assertFalse(self.stops())
+
     def test_wrong_core_identity_or_invocation_prevents_open(self):
         for key, wrong in [('Description', CORE_OWNER + 'other'), ('MainPID', '999'),
                            ('InvocationID', 'new-core')]:
@@ -442,7 +466,7 @@ class MainlineViewTests(unittest.TestCase):
         self.assertEqual(set(result), {'global', 'local'})
         self.assertTrue(all(record['phase'] == 'stopped' for record in result.values()))
         self.assertEqual(self.views.stop(self.state), {})
-        self.assertEqual(len(self.stops()), 2)
+        self.assertEqual(len(self.stops()), 1)
 
     def test_no_display_is_clear_warning_without_stopping_core(self):
         os.environ.pop('DISPLAY')

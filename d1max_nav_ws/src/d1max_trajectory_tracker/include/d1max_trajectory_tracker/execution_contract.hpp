@@ -15,6 +15,7 @@
 #include <optional>
 #include <deque>
 #include <initializer_list>
+#include <iterator>
 
 namespace d1max_trajectory_tracker {
 namespace wire=d1max_planning_interfaces::msg;
@@ -100,6 +101,7 @@ public:
     if(worker_)worker_->invalidate();
     preparation_request_.reset();
     if(handoff_)handoff_->retired=true;
+    task_closed_=true;
   }
   bool receiveOdom(const Odom& state,double now,double receipt) {
     const bool was_active=core_.active();
@@ -111,12 +113,14 @@ public:
     if(!versionValid(p.version,config_)||p.transport_mode!=mode_||p.proposal_id.empty()||
        !timed(now,seconds(p.source_stamp),seconds(p.valid_until),1.)||
        p.reference.path.header.frame_id!=config_.planning_frame||p.reference.point_reference!="body_center") return;
+    if(!enterTaskDomain(p.version))return;
     // Compare with the owner's current lease, even one whose commit failed
     // here: SCAN and the BT already build on it. A stale local view would
     // reject every successor forever while this controller holds.
     if(owner_permit_&&owner_permit_->allowed && !(p.expected_version==owner_permit_->version)) return;
     if(owner_permit_&&owner_permit_->allowed && p.expected_trajectory_id!=owner_permit_->trajectory_id) return;
-    if(proposal_&&p.version.reference_generation<proposal_->version.reference_generation) return;
+    if(proposal_&&identity(p.version).sameTask(identity(proposal_->version))&&
+       p.version.reference_generation<proposal_->version.reference_generation) return;
     proposal_=p;
     // An admission stays bound to the proposal it was prepared from; a newer
     // proposal must not re-date the task of an already prepared curve.
@@ -124,15 +128,15 @@ public:
     proposals_.push_back(p);if(proposals_.size()>8)proposals_.pop_front();
   }
   void support(const wire::SupportReference& s) {
-    if(!versionValid(s.version,config_)||s.support_ground_xyz.size()>20000) return;
+    if(!versionValid(s.version,config_)||s.support_ground_xyz.size()>20000||!mayStageTask(identity(s.version))) return;
     if(active_support_&&s.version==active_support_->version) active_support_=s;
     else pending_support_=s;
     schedulePreparation();
   }
   void candidate(Trajectory t) {
-    if(t.session_id!=config_.session_id || !t.identity.valid() || t.points.size()>10000) return;
+    if(t.session_id!=config_.session_id || !t.identity.valid() || t.points.size()>10000||!mayStageTask(t.identity)) return;
     if(retired_task_&&t.identity.task_id==*retired_task_)return;
-    if(candidate_ && t.generation<candidate_->generation) return;
+    if(candidate_ && t.identity.sameTask(candidate_->identity)&&t.generation<candidate_->generation) return;
     if(candidate_&&t.generation==candidate_->generation&&t.id<=candidate_->id)return;
     // A curve ID is immutable. Re-delivery cannot silently replace points
     // under a cached ID, and newer candidates do not touch the incumbent.
@@ -160,7 +164,7 @@ public:
   bool preparationPending()const{return candidate_&&!candidate_->prepared&&preparation_failure_.empty();}
   double preparationWorkerSeconds()const{return last_preparation_seconds_;}
   void validation(const wire::TrajectoryValidation& v,double now) {
-    if(!versionValid(v.version,config_)||v.transport_mode!=mode_) return;
+    if(!versionValid(v.version,config_)||v.transport_mode!=mode_||!mayStageTask(identity(v.version))) return;
     const auto duplicate=std::find_if(proofs_.begin(),proofs_.end(),[&](const auto& old){
       return old.version==v.version&&old.trajectory_id==v.trajectory_id&&old.sequence==v.sequence;
     });
@@ -173,13 +177,15 @@ public:
           leased_validation_=active_validation_;
         active_validation_=v;
       }
+      if(!core_.hasInstalledGeometry()&&(!pending_validation_||v.sequence>pending_validation_->sequence))
+        pending_validation_=v; // Re-admit the exact Applied geometry from fresh real proof.
     } else if(!pending_validation_||v.version.reference_generation>pending_validation_->version.reference_generation||
       (v.version==pending_validation_->version&&v.sequence>pending_validation_->sequence)) pending_validation_=v;
     (void)now;
   }
   bool motionValidation(const wire::MotionValidation& v,double now) {
     // This is controller feedback, never permission to move. Only an actual
-    // collision on our own still-live forward+turn or in-place turn command
+    // collision on our own still-live forward, forward+turn or in-place turn command
     // can request a different maneuver; unknown/late/foreign evidence cannot.
     if(v.valid||v.reason!="motion_sweep_occupied"||!permit_||!committed_version_||
        braking_model_sha256_.size()!=64||v.braking_model_sha256!=braking_model_sha256_||
@@ -193,7 +199,8 @@ public:
     });
     if(it==demands_.rend())return false;
     const auto& d=*it;
-    if(d.hold||d.velocity.linear.x<0.||std::abs(d.velocity.angular.z)<=1e-9||
+    if(d.hold||d.velocity.linear.x<0.||
+       (d.velocity.linear.x<=0.&&std::abs(d.velocity.angular.z)<=1e-9)||
        d.execution_id!=v.execution_id||d.control_epoch!=v.control_epoch||d.sdk_session!=v.sdk_session||
        d.sdk_arm_generation!=v.sdk_arm_generation||d.trajectory_id!=v.trajectory_id||
        d.permit_sequence!=v.permit_sequence||v.trajectory_validation_sequence<d.validation_sequence||
@@ -247,7 +254,7 @@ public:
     pollPreparation();
     if(!candidate_||!pending_validation_||!pending_support_) return {};
     if(!candidate_->prepared&&preparation_failure_.empty()) {last_prepare_reason_="waiting_candidate_preparation";return {};}
-    if(core_.active()&&core_.generation()==candidate_->generation&&core_.trajectoryId()==candidate_->id) return {};
+    if(core_.hasInstalledGeometry()&&core_.generation()==candidate_->generation&&core_.trajectoryId()==candidate_->id) return {};
     const auto& v=*pending_validation_;
     const auto* bound=proposalFor(v.version,v.proposal_id);
     if(!bound||
@@ -268,7 +275,9 @@ public:
     else {
       const auto observed=observeCandidateEntry(v,now,reason);
       if(!observed)reason="candidate:"+reason;
-      else if(!core_.admitRevision(task,*observed,preparedSupport(*pending_support_),now,receipt,false))
+      else if(!(isAppliedRecovery(v.version,v.trajectory_id)?
+          core_.admitAppliedGeometry(task,*observed,preparedSupport(*pending_support_),now,receipt,false):
+          core_.admitRevision(task,*observed,preparedSupport(*pending_support_),now,receipt,false,true)))
         reason="candidate:"+core_.candidateReason();
     }
     a.accepted=reason.empty();
@@ -280,9 +289,22 @@ public:
     }
     return a;
   }
+  bool entryPreparationReady(double now) const {
+    if(!candidate_||!candidate_->prepared||!candidate_->prepared->failure.empty()||
+       !preparation_failure_.empty()||!pending_validation_||!pending_support_)return false;
+    if(core_.hasInstalledGeometry()&&core_.generation()==candidate_->generation&&
+       core_.trajectoryId()==candidate_->id)return false;
+    const auto& v=*pending_validation_;
+    return v.whole_curve&&!v.remaining_curve&&proofFresh(v,now)&&
+      candidate_->generation==v.version.reference_generation&&candidate_->id==v.trajectory_id&&
+      candidate_->identity==identity(v.version)&&supportMatches(v,*pending_support_)&&
+      proposalFor(v.version,v.proposal_id);
+  }
   bool permit(const wire::ExecutionPermit& p,double now,double receipt) {
     if(!versionValid(p.version,config_)||p.transport_mode!=mode_||p.frame_id!=config_.planning_frame||
        p.sequence<=last_permit_sequence_||!timed(now,seconds(p.source_stamp),seconds(p.valid_until),.75)) return false;
+    if(!enterTaskDomain(p.version))return false;
+    if(!enterWriterDomain(p))return false;
     if(permit_ && p.control_epoch<permit_->control_epoch) return false;
     permit_history_.push_back(p);while(permit_history_.size()>32)permit_history_.pop_front();
     if(retired_task_&&p.version.task_id==*retired_task_&&!p.revoked)return false;
@@ -304,11 +326,15 @@ public:
     // Arming/holding changes authority, not an already committed geometry.
     // Do not require the expired first admission again after a zero-authority
     // heartbeat. The independent ledger and live controller must both agree.
-    if(committed_version_&&p.version==*committed_version_&&core_.active()&&
+    if(committed_version_&&p.version==*committed_version_&&core_.hasInstalledGeometry()&&
        p.trajectory_id==core_.trajectoryId()&&p.version.reference_generation==core_.generation()&&
        identity(p.version)==core_.task().identity) {
-      if(!proofFor(p,now)) {last_permit_reject_="heartbeat_proof_not_fresh";return false;}
-      permit_=p;last_permit_sequence_=p.sequence;core_.refreshTaskLease(receipt);return true;
+      // Owner authority and native collision evidence have independent clocks.
+      // A proof gap must not reject a fresh holding/disallowed heartbeat or
+      // let the task lease expire. step() still requires the latest fresh
+      // proof before issuing any nonzero demand for this exact curve.
+      permit_=p;last_permit_sequence_=p.sequence;core_.refreshTaskLease(receipt);
+      last_permit_reject_.clear();return true;
     }
     // A first geometry commit still binds the exact two-phase admission.
     // Only an already committed curve may advance beyond the permit's floor.
@@ -334,14 +360,18 @@ public:
     const Task task=taskFor(p.version,p.goal_position,seconds(bound->source_stamp));
     std::string entry_reason;const auto observed=observeCandidateEntry(*prepared_proof,now,entry_reason);
     if(!observed) {last_permit_reject_="commit_candidate:"+entry_reason;return false;}
-    if(!core_.admitRevision(task,*observed,preparedSupport(*pending_support_),now,receipt,true)) {
+    if(!(isAppliedRecovery(p.version,p.trajectory_id)?
+        core_.admitAppliedGeometry(task,*observed,preparedSupport(*pending_support_),now,receipt,true):
+        core_.admitRevision(task,*observed,preparedSupport(*pending_support_),now,receipt,true,true))) {
       last_permit_reject_="commit_candidate:"+core_.candidateReason();return false;
     }
     last_permit_reject_.clear();
     active_validation_=*prepared_proof;leased_validation_=active_validation_;active_support_=pending_support_;
     committed_version_=p.version;
     permit_=p;last_permit_sequence_=p.sequence;
-    recordInstallation(p,*admission,*prepared_proof,task,stamp(now));
+    recordInstallation(p,*admission,*prepared_proof,task,stamp(now),*candidate_,*pending_support_);
+    if(handoff_&&handoff_->applied&&handoff_->grant.candidate.version==p.version&&
+       handoff_->grant.candidate.trajectory_id==p.trajectory_id)handoff_->retired=false;
     admission_.reset();return true;
   }
   wire::MotionDemand step(double now,double receipt) {
@@ -401,6 +431,7 @@ public:
     d.hold=out.forward==0.&&out.yaw_rate==0.;d.reason=out.reason;
     // Deliberately left false: a separate raw-ray guard must sign the demand.
     d.safety_checked=false;
+    pinInitialIntent(p);
     if(!d.hold) {
       demands_.push_back(d);while(demands_.size()>16)demands_.pop_front();
     }
@@ -445,7 +476,7 @@ public:
       core_.trajectoryId()==g.candidate.trajectory_id;
     std::string entry_reason;const auto observed=observeCandidateEntry(*proof,now,entry_reason);
     if(!observed) {handoff_reason_="handoff_prepare:"+entry_reason;return false;}
-    if(!already&&!trial.admitRevision(task,*observed,preparedSupport(*s),now,receipt,true)) {
+    if(!already&&!trial.admitRevision(task,*observed,preparedSupport(*s),now,receipt,true,true)) {
       handoff_reason_="handoff_prepare:"+trial.candidateReason();return false;
     }
     if(handoff_)tombstone_=std::move(handoff_);
@@ -458,6 +489,11 @@ public:
     if(seconds(g.transition_deadline)<=now||seconds(g.valid_until)<=now||seconds(p.valid_until)<=now) {
       h.retired=true;handoff_reason_="handoff_ack_timeout";return {};
     }
+    // The fixed <=750 ms grant can produce at most 38 normal 50 Hz entries.
+    // Retain every actually issued entry in this transaction rather than
+    // evicting its writer-selected entry with an unrelated rolling cache.
+    // Abnormal caller rates stop preparation; they never overwrite evidence.
+    if(h.demands.size()>=40) {handoff_reason_="prepared_transaction_evidence_capacity";return {};}
     const auto* proof=proofFor(p,now);
     if(!proof||!proof->whole_curve||!supportMatches(*proof,h.support))return {};
     const auto entry=h.controller.refreshPreparedState(core_,now,receipt);
@@ -491,25 +527,35 @@ public:
     auto& a=out.entry_admission;a.sequence=++admission_sequence_;a.version=p.version;
     a.trajectory_id=p.trajectory_id;a.validation_sequence=proof->sequence;a.body_source_stamp=d.body_source_stamp;
     a.checked_at=stamp(now);a.valid_until=d.valid_until;a.accepted=true;a.reason="actual_entry_prepared_not_applied";a.transport_mode=mode_;
-    h.demands.push_back(out);while(h.demands.size()>8)h.demands.pop_front();
+    h.demands.push_back(out);
     handoff_reason_="prepared_waiting_writer";return out;
   }
   bool commitAck(const wire::ExecutionCommitAck& a,double now,double receipt) {
-    if(!writer_handoff_||a.schema_version!=1||a.sequence<=ack_sequence_||a.transport_mode!=mode_)return false;
+    if(!writer_handoff_||a.schema_version!=1||a.sequence<=ack_sequence_||a.transport_mode!=mode_||
+       !task_domain_||task_closed_||!task_domain_->sameTask(identity(a.candidate_version))||
+       !writer_domain_||a.execution_id!=writer_domain_->execution_id||a.control_epoch!=writer_domain_->control_epoch||
+       a.sdk_session!=writer_domain_->sdk_session||a.sdk_arm_generation!=writer_domain_->sdk_arm_generation)return false;
     // The initial ordinary writer call records commit 1 without a handoff.
     if(a.handoff_id.empty()) {
-      const auto first=std::find_if(permit_history_.begin(),permit_history_.end(),[&](const auto& p){
+      const auto matches=[&](const auto& p){
         return a.permit_sequence==p.sequence&&a.candidate_version==p.version&&a.candidate_trajectory_id==p.trajectory_id&&
           a.execution_id==p.execution_id&&a.control_epoch==p.control_epoch&&a.sdk_session==p.sdk_session&&
           a.sdk_arm_generation==p.sdk_arm_generation&&p.allowed&&p.geometry_committed&&!p.revoked&&
           timeNs(p.source_stamp)<=timeNs(a.applied_at)&&timeNs(p.valid_until)>timeNs(a.applied_at);
-      });
-      const auto installed=std::find_if(installations_.rbegin(),installations_.rend(),[&](const auto& i){
-        return i.fact.version==a.candidate_version&&i.fact.trajectory_id==a.candidate_trajectory_id&&
-          timeNs(i.fact.installed_at)<=timeNs(a.applied_at);
-      });
-      if(!a.applied||a.previous_commit_sequence||a.commit_sequence!=1||first==permit_history_.end()||
-         installed==installations_.rend()) {initial_ack_reason_="initial_writer_fact_not_bound_to_installed_geometry";return false;}
+      };
+      const wire::ExecutionPermit* first=nullptr;const Installation* installed=nullptr;
+      for(const auto& p:permit_history_)if(matches(p))first=&p;
+      for(const auto& i:installations_)if(
+        i.fact.version==a.candidate_version&&i.fact.trajectory_id==a.candidate_trajectory_id&&
+        timeNs(i.fact.installed_at)<=timeNs(a.applied_at))installed=&i;
+      for(const auto& intent:initial_intents_)if(matches(intent.permit)&&
+          intent.installation.fact.version==a.candidate_version&&
+          intent.installation.fact.trajectory_id==a.candidate_trajectory_id&&
+          timeNs(intent.installation.fact.installed_at)<=timeNs(a.applied_at)) {
+        first=&intent.permit;installed=&intent.installation;
+      }
+      if(!a.applied||a.previous_commit_sequence||a.commit_sequence!=1||!first||!installed) {
+        initial_ack_reason_="initial_writer_fact_not_bound_to_installed_geometry";return false;}
       if(writer_commit_sequence_) {
         if(writer_commit_sequence_!=1||!initial_writer_ack_)return false;
         auto expected=*initial_writer_ack_,actual=a;
@@ -532,6 +578,8 @@ public:
         initial_ack_reason_="initial_writer_applied_fact_restored_hold";
         installation_=*installed; // Original installation fact, never re-dated.
         core_.recordAppliedHold(installed->task,a.candidate_trajectory_id,receipt,initial_ack_reason_);
+        if(installed->trajectory&&installed->support)
+          restoreAppliedPreparation(*installed->trajectory,*installed->support,installed->proposal.get());
       } else initial_ack_reason_="initial_writer_applied_installed_geometry";
       return true;
     }
@@ -556,6 +604,8 @@ public:
     if(a.commit_sequence!=a.previous_commit_sequence+1)return false;
     if(h.applied&&writer_commit_sequence_==a.commit_sequence) {ack_sequence_=a.sequence;return true;}
     if(a.previous_commit_sequence!=writer_commit_sequence_)return false;
+    if(timeNs(a.applied_at)<timeNs(g.source_stamp)||timeNs(a.applied_at)>timeNs(g.transition_deadline)||
+       timeNs(a.applied_at)<timeNs(p.source_stamp)||timeNs(a.applied_at)>timeNs(p.valid_until))return false;
     const auto found=std::find_if(h.demands.begin(),h.demands.end(),[&](const auto& x) {
       return x.demand.sequence==a.demand_sequence&&x.entry_admission.sequence==a.entry_admission_sequence&&
         x.demand.source_stamp==a.demand_source_stamp&&x.demand.body_source_stamp==a.demand_body_source_stamp&&
@@ -576,26 +626,112 @@ public:
     if(was_retired||!a.write_submitted||seconds(a.valid_until)<=now||
        seconds(p.valid_until)<=now||!entry||!proof||!sdk_entry) {
       h.retired=true;handoff_reason_="writer_applied_new_identity_hold";
-      core_.recordAppliedHold(h.task,p.trajectory_id,receipt,handoff_reason_);return true;
+      core_.recordAppliedHold(h.task,p.trajectory_id,receipt,handoff_reason_);
+      restoreAppliedPreparation(h.trajectory,h.support);return true;
     }
     h.controller.recordAppliedOutput(a.applied_velocity.linear.x,a.applied_velocity.angular.z,now,receipt);
     core_=std::move(h.controller);
     const auto admitted_proof=std::find_if(proofs_.rbegin(),proofs_.rend(),[&](const auto& v){
       return v.version==p.version&&v.trajectory_id==p.trajectory_id&&v.sequence==found->entry_admission.validation_sequence;
     });
-    if(admitted_proof!=proofs_.rend())recordInstallation(promoted,found->entry_admission,*admitted_proof,h.task,stamp(now));
+    if(admitted_proof!=proofs_.rend())recordInstallation(promoted,found->entry_admission,*admitted_proof,h.task,stamp(now),h.trajectory,h.support);
     handoff_reason_="writer_applied";return true;
   }
 private:
-  struct Installation {wire::TrackerGeometryReceipt fact;Task task;};
+  bool enterWriterDomain(const wire::ExecutionPermit& p) {
+    if(p.revoked||p.execution_id.empty())return true;
+    if(!writer_domain_) {writer_domain_=p;return true;}
+    const auto& old=*writer_domain_;
+    if(p.execution_id==old.execution_id&&p.control_epoch==old.control_epoch&&
+       p.sdk_session==old.sdk_session&&p.sdk_arm_generation==old.sdk_arm_generation)return true;
+    // Only a new fresh disallowed owner lease may establish another writer
+    // incarnation within the same retained task. A proposal/heartbeat from
+    // the old binding cannot reset CAS or authorize automatic continuation.
+    if(p.allowed||p.control_epoch<=old.control_epoch||(p.phase!="arming"&&p.phase!="holding"))return false;
+    writer_domain_=p;writer_commit_sequence_=ack_sequence_=0;initial_writer_ack_.reset();initial_intents_.clear();
+    handoff_.reset();tombstone_.reset();demands_.clear();return true;
+  }
+  bool isAppliedRecovery(const wire::ExecutionVersion& version,std::int64_t id)const {
+    return writer_handoff_&&writer_commit_sequence_&&committed_version_&&version==*committed_version_&&
+      core_.active()&&!core_.hasInstalledGeometry()&&core_.trajectoryId()==id&&
+      core_.task().identity==identity(version);
+  }
+  void restoreAppliedPreparation(const Trajectory& trajectory,const wire::SupportReference& support,
+      const wire::ReferenceProposal* original_proposal=nullptr) {
+    if(worker_)worker_->invalidate();
+    preparation_request_.reset();candidate_entry_curve_.reset();
+    candidate_=trajectory;pending_support_=support;admission_.reset();pending_validation_.reset();
+    preparation_failure_.clear();
+    if(original_proposal&&!proposalFor(original_proposal->version,original_proposal->proposal_id)) {
+      proposals_.push_back(*original_proposal);if(proposals_.size()>8)proposals_.pop_front();
+    }
+    for(auto it=proofs_.rbegin();it!=proofs_.rend();++it)if(it->version==support.version&&it->trajectory_id==trajectory.id) {
+      pending_validation_=*it;break;
+    }
+    // The worker reuses immutable cached geometry when possible; it grants no
+    // authority. Fresh admission and a fresh exact BT permit are still needed.
+    schedulePreparation();
+  }
+  bool mayStageTask(const ControlIdentity& value)const {
+    if(retired_task_&&value.task_id==*retired_task_)return false;
+    return !task_domain_||task_domain_->sameTask(value)||task_closed_;
+  }
+  bool enterTaskDomain(const wire::ExecutionVersion& version) {
+    const auto value=identity(version);
+    if(retired_task_&&value.task_id==*retired_task_)return false;
+    if(task_domain_&&task_domain_->sameTask(value))return !task_closed_;
+    // An unrelated proposal cannot take ownership of an active task. The
+    // sole BT owner first retires it; only then can a fresh typed ingress
+    // establish a new complete task domain (not just a reference counter).
+    if(task_domain_&&!task_closed_)return false;
+    const auto staged_support=pending_support_&&identity(pending_support_->version).sameTask(value)?pending_support_:std::nullopt;
+    const auto staged_candidate=candidate_&&candidate_->identity.sameTask(value)?candidate_:std::nullopt;
+    const auto staged_validation=pending_validation_&&identity(pending_validation_->version).sameTask(value)?pending_validation_:std::nullopt;
+    if(worker_)worker_->invalidate();
+    preparation_request_.reset();candidate_entry_curve_.reset();
+    proposal_.reset();proposals_.clear();permit_.reset();owner_permit_.reset();permit_history_.clear();
+    committed_version_.reset();admission_.reset();admissions_.clear();proofs_.clear();demands_.clear();
+    active_validation_.reset();leased_validation_.reset();admitted_validation_.reset();active_support_.reset();
+    blocked_entry_.reset();handoff_.reset();tombstone_.reset();initial_writer_ack_.reset();
+    installation_.reset();installations_.clear();initial_intents_.clear();writer_domain_.reset();writer_commit_sequence_=ack_sequence_=0;
+    handoff_reason_.clear();initial_ack_reason_.clear();preparation_failure_.clear();last_permit_reject_.clear();
+    candidate_=staged_candidate;pending_support_=staged_support;pending_validation_=staged_validation;
+    if(staged_validation)proofs_.push_back(*staged_validation);
+    task_domain_=value;task_closed_=false;
+    // Permits/sequences are one owner publisher's monotonic events, while
+    // writer commit/ACK counters start at one in each SDK task binding.
+    schedulePreparation();return true;
+  }
+  struct Installation {wire::TrackerGeometryReceipt fact;Task task;
+    std::shared_ptr<const Trajectory> trajectory;
+    std::shared_ptr<const wire::SupportReference> support;
+    std::shared_ptr<const wire::ReferenceProposal> proposal;};
+  struct InitialIntent {wire::ExecutionPermit permit;Installation installation;};
+  void pinInitialIntent(const wire::ExecutionPermit& p) {
+    if(!writer_handoff_||writer_commit_sequence_||!p.allowed||!p.geometry_committed||p.revoked||
+       p.execution_id.empty()||p.sdk_session.empty()||!installation_||
+       installation_->fact.version!=p.version||installation_->fact.trajectory_id!=p.trajectory_id)return;
+    for(const auto& old:initial_intents_)if(old.permit.sequence==p.sequence&&old.permit.version==p.version&&
+      old.permit.execution_id==p.execution_id&&old.permit.control_epoch==p.control_epoch&&
+      old.permit.sdk_session==p.sdk_session&&old.permit.sdk_arm_generation==p.sdk_arm_generation)return;
+    // First still-undecided real output is pinned; newer heartbeat/geometry
+    // changes retain only seven recent outputs. No TTL or permit is renewed.
+    initial_intents_.push_back({p,*installation_});
+    if(initial_intents_.size()>8)initial_intents_.erase(std::next(initial_intents_.begin()));
+  }
   void recordInstallation(const wire::ExecutionPermit& p,const wire::TrajectoryAdmission& a,
-      const wire::TrajectoryValidation& v,const Task& task,const builtin_interfaces::msg::Time& at) {
+      const wire::TrajectoryValidation& v,const Task& task,const builtin_interfaces::msg::Time& at,
+      const Trajectory& trajectory,const wire::SupportReference& support) {
     wire::TrackerGeometryReceipt r;r.schema_version=1;r.version=p.version;
     r.frame_id=config_.planning_frame;r.transport_mode=mode_;r.trajectory_id=p.trajectory_id;
     r.installation_sequence=++installation_sequence_;r.permit_sequence=p.sequence;
     r.admission_sequence=a.sequence;r.validation_sequence=v.sequence;r.installed_at=at;
     r.body_source_stamp=bodySourceStamp(core_.odometry());r.installed=true;r.reason="tracker_geometry_installed";
-    installation_=Installation{r,task};installations_.push_back(*installation_);
+    const auto* bound=proposalFor(p.version,v.proposal_id);
+    installation_=Installation{r,task,std::make_shared<const Trajectory>(trajectory),
+      std::make_shared<const wire::SupportReference>(support),
+      bound?std::make_shared<const wire::ReferenceProposal>(*bound):nullptr};
+    installations_.push_back(*installation_);
     while(installations_.size()>8)installations_.pop_front();
   }
   bool handoffModeValid(const wire::ExecutionHandoffGrant& g,double now)const {
@@ -677,7 +813,11 @@ private:
       v.trajectory_id==core_.trajectoryId()&&v.version.reference_generation==core_.generation()&&
       identity(v.version)==core_.task().identity&&core_.remainingProofCovers(v.checked_from_time,
         v.valid_start_time,v.valid_start_arc_length,v.checked_to_time,v.curve_duration,v.reverse_margin_m)));
-    return v.valid&&v.frame_id==config_.planning_frame&&v.collision_policy=="observed_free"&&covered&&
+    // The configured contract names exactly the certificate being admitted.
+    // An official geometry certificate makes no observed-free claim; actual
+    // motion still needs the separate native MotionValidation downstream.
+    const bool geometry_policy=v.collision_policy==config_.trajectory_geometry_policy;
+    return v.valid&&v.frame_id==config_.planning_frame&&geometry_policy&&covered&&
       v.map_snapshot_revision>0&&v.sequence>0&&v.transport_mode==mode_&&begin>0.&&end>=begin&&
       end<=now+.02&&now-end<=.25&&seconds(v.valid_until)>now&&
       // One microsecond only covers seconds/nanoseconds conversion rounding;
@@ -780,12 +920,15 @@ private:
   std::deque<wire::MotionDemand> demands_;
   std::optional<wire::MotionValidation> blocked_entry_;
   std::optional<std::string> retired_task_;
+  std::optional<ControlIdentity> task_domain_;bool task_closed_{false};
   std::string last_prepare_reason_,last_permit_reject_;
   std::uint64_t last_permit_sequence_{0},demand_sequence_{0},last_motion_sequence_{0},admission_sequence_{0};
   bool writer_handoff_{false};std::optional<PendingHandoff> handoff_,tombstone_;
   std::uint64_t writer_commit_sequence_{0},ack_sequence_{0};std::string handoff_reason_;
+  std::optional<wire::ExecutionPermit> writer_domain_;
   std::optional<Installation> installation_;
   std::deque<Installation> installations_;
+  std::deque<InitialIntent> initial_intents_;
   std::optional<wire::ExecutionCommitAck> initial_writer_ack_;
   std::uint64_t installation_sequence_{0},geometry_receipt_sequence_{0};
   std::string initial_ack_reason_;

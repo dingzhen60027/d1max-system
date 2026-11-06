@@ -383,6 +383,77 @@ TEST(VoxelCollision, UnknownCannotHideOccupiedInEndpointDiagnostics) {
   EXPECT_EQ(evidence.state(),1);
 }
 
+TEST(VoxelCollision, NativeCylinderQueriesPrioritizeOccupiedIndependentOfVoxelOrder) {
+  // Exercise all three production query templates, not a replacement map.
+  // All offsets intersect this actual-height cylinder. Exhaustive status
+  // combinations include unknown/outside BEFORE a later real obstacle.
+  const std::vector<Cell> kernel{Cell(0,0,0),Cell(1,0,0),Cell(-1,0,0)};
+  const Cell center_cell(0,0,0);
+  const Point center(.5,.5,.5);
+  const scan_planner::VerticalVoxelSpan span{-1,1};
+  for(int first:{0,1,2,-1})for(int second:{0,1,2,-1})for(int third:{0,1,2,-1}) {
+    const std::array<int,3> states{{first,second,third}};
+    scan_planner::CollisionEvidence evidence;
+    for(int state:states)++evidence.counts[state<0?3:state];
+    const auto query=[&](const Cell& c) {
+      return c.x()==0?states[0]:c.x()==-1?states[1]:states[2];
+    };
+    SCOPED_TRACE(::testing::Message()<<first<<","<<second<<","<<third);
+    EXPECT_EQ(observedCylinderStatus(center_cell,kernel,query),evidence.state());
+    EXPECT_EQ(scan_planner::observedCylinderStatusAtHeight(center_cell,span,kernel,query),evidence.state());
+    EXPECT_EQ(scan_planner::observedCylinderStatusAtPosition(center,center_cell,span,kernel,1.,2.,query),evidence.state());
+  }
+}
+
+TEST(VoxelCollision, FrontRearStatusMergePreservesBlockingAndMatchesEvidencePriority) {
+  for(int front:{0,1,2,-1})for(int rear:{0,1,2,-1}) {
+    scan_planner::CollisionEvidence evidence;
+    ++evidence.counts[front<0?3:front];++evidence.counts[rear<0?3:rear];
+    EXPECT_EQ(scan_planner::mergeCollisionStatus(front,rear),evidence.state());
+    EXPECT_EQ(scan_planner::mergeCollisionStatus(rear,front),evidence.state());
+    EXPECT_EQ(scan_planner::mergeCollisionStatus(front,rear)==0,front==0&&rear==0);
+  }
+  EXPECT_EQ(scan_planner::mergeCollisionStatus(0,99),2);
+  EXPECT_EQ(scan_planner::mergeCollisionStatus(99,1),1);
+}
+
+TEST(VoxelCollision, NativePriorityQueriesStayKernelBoundedAndStopOnOccupied) {
+  const auto kernel=conservativeCylinderInflation(.08,.29,.45,.45);
+  const Cell center_cell(0,0,0);
+  const Point center(.04,.04,.04);
+  const auto span=scan_planner::verticalVoxelSpan(center.z(),.45,.45,.08);
+  // Unknown must never become free, nor trigger expansion beyond the existing
+  // finite kernel. A discovered occupied voxel is the definitive early exit.
+  std::size_t calls=0;
+  auto unknown=[&](const Cell&) {++calls;return 2;};
+  EXPECT_EQ(observedCylinderStatus(center_cell,kernel,unknown),2);
+  EXPECT_EQ(calls,kernel.size());
+  calls=0;
+  EXPECT_EQ(scan_planner::observedCylinderStatusAtHeight(center_cell,span,kernel,unknown),2);
+  EXPECT_LE(calls,kernel.size());EXPECT_GT(calls,0U);
+  calls=0;
+  EXPECT_EQ(scan_planner::observedCylinderStatusAtPosition(center,center_cell,span,kernel,.08,.29,unknown),2);
+  EXPECT_LE(calls,kernel.size());EXPECT_GT(calls,0U);
+  auto occupied=[&](const Cell&) {++calls;return 1;};
+  calls=0;EXPECT_EQ(observedCylinderStatus(center_cell,kernel,occupied),1);EXPECT_EQ(calls,1U);
+  calls=0;EXPECT_EQ(scan_planner::observedCylinderStatusAtHeight(center_cell,span,kernel,occupied),1);EXPECT_EQ(calls,1U);
+  calls=0;EXPECT_EQ(scan_planner::observedCylinderStatusAtPosition(center,center_cell,span,kernel,.08,.29,occupied),1);EXPECT_EQ(calls,1U);
+}
+
+TEST(VoxelCollision, OccupancyPriorityDoesNotExpandActualHeightOrXYEnvelope) {
+  const std::vector<Cell> kernel{Cell(0,0,0),Cell(0,0,-5),Cell(-5,0,0)};
+  const Cell center_cell(0,0,0);
+  const Point center(.5,.5,.5);
+  const scan_planner::VerticalVoxelSpan span{0,0};
+  const auto query=[](const Cell& c) {return c==Cell(0,0,0)?2:1;};
+  EXPECT_EQ(observedCylinderStatus(center_cell,kernel,query),1);
+  EXPECT_EQ(scan_planner::observedCylinderStatusAtHeight(center_cell,span,kernel,query),1);
+  EXPECT_EQ(scan_planner::observedCylinderStatusAtPosition(center,center_cell,span,kernel,1.,.25,query),2);
+  // A high occupied cell excluded by the original Z span is not visited.
+  const std::vector<Cell> height_kernel{Cell(0,0,0),Cell(0,0,-5)};
+  EXPECT_EQ(scan_planner::observedCylinderStatusAtHeight(center_cell,span,height_kernel,query),2);
+}
+
 TEST(VoxelCollision, LiveSnapshotGroundVoxelStillBlocksRatherThanBeingSilentlyCleared) {
   // 2026-09-26 16:43 passive live snapshot; observed ground at z=-.46
   // occupies [-.48,-.40]. The body bottom is -.42566: the full voxel DOES

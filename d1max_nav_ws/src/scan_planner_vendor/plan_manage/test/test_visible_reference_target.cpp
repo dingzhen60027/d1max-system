@@ -19,7 +19,11 @@ struct GridMapTestAccess {
   }
   static void fill(GridMap& m,double xmin,double xmax,double ymin,double ymax,double odds) {
     for(double x=xmin;x<=xmax;x+=.025)for(double y=ymin;y<=ymax;y+=.025)for(double z=.025;z<=1.15;z+=.025) {
-      Eigen::Vector3i id;m.posToIndex({x,y,z},id);if(m.isInMap(id))m.md_.occupancy_buffer_[m.toAddress(id)]=odds;
+      Eigen::Vector3i id;m.posToIndex({x,y,z},id);
+      // Native updates must maintain BOTH official candidate inflation and
+      // strict raw evidence. Direct raw-buffer writes left A*'s official
+      // obstacle layer empty and could route straight through the fixture box.
+      if(m.isInMap(id))m.applyOccupancyUpdate(id,odds);
     }
   }
   static void rawSnapshot(GridMap& m) {
@@ -67,8 +71,15 @@ TEST(VisibleReferenceTarget,ProductionObservedSideStepAndNativeAstarAroundBoxWit
   for(std::size_t i=1;i<path.size();++i) {
     const Point delta=path[i]-path[i-1];const double yaw=std::atan2(delta.y(),delta.x());
     const int n=std::max(1,int(std::ceil(delta.norm()/.0125)));
-    for(int k=0;k<=n;++k)EXPECT_EQ(map->getInflateOccupancy(path[i-1]+delta*(double(k)/n),yaw),0);
+    // A* is the official SCAN candidate search. Its zero is not strict
+    // observed-free certification; the visible support/entry lane and final
+    // execution validation remain independent, including unknown behind box.
+    for(int k=0;k<=n;++k)EXPECT_EQ(map->getPlanningInflateOccupancy(path[i-1]+delta*(double(k)/n),yaw),0);
   }
+  // Query beyond the box's whole reflected cylinder envelope. At x=2.2
+  // the rear cylinder still intersects the real box and must report occupied.
+  EXPECT_EQ(map->getInflateOccupancy({2.65,0,.55},0.),2); // Occluded evidence stays unknown.
+  EXPECT_EQ(map->getPlanningInflateOccupancy({1.6,0,.55},0.),1); // Real box is still blocked.
 }
 TEST(VisibleReferenceTarget,NoObservedSideSpaceDoesNotBecomeAFreeDetour) {
   for(double state:{-1.01,0.,2.}) {

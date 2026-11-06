@@ -77,6 +77,21 @@ static Handoff reentry(const Stationary&s){auto g=grant();g.transition_mode=Hand
  g.retain_incumbent_until=g.source_stamp;g.candidate.sequence=40;g.candidate.source_stamp=g.source_stamp;g.candidate.valid_until=g.valid_until;
  return g;}
 int main(){
+ // The conditional new-geometry writer also consumes SCAN's original
+ // geometry/sweep deadline, not a second front/rear/body sensor-age ceiling.
+ for(bool expired:{false,true}) {auto t=active();const auto g=grant();auto p=prepared(g);
+  p.demand.safety_source_stamp=stamp(9.);assert(t.handoff(g,10.02));
+  assert(t.localState(body(10.03),10.03));auto c=curve(g.candidate,10.03);
+  c.body_source_stamp=c.front_ray_source_stamp=c.rear_ray_source_stamp=stamp(9.);
+  c.valid_until=stamp(expired?10.029:10.05);assert(t.trajectoryValidation(c,10.03));
+  auto m=sweep(p,10.03);m.body_source_stamp=m.front_ray_source_stamp=m.rear_ray_source_stamp=stamp(9.);
+  m.valid_until=stamp(expired?10.029:10.05);assert(t.motionValidation(m,10.03));
+  assert(t.preparedDemand(p,10.03)==!expired);
+  assert(t.tick(10.04,health())->linear.x==.2); // A failed candidate preserves the incumbent.
+  t.writeCalled(10.04,true);const auto ack=t.takeCommitAck();
+  if(expired)assert(!ack);else {assert(ack&&ack->commit_sequence==2&&ack->valid_until==m.valid_until);
+   assert(t.tick(10.051,health())->linear.x==0.);}
+ }
  // Real-epoch regression: double seconds cannot represent all nanoseconds.
  // The first nonzero ACK must copy the exact minimum original command,
  // permission, motion-sweep and geometry deadlines, never round one forward.

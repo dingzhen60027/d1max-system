@@ -129,6 +129,53 @@ int main() {
       f.last_attempt_failure_phase_=="solve_deadline_exceeded"&&f.snapshot_pool_.cancellations==1,
       "expired_original_acquisition_withdraws_arbiter_intent_never_starts_solver");
     expect(!side->allowed(),"side_work_does_not_outlive_original_wait_inclusive_deadline");
+    f.waitForChangedEnvironment();
+    const double failed=f.failed_replan_monotonic_;
+    expect(!f.failedAttemptRetryReady(failed+.499),
+      "expired_acquisition_never_restarts_before_existing_half_second_cooldown");
+    expect(!f.environmentChangedSinceFailure()&&f.failedAttemptRetryReady(failed+.501),
+      "expired_acquisition_recovers_compute_without_moving_stopped_body_or_changing_saturated_map");
+    expect(f.exec_state_==FSM::WAIT_ENVIRONMENT&&f.rechecks==1&&f.invalidations==0&&
+      f.planner_manager_->local_data_.traj_id_==1,
+      "scheduling_timeout_keeps_separately_revalidated_incumbent_not_fake_motion_authority");
+    const auto next=f.pending_snapshot_request_.begin(f.reference_generation_,[&]{return now;});
+    expect(next!=budget&&next->remainingSeconds()>.399&&!budget->allowed()&&!side->allowed(),
+      "retry_is_distinct_turn_old_parent_and_subbudget_remain_expired");
+  }
+  {
+    FSM f;auto now=scan_planner::SolveBudget::Time{};
+    const auto worker_budget=f.pending_snapshot_request_.begin(f.reference_generation_,[&]{return now;});
+    f.pending_snapshot_request_.release(); // Production transfers this token to one worker.
+    std::promise<int> worker;f.solve_future_=worker.get_future();
+    now+=std::chrono::milliseconds(400);
+    f.last_attempt_failure_phase_=worker_budget->reason();
+    f.waitForChangedEnvironment();
+    expect(f.exec_state_==FSM::EXEC_TRAJ&&f.rechecks==0&&f.invalidations==0&&
+      !scan_planner::formalReseedSubmissionDue(std::chrono::steady_clock::now(),{},f.solve_future_.valid()),
+      "deadline_does_not_retire_running_worker_or_allow_second_concurrent_solve");
+    worker.set_value(0);f.solve_future_.get(); // Actual poll consumes the retired result once.
+    f.waitForChangedEnvironment();
+    const double failed=f.failed_replan_monotonic_;
+    expect(!f.failedAttemptRetryReady(failed+.499)&&f.failedAttemptRetryReady(failed+.501)&&
+      !f.environmentChangedSinceFailure()&&!worker_budget->allowed()&&f.invalidations==0,
+      "retired_worker_timeout_recovers_after_cooldown_without_clearing_safe_old_curve");
+  }
+  for(const auto* phase:{"waiting_observed_space","failed_final_collision","failed_reference_target_occupied",
+      "failed_reference_geometry","solve_cancelled","solve_exception","solve_launch_failed"}) {
+    FSM f;f.last_attempt_failure_phase_=phase;f.waitForChangedEnvironment();
+    expect(!scan_planner::nativeResourceWait(phase)&&
+      !f.failedAttemptRetryReady(f.failed_replan_monotonic_+1.),
+      "geometry_unknown_cancel_or_unclassified_error_never_borrows_compute_retry");
+  }
+  {
+    FSM f;f.last_attempt_failure_phase_="solve_search_deadline_exceeded";
+    f.waitForChangedEnvironment();const double failed=f.failed_replan_monotonic_;
+    expect(scan_planner::nativeResourceWait(f.last_attempt_failure_phase_) &&
+      !f.environmentChangedSinceFailure() && !f.failedAttemptRetryReady(failed+.499) &&
+      f.failedAttemptRetryReady(failed+.501),
+      "inner_astar_compute_deadline_retries_same_fresh_map_at_existing_two_hz_limit");
+    expect(f.invalidations==0 && f.planner_manager_->local_data_.traj_id_==1 && f.rechecks==1,
+      "inner_search_timeout_preserves_only_independently_rechecked_incumbent");
   }
   for(int boundary=0;boundary<4;++boundary) {
     FSM f;auto now=scan_planner::SolveBudget::Time{};
@@ -342,6 +389,10 @@ def main():
         if args.report:
             args.report.write_text(json.dumps(dict(source=str(args.source),
                 source_sha256=hashlib.sha256(source.encode()).hexdigest(),
+                include_directory=str(args.include.resolve()),
+                input_contract_sha256=hashlib.sha256(
+                    (args.include/'plan_manage/input_contract.hpp').read_bytes()).hexdigest(),
+                harness_sha256=hashlib.sha256(HARNESS.encode()).hexdigest(),
                 production_method_sha256=hashlib.sha256(methods.encode()).hexdigest(),
                 returncode=result.returncode, stdout=result.stdout, stderr=result.stderr,
                 ros_initialized=False, robot_connected=False,

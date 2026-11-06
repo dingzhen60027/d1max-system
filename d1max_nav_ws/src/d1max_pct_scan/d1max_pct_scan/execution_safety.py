@@ -334,6 +334,10 @@ class ExecutionSafety:
                 and actual_sequence>getattr(self.proofs.get(key),'sequence',0)
                 and demand.validation_sequence>self.invalidated_through.get(key,0)):
             return Decision(False,'waiting_native_curve_proof')
+        # A geometry policy alone never authorizes a write: the exact native
+        # raw-ray command sweep has already been joined above. Official SCAN
+        # geometry removes a route-sized visibility precondition, not this
+        # demand's occupied/unknown/braking checks.
         if (proof is None or not proof.valid or not self._proof_domain(proof,p,now_ns)
                 or demand.validation_sequence<=self.invalidated_through.get(key,0)
                 # The owner grants authority for this immutable curve. Its
@@ -341,7 +345,8 @@ class ExecutionSafety:
                 # The command still names one exact fresh proof, and newer
                 # negative evidence fences every older positive result above.
                 or proof.sequence<demand.validation_sequence or proof.sequence<p.validation_sequence
-                or proof.frame_id!='d1max_loc_odom' or proof.collision_policy!='observed_free'):
+                or proof.frame_id!='d1max_loc_odom'
+                or proof.collision_policy not in ('observed_free','official_inflated_geometry')):
             return Decision(False,'native_swept_collision_proof_missing_or_revoked')
         if (not fresh(proof.check_end,now_ns,250_000_000)
                 or not now_ns < stamp_ns(proof.valid_until)

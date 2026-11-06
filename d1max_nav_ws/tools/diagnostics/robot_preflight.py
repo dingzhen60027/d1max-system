@@ -10,7 +10,9 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import importlib.util
 import json
+import os
 from pathlib import Path
 import socket
 import subprocess
@@ -20,15 +22,15 @@ NAV_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(NAV_ROOT / 'src/d1max_pct_planner'))
 from d1max_pct_planner import paths  # noqa: E402
 
-# Physical acceptance flags checked by the monitor's acceptance validator.
-ACCEPTANCE_FLAGS = ('speed_mapping_verified', 'stop_timing_verified',
-                    'body_envelope_verified', 'raw_ray_safety_verified')
 RELEASE_MONITOR = 'sdk/install/d1max_sdk_bridge/lib/d1max_sdk_bridge/sdk_monitor_bridge'
 
 
 class Report:
     def __init__(self):
         self.rows = []
+        self.motion_ready = False
+        self.physical_record_valid = False
+        self.purpose = None
 
     def add(self, name, ok, detail, action=''):
         self.rows.append({'check': name, 'ok': bool(ok), 'detail': detail, 'action': '' if ok else action})
@@ -81,6 +83,25 @@ def sha256(path):
     return digest.hexdigest()
 
 
+def load_helper(name, path):
+    """Import only the entry's stdlib helper, not a ROS/SDK session."""
+    spec = importlib.util.spec_from_file_location(name, path)
+    if spec is None or spec.loader is None:
+        raise ValueError('entry_helper_missing:' + str(path))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def selected_release(nav_root):
+    override = os.environ.get('D1MAX_RELEASE', '').strip()
+    if override:
+        return Path(override).resolve(strict=True)
+    helper = load_helper('d1max_preflight_selector',
+                         nav_root / 'tools/release/single_floor_entry_preflight.py')
+    return helper.select(nav_root)
+
+
 def check_release(report, release):
     try:
         root, descriptor = paths.release_descriptor(release)
@@ -107,19 +128,72 @@ def check_monitor(report, release, app_root):
                f'写 {app_root}/foxglove_d1max/config/monitor-release 后经 manager 重启 monitor（需要你批准）')
 
 
-def check_web(report, nav_root):
+def check_web(report, app_root):
     state, pid = unit_state('d1max-web-managed.service')
     report.add('web_running', state == 'active', f'{state} pid={pid}', '经 manager 启动 Web')
-    # A Web process started before the current entry scripts still resolves
-    # the previous layout; it must be restarted to load them.
-    script = nav_root / 'scripts/navigation/start_navigation.sh'
+    # Check the actual backend, not the unrelated historical Nav2 shell script.
+    scripts = [app_root / 'map_manager/backend' / name
+               for name in ('single_floor.py', 'mainline_release.py', 'mainline_views.py')]
     try:
         started = Path(f'/proc/{int(pid)}').stat().st_mtime if pid.isdecimal() and int(pid) > 0 else None
-        current = started is not None and started >= script.stat().st_mtime
+        current = started is not None and all(started >= script.stat().st_mtime for script in scripts)
     except OSError:
         current = False
-    report.add('web_loaded_current_layout', current, f'script={script.relative_to(nav_root)}',
-               '经 manager 重启 Web 以加载新的脚本路径（需要你批准）')
+    report.add('web_loaded_current_backend', current, 'backend=single_floor/mainline_release/mainline_views',
+               '通过现有 manager 重启 Web，加载当前后端；本检查不重启服务')
+
+
+def check_launch_configuration(report, release, nav_root, app_root):
+    """Static deployment bindings; never bind a session or grant execution."""
+    activation_path = Path(os.environ.get('D1MAX_MAP_MANAGER_DATA',
+        str(app_root / 'map_manager/data'))) / 'single_floor/activation.json'
+    activation = None
+    try:
+        info = activation_path.stat()
+        if activation_path.is_symlink() or info.st_uid != os.getuid() or info.st_mode & 0o077:
+            raise ValueError('private_owned_activation_required')
+        activation = json.loads(activation_path.read_text())
+        if activation.get('schema_version') != 3 or activation.get('profile') != 'single_floor_live':
+            raise ValueError('activation_schema')
+        report.purpose = activation['purpose']
+        if report.purpose not in ('planning_only', 'execution'):
+            raise ValueError('explicit_purpose_required')
+        if Path(activation['release_root']).resolve(strict=True) != release:
+            raise ValueError('web_and_navigation_release_differ')
+        descriptor = json.loads((release / 'release.json').read_text())
+        seal = release / descriptor['sealed_manifest']
+        if (Path(activation['release_manifest']) != seal or
+                sha256(seal) != activation['release_manifest_sha256']):
+            raise ValueError('web_activation_manifest_changed')
+        entry = Path(activation['entrypoint'])
+        if (entry not in (nav_root/'tools/navigation_entry.sh', nav_root/'tools/single_floor_entry.sh')
+                or entry.is_symlink() or not os.access(entry, os.X_OK)
+                or sha256(entry) != activation['entrypoint_sha256']):
+            raise ValueError('web_entry_binding_changed')
+        if (entry.name == 'navigation_entry.sh' and sha256(nav_root/'tools/single_floor_entry.sh')
+                != activation.get('compatibility_entrypoint_sha256')):
+            raise ValueError('web_compatibility_entry_binding_changed')
+        policy = activation.get('sdk_session_policy', 'fixed')
+        if (policy not in ('fixed', 'bind_current_on_start') or
+                policy == 'bind_current_on_start' and report.purpose != 'planning_only' or
+                policy == 'fixed' and not activation.get('expected_sdk_session')):
+            raise ValueError('sdk_session_binding_invalid')
+        report.add('web_activation_matches_mainline', True,
+                   f'{activation_path}, purpose={report.purpose}, SDK policy={policy}')
+    except (OSError, ValueError, KeyError, TypeError, AttributeError) as error:
+        report.add('web_activation_matches_mainline', False, str(error),
+                   '核对实际 Web DATA_ROOT 下的 activation 与唯一 selector；不要用旧入口兜底')
+        activation = None
+    try:
+        helper = load_helper('d1max_preflight_sdk_startup',
+            app_root / 'foxglove_d1max/scripts/sdk_motion_startup.py')
+        selected = helper.resolve_monitor_release()
+        report.add('sdk_launcher_matches_mainline', selected == release,
+                   f'configured={selected}, navigation={release}',
+                   'SDK 默认用 @mainline；检查显式 D1MAX_MONITOR_RELEASE 覆盖')
+    except (OSError, ValueError, KeyError, RuntimeError) as error:
+        report.add('sdk_launcher_matches_mainline', False, str(error), '核对 SDK 唯一启动配置')
+    return activation
 
 
 def check_network(report, app_root):
@@ -145,43 +219,69 @@ def check_network(report, app_root):
         report.add(f'tcp_{host}:{port}', reachable and device == interface, f'reachable={reachable}', '机器人上电并确认端点')
 
 
-def check_acceptance(report, release):
-    record = release / 'physical_acceptance/record_draft.json' if release else None
-    try:
-        value = json.loads(record.read_text())
-    except (OSError, ValueError, AttributeError):
-        report.add('physical_acceptance', False, 'record missing', '按物理验收流程采集')
+def check_acceptance(report, release, activation, *, files_only=False):
+    # Never treat the historical draft or four booleans as accepted physics.
+    # Reuse the actual writer's offline record validator and profile binding.
+    record = Path(activation['physical_acceptance_record']) if activation and activation.get('physical_acceptance_record') else None
+    if record is None and files_only and report.purpose == 'planning_only':
+        report.add('configured_mode', True, 'planning_only; motion is NOT accepted or enabled')
         return
-    pending = [flag for flag in ACCEPTANCE_FLAGS if value.get(flag) is not True]
-    missing = [row['kind'] for row in value.get('records', []) if not row.get('path')]
-    report.add('physical_acceptance', not pending and not missing and bool(value.get('robot_id')),
-               f'pending={pending} missing_evidence={missing} robot_id={value.get("robot_id")}',
-               '按物理验收流程实测；在此之前 v3 只能监视，不能运动')
+    try:
+        if record is None or release is None:
+            raise ValueError('no_bound_physical_record')
+        if sha256(record) != activation['physical_acceptance_record_sha256']:
+            raise ValueError('physical_record_binding_changed')
+        value = json.loads(record.read_text())
+        checker = release/'sdk/install/d1max_sdk_bridge/lib/d1max_sdk_bridge/execution_acceptance_check'
+        result = subprocess.run([str(checker), str(record), value['robot_id'], value['sdk_version'],
+            value['calibration_sha256'], value['robot_profile_sha256']], capture_output=True,
+            text=True, timeout=10, check=False)
+        accepted = json.loads(result.stdout)
+        if result.returncode or accepted.get('valid') is not True:
+            raise ValueError('writer_rejected_physical_record:' + result.stdout.strip()[:512])
+        descriptor = json.loads((release/'release.json').read_text())
+        profile = release/descriptor['template_source_root']/'src/d1max_scan_planner/config/d1max_robot.yaml'
+        if sha256(profile) != value['robot_profile_sha256']:
+            raise ValueError('accepted_profile_differs_from_actual_navigation_profile')
+    except (OSError, ValueError, KeyError, TypeError, subprocess.TimeoutExpired) as error:
+        report.add('physical_acceptance', False, str(error),
+                   '先完成实际物理测量，再绑定 Web 与 SDK writer 的同一验收记录；不得置真 draft')
+        return
+    report.physical_record_valid = True
+    report.add('physical_acceptance', True, f'writer-validated bound record={record}')
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument('--offline', action='store_true', help='skip robot network checks')
+    parser.add_argument('--files-only', action='store_true',
+                        help='configuration and sealed files only; no service, network, ROS or SDK session checks')
     parser.add_argument('--json', action='store_true')
     args = parser.parse_args()
     report = Report()
     nav_root, app_root = paths.nav_root(), paths.app_root()
     try:
-        release = check_release(report, paths.release_root())
-    except ValueError as error:
-        report.add('release_sealed', False, str(error), '设置 D1MAX_RELEASE')
+        release = check_release(report, selected_release(nav_root))
+    except (OSError, ValueError, KeyError) as error:
+        report.add('release_sealed', False, str(error), '核对 deploy/single_floor_release.json 的默认选择')
         release = None
-    check_web(report, nav_root)
-    check_monitor(report, release, app_root)
-    if not args.offline:
-        check_network(report, app_root)
-    check_acceptance(report, release)
+    activation = check_launch_configuration(report, release, nav_root, app_root)
+    if not args.files_only:
+        check_web(report, app_root)
+        check_monitor(report, release, app_root)
+        if not args.offline:
+            check_network(report, app_root)
+    check_acceptance(report, release, activation, files_only=args.files_only)
     if args.json:
-        print(json.dumps({'ok': report.ok, 'checks': report.rows}, ensure_ascii=False, indent=1))
+        print(json.dumps({'ok': report.ok, 'scope': 'files_only' if args.files_only else 'readiness',
+                          'purpose': report.purpose, 'motion_ready': report.motion_ready,
+                          'physical_record_valid': report.physical_record_valid,
+                          'sdk_connected_by_check': False, 'checks': report.rows}, ensure_ascii=False, indent=1))
     else:
         for row in report.rows:
             print(('OK   ' if row['ok'] else 'FAIL ') + f"{row['check']}: {row['detail']}" +
                   (f"\n       → {row['action']}" if row['action'] else ''))
+        print(f'purpose={report.purpose}; motion_ready={report.motion_ready}; no session started')
     return 0 if report.ok else 1
 
 

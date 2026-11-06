@@ -65,6 +65,7 @@ test('shell and planning page do not contain algorithm branding or numeric workf
  }
  const panel=readFileSync(new URL('../src/NavigationLaunch.jsx',import.meta.url),'utf8')
  assert.doesNotMatch(panel,/live-stage-index|启动后自动打开 RViz|RViz 工作流/)
- assert.match(panel,/启动不执行运动/)
- assert.match(panel,/退役当前任务并停止本次服务；不是急停/)
+ assert.match(panel,/disabled=\{!view\.canStart\}/)
+ assert.doesNotMatch(panel,/启动不执行运动|目标与执行确认/)
+ assert.match(panel,/disabled=\{!view\.canStop\} onClick=\{\(\)=>act\('stop'\)\}/)
 })

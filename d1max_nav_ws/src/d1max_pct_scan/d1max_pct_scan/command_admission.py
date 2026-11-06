@@ -37,6 +37,14 @@ class CommandAdmission:
             for key,old in tuple(self.pending.items()):
                 if old.sequence<=message.sequence:del self.pending[key]
             return decision
+        if decision.reason in ('foreign_execution_context','replayed_motion_demand',
+                               'execution_version_not_committed'):
+            # Delayed inputs have no authority over the active command join.
+            # Do not discard its pending proof/immutable evidence-upgrade slot
+            # because a retired version or duplicate was delivered afterward.
+            # Owner HOLD/revocation and actual negative evidence still pass
+            # through their dedicated callbacks and the rejection path below.
+            return decision
         self.pending.pop(self.core.motion_key(message),None)
         self.recent=None
         stop=self.core.stop_for_rejection(message,now_ns,decision.reason)

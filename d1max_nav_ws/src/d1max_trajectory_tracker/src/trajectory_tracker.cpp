@@ -33,6 +33,8 @@ public:
     Config c;
     c.session_id = declare_parameter<std::string>("session_id", "");
     c.map_version_id = declare_parameter<std::string>("map_version_id", "");
+    c.trajectory_geometry_policy=declare_parameter<std::string>(
+      "trajectory_geometry_policy",c.trajectory_geometry_policy);
     c.map_frame = declare_parameter<std::string>("map_frame", c.map_frame);
     c.planning_frame = declare_parameter<std::string>("planning_frame", c.planning_frame);
     c.base_frame = declare_parameter<std::string>("base_frame", c.base_frame);
@@ -164,7 +166,11 @@ public:
           if(!decodeLocalNavigationState(*msg,config_,input,reason)) {
             rejectedState(*msg,reason);return;
           }
-          if(execution_->receiveOdom(input,now().seconds(),monotonicNow()))odom_source_stamp_=msg->source_stamp;
+          const double ros_now=now().seconds(),receipt=monotonicNow();
+          if(execution_->receiveOdom(input,ros_now,receipt)) {
+            odom_source_stamp_=msg->source_stamp;
+            prepareFromMeasuredState(ros_now,receipt);
+          }
         });
     } else {
       // Legacy isolated fixtures supply an atomic pair. Formal local transport
@@ -179,7 +185,11 @@ public:
           if (!decodeNavigationState(*msg,config_,input,reason)) {
             rejectedState(*msg,reason);return;
           }
-          if(execution_->receiveOdom(input, now().seconds(), monotonicNow())) odom_source_stamp_=msg->source_stamp;
+          const double ros_now=now().seconds(),receipt=monotonicNow();
+          if(execution_->receiveOdom(input,ros_now,receipt)) {
+            odom_source_stamp_=msg->source_stamp;
+            prepareFromMeasuredState(ros_now,receipt);
+          }
         });
     }
     stop_service_ = create_service<std_srvs::srv::Trigger>(
@@ -222,6 +232,14 @@ private:
       admission_pub_->publish(*admission);
       if(admission->accepted) ++accepted_; else ++rejected_;
     }
+  }
+  void prepareFromMeasuredState(double ros_now,double receipt)
+  {
+    // A 150 ms entry admission must not wait on the 200 ms fallback clock.
+    // Only advancing accepted body samples can refresh the measured join;
+    // cached geometry and the original native proof retain their own expiry.
+    if(receipt-last_prepare_<.05||!execution_->entryPreparationReady(ros_now))return;
+    prepareAndPublish(ros_now,receipt);
   }
   void taskCallback(const std_msgs::msg::String &message)
   {

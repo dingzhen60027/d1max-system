@@ -250,8 +250,27 @@ class TomogramRoute:
         keep[-1] = True
         path,layers=path[keep],layers[keep]
         checks = self.tomogram.validate_path(path,layers)
-        refinement = refine_source_identity(self.tomogram,path,layers,self.refinement_corner_cut_m,self.source_ground)
-        path,layers=np.asarray(refinement['path']),np.asarray(refinement['layer_ids'],dtype=int)
+        try:
+            refinement = refine_source_identity(self.tomogram,path,layers,self.refinement_corner_cut_m,self.source_ground)
+            path,layers=np.asarray(refinement['path']),np.asarray(refinement['layer_ids'],dtype=int)
+        except TomogramError as error:
+            failures=error.details.get('candidate_failures',[])
+            # Smoothing quality is optional; the native route was already
+            # checked above. A relative curvature score against a discretely
+            # sampled A-star polyline is not a collision or support failure.
+            # Match only this explicit soft failure: geometry, unknown support,
+            # resource limits and mixed failure sets remain hard errors.
+            quality_only=(error.code=='no_valid_smooth_candidate' and failures
+                          and all(item.get('code')=='quality_not_improved' for item in failures))
+            if not quality_only:
+                raise
+            refinement=dict(applied=False,reason='quality_only_smoothing_fallback',
+                algorithm='native PCT A-star + checked original polyline',
+                curve_validation='native_polyline_cell_supercover_and_actual_slice_overlap',
+                continuity='Geometric polyline; no C1/C2 or dynamic-continuity claim',
+                before_quality=path_quality(path),after_quality=None,
+                physical_safety_certified=False,prior_candidate_failures=failures,
+                path=path.tolist(),layer_ids=layers.tolist())
         if not np.array_equal(path[0],start['xyz']) or not np.array_equal(path[-1],goal['xyz']):
             raise TomogramError('refinement_endpoint_mismatch','Refinement changed frozen endpoints')
         final_checks = self.tomogram.validate_path(path,layers)

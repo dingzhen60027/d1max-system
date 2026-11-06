@@ -93,13 +93,17 @@ class FollowRecovery:
             if evidence_stamp > 0 and (self.last_evidence is None or evidence_stamp > self.last_evidence):
                 self.good_samples += 1
                 self.last_evidence = evidence_stamp
-            if now-self.good_since >= self.params['follow_stable_reset_s'] and self.good_samples >= 3:
-                self.since = self.good_since = None
-                self.waits.clear()
-                return ''
+        # Deadline admission precedes stable recovery, as in the BT's native
+        # PreparationBudget. A third good report received at/after the original
+        # deadline cannot revive an already expired episode.
         for kind, elapsed in self.waits.items():
             if elapsed >= self.params['follow_'+kind+'_wait_s']:
                 return 'follow_'+kind+'_timeout:'+stage.reason
         if self.since is not None and now-self.since >= self.params['follow_recovery_episode_s']:
             return 'follow_recovery_episode_timeout:'+stage.reason
+        if (self.good_since is not None
+                and now-self.good_since >= self.params['follow_stable_reset_s']
+                and self.good_samples >= 3):
+            self.since = self.good_since = None
+            self.waits.clear()
         return ''

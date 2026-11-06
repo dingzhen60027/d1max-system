@@ -7,6 +7,7 @@ There is deliberately no command publisher and no restored route on startup.
 """
 from __future__ import annotations
 
+from copy import deepcopy
 import hashlib
 from functools import partial
 import json
@@ -85,7 +86,7 @@ class LiveGlobalPlanner(Node):
                         current_floor='', goal_floor='',
                         body_height_min_m=.25, body_height_max_m=.85,
                         max_start_move_m=.3, result_timeout_s=10., warmup_timeout_s=30.,
-                        commit_wait_timeout_s=10., freshness_s=.5,
+                        commit_wait_timeout_s=10., readiness_timeout_s=30., freshness_s=.5,
                         retain_preview_task_on_soft_loss=False)
         self.p = {name: self.declare_parameter(name, value).value
                   for name, value in defaults.items()}
@@ -98,6 +99,7 @@ class LiveGlobalPlanner(Node):
                 or not 5 <= self.p['result_timeout_s'] <= 60
                 or not 1 <= self.p['warmup_timeout_s'] <= 60
                 or not 1 <= self.p['commit_wait_timeout_s'] <= 30
+                or not 1 <= self.p['readiness_timeout_s'] <= 120
                 or not 0 < self.p['body_height_min_m'] < self.p['body_height_max_m'] <= 2):
             raise ValueError('invalid_bounded_live_global_parameters')
         if not all(Path(self.p[key]).is_file() for key in
@@ -161,6 +163,7 @@ class LiveGlobalPlanner(Node):
         self.pause_wall = None
         self.current = None
         self.pending_goal = None
+        self.waiting_goal = None
         self.cached_result = None
         self.cached_evidence = None
         self.commit_wait_started = None
@@ -328,6 +331,7 @@ class LiveGlobalPlanner(Node):
         self.pause_wall = None
         self.current = None
         self.pending_goal = None
+        self.waiting_goal = None
         self.cached_result = None
         self.cached_evidence = None
         self.commit_wait_started = None
@@ -533,14 +537,18 @@ class LiveGlobalPlanner(Node):
                     monotonic=time.monotonic(),receipt_timeout_s=self.p['freshness_s']):
                 raise ValueError('fresh_atomic_navigation_state_required')
             identity=self.atomic_state.identity
-            return GoalIdentity(identity[0],self.p['map_version_id'],identity[1],identity[2],
+            result = GoalIdentity(identity[0],self.p['map_version_id'],identity[1],identity[2],
                 self.bridge.source_frame,self.tomogram.sha256)
+            self._last_confirmed_identity = result
+            return result
         if time.monotonic()-self.localizer_received > self.p['freshness_s']:
             raise ValueError('localizer_subscription_stale')
-        return confirmed_goal_identity(
+        result = confirmed_goal_identity(
             self.localizer, session_id=self.p['session_id'],
             frame_id=self.bridge.source_frame, tomogram_sha256=self.tomogram.sha256,
             now=self.now_s(), freshness_s=self.p['freshness_s'])
+        self._last_confirmed_identity = result
+        return result
 
     def pause_reference(self, reason):
         if getattr(self, 'recovery_hold', None) is not None:
@@ -575,9 +583,16 @@ class LiveGlobalPlanner(Node):
         if intent is None or getattr(self, 'recovery_hold', None) is not None:
             return
         try:
-            if self.confirmed_identity() != intent.identity:
-                raise GlobalPlanError('resume_identity_changed')
+            identity = self.confirmed_identity()
             context = self.planning_context()
+        except (GlobalPlanError, ValueError) as exc:
+            # Readiness can expire between the previous timer check and this
+            # admission. It is a new soft wait, not contradictory task identity.
+            self.pause_reference(str(exc))
+            return
+        try:
+            if identity != intent.identity:
+                raise GlobalPlanError('resume_identity_changed')
             if context != (intent.identity.epoch, intent.identity.confirmed_seed):
                 raise GlobalPlanError('resume_navigation_identity_changed')
             self.pause.resumed()
@@ -716,10 +731,45 @@ class LiveGlobalPlanner(Node):
             return
         self.last_goal_stamp = stamp
         self.revoke('new_goal_cancels_previous_reference', preserve_idle_worker=True)
+        # A one-shot Action delivery can race a single localization callback.
+        # Retain only the operator request (not a pose, route, or motion lease)
+        # and start its calculation budget only when fresh input is available.
+        self.waiting_goal = dict(message=deepcopy(message), kind=kind, stamp=stamp,
+            started=time.monotonic(), identity=getattr(self, '_last_confirmed_identity', None))
+        LiveGlobalPlanner._start_waiting_goal(self)
+
+    def _start_waiting_goal(self):
+        pending = getattr(self, 'waiting_goal', None)
+        if pending is None:
+            return
+        if time.monotonic()-pending['started'] >= self.p.get('readiness_timeout_s', 30.):
+            self.waiting_goal = None
+            self.state = 'goal_rejected'
+            self.reason = 'goal_localization_wait_expired'
+            return
+        expected = pending['identity']
+        issue = (hard_identity_issue(expected, localizer=self.localizer,
+                                    navigation=self.navigation, scan={})
+                 if expected is not None else None)
+        if issue:
+            self.revoke('goal_identity_or_fault_changed:' + issue)
+            self.state = 'goal_rejected'
+            return
         try:
-            self.goal_stamp, self.goal_kind = stamp, kind
             context = self.planning_context()
             identity = self.confirmed_identity()
+        except (GlobalPlanError, ValueError) as exc:
+            self.state = 'waiting_for_goal_localization'
+            self.reason = str(exc)[:1000]
+            return
+        if expected is not None and identity != expected:
+            self.revoke('confirmed_goal_identity_changed_while_waiting')
+            self.state = 'goal_rejected'
+            return
+        message, kind, stamp = pending['message'], pending['kind'], pending['stamp']
+        self.waiting_goal = None
+        try:
+            self.goal_stamp, self.goal_kind = stamp, kind
             if context != (identity.epoch, identity.confirmed_seed):
                 raise GlobalPlanError('goal_navigation_localizer_identity_mismatch')
             if kind == '2d':
@@ -746,7 +796,7 @@ class LiveGlobalPlanner(Node):
                                 goal_floor, identity)
             self.pause.install(intent)
             LiveGlobalPlanner._begin_computation_cycle(self)
-            self.plan_intent(intent, context=context, attempt_stamp=stamp)
+            self.plan_intent(intent, context=context, attempt_stamp=self.now_s())
         except Exception as exc:
             self.pause.clear()
             self.pending_goal = None
@@ -1092,6 +1142,7 @@ class LiveGlobalPlanner(Node):
     def tick(self):
         self.retired_children.reap()
         LiveGlobalPlanner._poll_warmup(self)
+        LiveGlobalPlanner._start_waiting_goal(self)
         self._revoke_if_context_lost()
         if (self.current is not None and self.goal_deadline_monotonic is not None
                 and time.monotonic() >= self.goal_deadline_monotonic):
@@ -1145,6 +1196,8 @@ class LiveGlobalPlanner(Node):
             # Planning is complete even when following inputs are unavailable.
             # paused_for_recovery/active_reference describe that separate lease.
             phase = 'active'
+        elif getattr(self, 'waiting_goal', None) is not None:
+            phase = 'awaiting_navigation'
         elif getattr(self, 'recovery_hold', None) is not None:
             phase = 'goal_retained_waiting_recovery'
         elif self.state == 'expired':
@@ -1170,6 +1223,7 @@ class LiveGlobalPlanner(Node):
                           if self.commit_wait_started is not None else None)
         commit_remaining = (max(0., self.p['commit_wait_timeout_s']-commit_elapsed)
                             if commit_elapsed is not None else None)
+        waiting_goal = getattr(self, 'waiting_goal', None)
         value = dict(schema=1, mode='LIVE_SHADOW_NO_MOTION', session_id=self.p['session_id'],
                      received_at_unix=self.now_s(),callback_wall_time=time.time(),state=self.state,reason=self.reason,
                      planning_phase=phase, replan_count=self.replan_count,
@@ -1178,6 +1232,9 @@ class LiveGlobalPlanner(Node):
                      native_deadline_remaining_sec=native_remaining,
                      commit_wait_elapsed_sec=commit_elapsed,
                      commit_wait_remaining_sec=commit_remaining,
+                     waiting_goal_localization=waiting_goal is not None,
+                     readiness_wait_remaining_sec=(max(0., self.p['readiness_timeout_s']-
+                         (mono-waiting_goal['started'])) if waiting_goal is not None else None),
                      generation=self.generation, goal_kind=self.goal_kind,
                      last_goal_stamp=self.last_goal_stamp,
                      computation_cycle=getattr(self, 'computation_cycle', 0),

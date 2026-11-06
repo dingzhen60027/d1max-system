@@ -36,12 +36,16 @@ inline bool formalReseedSubmissionDue(std::chrono::steady_clock::time_point now,
     now-last_submission>=std::chrono::milliseconds(500));
 }
 
-// Snapshot contention is a scheduler precondition, not evidence that geometry
-// is blocked. Retrying it never changes collision/unknown semantics and never
-// renews a previously submitted SolveBudget.
+// Snapshot contention and an exhausted whole-turn deadline are scheduling
+// failures, not evidence that geometry is blocked. After the old worker and
+// its budget retire, the FSM may start a distinct bounded turn after its normal
+// cooldown. It must not wait for a stationary saturated map to change before
+// retrying recovered compute resources, nor renew the expired SolveBudget.
+// Collision, unknown-space and invalid-input failures remain evidence-gated.
 inline bool nativeResourceWait(const std::string &phase)
 {
-  return phase == "waiting_snapshot_slot";
+  return phase == "waiting_snapshot_slot" || phase == "solve_deadline_exceeded" ||
+      phase == "solve_search_deadline_exceeded";
 }
 
 // These are selector envelope QUERY counts, never unique physical voxels.

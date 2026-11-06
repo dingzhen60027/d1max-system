@@ -61,6 +61,35 @@ def test_small_real_original_records_and_tomogram_package_validate_without_ros(t
     assert bound['route']['source_pcd']==str(directory/'processed_map.pcd')
 
 
+def test_published_layers_identify_the_actual_cleaned_planning_package(tmp_path):
+    from d1max_pct_scan.live_map_geometry import build_layers
+    _, directory = package(tmp_path)
+    path = directory/'manifest.json'
+    manifest = json.loads(path.read_text())
+    manifest.update(retained_points=4,
+        source_record_cleanup=dict(enabled=True, removed_points=1))
+    path.write_text(json.dumps(manifest))
+    route_path = directory/'route.yaml'
+    route = yaml.safe_load(route_path.read_text())
+    route['floor_z_ranges'] = dict(lower=[-.15, .15])
+    route_path.write_text(yaml.safe_dump(route))
+    with np.load(directory/'tomogram.npz', allow_pickle=False) as archive:
+        payload = {k:archive[k].copy() for k in archive.files}
+    payload['source_processing_manifest_sha256'] = np.asarray(digest_file(path))
+    np.savez_compressed(directory/'tomogram.npz', **payload)
+    _, _, _, status = build_layers(dict(planning_manifest=str(path),
+        tomogram_npz=str(directory/'tomogram.npz'),
+        crossfloor_route_config=str(route_path), frame_id='d1max_loc_map'))
+    assert status['planning_manifest'] == str(path)
+    assert status['planning_manifest_sha256'] == digest_file(path)
+    assert status['source_tomogram_sha256'] == digest_file(directory/'tomogram.npz')
+    assert status['original_source_sha256'] == manifest['source_sha256']
+    assert status['retained_source_records'] == 4
+    assert status['reviewed_cleanup_enabled'] is True
+    assert status['reviewed_removed_source_records'] == 1
+    assert status['motion_enabled'] is False
+
+
 def test_copied_absolute_route_fails_before_node_launch_then_explicit_rebase_preserves_geometry(tmp_path,monkeypatch):
     old,original=package(tmp_path)
     new=tmp_path/'new'; shutil.copytree(old,new)

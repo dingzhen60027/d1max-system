@@ -26,6 +26,7 @@ def test_dragged_xyz_and_optional_yaw_use_single_task_action_not_path_publisher(
     live_view.LiveView.commit_goal(node,None)
     goal=node.navigate_client.send_goal_async.call_args.args[0]
     assert goal.schema_version == 2 and goal.goal_kind == '3d' and goal.has_goal_yaw
+    assert goal.request_execution is False
     assert goal.goal.pose.position.z == 3.8
     node.goal_pose.position.z=7.
     assert goal.goal.pose.position.z == 3.8
@@ -33,6 +34,32 @@ def test_dragged_xyz_and_optional_yaw_use_single_task_action_not_path_publisher(
     future.set_result(handle)
     assert not node.goal_request_pending
     handle.cancel_goal_async.assert_not_called()
+
+
+def test_explicit_navigation_goal_carries_one_execution_intent_without_second_ui_rpc(monkeypatch):
+    node,future=harness(monkeypatch)
+    node.motion_capable=True
+    node.execute_client=Mock()
+    live_view.LiveView.commit_goal(node,None,request_execution=True)
+    live_view.LiveView.commit_goal(node,None,request_execution=True)
+    node.navigate_client.send_goal_async.assert_called_once()
+    assert node.navigate_client.send_goal_async.call_args.args[0].request_execution is True
+    future.set_result(Mock(accepted=True))
+    node.execute_client.call_async.assert_not_called()
+    assert node.reason=='导航目标已接收'
+
+
+def test_motion_capable_preview_still_requires_separate_explicit_intent(monkeypatch):
+    node,_=harness(monkeypatch);node.motion_capable=True
+    live_view.LiveView.commit_goal(node,None)
+    assert node.navigate_client.send_goal_async.call_args.args[0].request_execution is False
+
+
+def test_display_only_entry_cannot_send_execution_intent(monkeypatch):
+    node,_=harness(monkeypatch)
+    live_view.LiveView.commit_goal(node,None,request_execution=True)
+    node.navigate_client.send_goal_async.assert_not_called()
+    assert not node.goal_request_pending
 
 
 def test_late_goal_acceptance_after_user_cancel_is_retired_not_ignored(monkeypatch):

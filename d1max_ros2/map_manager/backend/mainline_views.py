@@ -68,7 +68,7 @@ class OwnedNavigationViews:
         finally:
             self.lock.release()
 
-    def _binding(self, state):
+    def _binding(self, state, *, opening=True):
         if not isinstance(state, dict):
             raise ValueError('view_session_binding_invalid')
         identifier = state.get('id')
@@ -79,9 +79,9 @@ class OwnedNavigationViews:
             directory = Path(state['directory'])
             if not release.is_absolute() or not directory.is_absolute():
                 raise ValueError('view_session_binding_invalid')
-            release = release.resolve(strict=True)
+            release = release.resolve(strict=opening)
             directory = directory.resolve(strict=True)
-            if (not release.is_dir() or not directory.is_dir()
+            if ((opening and not release.is_dir()) or not directory.is_dir()
                     or not release.is_relative_to(self.nav_root / 'experiments')):
                 raise ValueError('view_session_binding_invalid')
         except (KeyError, TypeError, OSError):
@@ -89,6 +89,11 @@ class OwnedNavigationViews:
         expected_session = state.get('session_sha256')
         if expected_session and hashlib.sha256((directory / 'session.json').read_bytes()).hexdigest() != expected_session:
             raise ValueError('view_session_binding_changed')
+        # Cleanup does not execute a dispatcher or load a release. Its authority
+        # is the admitted session and the exact viewer invocation below; a
+        # staged/removed entry must not prevent that old invocation from exiting.
+        if not opening:
+            return identifier, directory, release, None
         # Use this session's admitted dispatcher, never a new Web activation.
         # Older saved sessions have no path field and retain their old entry.
         entry = Path(state.get('entrypoint') or self.nav_root / 'tools/single_floor_entry.sh')
@@ -303,7 +308,7 @@ class OwnedNavigationViews:
             raise ValueError('desktop_environment_invalid')
         return desktop
 
-    def open(self, state, layout):
+    def open(self, state, layout, *, on_record=None):
         if layout not in VIEW_UNITS:
             raise ValueError('unknown_view_layout')
         with self._transaction():
@@ -317,6 +322,7 @@ class OwnedNavigationViews:
             unit = self._unit(VIEW_UNIT)
             if self._busy(unit):
                 record = self._record(state, 'single', unit, identifier, directory, release)
+                if on_record:on_record(record)
                 return self._layout(state, layout, identifier, directory, core, record)
             desktop = self._desktop()
             viewer_id = uuid.uuid4().hex
@@ -339,25 +345,28 @@ class OwnedNavigationViews:
             # was rejected without stopping or adopting it.
             fresh_state = {**state, 'views': {**state.get('views', {}), 'single': None}}
             record = self._record(fresh_state, 'single', self._unit(VIEW_UNIT), identifier, directory, release)
+            if on_record:on_record(record)
             return self._layout(state, layout, identifier, directory, core, record)
 
+    def preflight_stop(self,state):
+        identifier,directory,release,_=self._binding(state,opening=False)
+        owned={}
+        # Validate all groups before changing any, including core's batch stop.
+        for layout,name in {'single':VIEW_UNIT,**LEGACY_VIEW_UNITS}.items():
+            unit=self._unit(name)
+            if self._busy(unit):
+                owned[layout]=self._record(state,layout,unit,identifier,directory,release,allow_stopping=True)
+        return owned
+
     def stop(self, state):
-        """Close only exact viewers; navigation cancellation is outside this API."""
+        """Close only exact viewers, in one shared systemd stop transaction."""
         with self._transaction():
-            identifier, directory, release, _ = self._binding(state)
-            owned = []
-            # Validate all three before changing any; a foreign or replacement
-            # process must never be killed merely because its unit is fixed.
-            for layout, name in {'single': VIEW_UNIT, **LEGACY_VIEW_UNITS}.items():
-                unit = self._unit(name)
-                if self._busy(unit):
-                    record = self._record(state, layout, unit, identifier, directory, release,
-                                          allow_stopping=True)
-                    owned.append((layout, record))
+            owned=self.preflight_stop(state)
             result = {}
-            for layout, record in owned:
-                self.runner(['systemctl', '--user', 'stop', record['unit']], check=True,
+            if owned:
+                self.runner(['systemctl','--user','stop',*[record['unit'] for record in owned.values()]],check=True,
                             capture_output=True, text=True, timeout=16)
+            for layout,record in owned.items():
                 after = self._unit(record['unit'])
                 if self._busy(after):
                     raise ValueError('view_stop_unconfirmed:' + layout)

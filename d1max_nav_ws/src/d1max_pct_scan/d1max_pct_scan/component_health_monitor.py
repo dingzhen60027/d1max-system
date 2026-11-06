@@ -19,7 +19,10 @@ def main(args=None):
             components=['global','reference','perception','map','tracker']
             if self.declare_parameter('motion_pipeline',True).value:components.append('safety')
             self.health=FunctionalHealth(sid,components,started=time.monotonic(),
-                startup_s=self.declare_parameter('startup_timeout_s',30.).value)
+                startup_s=self.declare_parameter('startup_timeout_s',30.).value,
+                timeout_s=self.declare_parameter('callback_timeout_s',1.5).value,
+                stable_duration_s=self.declare_parameter('stable_duration_s',.6).value,
+                minimum_new_samples=self.declare_parameter('minimum_new_samples',3).value)
             self.directory=Path(output).resolve(strict=True)
             self.publisher=self.create_publisher(String,PREFIX+'component_health',1)
             topics=dict(global_='global_status',reference='scan_bridge_status',perception='ray_projector_status',

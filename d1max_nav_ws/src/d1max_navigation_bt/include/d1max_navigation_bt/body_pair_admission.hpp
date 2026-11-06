@@ -38,10 +38,10 @@ inline bool acceptLocalState(const d1max_planning_interfaces::msg::LocalNavigati
      m.localization_epoch==0||m.localization_seed_id.empty()||m.source_stamp.nanosec>=1000000000U||
      m.localization_epoch<previous.localization_epoch||
      (m.localization_epoch==previous.localization_epoch&&ns(m.source_stamp)<=ns(previous.source_stamp))||
-     !exec3::fresh(exec3::seconds(m.source_stamp),now,.4)||m.local_odometry.header.stamp!=m.source_stamp||
-     m.local_odometry.header.frame_id!="d1max_loc_odom"||m.local_odometry.child_frame_id!="d1max_loc_base_link"||
-     !std::isfinite(m.extrapolation_sec)||m.extrapolation_sec<0)return false;
-  // Unavailable states withdraw capability without supplying synthetic pose.
+     !exec3::fresh(exec3::seconds(m.source_stamp),now,.4))return false;
+  // An ordered unavailable envelope has identity/time/reason, not geometry.
+  // The producer deliberately leaves odometry and measurement stamps empty;
+  // requiring them here would discard the very event that withdraws a lease.
   if(!m.usable)return m.reason.size()<=1024;
   // Validate the SAME original propagation/time/geometry contract at entry.
   // Task use may later survive the instantaneous IMU lease, but admission and
@@ -60,8 +60,11 @@ inline bool acceptBodyPair(const d1max_planning_interfaces::msg::NavigationState
      m.localization_epoch==0||m.localization_seed_id.empty()||m.source_stamp.nanosec>=1000000000U||
      m.localization_epoch<previous.localization_epoch||
      (m.localization_epoch==previous.localization_epoch&&ns(m.source_stamp)<=ns(previous.source_stamp))||
-     !exec3::fresh(exec3::seconds(m.source_stamp),now,.4)||
-     m.local_odometry.header.stamp!=m.source_stamp||m.global_odometry.header.stamp!=m.source_stamp||
+     !exec3::fresh(exec3::seconds(m.source_stamp),now,.4))return false;
+  // Match the local and Python atomic inbox negative-evidence contract.
+  // No pose is consumed and no observation lease is renewed by this event.
+  if(!m.usable)return m.reason.size()<=1024;
+  if(m.local_odometry.header.stamp!=m.source_stamp||m.global_odometry.header.stamp!=m.source_stamp||
      m.local_odometry.header.frame_id!="d1max_loc_odom"||m.global_odometry.header.frame_id!="d1max_loc_map"||
      m.local_odometry.child_frame_id!="d1max_loc_base_link"||m.global_odometry.child_frame_id!="d1max_loc_base_link"||
      !std::isfinite(m.extrapolation_sec)||m.extrapolation_sec<0)return false;

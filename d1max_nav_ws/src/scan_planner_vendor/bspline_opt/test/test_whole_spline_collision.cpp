@@ -10,16 +10,21 @@ using Point=Eigen::Vector3d;
 
 // Production GridMap/inflation and UniformBspline, without ROS initialization.
 struct GridMapTestAccess {
-  static GridMap::Ptr make() {
+  static GridMap::Ptr make(bool observed_free=false) {
     auto map=std::make_shared<GridMap>();auto &p=map->mp_;auto &d=map->md_;
     p.resolution_=.05;p.resolution_inv_=20.;p.map_voxel_num_={160,80,64};
     p.map_origin_idx_.setZero();map->updateMapBoundaryFromIndex();
     p.clamp_min_log_=-1.;p.clamp_max_log_=2.;p.min_occupancy_log_=1.;p.unknown_flag_=.01;
-    p.require_observed_free_=false;p.double_cylinder_radius_=.29;p.double_cylinder_offset_=.2;
+    p.require_observed_free_=observed_free;p.double_cylinder_radius_=.29;p.double_cylinder_offset_=.2;
     p.obstacles_inflation_z_up=p.obstacles_inflation_z_down=.45;
     const std::size_t size=160U*80U*64U;
-    d.occupancy_buffer_.assign(size,-1.01);d.occupancy_buffer_inflate_.assign(size,0);
+    d.occupancy_buffer_.assign(size,observed_free?-1.:-1.01);d.occupancy_buffer_inflate_.assign(size,0);
     d.occupancy_buffer_inflate_cnt_.assign(size,0);map->rebuildInflationOffsets();return map;
+  }
+  static void unknown(GridMap &map,const Point &point) {
+    Eigen::Vector3i cell;map.posToIndex(point,cell);
+    map.md_.occupancy_buffer_[map.toAddress(cell)]=-1.01;
+    map.observed_cylinder_cache_.clear();++map.occupancy_revision_;
   }
 };
 
@@ -151,6 +156,59 @@ TEST(PreviewSplineHeading, StationaryNoiseDoesNotChangeBodyHeadingOrActualDeriva
   auto noisy=slowCurve({0.,.009,0.});
   // Default/disabled behavior is deliberately unchanged, not silently opted in.
   EXPECT_EQ(checkWholeSplineCollision(noisy,.05,query(*map)).state,SplineCollisionState::Collision);
+}
+
+TEST(PreviewSplineHeading, FormalBtPreviewUsesWriterContractInsteadOfLegacyMapLabel) {
+  using scan_planner::noMotionMeasuredHeadingContract;
+  EXPECT_TRUE(noMotionMeasuredHeadingContract(false,false,true,false,true,false));
+  // Strict observed-space planning still checks the same unknown evidence;
+  // using measured orientation does not require downgrading its map policy.
+  EXPECT_TRUE(noMotionMeasuredHeadingContract(false,false,true,false,true,true));
+  EXPECT_FALSE(noMotionMeasuredHeadingContract(false,false,true,true,true,false));
+  EXPECT_FALSE(noMotionMeasuredHeadingContract(false,false,false,true,true,false));
+  EXPECT_TRUE(noMotionMeasuredHeadingContract(true,true,false,false,true,false));
+  EXPECT_TRUE(noMotionMeasuredHeadingContract(true,true,false,true,true,false));
+  EXPECT_THROW(noMotionMeasuredHeadingContract(true,true,true,true,true,false),std::invalid_argument);
+  EXPECT_THROW(noMotionMeasuredHeadingContract(false,false,true,false,false,false),std::invalid_argument);
+  EXPECT_THROW(noMotionMeasuredHeadingContract(true,false,false,false,true,false),std::invalid_argument);
+}
+
+TEST(PreviewSplineHeading, RecordedMillimeterVelocityCannotRotateMeasuredStandingFootprint) {
+  auto map=GridMapTestAccess::make();
+  // Recorded 2026-10-09 standing input: forward axis near +Y, but the 5/-15
+  // mm/s derivative has an unreliable course near -Y. The native dual circle
+  // footprint is yaw dependent even though its front/rear centers are symmetric.
+  const Point velocity(.005,-.015,0.);const double measured_yaw=1.567123;
+  auto curve=slowCurve(velocity);
+  const double noise_yaw=std::atan2(velocity.y(),velocity.x());
+  const Point obstruction(.325,-.225,.225);
+  map->setOccupied(obstruction);
+  ASSERT_EQ(map->getInflateOccupancy(curve.evaluateDeBoorT(0.),measured_yaw),0);
+  ASSERT_EQ(map->getInflateOccupancy(curve.evaluateDeBoorT(0.),noise_yaw),1);
+  const auto original=curve.getControlPoint();
+  EXPECT_EQ(checkWholeSplineCollision(curve,.05,query(*map)).state,SplineCollisionState::Collision);
+  EXPECT_EQ(checkWholeSplineCollision(curve,.05,query(*map),50000,
+      previewContract(measured_yaw)).state,SplineCollisionState::Clear);
+  EXPECT_TRUE(curve.getControlPoint().isApprox(original,0.));
+  EXPECT_TRUE(curve.getDerivative().evaluateDeBoorT(0.).isApprox(velocity,1e-10));
+  // The fix changes the queried orientation, never the map or the velocity.
+  EXPECT_EQ(map->getOccupancy(obstruction),1);
+  map->setOccupied(curve.evaluateDeBoorT(0.));
+  EXPECT_EQ(checkWholeSplineCollision(curve,.05,query(*map),50000,
+      previewContract(measured_yaw)).state,SplineCollisionState::Collision);
+}
+
+TEST(PreviewSplineHeading, FormalStrictPlanningDoesNotOpenUnknownSpace) {
+  auto map=GridMapTestAccess::make(true);auto curve=slowCurve({.005,-.015,0.});
+  auto contract=previewContract(1.567123);
+  contract.preview_only_enabled=scan_planner::noMotionMeasuredHeadingContract(
+      false,false,true,false,true,true);
+  EXPECT_EQ(checkWholeSplineCollision(curve,.05,query(*map),50000,contract).state,
+      SplineCollisionState::Clear);
+  GridMapTestAccess::unknown(*map,curve.evaluateDeBoorT(0.));
+  const auto denied=checkWholeSplineCollision(curve,.05,query(*map),50000,contract);
+  EXPECT_EQ(denied.state,SplineCollisionState::Collision);
+  EXPECT_EQ(denied.occupancy,2);
 }
 
 TEST(PreviewSplineHeading, ActualMeasuredFootprintStillRejectsAtZeroSpeed) {

@@ -121,8 +121,42 @@ TEST(MotionSweep,FailedEnvelopeDiagnosticsSeparateClassesAndUniqueFromRawOverlap
   EXPECT_NE(provenance.find("ray_witness={sensor:1,hit:1,vote:1,scan_ns:100000000000"),std::string::npos);
   EXPECT_NE(provenance.find("origin:[-0.4,0,0.5]"),std::string::npos);
   map.beginObservedProof();EXPECT_NE(map.getInflateOccupancy({0.,0.,.5},0.),0);
-  // Diagnostic occupied has decision precedence for reporting only; native
-  // first-hit policy and all unknown-space blocking remain unchanged.
+  // Native and diagnostic occupied now share precedence; the set of blocked
+  // cells, original evidence timestamps and unknown-space blocking are unchanged.
+}
+TEST(MotionSweep,EarlierUnknownCannotHideRealObstacleAndSuppressLocalRecovery) {
+  for(double uncertain:{-1.01,0.}) {
+    GridMap map;GridMapTestAccess::configure(map);
+    // Production sweep order visits negative X before the forward obstacle.
+    GridMapTestAccess::voxel(map,{-.125,.025,.55},uncertain);
+    GridMapTestAccess::voxel(map,{.50,.025,.55},2.);
+    geometry_msgs::msg::Twist command;command.linear.x=.3;
+    const auto result=run(map,command);
+    EXPECT_FALSE(result.valid);EXPECT_EQ(result.reason,"motion_sweep_occupied");
+    EXPECT_GE(result.state_counts[2],1U);EXPECT_EQ(result.state_counts[1],1U);
+    EXPECT_FALSE(result.query_complete);
+    EXPECT_EQ(result.unique_voxels,result.state_counts[0]+result.state_counts[1]+
+        result.state_counts[2]+result.state_counts[3]);
+  }
+}
+TEST(MotionSweep,PureUnknownStillBlocksAndCountsOnlyActuallyCheckedVolume) {
+  GridMap map;GridMapTestAccess::configure(map);
+  GridMapTestAccess::voxel(map,{-.125,.025,.55},-1.01);
+  geometry_msgs::msg::Twist command;command.linear.x=.3;
+  const auto result=run(map,command);
+  EXPECT_FALSE(result.valid);EXPECT_EQ(result.reason,"motion_sweep_unknown_or_expired");
+  EXPECT_TRUE(result.query_complete);EXPECT_EQ(result.state_counts[1],0U);
+  EXPECT_EQ(result.state_counts[2],1U);EXPECT_GT(result.state_counts[0],0U);
+  EXPECT_EQ(result.unique_voxels,result.state_counts[0]+result.state_counts[2]);
+}
+TEST(MotionSweep,RawUnknownFrontDoesNotHideOccupiedRearCylinder) {
+  GridMap map;GridMapTestAccess::configure(map);
+  GridMapTestAccess::voxel(map,{.225,.025,.55},-1.01);
+  GridMapTestAccess::voxel(map,{-.225,.025,.55},2.);
+  map.beginObservedProof();EXPECT_EQ(map.getInflateOccupancy({0.,0.,.55},0.),1);
+  const auto evidence=map.inspectInflateOccupancy({0.,0.,.55},0.,true);
+  EXPECT_EQ(evidence.state(),1);EXPECT_EQ(evidence.unique_counts[1],1U);
+  EXPECT_EQ(evidence.unique_counts[2],1U);
 }
 TEST(MotionSweep,NewBodyOrNewProofDoesNotRenewOriginalDemandBodyOrExpiredRaySource) {
   constexpr std::int64_t t=100000000000LL;

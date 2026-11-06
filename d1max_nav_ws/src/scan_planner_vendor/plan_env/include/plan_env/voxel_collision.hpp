@@ -236,31 +236,46 @@ inline std::vector<Eigen::Vector3i> conservativeCylinderInflation(
   return result;
 }
 
+// A blocking classification must not depend on traversal order. Keep the same
+// rejection set, but a confirmed obstacle outranks missing evidence; outside
+// outranks unknown just as CollisionEvidence::state(). Unexpected nonzero
+// values remain uncertain/blocked rather than being accidentally made free.
+inline int mergeCollisionStatus(int first,int second) {
+  if(first==1 || second==1)return 1;
+  if(first<0 || second<0)return -1;
+  return first!=0 || second!=0 ? 2:0;
+}
+
 // Reverse the obstacle-inflation offsets to visit all raw cells that could
 // intersect a cylinder whose actual center lies anywhere in center_cell.
 // queryRaw: 0 measured free, 1 occupied, 2 unobserved, -1 outside map.
+// Work stays bounded by the existing finite kernel, without adding another
+// region or a fresh query deadline. Occupied is the definitive early exit;
+// unknown/outside must not conceal an occupied voxel later in this SAME set.
 template <class RawQuery>
 int observedCylinderStatus(const Eigen::Vector3i &center_cell,
     const std::vector<Eigen::Vector3i> &inflation_offsets, RawQuery queryRaw) {
+  int result=0;
   for (const auto &offset:inflation_offsets) {
     const Eigen::Vector3i body_cell=center_cell-offset;
-    const int state=queryRaw(body_cell);
-    if (state!=0) return state;
+    result=mergeCollisionStatus(result,queryRaw(body_cell));
+    if (result==1) return result;
   }
-  return 0;
+  return result;
 }
 
 template <class RawQuery>
 int observedCylinderStatusAtHeight(const Eigen::Vector3i &center_cell,
     const VerticalVoxelSpan &span, const std::vector<Eigen::Vector3i> &inflation_offsets,
     RawQuery queryRaw) {
+  int result=0;
   for (const auto &offset:inflation_offsets) {
     const Eigen::Vector3i body_cell=center_cell-offset;
     if (body_cell.z()<span.low || body_cell.z()>span.high) continue;
-    const int state=queryRaw(body_cell);
-    if (state!=0) return state;
+    result=mergeCollisionStatus(result,queryRaw(body_cell));
+    if (result==1) return result;
   }
-  return 0;
+  return result;
 }
 
 template <class RawQuery>
@@ -268,14 +283,15 @@ int observedCylinderStatusAtPosition(const Eigen::Vector3d &center,
     const Eigen::Vector3i &center_cell, const VerticalVoxelSpan &span,
     const std::vector<Eigen::Vector3i> &inflation_offsets,
     double resolution, double radius, RawQuery queryRaw) {
+  int result=0;
   for (const auto &offset:inflation_offsets) {
     const Eigen::Vector3i cell=center_cell-offset;
     if (cell.z()<span.low || cell.z()>span.high ||
         !cylinderIntersectsVoxelXY(center,cell,resolution,radius)) continue;
-    const int state=queryRaw(cell);
-    if (state!=0) return state;
+    result=mergeCollisionStatus(result,queryRaw(cell));
+    if (result==1) return result;
   }
-  return 0;
+  return result;
 }
 
 }  // namespace scan_planner

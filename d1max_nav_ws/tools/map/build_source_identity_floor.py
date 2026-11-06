@@ -19,25 +19,52 @@ sys.path[:0] = [str(ROOT), str(ROOT/'src/d1max_pct_scan'), str(ROOT/'src/d1max_p
 from d1max_pct_scan.source_route import digest_file
 from d1max_pct_planner.cpu_tomography import tomogram_from_points
 from tools.pointcloud_preprocessing.pcd_io import read_pcd, write_subset
+from tools.pointcloud_preprocessing.source_record_cleanup import reviewed_source_keep
 
 
 def build(source, evidence, config, output, floor_id):
     if not floor_id.isidentifier():
         raise ValueError('floor_id_must_be_an_identifier')
     output = Path(output).resolve()
-    output.mkdir(parents=True, exist_ok=False)
     inherited = yaml.safe_load(Path(config).read_text())
+    route_template = None
+    # Reject a stale/incompatible route before creating any output directory or
+    # publishing a complete manifest. This also keeps failed builds reusable.
+    if inherited.get('route_template'):
+        item = inherited['route_template']
+        template_path = Path(item['path']).resolve(strict=True)
+        if digest_file(template_path) != item['sha256']:
+            raise ValueError('source_identity_route_template_changed')
+        route_template = yaml.safe_load(template_path.read_text())
+        if (route_template.get('schema') != 'd1max.source_identity_route/v1'
+                or route_template.get('floor_id') != floor_id
+                or route_template.get('frame_id') != 'd1max_loc_map'
+                or route_template.get('stairs_enabled') is not False
+                or not all(key in route_template for key in
+                           ('vendor_root','unknown_ceiling_policy','minimum_headroom_m','limits','planning'))):
+            raise ValueError('source_identity_route_template_incompatible')
     cfg = {k:inherited[k] for k in ('preprocessing','pct')}
     cloud = read_pcd(source)
     lo, hi = np.asarray(cfg['preprocessing']['roi']['min']), np.asarray(cfg['preprocessing']['roi']['max'])
-    selected = np.flatnonzero(cloud.finite_xyz_mask & np.all((cloud.xyz >= lo) & (cloud.xyz <= hi), axis=1))
-    write_subset(output/'processed_map.pcd', cloud, selected)
     with np.load(evidence, allow_pickle=False) as audit:
         ids = audit[floor_id+'_source_indices'][audit[floor_id+'_support']]
     if ids.dtype.kind not in 'iu' or np.any(ids < 0) or np.any(ids >= len(cloud.xyz)):
         raise ValueError('invalid_original_floor_evidence_indices')
     # No planar prediction or synthesized returns: source points only.
     support = cloud.xyz[ids]
+    keep, cleanup = reviewed_source_keep(source, len(cloud.xyz), evidence, floor_id,
+                                        inherited.get('source_record_cleanup'), ids)
+    cfg['source_record_cleanup'] = cleanup
+    roi = cloud.finite_xyz_mask & np.all((cloud.xyz >= lo) & (cloud.xyz <= hi), axis=1)
+    selected = np.flatnonzero(roi & keep)
+    removed = np.flatnonzero(roi & ~keep)
+    output.mkdir(parents=True, exist_ok=False)
+    write_subset(output/'processed_map.pcd', cloud, selected)
+    if len(removed):
+        (output/'audit').mkdir()
+        write_subset(output/'audit/removed_original_records.pcd', cloud, removed)
+        np.savez_compressed(output/'audit/source_record_cleanup.npz',
+                            removed_source_indices=removed)
     np.savez_compressed(output/'source_indices.npz', selected_source_indices=selected,
                         **{floor_id+'_support_source_indices': ids, floor_id+'_support_xyz': support})
     payload, stats = tomogram_from_points(cloud.xyz[selected], cfg['pct'])
@@ -75,6 +102,7 @@ def build(source, evidence, config, output, floor_id):
         parent_configuration_sha256=digest_file(config),
         forbidden_stair_xy=[stair_lo.tolist(),stair_hi.tolist()],
         source_points=len(cloud.xyz), retained_points=len(selected), support_points=len(ids),
+        source_record_cleanup=cleanup,
         xyz_modified=False, source_coordinate_error_m=0.,
         physical_acceptance=False, support_radius_m=.12,
         notes=['Observed original records only; no ground filling or flattening.',
@@ -98,6 +126,11 @@ def build(source, evidence, config, output, floor_id):
         limits=dict(max_ground_step_m=.17),planning=dict(max_heading_rate=1.,astar_cost_weight=1.,
             optimizer_cost_margin=8.,path_refinement='visibility_c2',refinement_corner_cut_m=1.5,
             optimizer_sample_interval=10))
+    # Reuse an explicitly bound production strategy, rather than quietly
+    # reverting a regenerated map to the historical GPMP default.
+    if route_template is not None:
+        for key in ('vendor_root','unknown_ceiling_policy','minimum_headroom_m','limits','planning'):
+            route[key] = route_template[key]
     (output/'route.yaml').write_text(yaml.safe_dump(route,sort_keys=False))
     print(json.dumps({'output':str(output),'shape':list(data.shape),'floor_mask':counts}))
 

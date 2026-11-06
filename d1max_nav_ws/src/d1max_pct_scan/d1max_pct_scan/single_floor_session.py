@@ -4,7 +4,7 @@ The live graph attaches to ONE separately authorized SDK Monitor session. The
 isolated graph substitutes only robot transport and sensors, never planners.
 """
 import argparse
-from contextlib import contextmanager
+from contextlib import contextmanager,ExitStack
 import fcntl
 import hashlib
 import importlib.util
@@ -40,6 +40,8 @@ def prepare(output, *, map_directory=None, transport_mode='isolated_mock',
     from .live_view_reload import write_owned_json
     from .bt_configuration import prepare_tree,route_provenance
     from .robot_profile import load_robot_profile,scan_robot_parameters
+    from .navigation_runtime_policy import load as load_runtime_policy
+    from dataclasses import asdict
     if transport_mode not in ('live','isolated_mock'):
         raise ValueError('explicit_execution_transport_required')
     planning_only=purpose=='planning_only'
@@ -53,6 +55,8 @@ def prepare(output, *, map_directory=None, transport_mode='isolated_mock',
     if directory.exists() and any(directory.iterdir()):
         raise ValueError('refusing_to_overwrite_existing_session')
     templates=paths.template_root()
+    policy_path=templates/'src/d1max_pct_scan/config/navigation_runtime.yaml'
+    policy=load_runtime_policy(policy_path)
     map_directory=Path(map_directory or paths.default_map_directory()).resolve(strict=True)
     manifest=json.loads((map_directory/'manifest.json').read_text())
     # The floor is whatever the map package declares; code names no floor.
@@ -61,7 +65,7 @@ def prepare(output, *, map_directory=None, transport_mode='isolated_mock',
             or not isinstance(floor,str) or not floor or manifest.get('frame_id')!='d1max_loc_map'):
         raise ValueError('source_identity_original_coordinates_required')
     bridge=SourceIdentityBridge.from_artifacts(map_directory/'manifest.json')
-    validate_package(map_directory,bridge=bridge)
+    validated_map=validate_package(map_directory,bridge=bridge)
     route=yaml.safe_load((map_directory/'route.yaml').read_text())
     # This graph executes floor segments only: stairs need segment transitions.
     if route.get('stairs_enabled') is not False or route.get('floor_id')!=floor:
@@ -112,13 +116,20 @@ def prepare(output, *, map_directory=None, transport_mode='isolated_mock',
         max_speed_mps=max_speed,max_yaw_radps=max_yaw,
         planning_manifest=str(map_directory/'manifest.json'),tomogram_npz=str(map_directory/'tomogram.npz'),
         crossfloor_route_config=str(map_directory/'route.yaml'),
+        terrain_resolution_m=validated_map['tomogram'].resolution,
         localization_config=str(directory/'localization.yaml'),robot_profile=str(profile_path),
         frame_id=frames['map_frame'],local_planning_frame=frames['odom_frame'],
         current_floor=floor,goal_floor=floor,floor=floor,body_height=body_height,
         body_height_calibration_id=calibration,body_height_min_m=.25,body_height_max_m=.85,
         body_height_calibration_status='engineering_nominal_not_physically_verified' if planning_only else 'execution_record_or_isolated_fixture',
-        max_start_move_m=.30,result_timeout_s=10.,freshness_s=.4,
+        max_start_move_m=.30,result_timeout_s=policy.global_route_timeout_s,
+        warmup_timeout_s=policy.worker_startup_timeout_s,
+        readiness_timeout_s=policy.recovery_timeout_s,
+        commit_wait_timeout_s=policy.recovery_timeout_s,freshness_s=.4,
+        runtime_policy=asdict(policy),runtime_policy_source=str(policy_path),
         perception_backend='per_sensor_rays',scan_collision_policy='observed_free',perception_timeout_s=.5,
+        scan_planning_collision_policy='official',trajectory_geometry_policy='official_inflated_geometry',
+        execution_collision_policy='observed_free',
         navigation_contract=dict(frames=frames),ui_lifetime_policy='independent',
         ground_support_height_tolerance_m=.20,ground_support_max_step_m=.17)
     directory.mkdir(parents=True,exist_ok=True,mode=0o700)
@@ -154,7 +165,6 @@ def prepare(output, *, map_directory=None, transport_mode='isolated_mock',
     localization=yaml.safe_load(source_config.read_text())
     # Resolve the new stage into the session snapshot, not live-editable launch
     # defaults. The pinned legacy config/launch remain byte-identical.
-    from dataclasses import asdict
     from d1max_localization.global_registration import RegistrationConfig
     from d1max_localization.startup_relocalization import StartupConfig
     global_template=templates/'src/d1max_localization/config/global_relocalization.yaml'
@@ -181,7 +191,8 @@ def prepare(output, *, map_directory=None, transport_mode='isolated_mock',
     bt.update(planning_frame='d1max_loc_map',preview_only=planning_only,execution_purpose=purpose,
         dependency_health_required=True,
         execution_transport_mode=transport_mode,expected_sdk_session=sdk_session,
-        arrival_evidence_timeout_s=4.,execution_blocked_timeout_s=30.,execution_recovery_time_s=1.)
+        arrival_evidence_timeout_s=4.)
+    bt.update(policy.bt_parameters())
     if model_path:
         stationary=session['stationary_evidence']
         bt.update(stationary_linear_threshold_mps=stationary['linear_threshold_mps'],
@@ -194,18 +205,20 @@ def prepare(output, *, map_directory=None, transport_mode='isolated_mock',
                   execution_record_sha256=sha(acceptance_record))
     # Cold native map/worker initialization has its own bounded preparation
     # budget; the functional monitor must not kill it at an unrelated 30 s.
-    startup=max(30.,float(bt.get('worker_startup_timeout_s',60.)))
+    startup=policy.worker_startup_timeout_s
     if not math.isfinite(startup) or startup>60.:
         raise ValueError('invalid_component_startup_budget')
     session['component_startup_timeout_s']=startup
     yaml_parameters(directory/'bt.yaml',bt)
     adapter=yaml.safe_load((directory/'bt_adapter.yaml').read_text())['/**']['ros__parameters']
     adapter.update(execution_mode='single_floor',pipeline_contract='single_floor_v3',
-        map_version_id=version,transport_mode=transport_mode,local_state_enabled=True)
+        map_version_id=version,transport_mode=transport_mode,local_state_enabled=True,
+        arrival_evidence_timeout_s=bt['arrival_evidence_timeout_s'])
     yaml_parameters(directory/'bt_adapter.yaml',adapter)
     global_params={k:session[k] for k in ('planning_manifest','tomogram_npz','crossfloor_route_config',
         'current_floor','goal_floor','body_height_min_m','body_height_max_m','max_start_move_m',
-        'result_timeout_s','freshness_s','pipeline_contract','transport_mode')}
+        'result_timeout_s','warmup_timeout_s','readiness_timeout_s','commit_wait_timeout_s',
+        'freshness_s','pipeline_contract','transport_mode')}
     global_params.update(session_id=identifier,map_version_id=version,output_directory=str(directory))
     yaml_parameters(directory/'global.yaml',global_params)
     ref=dict(session_id=identifier,map_version_id=version,body_height_m=body_height,
@@ -223,6 +236,7 @@ def prepare(output, *, map_directory=None, transport_mode='isolated_mock',
         'fsm.require_reference_schema_v2':True,'fsm.navigation_session_id':identifier,
         'fsm.execution_protocol':True,'fsm.execution_transport_mode':transport_mode,
         'fsm.writer_handoff_enabled':not planning_only,
+        'fsm.trajectory_geometry_policy':session['trajectory_geometry_policy'],
         'fsm.execution_braking_model_record':session['execution_braking_model_record'],
         'fsm.execution_braking_model_sha256':session['execution_braking_model_sha256'],
         'fsm.strict_input_frames':True,'fsm.odom_twist_in_body_frame':True,
@@ -233,6 +247,7 @@ def prepare(output, *, map_directory=None, transport_mode='isolated_mock',
         'manager.max_vel':max_speed,'optimization.max_vel':max_speed,'manager.max_acc':.35,'optimization.max_acc':.35,
         'grid_map.frame_id':frames['odom_frame'],'grid_map.sliding_map_frame_id':'scan_local_'+identifier[:8],
         'grid_map.strict_input_frames':True,'grid_map.require_observed_free':True,
+        'grid_map.planning_collision_policy':session['scan_planning_collision_policy'],
         'grid_map.preview_only':False,'grid_map.require_localization_context':True,
         'grid_map.localization_session_id':identifier,'grid_map.maximum_cloud_pose_dt':.25,
         'grid_map.cloud_pose_max_age':session['perception_timeout_s'],'grid_map.cloud_is_world':True,'grid_map.need_extrinsic':False,
@@ -243,6 +258,7 @@ def prepare(output, *, map_directory=None, transport_mode='isolated_mock',
     yaml_parameters(directory/'scan.yaml',scan)
     tracker=dict(session_id=identifier,map_version_id=version,transport_mode=transport_mode,
         local_state_enabled=True,writer_handoff_enabled=not planning_only,
+        trajectory_geometry_policy=session['trajectory_geometry_policy'],
         local_navigation_state_topic='/d1max/localization/navigation/local_state',
         map_frame=frames['map_frame'],planning_frame=frames['odom_frame'],base_frame=frames['body_frame'],
         max_speed=max_speed,max_yaw_rate=max_yaw,max_acceleration=.35,max_yaw_acceleration=.8,
@@ -261,7 +277,7 @@ def prepare(output, *, map_directory=None, transport_mode='isolated_mock',
             stationary_minimum_samples=stationary['minimum_new_samples'])
     yaml_parameters(directory/'tracker.yaml',tracker)
     yaml_parameters(directory/'component_health.yaml',dict(session_id=identifier,
-        output_directory=str(directory),motion_pipeline=not planning_only,startup_timeout_s=startup))
+        output_directory=str(directory),motion_pipeline=not planning_only,**policy.health_parameters()))
     model_params={key:session[key] for key in ('execution_braking_model_record','execution_braking_model_sha256')}
     if not planning_only:
         yaml_parameters(directory/'safety.yaml',dict(session_id=identifier,transport_mode=transport_mode,
@@ -273,7 +289,8 @@ def prepare(output, *, map_directory=None, transport_mode='isolated_mock',
     rviz_source=templates/'src/d1max_navigation/rviz/localization_test.rviz'
     base=yaml.safe_load(rviz_source.read_text())
     for layout in ('global','local'):
-        config=configure(base,session_id=identifier,layout=layout,session_directory=directory)
+        config=configure(base,session_id=identifier,layout=layout,session_directory=directory,
+                         terrain_resolution_m=session['terrain_resolution_m'])
         config['Panels'][0]['Motion Capable']=not planning_only
         # Only the typed task confirmation UI, never legacy manual SDK controls.
         config['Visualization Manager']['Global Options']['Fixed Frame']=(
@@ -298,7 +315,7 @@ def prepare(output, *, map_directory=None, transport_mode='isolated_mock',
     # Seal the templates actually used to create future sessions, not only the
     # generated copy: otherwise editing a source XML after release sealing
     # silently changes task policy in an apparently identical release.
-    inputs.extend([source_config,global_template,realtime_template,scan_source,tree_source,rviz_source])
+    inputs.extend([source_config,global_template,realtime_template,scan_source,tree_source,rviz_source,policy_path])
     inputs.append(runtime_inputs)
     if model_path:inputs.append(model_path)
     if acceptance_record: inputs.append(Path(acceptance_record).resolve())
@@ -406,10 +423,20 @@ def _owned_file_lock(path,reason):
     fd=os.open(path,os.O_CREAT|os.O_RDWR|os.O_NOFOLLOW|os.O_CLOEXEC,0o600)
     try:
         info=os.fstat(fd)
-        if not stat.S_ISREG(info.st_mode) or info.st_uid!=os.getuid() or info.st_mode&0o077:
+        if not stat.S_ISREG(info.st_mode) or info.st_uid!=os.getuid() or info.st_nlink!=1:
             raise ValueError('navigation_lock_not_private:'+str(path))
+        repair=bool(info.st_mode&0o077)
+        if repair:
+            # Older shell diagnostics created this empty lease with umask
+            # permissions. Harden only a self-owned, empty lock in a private
+            # owned directory; preserve its inode and exclusive lease.
+            parent=path.parent.lstat()
+            if (info.st_size or not stat.S_ISDIR(parent.st_mode)
+                    or parent.st_uid!=os.getuid() or parent.st_mode&0o077):
+                raise ValueError('navigation_lock_not_private:'+str(path))
         try:fcntl.flock(fd,fcntl.LOCK_EX|fcntl.LOCK_NB)
         except BlockingIOError as exc:raise ValueError(reason) from exc
+        if repair:os.fchmod(fd,0o600)
         yield fd
     finally:os.close(fd)
 
@@ -444,7 +471,8 @@ def _try_display_lease(directory):
 
 def view(directory,layout):
     """Independent UI process group. Closing it never drains/cancels the owner."""
-    from .isolated_zenoh import validate_environment,stop_owned
+    from .isolated_zenoh import validate_environment
+    from .live_runtime import stop_owned_children
     directory=Path(directory).resolve(strict=True);s,_=verify(directory)
     if os.environ.get('RMW_IMPLEMENTATION')!='rmw_zenoh_cpp':raise ValueError('unchanged_zenoh_required')
     if s['transport_mode']=='isolated_mock':validate_environment()
@@ -459,25 +487,34 @@ def view(directory,layout):
         try:
             for name,cmd in view_commands(directory,layout,include_publishers=False).items():
                 log=(directory/(name+'-single.log')).open('a');logs.append(log)
-                children.append(subprocess.Popen(cmd,stdout=log,stderr=subprocess.STDOUT,start_new_session=True,
-                    env=view_env,pass_fds=(window_fd,)))
-            while not stopping and all(p.poll() is None for p in children):
+                children.append((name,subprocess.Popen(cmd,stdout=log,stderr=subprocess.STDOUT,start_new_session=True,
+                    env=view_env,pass_fds=(window_fd,))))
+            while not stopping and all(p.poll() is None for _,p in children):
                 if display_lease is None:
                     display_lease=_try_display_lease(directory)
                     if display_lease is not None:
                         for name,cmd in view_commands(directory,layout).items():
                             if name=='rviz':continue
                             log=(directory/(name+'.log')).open('a');logs.append(log)
-                            children.append(subprocess.Popen(cmd,stdout=log,stderr=subprocess.STDOUT,start_new_session=True,
-                                pass_fds=(display_lease[1],window_fd)))
+                            children.append((name,subprocess.Popen(cmd,stdout=log,stderr=subprocess.STDOUT,start_new_session=True,
+                                pass_fds=(display_lease[1],window_fd))))
                 time.sleep(.1)
         finally:
             # Release only after RViz and the publisher children are reaped;
             # a direct second CLI cannot overlap a lingering window.
-            for p in reversed(children):stop_owned(p)
-            if display_lease is not None:display_lease[0].__exit__(None,None,None)
-            for stream in logs:stream.close()
-            for sig,handler in previous.items():signal.signal(sig,handler)
+            try:
+                stop_owned_children(children,interrupt_s=6.,terminate_s=1.,kill_s=1.)
+            finally:
+                release_supervisor_resources(logs,previous,
+                    display_lease[0] if display_lease is not None else None)
+
+
+def release_supervisor_resources(logs,previous,lease=None):
+    """All local resources unwind even if one close/release operation fails."""
+    with ExitStack() as resources:
+        for sig,handler in previous.items():resources.callback(signal.signal,sig,handler)
+        if lease is not None:resources.callback(lease.__exit__,None,None,None)
+        for stream in logs:resources.callback(stream.close)
 
 
 def check_acceptance(record):
@@ -527,6 +564,7 @@ def validate_live_localization_parameters(config, *, package_prefix=None):
 
 def verify(directory, *, seal_runtime=False):
     from .interface_preflight import validate_execution_interfaces
+    from .navigation_runtime_policy import validate_session_policy
     directory=Path(directory).resolve(strict=True)
     s=json.loads((directory/'session.json').read_text())
     if s.get('pipeline_contract')!='single_floor_v3' or s.get('interface_version')!=3:
@@ -541,8 +579,22 @@ def verify(directory, *, seal_runtime=False):
         if sha(path)!=digest: raise ValueError('changed_input:'+path)
     for name,digest in s['parameter_hashes'].items():
         if sha(directory/name)!=digest: raise ValueError('changed_parameter:'+name)
+    validate_session_policy(directory,s)
     validate_planning_only_parameters(directory,s)
     motion=not planning_only_profile(s)
+    # Search/trajectory geometry and actual motion evidence have different
+    # domains. Freeze their agreement end-to-end; an old strict consumer must
+    # not silently reject all official-model candidates at runtime.
+    scan=yaml.safe_load((directory/'scan.yaml').read_text())['/**']['ros__parameters']
+    tracker=yaml.safe_load((directory/'tracker.yaml').read_text())['/**']['ros__parameters']
+    if (s.get('scan_planning_collision_policy')!='official'
+            or s.get('trajectory_geometry_policy')!='official_inflated_geometry'
+            or s.get('execution_collision_policy')!='observed_free'
+            or scan.get('grid_map.planning_collision_policy')!='official'
+            or scan.get('fsm.trajectory_geometry_policy')!='official_inflated_geometry'
+            or tracker.get('trajectory_geometry_policy')!='official_inflated_geometry'
+            or scan.get('grid_map.require_observed_free') is not True):
+        raise ValueError('inconsistent_planning_geometry_or_motion_evidence_policy')
     for name,key in (('scan.yaml','fsm.writer_handoff_enabled'),('tracker.yaml','writer_handoff_enabled')):
         value=yaml.safe_load((directory/name).read_text())['/**']['ros__parameters'].get(key)
         if value is not motion:raise ValueError('inconsistent_writer_handoff_configuration:'+name)
@@ -668,13 +720,34 @@ def _core_lock_root():
 
 def run(directory):
     directory=Path(directory).resolve(strict=True)
-    with runtime_lock(directory) as core_fd:
-        _run_locked(directory,core_fd=core_fd)
+    session=json.loads((directory/'session.json').read_text())
+    identifier=session['id']
+    _startup_report(directory,identifier,'starting',False)
+    try:
+        with runtime_lock(directory) as core_fd:
+            _run_locked(directory,core_fd=core_fd)
+    except Exception as error:
+        # Report pre-graph failure separately from failures after a child may
+        # have started. Only the former can be retired without a task drain.
+        attempted=True
+        try:
+            last=json.loads((directory/'core_startup.json').read_text())
+            if last.get('session_id')==identifier:attempted=last.get('children_started') is not False
+        except (OSError,ValueError,TypeError):pass
+        _startup_report(directory,identifier,'failed',attempted,error=str(error)[:1024])
+        raise
+
+
+def _startup_report(directory,identifier,phase,children_started,*,error=''):
+    from .live_view_reload import write_owned_json
+    write_owned_json(Path(directory)/'core_startup.json',dict(schema=1,session_id=identifier,
+        phase=phase,children_started=children_started,error=error,recorded_at_unix=time.time()))
 
 
 def _run_locked(directory,core_fd=None):
     """Critical exits stop the graph; never starts a physical SDK connection."""
-    from .isolated_zenoh import validate_environment,stop_owned
+    from .isolated_zenoh import validate_environment
+    from .live_runtime import stop_owned_children
     directory=Path(directory).resolve(strict=True)
     if os.environ.get('RMW_IMPLEMENTATION')!='rmw_zenoh_cpp':
         raise ValueError('unchanged_zenoh_required')
@@ -691,17 +764,32 @@ def _run_locked(directory,core_fd=None):
     previous={sig:signal.signal(sig,signal_stop) for sig in (signal.SIGINT,signal.SIGTERM)}
     children=[]; logs=[]
     try:
+        # Conservative before Popen, so even a crash immediately after spawn
+        # cannot be mistaken for a failure with no running work.
+        _startup_report(directory,s['id'],'spawning',True)
         for name,cmd in commands.items():
             log=(directory/(name+'.log')).open('w'); logs.append(log)
             p=subprocess.Popen(cmd,stdout=log,stderr=subprocess.STDOUT,start_new_session=True,
                 pass_fds=() if core_fd is None else (core_fd,))
             children.append((name,p))
+        # Creation of the last process must not conceal an earlier component
+        # that already exited during the spawn loop. This ACK means that the
+        # children were spawned and are alive, not functional/sensor readiness.
+        exited=exited_critical_components(children)
+        if exited:raise RuntimeError('critical_component_exited:'+repr(exited))
+        _startup_report(directory,s['id'],'started',True)
         reported_display_exit=False
         from .component_health import SupervisorHealth
+        from .navigation_runtime_policy import session_policy
+        policy=session_policy(s)
         supervisor=SupervisorHealth(s['id'],started=time.monotonic(),
-            startup_s=s.get('component_startup_timeout_s',30.))
+            startup_s=s.get('component_startup_timeout_s',30.),
+            # Functional monitor loss first blocks execution at the BT. Only
+            # persistent loss tears down the graph; real child exits above
+            # remain immediate faults. No old report renews this interval.
+            timeout_s=policy.recovery_timeout_s if policy is not None else 1.5)
         while not stopping:
-            exited=[(n,p.returncode) for n,p in children if p.poll() is not None and component_is_critical(n)]
+            exited=exited_critical_components(children)
             if exited: raise RuntimeError('critical_component_exited:'+repr(exited))
             if s.get('component_health_contract')=='functional_liveness_v1':
                 value=None
@@ -720,20 +808,45 @@ def _run_locked(directory,core_fd=None):
             time.sleep(.1)
     finally:
         from .lifecycle_shutdown import drain_task_owner
-        try: drain=drain_task_owner(s['id'])
-        except Exception as error: drain={'reason':str(error),'physical_stop_confirmed':False}
-        drain.update(session_id=s['id'],recorded_at_unix=time.time())
-        (directory/'shutdown.json').write_text(json.dumps(drain,indent=2)+'\n')
-        # Navigator drains while perception, control and SDK still run.
-        for _name,p in reversed(children): stop_owned(p)
-        for stream in logs: stream.close()
-        for sig,handler in previous.items(): signal.signal(sig,handler)
+        navigator_started=any(name=='navigator' for name,_ in children)
+        navigator_alive=any(name=='navigator' and p.poll() is None for name,p in children)
+        drain=dict(request_accepted=False,software_retired=False,physical_stop_confirmed=False,
+            reason='task_owner_not_alive' if navigator_started else 'task_owner_never_started')
+        if navigator_alive:
+            # Navigator drains while perception, control and SDK still run.
+            try:drain=drain_task_owner(s['id'])
+            except Exception as error:
+                drain['reason']='task_owner_drain_error:'+type(error).__name__
+        try:
+            # One set of shared phase deadlines, not 3+3 seconds PER child.
+            # The helper also checks/retires recorded new-session groups whose
+            # direct parent exited but left children behind. Together with the
+            # six-second task drain, this stays inside systemd's 30-second cap.
+            cleanup=stop_owned_children(children,interrupt_s=6.,terminate_s=1.,kill_s=1.)
+        except Exception as error:
+            cleanup=dict(all_direct_children_exited=False,all_owned_groups_exited=False,
+                reason='owned_process_cleanup_error:'+type(error).__name__)
+        try:
+            from .live_view_reload import write_owned_json
+            drain.update(session_id=s['id'],recorded_at_unix=time.time(),
+                navigator_started=navigator_started,navigator_alive_at_drain=navigator_alive,
+                process_cleanup=cleanup)
+            # Publish only after actual group cleanup, atomically. A disk error
+            # cannot skip process cleanup or turn a kill into physical stopping.
+            write_owned_json(directory/'shutdown.json',drain)
+        finally:
+            release_supervisor_resources(logs,previous)
 
 
 def component_is_critical(name):
     # Display-only history is hosted alongside the core for UI independence;
     # its failure is diagnosable but must not cancel an authorized task.
     return name!='route_display_cache'
+
+
+def exited_critical_components(children):
+    return [(name,p.returncode) for name,p in children
+        if p.poll() is not None and component_is_critical(name)]
 
 
 def main():

@@ -3,6 +3,7 @@
 #include <d1max_planning_interfaces/msg/support_reference.hpp>
 #include <geometry_msgs/msg/twist.hpp>
 #include <Eigen/Geometry>
+#include <array>
 #include <unordered_map>
 #include <optional>
 
@@ -72,7 +73,12 @@ public:
 };
 
 struct MotionSweepResult {bool valid{false};std::string reason;std::size_t unique_voxels{0};
-  double length{0.},heading_bound{0.},min_z{0.},max_z{0.};};
+  double length{0.},heading_bound{0.},min_z{0.},max_z{0.};
+  // Unique raw queries actually visited: free, occupied, unknown, outside.
+  // Occupied and deadline exits may be partial; never label them full-volume
+  // counts or turn partial free evidence into a command certificate.
+  std::array<std::size_t,4> state_counts{{0,0,0,0}};
+  bool query_complete{false};};
 
 // A reachable set, not just the ideal vx/wz arc: every possible center lies
 // within this body-frame rectangle throughout reaction and braking, while
@@ -151,6 +157,7 @@ inline MotionSweepResult validateMotionSweep(GridMap& map,const MotionSupport& s
   const Eigen::Matrix<std::int64_t,3,1> size=(high-low+Eigen::Vector3i::Ones()).cast<std::int64_t>();
   if((size.array()<=0).any()||size.prod()>200000){result.reason="motion_volume_budget_exhausted";return result;}
   map.beginObservedProof();
+  int blocked_state=0;
   // Circumscribed XY cell disc means corner-intersecting voxels are included.
   const double padded_radius=radius+map.getResolution()*std::sqrt(.5);
   for(int x=low.x();x<=high.x();++x)for(int y=low.y();y<=high.y();++y) {
@@ -165,9 +172,17 @@ inline MotionSweepResult validateMotionSweep(GridMap& map,const MotionSupport& s
     for(int z=low.z();z<=high.z();++z) {
       if(expired()){result.reason="motion_check_budget_exhausted";return result;}
       ++result.unique_voxels;const int state=map.observedRawSnapshotStatus({x,y,z});
-      if(state!=0){result.reason=state==1?"motion_sweep_occupied":state<0?"motion_sweep_outside_map":"motion_sweep_unknown_or_expired";return result;}
+      ++result.state_counts[state==0?0:state==1?1:state<0?3:2];
+      // An earlier unknown/outside cell cannot hide a definite occupied voxel
+      // and suppress the native blocked-entry replan event. Continue only the
+      // SAME bounded sweep; an occupied hit still exits immediately. Time and
+      // volume budgets remain unchanged, including the blocked timeout exit.
+      blocked_state=mergeCollisionStatus(blocked_state,state);
+      if(blocked_state==1){result.reason="motion_sweep_occupied";return result;}
     }
   }
+  result.query_complete=true;
+  if(blocked_state!=0){result.reason=blocked_state<0?"motion_sweep_outside_map":"motion_sweep_unknown_or_expired";return result;}
   result.valid=result.unique_voxels>0;result.reason=result.valid?"observed_free_motion_sweep":"empty_motion_sweep";return result;
 }
 

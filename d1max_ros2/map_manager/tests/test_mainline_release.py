@@ -1,14 +1,76 @@
 """Read-only temporary fixtures: no services, ROS, SDK, or setup execution."""
 import hashlib
 import json
+import os
 from pathlib import Path
 import subprocess
+import sys
 import threading
 import time
 
 import pytest
 
 from backend import mainline_release as module
+
+
+def test_navigation_launch_has_no_fixed_mode_or_implicit_execution():
+    raw = dict(launch_policy='navigation')
+    resolved = module.activation_launch_config(raw)
+    assert resolved['purpose'] == 'planning_only'
+    assert resolved['sdk_session_policy'] == 'bind_current_on_start'
+    assert raw == dict(launch_policy='navigation')
+
+
+def test_navigation_launch_resolves_complete_explicit_execution_binding():
+    raw = dict(launch_policy='navigation', physical_acceptance_record='/measured/record.json',
+               physical_acceptance_record_sha256='a'*64, expected_sdk_session='measured-sdk')
+    resolved = module.activation_launch_config(raw)
+    assert resolved['purpose'] == 'execution' and resolved['sdk_session_policy'] == 'fixed'
+    assert resolved['expected_sdk_session'] == 'measured-sdk'
+    assert 'purpose' not in raw
+
+
+def test_navigation_launch_runtime_profile_needs_no_calibration_report_or_fixed_session():
+    raw=dict(launch_policy='navigation',runtime_motion_profile='/release/profile.json',
+             runtime_motion_profile_sha256='a'*64)
+    resolved=module.activation_launch_config(raw)
+    assert resolved['purpose']=='execution'
+    assert resolved['sdk_session_policy']=='bind_current_on_start'
+    assert resolved['motion_profile_record']=='/release/profile.json'
+    assert resolved['motion_profile_sha256']=='a'*64
+    assert 'physical_acceptance_record' not in resolved
+    assert 'expected_sdk_session' not in resolved
+    assert 'purpose' not in raw
+
+
+@pytest.mark.parametrize('change',[
+    dict(runtime_motion_profile='relative'), dict(runtime_motion_profile_sha256='bad'),
+    dict(expected_sdk_session='unbound'),dict(physical_acceptance_record='/legacy'),
+    dict(physical_acceptance_record_sha256='b'*64)])
+def test_navigation_runtime_profile_cannot_mix_or_drop_configuration_identity(change):
+    with pytest.raises(ValueError):
+        module.activation_launch_config({'launch_policy':'navigation',
+            'runtime_motion_profile':'/release/profile.json','runtime_motion_profile_sha256':'a'*64,**change})
+
+
+@pytest.mark.parametrize('change', [
+    dict(purpose='planning_only'), dict(purpose='execution'),
+    dict(sdk_session_policy='bind_current_on_start'), dict(launch_policy='auto_motion')])
+def test_navigation_launch_cannot_mix_legacy_mode_or_unrecognized_policy(change):
+    with pytest.raises(ValueError):
+        module.activation_launch_config({'launch_policy':'navigation', **change})
+
+
+@pytest.mark.parametrize('fields', [
+    dict(expected_sdk_session='existing'),
+    dict(physical_acceptance_record='/record.json', physical_acceptance_record_sha256='a'*64),
+    dict(physical_acceptance_record='relative.json', physical_acceptance_record_sha256='a'*64,
+         expected_sdk_session='existing'),
+    dict(physical_acceptance_record='/record.json', physical_acceptance_record_sha256='unknown',
+         expected_sdk_session='existing')])
+def test_navigation_launch_incomplete_or_invalid_bindings_do_not_silently_downgrade(fields):
+    with pytest.raises(ValueError, match='navigation_execution_binding'):
+        module.activation_launch_config(dict(launch_policy='navigation', **fields))
 
 
 def write(path, value, *, private=False):
@@ -77,6 +139,52 @@ def test_valid_legacy_seal_is_not_claimed_as_frozen_new_contract(tmp_path):
     state=settle(probe,lambda s:s['readiness']!='checking')
     assert state['readiness']=='ready' and state['release_contract']=='legacy_schema3'
     assert state['startup_closure_verified'] is False and state['motion_authorized'] is False
+
+
+def test_navigation_launch_probe_resolves_same_entry_without_fixed_purpose(tmp_path):
+    b = bundle(tmp_path)
+    a = dict(b['activation'], launch_policy='navigation')
+    a.pop('purpose'); a.pop('expected_sdk_session')
+    write(b['activation_path'], a, private=True)
+    state = settle(module.MainlineReleaseProbe(b['nav'], b['activation_path']),
+                   lambda s:s['readiness']!='checking')
+    assert state['readiness'] == 'ready' and state['motion_authorized'] is False
+    assert 'purpose' not in json.loads(b['activation_path'].read_text())
+
+
+def test_launch_hash_verification_is_cancellable_at_chunk_boundary(tmp_path):
+    b=bundle(tmp_path);calls=[]
+    def cancel():
+        calls.append(True)
+        raise InterruptedError('offline_cancel')
+    with pytest.raises(InterruptedError,match='offline_cancel'):
+        module.verify_release_files(b['nav'],b['release'],b['seal'],check_cancelled=cancel)
+    assert len(calls)==1
+
+
+def test_launch_startup_check_uses_owned_runner_not_default_probe_runner(tmp_path,monkeypatch):
+    b=bundle(tmp_path,frozen=True);calls=[]
+    monkeypatch.setattr(module.subprocess,'run',lambda *args,**kwargs:pytest.fail('unowned_subprocess'))
+    def owned(command,**kwargs):
+        calls.append(command);return subprocess.CompletedProcess(command,0,'{}','')
+    module.verify_release_files(b['nav'],b['release'],b['seal'],runner=owned)
+    assert len(calls)==1 and 'startup-check' in calls[0]
+
+
+def test_launch_keeps_stricter_admitted_frozen_tools_binding(tmp_path):
+    b=bundle(tmp_path,frozen=True)
+    with pytest.raises(module.ReleaseDiagnosticError,match='tools_binding'):
+        module.verify_release_files(b['nav'],b['release'],b['seal'],require_admitted_tools=True)
+
+
+def test_probe_thread_start_failure_releases_pending_reservation(tmp_path,monkeypatch):
+    b=bundle(tmp_path);write(b['activation_path'],b['activation'],private=True)
+    probe=module.MainlineReleaseProbe(b['nav'],b['activation_path'])
+    with monkeypatch.context() as patcher:
+        patcher.setattr(module.threading.Thread,'start',lambda _: (_ for _ in ()).throw(RuntimeError('no_thread')))
+        assert probe.snapshot()['readiness']=='invalid'
+    assert probe._worker is None
+    assert settle(probe,lambda state:state['readiness']!='checking')['readiness']=='ready'
 
 
 def test_generic_root_entry_keeps_old_release_contract_and_both_hash_checks(tmp_path):
@@ -247,18 +355,93 @@ def test_polling_is_nonblocking_single_worker_and_no_unbounded_queue(tmp_path):
     assert len(calls)==1 and state['checked_at_unix'] is not None
 
 
-def test_ttl_expiry_withdraws_ready_and_checks_again(tmp_path):
+def test_ttl_expiry_keeps_same_identity_result_during_one_slow_refresh(tmp_path):
     b=bundle(tmp_path);write(b['activation_path'],b['activation'],private=True)
-    now=[10.];calls=[];gate=threading.Event();gate.set()
+    now=[10.];calls=[];gate=threading.Event();entered=threading.Event();gate.set()
     def verify(*args,**kw):
-        calls.append(1);assert gate.wait(2)
+        calls.append(1);entered.set();assert gate.wait(2)
         return dict(manifest_sha256=digest(b['seal']))
     probe=module.MainlineReleaseProbe(b['nav'],b['activation_path'],ttl_s=1,
         verifier=verify,clock=lambda:now[0])
-    settle(probe,lambda s:s['readiness']=='ready');gate.clear();now[0]=11.1
-    assert probe.snapshot()['readiness']=='checking'
-    gate.set();settle(probe,lambda s:s['readiness']=='ready')
+    original=settle(probe,lambda s:s['readiness']=='ready')
+    entered.clear();gate.clear();now[0]=11.1
+    try:
+        state=probe.snapshot();assert entered.wait(1)
+        worker=probe._worker
+        assert state['readiness']=='ready' and state['selected_readiness']=='ready'
+        assert state['checked_at_unix']==original['checked_at_unix']
+        begin=time.monotonic()
+        for _ in range(40):
+            state=probe.snapshot()
+            assert state['readiness']=='ready' and state['checked_at_unix']==original['checked_at_unix']
+            assert state['sdk_connected'] is False and state['motion_authorized'] is False
+        assert time.monotonic()-begin<.2 and len(calls)==2 and probe._worker is worker
+    finally:
+        gate.set()
+        if probe._worker is not None:probe._worker.join(1)
+    assert probe._worker is None
+    state=probe.snapshot()
+    assert state['readiness']=='ready' and state['checked_at_unix']>original['checked_at_unix']
     assert len(calls)==2
+
+
+@pytest.mark.parametrize('kind',['selector','activation','descriptor','seal','entry'])
+def test_identity_change_withdraws_ready_during_same_key_refresh(tmp_path,kind):
+    b=bundle(tmp_path);write(b['activation_path'],b['activation'],private=True)
+    now=[10.];calls=[];gate=threading.Event();entered=threading.Event();gate.set()
+    def verify(*args,**kw):
+        calls.append(1);entered.set();assert gate.wait(2)
+        return dict(manifest_sha256=kw['expected_manifest_sha256'])
+    probe=module.MainlineReleaseProbe(b['nav'],b['activation_path'],ttl_s=1,
+        verifier=verify,clock=lambda:now[0])
+    original=settle(probe,lambda s:s['readiness']=='ready')
+    entered.clear();gate.clear();now[0]=11.1
+    try:
+        assert probe.snapshot()['readiness']=='ready';assert entered.wait(1)
+        worker=probe._worker
+        path={'selector':b['selector'],'activation':b['activation_path'],
+              'descriptor':b['release']/'release.json','seal':b['seal'],'entry':b['entry']}[kind]
+        if kind=='entry':path.write_text('# changed entry fixture')
+        else:write(path,{**json.loads(path.read_text()),'fixture_revision':2},private=kind=='activation')
+        for _ in range(20):
+            state=probe.snapshot()
+            assert state['readiness']==('invalid' if kind=='entry' else 'checking')
+            assert state['checked_at_unix'] is None
+            assert state['motion_authorized'] is False and state['sdk_connected'] is False
+        assert len(calls)==2 and probe._worker is worker
+    finally:
+        gate.set()
+        if probe._worker is not None:probe._worker.join(1)
+    # The obsolete refresh must not publish its result for the new identity.
+    assert probe._cached[2]['checked_at_unix']==original['checked_at_unix']
+    assert probe._cached[0]!=probe._requested_key
+
+
+def test_failed_refresh_replaces_same_identity_ready_and_cached_display_is_not_admission(tmp_path):
+    b=bundle(tmp_path);write(b['activation_path'],b['activation'],private=True)
+    now=[10.];gate=threading.Event();entered=threading.Event();gate.set()
+    def verify(*args,**kw):
+        entered.set();assert gate.wait(2)
+        return module.verify_release_files(*args,**kw)
+    probe=module.MainlineReleaseProbe(b['nav'],b['activation_path'],ttl_s=1,
+        verifier=verify,clock=lambda:now[0])
+    original=settle(probe,lambda s:s['readiness']=='ready')
+    b['payload'].write_text('changed payload, selection and launch identity unchanged')
+    entered.clear();gate.clear();now[0]=11.1
+    try:
+        state=probe.snapshot();assert entered.wait(1)
+        assert state['readiness']=='ready' and state['checked_at_unix']==original['checked_at_unix']
+        # Start does this independent full byte check even while diagnostics refresh.
+        with pytest.raises(module.ReleaseDiagnosticError,match='release_file_changed'):
+            module.verify_release_files(b['nav'],b['release'],b['seal'])
+    finally:
+        gate.set()
+        if probe._worker is not None:probe._worker.join(1)
+    state=probe.snapshot()
+    assert state['readiness']=='invalid' and state['selected_readiness']=='invalid'
+    assert state['reason_code']=='release_file_changed'
+    assert state['checked_at_unix']>original['checked_at_unix']
+    assert state['motion_authorized'] is False and state['sdk_connected'] is False
 
 
 def test_tool_change_invalidates_cached_readiness_immediately(tmp_path):
@@ -297,6 +480,43 @@ def test_execution_record_checksum_is_not_motion_acceptance(tmp_path):
     write(b['activation_path'],a,private=True)
     state=settle(module.MainlineReleaseProbe(b['nav'],b['activation_path']),lambda s:s['readiness']!='checking')
     assert state['readiness']=='ready' and state['motion_authorized'] is False
+
+
+@pytest.mark.parametrize('reader',['_digest','_json'])
+def test_file_readers_reject_fifo_before_blocking_the_only_worker(tmp_path,reader):
+    fifo=tmp_path/'replaced-sealed-file';os.mkfifo(fifo)
+    # A regressed blocking open is contained in this disposable local child;
+    # no verifier/service/SDK process or real release is touched.
+    code="""import sys
+from backend import mainline_release as m
+try:getattr(m,sys.argv[1])(sys.argv[2])
+except m.ReleaseDiagnosticError as error:
+ assert error.code=='release_invalid';sys.exit(0)
+sys.exit(1)
+"""
+    result=subprocess.run([sys.executable,'-c',code,reader,str(fifo)],
+        cwd=Path(__file__).resolve().parents[1],capture_output=True,text=True,timeout=2.)
+    assert result.returncode==0,result.stderr
+
+
+@pytest.mark.parametrize('kind',['outside_release','unsealed','physical_true','wrong_kind','valid'])
+def test_runtime_profile_readiness_matches_formal_launch_admission(tmp_path,kind):
+    b=bundle(tmp_path)
+    profile={'record_kind':'runtime_motion_profile','physical_acceptance_verified':False}
+    if kind=='physical_true':profile['physical_acceptance_verified']=True
+    if kind=='wrong_kind':profile['record_kind']='physical_acceptance_record'
+    record=write((tmp_path if kind=='outside_release' else b['release'])/'runtime.json',profile)
+    manifest=json.loads(b['seal'].read_text())
+    if kind!='unsealed':manifest['files'][str(record)]=digest(record)
+    write(b['seal'],manifest)
+    a={key:value for key,value in b['activation'].items() if key not in ('purpose','expected_sdk_session')}
+    a.update(launch_policy='navigation',runtime_motion_profile=str(record),runtime_motion_profile_sha256=digest(record),
+             release_manifest_sha256=digest(b['seal']))
+    write(b['activation_path'],a,private=True)
+    state=settle(module.MainlineReleaseProbe(b['nav'],b['activation_path']),lambda s:s['readiness']!='checking')
+    assert state['readiness']==('ready' if kind=='valid' else 'invalid')
+    if kind!='valid':assert state['reason_code']=='physical_record_invalid'
+    assert state['motion_authorized'] is False and state['sdk_connected'] is False
 
 
 def test_planning_only_can_defer_current_data_session_binding_without_reading_sdk(tmp_path):

@@ -70,6 +70,9 @@ struct Operation : AsyncRequestState {
   Clock::time_point feedback_at{};
   // Compute-only stage clock; first admitted work phase wins permanently.
   std::optional<Clock::time_point> work_started;
+  std::optional<Clock::time_point> readiness_started;
+  std::optional<Clock::time_point> commit_started;
+  std::string phase{"waiting_worker"};
 };
 
 struct Task {
@@ -79,6 +82,10 @@ struct Task {
   bool has_goal_yaw{false};
   double goal_yaw_tolerance{.15};
   ConfirmationLedger confirmation;
+  GoalExecutionIntent execution_intent;
+  // SDK discovery belongs to this explicit goal execution attempt, not the
+  // geometry preparation episode. A healthy preview must not renew this wait.
+  std::optional<Clock::time_point> execution_writer_wait_started;
   std::unique_ptr<exec3::Owner> execution;
   exec3::GoalLedger execution_goals;
   std::unique_ptr<PreparationBudget> preparation;
@@ -119,10 +126,14 @@ public:
     cancellation_timeout_ = declare_parameter<double>("cancellation_timeout_s", 3.0);
     action_watchdog_timeout_ = declare_parameter<double>("action_watchdog_timeout_s", 3.0);
     compute_route_timeout_ = declare_parameter<double>("compute_route_timeout_s",10.);
+    compute_readiness_timeout_=declare_parameter<double>("compute_readiness_timeout_s",30.);
     worker_startup_timeout_ = declare_parameter<double>("worker_startup_timeout_s",60.);
     initial_localization_map_sha_=declare_parameter<std::string>("initial_localization_map_sha256","");
     initial_pose_transaction_=std::make_unique<InitialPoseTransaction>(session_,frame_,initial_localization_map_sha_);
-    dependency_health_=DependencyHealthGuard(declare_parameter<bool>("dependency_health_required",false));
+    dependency_health_=DependencyHealthGuard(declare_parameter<bool>("dependency_health_required",false),
+      declare_parameter<double>("dependency_heartbeat_timeout_s",1.5),
+      declare_parameter<double>("dependency_recovery_timeout_s",30.),
+      declare_parameter<double>("dependency_stable_duration_s",.6));
     arrival_evidence_timeout_ = declare_parameter<double>("arrival_evidence_timeout_s", 4.0);
     execution_blocked_timeout_ = declare_parameter<double>("execution_blocked_timeout_s",30.);
     execution_recovery_time_ = declare_parameter<double>("execution_recovery_time_s",1.);
@@ -172,6 +183,7 @@ public:
         !std::isfinite(cancellation_timeout_) || cancellation_timeout_ <= 0.0 ||
         !std::isfinite(action_watchdog_timeout_) || action_watchdog_timeout_ <= 0.0 ||
         !std::isfinite(compute_route_timeout_) || compute_route_timeout_<5. || compute_route_timeout_>60. ||
+        !std::isfinite(compute_readiness_timeout_) || compute_readiness_timeout_<1. || compute_readiness_timeout_>300. ||
         !std::isfinite(worker_startup_timeout_) || worker_startup_timeout_<10. || worker_startup_timeout_>60. ||
         !std::isfinite(arrival_evidence_timeout_) || arrival_evidence_timeout_ <= 0.0) {
       throw std::invalid_argument("A session and bounded preview-only BT configuration are required");
@@ -221,6 +233,8 @@ public:
           const bool hard=!m->usable&&(m->reason=="hard_localization_lost"||m->reason=="lio_reset"||m->reason=="localization_reset");
           if(changed||hard) {
             t->transport_fault=changed?"localization_context_replaced":"hard_localization_lost";
+            t->execution_intent.revoke(t->transport_fault);
+            t->execution_writer_wait_started.reset();
             t->confirmation.revoke();if(t->execution)t->execution->stop(t->transport_fault,now().seconds());
           }
         }});
@@ -354,7 +368,8 @@ public:
           result->retirement_confirmed = true;
           handle->abort(result); return;
         }
-        submit(goal->goal_kind, goal->goal, handle, goal->has_goal_yaw, goal->goal_yaw_tolerance_rad);
+        submit(goal->goal_kind, goal->goal, handle, goal->has_goal_yaw, goal->goal_yaw_tolerance_rad,
+          goal->request_execution);
       });
     timer_ = create_wall_timer(std::chrono::duration<double>(1.0/tick_hz), [this]() { tick(); });
   }
@@ -439,6 +454,8 @@ public:
     const auto task = lookup(identity);
     if (!task || task->retired) return {false, "task_retired"};
     if (!retiredOperationsDone()) return {false, "retiring_previous_task"};
+    const auto dependency=dependency_health_.blocker(monotonic());
+    if(!dependency.empty())return {false,dependency};
     if (!healthFresh()) return {false, "waiting_fresh_navigation_health"};
     const bool global_phase=task->compute.result.status!=BT::NodeStatus::SUCCESS;
     if (!validHealthIdentity() || (global_phase&&!health_.global_planning_ready)) {
@@ -494,9 +511,13 @@ public:
         std::shared_ptr<const Compute::Feedback> feedback) {
       if (!task->retired && task->compute.pending()) {
         task->compute.feedback_at = Clock::now();
-        if(!task->compute.work_started&&
-           (feedback->phase=="computing"||feedback->phase=="waiting_localization"))
+        task->compute.phase=feedback->phase;
+        if(!task->compute.work_started&&feedback->phase=="computing")
           task->compute.work_started=task->compute.feedback_at;
+        if(!task->compute.readiness_started&&feedback->phase=="waiting_localization")
+          task->compute.readiness_started=task->compute.feedback_at;
+        if(!task->compute.commit_started&&feedback->phase=="waiting_result_localization")
+          task->compute.commit_started=task->compute.feedback_at;
         task->phase = feedback->phase;
         task->reason = feedback->reason;
       }
@@ -569,7 +590,15 @@ public:
   RouteTiming routeTiming(const TaskIdentity& identity) override {
     const auto task=lookup(identity);
     if(!task)return {};
-    return {!task->compute.work_started.has_value(),task->compute.work_started};
+    RouteTiming result;
+    result.waiting_readiness=task->compute.phase=="waiting_localization"||
+      task->compute.phase=="waiting_result_localization"||
+      (task->compute.phase=="waiting_worker"&&task->compute.readiness_started.has_value());
+    result.waiting_worker=!result.waiting_readiness&&!task->compute.work_started;
+    result.readiness_started=task->compute.phase=="waiting_result_localization"?
+      task->compute.commit_started:task->compute.readiness_started;
+    result.work_started=task->compute.work_started;
+    return result;
   }
 
   Result pollRoute(const TaskIdentity& identity) override {
@@ -772,6 +801,9 @@ private:
     response.reason = decision.reason;
     if(decision.authorized&&current_->execution&&!current_->execution->confirmed()) {
       auto task=current_;
+      // Both manual confirmation and goal-bound execution use this SAME
+      // ledger/owner. Consume before the one SDK grant can be submitted.
+      if(task->execution_intent.requested())task->execution_intent.consume(binding);
       if(!task->execution->begin(task->identity.task_id+":execution",decision.confirmation_id,++execution_epoch_,now().seconds())) {
         task->confirmation.revoke();response.accepted=response.execution_authorized=false;response.reason="execution_prepare_changed";return;
       }
@@ -780,19 +812,37 @@ private:
       req->control_epoch=task->execution->controlEpoch();req->confirmation_id=decision.confirmation_id;
       req->request_id=decision.confirmation_id;req->sdk_session=expected_sdk_session_;req->acceptance_record_sha256=record_sha256_;req->source_stamp=now();req->activate=true;
       req->transport_mode=transport_mode_;
-      execution_grant_->async_send_request(req,[this,task](rclcpp::Client<d1max_planning_interfaces::srv::ExecutionGrant>::SharedFuture f){
-        try {const auto reply=f.get();if(!reply->accepted)task->execution->stop("sdk_grant_rejected:"+reply->reason,now().seconds());}
+      execution_grant_->async_send_request(req,[this,task,req](rclcpp::Client<d1max_planning_interfaces::srv::ExecutionGrant>::SharedFuture f){
+        try {
+          const auto reply=f.get();
+          if(!reply) {task->execution->stop("sdk_grant_transport_failure",now().seconds());return;}
+          if(!reply->accepted) {
+            if(!task->public_terminal&&task->execution->rejectUnadmittedGrant(*req,*reply)) {
+              // This is a rejected admission, not a claim of measured stop.
+              // The task still retires its algorithms and cannot retry grant.
+              task->confirmation.revoke();task->execution_intent.revoke(task->execution->failureReason());
+              task->execution_writer_wait_started.reset();
+              task->transport_fault=task->execution->failureReason();
+            } else task->execution->stop("sdk_grant_rejected:"+reply->reason,now().seconds());
+          }
+        }
         catch(const std::exception&){task->execution->stop("sdk_grant_transport_failure",now().seconds());}
       });
     }
   }
   template<class Handle>
   std::string watchOperation(Operation<Handle>& operation, const std::string& name) {
-    const bool warming=name=="compute"&&!operation.work_started;
-    const auto since=warming?operation.requested_at:operation.work_started.value_or(operation.requested_at);
+    const bool readiness=name=="compute"&&(operation.phase=="waiting_localization"||
+      operation.phase=="waiting_result_localization"||
+      (operation.phase=="waiting_worker"&&operation.readiness_started.has_value()));
+    const bool warming=name=="compute"&&!readiness&&!operation.work_started;
+    const auto readiness_started=operation.phase=="waiting_result_localization"?
+      operation.commit_started:operation.readiness_started;
+    const auto since=readiness?readiness_started.value_or(operation.requested_at):
+      warming?operation.requested_at:operation.work_started.value_or(operation.requested_at);
     const auto why = name=="compute"&&routeDeadlineExpired(operation.pending(),elapsed(since),
-      warming?worker_startup_timeout_:compute_route_timeout_)?
-      std::string(warming?"worker_startup_timeout":"route_end_to_end_timeout"):actionTransportTimeout(operation.pending(),
+      readiness?compute_readiness_timeout_:warming?worker_startup_timeout_:compute_route_timeout_)?
+      std::string(readiness?"route_readiness_timeout":warming?"worker_startup_timeout":"route_end_to_end_timeout"):actionTransportTimeout(operation.pending(),
       static_cast<bool>(operation.handle), elapsed(operation.requested_at),
       elapsed(operation.feedback_at), action_watchdog_timeout_);
     if (!why.empty()) {
@@ -837,7 +887,8 @@ private:
     submit(kind, goal, {});
   }
   void submit(const std::string& kind, const geometry_msgs::msg::PoseStamped& goal,
-              std::shared_ptr<NavigateHandle> action, bool has_yaw=false, double yaw_tolerance=.15) {
+              std::shared_ptr<NavigateHandle> action, bool has_yaw=false, double yaw_tolerance=.15,
+              bool request_execution=false) {
     bool old_work_pending = false;
     for (const auto& entry : tasks_) old_work_pending |= unresolvedRetirement(
       entry.second->retired, entry.second->pending(), entry.second->retirement_error);
@@ -845,6 +896,7 @@ private:
     auto task = std::make_shared<Task>();
     task->preparation=std::make_unique<PreparationBudget>(preparation_limits_);
     task->identity = {session_ + "." + std::to_string(++task_sequence_), session_};
+    task->execution_intent=GoalExecutionIntent(request_execution,"goal_execute:"+std::to_string(task_sequence_));
     task->goal_kind = kind;
     task->goal = goal;
     task->has_goal_yaw = has_yaw;
@@ -890,6 +942,8 @@ private:
   }
   void retire(const std::shared_ptr<Task>& task) {
     task->confirmation.revoke();
+    task->execution_intent.revoke();
+    task->execution_writer_wait_started.reset();
     if(task->execution)task->execution->stop("task_retired",now().seconds());
     if (!task->retired) {
       task->retired = true;
@@ -991,6 +1045,7 @@ private:
       }
       preparationTick();
       if (lifecycle_.accepting()) engine_->tick();
+      executeSubmittedGoal();
       executionTick();
       publishStatus();
       for (auto it = tasks_.begin(); it != tasks_.end();) {
@@ -1012,13 +1067,14 @@ private:
     if(!usesGeometryOwner(execution_purpose_,preview_only_)||!task||task->retired||task->finished||!task->transport_fault.empty()||!task->preparation||
        (task->execution&&task->execution->confirmed())||
        !preparationStarted(task->compute.result.status==BT::NodeStatus::SUCCESS,task->follow.sent))return;
-    const bool inputs=healthFresh()&&validHealthIdentity()&&
+    const auto dependency=dependency_health_.blocker(monotonic());
+    const bool inputs=dependency.empty()&&healthFresh()&&validHealthIdentity()&&
       localTaskInputsFresh(local_state_,session_,task->route.snapshot.map_version_id,
         static_cast<uint64_t>(task->epoch),task->seed,now().seconds());
     const auto evidence=task->execution?task->execution->preparationEvidence(now().seconds()):0;
     const auto stage=preparationStage(inputs,task->compute.result.status==BT::NodeStatus::SUCCESS,
       task->follow_phase,evidence);
-    const auto reason=inputs?task->follow_reason:"waiting_current_localization";
+    const auto reason=!dependency.empty()?dependency:inputs?task->follow_reason:"waiting_current_localization";
     const double monotonic=std::chrono::duration<double>(Clock::now().time_since_epoch()).count();
     const auto problem=task->preparation->observe(stage,monotonic,evidence);
     if(!problem.empty())task->transport_fault=problem+":"+reason;
@@ -1039,7 +1095,8 @@ private:
     if(!permitsMotionAuthority(execution_purpose_,preview_only_)||!current_||current_->retired||
        !current_->execution)return;
     const double time=now().seconds();auto&task=*current_;
-    if(!healthFresh()||!health_.local_control_ready||!localExecutionInputsFresh(task,time))return;
+    if(!dependency_health_.blocker(monotonic()).empty()||
+       !healthFresh()||!health_.local_control_ready||!localExecutionInputsFresh(task,time))return;
     const auto*version=task.execution->pendingVersion(time);
     const auto*incumbent=task.execution->publishedHandoffIncumbent(time);
     if(!version||!incumbent)return;
@@ -1049,6 +1106,40 @@ private:
        !task.execution->prepareHandoff(*incumbent,*goal,candidate.sequence,time))return;
     handoff_pub_->publish(*task.execution->handoff());
   }
+  void executeSubmittedGoal() {
+    if(!current_)return;
+    auto& task=*current_;
+    const auto& snapshot=task.route.snapshot;
+    const RouteBinding binding{session_,task.identity.task_id,snapshot.route_id,snapshot.route_hash};
+    if(!task.execution_intent.prepare(binding,!task.retired&&!task.finished))return;
+    // Preview is a capability, not a UI convention. Even an explicit execute
+    // request cannot make a preview or unaccepted robot session send motion.
+    if(!permitsMotionAuthority(execution_purpose_,preview_only_)) {
+      task.execution_intent.wait("planning_only_execution_disabled");return;
+    }
+    if(task.execution_writer_wait_started&&
+       elapsed(*task.execution_writer_wait_started)>=execution_blocked_timeout_) {
+      // No SDK grant has been submitted here. Retire this explicit attempt
+      // through the normal BT fence; keep the immutable route for inspection.
+      // A briefly visible writer, geometry refresh or renewed Action heartbeat
+      // cannot give a missing writer a new execution admission budget.
+      task.transport_fault="execution_sdk_writer_wait_timeout";
+      task.execution_intent.revoke(task.transport_fault);
+      task.confirmation.revoke();
+      task.execution_writer_wait_started.reset();
+      task.reason=task.transport_fault;
+      return;
+    }
+    ConfirmExecution::Request request;ConfirmExecution::Response response;
+    request.schema_version=task_schema_version;request.session_id=binding.session;
+    request.task_id=binding.task;request.route_id=binding.route;request.route_hash=binding.hash;
+    request.request_id=task.execution_intent.requestId();
+    confirm(request,response);
+    if(response.reason=="waiting_single_sdk_writer"&&!task.execution_writer_wait_started)
+      task.execution_writer_wait_started=Clock::now();
+    if(task.execution_intent.consumed())task.execution_writer_wait_started.reset();
+    if(!response.execution_authorized)task.execution_intent.wait(response.reason);
+  }
   void executionTick() {
     for(auto& entry:tasks_) {
       auto& task=entry.second;if(!task->execution)continue;
@@ -1057,8 +1148,12 @@ private:
       const auto evidence=rclcpp::Time(local_state_.source_stamp).nanoseconds();
       const auto identity=session_+":"+std::to_string(local_state_.localization_epoch)+":"+local_state_.localization_seed_id;
       const auto monotonic=std::chrono::duration<double>(Clock::now().time_since_epoch()).count();
-      auto p=task->execution->tick(time,!task->retired&&healthFresh()&&health_.local_control_ready&&body_fresh,
+      const auto dependency=dependency_health_.blocker(monotonic);
+      auto p=task->execution->tick(time,!task->retired&&dependency.empty()&&healthFresh()&&health_.local_control_ready&&body_fresh,
         evidence,identity,monotonic);
+      if(!dependency.empty()&&!p.revoked) {
+        p.allowed=false;p.phase="holding";p.reason=dependency;
+      }
       const auto* proposal=task->execution_goals.committed(p.version);
       if(proposal) {
         p.goal_position=proposal->goal_position;p.frame_id=proposal->reference.path.header.frame_id;
@@ -1094,7 +1189,7 @@ private:
         // The globally ordered candidate permit lives ONLY in this conditional
         // wrapper.  Publishing it on the active-permit channel would retire the
         // old tracker/map geometry before the writer can actually submit it.
-        if(permitsMotionAuthority(execution_purpose_,preview_only_)&&!p.revoked&&current_==task) {
+        if(dependency.empty()&&permitsMotionAuthority(execution_purpose_,preview_only_)&&!p.revoked&&current_==task) {
           if(const auto* version=task->execution->pendingVersion(time)) {
             if(const auto* goal=task->execution_goals.find(*version)) {
               auto candidate=p;candidate.version=*version;
@@ -1104,7 +1199,8 @@ private:
           }
         }
         if(const auto* grant=task->execution->handoff()) {
-          if(current_==task||(task->execution->confirmed()&&!task->execution->stopped()&&grant->revoked))
+          if((dependency.empty()&&current_==task)||
+             (task->execution->confirmed()&&!task->execution->stopped()&&grant->revoked))
             handoff_pub_->publish(*grant);
         }
       }
@@ -1150,6 +1246,11 @@ private:
       out["route_id"] = current_->route.route_id;
       out["route_hash"] = current_->route.snapshot.route_hash;
       out["execution_eligible"] = current_->route.snapshot.execution_eligible;
+      out["goal_execution_requested"]=current_->execution_intent.requested();
+      out["goal_execution_intent_consumed"]=current_->execution_intent.consumed();
+      out["goal_execution_intent_reason"]=current_->execution_intent.reason();
+      out["goal_execution_writer_wait_age_s"]=current_->execution_writer_wait_started?
+        elapsed(*current_->execution_writer_wait_started):0.;
       out["execution_blocker"] = execution_purpose_=="planning_only"?"planning_only_execution_disabled":
         preview_only_?"preview_only":transport_mode_=="live"&&!record_bound_?"acceptance_record_binding_missing":"";
       out["execution_authorized"]=current_->execution&&current_->execution->confirmed()&&!current_->execution->stopping();
@@ -1221,6 +1322,7 @@ private:
   std::unique_ptr<InitialPoseTransaction>initial_pose_transaction_;
   double health_timeout_{0.6}, cancellation_timeout_{3.0}, action_watchdog_timeout_{3.0};
   double compute_route_timeout_{10.};
+  double compute_readiness_timeout_{30.};
   double worker_startup_timeout_{60.};
   std::string initial_localization_map_sha_;
   InitialLocalizationEvidence startup_evidence_;

@@ -104,6 +104,7 @@ struct MappingParameters {
   double maximum_cloud_pose_dt_{0.25};
   bool exact_cloud_pose_sync_{false};
   bool require_observed_free_{false};
+  std::string planning_collision_policy_{"official"};
   bool use_projected_rays_{false};
   bool preview_only_{false};  // Diagnostic lease only, never execution authority.
   double cloud_pose_pair_wait_{0.25};
@@ -126,6 +127,11 @@ struct MappingData {
   std::vector<char> occupancy_buffer_inflate_;
   std::vector<int> occupancy_buffer_inflate_cnt_;
   vector<Eigen::Vector3i> inflate_offsets_;
+  // Official SCAN geometry is independent of the raw-evidence execution
+  // policy. A strict writer retains a separate, bounded official layer.
+  std::vector<char> planning_occupancy_buffer_inflate_;
+  std::vector<int> planning_occupancy_buffer_inflate_cnt_;
+  vector<Eigen::Vector3i> planning_inflate_offsets_;
 
   // raycast origin and sensor pose data
 
@@ -193,6 +199,8 @@ public:
   inline int getOccupancy(Eigen::Vector3d pos);
   inline int getOccupancy(Eigen::Vector3i id);
   inline int getInflateOccupancy(Eigen::Vector3d pos, double yaw);
+  // Candidate geometry only. A zero is NOT observed-free motion evidence.
+  inline int getPlanningInflateOccupancy(Eigen::Vector3d pos, double yaw);
   std::string describeInflateOccupancy(const Eigen::Vector3d &position,double yaw);
   scan_planner::CollisionEvidence inspectInflateOccupancy(const Eigen::Vector3d &position,double yaw,bool detailed=false);
   // Offline diagnostic enablement only; no live config or permission changed.
@@ -288,6 +296,8 @@ public:
   // forcing regeneration of unchanged visual occupancy clouds.
   std::uint64_t occupancyRevision() const { return occupancy_revision_+free_evidence_revision_; }
   bool requiresObservedFree() const { return mp_.require_observed_free_; }
+  bool planningRequiresObservedFree() const { return mp_.planning_collision_policy_=="observed_free"; }
+  const char *planningCollisionQueryPolicy() const { return mp_.planning_collision_policy_.c_str(); }
   const char *collisionQueryPolicy() const {
     return mp_.require_observed_free_ ? "strict_observed_double_cylinder" :
         "official_inflated_double_cylinder";
@@ -309,6 +319,9 @@ public:
         md_.occupancy_buffer_inflate_.size()*sizeof(md_.occupancy_buffer_inflate_[0])+
         md_.occupancy_buffer_inflate_cnt_.size()*sizeof(md_.occupancy_buffer_inflate_cnt_[0])+
         md_.inflate_offsets_.size()*sizeof(Eigen::Vector3i)+
+        md_.planning_occupancy_buffer_inflate_.size()*sizeof(char)+
+        md_.planning_occupancy_buffer_inflate_cnt_.size()*sizeof(int)+
+        md_.planning_inflate_offsets_.size()*sizeof(Eigen::Vector3i)+
         free_observation_stamps_.size()*sizeof(std::int64_t);
   }
 
@@ -599,7 +612,11 @@ inline int GridMap::getInflateOccupancy(Eigen::Vector3d pos, double yaw) {
   // Retained opt-in strict policy: actual-height raw-voxel evidence and expiry.
   beginCollisionQuery();
   const int front_state=observedCylinderStatus(front);
-  const int state=front_state!=0 ? front_state:observedCylinderStatus(rear);
+  // An unknown front cylinder is not proof that the rear has no obstacle.
+  // Keep the same blocked set, but report definite occupancy first so native
+  // blocked-entry recovery sees the actual cause instead of a traversal order.
+  const int state=front_state==1 ? 1 : scan_planner::mergeCollisionStatus(
+      front_state,observedCylinderStatus(rear));
   if(state==0 && mp_.use_projected_rays_ && enforce_free_freshness_) {
     const auto now=collisionQueryClock();
     // Do not return a cached free certificate that expired during this query.
@@ -607,6 +624,26 @@ inline int GridMap::getInflateOccupancy(Eigen::Vector3d pos, double yaw) {
         now>=collision_cache_deadline_ns_) return 2;
   }
   return state;
+}
+
+inline int GridMap::getPlanningInflateOccupancy(Eigen::Vector3d pos, double yaw) {
+  if (!pos.allFinite() || !std::isfinite(yaw)) return -1;
+  if (planningRequiresObservedFree()) {
+    // Invalid mixed configurations must never silently weaken the explicitly
+    // requested strict planning policy (initMap rejects them as well).
+    return mp_.require_observed_free_ ? getInflateOccupancy(pos,yaw) : 2;
+  }
+  const Eigen::Vector3d heading(std::cos(yaw),std::sin(yaw),0.);
+  const auto front=(pos+mp_.double_cylinder_offset_*heading).eval();
+  const auto rear=(pos-mp_.double_cylinder_offset_*heading).eval();
+  if (!isInMap(front) || !isInMap(rear)) return -1;
+  // Non-strict writers already carry the upstream layer. A strict proof
+  // snapshot copied from such a writer keeps that official layer unchanged.
+  const auto& buffer=md_.planning_occupancy_buffer_inflate_.empty() ?
+      md_.occupancy_buffer_inflate_ : md_.planning_occupancy_buffer_inflate_;
+  if (buffer.empty() || buffer.size()!=md_.occupancy_buffer_.size()) return -1;
+  const int front_occ=getInflateOccupancyFromBuffer(front,buffer);
+  return front_occ!=0 ? front_occ : getInflateOccupancyFromBuffer(rear,buffer);
 }
 
 inline int GridMap::getInflateOccupancyFromBuffer(Eigen::Vector3d pos, const std::vector<char>& buffer) {

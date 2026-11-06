@@ -45,7 +45,8 @@ def native_cancel(node, clock, generation=4):
 def worker_retired(node, clock):
     node.on_worker_status(String(data=json.dumps(dict(session_id='session',
         received_at_unix=clock.wall, planning=False, pending_worker_start=False,
-        retired_native_workers=0, active_goal=None, active_reference=False))))
+        retired_native_workers=0, active_goal=None, active_reference=False,
+        native_warmup={'phase':'ready'}))))
 
 
 def time_msg(value):
@@ -375,6 +376,72 @@ def test_refresh_only_renews_same_route_on_exact_bridge_request(monkeypatch):
     assert len(node.reference_pub.messages) == 2
 
 
+def test_typed_unknown_wait_ignores_legacy_refresh_and_keeps_fixed_route(monkeypatch):
+    node, clock = harness(monkeypatch)
+    _, handle = commit(node, clock)
+    node.p.update(pipeline_contract='single_floor_v3', map_version_id='map')
+    node.ready_identity = lambda: (1, 'seed', 'map')
+    node.local_ready = lambda context: True
+    slot = node.follow
+    original = deepcopy(node.route_reference_pub.messages[0])
+    node.scan.update(active_reference=False, spline_visual_valid=False,
+        native_reference_received=True, pending_reference_generation=2,
+        local_debug_generation=2, native_pending_phase='waiting_observed_space',
+        owner_task_id=handle.request.task_id, owner_route_id=node.snapshot['route_id'],
+        owner_route_hash=node.snapshot['source_snapshot'].route_hash,
+        owner_delivery_sequence=slot['reference_delivery_sequence'],
+        owner_reference_stamp_ns=slot['reference_stamp_ns'])
+    node.follow_tick()
+    # Replay the old callback's actual count/deadline triggers while a native
+    # UNKNOWN outcome waits under the BT's common 30 s recovery budget.
+    for index, elapsed in enumerate((.1, 12.1, 13., 29.), 1):
+        clock.wall, clock.mono = 100.+elapsed, 10.+elapsed
+        node.scan['received_at_unix'] = clock.wall
+        node.received['scan'] = clock.mono
+        node.on_refresh(String(data=json.dumps(dict(session_id='session',
+            received_at_unix=clock.wall, motion_enabled=False,
+            localization_epoch=1, localization_seed_id='seed',
+            rejected_reference_stamp=slot['reference_stamp'], request_id=index))))
+        node.follow_tick()
+        assert slot['wait_reason'] == 'waiting_observed_space'
+        assert slot['cancel'] is None and handle.terminal is None
+    assert node.route_reference_pub.messages == [original]
+    assert len(node.reference_pub.messages) == 1
+    assert len(node.goal3d_pub.messages) == 1  # no autonomous global retry
+    assert not node.worker_cancel_pub.messages
+    assert slot['refresh_count'] == 0
+
+
+def test_legacy_refresh_count_does_not_preempt_shared_recovery_budget(monkeypatch):
+    from d1max_pct_scan.navigation_runtime_policy import NavigationRuntimePolicy
+    from d1max_pct_scan.bt_follow_policy import FollowRecovery
+    node, clock = harness(monkeypatch)
+    node.p.update(NavigationRuntimePolicy().follow_parameters())
+    _, handle = commit(node, clock)
+    slot = node.follow
+    assert isinstance(slot['recovery'], FollowRecovery)
+    original_hash = node.snapshot['digest']
+    started_wall, started_mono = clock.wall, clock.mono
+    node.follow_tick()  # starts the sole monotonic episode at t=0
+    for index in range(1, 27):
+        clock.wall, clock.mono = started_wall+index*.5, started_mono+index*.5
+        refresh(node, clock)
+        node.on_refresh(String(data=json.dumps(dict(session_id='session',
+            received_at_unix=clock.wall, motion_enabled=False,
+            localization_epoch=1, localization_seed_id='seed',
+            rejected_reference_stamp=slot['reference_stamp'], request_id=index))))
+        node.follow_tick()
+        assert slot['cancel'] is None and handle.terminal is None
+        assert node.snapshot['digest'] == original_hash
+    assert slot['refresh_count'] == 26  # diagnostics, not a terminal counter
+    # Refreshing cannot extend the centralized deadline indefinitely either.
+    clock.wall, clock.mono = started_wall+30.01, started_mono+30.01
+    refresh(node, clock)
+    node.follow_tick()
+    assert slot['cancel']['reason'].startswith('follow_reference_timeout:')
+    assert slot['recovery'].since == pytest.approx(started_mono)
+
+
 def test_arrival_uses_fresh_actual_body_and_same_floor_not_spline_clock(monkeypatch):
     node, clock = harness(monkeypatch)
     _, handle = commit(node, clock)
@@ -580,7 +647,7 @@ def test_first_goal_waits_worker_heartbeat_and_matching_subscriber(monkeypatch, 
 
 def pending_compute_for_deadline(monkeypatch):
     node,clock=harness(monkeypatch)
-    node.p.update(result_timeout_s=10.,worker_startup_timeout_s=60.)
+    node.p.update(result_timeout_s=10.,worker_startup_timeout_s=60.,readiness_timeout_s=30.)
     node.worker={};node.received['worker']=-float('inf')
     handle=Handle(request())
     assert node.compute_goal(handle.request)==GoalResponse.ACCEPT
@@ -607,7 +674,7 @@ def test_compute_worker_prewarm_uses_independent_bounded_sixty_seconds(monkeypat
     assert not node.goal3d_pub.messages and not node.worker_cancel_pub.messages
 
 
-def test_worker_ready_waiting_localization_starts_the_same_ten_second_work_deadline(monkeypatch):
+def test_worker_ready_localization_wait_has_its_own_fixed_budget(monkeypatch):
     node,clock,_,slot=pending_compute_for_deadline(monkeypatch)
     node.ready_identity=unavailable_localization
     advance_compute_clock(node,clock,40.);worker_retired(node,clock)
@@ -615,8 +682,10 @@ def test_worker_ready_waiting_localization_starts_the_same_ten_second_work_deadl
     assert slot['wait_phase']=='waiting_localization' and slot['cancel'] is None
     advance_compute_clock(node,clock,49.999);worker_retired(node,clock);node.compute_tick()
     assert slot['cancel'] is None
-    advance_compute_clock(node,clock,50.001);worker_retired(node,clock);node.compute_tick()
-    assert slot['cancel']['reason']=='compute_route_timeout'
+    advance_compute_clock(node,clock,69.999);worker_retired(node,clock);node.compute_tick()
+    assert slot['cancel'] is None
+    advance_compute_clock(node,clock,70.001);worker_retired(node,clock);node.compute_tick()
+    assert slot['cancel']['reason']=='compute_localization_wait_timeout'
     assert not slot['dispatched'] and not node.goal3d_pub.messages
 
 
@@ -628,12 +697,12 @@ def test_retreat_to_waiting_worker_does_not_reenter_or_renew_startup_budget(monk
     advance_compute_clock(node,clock,45.)
     node.worker={};node.received['worker']=-float('inf');node.compute_tick()
     assert slot['wait_phase']=='waiting_worker' and slot['cancel'] is None
-    advance_compute_clock(node,clock,50.001);node.compute_tick()
-    assert slot['cancel']['reason']=='compute_route_timeout'
+    advance_compute_clock(node,clock,70.001);node.compute_tick()
+    assert slot['cancel']['reason']=='compute_localization_wait_timeout'
     assert not node.goal3d_pub.messages
 
 
-def test_goal_dispatch_cannot_regrant_time_spent_waiting_for_localization(monkeypatch):
+def test_goal_dispatch_starts_bounded_solve_after_localization_wait(monkeypatch):
     node,clock,_,slot=pending_compute_for_deadline(monkeypatch)
     node.ready_identity=unavailable_localization
     advance_compute_clock(node,clock,40.);worker_retired(node,clock)
@@ -641,9 +710,9 @@ def test_goal_dispatch_cannot_regrant_time_spent_waiting_for_localization(monkey
     advance_compute_clock(node,clock,48.);worker_retired(node,clock)
     node.ready_identity=lambda:(1,'seed','map');node.compute_tick()
     assert slot['dispatched'] and len(node.goal3d_pub.messages)==1
-    advance_compute_clock(node,clock,49.999);worker_retired(node,clock);node.compute_tick()
+    advance_compute_clock(node,clock,57.999);worker_retired(node,clock);node.compute_tick()
     assert slot['cancel'] is None
-    advance_compute_clock(node,clock,50.001);worker_retired(node,clock);node.compute_tick()
+    advance_compute_clock(node,clock,58.001);worker_retired(node,clock);node.compute_tick()
     assert slot['cancel']['reason']=='compute_route_timeout'
     assert len(node.goal3d_pub.messages)==1 and len(node.worker_cancel_pub.messages)==1
 

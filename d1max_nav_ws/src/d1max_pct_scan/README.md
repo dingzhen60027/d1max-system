@@ -1,6 +1,6 @@
 # D1 Max 导航会话与规划适配
 
-## 当前主线（2026-10-04）
+## 当前主线（2026-10-08）
 
 唯一任务与运动主线是现有 BehaviorTree.CPP 导航图，由
 `d1max_pct_scan.navigation_session` 提供公开会话接口，正式操作统一走
@@ -13,6 +13,65 @@
 `planning_only` / `execution`
 是同一运行图的两种用途，不是两套上层；PCT/SCAN 是当前可替换的算法后端。
 当前状态与边界以[项目 README](../../README.md)及其状态文档为准。
+
+运行策略只维护 `config/navigation_runtime.yaml` 一处；准备会话时生成行为树、
+适配器、组件监控的有效参数并核对一致性。主线恢复总预算默认 30 秒，
+地图、参考、局部候选等待不再用更短的独立终止预算抢先结束任务。
+组件短暂失活进入暂停，新鲜证据持续稳定后恢复原任务，不永久锁死。
+全局路线不重算；坏候选不清除仍安全的已提交轨迹。
+心跳存活、传感器有效性和运动授权是不同事实；真实碰撞、急停、失权、
+未确认退役仍保留处理。
+
+RViz 目标菜单的「导航到此处」提交一次带执行意图的 `Navigate` 任务。
+BT 等定位、固定路线和局部准备齐后，通过现有授权账本向唯一 SDK 写者申请一次执行；
+取消、定位身份变化或申请失败后不会重新申请旧意图。
+「仅规划预览」保留预览用途；预览完成后也可选择「执行已预览路线」。
+启动服务及拖动目标只准备系统/编辑目标，不提交导航意图。
+
+全局规划分为原生 worker 预热、等待定位、实际求解、等待定位后提交结果。
+有效参数分别来自统一策略：预热 60 秒、定位等待/结果提交等待 30 秒、实际求解 10 秒。
+每段时钟只在首次进入时建立；回调空窗保留原目标，新目标、取消或定位身份改变退役旧请求。
+`nav_msgs/Path` 显示更新和机器人运动不会触发重新计算已提交路线。
+
+2026-10-08 16:24 已将此前本主线整套编译、封存到 `experiments/navigation_runtime`，
+默认入口实际加载该目录的定位、接口、BT、规划、跟踪、SDK 适配器和 RViz。
+地图部署路径及 NPZ 来源元数据已同步，原始几何数组不变。
+仅完成编译与真实加载核验，没有启动生产导航、连接 SDK 或发送运动。
+以下带日期的测试和未部署说明属于当时记录，不代表当前默认版本。
+
+### 局部规划与跟踪衔接（2026-10-08）
+
+正式会话显式区分两个域：目标选择、搜索、优化和曲线几何检查使用
+`grid_map.planning_collision_policy: official` 与
+`trajectory_geometry_policy: official_inflated_geometry`；实际速度仍必须通过
+原生 `MotionValidation` 的原始双雷达制动扫掠。未知体素不被改写成自由，
+远端自由证据过期不再提前阻止计算整个局部候选。
+官方规划膨胀层与严格运动证据层独立；融合、滑窗和三槽快照保持原生产实现。
+跟踪器在新实测状态到达时最多 20 Hz 刷新接入回执，不延长原曲线证书租约。
+SCAN 进度核对保留原采集时间，与同时间里程计配对，不以接收先后推断几何偏离。
+坏候选仍不清除安全旧轨迹；真实占据、支撑、限速、失权与停止证据不因此删除。
+本次只做源码整改和必要编译/加载核对，不进行录包、模拟或实机导航测试。
+本节 SCAN 整改与下面的衔接修复一并更新唯一默认运行包；原生地图、搜索、
+优化、规划、跟踪、BT、SDK 与安装版 Python 同步构建封存，不单独替换一个二进制。
+更新不启动生产会话，也不改变未完成的物理验收状态。
+
+### 导航环节衔接修复（2026-10-08）
+
+- 已核对 BT 记忆序列及全局规划提交状态：普通暂停、机器人运动、输入恢复
+  不重复计算固定全局路线；迟到或重复运动需求不破坏当前证据接合槽。
+- 新坐标锚/参考候选投影失败只退役未提交候选，不吞掉当前有效的实测任务进度。
+  当前进度始终绑定已提交参考，不能提前使用候选 generation。
+- 当前曲线的合法 BT 心跳与瞬时碰撞证据分开接收。失证期间禁止运动，
+  但不因此丢掉同一任务；SDK 状态短暂空窗也改为有界暂停，不推断永久失权。
+- 正式曲线经新鲜原生验证及当前实测入轨复核后，不再因最初求解发布时间
+  或墙钟 duration 永久过期；实测接入、支撑、动力学与原始证据期限不变。
+- SDK 剩余曲线进度核对使用同采集时间的有界实测状态历史，不将回调时差
+  误判为几何偏离。旧/重复 unavailable 事件不能清除更新的定位状态；
+  真正失效事件保留源时水位，并阻断跨失效区间插值。
+- 换轨安全消费者继承当前会话同一传感器源龄和停稳策略，避免暗用默认参数。
+
+本轮仅完成代码、整包编译和入口加载核对；没有执行录包回归、模拟或实机运动。
+真实碰撞、急停、定位身份改变、SDK 实际失权及停止未确认不作为小空窗放行。
 
 ### 系统整改：任务事务、调度与证据一致性（2026-10-04）
 
@@ -96,22 +155,23 @@ SDK MC 改成固定 512 条 timing ring，锁内诊断取轻量快照；ACK 使�
 1672 B、10000 点时增加 640200 B；SDK MC 对象增加 8128 B，换取热路径无分配。
 跟踪基准 RSS 有增加，SDK 基准 RSS 不变，不能把缓冲区节省当作整服务 RSS 结论。
 
-开发目录的 `experiments/navigation_performance_20261004/` 保存 native、tracker、SDK 与 owner 的
+`experiments/navigation_performance_20261004/` 保存 native、tracker、SDK 与 owner 的
 原始 JSON、冻结基线、源码/ELF 哈希和复现脚本。native 新缓冲布局的四包依赖已
 在全新隔离构建中成套重编，325 项原生用例、160 项 tracker 用例、14 组 SDK
 测试通过；两个需运行 ROS 节点的 native launch 测试未执行。
 Python 全量回归 2033 项通过、1 项大型地图缺项跳过；最终通信/参考边界再复跑
 128 项通过，包含 100 次不完整帧取消后的 FD/线程无累积检查。
 
-发布仓库仅保留审阅后的 [性能证据](../../../docs/verification/20261004-performance/)，
-不复制全部隔离构建树。新电脑完整 native 重建见 [部署说明](../../../docs/DEPLOYMENT.md)。
-在已提供 NumPy 的系统 Python 环境，从仓库的 `d1max_nav_ws` 可重现 owner 基准：
+在上文纯 Python 测试环境中可重现 owner 基准：
 
 ```bash
 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src/d1max_pct_scan /usr/bin/python3 \
   tools/validation/benchmark_navigation_owner.py \
-  --baseline ../docs/verification/20261004-performance/baseline_reference.py \
-  --output /tmp/d1max-owner-results.json
+  --baseline experiments/navigation_performance_20261004/owner_before/continuous_reference.py \
+  --output experiments/navigation_performance_20261004/owner_results.json
+bash experiments/navigation_performance_20261004/run_native_consistent_build.sh
+bash experiments/navigation_performance_20261004/run_tracker_hot_path_probe.sh
+bash experiments/navigation_performance_20261004/run_sdk_buffer_benchmark.sh
 ```
 
 构建、计数和纯计时分开，正式计时使用串行静默窗口。以上是具体核心/缓冲区

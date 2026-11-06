@@ -80,6 +80,11 @@ void GridMap::initMap(rclcpp::Node *node)
   // False selects the upstream inflated-buffer collision policy. Sensor input
   // identity, complete per-ray integration and scan freshness are independent.
   load_parameter(node_, "grid_map.require_observed_free", mp_.require_observed_free_, false);
+  load_parameter(node_, "grid_map.planning_collision_policy", mp_.planning_collision_policy_, string("official"));
+  if (mp_.planning_collision_policy_!="official" && mp_.planning_collision_policy_!="observed_free")
+    throw std::invalid_argument("grid_map.planning_collision_policy must be official or observed_free");
+  if (mp_.planning_collision_policy_=="observed_free" && !mp_.require_observed_free_)
+    throw std::invalid_argument("observed_free planning requires grid_map.require_observed_free=true");
   load_parameter(node_, "grid_map.use_projected_rays", mp_.use_projected_rays_, false);
   load_parameter(node_, "grid_map.preview_only", mp_.preview_only_, false);
   std::vector<std::int64_t> expected_ray_sensors;
@@ -276,11 +281,7 @@ void GridMap::updateMapBoundaryFromIndex()
 
 void GridMap::rebuildInflationOffsets()
 {
-  if (mp_.require_observed_free_) {
-    md_.inflate_offsets_=scan_planner::conservativeCylinderInflation(
-        mp_.resolution_,mp_.double_cylinder_radius_,
-        mp_.obstacles_inflation_z_up,mp_.obstacles_inflation_z_down);
-  } else {
+  {
     // Upstream ROS 1 348e8a59 / ros2-community d0b921c9 discretization.
     // In particular, XY offsets at exactly the radius are excluded; this is
     // not the larger voxel-AABB kernel retained by the optional strict policy.
@@ -295,14 +296,33 @@ void GridMap::rebuildInflationOffsets()
     const double down=std::ceil(mp_.obstacles_inflation_z_down/mp_.resolution_);
     if ((2.*xy+1.)*(2.*xy+1.)*(up+down+1.)>200000.)
       throw std::invalid_argument("cylinder voxel kernel exceeds bounded budget");
-    md_.inflate_offsets_.clear();
+    md_.planning_inflate_offsets_.clear();
     for (int x=-static_cast<int>(xy);x<=static_cast<int>(xy);++x)
       for (int y=-static_cast<int>(xy);y<=static_cast<int>(xy);++y) {
         const Eigen::Vector2d offset_xy(x*mp_.resolution_,y*mp_.resolution_);
         if (offset_xy.norm()>=radius) continue;
         for (int z=-static_cast<int>(down);z<=static_cast<int>(up);++z)
-          md_.inflate_offsets_.emplace_back(x,y,z);
+          md_.planning_inflate_offsets_.emplace_back(x,y,z);
       }
+  }
+  if (mp_.require_observed_free_) {
+    md_.inflate_offsets_=scan_planner::conservativeCylinderInflation(
+        mp_.resolution_,mp_.double_cylinder_radius_,
+        mp_.obstacles_inflation_z_up,mp_.obstacles_inflation_z_down);
+    // Only the fusion owner has incremental counters. Private strict proof
+    // snapshots preserve copied geometry without allocating another writer.
+    if (!collision_snapshot_ && md_.planning_occupancy_buffer_inflate_.size()!=md_.occupancy_buffer_.size()) {
+      md_.planning_occupancy_buffer_inflate_.assign(md_.occupancy_buffer_.size(),0);
+      md_.planning_occupancy_buffer_inflate_cnt_.assign(md_.occupancy_buffer_.size(),0);
+      for (std::size_t address=0;address<md_.occupancy_buffer_.size();++address) {
+        if (md_.occupancy_buffer_[address]<=mp_.min_occupancy_log_) continue;
+        Eigen::Vector3i id;hashIdToGlobalIndex(static_cast<int>(address),id);
+        updateInflationLayer(id,1,md_.planning_inflate_offsets_,md_.planning_occupancy_buffer_inflate_cnt_,
+            md_.planning_occupancy_buffer_inflate_,nullptr);
+      }
+    }
+  } else {
+    md_.inflate_offsets_=md_.planning_inflate_offsets_;
   }
   observed_cylinder_cache_.clear();
 }
@@ -327,12 +347,16 @@ void GridMap::copyCollisionSnapshotTo(GridMap &out,std::int64_t source_now_ns,
   out.mp_=mp_;
   out.md_.occupancy_buffer_=md_.occupancy_buffer_;
   out.md_.occupancy_buffer_inflate_=md_.occupancy_buffer_inflate_;
+  out.md_.planning_occupancy_buffer_inflate_=md_.planning_occupancy_buffer_inflate_;
   // Incremental inflation counters belong to fusion only. Collision readers
   // use the committed flags/raw evidence and never update the map. Do not
   // allocate/copy four bytes per voxel into each of the three read slots.
   if(!out.md_.occupancy_buffer_inflate_cnt_.empty())
     std::vector<int>().swap(out.md_.occupancy_buffer_inflate_cnt_);
+  if(!out.md_.planning_occupancy_buffer_inflate_cnt_.empty())
+    std::vector<int>().swap(out.md_.planning_occupancy_buffer_inflate_cnt_);
   out.md_.inflate_offsets_=md_.inflate_offsets_;
+  out.md_.planning_inflate_offsets_=md_.planning_inflate_offsets_;
   out.free_observation_stamps_=free_observation_stamps_;
   out.integrated_cloud_stamp_ns_=integrated_cloud_stamp_ns_;
   out.ray_integrated_stamps_=ray_integrated_stamps_;
@@ -556,6 +580,8 @@ void GridMap::resetAllMapData()
   std::fill(md_.occupancy_buffer_.begin(), md_.occupancy_buffer_.end(), mp_.clamp_min_log_ - mp_.unknown_flag_);
   std::fill(md_.occupancy_buffer_inflate_.begin(), md_.occupancy_buffer_inflate_.end(), 0);
   std::fill(md_.occupancy_buffer_inflate_cnt_.begin(), md_.occupancy_buffer_inflate_cnt_.end(), 0);
+  std::fill(md_.planning_occupancy_buffer_inflate_.begin(), md_.planning_occupancy_buffer_inflate_.end(), 0);
+  std::fill(md_.planning_occupancy_buffer_inflate_cnt_.begin(), md_.planning_occupancy_buffer_inflate_cnt_.end(), 0);
   std::fill(md_.count_hit_and_miss_.begin(), md_.count_hit_and_miss_.end(), 0);
   std::fill(md_.count_hit_.begin(), md_.count_hit_.end(), 0);
   std::fill(md_.flag_rayend_.begin(), md_.flag_rayend_.end(), -1);
@@ -650,6 +676,9 @@ void GridMap::updateInflation(const Eigen::Vector3i& id, int delta, const std::v
 {
   updateInflationLayer(id, delta, md_.inflate_offsets_, md_.occupancy_buffer_inflate_cnt_,
                        md_.occupancy_buffer_inflate_, ignore_mask);
+  if (!md_.planning_occupancy_buffer_inflate_cnt_.empty())
+    updateInflationLayer(id,delta,md_.planning_inflate_offsets_,md_.planning_occupancy_buffer_inflate_cnt_,
+                         md_.planning_occupancy_buffer_inflate_,ignore_mask);
 }
 
 void GridMap::applyOccupancyUpdate(const Eigen::Vector3i& id, double new_log_odds)
@@ -812,6 +841,10 @@ void GridMap::updateSlidingMap(const Eigen::Vector3d& center)
     md_.occupancy_buffer_[addr] = mp_.clamp_min_log_ - mp_.unknown_flag_;
     md_.occupancy_buffer_inflate_cnt_[addr] = 0;
     md_.occupancy_buffer_inflate_[addr] = 0;
+    if (!md_.planning_occupancy_buffer_inflate_.empty()) {
+      md_.planning_occupancy_buffer_inflate_cnt_[addr] = 0;
+      md_.planning_occupancy_buffer_inflate_[addr] = 0;
+    }
     md_.count_hit_[addr] = 0;
     md_.count_hit_and_miss_[addr] = 0;
     md_.flag_rayend_[addr] = -1;

@@ -1,9 +1,9 @@
 {
   "schema_version": 1,
   "entry_module": "d1max_pct_scan.single_floor_session",
-  "entrypoint": "tools/single_floor_entry.sh",
-  "release_directory": "experiments/single_floor_execution_20261002_entry_v1",
-  "release_manifest_sha256": "f1b92d4581ce18f17a694f7535b154c9a33525f64e8e4de0222d4dfeda2789ab",
+  "entrypoint": "tools/navigation_entry.sh",
+  "release_directory": "experiments/navigation_runtime",
+  "release_manifest_sha256": "791925f25f33e2c61826bc60142441fdb06db5cfe321a191dc362138386babd6",
   "motion_purpose": "execution",
   "preview_purpose": "planning_only",
   "transport": "rmw_zenoh_cpp",
@@ -11,5 +11,5 @@
   "max_speed_mps": 0.3,
   "scope": "single_floor",
   "physical_acceptance": false,
-  "authorization_policy": "existing_sdk_session_and_physical_record_then_explicit_rviz_confirmation"
+  "authorization_policy": "existing_sdk_session_and_runtime_motion_profile_then_goal_bound_bt_execution_intent"
 }

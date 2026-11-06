@@ -17,3 +17,13 @@ def test_actual_writer_cas_interfaces_roundtrip_without_starting_ros():
     assert result['execution_types_verified']==22
     assert result['initial_pose_transaction']=='bt_initial_pose_transaction_v1'
     assert result['route_progress_contract']=='source_bound_full_route_arc_v1'
+
+
+def test_goal_execution_intent_defaults_to_preview_and_roundtrips_typed_authorization():
+    from d1max_navigation_bt_interfaces.action import Navigate
+    from rclpy.serialization import serialize_message, deserialize_message
+    request=Navigate.Goal(schema_version=2)
+    assert request.request_execution is False
+    request.request_execution=True
+    restored=deserialize_message(serialize_message(request),Navigate.Goal)
+    assert restored==request and restored.request_execution is True

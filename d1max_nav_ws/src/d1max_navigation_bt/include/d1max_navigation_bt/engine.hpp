@@ -37,6 +37,8 @@ struct RouteTiming {
   // Set once by the actual adapter-stage feedback. Pausing the tree must not
   // restart this clock or grant another route deadline.
   std::optional<std::chrono::steady_clock::time_point> work_started;
+  bool waiting_readiness{false};
+  std::optional<std::chrono::steady_clock::time_point> readiness_started;
 };
 
 // All methods must be non-blocking. Each asynchronous reply is correlated with

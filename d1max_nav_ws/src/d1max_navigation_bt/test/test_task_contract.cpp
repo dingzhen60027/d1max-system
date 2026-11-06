@@ -136,6 +136,61 @@ TEST(Confirmation, StaleContextAndUnverifiedGeometryNeverAuthorize) {
   EXPECT_FALSE(confirm(l,"a",false,false,true,true).authorized);
   EXPECT_FALSE(l.authorized());
 }
+TEST(GoalExecutionIntent, StartupAndPreviewGoalsHaveNoImplicitIntent) {
+  GoalExecutionIntent idle;
+  EXPECT_FALSE(idle.requested());EXPECT_FALSE(idle.prepare(binding,true));
+  EXPECT_FALSE(idle.consume(binding));EXPECT_FALSE(idle.consumed());
+}
+TEST(GoalExecutionIntent, MissingRouteAndInactiveTaskDoNotConsumeRequest) {
+  GoalExecutionIntent intent(true,"goal-request");
+  auto incomplete=binding;incomplete.route.clear();
+  EXPECT_FALSE(intent.prepare(incomplete,true));EXPECT_FALSE(intent.prepare(binding,false));
+  intent.wait("waiting_matching_native_and_tracker_preparation");
+  EXPECT_FALSE(intent.consumed());EXPECT_TRUE(intent.prepare(binding,true));
+  EXPECT_EQ(intent.requestId(),"goal-request");
+}
+TEST(GoalExecutionIntent, PinsExactCommittedRouteBeforeOneExistingConfirmation) {
+  GoalExecutionIntent intent(true,"goal-request");ConfirmationLedger ledger;
+  ASSERT_TRUE(intent.prepare(binding,true));
+  auto waiting=ledger.confirm(2,intent.requestId(),binding,binding,true,false,true,false,true);
+  EXPECT_FALSE(waiting.authorized);intent.wait(waiting.reason);EXPECT_FALSE(intent.consumed());
+  auto accepted=ledger.confirm(2,intent.requestId(),binding,binding,true,true,true,false,true);
+  ASSERT_TRUE(accepted.authorized);EXPECT_TRUE(intent.consume(binding));EXPECT_TRUE(intent.consumed());
+  EXPECT_FALSE(intent.prepare(binding,true)); // Recovery cannot consume a second request.
+  EXPECT_TRUE(intent.consume(binding)); // Idempotent fact, not another grant.
+  EXPECT_TRUE(ledger.confirm(2,intent.requestId(),binding,binding,true,true,true,false,true).duplicate);
+}
+TEST(GoalExecutionIntent, RouteHashOrTaskChangeRevokesRatherThanRebinding) {
+  for(bool change_task:{false,true}) {
+    GoalExecutionIntent intent(true,"goal-request");ASSERT_TRUE(intent.prepare(binding,true));
+    auto other=binding;if(change_task)other.task="new-task";else other.hash=std::string(64,'b');
+    EXPECT_FALSE(intent.prepare(other,true));EXPECT_FALSE(intent.prepare(binding,true));
+    EXPECT_FALSE(intent.consume(other));EXPECT_FALSE(intent.consumed());
+    EXPECT_EQ(intent.reason(),"goal_execution_route_changed");
+  }
+}
+TEST(GoalExecutionIntent, CancelAndLocalizationResetDoNotAutoAuthorizeAfterRecovery) {
+  for(bool consumed:{false,true}) {
+    GoalExecutionIntent intent(true,"goal-request");ASSERT_TRUE(intent.prepare(binding,true));
+    if(consumed)ASSERT_TRUE(intent.consume(binding));
+    intent.revoke("localization_context_replaced");
+    EXPECT_FALSE(intent.prepare(binding,true));EXPECT_FALSE(intent.consume(binding));
+    EXPECT_EQ(intent.reason(),"localization_context_replaced");
+  }
+}
+TEST(GoalExecutionIntent, ExplicitIntentCannotBypassPreviewOrPhysicalEvidence) {
+  for(bool preview:{false,true}) {
+    GoalExecutionIntent intent(true,"goal-request");ConfirmationLedger ledger;
+    ASSERT_TRUE(intent.prepare(binding,true));
+    const auto decision=ledger.confirm(2,intent.requestId(),binding,binding,true,true,true,preview,false);
+    EXPECT_FALSE(decision.authorized);EXPECT_FALSE(intent.consumed());EXPECT_FALSE(ledger.authorized());
+  }
+}
+TEST(GoalExecutionIntent, RequestIdentityMustBeBounded) {
+  EXPECT_THROW(GoalExecutionIntent(true,""),std::invalid_argument);
+  EXPECT_THROW(GoalExecutionIntent(true,std::string(129,'a')),std::invalid_argument);
+  EXPECT_NO_THROW(GoalExecutionIntent(false,""));
+}
 TEST(LifecycleDrain, WaitsAsynchronouslyBeforeReactivationAndCleanup) {
   LifecycleDrain l;
   EXPECT_FALSE(l.activate()); ASSERT_TRUE(l.configure()); ASSERT_TRUE(l.activate());

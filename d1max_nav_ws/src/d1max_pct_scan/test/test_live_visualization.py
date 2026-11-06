@@ -84,17 +84,24 @@ def test_rolling_maps_use_official_ros2_height_style_not_traversability_colours(
     assert spline_topic['Reliability Policy'] == 'Reliable'
 
 
-def test_structural_context_is_faint_but_height_information_retained():
+def test_building_context_visible_globally_but_local_map_group_hidden():
     layers = displays(configure(configuration()))
     source = layers['/d1max/localization/map_cloud']
     assert source['Color Transformer'] == 'AxisColor' and source['Axis'] == 'Z'
     assert source['Style'] == 'Points' and source['Size (Pixels)'] == 1
+    assert source['Enabled'] and source['Value']
     assert source['Alpha'] < layers[PREFIX+'traversable_surface']['Alpha']
     assert source['Alpha'] < layers[PREFIX+'scan/grid_map/occupancy']['Alpha']
-    assert layers[PREFIX+'blocked_surface']['Alpha'] < .3
+    assert not layers[PREFIX+'blocked_surface']['Enabled']
+    assert not layers[PREFIX+'blocked_surface']['Value']
     path = layers[PREFIX+'global_path_visual']
     assert path['Color'] == '65; 145; 255' and path['Alpha'] == 1.0
     assert path['Offset']['Z'] == .15  # only RViz offset, never geometry mutation
+    local = configure(configuration(), layout='local')
+    local_map = next(g for g in local['Visualization Manager']['Displays']
+                     if g['Name'] == '地图')
+    assert not local_map['Enabled']
+    assert displays(local)['/d1max/localization/map_cloud']['Enabled']
 
 
 def test_handles_preserved_names_algorithm_neutral_and_base_not_mutated():
@@ -128,8 +135,13 @@ def test_profiles_separate_heavy_map_layers_and_keep_same_tree_and_coordinate_fr
     assert not global_groups['局部规划']['Enabled'] and local_groups['局部规划']['Enabled']
     assert displays(global_cfg).keys() == displays(local_cfg).keys()
     global_topics, local_topics = visible_topics(global_cfg), visible_topics(local_cfg)
-    for topic in ('/d1max/localization/map_cloud', PREFIX+'traversable_surface', PREFIX+'blocked_surface'):
-        assert topic in global_topics and topic not in local_topics
+    assert PREFIX+'traversable_surface' in global_topics
+    assert PREFIX+'traversable_surface' not in local_topics
+    assert '/d1max/localization/map_cloud' in global_topics
+    assert '/d1max/localization/map_cloud' not in local_topics
+    assert PREFIX+'blocked_surface' not in global_topics
+    assert PREFIX+'blocked_surface' not in local_topics
+    assert PREFIX+'blocked_surface' in displays(global_cfg)  # Optional, not removed.
     for topic in ('/d1max/localization/lio/deskewed', PREFIX+'scan/grid_map/occupancy',
                   PREFIX+'scan/grid_map/occupancy_inflate',
                   PREFIX+'scan/grid_map/sliding_map_bbox', PREFIX+'local_debug',
@@ -157,6 +169,21 @@ def test_local_profile_hides_goal_editing_but_preserves_tools_and_goal_topic():
                   if d['Class'].endswith('/InteractiveMarkers'))
     assert not handle['Enabled'] and not handle['Value']
     assert handle['Interactive Markers Namespace'] == '/d1max_live_goal'
+
+
+@pytest.mark.parametrize('resolution', [.05, .10, .15, .20])
+def test_terrain_glyphs_match_actual_map_cells_without_cost_or_height_filtering(resolution):
+    cfg=configure(configuration(),terrain_resolution_m=resolution)
+    layers=displays(cfg)
+    for name in ('traversable_surface','blocked_surface'):
+        surface=layers[PREFIX+name]
+        assert surface['Style']=='Flat Squares'
+        assert surface['Size (m)']==resolution
+        assert surface['Color Transformer']=='RGB8'
+        assert surface['Position Transformer']=='XYZ'
+        assert surface['Use Fixed Frame'] and surface['Decay Time']==0
+    assert layers[PREFIX+'traversable_surface']['Enabled']
+    assert layers[PREFIX+'traversable_surface']['Alpha']>=.8
 
 
 def test_single_window_file_contract_is_bound_to_explicit_session_directory(tmp_path):

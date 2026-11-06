@@ -13,8 +13,8 @@ from .command_admission import CommandAdmission
 from .execution_safety import Decision, ExecutionSafety, binding, fresh, version
 
 
-def task_binding(message):
-    v=message.version
+def task_binding(message, *, acknowledgement=False):
+    v=message.candidate_version if acknowledgement else message.version
     return (v.schema_version,v.session_id,v.task_id,v.route_id,v.route_hash,
             v.map_version_id,v.localization_epoch,v.localization_seed_id,
             message.execution_id,message.control_epoch,message.sdk_session,
@@ -36,10 +36,39 @@ class CandidateSafety(ExecutionSafety):
         return super()._admit(demand,now_ns,require_zero_sweep=True,**kwargs)
 
 
+def retain_unresolved(records,key,value):
+    """Fixed eight facts: retain the earliest unresolved and the latest seven."""
+    if key in records:return
+    records[key]=deepcopy(value)
+    if len(records)>8:del records[next(iter(tuple(records)[1:]))]
+
+
+class InitialCommitAdmission(CommandAdmission):
+    def __init__(self,core,pin):
+        super().__init__(core)
+        self.pin=pin
+
+    def demand(self,message,now_ns):
+        result=super().demand(message,now_ns)
+        if result.allowed and result.output is not None:self.pin(result.output)
+        return result
+
+    def proof(self,message,now_ns):
+        result=super().proof(message,now_ns)
+        if result.allowed and result.output is not None:self.pin(result.output)
+        return result
+
+    def validation(self,message,now_ns):
+        results=super().validation(message,now_ns)
+        for result in results:
+            if result.allowed and result.output is not None:self.pin(result.output)
+        return results
+
+
 class ExecutionHandoffAdmission:
     def __init__(self,core,*,enabled=False):
         self.core=core
-        self.ordinary=CommandAdmission(core)
+        self.ordinary=InitialCommitAdmission(core,self._pin_initial_command)
         self.enabled=enabled
         self.commit_sequence=0
         self.applied=None
@@ -52,10 +81,65 @@ class ExecutionHandoffAdmission:
         self.pending_revoked=False
         self.failed_write_binding=None
         self.stationary=deque(maxlen=8)
+        self.initial_submissions=OrderedDict()
+        self.prepared_submissions=OrderedDict()
+        self.handoff_submissions=OrderedDict()
+        self.last_applied_ack=None
+        self.execution_revoked_at=None
+        # A supplied core may already contain its owner lease. Adopt only
+        # that signed context; no ACK or stationary callback can select it.
+        self.execution_binding=task_binding(core.permits[-1]) if core.permits else None
+
+    def _begin_execution(self,context):
+        # The sole writer and BT owner restart their handoff/ACK counters at
+        # each grant. These replay floors belong to that full execution, not
+        # to the lifetime of this ROS node. The ordinary permit publisher's
+        # session-wide sequence floor remains untouched in the core.
+        self.execution_binding=context
+        self.commit_sequence=0
+        self.applied=self.grant=self.candidate=None
+        self.prepared.clear();self.finished.clear();self.stationary.clear()
+        self.initial_submissions.clear();self.prepared_submissions.clear()
+        self.handoff_submissions.clear()
+        self.last_applied_ack=None;self.execution_revoked_at=None
+        self.last_grant_sequence=self.last_ack_sequence=0
+        self.pending_revoked=False;self.failed_write_binding=None
+        self.ordinary.pending.clear();self.ordinary.recent=None
+        self.core.last_binding=None;self.core.last_demand=0
+        self.core.last_original=None;self.core.last_admitted_proof=0
+
+    def _pin_initial_command(self,demand):
+        if self.commit_sequence or task_binding(demand)!=self.execution_binding:return
+        p=next((p for p in self.core.permits if p.sequence==demand.permit_sequence
+                and binding(p)==binding(demand) and p.trajectory_id==demand.trajectory_id
+                and p.allowed and p.geometry_committed and not p.revoked),None)
+        if p is None:return
+        # This records actual admission output, never a permission heartbeat.
+        # Multiple 50 Hz commands can share one 10 Hz signed permit.
+        if p.sequence not in self.initial_submissions:
+            retain_unresolved(self.initial_submissions,p.sequence,(p,OrderedDict()))
+        commands=self.initial_submissions[p.sequence][1]
+        retain_unresolved(commands,(demand.sequence,demand.motion_validation_sequence),demand)
+
+    @staticmethod
+    def _submitted_command(message,demand,p):
+        at=stamp_ns(message.applied_at)
+        return (message.demand_sequence==demand.sequence
+            and message.motion_validation_sequence==demand.motion_validation_sequence
+            and message.demand_source_stamp==demand.source_stamp
+            and message.demand_body_source_stamp==demand.body_source_stamp
+            and message.applied_velocity==demand.velocity
+            and fresh(demand.source_stamp,at,100_000_000)
+            and fresh(demand.body_source_stamp,at,100_000_000)
+            and fresh(message.body_source_stamp,at,100_000_000)
+            and stamp_ns(demand.source_stamp)<=at<=stamp_ns(demand.valid_until)
+            and stamp_ns(p.source_stamp)<=at<=stamp_ns(p.valid_until)
+            and at<=stamp_ns(message.valid_until)<=min(stamp_ns(p.valid_until),stamp_ns(demand.valid_until)))
 
     def on_stationary(self,message):
         # These are original SDK-published witnesses, not local-odom velocity.
-        if message.schema_version!=1 or message.sequence<=0:return False
+        if (message.schema_version!=1 or message.sequence<=0
+                or task_binding(message)!=self.execution_binding):return False
         if self.stationary and message.sequence<=self.stationary[-1].sequence:return False
         self.stationary.append(deepcopy(message))
         if (not message.usable and self.grant is not None and self.candidate is not None
@@ -109,6 +193,11 @@ class ExecutionHandoffAdmission:
             # grant) cannot replace an identity already chosen by the writer.
             return False
         accepted=self.core.on_permit(message)
+        if accepted and task_binding(message)!=self.execution_binding:
+            self._begin_execution(task_binding(message))
+        if accepted and message.revoked:
+            at=stamp_ns(message.source_stamp)
+            self.execution_revoked_at=at if self.execution_revoked_at is None else min(at,self.execution_revoked_at)
         stopped_reentry=(self.grant is not None and self.candidate is not None
             and self.grant.transition_mode==1 and not message.revoked and not message.allowed
             and message.phase=='holding' and binding(message)==binding(self.grant.incumbent)
@@ -126,6 +215,9 @@ class ExecutionHandoffAdmission:
     def _retire_pending(self,*,revoked=True):
         if self.grant is not None and self.grant.handoff_id not in self.finished:
             self.finished.append(self.grant.handoff_id)
+        if self.grant is not None and revoked:
+            transaction=self.handoff_submissions.get(self.grant.handoff_id)
+            if transaction is not None:transaction['retired']=True
         self.prepared.clear();self.candidate=None
         self.pending_revoked=self.pending_revoked or revoked
         # Retain the one tombstone: ACK may describe a write made before a
@@ -139,6 +231,7 @@ class ExecutionHandoffAdmission:
                     self._retire_pending();return True
                 return message==self.grant and self.candidate is not None
             if message.handoff_id in self.finished or message.sequence<=self.last_grant_sequence:return False
+            if message.handoff_id in self.handoff_submissions:return False
             if self.grant is not None and self.candidate is not None:return False
             a,b=message.incumbent,message.candidate
             if (message.revoked or self.applied is None or message.expected_commit_sequence!=self.commit_sequence
@@ -164,9 +257,14 @@ class ExecutionHandoffAdmission:
             # plausible wrapper assembled by a downstream candidate producer.
             if not any(p==a for p in self.core.permits):return False
             self.grant=deepcopy(message);self.last_grant_sequence=message.sequence
+            retain_unresolved(self.handoff_submissions,message.handoff_id,
+                dict(grant=message,commands=OrderedDict(),retired=False))
+            self.prepared_submissions=self.handoff_submissions[message.handoff_id]['commands']
             self.pending_revoked=False
             c=CandidateSafety(self.core.session,self.core.mode,max_speed=self.core.max_speed,
-                max_yaw=self.core.max_yaw,braking_model_sha256=self.core.braking_model_sha256)
+                max_yaw=self.core.max_yaw,braking_model_sha256=self.core.braking_model_sha256,
+                sensor_source_age_s=self.core.sensor_max_age_ns/1e9,
+                stationary_policy=self.core.stationary_policy)
             c.raw=self.core.raw;c.proofs=self.core.proofs;c.proof_history=self.core.proof_history
             c.invalidated_through=self.core.invalidated_through;c.motion_proofs=self.core.motion_proofs
             if not c.on_permit(b):return False
@@ -176,10 +274,15 @@ class ExecutionHandoffAdmission:
 
     def on_ack(self,message,now_ns):
         try:
+            at=stamp_ns(message.applied_at)
+            current=fresh(message.applied_at,now_ns,350_000_000)
             if (not self.enabled or message.schema_version!=1 or message.sequence<=self.last_ack_sequence
-                    or not fresh(message.applied_at,now_ns,350_000_000)):
+                    or task_binding(message,acknowledgement=True)!=self.execution_binding
+                    or not 0<at<=now_ns or not message.applied and not current
+                    or message.applied and self.execution_revoked_at is not None and at>self.execution_revoked_at):
                 return False
             g=self.grant
+            transaction=None
             if (message.applied and self.applied is not None
                     and message.commit_sequence==self.commit_sequence
                     and version(message.candidate_version)==version(self.applied.version)
@@ -193,16 +296,30 @@ class ExecutionHandoffAdmission:
                 # Async vendor callback/retransmit reports the same software
                 # write fact. It must not commit again, clear active permission,
                 # or renew any lease/evidence.
+                original=deepcopy(self.last_applied_ack);incoming=deepcopy(message)
+                if original is None:return False
+                if original.write_acknowledged and not incoming.write_acknowledged:return False
+                original.sequence=incoming.sequence=0
+                original.write_acknowledged=incoming.write_acknowledged=False
+                original.reason=incoming.reason=''
+                if original!=incoming:return False
                 self.last_ack_sequence=message.sequence
+                self.last_applied_ack=deepcopy(message)
                 return True
             if not message.handoff_id:
                 p=next((p for p in self.core.permits if p.sequence==message.permit_sequence),None)
+                pin=self.initial_submissions.get(message.permit_sequence)
+                if p is None and pin is not None:p=pin[0]
                 if (self.commit_sequence!=0 or p is None or not message.applied
                         or message.previous_commit_sequence!=0 or message.commit_sequence!=1
                         or not p.allowed or p.revoked or not p.geometry_committed
                         or not stamp_ns(p.source_stamp)<=stamp_ns(message.applied_at)<=stamp_ns(p.valid_until)):
                     return False
+                if not current and (pin is None or not any(self._submitted_command(message,d,p)
+                        for d in pin[1].values())):return False
             else:
+                transaction=self.handoff_submissions.get(message.handoff_id)
+                if transaction is not None:g=transaction['grant']
                 if g is None or message.handoff_id!=g.handoff_id or message.grant_sequence!=g.sequence:return False
                 p=g.candidate
                 if (message.previous_commit_sequence!=g.expected_commit_sequence
@@ -211,13 +328,25 @@ class ExecutionHandoffAdmission:
                     return False
                 if not message.applied:
                     if message.commit_sequence!=self.commit_sequence or not self._ack_binding(message,p):return False
-                    self.last_ack_sequence=message.sequence;self._retire_pending();return True
-                if stamp_ns(message.applied_at)>stamp_ns(g.transition_deadline):return False
-                if message.commit_sequence!=g.expected_commit_sequence+1:return False
+                    self.last_ack_sequence=message.sequence
+                    if transaction is not None:transaction['retired']=True
+                    if self.grant is not None and self.grant.handoff_id==g.handoff_id:self._retire_pending()
+                    return True
+                if not max(stamp_ns(g.source_stamp),stamp_ns(p.source_stamp))<=at<=min(
+                        stamp_ns(g.transition_deadline),stamp_ns(g.valid_until),stamp_ns(p.valid_until)):return False
+                if (message.previous_commit_sequence!=self.commit_sequence
+                        or message.commit_sequence!=g.expected_commit_sequence+1):return False
+                submissions=transaction['commands'] if transaction is not None else self.prepared_submissions
+                if not current and not any(self._submitted_command(message,m.demand,p)
+                        and message.entry_admission_sequence==m.entry_admission.sequence
+                        and message.entry_source_stamp==m.entry_source_stamp
+                        and message.curve_time==m.curve_time
+                        for m in submissions.values()):return False
             if (not self._ack_binding(message,p) or message.measured_pose.header.frame_id!='d1max_loc_odom'
                     or stamp_ns(message.measured_pose.header.stamp)!=stamp_ns(message.body_source_stamp)):
                 return False
             self.last_ack_sequence=message.sequence;self.commit_sequence=message.commit_sequence
+            self.last_applied_ack=deepcopy(message)
             self.applied=deepcopy(p)
             self.applied.geometry_committed=True
             # Promote only the original conditional lease. Revoke/HOLD which
@@ -229,15 +358,24 @@ class ExecutionHandoffAdmission:
                 and self.core.permits[-1].phase=='holding'
                 and binding(self.core.permits[-1])==binding(g.incumbent)
                 and self.core.permits[-1].trajectory_id==g.incumbent.trajectory_id)
-            revoked=bool(not message.write_submitted or (message.handoff_id and self.pending_revoked)
+            retired_transaction=(transaction is not None and (transaction['retired']
+                or self.grant is None or self.grant.handoff_id!=g.handoff_id))
+            revoked=bool(not message.write_submitted or retired_transaction
+                or (message.handoff_id and self.pending_revoked)
                 or self.core.permits and (self.core.permits[-1].revoked or
                     not self.core.permits[-1].allowed and not stopped_reentry))
-            if not revoked:
+            live_original=(current and fresh(p.source_stamp,now_ns,350_000_000)
+                and now_ns<min(stamp_ns(p.valid_until),stamp_ns(getattr(message,'valid_until',p.valid_until))))
+            if not revoked and live_original:
                 self.core.permits.clear();self.core.permits.append(deepcopy(self.applied))
                 self.core.last_original=None;self.ordinary.recent=None
-            else:
+            elif revoked or not self.core.permits or binding(self.core.permits[-1])!=binding(self.applied):
                 self.core.permits.clear();self.core.last_original=None;self.ordinary.recent=None
-            self._retire_pending(revoked=False)
+            if transaction is not None:transaction['retired']=True
+            # A historical applied transaction overtakes any newer conditional
+            # draft based on the old writer identity. Retire that draft, too.
+            self._retire_pending(revoked=bool(message.handoff_id and self.grant is not None
+                and self.grant.handoff_id!=g.handoff_id))
             return True
         except (ValueError,TypeError,AttributeError,OverflowError):return False
 
@@ -293,6 +431,8 @@ class ExecutionHandoffAdmission:
             self.prepared.move_to_end(key)
             while len(self.prepared)>8:self.prepared.popitem(last=False)
         elif result.allowed:
+            retain_unresolved(self.prepared_submissions,
+                (result.output.demand.sequence,result.output.demand.motion_validation_sequence),result.output)
             for k,m in tuple(self.prepared.items()):
                 if m.demand.sequence<=message.demand.sequence:del self.prepared[k]
         return result

@@ -11,7 +11,8 @@ struct GridMapTestAccess {
     p.resolution_=.08;p.resolution_inv_=12.5;p.map_voxel_num_={64,64,32};
     p.map_origin_idx_.setZero();map->updateMapBoundaryFromIndex();
     p.clamp_min_log_=-1.;p.min_occupancy_log_=1.;p.clamp_max_log_=2.;p.unknown_flag_=.01;
-    p.require_observed_free_=true;p.double_cylinder_radius_=.29;p.double_cylinder_offset_=.2;
+    p.require_observed_free_=true;p.planning_collision_policy_="observed_free";
+    p.double_cylinder_radius_=.29;p.double_cylinder_offset_=.2;
     p.obstacles_inflation_z_up=.45;p.obstacles_inflation_z_down=.45;
     d.occupancy_buffer_.assign(64*64*32,-1.);
     if(state) d.occupancy_buffer_[map->toAddress(blocked)]=state==1 ? 2.:-1.01;
@@ -20,7 +21,7 @@ struct GridMapTestAccess {
   }
   static GridMap::Ptr officialUnknown(bool center_only=false) {
     auto map=make();auto &p=map->mp_;auto &d=map->md_;
-    p.require_observed_free_=false;
+    p.require_observed_free_=false;p.planning_collision_policy_="official";
     if (center_only) {
       p.double_cylinder_radius_=.01;p.double_cylinder_offset_=0.;
       p.obstacles_inflation_z_up=p.obstacles_inflation_z_down=0.;
@@ -40,6 +41,30 @@ static ASTAR_RET search(GridMap::Ptr map,const Eigen::Vector3d &start={-.6,0,.5}
 
 TEST(SearchEndpoint, FullyObservedSpaceFindsPath) {
   EXPECT_EQ(search(GridMapTestAccess::make()),ASTAR_RET::SUCCESS);
+}
+TEST(SearchEndpoint, InternalSearchDeadlineIsResourceFailureAndSameMapCanRetry) {
+  using Clock=std::chrono::steady_clock;
+  const auto base=Clock::now();int calls=0;bool advance=true;
+  AStar astar([&] {return base+std::chrono::milliseconds(advance?20*calls++:0);});
+  astar.initGridMap(GridMapTestAccess::make(),{64,64,16});
+  auto budget=std::make_shared<scan_planner::SolveBudget>();astar.setSolveBudget(budget);
+  EXPECT_EQ(astar.AstarSearch(.08,{-.6,0,.5},{.6,0,.5},false),ASTAR_RET::SEARCH_ERR);
+  EXPECT_TRUE(astar.lastSearchTimedOut());
+  EXPECT_TRUE(budget->allowed()); // The inner 200ms is not the shared 400ms.
+  EXPECT_TRUE(astar.getPath().empty());
+  advance=false;
+  ASSERT_EQ(astar.AstarSearch(.08,{-.6,0,.5},{.6,0,.5},false),ASTAR_RET::SUCCESS);
+  EXPECT_FALSE(astar.lastSearchTimedOut());
+}
+TEST(SearchEndpoint, CancellationNeverBorrowsInternalTimeoutRecovery) {
+  using Clock=std::chrono::steady_clock;
+  const auto base=Clock::now();
+  AStar astar([&] {return base+std::chrono::seconds(1);});
+  astar.initGridMap(GridMapTestAccess::make(),{64,64,16});
+  auto budget=std::make_shared<scan_planner::SolveBudget>();budget->cancel();astar.setSolveBudget(budget);
+  EXPECT_EQ(astar.AstarSearch(.08,{-.6,0,.5},{.6,0,.5},false),ASTAR_RET::SEARCH_ERR);
+  EXPECT_FALSE(astar.lastSearchTimedOut());
+  EXPECT_TRUE(astar.getPath().empty());
 }
 TEST(SearchEndpoint, CancelledSharedBudgetDoesNotRunOrReturnOldPath) {
   AStar astar;astar.initGridMap(GridMapTestAccess::make(),{64,64,16});

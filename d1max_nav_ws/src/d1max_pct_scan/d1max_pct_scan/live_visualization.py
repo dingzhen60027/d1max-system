@@ -1,5 +1,6 @@
 """Algorithm-neutral RViz presentation. No planning or frame conversion here."""
 from copy import deepcopy
+import math
 from pathlib import Path
 
 PREFIX = '/d1max/live_planning/'
@@ -44,7 +45,8 @@ def rolling_occupancy_display(name, suffix, *, size):
            'Use Fixed Frame': True, 'Selectable': True})
 
 
-def configure(base, *, session_id='', layout='global', session_directory=None):
+def configure(base, *, session_id='', layout='global', session_directory=None,
+              terrain_resolution_m=.10):
     """Build one presentation profile over the same planning topics.
 
     The local view uses SCAN's published sliding occupancy, not a new map or
@@ -55,13 +57,17 @@ def configure(base, *, session_id='', layout='global', session_directory=None):
     """
     if layout not in ('global', 'local'):
         raise ValueError(f'unsupported RViz layout: {layout!r}')
+    if not math.isfinite(terrain_resolution_m) or terrain_resolution_m <= 0:
+        raise ValueError('terrain display resolution must be finite and positive')
     local_layout = layout == 'local'
     cfg = deepcopy(base)
     vm = cfg['Visualization Manager']
     old = {d.get('Topic', {}).get('Value'): d for d in vm['Displays']}
     map_cloud = old['/d1max/localization/map_cloud']
-    # Like the upstream navigation view: faint structural context behind the
-    # task's route/active obstacle layers, not a second opaque live cloud.
+    # Building structure gives the route its spatial context. The low-alpha
+    # point layer stays below the opaque traversability surface; the whole
+    # map group is disabled in the local layout, not the building child.
+    # This changes presentation only, not map support or collision semantics.
     map_cloud.update(Name='建筑点云', Enabled=True, Value=True, Alpha=.10,
                      **{'Color Transformer': 'AxisColor', 'Axis': 'Z',
                         'Autocompute Value Bounds': True, 'Style': 'Points',
@@ -87,11 +93,12 @@ def configure(base, *, session_id='', layout='global', session_directory=None):
             trajectory, initial]),
         group('地图', [map_cloud, display('PointCloud2', '可通行地面',
             Topic=topic(PREFIX+'traversable_surface', transient=True),
-            **{'Position Transformer': 'XYZ', 'Color Transformer': 'RGB8', 'Style': 'Boxes',
-               'Size (m)': .095, 'Alpha': .28, 'Decay Time': 0, 'Use Fixed Frame': True}),
-            display('PointCloud2', '地图禁行区域', Topic=topic(PREFIX+'blocked_surface', transient=True),
-            **{'Position Transformer': 'XYZ', 'Color Transformer': 'RGB8', 'Style': 'Boxes',
-               'Size (m)': .095, 'Alpha': .12, 'Decay Time': 0, 'Use Fixed Frame': True})],
+            **{'Position Transformer': 'XYZ', 'Color Transformer': 'RGB8', 'Style': 'Flat Squares',
+               'Size (m)': terrain_resolution_m, 'Alpha': .85, 'Decay Time': 0, 'Use Fixed Frame': True}),
+            display('PointCloud2', '地图禁行区域', enabled=False,
+                Topic=topic(PREFIX+'blocked_surface', transient=True),
+            **{'Position Transformer': 'XYZ', 'Color Transformer': 'RGB8', 'Style': 'Flat Squares',
+               'Size (m)': terrain_resolution_m, 'Alpha': .35, 'Decay Time': 0, 'Use Fixed Frame': True})],
             enabled=not local_layout),
         group('全局规划', [display('Path', '全局路径',
             Topic=topic(PREFIX+'global_path_visual', transient=True),

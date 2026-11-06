@@ -6,6 +6,7 @@ import xml.etree.ElementTree as ET
 import yaml
 from .bt_follow_policy import FOLLOW_DEFAULTS, validate_follow_policy
 from .live_runtime import file_sha256
+from .navigation_runtime_policy import session_policy
 
 ORCHESTRATOR = 'behaviortree_cpp_v3'
 FILES = ('navigation.xml', 'bt.yaml', 'bt_adapter.yaml', 'bt_lifecycle.yaml')
@@ -65,19 +66,33 @@ def prepare_tree(directory, session, workspace):
         raise ValueError('Invalid BehaviorTree.CPP XML')
     route_deadline = session['result_timeout_s']
     startup_deadline = session.get('warmup_timeout_s', 60.)
+    readiness_deadline = session.get('readiness_timeout_s', 30.)
     if (type(route_deadline) not in (int, float) or not math.isfinite(route_deadline)
             or not 5. <= route_deadline <= 60.
             or type(startup_deadline) not in (int, float) or not math.isfinite(startup_deadline)
-            or not 10. <= startup_deadline <= 60.):
+            or not 10. <= startup_deadline <= 60.
+            or type(readiness_deadline) not in (int,float) or not math.isfinite(readiness_deadline)
+            or not 1. <= readiness_deadline <= 120.):
         raise ValueError('bounded_global_route_and_startup_deadlines_required')
-    # Session XML and the independent action watchdog consume the SAME
-    # end-to-end compute deadline, never 60 active seconds behind a 10s worker.
+    # Preparation, localization admission and active computation have distinct
+    # bounded stages. Every layer receives the same budget for each stage.
     for node in root.iter('ComputeGlobalRoute'):
         node.set('timeout_s', str(float(route_deadline)))
         node.set('startup_timeout_s',str(float(startup_deadline)))
+        node.set('readiness_timeout_s',str(float(readiness_deadline)))
     index_deadline=localization_index_deadline(directory)
     for node in root.iter('WaitForInitialLocalization'):
         node.set('warmup_timeout_s',str(index_deadline))
+    runtime_policy=session_policy(session)
+    if runtime_policy is not None:
+        if session.get('follow_recovery_policy'):
+            raise ValueError('navigation_policy_has_competing_follow_override')
+        if (route_deadline!=runtime_policy.global_route_timeout_s
+                or startup_deadline!=runtime_policy.worker_startup_timeout_s
+                or readiness_deadline!=runtime_policy.recovery_timeout_s):
+            raise ValueError('navigation_runtime_policy_planning_mismatch')
+        for node in root.iter('PauseOnUnavailable'):
+            node.set('timeout_s',str(runtime_policy.recovery_timeout_s))
     (directory/'navigation.xml').write_text(ET.tostring(root, encoding='unicode'))
     params = dict(session_id=session['id'], frame_id=session['frame_id'],
         planning_frame='d1max_multifloor_planning',
@@ -85,6 +100,7 @@ def prepare_tree(directory, session, workspace):
         cancellation_timeout_s=3., action_watchdog_timeout_s=3.,
         compute_route_timeout_s=float(route_deadline),
         worker_startup_timeout_s=float(startup_deadline),
+        compute_readiness_timeout_s=float(readiness_deadline),
         arrival_evidence_timeout_s=4., preview_only=True)
     provenance=route_provenance(session)
     params['initial_localization_map_sha256']=provenance['expected_source_map_sha256']
@@ -93,14 +109,18 @@ def prepare_tree(directory, session, workspace):
         execution_mode='preview', map_frame=session['frame_id'],
         body_frame=frames['body_frame'], result_timeout_s=session['result_timeout_s'],
         worker_startup_timeout_s=float(startup_deadline),
+        readiness_timeout_s=float(readiness_deadline),
         cancel_timeout_s=2.5, freshness_s=session['freshness_s'], worker_status_timeout_s=1.,
         tracking_frame=frames['tracking_frame'],
         body_height=session['body_height'], goal_xy_tolerance_m=.20, goal_z_tolerance_m=.15)
     adapter.update(provenance)
-    policy = session.get('follow_recovery_policy', {})
+    policy = (runtime_policy.follow_parameters() if runtime_policy is not None
+              else session.get('follow_recovery_policy', {}))
     if not isinstance(policy, dict) or set(policy)-set(FOLLOW_DEFAULTS):
         raise ValueError('Unknown FollowRoute recovery policy configuration')
     adapter.update({key: policy.get(key, value) for key, value in FOLLOW_DEFAULTS.items()})
+    if runtime_policy is not None:
+        params.update(runtime_policy.bt_parameters())
     validate_follow_policy(adapter)
     for filename, values in (('bt.yaml', params), ('bt_adapter.yaml', adapter),
                              ('bt_lifecycle.yaml', lifecycle_parameters())):
@@ -125,8 +145,10 @@ def validate_tree_wiring(directory, session):
         (bt.get('initial_localization_map_sha256'),route_provenance(session)['expected_source_map_sha256']),
         (bt.get('compute_route_timeout_s'), float(session['result_timeout_s'])),
         (bt.get('worker_startup_timeout_s'),float(session.get('warmup_timeout_s',60.))),
+        (bt.get('compute_readiness_timeout_s'),float(session.get('readiness_timeout_s',30.))),
         (adapter.get('result_timeout_s'), session['result_timeout_s']),
         (adapter.get('worker_startup_timeout_s'), float(session.get('warmup_timeout_s',60.))),
+        (adapter.get('readiness_timeout_s'),float(session.get('readiness_timeout_s',30.))),
         (bt.get('frame_id'), session['frame_id']),
         (bt.get('planning_frame'), 'd1max_multifloor_planning'),
         (bt.get('tree_xml'), str(directory/'navigation.xml')),
@@ -143,6 +165,7 @@ def validate_tree_wiring(directory, session):
     tree = ET.parse(directory/'navigation.xml').getroot()
     if any(float(node.get('timeout_s','nan')) != float(session['result_timeout_s'])
            or float(node.get('startup_timeout_s','nan')) != float(session.get('warmup_timeout_s',60.))
+           or float(node.get('readiness_timeout_s','nan')) != float(session.get('readiness_timeout_s',30.))
            for node in tree.iter('ComputeGlobalRoute')):
         raise ValueError('Behavior tree/worker route deadline mismatch')
     if any(float(node.get('warmup_timeout_s','nan'))!=localization_index_deadline(directory)

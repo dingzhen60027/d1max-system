@@ -111,9 +111,10 @@ class Monitor final:public rclcpp::Node {
       execution_grant_=create_service<d1monitor::execution3::Grant>(p+"grant",
         [this,accepted_record_hash,exec3_sdk](const std::shared_ptr<d1monitor::execution3::Grant::Request>r,std::shared_ptr<d1monitor::execution3::Grant::Response>s){
           std::lock_guard<std::mutex> lock(mutex);
-          if(r->activate&&(!sdk_||sdk_version_!=exec3_sdk)){s->reason="actual_sdk_version_not_bound";return;}
+          if(r->activate&&(!sdk_||sdk_version_!=exec3_sdk)){
+            *s=execution3_->rejectGrant(*r,"actual_sdk_version_not_bound");return;}
           if(r->activate&&(accepted_record_hash.empty()||r->acceptance_record_sha256!=accepted_record_hash)){
-            s->reason="physical_acceptance_record_not_bound";return;}
+            *s=execution3_->rejectGrant(*r,"physical_acceptance_record_not_bound");return;}
           *s=execution3_->grant(*r,wall(),execution_health());
         },rmw_qos_profile_services_default,execution_callbacks_);
       execution_permit_=create_subscription<d1monitor::execution3::Permit>(p+"permit",10,
@@ -326,8 +327,15 @@ class Monitor final:public rclcpp::Node {
   void apply_navigation_events(){
     using Events=d1monitor::NavigationEvents;
     const auto events=navigation_events_.take();
-    if(execution3_&&(events&(Events::ConnectionError|Events::UnsafeRobotState|Events::MoveWriteFailure|
-        Events::RobotFault|Events::WorkerStopped|Events::EmergencyStop)))
+    // Before the first grant, an ordinary posture/mode/gear mismatch is
+    // admission readiness, not a failed execution. execution_health() still
+    // rejects grants until a fresh normal/standing/low-speed state is present.
+    // Once an execution was admitted, the same event remains irreversible:
+    // do not clear a real veto or let a new task reuse an uncertain writer.
+    const bool execution_state_veto=execution3_&&!execution3_->executionId().empty()&&
+      (events&Events::UnsafeRobotState);
+    if(execution3_&&(execution_state_veto||(events&(Events::ConnectionError|Events::MoveWriteFailure|
+        Events::RobotFault|Events::WorkerStopped|Events::EmergencyStop))))
       execution3_->fault("sdk_callback_safety_veto",wall());
     const bool was_armed=navigation_.armed;
     if(events&Events::ConnectionError)navigation_.disarm("SDK_connection_error");

@@ -1,11 +1,36 @@
-# 显式启动运动能力，启动后仍未解锁
+# 唯一主线 SDK 启动与执行边界
+
+正式入口是 Web 的“连接机器狗”，随后“启动导航服务”。Web 仅启动数据及导航
+服务；RViz 设置初值、三维目标及任务。当前没有已通过的物理验收记录，Web
+配置为 `planning_only`：可以定位、全局规划、局部规划和跟踪预览，不能执行运动。
+
+SDK 和导航读取同一份 `d1max_nav_ws/deploy/single_floor_release.json`。
+`config/monitor-release` 的 `@mainline` 表示跟随唯一默认发布，不保存另一条过时路径。
+文件缺省时也跟随默认；显式 `D1MAX_MONITOR_RELEASE` 或该文件的绝对路径仍可选择
+已封存包，启动前重新核对封存文件与真正执行的 SDK ELF。正式入口不再加载或
+执行旧 `sdk_bridge_ws/install` 的 SDK。
+SDK 参数也来自同一包的封存 `monitor.yaml`：优先已封存 installed-share 配置，
+否则使用包内已封存的 SDK source snapshot，不读取可变工作区配置。
+
+只读核对最终目录及完整封存（不连接 SDK、不调用 manager、不 source ROS）：
+
+```bash
+/usr/bin/python3 scripts/sdk_motion_startup.py resolve-release
+```
+
+后续具备真实验收记录后，必须同时绑定 Web 的执行用途与 SDK 的物理记录身份。
+不能仅将用途改成 `execution` 或沿用旧运动票据来获得运动许可。
+
+## 历史运动票据入口（不是正式导航入口）
 
 在 `d1max_ros2/foxglove_d1max` 目录执行：
 
 ```bash
 python3 scripts/sdk_motion_startup.py check
-python3 scripts/sdk_motion_startup.py start
 ```
+
+历史 `prepare/start` 与主线 schema-3 grant 互斥，现会在写票据和启动 monitor 前
+明确拒绝。不要用这些入口启动当前主线；下面的票据说明仅保留历史兼容语义。
 
 `start` 会通过已有鉴权的本机 manager 启动**同一个**
 `d1max-monitor-managed.service`，复用原来的 Zenoh、SDK、Foxglove 和进程组管理。
@@ -69,12 +94,12 @@ python3 scripts/sdk_motion_startup.py start
 原有 `start_live_monitor.sh` 的“不提供运动控制”提示描述默认监控模式；显式启动时
 以 SDK monitor 的 `motion-capable, startup DISARMED` 提示及实际状态为准。
 
-## 导航 release 的 schema-3 执行通道（可选，默认关闭）
+## 主线 release 的 schema-3 执行通道（默认连接，运动仍未授权）
 
 导航 v3（BT Owner → Permit/Demand → SDK）只接受已封存 release 中的
-`sdk_monitor_bridge`。启用方式是在 `config/monitor-release` 写一行 release 绝对路径
-（或给 `start_sdk_monitor.sh` 设置 `D1MAX_MONITOR_RELEASE`）。文件与变量都不存在时，
-行为与之前完全相同。启用后：
+`sdk_monitor_bridge`。默认通过 `@mainline` 解析唯一 release；需要显式覆盖时才
+在 `config/monitor-release` 写一行 release 绝对路径（或设置
+`D1MAX_MONITOR_RELEASE`）。解析失败或封存变化会报告原因，不回退旧 install。连接后：
 
 - `start_sdk_monitor.sh` 额外 source release 的 `interfaces`、`sdk` 两个 install；
 - 启动前重算 release 封存清单全部文件的 SHA256，任一变化或 SDK 二进制未封存都拒绝启动；

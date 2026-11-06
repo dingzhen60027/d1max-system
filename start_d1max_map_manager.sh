@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# D1 Max 3D-only map workspace.
+# D1 Max Web workspace. Navigation and robot connections are separate services.
 
 set -euo pipefail
 
@@ -18,11 +18,6 @@ elif [[ -x "$GO2_PYTHON" ]]; then
 else
   echo "ERROR: 找不到带 FastAPI/Uvicorn 的 Python 环境。" >&2
   echo "请按 d1max_ros2/map_manager/README.md 创建 .venv。" >&2
-  exit 1
-fi
-
-if [[ ! -d "${D1MAX_MAPS_ROOT:-/home/dndx/d1max_nav_ws/maps}" ]]; then
-  echo "ERROR: D1 Max maps 目录不存在: ${D1MAX_MAPS_ROOT:-/home/dndx/d1max_nav_ws/maps}" >&2
   exit 1
 fi
 

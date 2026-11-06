@@ -836,7 +836,13 @@ TEST(TrackerWriterCAS, StationaryReentryRequiresOriginalSdkWitnessAndNewCurvePro
     ASSERT_TRUE(gate.core().receiveOdom(body,100.04,10.04));
     auto invalid=proofWire();invalid.sequence=3;invalid.valid=false;gate.validation(invalid,100.04);
     auto holding=g.incumbent;holding.sequence=2;holding.allowed=false;holding.phase="holding";
-    EXPECT_FALSE(gate.permit(holding,100.04,10.04)); // Invalid old geometry is NOT made valid.
+    // Refreshing an incumbent owner's zero-authority lease is independent
+    // from renewing its native collision proof. Admission is not motion.
+    ASSERT_TRUE(gate.permit(holding,100.04,10.04));
+    const auto held=gate.step(100.04,10.04);
+    EXPECT_TRUE(held.hold);EXPECT_FALSE(held.safety_checked);
+    EXPECT_DOUBLE_EQ(held.velocity.linear.x,0.);EXPECT_DOUBLE_EQ(held.velocity.angular.z,0.);
+    EXPECT_EQ(gate.core().trajectoryId(),1);
     g.incumbent=holding;g.candidate.sequence=3;
     g.source_stamp=stamp(100.04);g.valid_until=g.transition_deadline=stamp(100.24);
     g.retain_incumbent_until=g.source_stamp;g.candidate.source_stamp=g.source_stamp;g.candidate.valid_until=g.valid_until;
@@ -973,9 +979,16 @@ TEST(TrackerExecution, ThirtySecondStationaryPreviewCanExecuteOnlyWithCurrentExa
     const double now=current_proof?130.02:130.3;
     auto body=odom(now);ASSERT_TRUE(gate.core().receiveOdom(body,now,now-90.));
     ++p.sequence;p.allowed=true;p.phase="tracking";p.source_stamp=stamp(now);p.valid_until=stamp(now+.2);
-    EXPECT_EQ(gate.permit(p,now,now-90.),current_proof);
+    // Both are fresh leases for already committed geometry; only the
+    // current exact native proof can produce a nonzero motion demand.
+    ASSERT_TRUE(gate.permit(p,now,now-90.));
     const auto output=gate.step(now+.02,now-90.+.02);
-    if(current_proof)EXPECT_GT(output.velocity.linear.x,0.);else EXPECT_TRUE(output.hold);
+    if(current_proof)EXPECT_GT(output.velocity.linear.x,0.);
+    else {
+      EXPECT_TRUE(output.hold);EXPECT_FALSE(output.safety_checked);
+      EXPECT_DOUBLE_EQ(output.velocity.linear.x,0.);EXPECT_DOUBLE_EQ(output.velocity.angular.z,0.);
+      EXPECT_EQ(output.reason,"permission_or_native_proof_expired");
+    }
   }
 }
 TEST(TrackerExecution, NativeUnknownExpiredProofWrongOwnerAndMockLeakCannotCommit) {
@@ -1096,7 +1109,15 @@ TEST(TrackerExecution, RemainingProofIsOnlyForCommittedCurveAndRecomputesArcCove
     if(failure==3)suffix.reverse_margin_m=.1;
     if(failure==4)suffix.valid_start_arc_length=.2;
     gate.validation(suffix,100.01);++p.sequence;p.validation_sequence=2;
-    EXPECT_EQ(gate.permit(p,100.02,10.02),failure==1);
+    ASSERT_TRUE(gate.permit(p,100.02,10.02));
+    ASSERT_TRUE(gate.core().receiveOdom(odom(100.02),100.02,10.02));
+    const auto demand=gate.step(100.02,10.02);
+    if(failure==1) {EXPECT_FALSE(demand.hold);EXPECT_GT(demand.velocity.linear.x,0.);}
+    else {
+      EXPECT_TRUE(demand.hold);EXPECT_FALSE(demand.safety_checked);
+      EXPECT_DOUBLE_EQ(demand.velocity.linear.x,0.);EXPECT_DOUBLE_EQ(demand.velocity.angular.z,0.);
+      EXPECT_EQ(demand.reason,"permission_or_native_proof_expired");
+    }
   }
 }
 TEST(TrackerV2, RemainingDomainIncludesMeasuredBacktrackingNotHighWaterCutoff) {
@@ -1158,8 +1179,13 @@ TEST(TrackerExecution, OlderFreshHeartbeatCanUseExactProofHistoryButNeverMaskNew
   auto next=proofWire();next.sequence=2;gate.validation(next,100.01);
   ++p.sequence;EXPECT_TRUE(gate.permit(p,100.02,10.02));
   next.sequence=3;next.valid=false;gate.validation(next,100.03);
-  ++p.sequence;EXPECT_FALSE(gate.permit(p,100.04,10.04));
-  EXPECT_TRUE(gate.step(100.04,10.04).hold);
+  // A fresh owner heartbeat does not erase the newer invalidation fence.
+  ++p.sequence;ASSERT_TRUE(gate.permit(p,100.04,10.04));
+  ASSERT_TRUE(gate.core().receiveOdom(odom(100.04),100.04,10.04));
+  const auto demand=gate.step(100.04,10.04);
+  EXPECT_TRUE(demand.hold);EXPECT_FALSE(demand.safety_checked);
+  EXPECT_DOUBLE_EQ(demand.velocity.linear.x,0.);EXPECT_DOUBLE_EQ(demand.velocity.angular.z,0.);
+  EXPECT_EQ(demand.reason,"permission_or_native_proof_expired");EXPECT_EQ(gate.core().trajectoryId(),1);
 }
 TEST(TrackerExecution, GeometryPreviewProjectsOnlyNewMeasuredPositionWhileDemandStaysZero) {
   ExecutionContract gate(executionConfig(),"isolated_mock");stage(gate);
@@ -1317,6 +1343,14 @@ wire::MotionDemand ownTurningDemand(ExecutionContract& gate) {
   EXPECT_GT(demand.velocity.linear.x,0.);EXPECT_GT(std::abs(demand.velocity.angular.z),1e-9);
   return demand;
 }
+wire::MotionDemand ownStraightDemand(ExecutionContract& gate) {
+  stage(gate);const auto prepared=gate.prepare(100.,10.);
+  EXPECT_TRUE(prepared&&prepared->accepted);EXPECT_TRUE(gate.permit(permitWire(),100.,10.));
+  EXPECT_TRUE(gate.core().receiveOdom(odom(100.02),100.02,10.02));
+  const auto demand=gate.step(100.02,10.02);
+  EXPECT_GT(demand.velocity.linear.x,0.);EXPECT_NEAR(demand.velocity.angular.z,0.,1e-9);
+  return demand;
+}
 void refreshTurnProofAndOwner(ExecutionContract& gate,double now,double receipt,std::uint64_t sequence) {
   // A 0.6 s measured rest window outlives one 200 ms collision/owner lease.
   // Supply independent fresh exact-curve evidence rather than extending the
@@ -1357,6 +1391,41 @@ TEST(TrackerExecution, OnlyOwnExactFreshBlockedForwardTurnCanRequestDifferentMan
   ASSERT_TRUE(gate.core().receiveOdom(odom(100.30),100.30,10.30));
   const auto no_evidence=gate.step(100.30,10.30);
   EXPECT_TRUE(no_evidence.hold);EXPECT_FALSE(no_evidence.safety_checked);
+}
+
+TEST(TrackerExecution, OwnExactFreshStraightOccupiedReachesNativeDifferentEntryFeedback) {
+  ExecutionContract gate(executionConfig(),"isolated_mock",std::string(64,'f'));
+  const auto demand=ownStraightDemand(gate);const auto feedback=occupiedFor(demand);
+  ASSERT_TRUE(gate.motionValidation(feedback,100.04));
+  EXPECT_STREQ(gate.core().maneuverPhase(),"waiting_executable_entry");
+  const auto forwarded=gate.takeBlockedEntry();ASSERT_TRUE(forwarded);
+  EXPECT_EQ(*forwarded,feedback); // Original proof, never a re-stamped permission.
+  EXPECT_FALSE(gate.takeBlockedEntry());
+  EXPECT_FALSE(gate.motionValidation(feedback,100.04));
+  ASSERT_TRUE(gate.core().receiveOdom(odom(100.06),100.06,10.06));
+  const auto hold=gate.step(100.06,10.06);
+  EXPECT_TRUE(hold.hold);EXPECT_EQ(hold.velocity.linear.x,0.);
+  EXPECT_EQ(hold.velocity.angular.z,0.);EXPECT_TRUE(gate.core().active());
+}
+
+TEST(TrackerExecution, StraightUnknownStaleForeignOrMutatedProofCannotRequestDifferentEntry) {
+  for(int variant=0;variant<8;++variant) {
+    SCOPED_TRACE(variant);
+    ExecutionContract gate(executionConfig(),"isolated_mock",std::string(64,'f'));
+    const auto demand=ownStraightDemand(gate);auto feedback=occupiedFor(demand);double now=100.04;
+    switch(variant) {
+      case 0:feedback.reason="motion_sweep_unknown_or_expired";break;
+      case 1:feedback.reason="motion_evidence_expired_during_check";break;
+      case 2:feedback.version.task_id="foreign";break;
+      case 3:feedback.demand_sequence++;break;
+      case 4:feedback.velocity.linear.x=0.;break;
+      case 5:feedback.velocity.linear.x=-.1;break;
+      case 6:feedback.demand_body_source_stamp.nanosec++;break;
+      case 7:now=100.13;break;
+    }
+    EXPECT_FALSE(gate.motionValidation(feedback,now));EXPECT_FALSE(gate.takeBlockedEntry());
+    EXPECT_STREQ(gate.core().maneuverPhase(),"following");
+  }
 }
 
 TEST(TrackerExecution, UnknownStaleForeignOrMutatedSweepCannotRequestTurn) {

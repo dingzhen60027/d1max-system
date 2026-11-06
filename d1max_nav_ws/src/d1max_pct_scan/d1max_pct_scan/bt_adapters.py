@@ -58,8 +58,8 @@ class NavigationBTAdapters(Node):
             expected_source_map_sha256='', expected_tomogram_sha256='', expected_conditioning_sha256='',
             map_frame='d1max_loc_map', body_frame='d1max_loc_base_link',
             tracking_frame='d1max_loc_tracking', freshness_s=.5, result_timeout_s=60.,
-            worker_status_timeout_s=1.,worker_startup_timeout_s=60.,local_state_enabled=False,
-            cancel_timeout_s=2.5, body_height=.55, goal_xy_tolerance_m=.20,
+            worker_status_timeout_s=1.,worker_startup_timeout_s=60.,readiness_timeout_s=30.,local_state_enabled=False,
+            cancel_timeout_s=2.5, arrival_evidence_timeout_s=4., body_height=.55, goal_xy_tolerance_m=.20,
             goal_z_tolerance_m=.15)
         defaults.update(FOLLOW_DEFAULTS)
         self.p = {k: self.declare_parameter(k, v).value for k, v in defaults.items()}
@@ -72,8 +72,11 @@ class NavigationBTAdapters(Node):
                 or not .1 <= self.p['freshness_s'] <= .5
                 or not .5 <= self.p['worker_status_timeout_s'] <= 1.5
                 or not 10 <= self.p['worker_startup_timeout_s'] <= 60
+                or not 1 <= self.p['readiness_timeout_s'] <= 120
                 or not 5 <= self.p['result_timeout_s'] <= 60
                 or not .5 <= self.p['cancel_timeout_s'] <= 3
+                or not math.isfinite(self.p['arrival_evidence_timeout_s'])
+                or self.p['arrival_evidence_timeout_s'] <= 0
                 or not .1 <= self.p['body_height'] <= 1.
                 or not .05 <= self.p['goal_xy_tolerance_m'] <= .3
                 or not .05 <= self.p['goal_z_tolerance_m'] <= .2):
@@ -95,7 +98,11 @@ class NavigationBTAdapters(Node):
         self.create_subscription(String, PREFIX+'global_status', self.on_worker_status, 5)
         self.create_subscription(String, PREFIX+'scan_bridge_status', self.on_scan_status, 5)
         self.create_subscription(LocalPlanDebug, PREFIX+'native_local_debug', self.on_native_debug, 5)
-        self.create_subscription(String, PREFIX+'reference_refresh_request', self.on_refresh, 5)
+        if not uses_atomic_navigation(self.p):
+            # The typed mainline has one reference manager. Legacy JSON
+            # refreshes must not re-deliver its committed route or own a
+            # competing recovery/retirement episode.
+            self.create_subscription(String, PREFIX+'reference_refresh_request', self.on_refresh, 5)
         if uses_atomic_navigation(self.p):
             from d1max_planning_interfaces.msg import NavigationState,ExecutionPermit,StopReport
             self.create_subscription(NavigationState,'/d1max/localization/navigation/state',self.on_atomic_state,qos_profile_sensor_data)
@@ -221,6 +228,17 @@ class NavigationBTAdapters(Node):
                 or self.execution_permit is not None and message.sequence<=self.execution_permit.sequence):
             return
         self.execution_permit=deepcopy(message); self.permit_received=time.monotonic()
+        slot=self.follow
+        if (slot is not None and slot['cancel'] is None
+                and slot['handle'].request.task_id==v.task_id
+                and message.phase=='terminal' and message.reason=='goal_reached'
+                and slot.get('arrival_wait_started') is None):
+            # The BT owner has already verified local arrival AND measured stop.
+            # Await the independent, source-map final-position evidence for this
+            # same Action/task. Renewed permits cannot renew that bounded wait.
+            slot['arrival_wait_started']=self.permit_received
+            slot['wait_phase']='waiting_final_arrival_evidence'
+            slot['wait_reason']='waiting_fresh_final_global_localization'
 
     def on_stop_report(self,message):
         permit=self.execution_permit
@@ -448,8 +466,9 @@ class NavigationBTAdapters(Node):
         self.reserved_follow = False
         self.follow = dict(handle=handle, future=Future(), context=self.snapshot['context'],
             committed=False, cancel=None, reference_stamp=0., refresh_count=0,
-            refresh_deadline=None, last_refresh_id=0, started=time.monotonic(),
+            last_refresh_id=0, started=time.monotonic(),
             recovery=FollowRecovery(self.p), measured_arrival_stamp=0.,
+            arrival_wait_started=None,
             wait_phase='waiting_reference', wait_reason='waiting_reference_delivery')
         self.executions[id(handle)] = self.follow
         self.arrival.reset()
@@ -638,16 +657,43 @@ class NavigationBTAdapters(Node):
         if hard:
             self.begin_cancel(slot, hard, compute=True)
             return
-        # Heavy map loading has its own startup allowance. Once the worker is
-        # ready, localization wait and computation share one fixed deadline;
-        # transient loss of worker status or eventual dispatch cannot renew it.
-        work_started = slot.get('prework_at')
-        budget = (self.p['result_timeout_s'] if work_started is not None
-                  else self.p.get('worker_startup_timeout_s', 60.))
-        start = work_started if work_started is not None else slot['began']
+        # Completion can wait for fresh localization without re-running PCT.
+        # Only a fresh, correlated worker report may suspend the active-solve
+        # deadline; missing feedback does not provide an unlimited allowance.
+        correlated=(slot['dispatched'] and self.fresh_status('worker')
+            and self.worker.get('last_goal_stamp')==slot['goal_stamp'])
+        if (correlated and not self.worker.get('route_committed')
+                and self.worker.get('validated_route_cached') is True):
+            if slot.get('result_wait_at') is None:
+                slot['result_wait_at']=time.monotonic()
+            slot['wait_phase']='waiting_result_localization'
+        elif slot.get('result_wait_at') is not None:
+            slot['wait_phase']='waiting_result_localization'
+        elif correlated and self.worker.get('waiting_goal_localization') is True:
+            slot['wait_phase']='waiting_localization'
+            slot['worker_waiting_localization']=True
+        elif correlated and self.worker.get('planning') is True:
+            if slot.get('solve_started_at') is None:
+                slot['solve_started_at']=time.monotonic()
+            slot['worker_waiting_localization']=False
+            slot['wait_phase']='computing'
+        if slot.get('result_wait_at') is not None:
+            start,budget,reason=(slot['result_wait_at'],self.p.get('readiness_timeout_s',30.),
+                                'compute_result_readiness_timeout')
+        elif slot.get('worker_waiting_localization'):
+            start,budget,reason=(slot['readiness_at'],self.p.get('readiness_timeout_s',30.),
+                                'compute_localization_wait_timeout')
+        elif slot['dispatched']:
+            start,budget,reason=(slot.get('solve_started_at',slot['dispatched_at']),
+                                self.p['result_timeout_s'],'compute_route_timeout')
+        elif slot.get('readiness_at') is not None:
+            start,budget,reason=(slot['readiness_at'],self.p.get('readiness_timeout_s',30.),
+                                'compute_localization_wait_timeout')
+        else:
+            start,budget,reason=(slot['began'],self.p.get('worker_startup_timeout_s',60.),
+                                'compute_worker_startup_timeout')
         if time.monotonic()-start > budget:
-            self.begin_cancel(slot, 'compute_route_timeout' if work_started is not None
-                              else 'compute_worker_startup_timeout', compute=True)
+            self.begin_cancel(slot,reason,compute=True)
             return
         if not slot['dispatched']:
             # Action-server discovery is not proof that the heavy private PCT
@@ -662,11 +708,12 @@ class NavigationBTAdapters(Node):
                     or self.worker.get('planning') is not False
                     or self.worker.get('pending_worker_start') is not False
                     or self.worker.get('retired_native_workers') != 0
+                    or self.worker.get('native_warmup',{}).get('phase')!='ready'
                     or publisher.get_subscription_count() < 1):
                 slot['wait_phase'], slot['wait_reason'] = 'waiting_worker', 'waiting_private_worker_ready'
                 return
-            if slot.get('prework_at') is None:
-                slot['prework_at'] = time.monotonic()
+            if slot.get('readiness_at') is None:
+                slot['readiness_at']=time.monotonic()
             try:
                 context = self.ready_identity()
             except ValueError as exc:
@@ -680,6 +727,9 @@ class NavigationBTAdapters(Node):
             self.last_goal_stamp = slot['goal_stamp'] = stamp
             slot['context'], slot['dispatched'] = context, True
             slot['dispatched_at']=time.monotonic()
+            # Until a correlated report confirms active native work, this is
+            # delivery, not a started solve. The adapter still bounds silence.
+            slot['wait_phase']='waiting_worker'
             if request.goal_kind == '2d':
                 self.goal_pub.publish(message)
             else:
@@ -728,6 +778,8 @@ class NavigationBTAdapters(Node):
             and (self.scan.get('localization_epoch'), self.scan.get('localization_seed_id')) == context[:2])
 
     def on_refresh(self, message):
+        if uses_atomic_navigation(self.p):
+            return  # Formal reference windows recover without route re-delivery.
         slot = self.follow
         if slot is None or slot['cancel'] or not slot['committed']:
             return
@@ -742,11 +794,10 @@ class NavigationBTAdapters(Node):
                     or self.ready_identity() != slot['context']
                     or not self.local_ready(slot['context'])):
                 return
-            if slot['refresh_deadline'] is None:
-                slot['refresh_deadline'] = time.monotonic()+12.
-            if slot['refresh_count'] >= 20 or time.monotonic() > slot['refresh_deadline']:
-                self.begin_cancel(slot, 'reference_handshake_episode_exhausted', compute=False)
-                return
+            # A request is diagnostic/transport retry, not task authorization.
+            # FollowRecovery owns the configured, monotonic recovery budget;
+            # neither callback count nor a second hard-coded deadline may
+            # abort before that budget or reset it by changing the route stamp.
             slot['last_refresh_id'] = value['request_id']
             slot['refresh_count'] += 1
             self.publish_reference(slot)
@@ -791,7 +842,7 @@ class NavigationBTAdapters(Node):
         if same_reference:
             # Bounded handshake attempts belong to an unaccepted delivery
             # episode, not the lifetime of a long navigation task.
-            slot['refresh_count'], slot['refresh_deadline'] = 0, None
+            slot['refresh_count'] = 0
         endpoint = self.snapshot['route'].poses[-1].pose.position
         goal = self.snapshot['source_snapshot'].payload()
         yaw = self.body_yaw
@@ -806,6 +857,14 @@ class NavigationBTAdapters(Node):
             z_tolerance=self.p['goal_z_tolerance_m'])
         if uses_atomic_navigation(self.p):
             permit=self.execution_permit; stop=self.stop_report
+            arrival_wait=slot.get('arrival_wait_started')
+            if (arrival_wait is not None
+                    and time.monotonic()-arrival_wait>=self.p['arrival_evidence_timeout_s']):
+                # This is an unconfirmed FINAL arrival, not loss of the already
+                # measured physical stop. Retire the algorithms without renewed
+                # motion, re-planning, or a heartbeat-dated arrival certificate.
+                self.begin_cancel(slot,'final_arrival_evidence_timeout',compute=False)
+                return
             # Terminal execution evidence is necessary, not a replacement for
             # current measured arrival. SCAN may already be retired here, so
             # do not depend on local_ready/reference/trajectory availability.
@@ -833,6 +892,15 @@ class NavigationBTAdapters(Node):
         if reached:
             slot['measured_arrival_stamp'] = self.body_source
             self.begin_cancel(slot, 'goal_reached', compute=False)
+            return
+        if uses_atomic_navigation(self.p) and slot.get('arrival_wait_started') is not None:
+            # SCAN can be idle after the final stop; waiting for its trajectory
+            # is then the wrong recovery stage. This budget stops as soon as
+            # real final evidence is latched above; the existing independent
+            # cancellation/retirement fence owns subsequent cleanup.
+            slot['wait_phase']='waiting_final_arrival_evidence'
+            slot['wait_reason']=('waiting_fresh_final_global_localization' if not global_ready
+                else 'waiting_matching_goal_stop_report')
             return
         pending_phase = ''
         if (same_delivery and scan.get('native_reference_received') is True
@@ -899,7 +967,7 @@ class NavigationBTAdapters(Node):
             slot = self.compute
             slot['handle'].publish_feedback(ComputeRoute.Feedback(
                 phase='canceling' if slot['cancel'] else (
-                    'computing' if slot['dispatched'] else slot['wait_phase']),
+                    slot['wait_phase']),
                 reason=slot['cancel']['reason'] if slot['cancel'] else (
                     str(self.worker.get('reason', '')) if slot['dispatched'] else slot['wait_reason'])))
         if self.follow is not None:

@@ -347,7 +347,8 @@ TEST(Tracker, WrongOldZeroFeedbackCannotRequestManeuverAndStaleBodyCannotTurn) {
   EXPECT_FALSE(core.notifyBlockedForwardTurn(2,100.,100.,.1,.2));
   EXPECT_FALSE(core.notifyBlockedForwardTurn(1,99.8,100.,.1,.2));
   EXPECT_FALSE(core.notifyBlockedForwardTurn(1,100.,100.,0.,.2));
-  EXPECT_FALSE(core.notifyBlockedForwardTurn(1,100.,100.,.1,0.));
+  EXPECT_FALSE(core.notifyBlockedForwardTurn(1,100.,100.,0.,0.));
+  EXPECT_FALSE(core.notifyBlockedForwardTurn(1,100.,100.,-.1,0.));
   EXPECT_STREQ(core.maneuverPhase(),"following");
   ASSERT_TRUE(core.notifyBlockedForwardTurn(1,100.,100.,.1,.2));
   EXPECT_FALSE(core.notifyBlockedForwardTurn(1,100.,100.,.1,.2));
@@ -356,6 +357,18 @@ TEST(Tracker, WrongOldZeroFeedbackCannotRequestManeuverAndStaleBodyCannotTurn) {
   core.refreshTaskLease(10.5);const auto output=core.step(100.5,10.5);
   EXPECT_EQ(output.forward,0.);EXPECT_EQ(output.yaw_rate,0.);
   EXPECT_TRUE(core.holding());
+}
+
+TEST(Tracker, ConfirmedStraightEntryRequiresNewCurveNotRepeatedHeadingAlignment) {
+  TrackerCore core(config());prepare(core);
+  ASSERT_TRUE(core.notifyBlockedForwardTurn(1,100.,100.,.1,0.));
+  EXPECT_STREQ(core.maneuverPhase(),"waiting_executable_entry");
+  EXPECT_TRUE(core.active());EXPECT_EQ(core.trajectoryId(),1);
+  const auto hold=core.step(100.,10.);
+  EXPECT_EQ(hold.forward,0.);EXPECT_EQ(hold.yaw_rate,0.);
+  EXPECT_FALSE(core.notifyBlockedForwardTurn(1,100.,100.,.1,0.));
+  EXPECT_FALSE(core.notifyBlockedForwardTurn(1,100.01,100.01,.1,0.));
+  EXPECT_STREQ(core.maneuverPhase(),"waiting_executable_entry");
 }
 
 TEST(Tracker, SameTaskCandidateAndTemporaryProofHoldDoNotResetTurnPhase) {

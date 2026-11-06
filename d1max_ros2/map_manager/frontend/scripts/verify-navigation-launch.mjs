@@ -5,10 +5,13 @@ import {readFile,mkdir} from 'node:fs/promises'
 import {resolve,extname,sep,dirname} from 'node:path'
 import {fileURLToPath} from 'node:url'
 import {chromium} from '/home/dndx/go2_nav/tools/map_manager/frontend/node_modules/playwright-core/index.mjs'
-const root='/home/dndx/d1max_nav_ws/experiments/single_floor_execution_20260927'
-const dist=resolve(dirname(fileURLToPath(import.meta.url)),'../dist'),output=resolve(root,'web_ui')
+const dist=resolve(dirname(fileURLToPath(import.meta.url)),'../dist')
+const output=resolve(dirname(fileURLToPath(import.meta.url)),'../artifacts/navigation-launch')
 const errors=[],forbidden=[],writes=[]
-const state={phase:'stopped',busy:false,release_configured:false,quarantined:false,scope:{floors:['floor1'],stairs_enabled:false}}
+const state={phase:'stopped',busy:false,owned:false,release_configured:false,quarantined:false,
+ can_start:false,can_stop:false,can_view:false,can_connect:false,worker_error:'',startup_error:'',view_error:'',
+ connection:{phase:'running',active:true,health:{sdk_fresh:true,lidar_fresh:true,replay:false}}}
+const snapshot=()=>({...structuredClone(state),snapshot_at_unix:Date.now()/1000})
 const server=createServer(async(req,res)=>{try{
  if(req.method!=='GET'||req.url.startsWith('/api/')){forbidden.push(req.url);res.writeHead(403);return res.end()}
  const path=resolve(dist,'.'+new URL(req.url,'http://fixture').pathname.replace(/\/$/,'/index.html'))
@@ -28,35 +31,45 @@ try {
   if(url.origin!==origin){forbidden.push(r.url());return route.abort()}
   if(url.pathname.startsWith('/api/')){
    if(r.method()==='POST'){
-    assert(['start','stop'].some(x=>url.pathname==='/api/single-floor/'+x));assert.deepEqual(r.postDataJSON(),{})
-    writes.push(url.pathname);state.busy=url.pathname.endsWith('/start');state.phase=state.busy?'running':'stopped'
-    return route.fulfill({json:state})
+    assert(['start','stop'].some(x=>url.pathname==='/api/navigation-session/'+x));assert.deepEqual(r.postDataJSON(),{})
+    writes.push(url.pathname)
+    if(url.pathname.endsWith('/start'))Object.assign(state,{phase:'preparing',busy:true,owned:false,
+     can_start:false,can_stop:true,can_view:false,worker_operation:'start'})
+    else Object.assign(state,{phase:'stopping',busy:true,can_start:false,can_stop:false,can_view:false,worker_operation:'stop'})
+    return route.fulfill({status:202,json:snapshot()})
    }
-   if(url.pathname==='/api/single-floor/overview')return route.fulfill({json:state})
-   if(url.pathname==='/api/live-planning/overview')return route.fulfill({json:{phase:'stopped',busy:false,installed:false,mode:'LIVE_VISUALIZATION_NO_MOTION',motion_enabled:false,connection:{}}})
+   if(url.pathname==='/api/navigation-session/overview')return route.fulfill({json:snapshot()})
    if(url.pathname==='/api/overview')return route.fulfill({json:{items:[],summary:{map_count:0},processing_job:{running:false}}})
    if(url.pathname==='/api/2d/overview')return route.fulfill({json:{versions:[],profiles:[],job:{running:false},invalid:[]}})
-   if(url.pathname==='/api/navigation/overview')return route.fulfill({json:{phase:'stopped',busy:false,installed:true,health:{}}})
    forbidden.push(url.pathname);return route.abort()
   }
   return route.continue()
  })
  await page.goto(origin+'/#/planning')
- await page.getByRole('heading',{name:'定位与规划',exact:true}).waitFor()
- await page.getByRole('button',{name:'导航',exact:true}).click()
  await page.getByRole('heading',{name:'导航',exact:true}).waitFor()
- await page.getByText('版本未激活',{exact:true}).waitFor()
- assert(await page.getByRole('button',{name:'启动服务',exact:true}).isDisabled())
+ const start=page.getByRole('button',{name:'启动',exact:true})
+ const stop=page.getByRole('button',{name:'退出',exact:true})
+ const openRviz=page.getByRole('button',{name:'打开 RViz',exact:true})
+ await page.getByText('未启动',{exact:true}).waitFor()
+ assert(await start.isDisabled());assert(await stop.isDisabled());assert(await openRviz.isDisabled())
  assert.equal(await page.locator('.live-planning-page input,.live-planning-page form,.live-planning-page canvas').count(),0)
- assert.equal(await page.getByRole('button',{name:'连接',exact:true}).count(),0)
- await page.getByText('floor1',{exact:true}).waitFor()
+ assert.equal(await page.getByRole('button',{name:'连接机器狗',exact:true}).count(),1)
+ assert.equal(await page.locator('.live-planning-page button').count(),4)
+ assert.doesNotMatch(await page.locator('.live-planning-page').innerText(),/floor1|版本未激活|启动服务|停止服务/)
  await page.screenshot({path:output+'/unactivated.png',fullPage:true})
- state.release_configured=true;await page.getByRole('button',{name:'刷新导航服务状态'}).click()
- await page.waitForFunction(()=>[...document.querySelectorAll('button')].some(x=>x.textContent==='启动服务'&&!x.disabled))
- await page.getByRole('button',{name:'启动服务',exact:true}).click();await page.getByText('运行中',{exact:true}).waitFor()
- assert(await page.getByRole('button',{name:'启动服务',exact:true}).isDisabled())
- await page.getByRole('button',{name:'停止服务',exact:true}).click();await page.getByText('未启动',{exact:true}).waitFor()
- assert.deepEqual(writes,['/api/single-floor/start','/api/single-floor/stop'])
+ state.release_configured=true;state.can_start=true
+ await page.waitForFunction(()=>[...document.querySelectorAll('button')].some(x=>x.textContent.trim()==='启动'&&!x.disabled))
+ await start.click();await page.getByText('准备中',{exact:true}).waitFor()
+ assert.equal(state.owned,false);assert(await stop.isEnabled());assert(await openRviz.isDisabled())
+ state.phase='starting';state.owned=true
+ await page.getByText('启动中',{exact:true}).waitFor();assert(await openRviz.isDisabled())
+ state.phase='running';state.can_view=true;state.startup_report={phase:'started'}
+ await page.getByText('运行中',{exact:true}).waitFor()
+ assert(await start.isDisabled());assert(await stop.isEnabled());assert(await openRviz.isEnabled())
+ await stop.click();await page.getByText('退出中',{exact:true}).waitFor()
+ Object.assign(state,{phase:'stopped',busy:false,owned:false,can_start:true,can_stop:false,can_view:false})
+ await page.getByText('可启动',{exact:true}).waitFor();assert(await openRviz.isDisabled())
+ assert.deepEqual(writes,['/api/navigation-session/start','/api/navigation-session/stop'])
  assert.deepEqual(errors,[]);assert.deepEqual(forbidden,[])
- console.log('Navigation launch private browser fixture passed: default preview, disabled unactivated profile, mocked start/stop only; no external requests.')
+ console.log('Navigation launch private browser fixture passed: canonical backend flags, 202 acceptance, preparing/starting/ACK and retirement polling; intercepted start/stop only.')
 } finally {if(browser)await browser.close();await new Promise(done=>server.close(done))}

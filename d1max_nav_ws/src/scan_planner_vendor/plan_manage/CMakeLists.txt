@@ -62,6 +62,10 @@ install(PROGRAMS scripts/keypoint_recorder.py
 if(BUILD_TESTING)
   find_package(ament_cmake_gtest REQUIRED)
   find_package(Python3 REQUIRED COMPONENTS Interpreter)
+  add_test(NAME test_heading_startup_no_ros
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test/test_heading_startup_no_ros.py
+      --source ${CMAKE_CURRENT_SOURCE_DIR}/src/planner_manager.cpp
+      --build-dir ${CMAKE_CURRENT_BINARY_DIR}/heading_startup_no_ros)
   add_test(NAME test_async_worker_no_ros
     COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test/test_async_worker_no_ros.py)
   add_test(NAME test_replan_handoff_no_ros
@@ -77,11 +81,22 @@ if(BUILD_TESTING)
       ${CMAKE_CURRENT_SOURCE_DIR}/test/test_reference_callback_no_ros.py
       --source ${CMAKE_CURRENT_SOURCE_DIR}/src/scan_replan_fsm.cpp
       --build-dir ${CMAKE_CURRENT_BINARY_DIR}/reference_callback_no_ros)
+  add_test(NAME test_blocked_entry_target_no_ros
+    COMMAND ${Python3_EXECUTABLE}
+      ${CMAKE_CURRENT_SOURCE_DIR}/test/test_blocked_entry_target_no_ros.py
+      --source ${CMAKE_CURRENT_SOURCE_DIR}/src/scan_replan_fsm.cpp
+      --native-build ${CMAKE_CURRENT_BINARY_DIR}
+      --build-dir ${CMAKE_CURRENT_BINARY_DIR}/blocked_entry_target_no_ros)
   add_test(NAME test_preview_revalidation_no_ros
     COMMAND ${Python3_EXECUTABLE}
       ${CMAKE_CURRENT_SOURCE_DIR}/test/test_preview_revalidation_no_ros.py
       --source ${CMAKE_CURRENT_SOURCE_DIR}/src/scan_replan_fsm.cpp
       --build-dir ${CMAKE_CURRENT_BINARY_DIR}/preview_revalidation_no_ros)
+  add_test(NAME test_manager_curve_evidence_no_ros
+    COMMAND ${Python3_EXECUTABLE}
+      ${CMAKE_CURRENT_SOURCE_DIR}/test/test_manager_curve_evidence_no_ros.py
+      --source ${CMAKE_CURRENT_SOURCE_DIR}/src/planner_manager.cpp
+      --native-build ${CMAKE_CURRENT_BINARY_DIR})
   ament_add_gtest(test_input_contract test/test_input_contract.cpp)
   target_include_directories(test_input_contract PRIVATE include)
   target_link_libraries(test_input_contract Eigen3::Eigen)

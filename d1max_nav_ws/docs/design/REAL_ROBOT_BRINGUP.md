@@ -1,12 +1,13 @@
 # 实机上线步骤
 
-适用于任意已封存的导航 release（下文 `$D1MAX_RELEASE`）。每一阶段通过后再进入下一阶段。
+默认使用 `deploy/single_floor_release.json` 选择的唯一主线；只有明确覆盖时才设置 `$D1MAX_RELEASE`。
+每一阶段通过后再进入下一阶段。
 前一阶段未通过时，后面的步骤不会放行运动：monitor 的 v3 通道和 activation 都会拒绝。
 
 ```bash
-export D1MAX_RELEASE=<已封存 release 的绝对路径>
+python3 tools/diagnostics/robot_preflight.py --files-only  # 不启动、不连网：先核对真实入口配置
 python3 tools/diagnostics/robot_preflight.py            # 全部只读，rc=0 才算就绪
-python3 tools/diagnostics/robot_preflight.py --offline  # 不连狗时只查软件侧
+python3 tools/diagnostics/robot_preflight.py --offline  # 跳过机器人网络，仍检查服务及运动验收绑定
 ```
 
 预检不启动、停止或重启任何服务，不连接 SDK，不发送命令。每个 FAIL 都会给出由谁处理。
@@ -16,8 +17,8 @@ python3 tools/diagnostics/robot_preflight.py --offline  # 不连狗时只查软�
 | 项 | 要求 | 处理 |
 |---|---|---|
 | release | 封存清单全部哈希不变，`activation=false` | 任何改动都要重新封存 |
-| Web | 进程启动时间晚于当前入口脚本 | 经 manager 重启 Web（需批准） |
-| monitor | 受管 monitor 运行的是 `$D1MAX_RELEASE` 里的 `sdk_monitor_bridge` | 在 `foxglove_d1max/config/monitor-release` 写一行 release 路径，经 manager 停止再启动（需批准） |
+| Web | 实际 DATA_ROOT 的私有 activation 与默认包、两个入口哈希一致；后端已加载当前代码 | 经 manager 启动或重启 Web |
+| monitor | 受管 monitor 的 ELF、接口环境和参数来自同一默认包 | `foxglove_d1max/config/monitor-release` 默认为 `@mainline`；不手选旧目录 |
 
 monitor 以 release 模式启动时，所有未设置验收绑定的 activation grant 都会被拒绝。
 这一阶段只能监视，不能运动。详见 `foxglove_d1max/scripts/SDK_MOTION_STARTUP.md`。
@@ -30,11 +31,12 @@ monitor 以 release 模式启动时，所有未设置验收绑定的 activation 
    插上网线后，main 表里的 /24 路由优先级更高，流量会走机器人网卡。
    预检的 `route_*` 必须显示经过机器人网卡；如果还是走代理，关闭代理或给该网段加直连规则。
 4. 重新运行预检，确认 `robot_link`、`route_*`、`tcp_*` 全部为 OK。
-5. 在 Web 定位页启动所选地图的实机定位。检查以下几项：
+5. 通过 Web 的主线导航入口启动当前目的为 `planning_only` 的会话，RViz 给初值并预览规划。
+   不再同时从历史定位页另起一条定位或导航链。检查以下几项：
    - `/d1max/localization/status` 中 `localized=true`；
    - 点云与墙体重合，静止时漂移有界；
    - 前后雷达、MC 数据都新鲜（不是回放）。
-6. 这一阶段不发送目标，也不解锁。
+6. 可以给仅用于预览的目标，但不执行、不解锁；这不是已完成自主导航验收。
 
 ## 2. 物理验收（有人值守、急停在手）
 

@@ -44,12 +44,12 @@ struct SearchEdgeCheck {
 SearchEdgeCheck checkSearchEdge(GridMap &map,const Vector3d &from,const Vector3d &to,
                                double yaw,double step) {
     SearchEdgeCheck result;
-    result.point=to;result.occupancy=map.getInflateOccupancy(to,yaw);
+    result.point=to;result.occupancy=map.getPlanningInflateOccupancy(to,yaw);
     if (result.occupancy!=0) return result;
     result.samples=std::max(1,static_cast<int>(std::ceil((to-from).norm()/(step*.5))));
     for (result.sample=0;result.sample<=result.samples;++result.sample) {
         result.point=from+(to-from)*(static_cast<double>(result.sample)/result.samples);
-        result.occupancy=map.getInflateOccupancy(result.point,yaw);
+        result.occupancy=map.getPlanningInflateOccupancy(result.point,yaw);
         if (result.occupancy!=0) return result;
     }
     return result;
@@ -63,10 +63,11 @@ Vector3d searchCoordinate(const Vector3i &index,const SearchPlane &plane) {
 // Both test the very same eight directed, fully sampled edges as the search.
 bool hasSearchAnchorEdge(GridMap &map,const Vector3i &anchor,bool outgoing,
                          const SearchPlane &plane,const Vector3i &size,
-                         const std::chrono::steady_clock::time_point &deadline) {
+                         const std::chrono::steady_clock::time_point &deadline,
+                         const std::function<std::chrono::steady_clock::time_point()> &now) {
     if (!outgoing && !insideSearchInterior(anchor,size)) return false;
     for (int dx=-1;dx<=1;++dx) for (int dy=-1;dy<=1;++dy) {
-        if (std::chrono::steady_clock::now()>=deadline) return false;
+        if (now()>=deadline) return false;
         if (dx==0 && dy==0) continue;
         Vector3i neighbor(anchor.x()+dx,anchor.y()+dy,0);
         neighbor.z()=plane.zIndex(neighbor.x(),neighbor.y());
@@ -203,7 +204,7 @@ bool AStar::ConvertToIndexAndAdjustStartEndPoints(Vector3d &start_pt, Vector3d &
         return Coord2Index(end_pt,end_idx);
     };
     for (;;) {
-        if (!scan_planner::solveAllowed(solve_budget_) || std::chrono::steady_clock::now()>=deadline) return false;
+        if (!scan_planner::solveAllowed(solve_budget_) || search_now_()>=deadline) return false;
         const int start_occ=checkOccupancy(Index2Coord(start_idx),path_yaw);
         const int end_occ=checkOccupancy(Index2Coord(end_idx),path_yaw);
         if (start_occ==-1 || end_occ==-1) return false;
@@ -212,11 +213,11 @@ bool AStar::ConvertToIndexAndAdjustStartEndPoints(Vector3d &start_pt, Vector3d &
 
         const SearchPlane plane(Index2Coord(start_idx),Index2Coord(end_idx),
                                 center_,CENTER_IDX_,step_size_,start_idx.z());
-        if (!hasSearchAnchorEdge(*grid_map_,start_idx,true,plane,POOL_SIZE_,deadline)) {
+        if (!hasSearchAnchorEdge(*grid_map_,start_idx,true,plane,POOL_SIZE_,deadline,search_now_)) {
             if (!shift_start()) return false;
             continue;
         }
-        if (!hasSearchAnchorEdge(*grid_map_,end_idx,false,plane,POOL_SIZE_,deadline)) {
+        if (!hasSearchAnchorEdge(*grid_map_,end_idx,false,plane,POOL_SIZE_,deadline,search_now_)) {
             if (!shift_end()) return false;
             continue;
         }
@@ -227,12 +228,22 @@ bool AStar::ConvertToIndexAndAdjustStartEndPoints(Vector3d &start_pt, Vector3d &
 ASTAR_RET AStar::AstarSearch(const double step_size, Vector3d start_pt, Vector3d end_pt,
                            bool adjust_endpoints,bool recover_reference_lattice)
 {
-    const auto time_1 = std::chrono::steady_clock::now();
+    last_search_timed_out_=false;
+    const auto time_1 = search_now_();
     const auto deadline=solve_budget_ ? std::min(solve_budget_->deadline(),time_1+std::chrono::milliseconds(200)) :
         time_1+std::chrono::milliseconds(200);
     gridPath_.clear();
     connected_reference_path_.clear();
-    if (!scan_planner::solveAllowed(solve_budget_)) return ASTAR_RET::SEARCH_ERR;
+    const auto search_failure=[&]() {
+        // Cancellation is never recoverable as a compute timeout. Preserve
+        // ASTAR_RET compatibility while distinguishing an exhausted quota
+        // from a geometrically exhausted open set for the planning owner.
+        last_search_timed_out_=(!solve_budget_ ||
+            solve_budget_->stop()!=scan_planner::SolveBudget::Stop::Cancelled) &&
+            search_now_()>=deadline;
+        return ASTAR_RET::SEARCH_ERR;
+    };
+    if (!scan_planner::solveAllowed(solve_budget_)) return search_failure();
     if (!std::isfinite(step_size) || step_size <= 0. ||
         !start_pt.allFinite() || !end_pt.allFinite() ||
         (adjust_endpoints && recover_reference_lattice)) return ASTAR_RET::INIT_ERR;
@@ -251,7 +262,7 @@ ASTAR_RET AStar::AstarSearch(const double step_size, Vector3d start_pt, Vector3d
     bool reference_recovery=false;
     std::vector<std::pair<Vector3i,Vector3i>> reference_pairs;
     for (int attempt=0;;++attempt) {
-    if (!scan_planner::solveAllowed(solve_budget_) || std::chrono::steady_clock::now()>=deadline) return ASTAR_RET::SEARCH_ERR;
+    if (!scan_planner::solveAllowed(solve_budget_) || search_now_()>=deadline) return search_failure();
     Vector3i start_idx, end_idx;
     const double endpoint_yaw=std::atan2(end_pt.y()-start_pt.y(), end_pt.x()-start_pt.x());
     bool endpoints_valid=false;
@@ -301,7 +312,7 @@ ASTAR_RET AStar::AstarSearch(const double step_size, Vector3d start_pt, Vector3d
                     std::vector<Vector3i> result;
                     const int extent=needs_recovery ? 1:0; // at most one XY lattice step
                     for (int dx=-extent;dx<=extent;++dx) for (int dy=-extent;dy<=extent;++dy) {
-                        if (std::chrono::steady_clock::now()>=deadline) return result;
+                        if (search_now_()>=deadline) return result;
                         Vector3i index(nearest.x()+dx,nearest.y()+dy,0);
                         index.z()=original_plane.zIndex(index.x(),index.y());
                         if (!insideSearchInterior(index,POOL_SIZE_)) continue;
@@ -323,10 +334,10 @@ ASTAR_RET AStar::AstarSearch(const double step_size, Vector3d start_pt, Vector3d
                 const auto starts=candidates(start_pt,start_idx,recover_start,true);
                 const auto ends=candidates(end_pt,end_idx,recover_end,false);
                 for (const auto &a:starts) for (const auto &b:ends) {
-                    if (std::chrono::steady_clock::now()>=deadline) break;
+                    if (search_now_()>=deadline) break;
                     const SearchPlane plane(Index2Coord(a),Index2Coord(b),center_,CENTER_IDX_,step_size_,a.z());
-                    if (hasSearchAnchorEdge(*grid_map_,a,true,plane,POOL_SIZE_,deadline) &&
-                        hasSearchAnchorEdge(*grid_map_,b,false,plane,POOL_SIZE_,deadline))
+                    if (hasSearchAnchorEdge(*grid_map_,a,true,plane,POOL_SIZE_,deadline,search_now_) &&
+                        hasSearchAnchorEdge(*grid_map_,b,false,plane,POOL_SIZE_,deadline,search_now_))
                         reference_pairs.emplace_back(a,b);
                 }
                 std::stable_sort(reference_pairs.begin(),reference_pairs.end(),[&](const auto &a,const auto &b) {
@@ -345,14 +356,14 @@ ASTAR_RET AStar::AstarSearch(const double step_size, Vector3d start_pt, Vector3d
     }
     if (!endpoints_valid)
     {
-        if (searched || std::chrono::steady_clock::now()>=deadline) {
+        if (searched || search_now_()>=deadline) {
             RCLCPP_WARN(rclcpp::get_logger("path_searching"),
                 "A-star internal retry stopped: attempt=%d remaining_shifts=%d total_seconds=%.6f",
                 attempt,remaining_shifts,
-                std::chrono::duration<double>(std::chrono::steady_clock::now()-time_1).count());
-            return ASTAR_RET::SEARCH_ERR;
+                std::chrono::duration<double>(search_now_()-time_1).count());
+            return search_failure();
         }
-        if (!adjust_endpoints && exact_start!=3 && grid_map_->requiresObservedFree()) {
+        if (!adjust_endpoints && exact_start!=3 && grid_map_->planningRequiresObservedFree()) {
             // Failure semantics must not mistake the first unknown cell for
             // an entirely empty envelope. Inspect all endpoint cells only on
             // this strict-policy failure path; occupied takes precedence.
@@ -363,7 +374,7 @@ ASTAR_RET AStar::AstarSearch(const double step_size, Vector3d start_pt, Vector3d
             grid_start=grid_map_->inspectInflateOccupancy(Index2Coord(start_idx),endpoint_yaw).state();
             grid_end=grid_map_->inspectInflateOccupancy(Index2Coord(end_idx),endpoint_yaw).state();
         }
-        const auto now=std::chrono::steady_clock::now();
+        const auto now=search_now_();
         static thread_local std::chrono::steady_clock::time_point last_endpoint_warning{};
         if (now-last_endpoint_warning>=std::chrono::seconds(2)) {
             last_endpoint_warning=now;
@@ -450,9 +461,9 @@ ASTAR_RET AStar::AstarSearch(const double step_size, Vector3d start_pt, Vector3d
     };
     while (!openSet_.empty())
     {
-        if (std::chrono::steady_clock::now()>=deadline) {
+        if (search_now_()>=deadline) {
             report_exhaustion("time_limit");
-            return ASTAR_RET::SEARCH_ERR;
+            return search_failure();
         }
         num_iter++;
         const auto entry=openSet_.top();
@@ -556,17 +567,17 @@ ASTAR_RET AStar::AstarSearch(const double step_size, Vector3d start_pt, Vector3d
                     openSet_.push({neighborPtr, neighborPtr->fScore, neighborPtr->gScore});
                 }
             }
-        const auto time_2 = std::chrono::steady_clock::now();
+        const auto time_2 = search_now_();
         if (!scan_planner::solveAllowed(solve_budget_) || time_2>=deadline)
         {
             report_exhaustion("time_limit");
             RCLCPP_WARN(rclcpp::get_logger("path_searching"),
                         "Failed in A-star path search: 0.2 second time limit exceeded");
-            return ASTAR_RET::SEARCH_ERR;
+            return search_failure();
         }
     }
 
-    const auto time_2 = std::chrono::steady_clock::now();
+    const auto time_2 = search_now_();
 
     const double elapsed = std::chrono::duration<double>(time_2 - time_1).count();
     if (elapsed > 0.1)
@@ -576,11 +587,11 @@ ASTAR_RET AStar::AstarSearch(const double step_size, Vector3d start_pt, Vector3d
     report_exhaustion("open_set_exhausted");
     if (reference_recovery) {
         if (static_cast<std::size_t>(attempt+1)<reference_pairs.size() &&
-            std::chrono::steady_clock::now()<deadline) continue;
-        return ASTAR_RET::SEARCH_ERR;
+            search_now_()<deadline) continue;
+        return search_failure();
     }
     if (!adjust_endpoints || remaining_shifts<2 ||
-        std::chrono::steady_clock::now()>=deadline) return ASTAR_RET::SEARCH_ERR;
+        search_now_()>=deadline) return search_failure();
     // A locally viable edge can still lead only into a small isolated pocket.
     // Retry internal helper anchors farther along the ORIGINAL line. Keep the
     // lattice origin, collision checks, total wall budget and shift budget.

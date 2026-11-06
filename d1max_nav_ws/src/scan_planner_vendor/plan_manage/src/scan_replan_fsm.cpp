@@ -30,6 +30,8 @@ namespace scan_planner
     trigger_ = false;
     have_target_ = false;
     have_odom_ = false;
+    odom_source_history_.clear();
+    pending_tracking_progress_.reset();
     have_new_target_ = false;
     rviz_height_ready_ = false;
     go2_execution_frozen_ = false;
@@ -126,9 +128,12 @@ namespace scan_planner
       else RCLCPP_WARN(node_->get_logger(),"No measured braking model: geometry preview only; motion proof unavailable");
       if(braking&&load_parameter<double>(node_,"grid_map.cloud_pose_max_age",.5)>braking->sensor_source_age)
         throw std::runtime_error("map sensor source age exceeds bound execution record");
+      const auto geometry_policy=load_parameter<std::string>(node_,"fsm.trajectory_geometry_policy","observed_free");
+      if(geometry_policy=="official_inflated_geometry"&&planner_manager_->grid_map_->planningRequiresObservedFree())
+        throw std::runtime_error("official trajectory geometry requires official planning collision policy");
       execution_validator_=std::make_unique<ExecutionValidator>(node_,snapshot_pool_,self_inflation_frame_id_,mode,
           self_double_cylinder_radius_+self_double_cylinder_offset_,std::move(braking),
-          load_parameter<bool>(node_,"fsm.writer_handoff_enabled",false));
+          load_parameter<bool>(node_,"fsm.writer_handoff_enabled",false),geometry_policy);
       execution_receipt_pub_=node_->create_publisher<ew::ReferenceReceipt>(
           "/d1max/live_planning/execution/reference_receipt",rclcpp::QoS(2));
       execution_support_sub_=node_->create_subscription<ew::SupportReference>(
@@ -149,8 +154,20 @@ namespace scan_planner
           MeasuredBodyPose body{{p.x,p.y,p.z},Eigen::Quaterniond(q.w,q.x,q.y,q.z),
             rclcpp::Time(m->header.stamp).seconds(),m->header.frame_id};
           double yaw=0.;
-          if(measuredBodyYaw(body,self_inflation_frame_id_,node_->now().seconds(),odom_timeout_,yaw))
-            execution_validator_->body(body);
+          if(measuredBodyYaw(body,self_inflation_frame_id_,node_->now().seconds(),odom_timeout_,yaw)) {
+            try {
+              auto twist=m->twist.twist;
+              const auto linear=odometryVelocityInWorld(
+                {twist.linear.x,twist.linear.y,twist.linear.z},body.orientation,odom_twist_in_body_frame_);
+              const auto angular=odometryVelocityInWorld(
+                {twist.angular.x,twist.angular.y,twist.angular.z},body.orientation,odom_twist_in_body_frame_);
+              twist.linear.x=linear.x();twist.linear.y=linear.y();twist.linear.z=linear.z();
+              twist.angular.x=angular.x();twist.angular.y=angular.y();twist.angular.z=angular.z();
+              execution_validator_->body(body,twist,rclcpp::Time(m->header.stamp).nanoseconds());
+            } catch(const std::invalid_argument&) {
+              // Invalid source velocity cannot become a braking-state sample.
+            }
+          }
         },control_options);
       execution_permit_sub_=node_->create_subscription<ew::ExecutionPermit>(
           "/d1max/live_planning/execution/permit",rclcpp::QoS(2),
@@ -496,7 +513,7 @@ namespace scan_planner
     const int sample_num = std::max(1, static_cast<int>(std::ceil(duration / sample_dt)));
     const Eigen::Vector3d final_pt = global_data.global_traj_.evaluate(duration);
     const Eigen::Vector3d final_prev = global_data.global_traj_.evaluate(duration * (sample_num - 1) / sample_num);
-    const int final_occ = map->getInflateOccupancy(final_pt, estimateYawFromSegment(final_prev, final_pt));
+    const int final_occ = map->getPlanningInflateOccupancy(final_pt, estimateYawFromSegment(final_prev, final_pt));
     if (final_occ <= 0)
       return true;
 
@@ -507,7 +524,7 @@ namespace scan_planner
       const Eigen::Vector3d pt = global_data.global_traj_.evaluate(t);
       const Eigen::Vector3d prev_pt = global_data.global_traj_.evaluate(prev_t);
 
-      if (map->getInflateOccupancy(pt, estimateYawFromSegment(prev_pt, pt)) == 0)
+      if (map->getPlanningInflateOccupancy(pt, estimateYawFromSegment(prev_pt, pt)) == 0)
       {
         const Eigen::Vector3d raw_end = end_pt_;
         end_pt_ = pt;
@@ -639,7 +656,8 @@ namespace scan_planner
       }
       tagged_bspline_pub_->publish(tagged);
       if(execution_validator_&&execution_proposal_&&execution_proposal_->reference.generation==tagged.generation)
-        execution_validator_->candidate(tagged,*execution_proposal_);
+        execution_validator_->candidate(tagged,*execution_proposal_,
+                                        planner_manager_->acceptedHeadingContract());
     }
   }
 
@@ -936,12 +954,18 @@ namespace scan_planner
     Eigen::Quaterniond orientation(msg->pose.pose.orientation.w, msg->pose.pose.orientation.x,
                                    msg->pose.pose.orientation.y, msg->pose.pose.orientation.z);
     Eigen::Vector3d velocity;
+    geometry_msgs::msg::Twist world_twist=msg->twist.twist;
     try
     {
       if (!position.allFinite()) throw std::invalid_argument("non-finite position");
       velocity = odometryVelocityInWorld(
           Eigen::Vector3d(msg->twist.twist.linear.x, msg->twist.twist.linear.y,
                           msg->twist.twist.linear.z), orientation, odom_twist_in_body_frame_);
+      const auto angular=odometryVelocityInWorld(
+          {world_twist.angular.x,world_twist.angular.y,world_twist.angular.z},
+          orientation,odom_twist_in_body_frame_);
+      world_twist.linear.x=velocity.x();world_twist.linear.y=velocity.y();world_twist.linear.z=velocity.z();
+      world_twist.angular.x=angular.x();world_twist.angular.y=angular.y();world_twist.angular.z=angular.z();
       orientation.normalize();
     }
     catch (const std::invalid_argument &error)
@@ -953,6 +977,13 @@ namespace scan_planner
     // Keep the acquisition time: a delayed message must not receive a second
     // freshness lease merely because the callback just ran.
     last_odom_time_ = source_time;
+    odom_source_history_.push_back({source_time.nanoseconds(),position,msg->header.frame_id});
+    // Hard bounds apply even if input rate changes. Never extrapolate from the
+    // newest sample, retain unbounded messages, or refresh a source stamp.
+    while (odom_source_history_.size()>64 ||
+           (!odom_source_history_.empty() && source_time.nanoseconds()-
+            odom_source_history_.front().source_ns>1000000000LL))
+      odom_source_history_.pop_front();
     odom_pos_(0) = msg->pose.pose.position.x;
     odom_pos_(1) = msg->pose.pose.position.y;
     odom_pos_(2) = msg->pose.pose.position.z;
@@ -974,9 +1005,15 @@ namespace scan_planner
         self_inflation_frame_id_,odom_timeout_);
     planner_manager_->setMeasuredBodyVelocity(velocity);
     if(execution_validator_) execution_validator_->body(
-      MeasuredBodyPose{position,orientation,source_time.seconds(),msg->header.frame_id});
+      MeasuredBodyPose{position,orientation,source_time.seconds(),msg->header.frame_id},
+      world_twist,source_time.nanoseconds());
 
     have_odom_ = true;
+    if (pending_tracking_progress_) {
+      const auto pending=pending_tracking_progress_;
+      pending_tracking_progress_.reset();
+      consumeTrackingProgress(pending);
+    }
     publishSelfInflationMarker();
     if (navi_mode_ == NAVI_MODE::PRESET_TARGET && !preset_started_)
     {
@@ -1155,8 +1192,6 @@ namespace scan_planner
           reseed->trajectory_id,reseed->reason.c_str(),rclcpp::Time(reseed->body_source_stamp).nanoseconds());
       }
     }
-    if(force_visible_side_target_&&!blocked_entry_replan_pending_&&
-       (odom_pos_-blocked_entry_position_).norm()>=.3)force_visible_side_target_=false;
     if(blocked_entry_replan_pending_) {
       if(!periodicReplanDue(node_->now().seconds(),last_replan_time_.seconds(),
           std::max(.5,failed_replan_cooldown_)))return;
@@ -1479,7 +1514,7 @@ namespace scan_planner
     const bool evidence_dependent=reason=="waiting_sensor_map"||reason=="waiting_recheck"||
         reason=="waiting_observed_space"||reason=="failed_final_collision"||
         reason=="failed_current_validation"||reason=="blocked_executable_entry"||
-        reason=="waiting_observed_side_target"||reason=="visible_side_target_budget_exhausted";
+        reason=="waiting_observed_side_target"||reason=="waiting_side_target"||reason=="visible_side_target_budget_exhausted";
     const bool new_supported_map=evidence_dependent &&
         map->latestCloudStamp()>failed_map_stamp_ &&
         map->integratedRaySourceStamp(0)>failed_ray_stamps_[0] &&
@@ -1592,7 +1627,8 @@ namespace scan_planner
     if (go2_execution_frozen_ || have_new_target_) return;
 
     if(execution_validator_) {
-      if(const auto boundary=execution_validator_->committedBoundary(odom_pos_,node_->now().seconds())) {
+      if(const auto boundary=execution_validator_->committedBoundary(
+          odom_pos_,odom_vel_,last_odom_time_.nanoseconds(),node_->now().seconds())) {
         start_vel_=boundary->velocity;start_acc_=boundary->acceleration;
       }
       return;
@@ -1637,12 +1673,37 @@ namespace scan_planner
   void SCANReplanFSM::trackingProgressCallback(
       const d1max_planning_interfaces::msg::TrackingProgress::ConstSharedPtr &msg)
   {
+    if (!msg) return;
     if(execution_validator_)execution_validator_->progress(*msg);
+    consumeTrackingProgress(msg);
+  }
+
+  std::optional<Eigen::Vector3d> SCANReplanFSM::odometryPositionAtSource(
+      std::int64_t source_ns,const std::string &frame) const
+  {
+    const auto next=std::lower_bound(odom_source_history_.begin(),odom_source_history_.end(),
+      source_ns,[](const OdomSourceSample& sample,std::int64_t stamp){return sample.source_ns<stamp;});
+    if (next==odom_source_history_.end() || next->frame!=frame) return {};
+    if (next->source_ns==source_ns) return next->position;
+    if (next==odom_source_history_.begin()) return {};
+    const auto previous=std::prev(next);
+    const auto gap=next->source_ns-previous->source_ns;
+    // Only interpolate between nearby, actually acquired samples in the same
+    // frame. A missing bracket is waiting evidence, not an invented pose.
+    if (previous->frame!=frame || gap<=0 || gap>100000000LL) return {};
+    const double alpha=static_cast<double>(source_ns-previous->source_ns)/static_cast<double>(gap);
+    return (1.-alpha)*previous->position+alpha*next->position;
+  }
+
+  void SCANReplanFSM::consumeTrackingProgress(
+      const d1max_planning_interfaces::msg::TrackingProgress::ConstSharedPtr &msg)
+  {
     const auto &identity=reference_metadata_;
     const double age=(node_->now()-rclcpp::Time(msg->header.stamp)).seconds();
     if (!msg->valid && msg->session_id==navigation_session_id_ &&
         msg->generation==reference_generation_ && msg->trajectory_id==accepted_curve_id_) {
       tracking_progress_.reset();
+      pending_tracking_progress_.reset();
       return;
     }
     if (!have_odom_ || !msg->valid || msg->session_id!=navigation_session_id_ ||
@@ -1662,8 +1723,7 @@ namespace scan_planner
          msg->anchor_id.empty() || !msg->context_sequence)) return;
     const Eigen::Vector3d measured(msg->pose.position.x,msg->pose.position.y,msg->pose.position.z);
     const auto &curve=planner_manager_->local_data_;
-    if (!measured.allFinite() || msg->curve_time>curve.duration_ ||
-        (measured-odom_pos_).norm()>planner_manager_->grid_map_->getResolution()*.25) return;
+    if (!measured.allFinite() || msg->curve_time>curve.duration_) return;
     if (tracking_progress_ && tracking_progress_->trajectory_id==msg->trajectory_id) {
       if (rclcpp::Time(msg->header.stamp)<=rclcpp::Time(tracking_progress_->header.stamp) ||
           msg->s_committed<tracking_progress_->s_committed ||
@@ -1675,6 +1735,19 @@ namespace scan_planner
       if (msg->arc_length-tracking_progress_->arc_length>
           planner_manager_->pp_.max_vel_*dt+.10) return;
     }
+    const auto source_ns=rclcpp::Time(msg->header.stamp).nanoseconds();
+    const auto paired=odometryPositionAtSource(source_ns,msg->header.frame_id);
+    if (!paired) {
+      // Progress may reach this callback before its corresponding odometry.
+      // One latest pending message is retried when real odometry arrives.
+      if (!pending_tracking_progress_ || source_ns>
+          rclcpp::Time(pending_tracking_progress_->header.stamp).nanoseconds())
+        pending_tracking_progress_=msg;
+      return;
+    }
+    if ((measured-*paired).norm()>planner_manager_->grid_map_->getResolution()*.25) return;
+    if (pending_tracking_progress_ && rclcpp::Time(pending_tracking_progress_->header.stamp)<=
+        rclcpp::Time(msg->header.stamp)) pending_tracking_progress_.reset();
     tracking_progress_=*msg;
   }
 
@@ -1824,7 +1897,7 @@ namespace scan_planner
       else if (nativeResourceWait(local_target_query_debug_.reason))
         last_attempt_failure_phase_=local_target_query_debug_.reason;
       if (request_budget->allowed() && !nativeResourceWait(last_attempt_failure_phase_) &&
-          planner_manager_->grid_map_->requiresObservedFree() &&
+          planner_manager_->grid_map_->planningRequiresObservedFree() &&
           planner_manager_->grid_map_->unknownCollisionQueries()>0)
         last_attempt_failure_phase_="waiting_observed_space";
       const auto &query=local_target_query_debug_;
@@ -2151,7 +2224,7 @@ namespace scan_planner
             // Test both centers first: the grid's occupied front center would
             // otherwise mask an out-of-map rear center due to short-circuiting.
             if (!map->isInMap(front) || !map->isInMap(rear)) return -1;
-            return map->getInflateOccupancy(point,yaw);
+            return map->getPlanningInflateOccupancy(point,yaw);
           });
       std::vector<Eigen::Vector3d> visible_side_reference;
       if(force_visible_side_target_) {
@@ -2159,10 +2232,9 @@ namespace scan_planner
       }
       if(!selection.valid&&execution_validator_&&solveAllowed(budget)) {
         const auto support=execution_validator_->planningSupport(executionVersion(reference_metadata_));
-        const auto braking=execution_validator_->brakingModel();
         double measured_yaw=0.;
         const MeasuredBodyPose measured{start_pt_,odom_orient_,last_odom_time_.seconds(),self_inflation_frame_id_};
-        if(support&&braking&&measuredBodyYaw(measured,self_inflation_frame_id_,node_->now().seconds(),odom_timeout_,measured_yaw)) {
+        if(support&&measuredBodyYaw(measured,self_inflation_frame_id_,node_->now().seconds(),odom_timeout_,measured_yaw)) {
           auto snapshot=snapshot_pool_.acquireSolver(*planner_manager_->grid_map_,
               node_->now().nanoseconds(),budget->deadline());
           if(!snapshot){selection.reason="waiting_snapshot_slot";local_target_query_debug_=selection;return false;}
@@ -2171,9 +2243,16 @@ namespace scan_planner
           // exclusive fair lease exists; it is capped by original remaining.
           const auto side_budget=std::make_shared<SolveBudget>(std::chrono::milliseconds(80),
               []{return SolveBudget::Clock::now();},budget);
-          snapshot->requireObservedSnapshot();
-          auto visible=selectVisibleSideTarget(discrete_reference_,start_pt_,measured_yaw,discrete_progress_,
-              planning_horizon_,*support,*snapshot,self_inflation_frame_id_,side_budget,1024,&*braking);
+          auto visible=selectPlanningSideTarget(discrete_reference_,start_pt_,measured_yaw,discrete_progress_,
+              planning_horizon_,*support,*snapshot,self_inflation_frame_id_,side_budget,1024);
+          // A matched occupied command proof requests ONE bounded alternative,
+          // not a permanent ban on the unchanged route. Consume only after the
+          // real side search ran: resource acquisition above can still retry.
+          // If a transient obstacle disappears while we are stationary, the
+          // next changed-environment solve must again consider the normal
+          // reference/A* entry. Independent command evidence still rejects a
+          // persistent occupied or unknown sweep; this grants no motion lease.
+          force_visible_side_target_=false;
           if(visible.target.valid) {
             if(reserved_snapshot)*reserved_snapshot=std::move(snapshot);
             visible_side_reference=std::move(visible.support_path);
@@ -2250,7 +2329,7 @@ namespace scan_planner
     }
 
     auto targetOccupancy = [&](const Eigen::Vector3d &pt) {
-      return planner_manager_->grid_map_->getInflateOccupancy(pt, estimateYawFromSegment(odom_pos_, pt));
+      return planner_manager_->grid_map_->getPlanningInflateOccupancy(pt, estimateYawFromSegment(odom_pos_, pt));
     };
 
     if (targetOccupancy(local_target_pt_) != 0)

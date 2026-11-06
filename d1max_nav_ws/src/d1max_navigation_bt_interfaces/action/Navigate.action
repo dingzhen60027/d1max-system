@@ -4,6 +4,11 @@ string goal_kind
 geometry_msgs/PoseStamped goal
 bool has_goal_yaw
 float64 goal_yaw_tolerance_rad
+# One explicit goal submission may also request execution of the route built
+# for that goal. False keeps the existing preview/ConfirmExecution workflow.
+# The BT consumes this intent once only after native/tracker preparation;
+# startup, localization recovery and display reconnect are not new requests.
+bool request_execution
 ---
 uint32 schema_version
 bool success

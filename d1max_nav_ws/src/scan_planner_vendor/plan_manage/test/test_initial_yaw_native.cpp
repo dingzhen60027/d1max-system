@@ -22,6 +22,11 @@ struct GridMapTestAccess {
     map.md_.occupancy_buffer_[map.toAddress(cell)]=state==1 ? 2. : -1.01;
     map.observed_cylinder_cache_.clear();++map.occupancy_revision_;
   }
+  static void unknown(GridMap &map,const Eigen::Vector3d &point) {
+    Eigen::Vector3i cell;map.posToIndex(point,cell);
+    map.md_.occupancy_buffer_[map.toAddress(cell)]=-1.01;
+    map.observed_cylinder_cache_.clear();++map.occupancy_revision_;
+  }
   static GridMap::Ptr officialPreview() {
     auto map=observedFree();auto &p=map->mp_;auto &d=map->md_;
     p.resolution_=.05;p.resolution_inv_=20.;map->updateMapBoundaryFromIndex();
@@ -144,7 +149,7 @@ TEST(InitialYawNative, IncompleteProofIsNotAClaimOfOccupiedGeometry) {
     const bool clear=scan_planner::wholeCurveCollisionFree(curve,.05,.49,
         [&](const Eigen::Vector3d &p,double yaw) {
           const int value=map->getInflateOccupancy(p,yaw);
-          occupied_witness=occupied_witness || value>0;
+          occupied_witness=occupied_witness || value==1;
           return value;
         },body,"map",10.,.5,budget,0.,0.,previewHeading());
     return scan_planner::curveCheckEvidence(clear,occupied_witness);
@@ -162,4 +167,21 @@ TEST(InitialYawNative, IncompleteProofIsNotAClaimOfOccupiedGeometry) {
   map->setOccupied({.025,.025,.225});
   EXPECT_EQ(inspect(previewBody(),50000),Evidence::Occupied);
   EXPECT_EQ(inspect(previewBody(),1),Evidence::Uncertified);
+}
+
+TEST(InitialYawNative, UnknownEvidenceIsNotAnOccupiedWitness) {
+  auto map=GridMapTestAccess::observedFree();auto curve=previewCurve(0.);
+  GridMapTestAccess::unknown(*map,{.025,.025,.55});
+  ASSERT_EQ(map->getInflateOccupancy({.025,.025,.55},0.),2);
+  const auto inspect=[&]() {
+    bool occupied_witness=false;
+    const bool clear=scan_planner::wholeCurveCollisionFree(curve,.05,.49,
+        [&](const Eigen::Vector3d &p,double yaw) {
+          const int value=map->getInflateOccupancy(p,yaw);
+          occupied_witness=occupied_witness || value==1;return value;
+        },previewBody(),"map",10.,.5,50000,0.,0.,previewHeading());
+    return scan_planner::curveCheckEvidence(clear,occupied_witness);
+  };
+  EXPECT_EQ(inspect(),scan_planner::CurveCheckEvidence::Uncertified);
+  EXPECT_TRUE(map->isUnknown(Eigen::Vector3d(.025,.025,.55)));
 }

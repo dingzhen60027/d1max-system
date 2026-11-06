@@ -75,6 +75,7 @@ namespace scan_planner
       return checkWholeTrajectoryCollision(trajectory, 5000, .008, false, measured_curve_time);
     }
     bool hasPreviewHeadingContract() const { return accepted_heading_contract_.preview_only_enabled; }
+    const SplineHeadingContract &acceptedHeadingContract() const { return accepted_heading_contract_; }
     double previewCurveProgressTime() const { return preview_curve_progress_time_; }
     CurveCheckEvidence recheckPreviewTrajectory() {
       // A manually moved robot in no-motion preview still has real measured
@@ -146,7 +147,7 @@ namespace scan_planner
     bool checkWholeTrajectoryCollision(UniformBspline &position_traj,
         std::size_t query_budget=200000, double wall_budget_seconds=0., bool diagnostic=true,
         double measured_curve_time=0., const SplineHeadingContract &heading_contract={},
-        CurveCheckEvidence *evidence=nullptr);
+        CurveCheckEvidence *evidence=nullptr, int *query_failure_state=nullptr);
 
     void reparamBspline(UniformBspline &bspline, vector<Eigen::Vector3d> &start_end_derivative, double ratio, Eigen::MatrixXd &ctrl_pts, double &dt,
                         double &time_inc);

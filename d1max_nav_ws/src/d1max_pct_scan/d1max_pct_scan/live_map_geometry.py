@@ -117,7 +117,17 @@ def build_layers(session):
         'estimated_inverse_not_tf': True, 'motion_enabled': False}
     floor = session.get('current_floor', 'floor1')
     if identity:
-        metadata.update(estimated_inverse_not_tf=False,geometry_operation='source_identity')
+        # Bind what RViz publishes to the exact planning package. A same-frame
+        # cloud or a cleaned PCD elsewhere is not evidence of deployment.
+        from .source_route import digest_file
+        cleanup = bridge.manifest.get('source_record_cleanup', {})
+        metadata.update(estimated_inverse_not_tf=False,geometry_operation='source_identity',
+            planning_manifest=str(bridge.manifest_path),
+            planning_manifest_sha256=digest_file(bridge.manifest_path),
+            original_source_sha256=bridge.manifest['source_sha256'],
+            retained_source_records=bridge.manifest.get('retained_points'),
+            reviewed_cleanup_enabled=cleanup.get('enabled', False),
+            reviewed_removed_source_records=cleanup.get('removed_points', 0))
         if len(original):
             metadata['initial_goal_xyz']=original[len(original)//2].tolist()
         return original,costs[ids],red,metadata

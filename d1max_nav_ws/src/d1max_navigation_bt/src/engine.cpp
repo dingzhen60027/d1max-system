@@ -181,12 +181,13 @@ public:
                      Runtime& runtime)
       : BT::StatefulActionNode(name, config), runtime_(runtime) {}
   static BT::PortsList providedPorts() {
-    return {BT::InputPort<double>("timeout_s", 10.0, "Route work end-to-end steady-clock deadline; pauses included"),
-      BT::InputPort<double>("startup_timeout_s",60.0,"Separate heavy worker prewarm deadline")};
+    return {BT::InputPort<double>("timeout_s", 10.0, "Active route computation steady-clock deadline"),
+      BT::InputPort<double>("startup_timeout_s",60.0,"Separate heavy worker prewarm deadline"),
+      BT::InputPort<double>("readiness_timeout_s",30.0,"Bounded localization admission or result commit wait")};
   }
   BT::NodeStatus onStart() override {
     started_ = runtime_.now;
-    for(const auto* port:{"timeout_s","startup_timeout_s"}) {
+    for(const auto* port:{"timeout_s","startup_timeout_s","readiness_timeout_s"}) {
       const auto timeout=getInput<double>(port).value();
       if(!std::isfinite(timeout)||timeout<=0.)throw std::invalid_argument("invalid_global_route_deadline");
     }
@@ -203,11 +204,15 @@ public:
       runtime_.explain(*this,result.reason);return result.status;
     }
     const auto timing=runtime_.backend->routeTiming(runtime_.task);
-    const auto since=timing.waiting_worker?started_:timing.work_started.value_or(started_);
-    const auto timeout=getInput<double>(timing.waiting_worker?"startup_timeout_s":"timeout_s").value();
+    const auto since=timing.waiting_readiness?timing.readiness_started.value_or(started_):
+      timing.waiting_worker?started_:timing.work_started.value_or(started_);
+    const auto port=timing.waiting_readiness?"readiness_timeout_s":
+      timing.waiting_worker?"startup_timeout_s":"timeout_s";
+    const auto timeout=getInput<double>(port).value();
     if (std::chrono::duration<double>(runtime_.now-since).count() >= timeout) {
       runtime_.backend->haltRoute(runtime_.task);
-      runtime_.explain(*this,timing.waiting_worker?"global_worker_startup_timeout":"global_route_timeout");
+      runtime_.explain(*this,timing.waiting_readiness?"global_route_readiness_timeout":
+        timing.waiting_worker?"global_worker_startup_timeout":"global_route_timeout");
       return BT::NodeStatus::FAILURE;
     }
     runtime_.explain(*this, result.reason.empty() ? "computing_global_route" : result.reason);

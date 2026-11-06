@@ -1,0 +1,8 @@
+# One operational policy for the existing navigation mainline.
+# These are task/recovery budgets, not collision or movement permissions.
+global_route_timeout_s: 10.0
+worker_startup_timeout_s: 60.0
+recovery_timeout_s: 30.0
+stable_duration_s: 0.6
+component_callback_timeout_s: 1.5
+dependency_heartbeat_timeout_s: 1.5

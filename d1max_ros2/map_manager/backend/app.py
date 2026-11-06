@@ -46,6 +46,7 @@ from .navigation import NavigationRuntime, create_navigation_router
 from .bags.runtime import BagRecorder
 from .bags.library import BagLibrary
 from .bags.api import create_bag_router
+from .remote_application import RemoteApplication, create_remote_router
 
 
 APP_ROOT = Path(__file__).resolve().parents[1]
@@ -1018,7 +1019,10 @@ app.add_middleware(
 @app.get("/api/health")
 def health() -> dict[str, Any]:
     return {
-        "ok": MAPS_ROOT.is_dir(),
+        # Liveness belongs to this HTTP service, not an optional map library.
+        # Navigation still validates its selected map before launching.
+        "ok": True,
+        "maps_available": MAPS_ROOT.is_dir(),
         "project_root": str(PROJECT_ROOT),
         "nav_root": str(NAV_ROOT),
         "maps_root": str(MAPS_ROOT),
@@ -1227,7 +1231,8 @@ def start_processing(request: ProcessingRequest) -> dict[str, Any]:
             raise HTTPException(status_code=409, detail="已有点云处理任务正在运行")
         if grid_workspace.job.get("running"):
             raise HTTPException(status_code=409, detail="2D 生成任务运行中，请完成后再处理点云")
-        if localization_runtime.pinned_id or navigation_runtime.snapshot()['busy']:
+        if (localization_runtime.pinned_id or navigation_runtime.snapshot()['busy']
+                or navigation_session_runtime.snapshot()['busy']):
             raise HTTPException(status_code=409, detail="定位或导航运行中，请先停止再处理点云")
         if runtime_manager.snapshot().get('status') in MAPPING_BUSY:
             raise HTTPException(status_code=409, detail='建图运行中，请先完成建图再处理点云')
@@ -1295,7 +1300,8 @@ def start_runtime(request: RuntimeRequest) -> dict[str, Any]:
         with processing_lock:
             if bag_recorder.snapshot()['busy']:
                 raise HTTPException(status_code=409, detail='请先结束 Bag 录制并等待保存完成')
-            if localization_runtime.pinned_id or navigation_runtime.snapshot()['busy']:
+            if (localization_runtime.pinned_id or navigation_runtime.snapshot()['busy']
+                    or navigation_session_runtime.snapshot()['busy']):
                 raise HTTPException(status_code=409, detail="请先停止定位和导航，再启动建图")
             if processing_job.get('running') or grid_workspace.overview()['job'].get('running'):
                 raise HTTPException(status_code=409, detail='请先等待地图处理任务结束')
@@ -1358,12 +1364,12 @@ async def unhandled_error(_, exc: Exception) -> JSONResponse:
     return JSONResponse(status_code=500, content={"detail": str(exc)})
 
 
-app.include_router(create_router(grid_workspace, find_item, processing_lock, lambda: processing_job.get("running", False) or bool(localization_runtime.pinned_id) or navigation_runtime.snapshot()['busy'] or runtime_manager.snapshot().get('status') in MAPPING_BUSY))
+app.include_router(create_router(grid_workspace, find_item, processing_lock, lambda: processing_job.get("running", False) or bool(localization_runtime.pinned_id) or navigation_runtime.snapshot()['busy'] or navigation_session_runtime.snapshot()['busy'] or runtime_manager.snapshot().get('status') in MAPPING_BUSY))
 app.include_router(create_localization_router(localization_runtime, grid_workspace, processing_lock, lambda: processing_job.get("running", False) or runtime_manager.snapshot().get("status") in MAPPING_BUSY or bag_recorder.snapshot()['busy'] or navigation_session_runtime.snapshot()['busy']))
 app.include_router(create_navigation_router(navigation_runtime, grid_workspace, processing_lock,
     lambda: processing_job.get('running', False) or runtime_manager.snapshot().get('status') in MAPPING_BUSY or bag_recorder.snapshot()['busy'] or navigation_session_runtime.snapshot()['busy']))
 app.include_router(create_bag_router(bag_library, bag_recorder, processing_lock,
-    lambda: bool(localization_runtime.pinned_id) or navigation_runtime.snapshot()['busy'] or runtime_manager.snapshot().get('status') in MAPPING_BUSY))
+    lambda: bool(localization_runtime.pinned_id) or navigation_runtime.snapshot()['busy'] or navigation_session_runtime.snapshot()['busy'] or runtime_manager.snapshot().get('status') in MAPPING_BUSY))
 app.include_router(create_live_planning_router(live_planning_runtime, processing_lock, grid_workspace.lock,
     lambda: bool(processing_job.get('running')) or bool(grid_workspace.job.get('running'))
     or runtime_manager.snapshot().get('status') in MAPPING_BUSY or bag_recorder.snapshot()['busy']
@@ -1381,10 +1387,22 @@ def navigation_session_other_busy():
 
 app.include_router(create_navigation_session_router(navigation_session_runtime, processing_lock, navigation_session_other_busy))
 app.include_router(create_single_floor_router(navigation_session_runtime, processing_lock, navigation_session_other_busy))
+app.include_router(create_remote_router(RemoteApplication()))
+
+class RevalidatingHtmlStaticFiles(StaticFiles):
+    """Revalidate HTML entrypoints without changing hashed asset caching."""
+
+    def file_response(self, full_path, stat_result, scope, status_code=200):
+        response = super().file_response(full_path, stat_result, scope, status_code)
+        if Path(full_path).suffix.lower() in {".html", ".htm"}:
+            # Set this after conditional handling so 304 responses carry it too.
+            response.headers["Cache-Control"] = "no-cache"
+        return response
+
 
 DIST_ROOT = APP_ROOT / "frontend" / "dist"
 if DIST_ROOT.is_dir():
-    app.mount("/", StaticFiles(directory=DIST_ROOT, html=True), name="frontend")
+    app.mount("/", RevalidatingHtmlStaticFiles(directory=DIST_ROOT, html=True), name="frontend")
 else:
     @app.get("/")
     def no_frontend() -> dict[str, str]:

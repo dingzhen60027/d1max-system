@@ -27,6 +27,10 @@ float64 checked_goal_yaw
 float64 valid_start_time
 float64 valid_start_arc_length
 string frame_id
+# observed_free: raw evidence across the checked curve envelope (legacy).
+# official_inflated_geometry: native SCAN twin-cylinder obstacle geometry.
+# Neither certifies the actual command/braking sweep: nonzero execution must
+# additionally bind an independent MotionValidation to the exact demand.
 string collision_policy
 string transport_mode
 string reason

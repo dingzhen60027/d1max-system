@@ -3,7 +3,8 @@
 
 This is a local integrity manifest, not physical acceptance or deployment.
 Run after building the application without symlinks and sourcing all overlays.
-An existing seal is never overwritten; make a new version to update a release.
+An existing seal is never overwritten; archive it before resealing the selected
+package after a complete build. Resealing is not physical motion acceptance.
 The release names its manifest and default map in <release>/release.json,
 which is itself sealed; the entry script reads it instead of a fixed revision.
 """
@@ -26,6 +27,41 @@ def elf_environment(path, native, native_environment):
     path = Path(path).resolve()
     roots = (Path(native['native_lib_dir']).resolve(), Path(native['gtsam_lib_dir']).resolve())
     return native_environment if any(path.is_relative_to(root) for root in roots) else None
+
+
+def localization_build_claim(prefix):
+    if prefix is None:
+        return 'external_selected_runtime'
+    provenance = json.loads((Path(prefix).parent/'runtime_copy_provenance.json').read_text())
+    # Initial dependencies were copied unchanged. A later native component
+    # rebuild must not keep that historical claim for the updated bundle.
+    return ('source_rebuild_with_runtime_copy' if provenance.get('rebuilt_packages')
+            else 'same_byte_copy_not_recompiled')
+
+
+def navigation_launch_bindings(app_root):
+    """Bind navigation dispatch, not the independently deployed Web shell.
+
+    The manifest must reject changed navigation/SDK launch code. General app
+    routes and content-hashed frontend chunks are not navigation artifacts:
+    editing a map page or adding a remote-control launcher must not invalidate
+    an otherwise unchanged navigation package. Web route registration is
+    checked by the Web application's own startup/route tests.
+    """
+    root = Path(app_root)
+    return {relative: root / relative for relative in (
+        'map_manager/backend/navigation.py',
+        'map_manager/backend/single_floor.py',
+        'map_manager/backend/mainline_release.py',
+        'map_manager/backend/mainline_views.py',
+        'map_manager/backend/navigation_session.py',
+        'foxglove_d1max/scripts/start_sdk_monitor.sh',
+        'foxglove_d1max/scripts/sdk_motion_startup.py',
+        'foxglove_d1max/scripts/monitor_health.py',
+        'foxglove_d1max/config/monitor-release',
+        'foxglove_d1max/config/manager.json',
+        'd1max_ros2_env.sh',
+    )}
 
 
 def main():
@@ -101,6 +137,15 @@ def main():
         for path in root.rglob('*'):
             if path.is_file() and path.suffix in ('.so','.xml','.rviz','.yaml'):add(path)
     add(paths.app_root()/'foxglove_d1max/config/zenoh-live.json5')
+    # The graph is not a complete local deployment if the external Web/SDK
+    # dispatcher can silently select an older ELF or refuse the current name.
+    # Bind actual launch code as external dependencies, not private activation
+    # (which pins THIS manifest) or credentials. No circular selector/seal hash.
+    launch_bindings={}
+    for relative, path in navigation_launch_bindings(paths.app_root()).items():
+        path=path.resolve(strict=True)
+        add(path)
+        launch_bindings[relative]={'path':str(path),'sha256':files[str(path)]}
     # RMW is loaded with dlopen, so ldd on planner executables misses it.
     rmw_prefix=Path(get_package_prefix('rmw_zenoh_cpp'))
     add(rmw_prefix/'lib/librmw_zenoh_cpp.so')
@@ -122,6 +167,8 @@ def main():
         runtime_inputs=runtime['runtime_inputs'],
         scientific_loader_dependencies=runtime['scientific_loader_dependencies'],
         actual_tools_root=str(frozen_tools),
+        launch_bindings=dict(scope='navigation_and_sdk_dispatchers_excluding_web_shell_and_static_assets',
+                             files=launch_bindings),
         startup_closure=startup_closure,
         pct_dependency_resolution=dict(scope='PCT_ELFs_only_production_child_loader_environment',
             vendor_root=native['vendor_root'],gtsam_version=native['gtsam_version'],
@@ -130,7 +177,7 @@ def main():
                 ('gtsam_library','metis_library') if not Path(native[k]).resolve().is_relative_to(release)]),
         localization_dependencies=dict(
             copied_runtime_prefix=str(localization_dependencies) if localization_dependencies else None,
-            build_claim='same_byte_copy_not_recompiled' if localization_dependencies else 'external_selected_runtime',
+            build_claim=localization_build_claim(localization_dependencies),
             external_runtime_dependencies=[p for p in files if not Path(p).is_relative_to(release)]),
         preflight_session=str(preflight/'session.json'))
     output.write_text(json.dumps(manifest,indent=2,ensure_ascii=False)+'\n')

@@ -90,15 +90,73 @@ TEST(InitialPoseTransaction, PrepareExpiryAndPostCommitUnknownResultNeverRevive)
   EXPECT_FALSE(committed.outcome(o,130000000000LL,40.));EXPECT_TRUE(committed.blocked());
   r.operation=r.ABORT;EXPECT_FALSE(ask(committed,r).accepted);
 }
-TEST(DependencyHealth, ReplayCannotRenewAndTimeoutLatches) {
+TEST(DependencyHealth, ShortGapWithdrawsReadinessWithoutDestroyingTheSession) {
   DependencyHealthGuard g(true);
   EXPECT_EQ(g.blocker(10.),"waiting_functional_dependencies");
   ASSERT_TRUE(g.observe(1,"session",1,true,false,"ready",100.,100.,10.,"session"));
   EXPECT_TRUE(g.blocker(10.5).empty());
   EXPECT_FALSE(g.observe(1,"session",1,true,false,"ready",100.5,100.5,10.5,"session"));
-  EXPECT_TRUE(g.fatal(10.7));
-  g.observe(1,"session",2,true,false,"ready",100.7,100.7,10.7,"session");
-  EXPECT_FALSE(g.blocker(10.7).empty());
+  // The old 0.6-second latching behavior killed otherwise healthy tasks.
+  EXPECT_FALSE(g.fatal(10.7));EXPECT_TRUE(g.blocker(10.7).empty());
+  EXPECT_EQ(g.blocker(11.6),"dependency_heartbeat_unavailable");
+  EXPECT_FALSE(g.fatal(11.6));
+  ASSERT_TRUE(g.observe(1,"session",2,true,false,"ready",101.7,101.7,11.7,"session"));
+  EXPECT_EQ(g.blocker(11.7),"confirming_dependency_recovery");
+  ASSERT_TRUE(g.observe(1,"session",3,true,false,"ready",102.,102.,12.,"session"));
+  EXPECT_FALSE(g.blocker(12.).empty());
+  ASSERT_TRUE(g.observe(1,"session",4,true,false,"ready",102.4,102.4,12.4,"session"));
+  EXPECT_TRUE(g.blocker(12.4).empty());EXPECT_FALSE(g.fatal(12.4));
+}
+TEST(DependencyHealth, RepeatedAndRewrittenSourcesCannotConfirmRecovery) {
+  DependencyHealthGuard g(true);
+  ASSERT_TRUE(g.observe(1,"session",1,true,false,"ready",100.,100.,10.,"session"));
+  ASSERT_TRUE(g.observe(1,"session",2,false,false,"map_stalled",100.1,100.1,10.1,"session"));
+  ASSERT_TRUE(g.observe(1,"session",3,true,false,"ready",100.2,100.2,10.2,"session"));
+  EXPECT_FALSE(g.observe(1,"session",3,true,false,"ready",100.8,100.8,10.8,"session"));
+  EXPECT_FALSE(g.observe(1,"session",4,true,false,"ready",100.2,100.8,10.8,"session"));
+  EXPECT_EQ(g.blocker(10.9),"confirming_dependency_recovery");
+  ASSERT_TRUE(g.observe(1,"session",4,true,false,"ready",100.9,100.9,10.9,"session"));
+  EXPECT_FALSE(g.blocker(10.9).empty());
+  ASSERT_TRUE(g.observe(1,"session",5,true,false,"ready",101.,101.,11.,"session"));
+  EXPECT_TRUE(g.blocker(11.).empty());
+}
+TEST(DependencyHealth, FlappingReadyReportsCannotRenewTheRecoveryDeadline) {
+  DependencyHealthGuard g(true,1.5,3.,.6);
+  ASSERT_TRUE(g.observe(1,"session",1,true,false,"ready",100.,100.,10.,"session"));
+  ASSERT_TRUE(g.observe(1,"session",2,false,false,"map_stalled",100.1,100.1,10.1,"session"));
+  for(unsigned i=3;i<=8;++i) {
+    const double at=10.2+(i-3)*.5;
+    ASSERT_TRUE(g.observe(1,"session",i,i%2==0,false,"temporary_wait",90.+at,90.+at,at,"session"));
+    EXPECT_FALSE(g.fatal(at));
+  }
+  EXPECT_TRUE(g.fatal(13.1));
+  EXPECT_EQ(g.blocker(13.1),"dependency_recovery_timeout:temporary_wait");
+  ASSERT_TRUE(g.observe(1,"session",9,true,false,"ready",103.2,103.2,13.2,"session"));
+  EXPECT_TRUE(g.fatal(13.2));
+}
+TEST(DependencyHealth, LateSuccessCannotHideAnUnobservedExpiredGap) {
+  DependencyHealthGuard g(true,1.5,3.,.6);
+  ASSERT_TRUE(g.observe(1,"session",1,true,false,"ready",100.,100.,10.,"session"));
+  // No polling occurred during the gap. Its deadline begins at the original
+  // lease expiry, not at receipt of the eventual replacement snapshot.
+  ASSERT_TRUE(g.observe(1,"session",2,true,false,"ready",104.6,104.6,14.6,"session"));
+  EXPECT_TRUE(g.fatal(14.6));
+}
+TEST(DependencyHealth, ColdPreparationUsesItsProducerStartupDeadline) {
+  DependencyHealthGuard g(true);
+  for(unsigned i=1;i<=5;++i) {
+    const double at=i*10.;
+    ASSERT_TRUE(g.observe(1,"session",i,false,false,"loading_map",100.+at,100.+at,at,"session"));
+    EXPECT_FALSE(g.fatal(at));EXPECT_EQ(g.blocker(at),"loading_map");
+  }
+  ASSERT_TRUE(g.observe(1,"session",6,true,false,"ready",151.,151.,51.,"session"));
+  EXPECT_TRUE(g.blocker(51.).empty());
+}
+TEST(DependencyHealth, PolicyMustBeFiniteBoundedAndFitItsRecoveryEpisode) {
+  EXPECT_THROW(DependencyHealthGuard(true,0.,30.,.6),std::invalid_argument);
+  EXPECT_THROW(DependencyHealthGuard(true,1.5,1.,.6),std::invalid_argument);
+  EXPECT_THROW(DependencyHealthGuard(true,1.5,30.,.1),std::invalid_argument);
+  EXPECT_THROW(DependencyHealthGuard(true,1.5,30.,std::numeric_limits<double>::infinity()),std::invalid_argument);
 }
 TEST(DependencyHealth, MalformedForeignFutureAndFatalAreNotReadiness) {
   DependencyHealthGuard g(true);

@@ -52,6 +52,15 @@ def test_real_artifact_preparation_is_odom_typed_no_preview_exclusion(tmp_path,m
     assert params('bt.yaml')['dependency_health_required'] is True
     assert params('component_health.yaml')['startup_timeout_s']==session['component_startup_timeout_s']
     assert session['component_startup_timeout_s']>=params('bt.yaml')['worker_startup_timeout_s']
+    from d1max_pct_scan.navigation_runtime_policy import validate_session_policy
+    validate_session_policy(tmp_path/'session',session)
+    assert session['runtime_policy']['recovery_timeout_s']==30.
+    assert params('bt.yaml')['follow_reference_wait_s']==params('bt_adapter.yaml')['follow_reference_wait_s']==30.
+    assert params('bt.yaml')['dependency_heartbeat_timeout_s']==1.5
+    assert params('component_health.yaml')['callback_timeout_s']==1.5
+    assert params('global.yaml')['warmup_timeout_s']==params('bt.yaml')['worker_startup_timeout_s']==60.
+    assert params('global.yaml')['readiness_timeout_s']==params('global.yaml')['commit_wait_timeout_s']==30.
+    assert params('bt.yaml')['compute_readiness_timeout_s']==params('bt_adapter.yaml')['readiness_timeout_s']==30.
     assert params('reference.yaml')['async_support_preparation'] is True
     assert session['execution_timing']['required_reaction_bound_s']==pytest.approx(.67)
     assert params('bt.yaml')['stationary_linear_threshold_mps']==params('tracker.yaml')['stationary_linear_threshold_mps']==.03
@@ -59,6 +68,7 @@ def test_real_artifact_preparation_is_odom_typed_no_preview_exclusion(tmp_path,m
     assert session['perception_projector']['max_input_points']==100000
     from d1max_pct_scan.single_floor_session import sha
     for relative in ('src/d1max_navigation_bt/trees/navigate_with_global_relocalization.xml',
+                     'src/d1max_pct_scan/config/navigation_runtime.yaml',
                      'src/d1max_localization/config/global_relocalization.yaml',
                      'src/d1max_navigation/rviz/localization_test.rviz'):
         template=paths.template_root()/relative
@@ -75,6 +85,11 @@ def test_real_artifact_preparation_is_odom_typed_no_preview_exclusion(tmp_path,m
     assert localization['global_relocalization.registration.search_timeout_s']==25.
     for layout in ('global','local'):
         cfg=yaml.safe_load((tmp_path/'session'/(layout+'_planning.rviz')).read_text())
+        terrain=[display for group in cfg['Visualization Manager']['Displays']
+                for display in group.get('Displays',[]) if display.get('Name')=='可通行地面']
+        assert len(terrain)==1
+        assert terrain[0]['Size (m)']==session['terrain_resolution_m']
+        assert terrain[0]['Style']=='Flat Squares'
         assert cfg['Panels'][0]['Motion Capable'] is True
         assert cfg['Visualization Manager']['Global Options']['Fixed Frame']==(
             'd1max_loc_odom' if layout=='local' else 'd1max_loc_map')
@@ -348,3 +363,58 @@ def test_core_lease_survives_supervisor_exit_until_inherited_child_retires(tmp_p
     finally:
         if child is not None and child.poll() is None:
             child.terminate();child.wait(timeout=3.)
+
+
+def test_legacy_empty_private_directory_lock_is_hardened_without_replacing_inode(tmp_path):
+    from d1max_pct_scan.single_floor_session import _owned_file_lock
+    lock=tmp_path/'old.lock';lock.touch();lock.chmod(0o664)
+    before=lock.stat().st_ino
+    with _owned_file_lock(lock,'busy'):
+        assert lock.stat().st_ino==before
+        assert lock.stat().st_mode&0o777==0o600
+        with pytest.raises(ValueError,match='busy'):
+            with _owned_file_lock(lock,'busy'):pytest.fail('second lease admitted')
+    assert lock.stat().st_ino==before
+
+
+def test_lock_hardening_never_mutates_data_or_shared_directory(tmp_path):
+    from d1max_pct_scan.single_floor_session import _owned_file_lock
+    lock=tmp_path/'data.lock';lock.write_text('not an empty lease');lock.chmod(0o664)
+    with pytest.raises(ValueError,match='navigation_lock_not_private'):
+        with _owned_file_lock(lock,'busy'):pytest.fail('unexpected file hardened')
+    assert lock.read_text()=='not an empty lease' and lock.stat().st_mode&0o777==0o664
+    shared=tmp_path/'shared';shared.mkdir(mode=0o755)
+    lock=shared/'old.lock';lock.touch();lock.chmod(0o664)
+    with pytest.raises(ValueError,match='navigation_lock_not_private'):
+        with _owned_file_lock(lock,'busy'):pytest.fail('shared directory lock admitted')
+    assert lock.stat().st_mode&0o777==0o664
+
+
+def test_pregraph_failure_reports_no_children_and_original_reason(tmp_path,monkeypatch):
+    from d1max_pct_scan import single_floor_session as entry
+    (tmp_path/'session.json').write_text(json.dumps({'id':'startup-test'}))
+    def fail_before_lock(_):raise ValueError('navigation_core_already_running')
+    monkeypatch.setattr(entry,'runtime_lock',fail_before_lock)
+    monkeypatch.setattr(entry,'_run_locked',lambda *a,**k:pytest.fail('children started'))
+    with pytest.raises(ValueError,match='navigation_core_already_running'):entry.run(tmp_path)
+    report=json.loads((tmp_path/'core_startup.json').read_text())
+    assert report['schema']==1 and report['session_id']=='startup-test'
+    assert report['phase']=='failed' and report['children_started'] is False
+    assert report['error']=='navigation_core_already_running'
+    assert (tmp_path/'core_startup.json').stat().st_mode&0o777==0o600
+
+
+def test_spawn_attempt_failure_is_not_reported_as_pregraph_failure(tmp_path,monkeypatch):
+    from contextlib import contextmanager
+    from d1max_pct_scan import single_floor_session as entry
+    (tmp_path/'session.json').write_text(json.dumps({'id':'startup-test'}))
+    @contextmanager
+    def mock_lock(_):yield 7
+    def fail_after_attempt(directory,**_):
+        entry._startup_report(directory,'startup-test','spawning',True)
+        raise OSError('child_start_failed')
+    monkeypatch.setattr(entry,'runtime_lock',mock_lock)
+    monkeypatch.setattr(entry,'_run_locked',fail_after_attempt)
+    with pytest.raises(OSError,match='child_start_failed'):entry.run(tmp_path)
+    report=json.loads((tmp_path/'core_startup.json').read_text())
+    assert report['phase']=='failed' and report['children_started'] is True

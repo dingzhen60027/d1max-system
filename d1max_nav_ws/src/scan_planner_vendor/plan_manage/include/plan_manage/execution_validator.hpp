@@ -23,6 +23,7 @@
 #include <condition_variable>
 #include <thread>
 #include <deque>
+#include <iterator>
 
 namespace scan_planner {
 namespace ew=d1max_planning_interfaces::msg;
@@ -43,6 +44,11 @@ inline bool sameExecutionTask(const ew::ExecutionVersion& a,const ew::ExecutionV
 // snapshots, value-copied geometry and measured source poses. Never live map.
 class ExecutionValidator {
   friend struct ExecutionValidatorTestAccess;
+  struct BodySourceSample {
+    MeasuredBodyPose pose;
+    std::optional<geometry_msgs::msg::Twist> twist;
+    std::int64_t source_ns;
+  };
 public:
   // Passive constructor exercises the exact transaction ledger without a ROS
   // graph or validator thread; no proof can be produced through this seam.
@@ -52,8 +58,11 @@ public:
   struct CommittedView {ew::TaggedBspline spline;std::optional<ew::LocalPlanDebug> debug;
     std::optional<ew::TrajectoryValidation> proof;std::optional<ew::TrackingProgress> progress;};
   ExecutionValidator(rclcpp::Node* node,CollisionSnapshotPool& pool,std::string frame,
-                     std::string mode,double extent,std::optional<BrakingModel> braking={},bool writer_handoff=false):node_(node),pool_(pool),frame_(std::move(frame)),mode_(std::move(mode)),extent_(extent),braking_(std::move(braking)),writer_handoff_(writer_handoff) {
+                     std::string mode,double extent,std::optional<BrakingModel> braking={},bool writer_handoff=false,
+                     std::string geometry_policy="observed_free"):node_(node),pool_(pool),frame_(std::move(frame)),mode_(std::move(mode)),extent_(extent),braking_(std::move(braking)),writer_handoff_(writer_handoff),geometry_policy_(std::move(geometry_policy)) {
     if(mode_!="live"&&mode_!="isolated_mock") throw std::invalid_argument("invalid execution transport");
+    if(geometry_policy_!="observed_free"&&geometry_policy_!="official_inflated_geometry")
+      throw std::invalid_argument("invalid trajectory geometry policy");
     pub_=node_->create_publisher<ew::TrajectoryValidation>("/d1max/live_planning/execution/validation",rclcpp::QoS(2));
     committed_pub_=node_->create_publisher<ew::TaggedBspline>("planning/committed_bspline",rclcpp::QoS(1).transient_local());
     motion_pub_=node_->create_publisher<ew::MotionValidation>("/d1max/live_planning/execution/motion_validation",rclcpp::QoS(8));
@@ -76,13 +85,43 @@ public:
   bool slowSnapshotWanted() const {std::lock_guard<std::mutex> l(mutex_);return active_.has_value()||candidate_.has_value()||prepared_.has_value();}
   void admissionSnapshotPublished(){{std::lock_guard<std::mutex> l(admission_wait_mutex_);admission_ready_=true;}
     admission_wake_.notify_all();}
-  void body(const MeasuredBodyPose& p){std::lock_guard<std::mutex> l(mutex_);if(p.source_stamp>body_.source_stamp)body_=p;}
-  void candidate(const ew::TaggedBspline& spline,const ew::ReferenceProposal& proposal) {
+  void body(const MeasuredBodyPose& p,
+      const std::optional<geometry_msgs::msg::Twist>& world_twist={},std::int64_t source_ns=0) {
+    if(!p.position.allFinite()||!p.orientation.coeffs().allFinite()||p.orientation.norm()<1e-6||
+       !std::isfinite(p.source_stamp)||p.source_stamp<=0.||p.frame!=frame_)return;
+    if(world_twist)for(double x:{world_twist->linear.x,world_twist->linear.y,world_twist->linear.z,
+        world_twist->angular.x,world_twist->angular.y,world_twist->angular.z})if(!std::isfinite(x))return;
+    if(source_ns==0)source_ns=static_cast<std::int64_t>(std::llround(p.source_stamp*1e9));
+    if(source_ns<=0)return;
     std::lock_guard<std::mutex> l(mutex_);
+    auto at=std::lower_bound(body_history_.begin(),body_history_.end(),source_ns,
+      [](const BodySourceSample& s,std::int64_t t){return s.source_ns<t;});
+    if(at!=body_history_.end()&&at->source_ns==source_ns) {
+      // The FSM and independent inbox can deliver the same real odometry.
+      // Duplicate callbacks do not manufacture a new sample or source lease.
+      if(world_twist&&!at->twist)at->twist=world_twist;
+    } else body_history_.insert(at,BodySourceSample{p,world_twist,source_ns});
+    while(body_history_.size()>64 || (!body_history_.empty()&&
+        body_history_.back().source_ns-body_history_.front().source_ns>1000000000LL))body_history_.pop_front();
+    if(p.source_stamp>body_.source_stamp)body_=p;
+  }
+  void candidate(const ew::TaggedBspline& spline,const ew::ReferenceProposal& proposal,
+      const SplineHeadingContract& frozen_heading={}) {
+    // The no-motion solver's direction-confidence contract is part of this
+    // exact curve. Copy its ORIGINAL heading seed, not the latest/join pose:
+    // the independent reader must reproduce the same swept geometry after
+    // measured progress advances. It never applies to the SDK writer lane.
+    if(frozen_heading.preview_only_enabled&&
+       (writer_handoff_||!validPreviewHeadingContract(frozen_heading)))
+      throw std::invalid_argument("invalid no-motion candidate heading contract");
+    std::lock_guard<std::mutex> l(mutex_);
+    if(task_domain_&&((!sameExecutionTask(*task_domain_,proposal.version)&&!task_closed_)||
+       (sameExecutionTask(*task_domain_,proposal.version)&&task_closed_)))return;
     if(retired_&&sameExecutionTask(*retired_,proposal.version)&&
        proposal.version.reference_generation<=retired_->reference_generation)return;
     candidate_=Job{spline,proposal.version,proposal.proposal_id,{},spline.valid_start_time,
-      proposal.has_goal_yaw,proposal.goal_yaw,{proposal.goal_position.x,proposal.goal_position.y,proposal.goal_position.z},{},{},{}};
+      proposal.has_goal_yaw,proposal.goal_yaw,{proposal.goal_position.x,proposal.goal_position.y,proposal.goal_position.z},{},{},{},{}};
+    candidate_->heading=frozen_heading;
     if(pending_support_&&pending_support_->version==proposal.version) candidate_->support=*pending_support_;
   }
   void support(const ew::SupportReference& s) {
@@ -213,14 +252,24 @@ public:
     if(!result.velocity.allFinite()||!result.acceleration.allFinite())return {};
     return result;
   }
-  std::optional<Boundary> committedBoundary(const Eigen::Vector3d& body,double now)const {
+  std::optional<Boundary> committedBoundary(const Eigen::Vector3d& body,
+      const Eigen::Vector3d& current_velocity,std::int64_t body_source_ns,double now)const {
     const auto view=committedView();
     if(!view||!view->proof||!view->proof->valid||!view->progress||!view->progress->valid||
        view->progress->holding||rclcpp::Time(view->proof->valid_until).seconds()<=now||
-       now-rclcpp::Time(view->progress->header.stamp).seconds()>.4)return {};
-    // Tracking progress identifies the curve, but its derivative is not a
-    // measured boundary. Speed limiting may intentionally slow the robot.
-    return measuredBoundary(*view->progress,body);
+       now-rclcpp::Time(view->progress->header.stamp).seconds()>.4||
+       body_source_ns<=0||now-body_source_ns*1e-9<-.02||now-body_source_ns*1e-9>.4||
+       !body.allFinite()||!current_velocity.allFinite())return {};
+    // An older progress sample still identifies the committed curve, but its
+    // speed is NOT the latest physical start boundary. Keep actual odometry
+    // velocity; use reported acceleration only at the exact same source time.
+    Boundary result{current_velocity,Eigen::Vector3d::Zero()};
+    const auto& p=*view->progress;
+    if(ns(p.header.stamp)==body_source_ns&&p.acceleration_valid) {
+      const auto same_sample=measuredBoundary(p,body);
+      if(same_sample)result.acceleration=same_sample->acceleration;
+    }
+    return result;
   }
   void progress(const ew::TrackingProgress& p) {
     progressAt(p,node_->now().seconds());
@@ -244,19 +293,23 @@ public:
       Eigen::Quaterniond(p.pose.orientation.w,p.pose.orientation.x,p.pose.orientation.y,p.pose.orientation.z),
       rclcpp::Time(p.header.stamp).seconds(),p.header.frame_id};
     double yaw=0.;if(!measuredBodyYaw(measured,frame_,now,.4,yaw))return;
-    if(measured.source_stamp>body_.source_stamp)body_=measured;
+    // Progress is a curve projection of an acquired body state, not the
+    // independent current-body inbox. It must not move that inbox forward or
+    // overwrite the matched odometry velocity with an older tracker sample.
     active_->progress=p;
   }
   bool commit(const ew::ExecutionPermit& p) {
     std::lock_guard<std::mutex> l(mutex_);
     if(p.transport_mode!=mode_||p.sequence<=permit_sequence_)return false;
+    if(!enterTaskDomainLocked(p))return false;
+    if(!enterWriterDomainLocked(p))return false;
     if(writer_handoff_&&writer_commit_sequence_&&active_&&
        (p.version!=active_->version||p.trajectory_id!=active_->spline.trajectory.traj_id)&&
        p.version.reference_generation<=active_->version.reference_generation&&!p.revoked)return false;
     if(writer_handoff_&&writer_commit_sequence_&&active_&&
        (p.version!=active_->version||p.trajectory_id!=active_->spline.trajectory.traj_id)&&!p.revoked)return false;
     latest_permit_=p;permits_.push_back(p);while(permits_.size()>32)permits_.pop_front();
-    if(p.revoked){retired_=p.version;active_.reset();candidate_.reset();if(grant_)grant_retired_=true;
+    if(p.revoked){retired_=p.version;task_closed_=true;active_.reset();candidate_.reset();if(grant_)grant_retired_=true;
       ++motion_stop_barrier_;permit_sequence_=p.sequence;return true;}
     if(!p.geometry_committed){permit_sequence_=p.sequence;return false;}
     if(active_&&active_->version==p.version&&active_->spline.trajectory.traj_id==p.trajectory_id) {permit_sequence_=p.sequence;return true;}
@@ -281,7 +334,7 @@ public:
     for(const auto* job:{&active_,&candidate_})if(*job &&
         (!sameExecutionTask((*job)->version,barrier)||
          barrier.reference_generation<=(*job)->version.reference_generation))return false;
-    retired_=barrier;active_.reset();candidate_.reset();
+    retired_=barrier;task_closed_=true;active_.reset();candidate_.reset();
     if(grant_)grant_retired_=true;
     ++motion_stop_barrier_;++prepared_stop_barrier_;
     return true;
@@ -308,11 +361,12 @@ public:
        ns(g.candidate.valid_until)<=now||g.candidate.frame_id!=frame_)return false;
     const auto matches=[&](const std::optional<Job>& j){return j&&j->version==g.candidate.version&&
       j->spline.trajectory.traj_id==g.candidate.trajectory_id;};
-    if(grant_) {tombstone_grant_=grant_;tombstone_job_=prepared_;tombstone_retired_=grant_retired_;}
+    if(grant_) {tombstone_grant_=grant_;tombstone_job_=prepared_;tombstone_retired_=grant_retired_;
+      tombstone_motion_proofs_=prepared_motion_proofs_;}
     if(matches(candidate_))prepared_=candidate_;
     else if(matches(active_))prepared_=active_;
     else return false;
-    grant_=g;grant_retired_=grant_applied_=false;prepared_demand_.reset();
+    grant_=g;grant_retired_=grant_applied_=false;prepared_demand_.reset();prepared_motion_proofs_.clear();
     ++prepared_stop_barrier_;return true;
   }
   void preparedDemand(const ew::PreparedMotionDemand& d) {
@@ -329,19 +383,27 @@ public:
   bool commitAck(const ew::ExecutionCommitAck& a) {return commitAckAt(a,node_->now().nanoseconds());}
   bool commitAckAt(const ew::ExecutionCommitAck& a,std::int64_t now) {
     std::lock_guard<std::mutex> l(mutex_);
-    if(!writer_handoff_||a.schema_version!=1||a.sequence<=ack_sequence_||a.transport_mode!=mode_)return false;
+    if(!writer_handoff_||a.schema_version!=1||a.sequence<=ack_sequence_||a.transport_mode!=mode_||
+       !task_domain_||task_closed_||!sameExecutionTask(*task_domain_,a.candidate_version)||
+       !writer_domain_||a.execution_id!=writer_domain_->execution_id||a.control_epoch!=writer_domain_->control_epoch||
+       a.sdk_session!=writer_domain_->sdk_session||a.sdk_arm_generation!=writer_domain_->sdk_arm_generation)return false;
     if(a.handoff_id.empty()) {
-      const auto first=std::find_if(permits_.begin(),permits_.end(),[&](const auto& p){
+      const auto matches=[&](const auto& p){
         return a.permit_sequence==p.sequence&&a.candidate_version==p.version&&a.candidate_trajectory_id==p.trajectory_id&&
           a.execution_id==p.execution_id&&a.control_epoch==p.control_epoch&&a.sdk_session==p.sdk_session&&
           a.sdk_arm_generation==p.sdk_arm_generation&&p.allowed&&p.geometry_committed&&!p.revoked&&
           ns(p.source_stamp)<=ns(a.applied_at)&&ns(p.valid_until)>ns(a.applied_at);
-      });
-      const auto original=std::find_if(committed_jobs_.rbegin(),committed_jobs_.rend(),[&](const auto& j){
-        return j.version==a.candidate_version&&j.spline.trajectory.traj_id==a.candidate_trajectory_id;
-      });
-      if(!a.applied||a.previous_commit_sequence||a.commit_sequence!=1||first==permits_.end()||
-         original==committed_jobs_.rend())return false;
+      };
+      const ew::ExecutionPermit* first=nullptr;const Job* original=nullptr;
+      for(const auto& p:permits_)if(matches(p))first=&p;
+      for(const auto& j:committed_jobs_)if(j.version==a.candidate_version&&
+          j.spline.trajectory.traj_id==a.candidate_trajectory_id)original=&j;
+      for(const auto& intent:initial_intents_)if(matches(intent.permit)&&
+          intent.geometry.version==a.candidate_version&&
+          intent.geometry.spline.trajectory.traj_id==a.candidate_trajectory_id) {
+        first=&intent.permit;original=&intent.geometry;
+      }
+      if(!a.applied||a.previous_commit_sequence||a.commit_sequence!=1||!first||!original)return false;
       if(writer_commit_sequence_) {
         if(writer_commit_sequence_!=1||!initial_writer_ack_)return false;
         auto expected=*initial_writer_ack_,actual=a;
@@ -388,13 +450,16 @@ public:
     if(writer_commit_sequence_==a.commit_sequence&&active_&&active_->version==p.version&&
        active_->spline.trajectory.traj_id==p.trajectory_id) {ack_sequence_=a.sequence;return true;}
     if(a.previous_commit_sequence!=writer_commit_sequence_)return false;
-    const auto proof=std::find_if(motion_proofs_.begin(),motion_proofs_.end(),[&](const auto& m){
+    if(ns(a.applied_at)<ns(g.source_stamp)||ns(a.applied_at)>ns(g.transition_deadline)||
+       ns(a.applied_at)<ns(p.source_stamp)||ns(a.applied_at)>ns(p.valid_until))return false;
+    const auto& transaction_proofs=tombstone?tombstone_motion_proofs_:prepared_motion_proofs_;
+    const auto proof=std::find_if(transaction_proofs.begin(),transaction_proofs.end(),[&](const auto& m){
       return m.handoff_id==g.handoff_id&&m.sequence==a.motion_validation_sequence&&m.valid&&
         m.demand_sequence==a.demand_sequence&&m.entry_admission_sequence==a.entry_admission_sequence&&
         m.demand_source_stamp==a.demand_source_stamp&&m.demand_body_source_stamp==a.demand_body_source_stamp&&
         m.velocity==a.applied_velocity&&m.entry_curve_time==a.curve_time;
     });
-    if(proof==motion_proofs_.end())return false;
+    if(proof==transaction_proofs.end())return false;
     // Applied facts do not acquire a new TTL and cannot be rejected merely
     // because the callback arrived after the original proof expired.
     const bool hold=(tombstone?tombstone_retired_:grant_retired_)||!a.write_submitted||
@@ -415,6 +480,10 @@ public:
     if(writer_handoff_&&active_&&(d.version!=active_->version||d.trajectory_id!=active_->spline.trajectory.traj_id))return;
     if(latest_demand_&&d.execution_id==latest_demand_->execution_id&&d.sequence<=latest_demand_->sequence)return;
     latest_demand_=d;
+    if(!writer_commit_sequence_&&active_)for(auto it=permits_.rbegin();it!=permits_.rend();++it)
+      if(it->sequence==d.permit_sequence&&it->version==d.version&&it->trajectory_id==d.trajectory_id) {
+        pinInitialIntentLocked(d,*it,*active_);break;
+      }
     if(d.hold||std::abs(d.velocity.linear.x)+std::abs(d.velocity.angular.z)<1e-12)++motion_stop_barrier_;
   }
 private:
@@ -422,7 +491,54 @@ private:
     std::optional<ew::SupportReference> support;double measured_time{0.};
     bool has_goal_yaw{false};double goal_yaw{0.};Eigen::Vector3d goal{Eigen::Vector3d::Zero()};
     std::optional<ew::LocalPlanDebug> debug;std::optional<ew::TrajectoryValidation> proof;
-    std::optional<ew::TrackingProgress> progress;};
+    std::optional<ew::TrackingProgress> progress;
+    SplineHeadingContract heading;};
+  struct InitialIntent {ew::ExecutionPermit permit;Job geometry;};
+  bool enterWriterDomainLocked(const ew::ExecutionPermit& p) {
+    if(p.revoked||p.execution_id.empty())return true;
+    if(!writer_domain_) {writer_domain_=p;return true;}
+    const auto& old=*writer_domain_;
+    if(p.execution_id==old.execution_id&&p.control_epoch==old.control_epoch&&
+       p.sdk_session==old.sdk_session&&p.sdk_arm_generation==old.sdk_arm_generation)return true;
+    if(p.allowed||p.control_epoch<=old.control_epoch||(p.phase!="arming"&&p.phase!="holding"))return false;
+    writer_domain_=p;writer_commit_sequence_=ack_sequence_=0;initial_writer_ack_.reset();initial_intents_.clear();
+    grant_.reset();tombstone_grant_.reset();prepared_.reset();tombstone_job_.reset();prepared_demand_.reset();
+    prepared_motion_proofs_.clear();tombstone_motion_proofs_.clear();latest_demand_.reset();
+    ++motion_stop_barrier_;++prepared_stop_barrier_;return true;
+  }
+  bool enterTaskDomainLocked(const ew::ExecutionPermit& p) {
+    if(p.version.schema_version!=3||p.version.task_id.empty()||p.version.session_id.empty())return false;
+    if(task_domain_&&sameExecutionTask(*task_domain_,p.version))return !task_closed_;
+    if(task_domain_&&!task_closed_)return false;
+    if(retired_&&sameExecutionTask(*retired_,p.version))return false;
+    const auto now=node_?node_->now().nanoseconds():ns(p.source_stamp);
+    if(ns(p.source_stamp)<=0||ns(p.source_stamp)>now+20000000LL||
+       now-ns(p.source_stamp)>750000000LL||ns(p.valid_until)<=now)return false;
+    // Only the fresh typed owner ingress establishes a new task. A solve or
+    // map correction never resets writer CAS state. Keep publisher-wide
+    // permit/motion sequence floors and the acquired body history intact.
+    active_.reset();prepared_.reset();tombstone_job_.reset();grant_.reset();tombstone_grant_.reset();
+    prepared_demand_.reset();latest_demand_.reset();blocked_entry_.reset();entry_reseed_.reset();
+    last_entry_reseed_.reset();last_terminal_reseed_.reset();committed_jobs_.clear();
+    permits_.clear();motion_proofs_.clear();prepared_motion_proofs_.clear();tombstone_motion_proofs_.clear();
+    initial_writer_ack_.reset();initial_intents_.clear();writer_domain_.reset();
+    writer_commit_sequence_=ack_sequence_=0;grant_retired_=grant_applied_=tombstone_retired_=false;
+    if(candidate_&&!sameExecutionTask(candidate_->version,p.version))candidate_.reset();
+    proofs_.erase(std::remove_if(proofs_.begin(),proofs_.end(),[&](const auto& proof){
+      return !sameExecutionTask(proof.version,p.version);}),proofs_.end());
+    task_domain_=p.version;task_closed_=false;++motion_stop_barrier_;++prepared_stop_barrier_;
+    return true;
+  }
+  void pinInitialIntentLocked(const ew::MotionDemand& d,const ew::ExecutionPermit& p,const Job& j) {
+    if(!writer_handoff_||writer_commit_sequence_||!p.allowed||!p.geometry_committed||p.revoked||
+       p.execution_id.empty()||p.sdk_session.empty()||p.version!=j.version||
+       p.trajectory_id!=j.spline.trajectory.traj_id||d.execution_id!=p.execution_id||
+       d.control_epoch!=p.control_epoch||d.sdk_session!=p.sdk_session||d.sdk_arm_generation!=p.sdk_arm_generation||
+       ns(d.source_stamp)<ns(p.source_stamp)||ns(d.source_stamp)>ns(p.valid_until))return;
+    for(const auto& old:initial_intents_)if(old.permit==p)return;
+    initial_intents_.push_back({p,j});
+    if(initial_intents_.size()>8)initial_intents_.erase(std::next(initial_intents_.begin()));
+  }
   void run() {
     while(!stop_) {
       const auto begin=std::chrono::steady_clock::now();
@@ -584,15 +700,18 @@ private:
   void checkPreparedMotion(GridMap& map,double budget_s,ValidationCycle::Clock::time_point round_deadline) {
     std::optional<ew::PreparedMotionDemand> request;std::optional<ew::ExecutionHandoffGrant> grant;
     std::optional<Job> job;std::optional<ew::TrajectoryValidation> proof;MeasuredBodyPose current;
+    std::optional<BodySourceSample> entry_sample;
     std::shared_ptr<const MotionSupport> support;std::uint64_t barrier=0;
     {std::lock_guard<std::mutex> l(mutex_);
       if(!prepared_demand_||!grant_||grant_retired_||grant_applied_||!prepared_)return;
       request=prepared_demand_;grant=grant_;job=prepared_;current=body_;barrier=prepared_stop_barrier_;
+      entry_sample=bodyAtSourceLocked(ns(request->entry_source_stamp));
       proof=motionProof(proofs_,request->demand,node_->now().nanoseconds());
       for(auto i=support_history_.rbegin();i!=support_history_.rend();++i)
         if((*i)->source.version==request->demand.version){support=*i;break;}}
     const auto& x=*request;const auto& d=x.demand;const auto& g=*grant;const auto now=node_->now().nanoseconds();
     if(!proof||!proof->whole_curve||!proof->valid||!job->support||!support||!support->valid||!braking_||
+       !entry_sample||!entry_sample->twist||
        !preparedEntryMatches(x,g,frame_,now)||!map.isRawRaySnapshot()||!map.integratedCloudFreshAt(now)||
        map.localizationContextSequence()!=d.version.context_sequence)return;
     const auto& s=job->spline.trajectory;
@@ -613,7 +732,13 @@ private:
        pe>x.position_tolerance_m||ve>x.velocity_tolerance_mps||
        std::abs(pe-x.position_error_m)>1e-6||std::abs(ve-x.velocity_error_mps)>1e-6||
        current.source_stamp<ns(x.entry_source_stamp)*1e-9||now*1e-9-current.source_stamp>.1||
-       (current.position-position).norm()>.0125)return;
+       (entry_sample->pose.position-position).norm()>.0125||
+       (Eigen::Vector3d(entry_sample->twist->linear.x,entry_sample->twist->linear.y,
+                        entry_sample->twist->linear.z)-measured_velocity).norm()>.05)return;
+    // Source-time consistency and latest-entry safety are different checks.
+    // The request's acquired state is paired with real odometry at that time;
+    // a later body sample must not make ordinary motion look like a bad entry.
+    // The unique writer still reobserves the actual latest entry before CAS.
     MeasuredBodyPose body{position,Eigen::Quaterniond(x.measured_pose.pose.orientation.w,x.measured_pose.pose.orientation.x,
       x.measured_pose.pose.orientation.y,x.measured_pose.pose.orientation.z),ns(x.entry_source_stamp)*1e-9,frame_};
     double yaw=0.;if(!measuredBodyYaw(body,frame_,now*1e-9,.1,yaw)||
@@ -640,6 +765,11 @@ private:
     {std::lock_guard<std::mutex> l(mutex_);const auto fresh=motionProof(proofs_,d,node_->now().nanoseconds());
       if(!grant_||grant_->handoff_id!=g.handoff_id||grant_retired_||grant_applied_||barrier!=prepared_stop_barrier_||
          !fresh||fresh->sequence!=proof->sequence)return;
+      // Fixed signed handoff, maximum 20 Hz prepared checks over its original
+      // sub-second deadline. Keep all issued proofs until outcome; ordinary
+      // motion heartbeats cannot evict the proof selected by the writer.
+      if(prepared_motion_proofs_.size()>=16)return;
+      prepared_motion_proofs_.push_back(out);
       motion_proofs_.push_back(out);while(motion_proofs_.size()>32)motion_proofs_.pop_front();}
     motion_pub_->publish(out);
   }
@@ -648,11 +778,13 @@ private:
     std::optional<ew::MotionDemand> demand;std::optional<ew::ExecutionPermit> permit,latest;
     std::optional<Job> active;std::shared_ptr<const MotionSupport> support;std::uint64_t barrier;
     std::optional<ew::TrajectoryValidation> proof;
+    std::optional<BodySourceSample> measured_state;
     {
       std::lock_guard<std::mutex> l(mutex_);
       if(!latest_demand_||latest_demand_->hold||
          std::abs(latest_demand_->velocity.linear.x)+std::abs(latest_demand_->velocity.angular.z)<1e-12)return;
       demand=latest_demand_;active=active_;latest=latest_permit_;barrier=motion_stop_barrier_;
+      if(!body_history_.empty())measured_state=body_history_.back();
       for(auto it=support_history_.rbegin();it!=support_history_.rend();++it)
         if((*it)->source.version==demand->version){support=*it;break;}
       for(auto it=permits_.rbegin();it!=permits_.rend();++it)if(it->sequence==demand->permit_sequence){permit=*it;break;}
@@ -665,6 +797,11 @@ private:
     // command. Existing certified demand can live ONLY to its original expiry.
     // A missing dependency can never produce a positive result either.
     if(!permit||!proof||ns(proof->valid_until)<=now||ns(permit->valid_until)<=now)return;
+    // Topic scheduling can deliver the command before its independent odom
+    // witness. Wait for that acquired state; this is not occupied evidence and
+    // does not extend any previously issued command's original expiration.
+    if(!measured_state||!measured_state->twist||measured_state->source_ns<ns(d.body_source_stamp)||
+       !motionSourceFresh(measured_state->source_ns,now))return;
     ew::MotionValidation out;
     out.version=d.version;out.execution_id=d.execution_id;out.control_epoch=d.control_epoch;
     out.sdk_session=d.sdk_session;out.sdk_arm_generation=d.sdk_arm_generation;out.trajectory_id=d.trajectory_id;
@@ -679,25 +816,27 @@ private:
     const auto fresh=[&](const builtin_interfaces::msg::Time& t){return motionSourceFresh(ns(t),now);};
     MotionSweepResult sweep;bool queried=false;
     std::int64_t deadline=std::min<std::int64_t>({ns(d.valid_until),ns(d.source_stamp)+100000000LL,ns(d.body_source_stamp)+100000000LL});
-    if(braking_&&active&&active->progress&&support&&support->source.version==d.version&&
+    if(braking_&&active&&active->progress&&measured_state&&measured_state->twist&&
+       measured_state->source_ns>=ns(d.body_source_stamp)&&motionSourceFresh(measured_state->source_ns,now)&&
+       support&&support->source.version==d.version&&
        active->version==d.version&&active->spline.trajectory.traj_id==d.trajectory_id&&
        active->proof&&active->proof->valid&&active->proof->sequence>=d.validation_sequence&&ns(active->proof->valid_until)>now&&proof&&proof->valid&&
        ns(proof->valid_until)>now&&permit&&latest&&demandPermitMatches(d,*permit,proof->sequence)&&demandPermitMatches(d,*latest,proof->sequence)&&
        permit->phase==latest->phase&&(permit->phase!="aligning"||std::abs(d.velocity.linear.x)<1e-12)&&
        ns(permit->valid_until)>now&&ns(latest->valid_until)>now&&
-       fresh(d.source_stamp)&&fresh(d.body_source_stamp)&&fresh(active->progress->header.stamp)&&deadline>now&&
+       fresh(d.source_stamp)&&fresh(d.body_source_stamp)&&deadline>now&&
        map.isRawRaySnapshot()&&map.integratedCloudFreshAt(now)&&map.localizationContextSequence()==d.version.context_sequence) {
-      const auto& p=*active->progress;out.body_source_stamp=p.header.stamp;
-      const Eigen::Vector3d position{p.pose.position.x,p.pose.position.y,p.pose.position.z};
-      MeasuredBodyPose body{position,Eigen::Quaterniond(p.pose.orientation.w,p.pose.orientation.x,p.pose.orientation.y,p.pose.orientation.z),
-        ns(p.header.stamp)*1e-9,frame_};double yaw=0.;
+      // Curve progress carries route identity, not the current safety pose or
+      // limiter boundary. Pose and twist come from one latest real odometry.
+      const auto& body=measured_state->pose;const auto& position=body.position;
+      out.body_source_stamp=rclcpp::Time(measured_state->source_ns);double yaw=0.;
       if(measuredBodyYaw(body,frame_,now*1e-9,.1,yaw)) {
         const double remaining=std::min(budget_s,
           std::chrono::duration<double>(round_deadline-ValidationCycle::Clock::now()).count());
         if(remaining<=0.)return; // CPU expiry is no new free or occupied evidence.
-        queried=true;sweep=validateMotionSweep(map,*support,*braking_,position,yaw,p.twist,d.velocity,frame_,remaining);
+        queried=true;sweep=validateMotionSweep(map,*support,*braking_,position,yaw,*measured_state->twist,d.velocity,frame_,remaining);
         out.valid=sweep.valid;out.reason=sweep.reason;
-        deadline=motionEvidenceDeadline(ns(d.source_stamp),ns(d.body_source_stamp),ns(p.header.stamp),
+        deadline=motionEvidenceDeadline(ns(d.source_stamp),ns(d.body_source_stamp),measured_state->source_ns,
           ns(d.valid_until),std::min(ns(permit->valid_until),ns(latest->valid_until)),ns(proof->valid_until),
           map.observedProofDeadlineNs(),map.integratedRaySourceStamp(0),map.integratedRaySourceStamp(1),braking_->raySourceAgeNs());
       }
@@ -720,8 +859,9 @@ private:
          ns(latest_permit_->valid_until)<=node_->now().nanoseconds())return;
     }
     if(!out.valid)RCLCPP_WARN_THROTTLE(node_->get_logger(),*node_->get_clock(),250,
-      "Motion proof demand=%lu voxels=%zu length=%.3f yaw_bound=%.3f check_ms=%.3f demand_age_ms=%.3f front_age_ms=%.3f rear_age_ms=%.3f queried=%d reason=%s",
-      d.sequence,sweep.unique_voxels,sweep.length,sweep.heading_bound,(ns(out.check_end)-ns(out.check_begin))*1e-6,
+      "Motion proof demand=%lu visited_unique_voxels=%zu free=%zu occupied=%zu unknown=%zu outside=%zu query_complete=%d length=%.3f yaw_bound=%.3f check_ms=%.3f demand_age_ms=%.3f front_age_ms=%.3f rear_age_ms=%.3f queried=%d reason=%s",
+      d.sequence,sweep.unique_voxels,sweep.state_counts[0],sweep.state_counts[1],sweep.state_counts[2],sweep.state_counts[3],
+      sweep.query_complete,sweep.length,sweep.heading_bound,(ns(out.check_end)-ns(out.check_begin))*1e-6,
       (ns(out.check_end)-ns(d.source_stamp))*1e-6,(ns(out.check_end)-map.integratedRaySourceStamp(0))*1e-6,
       (ns(out.check_end)-map.integratedRaySourceStamp(1))*1e-6,queried,out.reason.c_str());
     else RCLCPP_INFO_THROTTLE(node_->get_logger(),*node_->get_clock(),1000,
@@ -745,12 +885,17 @@ private:
     result.front_ray_source_stamp=rclcpp::Time(map.integratedRaySourceStamp(0));
     result.rear_ray_source_stamp=rclcpp::Time(map.integratedRaySourceStamp(1));
     result.map_snapshot_revision=map.occupancyRevision();result.frame_id=frame_;
-    result.collision_policy="observed_free";result.transport_mode=mode_;result.whole_curve=true;
+    // A route-sized geometry check is not an actuation proof. The formal
+    // planner uses SCAN's inflated twin-cylinder obstacle model; each actual
+    // demand still passes the independent raw observed-free braking sweep.
+    const bool official_geometry=geometry_policy_=="official_inflated_geometry";
+    result.collision_policy=geometry_policy_;result.transport_mode=mode_;result.whole_curve=true;
     result.reason="missing_fresh_raw_ray_support_or_body_evidence";
     if(job.support) {result.support_reference_id=job.support->support_reference_id;result.support_hash=job.support->support_hash;}
     const auto& s=job.spline.trajectory;
     if(job.support&&job.support->verified&&job.support->version==job.version&&map.isRawRaySnapshot()&&
        map.integratedCloudFreshAt(node_->now().nanoseconds())&&
+       (!official_geometry||!map.planningRequiresObservedFree())&&
        map.localizationContextSequence()==job.version.context_sequence&&s.order==3&&s.pos_pts.size()>=4&&
        s.pos_pts.size()<=10000&&s.knots.size()==s.pos_pts.size()+4&&job.spline.frame_id==frame_) {
       Eigen::MatrixXd points(3,s.pos_pts.size());Eigen::VectorXd knots(s.knots.size());
@@ -759,7 +904,11 @@ private:
       bool ordered=knots.allFinite();for(int i=1;i<knots.size();++i)ordered=ordered&&knots[i]>knots[i-1];
       if(points.allFinite()&&ordered) {
         UniformBspline curve(points,3,.1);curve.setKnot(knots);
-        const bool measured_progress=job.progress&&job.progress->valid&&
+        // The no-motion heading contract validates the complete frozen curve
+        // and replays its heading memory to the measured join. A tracker
+        // heartbeat must not turn that proof into an incompatible truncated
+        // curve, or reset the original heading to the current pose.
+        const bool measured_progress=!job.heading.preview_only_enabled&&job.progress&&job.progress->valid&&
           (node_->now()-rclcpp::Time(job.progress->header.stamp)).seconds()<=.4;
         std::optional<MeasuredCurveDomain> domain;
         double join_residual=std::numeric_limits<double>::quiet_NaN();
@@ -782,9 +931,10 @@ private:
             budget_s-std::chrono::duration<double>(std::chrono::steady_clock::now()-check_started).count(),
             std::chrono::duration<double>(round_deadline-ValidationCycle::Clock::now()).count());
           result.valid=arc_domain.has_value()&&supported&&remaining>0.&&wholeCurveCollisionFree(curve,map.getResolution(),extent_,
-            [&](const Eigen::Vector3d& p,double yaw){++queries;const int state=map.getInflateOccupancy(p,yaw);
+            [&](const Eigen::Vector3d& p,double yaw){++queries;const int state=official_geometry?
+                map.getPlanningInflateOccupancy(p,yaw):map.getInflateOccupancy(p,yaw);
               occupied=occupied||state==1;unknown=unknown||state==2||state<0;return state;},
-            body,frame_,node_->now().seconds(),.4,200000,remaining,*join,{},result.checked_from_time,
+            body,frame_,node_->now().seconds(),.4,200000,remaining,*join,job.heading,result.checked_from_time,
             domain?MeasuredConnectionPolicy::CommittedSweptConnection:MeasuredConnectionPolicy::CandidateAdmission);
           if(result.valid&&job.has_goal_yaw&&std::isfinite(job.goal_yaw)&&
              (body.position-job.goal).norm()<=.25) {
@@ -794,14 +944,14 @@ private:
                 map.getResolution(),extent_,[&](const Eigen::Vector3d& p,double yaw){
                   return ValidationCycle::Clock::now()<round_deadline&&
                     std::chrono::duration<double>(std::chrono::steady_clock::now()-check_started).count()<budget_s&&
-                    map.getInflateOccupancy(p,yaw)==0;
+                    (official_geometry?map.getPlanningInflateOccupancy(p,yaw):map.getInflateOccupancy(p,yaw))==0;
                 });
               if(result.goal_yaw_checked)result.checked_goal_yaw=job.goal_yaw;
             }
           }
         }
         const double query_seconds=std::chrono::duration<double>(std::chrono::steady_clock::now()-query_begin).count();
-        result.reason=result.valid?"observed_free":occupied?"occupied":unknown?"unknown_or_unobserved":
+        result.reason=result.valid?geometry_policy_:occupied?"occupied":unknown?"unknown_or_unobserved":
           !join?"measured_projection_or_connection_invalid":!supported?"measured_connection_support_invalid":
           (ValidationCycle::Clock::now()>=round_deadline||
            std::chrono::duration<double>(std::chrono::steady_clock::now()-check_started).count()>=budget_s)?
@@ -845,14 +995,15 @@ private:
     }
     result.check_end=node_->now();result.source_stamp=result.check_end;
     const auto sensor_age=braking_?braking_->raySourceAgeNs():500000000LL;
+    const auto evidence_deadline=official_geometry?std::numeric_limits<std::int64_t>::max():map.observedProofDeadlineNs();
     const auto min_deadline=std::min<std::int64_t>({node_->now().nanoseconds()+250000000LL,
-      map.observedProofDeadlineNs(),map.integratedRaySourceStamp(0)+sensor_age,
+      evidence_deadline,map.integratedRaySourceStamp(0)+sensor_age,
       map.integratedRaySourceStamp(1)+sensor_age,
       static_cast<std::int64_t>(body.source_stamp*1e9)+400000000LL});
     result.valid_until=rclcpp::Time(std::max<std::int64_t>(0,min_deadline));
     // Do not renew a source lease with computation completion.
     if(!map.integratedCloudFreshAt(node_->now().nanoseconds())||node_->now().seconds()-body.source_stamp>.4||
-       (map.observedProofDeadlineNs()>0&&min_deadline<=node_->now().nanoseconds())) {
+       min_deadline<=node_->now().nanoseconds()) {
       result.valid=false;result.reason="source_expired_during_check";
     }
     // A canceled/replaced job can never publish a late positive proof.
@@ -881,11 +1032,39 @@ private:
   mutable std::mutex mutex_;std::mutex wait_mutex_;std::condition_variable wake_;bool snapshot_ready_{false};
   std::atomic<bool>stop_{false};std::thread thread_,admission_thread_;
   std::mutex admission_wait_mutex_;std::condition_variable admission_wake_;bool admission_ready_{false};
+  // Only dedicated odometry enters this bounded history. A tracker projection
+  // cannot attest to itself, and source-time lookup never extrapolates.
+  std::optional<BodySourceSample> bodyAtSourceLocked(std::int64_t source_ns)const {
+    const auto next=std::lower_bound(body_history_.begin(),body_history_.end(),source_ns,
+      [](const BodySourceSample& s,std::int64_t t){return s.source_ns<t;});
+    if(next==body_history_.end()||next->pose.frame!=frame_)return {};
+    if(next->source_ns==source_ns)return *next;
+    if(next==body_history_.begin())return {};
+    const auto previous=std::prev(next);const auto gap=next->source_ns-previous->source_ns;
+    if(previous->pose.frame!=frame_||gap<=0||gap>100000000LL||!previous->twist||!next->twist)return {};
+    const double alpha=static_cast<double>(source_ns-previous->source_ns)/static_cast<double>(gap);
+    BodySourceSample result=*previous;result.source_ns=source_ns;
+    result.pose.source_stamp=source_ns*1e-9;
+    result.pose.position=(1.-alpha)*previous->pose.position+alpha*next->pose.position;
+    result.pose.orientation=previous->pose.orientation.normalized().slerp(alpha,next->pose.orientation.normalized());
+    auto& t=*result.twist;const auto& a=*previous->twist;const auto& b=*next->twist;
+    t.linear.x=(1.-alpha)*a.linear.x+alpha*b.linear.x;
+    t.linear.y=(1.-alpha)*a.linear.y+alpha*b.linear.y;
+    t.linear.z=(1.-alpha)*a.linear.z+alpha*b.linear.z;
+    t.angular.x=(1.-alpha)*a.angular.x+alpha*b.angular.x;
+    t.angular.y=(1.-alpha)*a.angular.y+alpha*b.angular.y;
+    t.angular.z=(1.-alpha)*a.angular.z+alpha*b.angular.z;
+    return result;
+  }
+  std::deque<BodySourceSample> body_history_;
   MeasuredBodyPose body_;std::optional<Job>active_,candidate_;std::optional<ew::SupportReference>pending_support_;
   // Geometry-only facts: fixed, bounded history for a late first writer ACK.
   // These are not snapshot slots or renewed collision proofs.
   std::deque<Job> committed_jobs_;
   std::optional<ew::ExecutionCommitAck> initial_writer_ack_;
+  std::deque<InitialIntent> initial_intents_;
+  std::optional<ew::ExecutionVersion> task_domain_;bool task_closed_{false};
+  std::optional<ew::ExecutionPermit> writer_domain_;
   std::optional<ew::ExecutionVersion> retired_;
   std::optional<BrakingModel> braking_;
   std::optional<ew::MotionDemand> latest_demand_;
@@ -893,6 +1072,7 @@ private:
   std::deque<ew::ExecutionPermit> permits_;
   std::deque<ew::TrajectoryValidation> proofs_;
   std::deque<ew::MotionValidation> motion_proofs_;
+  std::deque<ew::MotionValidation> prepared_motion_proofs_,tombstone_motion_proofs_;
   std::optional<ew::MotionValidation> blocked_entry_;
   std::uint64_t last_blocked_entry_sequence_{0};
   std::optional<ew::TrajectoryAdmission> entry_reseed_;
@@ -910,6 +1090,7 @@ private:
   rclcpp::Publisher<std_msgs::msg::String>::SharedPtr pipeline_pub_;
   std::uint64_t last_timing_publication_{0};
   bool writer_handoff_{false},grant_retired_{false},grant_applied_{false},tombstone_retired_{false};
+  std::string geometry_policy_{"observed_free"};
   std::optional<Job> prepared_,tombstone_job_;
   std::optional<ew::ExecutionHandoffGrant> grant_,tombstone_grant_;
   std::optional<ew::PreparedMotionDemand> prepared_demand_;

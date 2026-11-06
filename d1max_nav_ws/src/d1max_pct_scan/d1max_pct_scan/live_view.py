@@ -38,6 +38,19 @@ BODY_AXIS_LENGTH_M = .9
 BODY_AXIS_WIDTH_M = .05
 
 
+def execution_menu_capable(session):
+    """UI intent only; the BT and SDK still own all execution authorization."""
+    if session.get('pipeline_contract') == 'single_floor_v3':
+        if session.get('purpose') != 'execution':
+            return False
+        if session.get('transport_mode') == 'isolated_mock':
+            return session.get('motion_control_enabled') is False
+        return (session.get('transport_mode') == 'live'
+                and session.get('motion_control_enabled') is True)
+    return (session.get('mode') == 'LIVE_NAVIGATION'
+            and session.get('motion_control_enabled') is True)
+
+
 def body_axes_marker(body, lifetime_sec):
     """Local RGB axes at the measured pose, not an offset or a new pose sample."""
     marker = Marker()
@@ -64,8 +77,11 @@ class LiveView(Node):
         self.directory = directory
         self.session = json.loads((directory / 'session.json').read_text())
         self.single_floor = self.session.get('pipeline_contract') == 'single_floor_v3'
-        self.motion_capable = (self.session.get('mode') == 'LIVE_NAVIGATION'
-                               and self.session.get('motion_control_enabled') is True) or self.single_floor
+        # Keep the existing display field for execution-menu compatibility.
+        # A simulated execution intent is not a physical motion capability.
+        self.motion_capable = execution_menu_capable(self.session)
+        self.physical_motion_capable = (self.session.get('motion_control_enabled') is True
+            and (not self.single_floor or self.session.get('transport_mode') == 'live'))
         self.typed_view = None
         if self.single_floor:
             from .typed_view_state import TypedViewState
@@ -105,12 +121,13 @@ class LiveView(Node):
         self.marker = self.create_publisher(Marker, '/d1max/live_planning/view_status', 1)
         self.body_marker = self.create_publisher(Marker, '/d1max/live_planning/body_marker', 10)
         self.diagnostics_pub = self.create_publisher(String, '/d1max/live_planning/diagnostics', 1)
-        # In execution sessions the coordinator owns freeze feedback, including
-        # the disarmed state. A second always-true publisher would fight it.
+        # The formal BT runtime owns both preview and execution. Its typed
+        # contract is independent of the menu's physical motion capability.
+        # Never revive the legacy always-true freeze publisher for a v3 preview.
         runtime_freeze = self.session.get('preview_freeze_owner') == 'supervisor_child'
         if runtime_freeze:
             preview_reload_session(self.session)
-        self.freeze = (None if self.motion_capable or runtime_freeze else
+        self.freeze = (None if self.single_floor or self.motion_capable or runtime_freeze else
                        self.create_publisher(Bool, '/d1max/live_planning/execution_frozen', 10))
         self.cancel_pub = self.create_publisher(Empty, '/d1max/live_planning/cancel', 10)
         self.navigate_client = ActionClient(self, Navigate, '/d1max/live_planning/bt/navigate')
@@ -146,10 +163,15 @@ class LiveView(Node):
                                      qos_profile_sensor_data)
         self.markers = InteractiveMarkerServer(self, '/d1max_live_goal')
         self.menu = MenuHandler()
-        self.menu.insert('规划到此处' if self.motion_capable else '规划到此处（只显示）', callback=self.commit_goal)
+        if self.motion_capable:
+            self.menu.insert('导航到此处', callback=lambda feedback:self.commit_goal(feedback,request_execution=True))
+            self.menu.insert('仅规划预览', callback=self.commit_goal)
+        else:
+            self.menu.insert('规划到此处', callback=self.commit_goal)
         self.yaw_menu = self.menu.insert('指定终点朝向', callback=self.toggle_goal_yaw)
         self.menu.setCheckState(self.yaw_menu, MenuHandler.UNCHECKED)
-        self.menu.insert('执行已预览路线', callback=self.confirm_execution)
+        if self.motion_capable:
+            self.menu.insert('执行已预览路线', callback=self.confirm_execution)
         self.menu.insert('取消任务（不是机器人急停）', callback=self.cancel)
         initial_menu = self.menu.insert('初始楼层')
         self.menu.insert('一楼', parent=initial_menu,
@@ -216,14 +238,32 @@ class LiveView(Node):
         existing = None if self.goal_pose is None else (
             self.goal_pose.position.x, self.goal_pose.position.y, self.goal_pose.position.z)
         body = None
-        if (self.body is not None and time.monotonic()-self.body_received < .5
+        if (self.body is not None and self.body.header.frame_id == self.frame
+                and 0 <= time.monotonic()-self.body_received < .5
                 and LiveView.localization_ready(self)):
             p, q = self.body.pose.pose.position, self.body.pose.pose.orientation
             body = (p.x, p.y, p.z, math.atan2(2*(q.w*q.z+q.x*q.y), 1-2*(q.y*q.y+q.z*q.z)))
-        fallback = self.map_layer_metadata.get('initial_goal_xyz',
-            (0., 0., self.session['initial_body_z']-self.session.get('body_height', .55)))
-        point = goal_position(existing=existing, body=body, surfaces=self.goal_surfaces,
-                              fallback=fallback, body_height=self.session.get('body_height', .55))
+        # v3 sessions have no legacy initial_body_z. A dict.get() default is
+        # evaluated eagerly, even when a current target or map seed exists.
+        # Drafts use an existing map-ground target, a verified map-body sample
+        # (converted to ground once), or this same map's explicit ground seed.
+        metadata = self.map_layer_metadata
+        fallback = (metadata.get('initial_goal_xyz') if (
+            metadata.get('session_id') == self.session['id']
+            and metadata.get('frame_id') == self.frame
+            and metadata.get('ground_display_only') is True
+            and metadata.get('motion_enabled') is False) else None)
+        if existing is None and body is None and fallback is None:
+            self.reason = '等待定位或当前地图的可通行地面目标'
+            self.reason_scope = 'input'
+            return
+        try:
+            point = goal_position(existing=existing, body=body, surfaces=self.goal_surfaces,
+                                  fallback=fallback, body_height=self.session.get('body_height', .55))
+        except (ValueError, TypeError, IndexError):
+            self.reason = '3D 目标草稿坐标无效'
+            self.reason_scope = 'input'
+            return
         message = PointStamped()
         message.header.frame_id = self.frame
         message.header.stamp = self.get_clock().now().to_msg()
@@ -454,13 +494,14 @@ class LiveView(Node):
         if feedback.event_type in (InteractiveMarkerFeedback.POSE_UPDATE, InteractiveMarkerFeedback.MOUSE_UP):
             self.goal_pose = feedback.pose
 
-    def commit_goal(self, feedback):
+    def commit_goal(self, feedback, *, request_execution=False):
         if self.goal_pose is None:
             return
-        if not LiveView.localization_ready(self):
-            self.reason = '目标仅供编辑：请先完成定位，再右键明确提交'
-            self.publish_goal_editor()
+        if request_execution and not self.motion_capable:
+            self.reason='当前入口仅提供规划预览'
             return
+        # The task owner waits for localization. A UI callback between valid
+        # pose updates must not drop an otherwise explicit navigation goal.
         if self.goal_request_pending or not self.navigate_client.server_is_ready():
             self.reason = '导航任务服务未就绪或正在接收目标'
             return
@@ -470,11 +511,12 @@ class LiveView(Node):
         goal.goal.header.stamp = self.get_clock().now().to_msg()
         goal.goal.pose = deepcopy(self.goal_pose)
         goal.has_goal_yaw, goal.goal_yaw_tolerance_rad = self.goal_has_yaw, math.radians(10.)
+        goal.request_execution=bool(request_execution)
         self.goal_request_sequence += 1
         sequence = self.goal_request_sequence
         self.goal_request_pending = True
         self.goal_request_deadline = time.monotonic()+5.
-        self.reason = '目标已提交，等待规划'
+        self.reason = '导航目标已提交' if request_execution else '目标已提交，等待规划'
         self.reason_scope = 'planning'
         self.goal_submitted_at = LiveView.source_now_s(self)
         try:
@@ -491,8 +533,8 @@ class LiveView(Node):
                         handle.cancel_goal_async()
                     return
                 self.goal_request_pending = False
-                self.reason = ('目标已接收，等待路线预览' if handle.accepted
-                               else '目标被任务管理器拒绝')
+                self.reason = (('导航目标已接收' if request_execution else '目标已接收，等待路线预览')
+                               if handle.accepted else '目标被任务管理器拒绝')
             except Exception as error:
                 if sequence == self.goal_request_sequence:
                     self.goal_request_pending = False
@@ -508,6 +550,9 @@ class LiveView(Node):
         self.publish_goal_editor()
 
     def confirm_execution(self, _):
+        if not self.motion_capable:
+            self.reason = '当前入口仅提供规划预览'
+            return
         state = self.bt_state
         binding = tuple(state.get(key, '') for key in ('task_id', 'route_id', 'route_hash'))
         if (state.get('schema') != 2 or state.get('session_id') != self.session['id']
@@ -635,6 +680,7 @@ class LiveView(Node):
             self.last_snapshot_at = now
             snapshot = {'session_id': self.session['id'], 'received_at_unix': time.time(),
                 'mode': self.session['mode'], 'motion_enabled': False, 'motion_capable': self.motion_capable,
+                'physical_motion_capable': self.physical_motion_capable,
                 'reason': reason, 'seed_feedback': feedback,
                 'scan_status': scan_state, 'global_status': global_state,
                 'behavior_tree': report['behavior_tree']}

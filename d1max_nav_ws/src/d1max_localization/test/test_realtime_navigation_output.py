@@ -140,3 +140,136 @@ def test_nanosecond_roundtrip_cannot_make_current_prediction_a_future_packet():
         packet=body_pair_message(local=local,global_=global_,session_id='s',map_version_id='m',
             epoch=1,seed_id='seed',posterior_stamp=decoded-.2,imu_stamp=decoded-.01,extrapolation_sec=.01)
         assert packet.source_stamp.sec*10**9+packet.source_stamp.nanosec<=clock_ns
+
+
+def realtime_boundary():
+    """Actual serialized callbacks/tick with message publishers, no ROS graph.
+
+    Only the private EKF's input is supplied by the fixture. Prediction,
+    aligned history, body conversion, source stamps and output admission all
+    run through the production node implementation, not a copied estimator.
+    """
+    from collections import deque
+    from pathlib import Path
+    from unittest.mock import Mock
+    import yaml
+    from d1max_localization.estimation.configuration import navigation_parameters
+    from d1max_localization.math_utils import Pose3
+    from d1max_localization.realtime_navigation_output import RealtimeNavigationOutput
+    from test_navigation_estimation import locked
+
+    root = Path(__file__).parents[1]
+    config = yaml.safe_load((root/'config/localization.yaml').read_text())
+    config['navigation_estimation']['ros__parameters'].update(
+        yaml.safe_load((root/'config/realtime_navigation.yaml').read_text())
+        ['navigation_estimation']['ros__parameters'])
+    prediction, output, _ = navigation_parameters(config)
+    node = RealtimeNavigationOutput.__new__(RealtimeNavigationOutput)
+    node.core = locked()
+    node.core.limits = NavigationLimits(**{key[7:]:value for key,value in output.items()
+                                         if key.startswith('limits.')})
+    node.p = dict(map_frame='d1max_loc_map', odom_frame='d1max_loc_odom',
+                  tracking_frame='d1max_loc_tracking', body_frame='d1max_loc_base_link',
+                  trajectory_rate_hz=5., extrinsics_verified=False,
+                  time_alignment_verified=False)
+    node.extrinsic = Pose3((0.,0.,0.),(0.,0.,0.,1.))
+    node.wire_session = {'id':'session','version_id':'map'}
+    node.rate = output['output_rate_hz']
+    node.predictor = CausalInertialPredictor(PredictionLimits(**{
+        key:value for key,value in prediction.items() if key in vars(PredictionLimits())}))
+    node.now_s = Mock(return_value=10.2)
+    node.imu_frame = prediction['imu_frame']
+    for name in ('motion_pub','local_pub','local_state_pub','global_pub','state_pair_pub',
+                 'pose_pub','path_pub','status_pub','pose_status_pub','map_pub',
+                 'prediction_pub','rt_pub','tf'):
+        setattr(node,name,Mock())
+    for name in ('path','local_times','global_times','local_arrivals','global_arrivals',
+                 'rt_durations','rt_intervals'):
+        setattr(node,name,deque(maxlen=3000))
+    node.reset_client = Mock()
+    node.reset_client.service_is_ready.return_value = False
+    node.future = node.request_key = node.last_local_state_identity = None
+    node.last_local_unavailable = None
+    node.predictor_status = {}
+    node.last_error = ''
+    for name in ('last_local_sent','last_map_sent','last_path','last_status',
+                 'last_local_state_event','request_stamp','request_at','prediction_sequence',
+                 'rt_last_tick','rt_last_status','rt_overruns','rt_ticks',
+                 'clock_target_quantization_ns_max'):
+        setattr(node,name,0)
+    return node
+
+
+@pytest.mark.parametrize('global_gap',[None,'map','filter'])
+def test_actual_realtime_callbacks_emit_source_timed_50hz_body_states_across_global_gap(global_gap):
+    from sensor_msgs.msg import Imu
+    from std_msgs.msg import String
+    from nav_msgs.msg import Odometry
+    from d1max_localization.estimation_ros import stamp_time
+    from test_navigation_estimation import alignment, diagonal
+
+    node = realtime_boundary()
+    next_imu = 0
+    for tick in range(70):
+        now = 10.22+tick*.02
+        node.now_s.return_value = now
+        if tick % 5 == 0:
+            node.on_posterior(String(data=json.dumps(snapshot(now))))
+        while 10.195+next_imu*.005 <= now+1e-9:
+            acquisition = 10.195+next_imu*.005
+            message = Imu()
+            message.header.frame_id = node.imu_frame
+            message.header.stamp = stamp_time(acquisition)
+            message.linear_acceleration.z = 9.81
+            node.on_imu(message)
+            next_imu += 1
+        withholding = global_gap is not None and tick >= 10
+        if not withholding or global_gap != 'map':
+            correction = .002*tick if global_gap is None else 0.
+            contract = alignment(now)
+            contract['position'][0] = correction
+            contract['anchor']['position'][0] = correction
+            node.on_map(String(data=json.dumps(contract)))
+        if not withholding or global_gap != 'filter':
+            message = Odometry()
+            message.header.stamp = stamp_time(now)
+            message.header.frame_id = 'd1max_loc_map'
+            message.child_frame_id = 'd1max_loc_tracking'
+            message.pose.pose.position.x = .002*tick if global_gap is None else 0.
+            message.pose.pose.orientation.w = 1.
+            message.pose.covariance = diagonal()
+            node.on_filtered(message)
+        node.tick()
+        assert not node.last_error and not node.core.fault
+
+    local = [call.args[0] for call in node.local_state_pub.publish.call_args_list]
+    assert len(local) == 70 and all(message.usable for message in local)
+    times = [message.source_stamp.sec+message.source_stamp.nanosec*1e-9 for message in local]
+    assert times == pytest.approx([10.22+tick*.02 for tick in range(70)])
+    for message in local:
+        source = message.source_stamp.sec*10**9+message.source_stamp.nanosec
+        posterior = message.posterior_stamp.sec*10**9+message.posterior_stamp.nanosec
+        imu = message.imu_stamp.sec*10**9+message.imu_stamp.nanosec
+        assert message.source_stamp == message.local_odometry.header.stamp
+        assert 0 < posterior <= source and 0 < imu <= source
+        assert 0 <= source-posterior <= 350_000_000
+        assert 0 <= source-imu <= 100_000_000
+        assert (message.local_odometry.header.frame_id,
+                message.local_odometry.child_frame_id) == ('d1max_loc_odom','d1max_loc_base_link')
+    if global_gap is None:
+        pairs = [call.args[0] for call in node.state_pair_pub.publish.call_args_list
+                 if call.args[0].source_stamp.sec*10**9+call.args[0].source_stamp.nanosec
+                 >= 10_220_000_000]
+        assert len(pairs) == 70
+        assert all(message.local_odometry.header.stamp == message.global_odometry.header.stamp
+                   == message.source_stamp for message in pairs)
+        assert {(message.localization_epoch,message.localization_seed_id) for message in pairs} == {(1,'seed-a')}
+        assert all(abs(message.local_odometry.pose.pose.position.x) < 1e-8 for message in pairs)
+        # 13.8 cm cumulative map correction is not a new localization identity,
+        # a reset of odom, or a reason to interrupt its real 20 ms cadence.
+        assert pairs[-1].global_odometry.pose.pose.position.x > .10
+    else:
+        # The global correction genuinely expires; it cannot invalidate the
+        # independent continuous-odom output or fabricate a global heartbeat.
+        assert node.state_pair_pub.publish.call_count < 70
+        assert not node.core.output_ready(node.now_s())

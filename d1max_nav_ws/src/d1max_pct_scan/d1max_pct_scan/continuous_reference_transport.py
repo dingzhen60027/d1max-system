@@ -191,13 +191,20 @@ class ContinuousReferenceTransport:
                 return None
             if self.core is None:
                 return self._initialize(current_source_ns, now_monotonic)
+            # Record an exact same-context correction before projecting with
+            # the incumbent anchor. A failed old-anchor correspondence must
+            # not prevent creation of the independent replacement candidate.
+            # observe_pair does not move accepted geometry or task progress.
+            revision = (self.core.candidate_anchor or self.core.anchor).revision+1
+            self.core.observe_pair(*pair, revision=revision, current_source_ns=current_source_ns,
+                                   now_monotonic=now_monotonic)
             last=self.core._last_sample
             progress = (self.core.project(pair[1],current_source_ns=current_source_ns,
                 now_monotonic=now_monotonic) if last is None or pair[1].body.source_ns>last[0]
                 else self.core._progress)
-            revision = (self.core.candidate_anchor or self.core.anchor).revision+1
-            self.core.observe_pair(*pair, revision=revision, current_source_ns=current_source_ns,
-                                   now_monotonic=now_monotonic)
+            if progress is None:
+                self.status.update(phase='committed_reference_waiting_measured_projection')
+                return None
             self.status.update(phase='tracking_staged_reference' if self.accepted else 'waiting_reference_receipt',
                 measured_arc_m=progress.measured_arc_m, confirmed_arc_m=progress.confirmed_arc_m,
                 source_ns=progress.source_ns, anchor_id=progress.anchor_id,
@@ -232,7 +239,25 @@ class ContinuousReferenceTransport:
             return None  # A local sample never fabricates a global anchor.
         progress=self.core.project(sample,current_source_ns=current_source_ns,now_monotonic=now_monotonic)
         if self.pending_core is not None and self.pending_core is not self.core:
-            self.pending_core.project(sample,current_source_ns=current_source_ns,now_monotonic=now_monotonic)
+            try:
+                self.pending_core.project(sample,current_source_ns=current_source_ns,now_monotonic=now_monotonic)
+            except ValueError as error:
+                # A successor anchor is only a candidate. Its correspondence
+                # failure cannot suppress the already-valid measured progress
+                # of the immutable incumbent, nor retire the task/permit.
+                rejected=(dict(generation=self.pending.generation,
+                    task_id=self.pending.task_id,route_id=self.pending.route_id,
+                    route_hash=self.pending.route_hash,anchor_id=self.pending.anchor_id,
+                    anchor_revision=self.pending.anchor_revision,
+                    source_ns=nanoseconds(self.pending.path.header.stamp))
+                    if self.pending is not None else None)
+                # A projection failure is not proof that the sole writer did
+                # not select this prepared geometry. Keep its identity until
+                # the owner lane retires it or commits the matching snapshot.
+                self.pending_core._progress = None
+                self.status.update(phase='candidate_projection_rejected',
+                    rejected_pending_generation=rejected['generation'] if rejected else 0,
+                    rejected_pending_identity=rejected,pending_reason=str(error))
         self.status.update(measured_arc_m=progress.measured_arc_m,confirmed_arc_m=progress.confirmed_arc_m,
             source_ns=progress.source_ns,anchor_id=progress.anchor_id)
         return progress
@@ -399,27 +424,40 @@ class ContinuousReferenceTransport:
         """Called only after the formal owner commits this exact prepared version."""
         if self.pending is None or self.pending_core is None or self.quarantined:
             raise ValueError('no_prepared_reference_to_commit')
+        progress_error = ''
         if owner_committed:
             # A reference is immutable geometry, not a collision lease. Once
             # native accepted its delivery, a fresh owner commit may arrive
             # after that delivery deadline. Require CURRENT source-timed body
             # evidence; do not renew/rewrite the original proposal stamp.
             local=self.latest_local or (self.latest_pair[1] if self.latest_pair else None)
-            if local is None or local.body.context != self.pending_core.context:
+            if local is not None and local.body.context != self.pending_core.context:
                 raise ValueError('committed_reference_current_context_missing')
-            self._fresh(local.body.source_ns,local.received_monotonic,current_source_ns,now_monotonic)
-            last = self.pending_core._last_sample
-            if last is None or local.body.source_ns > last[0]:
-                self.pending_core.project(local,current_source_ns=current_source_ns,now_monotonic=now_monotonic)
+            try:
+                if local is None:
+                    raise ValueError('committed_reference_current_body_missing')
+                self._fresh(local.body.source_ns,local.received_monotonic,current_source_ns,now_monotonic)
+                last = self.pending_core._last_sample
+                if last is None or local.body.source_ns > last[0]:
+                    self.pending_core.project(local,current_source_ns=current_source_ns,now_monotonic=now_monotonic)
+                self.pending_core._require_progress(current_source_ns, now_monotonic)
+            except ValueError as error:
+                # A BT geometry commit is already a fact. Failing current
+                # measured projection cannot roll it back to an old anchor.
+                # Adopt geometry but emit no RouteProgress until a new real
+                # sample successfully projects; this supplies no motion lease.
+                progress_error = str(error)
+                self.pending_core._progress = None
         else:
             self._fresh(nanoseconds(self.pending.path.header.stamp), self._pending_received_monotonic,
                         current_source_ns, now_monotonic)
-        self.pending_core._require_progress(current_source_ns, now_monotonic)
+            self.pending_core._require_progress(current_source_ns, now_monotonic)
         self.core, self.accepted = self.pending_core, deepcopy(self.pending)
         self._accepted_end_arc_m = self._pending_end_arc_m
         self.discard_pending()
         self.status.update(phase='reference_receipt_acknowledged',
-            accepted_generation=self.accepted.generation, anchor_id=self.core.anchor.anchor_id)
+            accepted_generation=self.accepted.generation, anchor_id=self.core.anchor.anchor_id,
+            committed_progress_reason=progress_error)
         return self.accepted
 
     def pending_window_remaining(self):

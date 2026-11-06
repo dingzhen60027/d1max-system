@@ -162,3 +162,49 @@ from the global goal owner. It never queues an old route for automatic execution
 Pure geometry unit tests and isolated synthetic ROS checks must remain clearly
 separate from live robot acceptance. Official Go2 defaults/launch controllers are
 not D1 Max calibration or permission to move the robot.
+
+## 10-09 formal BT mainline audit (source changes, not deployment)
+
+The formal `navigation_session` has separate candidate and actuation queries;
+the preceding legacy `require_observed_free=false` description must not be used
+to infer its execution policy. Its generated configuration selects
+`grid_map.planning_collision_policy=official`,
+`fsm.trajectory_geometry_policy=official_inflated_geometry` and keeps the raw
+observed-evidence layer enabled. This was also confirmed in the saved actual
+`80a9625083cd42dd8e328f3f55081c1d` session parameters, not only the source template.
+
+| Consumer | Native query | Meaning of raw unknown |
+| --- | --- | --- |
+| A*, rebound and complete candidate geometry | `getPlanningInflateOccupancy` | Does not create an occupied planning flag; not written as free |
+| Actual command plus braking sweep | Raw observed snapshot | Insufficient evidence inside the requested sweep; unrelated unknown cells do not veto the entire map |
+
+The pinned ROS 2 upstream inflated-buffer query and the formal candidate query
+agree on this distinction. No collision policy, robot envelope, source lease,
+near-body clear box or motion-acceptance flag was relaxed in this audit.
+
+Changes are limited to ownership and truthful failure propagation:
+
+- An internal A* 200 ms timeout is a resource failure, not a geometric dead end.
+  It can start a new bounded attempt after the existing 500 ms cooldown without
+  waiting for a stationary map to change. Each attempt still shares the original
+  400 ms solve deadline; cancellation cannot be retried as resource recovery.
+- Optimizer and final-curve failures carry their own terminal query evidence:
+  state 1 is occupied, state 2 is uncertain/unobserved. Unknown cells visited by
+  a previous search cannot overwrite the final curve's reason.
+- The no-motion preview solver's original heading seed is value-copied with the
+  curve into the independent validator. Millimetre-per-second drift cannot
+  invent a different initial body yaw at that stage. Actual measured pose,
+  translation/rotation sweep, complete-curve checks and source expiry remain
+  required; this contract is rejected by the SDK writer lane.
+- The typed BT path has a single reference owner and ignores the legacy JSON
+  refresh callback. Legacy compatibility no longer kills a task after an
+  unrelated 12 s/20-message limit. Central recovery budgets still apply; an
+  already expired episode cannot be revived by a late third healthy message.
+
+Tests use the production GridMap/solver and passive transaction ledger without
+ROS initialization or SDK connection. These software regressions do not prove
+that the recorded near-body occupied returns are robot self echoes. The frozen
+raw-ray recording still contains real occupied classifications; the separately
+approved offline-only three-voxel withdrawal is not a live collision repair.
+Source changes and repository copies are not an update of the active sealed
+runtime. No services were restarted and no robot commands were issued.

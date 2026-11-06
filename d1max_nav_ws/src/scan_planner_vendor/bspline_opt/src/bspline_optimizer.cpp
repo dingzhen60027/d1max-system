@@ -60,12 +60,32 @@ namespace scan_planner
 
   void BsplineOptimizer::setBsplineInterval(const double &ts) { bspline_interval_ = ts; }
 
+  void BsplineOptimizer::recordQueryFailure(int state)
+  {
+    last_failure_phase_=state==2 ? "waiting_observed_space" :
+        (state==1 ? "failed_final_collision":"failed_rebound_search");
+  }
+
+  void BsplineOptimizer::recordSearchFailure(ASTAR_RET result)
+  {
+    if (a_star_->lastSearchTimedOut()) {
+      last_failure_phase_="solve_search_deadline_exceeded";
+      return;
+    }
+    if (result==ASTAR_RET::INIT_UNOBSERVED) recordQueryFailure(2);
+    else if (result==ASTAR_RET::INIT_START_OCCUPIED ||
+             result==ASTAR_RET::INIT_TARGET_OCCUPIED ||
+             result==ASTAR_RET::INIT_LATTICE_OCCUPIED) recordQueryFailure(1);
+    else last_failure_phase_="failed_rebound_search";
+  }
+
   /* This function is very similar to check_collision_and_rebound(). 
    * It was written separately, just because I did it once and it has been running stably since March 2020.
    * But I will merge then someday.*/
   std::vector<std::vector<Eigen::Vector3d>> BsplineOptimizer::initControlPoints(Eigen::MatrixXd &init_points, bool flag_first_init /*= true*/)
   {
     control_points_initialized_=false;
+    if (flag_first_init) last_failure_phase_.clear();
     if (!solveAllowed(solve_budget_)) return {};
     if (init_points.rows()!=3 || init_points.cols()<=2*order_ || !init_points.allFinite()) return {};
     if (flag_first_init)
@@ -85,6 +105,7 @@ namespace scan_planner
     vector<std::pair<int, int>> segment_ids;
     int same_occ_state_times = ENOUGH_INTERVAL + 1;
     bool occ, last_occ = false;
+    int last_query_state=0;
     bool flag_got_start = false, flag_got_end = false, flag_got_end_maybe = false;
     int i_end = (int)init_points.cols() - order_; // Include the terminal third.
     for (int i = order_; i <= i_end; ++i)
@@ -94,7 +115,8 @@ namespace scan_planner
         if (!solveAllowed(solve_budget_)) return {};
         Eigen::Vector3d sample_pt = a * init_points.col(i - 1) + (1 - a) * init_points.col(i);
         double sample_yaw = estimateSegmentYaw(init_points.col(i - 1), init_points.col(i));
-        occ = queryOccupancy(sample_pt, sample_yaw);
+        last_query_state = queryOccupancy(sample_pt, sample_yaw);
+        occ = last_query_state!=0;
         // cout << setprecision(5);
         // cout << (a * init_points.col(i-1) + (1-a) * init_points.col(i)).transpose() << " occ1=" << occ << endl;
 
@@ -141,7 +163,10 @@ namespace scan_planner
     }
 
     // A collision that reaches the fixed terminal controls has no free exit.
-    if (flag_got_start && !flag_got_end) return {};
+    if (flag_got_start && !flag_got_end) {
+      recordQueryFailure(last_query_state);
+      return {};
+    }
 
     /*** a star search ***/
     vector<vector<Eigen::Vector3d>> a_star_paths;
@@ -162,6 +187,7 @@ namespace scan_planner
       }
       else
       {
+        recordSearchFailure(ret);
         const double yaw=estimateSegmentYaw(in,out);
         RCLCPP_ERROR(rclcpp::get_logger("bspline_opt"),
             "A-star failed; aborting optimization: ret=%d segment=%zu controls=%d..%d "
@@ -738,6 +764,10 @@ namespace scan_planner
 
   bool BsplineOptimizer::check_collision_and_rebound(void)
   {
+    int last_query_state=0;
+    const auto query=[&](const Eigen::Vector3d &point,double yaw) {
+      last_query_state=queryOccupancy(point,yaw);return last_query_state;
+    };
 
     int end_idx = cps_.size - order_;
 
@@ -749,7 +779,7 @@ namespace scan_planner
     for (int i = order_ - 1; i <= i_end; ++i)
     {
 
-      bool occ = queryOccupancy(cps_.points.col(i), estimateControlPointYaw(cps_.points, i));
+      bool occ = query(cps_.points.col(i), estimateControlPointYaw(cps_.points, i));
 
       /*** check if the new collision will be valid ***/
       if (occ)
@@ -772,7 +802,7 @@ namespace scan_planner
         int j;
         for (j = i - 1; j >= 0; --j)
         {
-          occ = queryOccupancy(cps_.points.col(j), estimateControlPointYaw(cps_.points, j));
+          occ = query(cps_.points.col(j), estimateControlPointYaw(cps_.points, j));
           if (!occ)
           {
             in_id = j;
@@ -781,6 +811,7 @@ namespace scan_planner
         }
         if (j < 0) // fail to get the obs free point
         {
+          recordQueryFailure(last_query_state);
           RCLCPP_ERROR(rclcpp::get_logger("bspline_opt"), "The robot is inside an obstacle");
           control_points_initialized_=false;
           force_stop_type_=STOP_FOR_ERROR;
@@ -789,7 +820,7 @@ namespace scan_planner
 
         for (j = i + 1; j < cps_.size; ++j)
         {
-          occ = queryOccupancy(cps_.points.col(j), estimateControlPointYaw(cps_.points, j));
+          occ = query(cps_.points.col(j), estimateControlPointYaw(cps_.points, j));
 
           if (!occ)
           {
@@ -799,6 +830,7 @@ namespace scan_planner
         }
         if (j >= cps_.size) // fail to get the obs free point
         {
+          recordQueryFailure(last_query_state);
           RCLCPP_WARN(rclcpp::get_logger("bspline_opt"),
                       "Trajectory terminal point is in an obstacle; skip this plan");
 
@@ -834,7 +866,8 @@ namespace scan_planner
           }
           a_star_paths.push_back(path);
         }
-        else if (ret == ASTAR_RET::SEARCH_ERR && i + 1 < segment_ids.size())
+        else if (ret == ASTAR_RET::SEARCH_ERR && !a_star_->lastSearchTimedOut() &&
+                 i + 1 < segment_ids.size())
         {
           segment_ids[i].second = segment_ids[i + 1].second;
           segment_ids.erase(segment_ids.begin() + i + 1);
@@ -844,6 +877,7 @@ namespace scan_planner
         }
         else
         {
+          recordSearchFailure(ret);
           const double yaw=estimateSegmentYaw(in,out);
           RCLCPP_ERROR(rclcpp::get_logger("bspline_opt"),
               "A-star error in rebound: ret=%d segment=%zu controls=%d..%d "
@@ -995,6 +1029,7 @@ namespace scan_planner
 
   bool BsplineOptimizer::rebound_optimize()
   {
+    last_failure_phase_.clear();
     if (!solveAllowed(solve_budget_)) return false;
     iter_num_ = 0;
     int start_id = order_;
@@ -1053,6 +1088,7 @@ namespace scan_planner
             },50000,heading_contract_);
         if (collision.state==SplineCollisionState::InvalidInput ||
             collision.state==SplineCollisionState::SampleBudgetExceeded) {
+          last_failure_phase_="failed_curve_validation";
           RCLCPP_WARN(rclcpp::get_logger("bspline_opt"),
               "Full spline collision check rejected: state=%d queries=%zu",
               static_cast<int>(collision.state),collision.queries);
@@ -1060,6 +1096,8 @@ namespace scan_planner
         }
         flag_occ=collision.state==SplineCollisionState::Collision;
         if (flag_occ) {
+          last_failure_phase_=collision.occupancy==2 ?
+              "waiting_observed_space":"failed_final_collision";
           RCLCPP_WARN(rclcpp::get_logger("bspline_opt"),
               "Full spline collision: t=%.6f/%.6f state=%d queries=%zu restart=%d "
               "xyz=(%.6f %.6f %.6f) yaw=%.6f v=(%.6f %.6f %.6f) preview_body_heading=%d measured_yaw=%.6f",
@@ -1076,6 +1114,7 @@ namespace scan_planner
 
         if (!flag_occ)
         {
+          last_failure_phase_.clear();
           printf("\033[32miter(+1)=%d,time(ms)=%5.3f,total_t(ms)=%5.3f,cost=%5.3f\n\033[0m", iter_num_, time_ms, total_time_ms, final_cost);
           success = true;
         }

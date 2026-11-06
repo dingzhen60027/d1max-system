@@ -9,6 +9,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert'
 import './bags.css'
 import './live-planning.css'
+import RemoteLaunchButton from './RemoteLaunchButton.jsx'
 const Workspace3D = lazy(()=>import('./Workspace3D.jsx'))
 const Workspace2D = lazy(()=>import('./Workspace2D.jsx'))
 const WorkspaceBags = lazy(()=>import('./WorkspaceBags.jsx'))
@@ -52,7 +53,7 @@ function HomePage(){
  const [data,setData]=useState(null),[grid,setGrid]=useState(null),[error,setError]=useState('')
  useEffect(()=>{let live=true;const abort=new AbortController();Promise.all(['/api/overview','/api/2d/overview'].map(path=>fetch(path,{signal:abort.signal}).then(async r=>{if(!r.ok)throw Error('地图服务暂不可用');return r.json()}))).then(([d,g])=>{if(live){setData(d);setGrid(g)}}).catch(e=>{if(live)setError(e.message)});return()=>{live=false;abort.abort()}},[])
  return <div className="portal-home">
-  <header className="portal-home-top"><a href="#/" className="portal-brand"><span><Layers3/></span><strong>D1 Max<span>MAP WORKSPACE</span></strong></a><Badge variant="outline"><span className="status-dot"/>本地工作台</Badge></header>
+  <header className="portal-home-top"><a href="#/" className="portal-brand"><span><Layers3/></span><strong>D1 Max<span>MAP WORKSPACE</span></strong></a><div className="portal-header-actions"><RemoteLaunchButton/><Badge variant="outline"><span className="status-dot"/>本地工作台</Badge></div></header>
   <main className="home-content">
    <div className="home-intro"><h1>地图工作台</h1></div>
    {error&&<Alert variant="destructive"><FileWarning/><AlertTitle>连接异常</AlertTitle><AlertDescription>{error}</AlertDescription></Alert>}
@@ -89,7 +90,7 @@ export default function App(){
    {GROUPS[route.mode].length>1&&<SidebarGroup><SidebarGroupLabel>{modeName}</SidebarGroupLabel><SidebarMenu>{GROUPS[route.mode].map(v=><SidebarMenuItem key={v.id}><WorkspaceLink isActive={route.section===v.id} render={<a href={'#/'+route.mode+'/'+v.id}/> }><v.icon/><span>{v.name}</span></WorkspaceLink></SidebarMenuItem>)}</SidebarMenu></SidebarGroup>}</SidebarContent>
    <SidebarFooter><div className="portal-local" title="ROS 2 · Zenoh · Domain 24"><ScanLine/><span>本地工作区</span></div></SidebarFooter>
   </Sidebar>
-  <SidebarInset className="portal-inset"><header className="portal-breadcrumb"><SidebarTrigger/><Breadcrumb><BreadcrumbList><BreadcrumbItem><BreadcrumbLink href="#/">工作台</BreadcrumbLink></BreadcrumbItem><BreadcrumbSeparator/>{GROUPS[route.mode].length>1?<><BreadcrumbItem><BreadcrumbLink href={'#/'+route.mode+'/'+GROUPS[route.mode][0].id}>{modeName}</BreadcrumbLink></BreadcrumbItem><BreadcrumbSeparator/><BreadcrumbItem><BreadcrumbPage>{sectionName}</BreadcrumbPage></BreadcrumbItem></>:<BreadcrumbItem><BreadcrumbPage>{modeName}</BreadcrumbPage></BreadcrumbItem>}</BreadcrumbList></Breadcrumb></header>
+  <SidebarInset className="portal-inset"><header className="portal-breadcrumb"><SidebarTrigger/><Breadcrumb><BreadcrumbList><BreadcrumbItem><BreadcrumbLink href="#/">工作台</BreadcrumbLink></BreadcrumbItem><BreadcrumbSeparator/>{GROUPS[route.mode].length>1?<><BreadcrumbItem><BreadcrumbLink href={'#/'+route.mode+'/'+GROUPS[route.mode][0].id}>{modeName}</BreadcrumbLink></BreadcrumbItem><BreadcrumbSeparator/><BreadcrumbItem><BreadcrumbPage>{sectionName}</BreadcrumbPage></BreadcrumbItem></>:<BreadcrumbItem><BreadcrumbPage>{modeName}</BreadcrumbPage></BreadcrumbItem>}</BreadcrumbList></Breadcrumb><RemoteLaunchButton/></header>
    <div className="portal-page"><Suspense fallback={<div className="page-loading"><Skeleton/><Skeleton/><span>加载中…</span></div>}>
     {route.mode==='planning'?<LivePlanningPanel/>:route.mode==='bags'?<WorkspaceBags section={route.section}/>:route.mode==='3d'?<Workspace3D section={route.section} setSection={section=>navigate('/3d/'+section)} navigate={navigate}/>:<Workspace2D section={route.section} query={route.query} navigate={navigate}/>}
    </Suspense></div>

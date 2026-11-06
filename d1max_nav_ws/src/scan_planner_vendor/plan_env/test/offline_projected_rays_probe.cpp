@@ -1,4 +1,5 @@
-// Read-only real-bag replay of actual GridMap methods. No ROS init/node/graph.
+// Real-bag replay of actual GridMap methods. No ROS init/node/graph.
+// Optional exact-cell surgery is CLI opt-in, memory-only, never a live filter.
 #include <plan_env/grid_map.h>
 #include <rclcpp/serialization.hpp>
 #include <nlohmann/json.hpp>
@@ -7,6 +8,8 @@
 #include <iterator>
 #include <iomanip>
 #include <sstream>
+#include <set>
+#include <limits>
 
 using Json=nlohmann::json;
 template<class T> static Json xyz(const T &p) {return Json::array({p.x(),p.y(),p.z()});}
@@ -36,6 +39,11 @@ struct GridMapTestAccess {
     p.use_projected_rays_=v.value("grid_map.use_projected_rays",true);
     p.require_localization_context_=true;
     p.require_observed_free_=v.value("grid_map.require_observed_free",true);
+    p.planning_collision_policy_=v.value("grid_map.planning_collision_policy",std::string("official"));
+    if(p.planning_collision_policy_!="official" && p.planning_collision_policy_!="observed_free")
+      throw std::runtime_error("invalid planning collision policy");
+    if(p.planning_collision_policy_=="observed_free" && !p.require_observed_free_)
+      throw std::runtime_error("observed_free planning requires strict evidence map");
     p.preview_only_=v.value("grid_map.preview_only",false);
     p.localization_session_id_=v.at("grid_map.localization_session_id").get<std::string>();
     p.frame_id_=v.at("grid_map.frame_id").get<std::string>();p.sensor_type_="lidar";
@@ -124,6 +132,7 @@ struct GridMapTestAccess {
     if(summary) {
       out["require_observed_free"]=map.requiresObservedFree();
       out["query_policy"]=map.collisionQueryPolicy();
+      out["planning_query_policy"]=map.planningCollisionQueryPolicy();
       out["enforce_free_freshness"]=map.enforce_free_freshness_;
       out["free_evidence_memory_bytes"]=map.free_observation_stamps_.capacity()*sizeof(std::int64_t);
       std::array<std::size_t,3> cells{{0,0,0}};
@@ -140,6 +149,94 @@ struct GridMapTestAccess {
     }
     return out;
   }
+  static Json clearOfflinePreview(GridMap &map,const Json &request,bool enabled) {
+    if (!enabled || !request.value("offline_preview_only",false) || map.node_ || map.collision_snapshot_)
+      throw std::runtime_error("offline preview surgery requires an explicit CLI opt-in and memory-only writer");
+    // This diagnostic is restricted to the three user-selected recorded cells,
+    // not an expandable body box and not an arbitrary occupied-space eraser.
+    const std::set<std::array<int,3>> approved{{{-4,-16,-8}},{{-5,-16,-8}},{{-5,0,-8}}};
+    std::set<std::array<int,3>> requested;
+    std::vector<Eigen::Vector3i> cells;
+    std::vector<Eigen::Vector3d> centers;
+    if (request.at("cells").size()!=approved.size())
+      throw std::runtime_error("exactly the three approved recorded voxel indices are required");
+    if (std::abs(map.mp_.resolution_-.05)>1e-12)
+      throw std::runtime_error("recorded voxel resolution mismatch");
+    const Json before=state(map,true);
+    const std::string approved_digest="e23ea8fa4e062fe1";
+    if (request.at("expected_raw_digest")!=approved_digest ||
+        before.at("raw_buffer_fnv1a64")!=approved_digest)
+      throw std::runtime_error("recorded map digest mismatch; no voxel was modified");
+    // Validate the entire target set before touching the writer.
+    for (const auto &value:request.at("cells")) {
+      if (!value.is_array() || value.size()!=3 ||
+          !value[0].is_number_integer() || !value[1].is_number_integer() || !value[2].is_number_integer())
+        throw std::runtime_error("voxel indices must be integer XYZ");
+      std::array<int,3> key;
+      for (int axis=0;axis<3;++axis) {
+        if (value[axis].is_number_unsigned()) {
+          if (value[axis].get<std::uint64_t>()>static_cast<std::uint64_t>(std::numeric_limits<int>::max()))
+            throw std::runtime_error("voxel index exceeds native integer range");
+        } else {
+          const auto index=value[axis].get<std::int64_t>();
+          if (index<std::numeric_limits<int>::min() || index>std::numeric_limits<int>::max())
+            throw std::runtime_error("voxel index exceeds native integer range");
+        }
+        key[axis]=value[axis].get<int>();
+      }
+      if (!approved.count(key) || !requested.insert(key).second)
+        throw std::runtime_error("unapproved or duplicate target; no voxel was modified");
+      const Eigen::Vector3i cell(key[0],key[1],key[2]);
+      if (!map.isInMap(cell) || scan_planner::strictRawVoxelStatus(
+          map.md_.occupancy_buffer_[map.toAddress(cell)],map.mp_.clamp_min_log_,map.mp_.min_occupancy_log_)!=1)
+        throw std::runtime_error("target is not an occupied cell in this recorded map");
+      Eigen::Vector3d center;map.indexToPos(cell,center);
+      Eigen::Vector3i check;map.posToIndex(center,check);
+      if (check!=cell) throw std::runtime_error("voxel-center round trip mismatch");
+      cells.push_back(cell);centers.push_back(center);
+    }
+    const auto old_raw=map.md_.occupancy_buffer_;
+    const auto old_stamps=map.free_observation_stamps_;
+    Json changed=Json::array();
+    for (std::size_t i=0;i<cells.size();++i) {
+      const Json old=voxel(map,cells[i]);
+      // Native exact-cell reset retracts BOTH inflation layers and resets
+      // evidence to unknown. It does not fabricate a ray-derived free stamp.
+      map.resetBuffer(centers[i],centers[i]);
+      changed.push_back({{"before",old},{"after",voxel(map,cells[i])}});
+    }
+    std::size_t raw_changes=0,stamp_changes=0;bool only_targets=true;
+    std::set<int> addresses;
+    for (const auto &cell:cells) addresses.insert(map.toAddress(cell));
+    for (std::size_t i=0;i<old_raw.size();++i) {
+      if (old_raw[i]!=map.md_.occupancy_buffer_[i]) {
+        ++raw_changes;only_targets=only_targets&&addresses.count(static_cast<int>(i));
+      }
+      if (i<old_stamps.size() && old_stamps[i]!=map.free_observation_stamps_[i]) {
+        ++stamp_changes;only_targets=only_targets&&addresses.count(static_cast<int>(i));
+      }
+    }
+    if (!only_targets || raw_changes!=3)
+      throw std::runtime_error("offline exact-cell invariant failed");
+    return {{"offline_preview_only",true},{"cleared_count",cells.size()},
+      {"replacement_state","unknown_not_observed_free"},{"motion_authority",false},
+      {"raw_changed_cells",raw_changes},{"free_stamp_changed_cells",stamp_changes},
+      {"only_approved_cells_changed",only_targets},{"cells",changed},
+      {"before",before},{"after",state(map,true)}};
+  }
+  static Json occupiedPreview(GridMap &map) {
+    Json points=Json::array();
+    for (std::size_t address=0;address<map.md_.occupancy_buffer_.size();++address) {
+      if (scan_planner::strictRawVoxelStatus(map.md_.occupancy_buffer_[address],
+          map.mp_.clamp_min_log_,map.mp_.min_occupancy_log_)!=1) continue;
+      if (points.size()>=100000) throw std::runtime_error("offline preview export bound exceeded");
+      Eigen::Vector3i cell;map.hashIdToGlobalIndex(static_cast<int>(address),cell);
+      Eigen::Vector3d center;map.indexToPos(cell,center);points.push_back(xyz(center));
+    }
+    return {{"frame_id",map.mp_.frame_id_},{"resolution",map.mp_.resolution_},
+      {"occupied_count",points.size()},{"occupied_centers",points},
+      {"geometry_only",true},{"motion_authority",false}};
+  }
   static Json query(GridMap &map,const Json &v,std::int64_t now_ns,const std::string &config_hash) {
     const auto p=v.at("position").get<std::vector<double>>();const double yaw=v.at("yaw").get<double>();
     if(p.size()!=3) throw std::runtime_error("query must have XYZ");
@@ -154,9 +251,14 @@ struct GridMapTestAccess {
     }
     Json result={{"label",v.value("label","query")},{"position",p},{"yaw",yaw},
       {"collision",map.getInflateOccupancy(body,yaw)},
+      {"planning_collision",map.getPlanningInflateOccupancy(body,yaw)},
+      {"planning_query_policy",map.planningCollisionQueryPolicy()},
+      {"evidence_state",detail.state()},
+      {"evidence_requires_observed_free",map.requiresObservedFree()},
       {"query_policy",map.collisionQueryPolicy()},
       {"counts_semantics",map.requiresObservedFree()?"strict_with_free_expiry":"raw_evidence"},
       {"counts_free_occupied_unknown_outside",detail.counts},{"first_occupied_unknown_outside",first}};
+    result["planning_zero_semantics"]="candidate_geometry_clear; not observed-free execution proof";
     if(!detailed) return result;
     const auto &d=map.near_field_diagnostics_;
     result["query_source"]=v.value("query_source","offline_projected_rays_probe");
@@ -177,8 +279,11 @@ struct GridMapTestAccess {
     result["raw_overlap_count"]=detail.counts;
     result["unique_voxel_count"]=detail.voxels.size();
     result["diagnostic_counts"]=Json::object();
-    for(const auto *name:{"observed_free","occupied","never_observed","observed_insufficient","outside","invalid","stale_free"})
+    result["raw_overlap_diagnostic_counts"]=Json::object();
+    for(const auto *name:{"observed_free","occupied","never_observed","observed_insufficient","outside","invalid","stale_free"}) {
       result["diagnostic_counts"][name]=0;
+      result["raw_overlap_diagnostic_counts"][name]=0;
+    }
     const Eigen::Vector3d heading(std::cos(yaw),std::sin(yaw),0.);
     const auto body_envelope=map.bodyEnvelope();const auto kernel=map.obstacleDilation();
     result["collision_geometry"]={{"actual_query_yaw",yaw},{"radius",body_envelope.radius},
@@ -208,13 +313,43 @@ struct GridMapTestAccess {
       {"cell_limit",d.capacity()},{"events_per_integration_limit",d.eventLimit()},
       {"dropped_events",d.droppedEvents()},{"dropped_cells",d.droppedCells()},
       {"history_is_complete",false}};
+    // Partition native query voxels only. This diagnostic ROI is neither an
+    // entity self-filter nor a calibrated safety envelope; it changes no map.
+    // ROI membership remains geometric when witness retention is disabled,
+    // so diagnostics OFF/ON comparisons keep the same count semantics.
+    const Eigen::Vector3i roi_low=((d.center()-d.halfExtent())*map.mp_.resolution_inv_).array().floor().cast<int>();
+    const Eigen::Vector3i roi_high=((d.center()+d.halfExtent())*map.mp_.resolution_inv_).array().floor().cast<int>();
+    std::array<std::size_t,4> roi_inside_unique{{0,0,0,0}},roi_outside_unique{{0,0,0,0}};
+    std::array<std::size_t,4> roi_inside_raw{{0,0,0,0}},roi_outside_raw{{0,0,0,0}};
+    result["diagnostic_roi_classification_counts"]={{"inside",Json::object()},{"outside",Json::object()}};
+    result["diagnostic_roi_raw_overlap_classification_counts"]={{"inside",Json::object()},{"outside",Json::object()}};
+    for(const auto *name:{"observed_free","occupied","never_observed","observed_insufficient","outside","invalid","stale_free"}) {
+      result["diagnostic_roi_classification_counts"]["inside"][name]=0;
+      result["diagnostic_roi_classification_counts"]["outside"][name]=0;
+      result["diagnostic_roi_raw_overlap_classification_counts"]["inside"][name]=0;
+      result["diagnostic_roi_raw_overlap_classification_counts"]["outside"][name]=0;
+    }
     result["voxels"]=Json::array();
     for(const auto &cell:detail.voxels) {
       const auto name=scan_planner::diagnosticName(cell.classification);
       result["diagnostic_counts"][name]=result["diagnostic_counts"][name].get<std::size_t>()+1;
+      const bool in_roi=!(cell.index.array()<roi_low.array()).any() && !(cell.index.array()>roi_high.array()).any();
+      const auto roi=in_roi?"inside":"outside";
+      const int slot=cell.native_state<0?3:cell.native_state;
+      auto &unique=in_roi?roi_inside_unique:roi_outside_unique;
+      auto &raw=in_roi?roi_inside_raw:roi_outside_raw;
+      const unsigned overlap=(cell.cylinder_mask&1U?1U:0U)+(cell.cylinder_mask&2U?1U:0U);
+      ++unique[slot];raw[slot]+=overlap;
+      auto &classified=result["diagnostic_roi_classification_counts"][roi][name];
+      classified=classified.get<std::size_t>()+1;
+      auto &overlap_classified=result["diagnostic_roi_raw_overlap_classification_counts"][roi][name];
+      overlap_classified=overlap_classified.get<std::size_t>()+overlap;
+      auto &global_overlap=result["raw_overlap_diagnostic_counts"][name];
+      global_overlap=global_overlap.get<std::size_t>()+overlap;
       if(!v.value("export_voxels",true)) continue;
       if(result["voxels"].size()>=4096) continue;
       Json row=voxel(map,cell.index);row["cylinder_membership_mask"]=cell.cylinder_mask;
+      row["inside_diagnostic_roi"]=in_roi;
       const Eigen::Vector3d center=(cell.index.cast<double>().array()+.5)*map.mp_.resolution_;
       row["center_in_body_coordinates"]=xyz(q.conjugate()*(center-body));
       // Exact transformed eight corners, not an upright AABB mislabeled body space.
@@ -233,11 +368,19 @@ struct GridMapTestAccess {
     }
     result["exported_voxels"]=result["voxels"].size();
     result["export_truncated"]=v.value("export_voxels",true) && detail.voxels.size()>4096;
+    result["diagnostic_roi_partition"]={{"definition","configured witness ROI; not physical self geometry or safety envelope"},
+      {"unique_inside_free_occupied_unknown_outside",roi_inside_unique},
+      {"unique_outside_free_occupied_unknown_outside",roi_outside_unique},
+      {"raw_inside_free_occupied_unknown_outside",roi_inside_raw},
+      {"raw_outside_free_occupied_unknown_outside",roi_outside_raw}};
     return result;
   }
 };
 
-int main() {
+int main(int argc,char **argv) {
+  bool offline_preview_surgery=false;
+  if (argc==2 && std::string(argv[1])=="--offline-preview-surgery") offline_preview_surgery=true;
+  else if (argc!=1) {std::cerr<<"unsupported offline probe option"<<std::endl;return 2;}
   GridMap map;bool configured=false;std::string line,config_hash;
   while(std::getline(std::cin,line)) {
     try {
@@ -286,6 +429,12 @@ int main() {
         GridMapTestAccess::slide(map,request.at("position"));result=GridMapTestAccess::state(map);
       } else if(type=="reset") {
         map.resetBuffer();result=GridMapTestAccess::state(map);
+      } else if(type=="offline_preview_clear") {
+        result=GridMapTestAccess::clearOfflinePreview(map,request,offline_preview_surgery);
+      } else if(type=="offline_preview_export") {
+        if (!offline_preview_surgery || !request.value("offline_preview_only",false))
+          throw std::runtime_error("offline preview export requires explicit opt-in");
+        result=GridMapTestAccess::occupiedPreview(map);
       } else if(type=="raw_query") {
         GridMapTestAccess::queryClock(map,request.value("now_ns",std::int64_t(0)));
         result["voxels"]=Json::array();

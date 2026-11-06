@@ -65,12 +65,35 @@ struct GridMapTestAccess {
   static std::size_t inflationCounterBytes(const GridMap& map) {
     return map.md_.occupancy_buffer_inflate_cnt_.capacity()*sizeof(int);
   }
+  static std::size_t writerCounterBytes(const GridMap& map) {
+    return (map.md_.occupancy_buffer_inflate_cnt_.size()+
+        map.md_.planning_occupancy_buffer_inflate_cnt_.size())*sizeof(int);
+  }
   static void freeAges(GridMap &map,std::int64_t source,std::int64_t now) {
     map.mp_.use_projected_rays_=true;
     map.free_observation_stamps_.assign(map.md_.occupancy_buffer_.size(),source);
     map.ray_tick_clock_ns_=map.ray_tick_effective_ns_=now;
     map.ray_tick_receipt_=std::chrono::steady_clock::now();
     map.ray_query_clock_ns_=now;
+  }
+  static void candidateAndProofEvidence(GridMap &map) {
+    // A real native writer fixture with a measured-free start region, an
+    // unobserved candidate region, and an independent occupied voxel. The
+    // source begin predates query/copy time and follows the context barrier.
+    map.mp_.double_cylinder_offset_=0.;
+    for(int x=-4;x<0;++x)for(int y=-4;y<4;++y)for(int z=-4;z<4;++z)
+      map.applyOccupancyUpdate({x,y,z},map.mp_.clamp_min_log_);
+    map.applyOccupancyUpdate({2,2,2},map.mp_.clamp_max_log_);
+    freeAges(map,101900000000LL,102000000000LL);
+    map.integrated_cloud_stamp_ns_=101900000000LL;
+    map.ray_integrated_stamps_.fill(101900000000LL);
+  }
+  static void freeStamp(GridMap &map,const Eigen::Vector3i &cell,std::int64_t source) {
+    map.free_observation_stamps_.at(map.toAddress(cell))=source;
+  }
+  static void elapseSnapshot(GridMap &map,std::chrono::nanoseconds elapsed) {
+    ASSERT_TRUE(map.collision_snapshot_);
+    map.snapshot_captured_-=elapsed;
   }
   static void loseSensor(GridMap &map) {map.invalidateCloudPosePairs(102000000000);}
   static auto visual(GridMap &map,bool inflated) {return map.cachedVisualization(inflated);}
@@ -164,15 +187,76 @@ TEST(CollisionSnapshotPool, CopyDoesNotRenewExpiredFreeEvidence) {
   EXPECT_EQ(snapshot.latestCloudStampNs(),writer.latestCloudStampNs());
 }
 
+TEST(CollisionSnapshotPool, ThirdSlotSeparatesOfficialCandidateFromStrictUnknownExecutionProof) {
+  for(const bool strict_writer:{false,true}) {
+    GridMap writer;GridMapTestAccess::configure(writer,strict_writer);
+    ASSERT_TRUE(writer.applyLocalizationContext(context(1,1)));
+    GridMapTestAccess::candidateAndProofEvidence(writer);
+    const auto original=GridMapTestAccess::raw(writer);
+    scan_planner::CollisionSnapshotPool pool;
+    auto snapshot=pool.acquireSolver(writer,102000000000LL,
+      std::chrono::steady_clock::now()+std::chrono::milliseconds(400));
+    ASSERT_TRUE(snapshot);
+    EXPECT_FALSE(pool.borrowAdmission()); // One exclusive native query lease.
+    snapshot->requireObservedSnapshot();
+    const Eigen::Vector3d start(-.25,-.15,-.15),unobserved(.15,-.15,-.15),occupied(.25,.25,.25);
+    EXPECT_EQ(snapshot->getPlanningInflateOccupancy(start,0.),0);
+    EXPECT_EQ(snapshot->getPlanningInflateOccupancy(unobserved,0.),0);
+    EXPECT_EQ(snapshot->getPlanningInflateOccupancy(occupied,0.),1);
+    snapshot->beginObservedProof();
+    EXPECT_EQ(snapshot->getInflateOccupancy(start,0.),0);
+    EXPECT_EQ(snapshot->getInflateOccupancy(unobserved,0.),2);
+    EXPECT_EQ(snapshot->getInflateOccupancy(occupied,0.),1);
+    EXPECT_EQ(snapshot->integratedRaySourceStamp(0),101900000000LL);
+    EXPECT_EQ(snapshot->integratedRaySourceStamp(1),101900000000LL);
+    EXPECT_EQ(snapshot->latestCloudStampNs(),101900000000LL);
+    EXPECT_EQ(snapshot->observedProofDeadlineNs(),102400000000LL);
+    EXPECT_EQ(GridMapTestAccess::raw(*snapshot),original);
+    GridMapTestAccess::elapseSnapshot(*snapshot,std::chrono::milliseconds(600));
+    snapshot->beginObservedProof();
+    EXPECT_EQ(snapshot->getInflateOccupancy(start,0.),2);
+    EXPECT_EQ(snapshot->getInflateOccupancy(unobserved,0.),2);
+    EXPECT_EQ(snapshot->getInflateOccupancy(occupied,0.),1);
+    EXPECT_EQ(snapshot->getPlanningInflateOccupancy(unobserved,0.),0);
+    EXPECT_EQ(snapshot->integratedRaySourceStamp(0),101900000000LL);
+    EXPECT_EQ(GridMapTestAccess::raw(*snapshot),original);
+  }
+}
+
+TEST(CollisionSnapshotPool, EachObservedProofUsesOnlyItsOwnQueriedSourceDeadline) {
+  GridMap writer;GridMapTestAccess::configure(writer);
+  ASSERT_TRUE(writer.applyLocalizationContext(context(1,1)));
+  GridMapTestAccess::candidateAndProofEvidence(writer);
+  GridMapTestAccess::freeStamp(writer,{-1,-2,-2},101950000000LL);
+  scan_planner::CollisionSnapshotPool pool;
+  auto snapshot=pool.acquireSolver(writer,102000000000LL,
+    std::chrono::steady_clock::now()+std::chrono::milliseconds(400));
+  ASSERT_TRUE(snapshot);snapshot->requireObservedSnapshot();
+  snapshot->beginObservedProof();
+  EXPECT_EQ(snapshot->observedRawSnapshotStatus({-3,-2,-2}),0);
+  EXPECT_EQ(snapshot->observedProofDeadlineNs(),102400000000LL);
+  snapshot->beginObservedProof();
+  EXPECT_EQ(snapshot->observedRawSnapshotStatus({-1,-2,-2}),0);
+  EXPECT_EQ(snapshot->observedProofDeadlineNs(),102450000000LL);
+  EXPECT_EQ(snapshot->observedRawSnapshotStatus({1,-2,-2}),2);
+  EXPECT_EQ(snapshot->observedProofDeadlineNs(),102450000000LL);
+  EXPECT_EQ(snapshot->observedRawSnapshotStatus({2,2,2}),1);
+  EXPECT_EQ(snapshot->observedProofDeadlineNs(),102450000000LL);
+}
+
 TEST(CollisionSnapshotPool, ReaderDoesNotRetainWriterOnlyInflationCounters) {
   GridMap writer;GridMapTestAccess::configure(writer);GridMapTestAccess::seedEvidence(writer);
   GridMap snapshot;GridMapTestAccess::configure(snapshot); // Reuse a memory-only destination.
   ASSERT_GT(GridMapTestAccess::inflationCounterBytes(writer),0U);
   ASSERT_GT(GridMapTestAccess::inflationCounterBytes(snapshot),0U);
+  const auto writer_only_bytes=GridMapTestAccess::writerCounterBytes(writer);
   writer.copyCollisionSnapshotTo(snapshot,101000000000,std::chrono::steady_clock::now());
   EXPECT_EQ(GridMapTestAccess::inflationCounterBytes(snapshot),0U);
+  EXPECT_EQ(GridMapTestAccess::writerCounterBytes(snapshot),0U);
   EXPECT_GT(GridMapTestAccess::inflationCounterBytes(writer),0U);
-  EXPECT_EQ(snapshot.collisionSnapshotBytes()+512*sizeof(int),writer.collisionSnapshotBytes());
+  // Strict evidence and official planning have separate writer-only counters;
+  // snapshots retain BOTH committed flag layers but neither counter array.
+  EXPECT_EQ(snapshot.collisionSnapshotBytes()+writer_only_bytes,writer.collisionSnapshotBytes());
   for(double x:{-.25,-.15,.05,.25})for(double y:{-.25,-.05,.25})for(double yaw:{0.,.7,1.57}) {
     const Eigen::Vector3d point(x,y,.05);
     EXPECT_EQ(snapshot.getInflateOccupancy(point,yaw),writer.getInflateOccupancy(point,yaw));

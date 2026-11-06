@@ -20,6 +20,16 @@ SDK pipeline for single-floor, multi-floor, indoor and outdoor navigation;
 do not introduce another navigator, task owner or competing motion pipeline.
 Planner implementations remain selectable through configuration and contracts.
 
+Operational budgets have one source:
+`src/d1max_pct_scan/config/navigation_runtime.yaml`. Session preparation derives
+the BT, adapters and functional monitor parameters from it and verifies their
+agreement before startup. Short input/heartbeat gaps pause the existing task;
+fresh evidence resumes it within the shared recovery budget. A rejected local
+candidate cannot erase a still-safe accepted trajectory. Temporary waits retain
+the committed route; true collision, loss of control, emergency stop and
+unconfirmed retirement still deny motion. Internal interface/build identities
+prevent stale results and support rollback; they are not separate user workflows.
+
 Work continues in the current checkout; no new Git branch or parallel navigation
 project is created without an explicit user request. Isolated builds, regression
 fixtures, release bundles and rollback snapshots are validation/version artifacts
@@ -27,21 +37,20 @@ of this same mainline, not alternative architectures. See [AGENTS.md](AGENTS.md)
 for the project working rules and [current status](docs/status/PROJECT_TAKEOVER_STATUS_20260928.md)
 for the dated implementation and acceptance boundaries.
 
-Choosing the development mainline does not switch the production release or
-grant SDK motion authority. The default release selector remains unchanged;
-deployment and physical acceptance are separate steps.
+The default entry now selects the complete mainline runtime at
+`experiments/navigation_runtime` (2026-10-08), with its integrity manifest pinned
+in `deploy/single_floor_release.json`. Localization, interfaces, BT, planners,
+tracker, SDK adapter and RViz load from that same bundle. Historical bundles are
+rollback artifacts, not additional workflows. Selecting these bytes does not
+grant SDK motion authority or replace physical calibration.
 
 The 2026-10-04 performance round reduces native snapshot buffers, removes hot-loop
 heap allocation and isolates complete-frame worker IPC and periodic SDK publishing.
 Same-input measurements and the bounded-memory tradeoffs are recorded in the
 [navigation module performance section](src/d1max_pct_scan/README.md#性能整改2026-10-04未部署)
-and `experiments/navigation_performance_20261004/`. Sources and consistent isolated
-builds are verified; no production install, release pointer or physical acceptance
-flag has been changed. Core microbenchmarks are not an end-to-end 20 ms guarantee.
-This publication includes reviewed records in
-[`docs/verification/20261004-performance`](../docs/verification/20261004-performance/),
-not the developer's generated experiment/build trees. For another computer, use
-the [deployment guide](../docs/DEPLOYMENT.md) and root source-build planner.
+and `experiments/navigation_performance_20261004/`. Those source changes are
+included in the current mainline bundle. Physical acceptance flags are unchanged.
+Core microbenchmarks are not an end-to-end 20 ms guarantee.
 
 ## Layout
 
@@ -146,7 +155,19 @@ current state and open items.
 
 Real robot bring-up order and the read-only readiness check:
 `docs/design/REAL_ROBOT_BRINGUP.md` and
-`D1MAX_RELEASE=<release> python3 tools/diagnostics/robot_preflight.py`.
+`python3 tools/diagnostics/robot_preflight.py` (uses the same default selector).
+Before starting anything, `python3 tools/diagnostics/robot_preflight.py --files-only`
+checks the sealed release and the actual Web/SDK launch bindings without reading
+service state or contacting the robot. An optional `D1MAX_RELEASE` override is
+explicit; it must still agree with the other launchers. A file-check pass is not
+a navigation or physical-motion acceptance result.
+
+The SDK monitor default is `@mainline`, resolved by this same selector. Both its
+ELF and `monitor.yaml` come from that sealed bundle, not the mutable SDK workspace.
+The Web activation is a separate private local configuration. On 2026-10-08 it
+is bound to this default release for `planning_only`, because there is no valid
+bound physical acceptance record. The interface reports this purpose instead
+of presenting a planning preview as an executable robot task.
 
 ## Sensor assumptions
 

@@ -15,6 +15,7 @@
 #include <d1max_planning_interfaces/msg/execution_commit_ack.hpp>
 #include <d1max_planning_interfaces/msg/sdk_stationary_evidence.hpp>
 #include <d1max_planning_interfaces/msg/tracker_geometry_receipt.hpp>
+#include <d1max_planning_interfaces/srv/execution_grant.hpp>
 #include "d1max_navigation_bt/stable_recovery.hpp"
 #include "d1max_navigation_bt/route_progress_supervisor.hpp"
 #include <optional>
@@ -43,6 +44,7 @@ using CommitAck=d1max_planning_interfaces::msg::ExecutionCommitAck;
 using Stationary=d1max_planning_interfaces::msg::SDKStationaryEvidence;
 using GeometryReceipt=d1max_planning_interfaces::msg::TrackerGeometryReceipt;
 using RouteProgress=d1max_planning_interfaces::msg::RouteProgress;
+using Grant=d1max_planning_interfaces::srv::ExecutionGrant;
 
 // Pending proposals are bounded, but cannot evict the immutable final goal of
 // the committed anchor. This is task-owned geometry, not a renewable sensor lease.
@@ -104,6 +106,7 @@ struct StationaryLimits {
 };
 class Owner {
   struct InitialGeometry {Permit permit;Validation proof;Admission admission;};
+  struct InitialSubmission {InitialGeometry geometry;std::vector<MotionDemand> demands;};
   struct AppliedInstallation {Permit permit;CommitAck ack;std::optional<GeometryReceipt> fact;};
 public:
   explicit Owner(std::string transport="live",double blocked_timeout=30.,double recovery_time=1.,StationaryLimits stationary={})
@@ -235,9 +238,34 @@ public:
     return true;
   }
   bool begin(std::string id,std::string confirmation,uint64_t epoch,double now) {
-    if(confirmed_||id.empty()||confirmation.empty()||epoch==0||!canConfirm(now))return false;
+    if(confirmed_||!admission_rejection_.empty()||id.empty()||confirmation.empty()||epoch==0||!canConfirm(now))return false;
     execution_=std::move(id);confirmation_=std::move(confirmation);epoch_=epoch;
     confirmed_=true;phase_="arming";started_=now;last_now_=now;return true;
+  }
+  bool rejectUnadmittedGrant(const Grant::Request& request,const Grant::Response& reply) {
+    // A negative RPC alone is NOT evidence of no admission: duplicate/fault
+    // replies can refer to an installed grant. Only the writer's request-bound
+    // never-installed disposition can release this pending attempt. A timeout,
+    // uncertain response, observed writer state or actual submission keeps the
+    // existing stop/physical-confirmation obligation.
+    if(!confirmed_||needsReview()||ready_||sdk_sequence_||sdk_generation_||!sdk_session_.empty()||
+       applied_commit_sequence_||sdk_applied_commit_sequence_||commit_ack_sequence_||
+       reply.accepted||reply.duplicate||!reply.definitely_not_admitted||
+       !request.activate||!complete(request.version)||!sameTask(binding_,request.version)||
+       request.execution_id!=execution_||request.control_epoch!=epoch_||
+       request.confirmation_id!=confirmation_||request.request_id!=confirmation_||request.sdk_session.empty()||
+       request.transport_mode!=transport_||reply.version!=request.version||
+       reply.request_id!=request.request_id||reply.execution_id!=request.execution_id||
+       reply.control_epoch!=request.control_epoch||reply.sdk_session!=request.sdk_session||
+       reply.transport_mode!=request.transport_mode)return false;
+    admission_rejection_="sdk_grant_rejected:"+reply.reason;
+    confirmed_=ready_=stopping_=false;
+    // Never call this measured stopped. No movement was admitted for THIS
+    // execution identity; previous owners retain their own retirement fences.
+    stopped_=goal_stop_=arrival_verified_=false;
+    navigation_usable_=false;navigation_recovery_.withdraw();
+    phase_="admission_rejected";reason_=admission_rejection_;
+    return true;
   }
   bool observe(const SDKState& s,double now) {
     if(!confirmed_||s.execution_id!=execution_||s.control_epoch!=epoch_||!sameTask(binding_,s.version)||
@@ -290,11 +318,26 @@ public:
   // successful submission whose evidence expired in transit still advances
   // the applied identity; fresh evidence is separately required by tick().
   bool observe(const CommitAck& a,double now) {
-    if(!confirmed_||stopping_||!active_||a.schema_version!=1||a.sequence<=commit_ack_sequence_||
+    const double applied=seconds(a.applied_at);
+    if(!confirmed_||!active_||a.schema_version!=1||a.sequence<=commit_ack_sequence_||
        a.execution_id!=execution_||a.control_epoch!=epoch_||a.sdk_session!=sdk_session_||
        a.sdk_arm_generation!=sdk_generation_||a.transport_mode!=transport_||
        !sameTask(binding_,a.candidate_version)||!complete(a.candidate_version)||
-       !fresh(seconds(a.applied_at),now,.35))return false;
+       !std::isfinite(now)||!std::isfinite(applied)||applied<=0.||applied>now+.05||
+       (!a.applied&&(stopping_||!fresh(applied,now,.35)))||
+       (a.applied&&stopping_&&applied>stop_at_))return false;
+    // Keep exactly one immutable applied-write tombstone. A delayed vendor
+    // callback may update its delivery sequence/acknowledgement, never its
+    // original write identity, source stamps, evidence deadlines or authority.
+    if(last_applied_ack_&&a.applied&&a.commit_sequence==applied_commit_sequence_) {
+      if(last_applied_ack_->write_acknowledged&&!a.write_acknowledged)return false;
+      auto previous=*last_applied_ack_,current=a;
+      previous.sequence=current.sequence=0;
+      previous.write_acknowledged=current.write_acknowledged=false;
+      previous.reason.clear();current.reason.clear();
+      if(previous!=current)return false;
+      commit_ack_sequence_=a.sequence;last_applied_ack_=a;return true;
+    }
     if(a.handoff_id.empty()) {
       if(applied_commit_sequence_!=0||a.previous_commit_sequence!=0||a.commit_sequence!=1||
          a.grant_sequence!=0||!a.applied||!initial_submission_issued_)return false;
@@ -302,7 +345,23 @@ public:
       for(const auto&g:initial_geometries_)if(g.permit.sequence==a.permit_sequence&&g.permit.allowed&&
           sameVersion(g.permit.version,a.candidate_version)&&g.permit.trajectory_id==a.candidate_trajectory_id&&
           seconds(g.permit.source_stamp)<=seconds(a.applied_at)&&seconds(g.permit.valid_until)>=seconds(a.applied_at)&&
+          seconds(a.valid_until)<=seconds(g.permit.valid_until)&&
           submissionEvidence(a,g.permit.frame_id))issued=&g;
+      // Heartbeat preparation cache entries are not in-flight writer facts.
+      // Only an actual safety-admitted demand can pin its exact signed initial
+      // intent beyond that cache, with the original permit/proof/admission.
+      if(!issued)for(const auto&s:initial_submissions_)for(const auto&d:s.demands) {
+        const auto&g=s.geometry;
+        if(g.permit.sequence==a.permit_sequence&&g.permit.allowed&&
+           sameVersion(g.permit.version,a.candidate_version)&&g.permit.trajectory_id==a.candidate_trajectory_id&&
+           a.demand_sequence==d.sequence&&a.demand_source_stamp==d.source_stamp&&
+           a.demand_body_source_stamp==d.body_source_stamp&&a.applied_velocity==d.velocity&&
+           a.motion_validation_sequence==d.motion_validation_sequence&&
+           seconds(g.permit.source_stamp)<=applied&&applied<=seconds(g.permit.valid_until)&&
+           seconds(d.source_stamp)<=applied&&applied<=seconds(d.valid_until)&&
+           seconds(a.valid_until)<=std::min(seconds(g.permit.valid_until),seconds(d.valid_until))&&
+           submissionEvidence(a,g.permit.frame_id))issued=&g;
+      }
       if(!issued)return false;
       // A late first submission may name a previously issued initial intent.
       // Its real writer fact wins over the newer desired preview even if its
@@ -323,8 +382,9 @@ public:
         return true;
       }
       if(a.commit_sequence!=applied_commit_sequence_+1||a.permit_sequence!=handoff_->candidate.sequence||
-         a.entry_admission_sequence==0||seconds(a.applied_at)<seconds(handoff_->source_stamp)||
-         seconds(a.applied_at)>seconds(handoff_->transition_deadline)||
+          a.entry_admission_sequence==0||seconds(a.applied_at)<seconds(handoff_->source_stamp)||
+          seconds(a.applied_at)>seconds(handoff_->transition_deadline)||
+          seconds(a.valid_until)>seconds(handoff_->candidate.valid_until)||
          (handoff_revoked_at_>0&&seconds(a.applied_at)>handoff_revoked_at_)||
          !submissionEvidence(a,handoff_->candidate.frame_id)||!prepared_)return false;
       const bool stationary_reentry=handoff_->transition_mode==Handoff::STATIONARY_REENTRY;
@@ -335,6 +395,7 @@ public:
       handoff_.reset();prepared_.reset();handoff_reason_.clear();
     }
     applied_commit_sequence_=a.commit_sequence;commit_ack_sequence_=a.sequence;applied_at_=seconds(a.applied_at);
+    last_applied_ack_=a;initial_submissions_.clear();
     if(!a.write_submitted)stop("writer_submission_failed:"+a.reason,now);
     return true;
   }
@@ -447,6 +508,7 @@ public:
   const std::string& handoffReason()const{return handoff_reason_;}
   double handoffReadyWindow()const{return handoff_ready_window_;}
   bool observe(const MotionDemand& d,double now) {
+    rememberInitialSubmission(d,now);
     if(!executionFeedbackIdentity(d)||d.sequence<=demand_sequence_||
        !fresh(seconds(d.source_stamp),now,.35)||!fresh(seconds(d.body_source_stamp),now,.4)||
        seconds(d.valid_until)<now||seconds(d.valid_until)-seconds(d.source_stamp)>.35)return false;
@@ -541,6 +603,9 @@ public:
     Permit p;p.version=active_?active_->version:binding_;p.execution_id=execution_;p.control_epoch=epoch_;
     p.confirmation_id=confirmation_;p.sdk_session=sdk_session_;p.sdk_arm_generation=sdk_generation_;
     p.sequence=++sequence_;p.source_stamp=stamp(now);p.valid_until=stamp(now+.25);p.transport_mode=transport_;
+    if(!admission_rejection_.empty()) {
+      p.allowed=false;p.revoked=true;p.phase="admission_rejected";p.reason=admission_rejection_;return p;
+    }
     // Geometry ownership survives arming or a short evidence HOLD. This is not
     // a motion lease: allowed remains false until every execution proof passes.
     // Dropping geometry here forced consumers to re-admit the same old curve
@@ -567,7 +632,16 @@ public:
       if(now-started_>10.)stop("execution_arm_timeout",now);
       if(!ready_){p.phase=phase_;p.reason="waiting_sdk_grant";p.revoked=stopping_;return p;}
     }
-    if(!fresh(sdk_stamp_,now,.5)){stop("sdk_state_stale",now);p.revoked=true;p.phase=phase_;p.reason=reason_;return p;}
+    if(!fresh(sdk_stamp_,now,.5)) {
+      // Missing status is not an observed loss of control or a new SDK session.
+      // Withdraw this motion lease immediately, but retain the task and fixed
+      // route for the same bounded recovery used by other transient inputs.
+      // The SDK writer still checks its own state/command leases; no stale
+      // status can authorize motion. A fresh actual loss/session change is
+      // handled irreversibly by observe(SDKState), not inferred from a gap.
+      ready_=false;navigation_recovery_.withdraw();
+      phase_="holding";p.phase=phase_;p.reason="waiting_fresh_sdk_state";return p;
+    }
     if(!navigation_recovery_.observe(navigation_ready&&ready_,std::isfinite(monotonic)?monotonic:now,
          evidence_source_ns,evidence_identity)) {
       phase_="holding";p.phase=phase_;
@@ -626,6 +700,7 @@ public:
   // separate retirement fence, not permission to keep an abandoned action
   // alive. Ordinary evidence HOLD and a normal final stop are not failures.
   std::string failureReason()const {
+    if(!admission_rejection_.empty())return admission_rejection_;
     if(!confirmed_)return {};
     return (stopping_&&!goal_stop_)||needsReview()?reason_:std::string{};
   }
@@ -636,6 +711,42 @@ public:
     return c?c->version:binding_;
   }
 private:
+  void rememberInitialSubmission(const MotionDemand& d,double now) {
+    const auto&v=d.velocity;
+    const bool finite=std::isfinite(v.linear.x)&&std::isfinite(v.linear.y)&&std::isfinite(v.linear.z)&&
+      std::isfinite(v.angular.x)&&std::isfinite(v.angular.y)&&std::isfinite(v.angular.z);
+    const bool zero=finite&&std::abs(v.linear.x)+std::abs(v.linear.y)+std::abs(v.linear.z)+
+      std::abs(v.angular.x)+std::abs(v.angular.y)+std::abs(v.angular.z)<=1e-9;
+    // The writer may commit its first zero output as well. It is an applied
+    // identity fact, not an observed-free assertion: only nonzero outputs need
+    // safety_checked here, and the unique writer still checks its own proofs.
+    if(!confirmed_||stopping_||applied_commit_sequence_||!finite||(!zero&&!d.safety_checked)||
+       !sameTask(binding_,d.version)||d.execution_id!=execution_||d.control_epoch!=epoch_||
+       d.sdk_session!=sdk_session_||d.sdk_arm_generation!=sdk_generation_||d.transport_mode!=transport_||
+       d.sequence==0||!fresh(seconds(d.source_stamp),now,.35)||
+       !fresh(seconds(d.body_source_stamp),now,.4)||seconds(d.valid_until)<now||
+       seconds(d.valid_until)-seconds(d.source_stamp)>.35)return;
+    const auto matches=[&](const InitialGeometry&g) {
+      return g.permit.sequence==d.permit_sequence&&g.permit.allowed&&
+        g.permit.geometry_committed&&!g.permit.revoked&&
+        sameVersion(g.permit.version,d.version)&&g.permit.trajectory_id==d.trajectory_id&&
+        g.permit.validation_sequence<=d.validation_sequence&&
+        seconds(g.permit.source_stamp)<=seconds(d.source_stamp)&&
+        seconds(d.source_stamp)<=seconds(g.permit.valid_until);
+    };
+    for(auto&s:initial_submissions_)if(matches(s.geometry)) {
+      for(const auto&old:s.demands)if(old.sequence==d.sequence)return;
+      if(s.demands.size()==8)s.demands.erase(s.demands.begin()+1);
+      s.demands.push_back(d);return;
+    }
+    for(const auto&g:initial_geometries_)if(matches(g)) {
+      // Fixed capacity: retain the earliest unresolved actual submission plus
+      // the seven most recent distinct intents. Owner heartbeats never enter
+      // this ledger; SDK's applied-state HOLD cannot erase the pending fact.
+      if(initial_submissions_.size()==8)initial_submissions_.erase(initial_submissions_.begin()+1);
+      initial_submissions_.push_back({g,{d}});return;
+    }
+  }
   void withdrawStationary(const std::string& why,double now) {
     stationary_.reset();
     if(handoff_&&handoff_->transition_mode==Handoff::STATIONARY_REENTRY) {
@@ -737,7 +848,8 @@ private:
        v.trajectory_id==installed_geometry_->proof.trajectory_id);
     const bool suffix=!v.whole_curve&&v.remaining_curve&&installed&&active_&&sameVersion(v.version,active_->version)&&
       v.trajectory_id==active_->trajectory_id&&domain&&std::isfinite(v.reverse_margin_m)&&v.reverse_margin_m>=.15;
-    return v.valid&&(whole||suffix)&&!v.support_reference_id.empty()&&!v.support_hash.empty()&&seconds(v.valid_until)>=now&&
+    const bool geometry_policy=v.collision_policy=="observed_free"||v.collision_policy=="official_inflated_geometry";
+    return geometry_policy&&v.valid&&(whole||suffix)&&!v.support_reference_id.empty()&&!v.support_hash.empty()&&seconds(v.valid_until)>=now&&
       fresh(seconds(v.check_end),now,.35)&&fresh(seconds(v.source_stamp),now,.35)&&
       fresh(seconds(v.front_ray_source_stamp),now,.6)&&fresh(seconds(v.rear_ray_source_stamp),now,.6);
   }
@@ -810,13 +922,15 @@ private:
     }
     return best;
   }
-  std::string transport_,execution_,confirmation_,sdk_session_,phase_="preview",reason_,blocked_reason_,sdk_hold_reason_;
+  std::string transport_,execution_,confirmation_,sdk_session_,phase_="preview",reason_,blocked_reason_,sdk_hold_reason_,admission_rejection_;
   Version binding_;std::vector<Validation>proofs_;std::vector<Admission>admissions_;std::vector<Receipt>receipts_;
   std::vector<MotionDemand>safe_demands_;std::vector<MotionValidation>motion_proofs_;
   Validation active_storage_;const Validation*active_=nullptr;
   std::optional<Validation>prepared_;std::optional<Handoff>handoff_;
   std::optional<Permit>published_permit_;
   std::vector<InitialGeometry>initial_geometries_;
+  std::vector<InitialSubmission>initial_submissions_;
+  std::optional<CommitAck>last_applied_ack_;
   std::optional<InitialGeometry>installed_geometry_;std::optional<GeometryReceipt>installed_receipt_;
   std::optional<AppliedInstallation>applied_installation_;bool tracker_motion_fenced_=false;
   uint64_t geometry_receipt_sequence_=0;

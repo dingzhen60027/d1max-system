@@ -2,8 +2,25 @@
 #include <Eigen/Core>
 #include <algorithm>
 #include <cmath>
+#include <stdexcept>
 
 namespace scan_planner {
+
+// The BT preview is identified by the actual writer contract, not the legacy
+// GridMap preview label. Formal sessions keep the execution protocol/map
+// evidence pipeline active while deliberately omitting the motion writer.
+// Never infer this mode from a planning collision policy (which says nothing
+// about whether a trajectory is allowed to drive a robot).
+inline bool noMotionMeasuredHeadingContract(bool legacy_requested,
+    bool grid_preview_only, bool execution_protocol, bool writer_handoff_enabled,
+    bool projected_rays, bool planning_requires_observed_free) {
+  const bool managed_preview=execution_protocol && !writer_handoff_enabled;
+  if (!legacy_requested && !managed_preview) return false;
+  if (!projected_rays || (legacy_requested && execution_protocol && writer_handoff_enabled) ||
+      (!managed_preview && (!grid_preview_only || planning_requires_observed_free)))
+    throw std::invalid_argument("measured heading contract requires explicit no-motion projected-ray preview");
+  return true;
+}
 
 // Explicit no-motion preview only. Velocity is NOT changed: this says that a
 // mm/s position derivative is not a trustworthy estimate of body orientation.

@@ -12,7 +12,8 @@ struct GridMapTestAccess {
     p.resolution_=.05;p.resolution_inv_=20.;p.map_voxel_num_={120,160,48};
     p.map_origin_idx_={0,40,0};map->updateMapBoundaryFromIndex();
     p.clamp_min_log_=-1.;p.min_occupancy_log_=1.;p.clamp_max_log_=2.;p.unknown_flag_=.01;
-    p.require_observed_free_=strict;p.double_cylinder_radius_=.29;p.double_cylinder_offset_=.2;
+    p.require_observed_free_=strict;p.planning_collision_policy_=strict?"observed_free":"official";
+    p.double_cylinder_radius_=.29;p.double_cylinder_offset_=.2;
     p.obstacles_inflation_z_up=p.obstacles_inflation_z_down=.45;
     const std::size_t size=120U*160U*48U;
     d.occupancy_buffer_.assign(size,strict?-1.:-1.01);

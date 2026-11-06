@@ -75,8 +75,26 @@ namespace scan_planner
 
     if (!node_->has_parameter("manager.preview_body_heading_contract"))
       node_->declare_parameter<bool>("manager.preview_body_heading_contract",false);
-    preview_heading_contract_.preview_only_enabled=
+    const bool legacy_heading_preview=
         node_->get_parameter("manager.preview_body_heading_contract").as_bool();
+    // These two FSM parameters are loaded after initPlanModules(). Read their
+    // immutable startup overrides as well as already-declared parameters so
+    // initialization order cannot silently select the old tangent-only mode.
+    const auto &overrides=node_->get_node_parameters_interface()->get_parameter_overrides();
+    const auto startup_bool=[node,&overrides](const char *name,bool fallback) {
+      if (node->has_parameter(name)) return node->get_parameter(name).as_bool();
+      const auto override=overrides.find(name);
+      return override==overrides.end()?fallback:override->second.get<bool>();
+    };
+    const bool execution_protocol=startup_bool("fsm.execution_protocol",false);
+    // A missing writer flag is NOT a no-motion authorization. Old unmanaged
+    // configurations must explicitly opt into their existing preview mode.
+    const bool writer_handoff_enabled=startup_bool("fsm.writer_handoff_enabled",true);
+    preview_heading_contract_.preview_only_enabled=noMotionMeasuredHeadingContract(
+        legacy_heading_preview,node_->get_parameter("grid_map.preview_only").as_bool(),
+        execution_protocol,writer_handoff_enabled,
+        node_->get_parameter("grid_map.use_projected_rays").as_bool(),
+        grid_map_->planningRequiresObservedFree());
     preview_heading_contract_.minimum_direction_speed=
         get_double("manager.preview_direction_min_speed",.02);
     preview_heading_contract_.body_extent=
@@ -85,11 +103,6 @@ namespace scan_planner
     if (preview_heading_contract_.preview_only_enabled &&
         !validPreviewHeadingContract(preview_heading_contract_))
       throw std::invalid_argument("invalid preview body heading contract");
-    if (preview_heading_contract_.preview_only_enabled &&
-        (!node_->get_parameter("grid_map.preview_only").as_bool() ||
-         node_->get_parameter("grid_map.require_observed_free").as_bool() ||
-         !node_->get_parameter("grid_map.use_projected_rays").as_bool()))
-      throw std::invalid_argument("body heading contract requires explicit official per-ray no-motion preview");
 
     bspline_optimizer_rebound_.reset(new BsplineOptimizer);
     bspline_optimizer_rebound_->setParam(node_);
@@ -284,7 +297,7 @@ namespace scan_planner
       std::string seed_reason;
       const auto occupancy=[this](const Eigen::Vector3d &p, double yaw) {
         if (!solveAllowed(solve_budget_)) return -1;
-        return grid_map_->getInflateOccupancy(p, yaw);
+        return grid_map_->getPlanningInflateOccupancy(p, yaw);
       };
       for (std::size_t i=1; i<local_reference_.size(); ++i) {
         const auto a=local_reference_[i-1], b=local_reference_[i];
@@ -314,6 +327,8 @@ namespace scan_planner
           occupancy, search, collision_aware_reference, seed_reason, reference_detour_anchor_margin_)) {
         last_failure_phase_=seed_reason;
         if (seed_reason=="failed_reference_search") {
+          if (bspline_optimizer_rebound_->a_star_->lastSearchTimedOut())
+            last_failure_phase_="solve_search_deadline_exceeded";
           switch(search_result) {
             case ASTAR_RET::INIT_START_OCCUPIED: last_failure_phase_="failed_reference_start_occupied";break;
             case ASTAR_RET::INIT_TARGET_OCCUPIED: last_failure_phase_="failed_reference_target_occupied";break;
@@ -496,7 +511,8 @@ namespace scan_planner
     vector<vector<Eigen::Vector3d>> a_star_paths;
     a_star_paths = bspline_optimizer_rebound_->initControlPoints(ctrl_pts, true);
     if (!bspline_optimizer_rebound_->controlPointsInitialized()) {
-      last_failure_phase_="failed_rebound_search";
+      last_failure_phase_=bspline_optimizer_rebound_->lastFailurePhase().empty() ?
+          "failed_rebound_search":bspline_optimizer_rebound_->lastFailurePhase();
       ++continuous_failures_count_;
       return false;
     }
@@ -517,7 +533,10 @@ namespace scan_planner
     if (!solveAllowed(solve_budget_)) return false;
     if (!flag_step_1_success)
     {
-      if (!bspline_optimizer_rebound_->controlPointsInitialized()) last_failure_phase_="failed_rebound_search";
+      if (!bspline_optimizer_rebound_->lastFailurePhase().empty())
+        last_failure_phase_=bspline_optimizer_rebound_->lastFailurePhase();
+      else if (!bspline_optimizer_rebound_->controlPointsInitialized())
+        last_failure_phase_="failed_rebound_search";
       // visualization_->displayOptimalList( ctrl_pts, vis_id );
       continuous_failures_count_++;
       return false;
@@ -606,9 +625,11 @@ namespace scan_planner
     // Only queries on this actual final curve may classify its rejection.
     // Unknown cells explored by an earlier A* are not its terminal failure.
     grid_map_->resetCollisionDiagnostics();
-    if (!checkWholeTrajectoryCollision(pos,200000,0.,true,0.,attempt_heading_contract_)) {
-      last_failure_phase_=grid_map_->unknownCollisionQueries()>0 ?
-          "waiting_observed_space":"failed_final_collision";
+    int final_query_failure=0;
+    if (!checkWholeTrajectoryCollision(pos,200000,0.,true,0.,attempt_heading_contract_,
+                                       nullptr,&final_query_failure)) {
+      last_failure_phase_=final_query_failure==2 ? "waiting_observed_space" :
+          (final_query_failure==1 ? "failed_final_collision":"failed_curve_validation");
       ++continuous_failures_count_;
       return false;
     }
@@ -830,15 +851,19 @@ namespace scan_planner
 
   bool SCANPlannerManager::checkWholeTrajectoryCollision(UniformBspline &position_traj,
       std::size_t query_budget, double wall_budget_seconds, bool diagnostic, double measured_curve_time,
-      const SplineHeadingContract &heading_contract, CurveCheckEvidence *evidence)
+      const SplineHeadingContract &heading_contract, CurveCheckEvidence *evidence,
+      int *query_failure_state)
   {
     const double body_extent=preview_heading_contract_.body_extent;
     bool occupied_witness=false;
+    if (query_failure_state) *query_failure_state=0;
     const bool safe=wholeCurveCollisionFree(position_traj, grid_map_->getResolution(), body_extent,
       [&](const Eigen::Vector3d &p,double yaw) {
       if (!solveAllowed(solve_budget_)) return -1;
-      const int collision=grid_map_->getInflateOccupancy(p,yaw);
-      occupied_witness=occupied_witness || collision>0;
+      const int collision=grid_map_->getPlanningInflateOccupancy(p,yaw);
+      if (query_failure_state && *query_failure_state==0 && collision!=0)
+        *query_failure_state=collision;
+      occupied_witness=occupied_witness || collision==1;
       if (collision!=0 && diagnostic)
         RCLCPP_WARN(node_->get_logger(),
           "Final curve rejected: state=%d xyz=(%.6f,%.6f,%.6f) yaw=%.6f",

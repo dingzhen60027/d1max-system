@@ -10,7 +10,7 @@ def validate_interfaces():
     required = {
         RouteSnapshot: ('route_hash','point_floor_ids','segments','execution_eligible'),
         RouteReference: ('delivery_sequence','active','snapshot'),
-        Navigate.Goal: ('has_goal_yaw','goal_yaw_tolerance_rad'),
+        Navigate.Goal: ('has_goal_yaw','goal_yaw_tolerance_rad','request_execution'),
         ComputeRoute.Goal: (), FollowRoute.Goal: ('snapshot',),
         ConfirmExecution.Request: ('route_hash','request_id'), PrepareTransition.Request: ('reason','session_id'),
         NavigationState: ('local_odometry','global_odometry','posterior_stamp','imu_stamp'),
@@ -98,8 +98,15 @@ def validate_execution_interfaces():
             raise ValueError('Execution v3 typesupport mismatch: '+name)
     for cls in (srv.ExecutionGrant.Request,srv.ExecutionGrant.Response):
         value=cls()
+        for field in ('version','execution_id','control_epoch','request_id','sdk_session','transport_mode'):
+            if not hasattr(value,field):
+                raise ValueError('ExecutionGrant transaction binding missing:'+field)
+        if cls is srv.ExecutionGrant.Response:
+            if not hasattr(value,'definitely_not_admitted') or value.definitely_not_admitted is not False:
+                raise ValueError('ExecutionGrant explicit non-admission contract missing or unsafe default')
         if deserialize_message(serialize_message(value),cls)!=value:
             raise ValueError('ExecutionGrant typesupport mismatch')
     return dict(result,execution_schema_version=3,handoff_contract='writer_applied_cas_v3',
         route_progress_contract='source_bound_full_route_arc_v1',
+        grant_rejection_contract='writer_bound_never_admitted_v1',
         initial_pose_transaction='bt_initial_pose_transaction_v1',execution_types_verified=len(required)+5)

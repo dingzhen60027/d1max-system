@@ -12,18 +12,21 @@ struct VisibleReferenceTarget {
   std::size_t candidates{0};
 };
 
-// A bounded, observed-free side step when the ordered route has no reachable
-// visible endpoint. This is a LOCAL reference only: never alter route identity,
-// its order, the destination, or invent free space behind an obstacle. The
-// native A*/optimizer/admission and each command's braking proof still run.
-inline VisibleReferenceTarget selectVisibleSideTarget(
+namespace side_target_detail {
+enum class CollisionPolicy { PlanningGeometry, ObservedEvidence };
+
+// Shared source-support and rotation geometry. PlanningGeometry generates a
+// candidate, not a FREE certificate or a command braking proof. The strict
+// compatibility path keeps its independent observed-evidence checks.
+inline VisibleReferenceTarget selectSideTarget(
     const DiscreteReference& route,const Eigen::Vector3d& body,double measured_yaw,
     double progress,double horizon,const MotionSupport& support,GridMap& map,const std::string& frame,
-    const SolveBudget::Ptr& budget,std::size_t query_limit=1024,const BrakingModel* braking=nullptr) {
-  VisibleReferenceTarget out;out.target.reason="waiting_observed_side_target";
+    const SolveBudget::Ptr& budget,std::size_t query_limit,CollisionPolicy policy,const BrakingModel* braking) {
+  const bool observed_evidence=policy==CollisionPolicy::ObservedEvidence;
+  VisibleReferenceTarget out;out.target.reason=observed_evidence ? "waiting_observed_side_target" : "waiting_side_target";
   if(!body.allFinite()||!std::isfinite(measured_yaw)||!std::isfinite(progress)||
      !std::isfinite(horizon)||horizon<=0.||route.length()<=0.||!support.valid||
-     frame.empty()||support.source.frame_id!=frame||!map.requiresObservedFree()||
+     frame.empty()||support.source.frame_id!=frame||(observed_evidence&&!map.requiresObservedFree())||
      query_limit<1||query_limit>4096||!solveAllowed(budget))return out;
   progress=std::clamp(progress,0.,route.length());
   const auto origin=route.sample(progress);
@@ -32,9 +35,11 @@ inline VisibleReferenceTarget selectVisibleSideTarget(
   forward.normalize();const Eigen::Vector2d left(-forward.y(),forward.x());
   const double current_side=(body-origin).head<2>().dot(left);
   const std::array<double,2> sides=current_side<-.1?std::array<double,2>{-1.,1.}:std::array<double,2>{1.,-1.};
-  const auto observed=[&](const Eigen::Vector3d& point,double yaw) {
+  const auto collision_free=[&](const Eigen::Vector3d& point,double yaw) {
     if(out.target.queries>=query_limit||!solveAllowed(budget))return false;
-    const int state=map.getInflateOccupancy(point,yaw);out.target.observe(point,state,yaw);
+    const int state=observed_evidence ? map.getInflateOccupancy(point,yaw) :
+        map.getPlanningInflateOccupancy(point,yaw);
+    out.target.observe(point,state,yaw);
     return state==0;
   };
   const auto body_support=support.nearest(body.x(),body.y());
@@ -57,7 +62,7 @@ inline VisibleReferenceTarget selectVisibleSideTarget(
     if(displacement.head<2>().norm()<.25||displacement.norm()>std::min(2.,horizon)||
        std::abs(ground->z-body_support->z)>support.source.max_support_step_m+slope*displacement.head<2>().norm())continue;
     const double yaw=std::atan2(displacement.y(),displacement.x());
-    if(!observed(target,yaw))continue;
+    if(!collision_free(target,yaw))continue;
     // Query the actual body rotation as well; a side target cannot ignore the
     // long rectangular footprint while it turns away from the route tangent.
     const double turn=std::atan2(std::sin(yaw-measured_yaw),std::cos(yaw-measured_yaw));
@@ -66,7 +71,7 @@ inline VisibleReferenceTarget selectVisibleSideTarget(
       std::max(.005,map.getResolution()*.5))));
     if(turns>128)continue;
     bool valid=true;
-    for(int i=0;i<=turns&&valid;++i)valid=observed(body,measured_yaw+turn*double(i)/turns);
+    for(int i=0;i<=turns&&valid;++i)valid=collision_free(body,measured_yaw+turn*double(i)/turns);
     if(!valid)continue;
     const int steps=std::max(1,int(std::ceil(displacement.head<2>().norm()/std::min(.025,map.getResolution()*.5))));
     if(steps>128)continue;
@@ -81,7 +86,7 @@ inline VisibleReferenceTarget selectVisibleSideTarget(
       // Height comes only from the measured source support at this XY, never
       // a copy of the route centerline height onto an unobserved side floor.
       Eigen::Vector3d sample(sample_xy.x(),sample_xy.y(),p->z+support.source.body_reference_height_m);
-      valid=observed(sample,yaw);if(valid)path.push_back(sample);
+      valid=collision_free(sample,yaw);if(valid)path.push_back(sample);
       previous_z=p->z;previous_xy=sample_xy;
     }
     if(!valid)continue;
@@ -97,5 +102,27 @@ inline VisibleReferenceTarget selectVisibleSideTarget(
     out.target.reason="reference_target_visible_side";out.support_path=std::move(path);return out;
   }
   return out;
+}
+} // namespace side_target_detail
+
+// The production target/A*/optimizer pipeline uses one geometry policy. Raw
+// visibility and a measured braking model belong to the eventual command
+// sweep, not to discovery of a local side-reference candidate.
+inline VisibleReferenceTarget selectPlanningSideTarget(
+    const DiscreteReference& route,const Eigen::Vector3d& body,double measured_yaw,
+    double progress,double horizon,const MotionSupport& support,GridMap& map,const std::string& frame,
+    const SolveBudget::Ptr& budget,std::size_t query_limit=1024) {
+  return side_target_detail::selectSideTarget(route,body,measured_yaw,progress,horizon,support,map,frame,
+      budget,query_limit,side_target_detail::CollisionPolicy::PlanningGeometry,nullptr);
+}
+
+// Existing strict API is retained for callers that explicitly request an
+// observed-free side corridor. Never substitute it for motion authorization.
+inline VisibleReferenceTarget selectVisibleSideTarget(
+    const DiscreteReference& route,const Eigen::Vector3d& body,double measured_yaw,
+    double progress,double horizon,const MotionSupport& support,GridMap& map,const std::string& frame,
+    const SolveBudget::Ptr& budget,std::size_t query_limit=1024,const BrakingModel* braking=nullptr) {
+  return side_target_detail::selectSideTarget(route,body,measured_yaw,progress,horizon,support,map,frame,
+      budget,query_limit,side_target_detail::CollisionPolicy::ObservedEvidence,braking);
 }
 } // namespace scan_planner

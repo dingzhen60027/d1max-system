@@ -11,6 +11,7 @@ import argparse
 from contextlib import contextmanager
 import fcntl
 import hashlib
+import importlib.util
 import json
 import os
 from pathlib import Path
@@ -33,8 +34,8 @@ SDK_EXECUTABLES = {"sdk_monitor_bridge", "sdk_state_bridge", "sdk_telemetry_brid
 LIMITS = {"navigation_max_forward_mps": 0.30, "navigation_max_lateral_mps": 0.0,
           "navigation_max_yaw_radps": 0.50}
 STOP_FIRST = "已有 monitor 或启动/停止尚未完成；请通过现有 manager 停止并确认 stopped 后再执行。不会旁起 SDK 或自动重启。"
-# Optional sealed navigation release whose schema-3 monitor replaces the
-# workspace build. Its execution channel only moves after a bound grant.
+# The unique sealed navigation release replaces the workspace build. Explicit
+# overrides remain possible; motion still needs a physically accepted grant.
 RELEASE_ENV = "D1MAX_MONITOR_RELEASE"
 RELEASE_MONITOR = "sdk/install/d1max_sdk_bridge/lib/d1max_sdk_bridge/sdk_monitor_bridge"
 # Physical acceptance binding, validated by the monitor itself. Absent means
@@ -207,6 +208,10 @@ def validate_ticket(ticket, instance):
 
 
 def create_ticket(client, *, reuse=False):
+    # Legacy arm tickets and the formal BT execution grant are different
+    # channels. Reject before writing a ticket or starting the managed unit.
+    if resolve_monitor_release():
+        raise RuntimeError("当前使用主线 schema-3 SDK；请通过 Web 连接并在 RViz/BT 执行，旧运动票据入口不能启动此通道")
     with startup_lock():
         snapshot = client.status()
         require_stopped(snapshot, client.config)
@@ -298,6 +303,39 @@ def ros_duplicate_preflight():
         rclpy.shutdown()
 
 
+def resolve_monitor_release():
+    """Read-only shared selection; no ROS initialization, SDK, or manager call.
+
+    Environment override wins over the optional one-line operator override.
+    @mainline (also the absent-file default) uses the public entry's selector,
+    including its manifest hash. An override never rewrites that selector.
+    """
+    value = os.environ.get(RELEASE_ENV, "").strip()
+    if not value:
+        choice = BASE / "config/monitor-release"
+        if choice.exists():
+            if not choice.is_file() or choice.stat().st_size > 4096:
+                raise RuntimeError("monitor-release 必须是有界单行配置")
+            lines = choice.read_text(encoding="utf-8").splitlines()
+            if len(lines) != 1 or not lines[0].strip():
+                raise RuntimeError("monitor-release 必须只有一条 @mainline 或绝对路径")
+            value = lines[0].strip()
+        else:
+            value = "@mainline"
+    if value == "@mainline":
+        workspace = Path(os.environ.get("D1MAX_NAV_ROOT", "/home/dndx/d1max_nav_ws")).resolve(strict=True)
+        helper = workspace / "tools/release/single_floor_entry_preflight.py"
+        spec = importlib.util.spec_from_file_location("d1max_monitor_release_selector", helper)
+        if spec is None or spec.loader is None:
+            raise RuntimeError("主线 release selector 不可用")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module.select(workspace)
+    if not value.startswith("/"):
+        raise RuntimeError(f"{RELEASE_ENV} / monitor-release 必须是 @mainline 或绝对路径")
+    return Path(value).resolve(strict=True)
+
+
 def sealed_release_monitor(value):
     """Schema-3 monitor of a sealed release; every sealed file must be unchanged."""
     if not value.startswith("/"):
@@ -324,6 +362,37 @@ def sealed_release_monitor(value):
     return binary
 
 
+def sealed_release_monitor_config(value):
+    """Use a config actually covered by the same selected release seal.
+
+    Installed-share config is preferred when sealed. Current bundles seal the
+    real SDK source snapshot instead; no workspace config is an implicit
+    operator override and missing sealed configuration is an explicit error.
+    """
+    release = Path(value).resolve(strict=True)
+    descriptor = json.loads((release / "release.json").read_text(encoding="utf-8"))
+    name = Path(str(descriptor.get("sealed_manifest", "")))
+    if descriptor.get("schema") != 1 or name.is_absolute() or len(name.parts) != 1:
+        raise RuntimeError("release.json 必须指向 release 内的封存清单")
+    files = json.loads((release / name).read_text(encoding="utf-8")).get("files")
+    if not isinstance(files, dict):
+        raise RuntimeError("封存清单缺少文件列表")
+    candidates = (
+        release / "sdk/install/d1max_sdk_bridge/share/d1max_sdk_bridge/config/monitor.yaml",
+        release / "source_snapshot/sdk_bridge_ws/src/d1max_sdk_bridge/config/monitor.yaml",
+    )
+    for config in candidates:
+        expected = files.get(str(config))
+        if expected is None:
+            continue
+        if config.is_symlink() or not config.resolve(strict=True).is_relative_to(release):
+            raise RuntimeError(f"SDK 配置不在实际封存 release 内：{config}")
+        if hashlib.sha256(config.read_bytes()).hexdigest() != expected:
+            raise RuntimeError(f"SDK 配置与封存不一致：{config}")
+        return config
+    raise RuntimeError("所选 release 缺少实际封存的 SDK monitor.yaml；不会加载可变工作区配置")
+
+
 def execution_identity():
     """All five acceptance bindings or none; the monitor validates the record."""
     given = {name: os.environ.get(variable, "") for name, (variable, _) in EXECUTION_IDENTITY.items()}
@@ -344,14 +413,13 @@ def sdk_arguments(enabled):
         raise RuntimeError('Invalid joint telemetry audit option')
     if audit == 'true' and enabled:
         raise RuntimeError('Joint telemetry audit cannot consume a motion startup request')
-    workspace = BASE.parent / "sdk_bridge_ws"
-    release = os.environ.get(RELEASE_ENV, "")
+    release = str(resolve_monitor_release())
     if release and enabled:
         raise RuntimeError("release schema-3 执行通道与旧运动能力互斥；v3 仅接受绑定验收的 grant")
-    binary = (sealed_release_monitor(release) if release else
-              workspace / "install/d1max_sdk_bridge/lib/d1max_sdk_bridge/sdk_monitor_bridge")
+    binary = sealed_release_monitor(release)
+    config = sealed_release_monitor_config(release)
     args = [str(binary),
-            "--ros-args", "--params-file", str(workspace / "src/d1max_sdk_bridge/config/monitor.yaml"),
+            "--ros-args", "--params-file", str(config),
             "-p", "navigation_control_enabled:=" + ("true" if enabled else "false")]
     for name, value in LIMITS.items():
         args.extend(["-p", f"{name}:={value}"])
@@ -368,7 +436,8 @@ def sdk_arguments(enabled):
 def launch_sdk():
     try:
         if os.environ.get("D1MAX_NAVIGATION_CONTROL_ENABLED", "false") != "false":
-            raise RuntimeError("请使用 sdk_motion_startup.py start 显式启动；不再通过环境变量启用运动能力")
+            raise RuntimeError("主线运动只接受 RViz/BT 的绑定授权；不能通过环境变量启用运动能力")
+        os.environ[RELEASE_ENV] = str(resolve_monitor_release())
         with startup_lock():
             require_core_lease_available()
             if local_sdk_processes():
@@ -449,9 +518,15 @@ def start_managed(client):
 
 def main():
     parser = argparse.ArgumentParser(description="显式启动同一个受管SDK monitor的运动能力；启动仍DISARMED")
-    parser.add_argument("action", choices=("check", "status", "prepare", "cancel", "start", "_launch"))
+    parser.add_argument("action", choices=("check", "status", "prepare", "cancel", "start", "resolve-release", "_launch"))
     args = parser.parse_args()
     try:
+        if args.action == "resolve-release":
+            release = resolve_monitor_release()
+            sealed_release_monitor(str(release))
+            sealed_release_monitor_config(str(release))
+            print(release)
+            return
         if args.action == "_launch":
             launch_sdk()
             return

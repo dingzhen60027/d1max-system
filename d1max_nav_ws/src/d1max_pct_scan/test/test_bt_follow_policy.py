@@ -1,6 +1,6 @@
 """Explicit recovery episodes, independent of ROS and native map internals."""
 import pytest
-from d1max_pct_scan.bt_follow_policy import (FollowRecovery, FollowStage,
+from d1max_pct_scan.bt_follow_policy import (FOLLOW_DEFAULTS, FollowRecovery, FollowStage,
     classify_follow, validate_follow_policy)
 
 
@@ -102,3 +102,65 @@ def test_contract_failure_has_no_retry_loop(phase):
         subscriber_ready=True, same_reference=True,
         scan={'spline_visual_valid': False, 'local_debug_phase': phase})
     assert FollowRecovery({}).observe(stage, 0.) == 'follow_contract_failure:'+phase
+
+
+def test_live_preview_failed_optimization_is_local_wait_not_global_or_identity_failure():
+    # Session 5920af...: the fixed route was delivered at 1791516719.001476;
+    # native solve 0 failed at .075630, solve 48 at 1791516748.777450.
+    # It never published a proved local curve. A reference receipt is not one.
+    params = {key: 30. for key in FOLLOW_DEFAULTS if key != 'follow_stable_reset_s'}
+    params['follow_stable_reset_s'] = .6
+    policy = FollowRecovery(params)
+    for elapsed, reason in ((0., 'failed_optimization'),
+            (1.799964, 'failed_reference_search'),
+            (3.600012, 'failed_reference_start_occupied'),
+            (29.701820, 'failed_optimization')):
+        stage = classify_follow(pose_ready=True, map_ready=True, committed=True,
+            subscriber_ready=True, same_reference=False,
+            scan={'native_reference_received': True, 'spline_visual_valid': False},
+            pending_native_phase=reason)
+        assert stage == FollowStage('recovering_local_trajectory', reason, 'trajectory')
+        assert not stage.terminal and not policy.observe(stage, elapsed)
+    assert policy.observe(stage, 30.01) == 'follow_trajectory_timeout:failed_optimization'
+
+
+def test_fresh_proved_curve_before_original_deadline_recovers_same_preview_episode():
+    params = {key: 30. for key in FOLLOW_DEFAULTS if key != 'follow_stable_reset_s'}
+    params['follow_stable_reset_s'] = .6
+    policy = FollowRecovery(params)
+    stage = classify_follow(pose_ready=True, map_ready=True, committed=True,
+        subscriber_ready=True, same_reference=False, scan={},
+        pending_native_phase='failed_optimization')
+    assert not policy.observe(stage, 0.)
+    proved = classify_follow(pose_ready=True, map_ready=True, committed=True,
+        subscriber_ready=True, same_reference=True,
+        scan={'spline_visual_valid': True, 'local_debug_phase': 'failed_optimization'})
+    for elapsed, stamp in ((20., 120.), (20.3, 120.3), (20.61, 120.61)):
+        assert not policy.observe(proved, elapsed, evidence_stamp=stamp)
+    assert policy.since is None and not policy.waits
+    assert not policy.observe(proved, 60., evidence_stamp=160.)
+
+
+@pytest.mark.parametrize('third_at', [30., 30.2])
+def test_stable_recovery_cannot_renew_already_expired_common_episode(third_at):
+    params = {key: 30. for key in FOLLOW_DEFAULTS if key != 'follow_stable_reset_s'}
+    params['follow_stable_reset_s'] = .6
+    policy = FollowRecovery(params)
+    waiting = FollowStage('recovering_local_trajectory', 'waiting_observed_space', 'trajectory')
+    assert not policy.observe(waiting, 0.)
+    assert not policy.observe(GOOD, 29.3, evidence_stamp=129.3)
+    assert not policy.observe(GOOD, 29.6, evidence_stamp=129.6)
+    # Third fresh report meets stability, but arrives after the original 30 s.
+    # It cannot revive a terminal episode or buy another whole recovery budget.
+    assert policy.observe(GOOD, third_at, evidence_stamp=100.+third_at) == 'follow_recovery_episode_timeout:following'
+    assert policy.since == 0.
+
+
+def test_stable_recovery_third_report_before_deadline_still_clears_episode():
+    params = {key: 30. for key in FOLLOW_DEFAULTS if key != 'follow_stable_reset_s'}
+    params['follow_stable_reset_s'] = .6
+    policy = FollowRecovery(params)
+    assert not policy.observe(BLOCKED, 0.)
+    for stamp in (29.1, 29.4, 29.8):
+        assert not policy.observe(GOOD, stamp, evidence_stamp=100.+stamp)
+    assert policy.since is None and not policy.waits

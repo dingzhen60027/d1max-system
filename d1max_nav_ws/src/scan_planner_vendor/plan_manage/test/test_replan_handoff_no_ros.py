@@ -15,12 +15,14 @@ import tempfile
 HARNESS = r'''
 #include <plan_manage/input_contract.hpp>
 #include <algorithm>
+#include <cstdint>
 #include <iostream>
 #include <memory>
 #include <limits>
 #include <optional>
 #define RCLCPP_ERROR(...) ((void)0)
 struct TimeValue { double value=100.; double seconds() const {return value;}
+  std::int64_t nanoseconds() const {return static_cast<std::int64_t>(value*1e9);}
   TimeValue operator-(TimeValue b) const {return {value-b.value};} };
 namespace rclcpp {using Time=TimeValue;}
 struct Node { TimeValue stamp; TimeValue now() const {return stamp;} };
@@ -49,7 +51,8 @@ class SCANReplanFSM {
   struct Validator {
     struct Boundary {Eigen::Vector3d velocity,acceleration;};
     std::optional<Boundary> value;
-    std::optional<Boundary> committedBoundary(const Eigen::Vector3d&,double)const {return value;}
+    std::optional<Boundary> committedBoundary(const Eigen::Vector3d&,const Eigen::Vector3d&,
+        std::int64_t,double)const {return value;}
   };
   std::shared_ptr<Validator> execution_validator_;
   std::shared_ptr<Manager> planner_manager_=std::make_shared<Manager>();
@@ -60,6 +63,7 @@ class SCANReplanFSM {
     std::uint64_t generation=7;double curve_time=1.;struct {TimeValue stamp;} header;};
   std::optional<Progress> tracking_progress_{Progress{}};
   double odom_timeout_=.5;
+  TimeValue last_odom_time_;
   std::uint64_t accepted_curve_generation_=7,reference_generation_=7;
   Eigen::Vector3d odom_pos_{1.,2.,.55},odom_vel_{.02,0.,0.},end_pt_{-10.,2.,.55};
   Eigen::Vector3d start_pt_,start_vel_,start_acc_;

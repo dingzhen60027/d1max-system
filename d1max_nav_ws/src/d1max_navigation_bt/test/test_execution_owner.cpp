@@ -15,6 +15,7 @@ Version ver(){Version v;v.schema_version=3;v.session_id="nav";v.task_id="task";v
  v.map_version_id="map";v.localization_epoch=1;v.localization_seed_id="seed";v.reference_generation=1;v.segment_id="floor";
  v.anchor_id="anchor";v.anchor_revision=1;v.context_sequence=1;return v;}
 Validation proof(double t=10.,uint64_t seq=1,int64_t curve=1){Validation p;p.version=ver();p.proposal_id="proposal";p.trajectory_id=curve;p.sequence=seq;
+ p.frame_id="d1max_loc_odom";p.collision_policy="official_inflated_geometry";
  p.source_stamp=p.check_begin=p.check_end=p.body_source_stamp=p.front_ray_source_stamp=p.rear_ray_source_stamp=stamp(t);
  p.valid_until=stamp(t+.4);
  p.checked_to_time=p.curve_duration=1.;
@@ -349,7 +350,7 @@ TEST(LocalStateAdmission, IndependentLocalEvidenceDoesNotRequireASyntheticGlobal
  ASSERT_TRUE(accept(m));old=m;EXPECT_FALSE(accept(m));
  m.source_stamp=m.local_odometry.header.stamp=stamp(10.02);m.usable=false;m.reason="waiting_imu";
  EXPECT_TRUE(accept(m));auto bad=m;bad.session_id="other";EXPECT_FALSE(accept(bad));
- bad=m;bad.local_odometry.header.frame_id="map";EXPECT_FALSE(accept(bad));
+ bad=m;bad.usable=true;bad.local_odometry.header.frame_id="map";EXPECT_FALSE(accept(bad));
  bad=m;bad.usable=true;bad.imu_stamp=stamp(9.8);EXPECT_FALSE(accept(bad));
  bad=m;bad.imu_stamp=bad.posterior_stamp=bad.source_stamp;
  bad.localization_epoch=2;bad.localization_seed_id="reset";ASSERT_TRUE(accept(bad));old=bad;
@@ -404,6 +405,54 @@ TEST(LocalStateAdmission, NewEpochWithSlightClockRollbackWithdrawsOldExecutionId
  old=reset;auto late=taskLocalState();late.source_stamp=late.local_odometry.header.stamp=stamp(10.09);
  EXPECT_FALSE(d1max_navigation_bt::acceptLocalState(late,old,"nav","map",10.1));
  reset.usable=true;reset.reason="";EXPECT_FALSE(d1max_navigation_bt::acceptLocalState(reset,old,"nav","map",10.1));
+}
+TEST(LocalStateAdmission, ProductionUnavailableEnvelopeRequiresNoSyntheticGeometry) {
+ // navigation_output.publish_local_unavailable constructs this from scratch,
+ // not by copying the last valid odometry and changing usable to false.
+ const auto old=taskLocalState();
+ for(const auto* reason:{"local_navigation_unavailable","hard_localization_lost","lio_reset","localization_reset"}) {
+  d1max_planning_interfaces::msg::LocalNavigationState event;
+  event.schema_version=1;event.session_id="nav";event.map_version_id="map";
+  event.localization_epoch=1;event.localization_seed_id="seed";
+  event.source_stamp=stamp(10.081);event.usable=false;event.reason=reason;
+  ASSERT_TRUE(d1max_navigation_bt::acceptLocalState(event,old,"nav","map",10.09))<<reason;
+  EXPECT_FALSE(taskLocalFresh(event,10.09));
+  auto fake_positive=event;fake_positive.usable=true;
+  EXPECT_FALSE(d1max_navigation_bt::acceptLocalState(fake_positive,old,"nav","map",10.09));
+ }
+}
+TEST(LocalStateAdmission, UnavailableEnvelopeCannotEraseNewerOrForeignIdentity) {
+ const auto old=taskLocalState();
+ d1max_planning_interfaces::msg::LocalNavigationState event;
+ event.schema_version=1;event.session_id="nav";event.map_version_id="map";
+ event.localization_epoch=1;event.localization_seed_id="seed";event.source_stamp=stamp(10.081);
+ event.usable=false;event.reason="hard_localization_lost";
+ const auto accept=[&](const auto&m){return d1max_navigation_bt::acceptLocalState(m,old,"nav","map",10.09);};
+ ASSERT_TRUE(accept(event));
+ for(int kind=0;kind<10;++kind) {
+  auto bad=event;
+  switch(kind) {
+   case 0:bad.session_id="other";break;
+   case 1:bad.map_version_id="other";break;
+   case 2:bad.schema_version=2;break;
+   case 3:bad.localization_epoch=0;break;
+   case 4:bad.localization_seed_id.clear();break;
+   case 5:bad.source_stamp=old.source_stamp;break;
+   case 6:bad.source_stamp=stamp(9.);break;
+   case 7:bad.source_stamp=stamp(10.1);break;
+   case 8:bad.source_stamp.nanosec=1000000000U;break;
+   case 9:bad.reason.assign(1025,'x');break;
+  }
+  EXPECT_FALSE(accept(bad))<<kind;
+ }
+ EXPECT_TRUE(old.usable);EXPECT_EQ(old.source_stamp,stamp(10.08));
+ auto reset=event;reset.localization_epoch=2;reset.localization_seed_id="new";reset.reason="localization_reset";
+ reset.source_stamp=stamp(10.03);
+ ASSERT_TRUE(accept(reset));
+ EXPECT_FALSE(d1max_navigation_bt::localTaskInputsFresh(reset,"nav","map",1,"seed",10.09));
+ auto late=old;late.source_stamp=late.local_odometry.header.stamp=stamp(10.085);
+ EXPECT_FALSE(d1max_navigation_bt::acceptLocalState(late,reset,"nav","map",10.09));
+ EXPECT_FALSE(d1max_navigation_bt::acceptLocalState(reset,reset,"nav","map",10.09));
 }
 TEST(LocalTaskContinuity, TimerPhaseCannotTearDownAdmittedTaskOrAuthorizeMotion) {
  const auto m=taskLocalState();d1max_planning_interfaces::msg::LocalNavigationState old;
@@ -661,9 +710,9 @@ TEST(BodyPairAdmission, OrderedUnusableWithdrawsButBadOrOldCannotErase){
  auto accept=[&](const State&s){return d1max_navigation_bt::acceptBodyPair(s,old,"nav","map",10.2);};
  ASSERT_TRUE(accept(m));old=m;EXPECT_FALSE(accept(m));
  m.source_stamp=m.local_odometry.header.stamp=m.global_odometry.header.stamp=stamp(10.1);m.usable=false;
- EXPECT_TRUE(accept(m));auto bad=m;bad.local_odometry.header.frame_id="map";EXPECT_FALSE(accept(bad));
- bad=m;bad.global_odometry.pose.pose.position.z=std::numeric_limits<double>::quiet_NaN();EXPECT_FALSE(accept(bad));
- bad=m;bad.local_odometry.header.stamp=stamp(10.11);EXPECT_FALSE(accept(bad));
+ EXPECT_TRUE(accept(m));auto bad=m;bad.usable=true;bad.local_odometry.header.frame_id="map";EXPECT_FALSE(accept(bad));
+ bad=m;bad.usable=true;bad.global_odometry.pose.pose.position.z=std::numeric_limits<double>::quiet_NaN();EXPECT_FALSE(accept(bad));
+ bad=m;bad.usable=true;bad.local_odometry.header.stamp=stamp(10.11);EXPECT_FALSE(accept(bad));
  bad=m;bad.localization_epoch=2;bad.localization_seed_id="reset";EXPECT_TRUE(accept(bad));
  bad=m;bad.session_id="foreign";EXPECT_FALSE(accept(bad));
 }
@@ -681,6 +730,37 @@ TEST(BodyPairAdmission, EpochOrderPrecedesSourceWatermarkAndNeverReturnsToOldEpo
  m.source_stamp=m.local_odometry.header.stamp=m.global_odometry.header.stamp=stamp(10.09);
  EXPECT_FALSE(d1max_navigation_bt::acceptBodyPair(m,old,"nav","map",10.1));
  EXPECT_FALSE(d1max_navigation_bt::acceptBodyPair(reset,old,"nav","map",10.1));
+}
+TEST(BodyPairAdmission, ProductionUnavailableEnvelopeIsNegativeEvidenceOnly) {
+ using State=d1max_planning_interfaces::msg::NavigationState;
+ auto old=body(10.08);old.global_odometry=old.local_odometry;old.global_odometry.header.frame_id="d1max_loc_map";
+ State event;event.schema_version=2;event.session_id="nav";event.map_version_id="map";
+ event.localization_epoch=1;event.localization_seed_id="seed";event.source_stamp=stamp(10.081);
+ event.usable=false;event.reason="atomic_navigation_unavailable";
+ const auto accept=[&](const State&m){return d1max_navigation_bt::acceptBodyPair(m,old,"nav","map",10.09);};
+ ASSERT_TRUE(accept(event));
+ event.reason="hard_localization_lost";ASSERT_TRUE(accept(event));
+ auto positive=event;positive.usable=true;EXPECT_FALSE(accept(positive));
+ for(int kind=0;kind<8;++kind) {
+  auto bad=event;
+  switch(kind) {
+   case 0:bad.session_id="other";break;
+   case 1:bad.map_version_id="other";break;
+   case 2:bad.schema_version=1;break;
+   case 3:bad.localization_epoch=0;break;
+   case 4:bad.source_stamp=old.source_stamp;break;
+   case 5:bad.source_stamp=stamp(9.);break;
+   case 6:bad.source_stamp=stamp(10.1);break;
+   case 7:bad.reason.assign(1025,'x');break;
+  }
+  EXPECT_FALSE(accept(bad))<<kind;
+ }
+ EXPECT_TRUE(old.usable);
+ auto reset=event;reset.localization_epoch=2;reset.localization_seed_id="new";reset.reason="localization_reset";
+ reset.source_stamp=stamp(10.03);ASSERT_TRUE(accept(reset));
+ auto late=old;late.source_stamp=late.local_odometry.header.stamp=late.global_odometry.header.stamp=stamp(10.085);
+ EXPECT_FALSE(d1max_navigation_bt::acceptBodyPair(late,reset,"nav","map",10.09));
+ EXPECT_FALSE(d1max_navigation_bt::acceptBodyPair(reset,reset,"nav","map",10.09));
 }
 TEST(ExecutionOwner, RequiresBothFreshMatchingProofs){Owner o("isolated_mock");o.bind(ver());o.observe(proof(),10.);
  EXPECT_FALSE(o.canConfirm(10.));auto a=ack();a.validation_sequence=2;o.observe(a,10.);EXPECT_FALSE(o.canConfirm(10.));
@@ -1139,17 +1219,66 @@ TEST(ExecutionHandoff, OriginalDemandAndEntrySourceAreDistinctFromActualWriterMe
  EXPECT_FALSE(o.observe(restamped,10.24));
  ASSERT_TRUE(o.observe(actual,10.24));EXPECT_EQ(o.appliedCommitSequence(),2u);
 }
-TEST(ExecutionHandoff, AcknowledgementWindowIsBoundedAndNeverRestampsExpiredEvidence) {
+TEST(ExecutionHandoff, LateAppliedFactIsRecordedWithoutRestampingExpiredEvidence) {
  for(const double delay:{.349,.351}) {
   Owner o("isolated_mock");beginUnapplied(o);ASSERT_TRUE(o.observe(initialCommit(o,o.tick(10.1,true)),10.11));
   o.observe(proof(10.2,2,2),10.2);o.observe(ack(10.2,2,2),10.2);
   auto p=o.tick(10.21,true);p.frame_id="d1max_loc_odom";
   ASSERT_TRUE(o.prepareHandoff(p,candidateGoal(*o.pendingVersion(10.21)),100,10.21));
   auto actual=handoffCommit(*o.handoff(),10.22);
-  EXPECT_EQ(o.observe(actual,10.22+delay),delay<.35);
-  EXPECT_EQ(o.appliedCommitSequence(),delay<.35?2u:1u);
-  if(delay>.35)ASSERT_NE(o.handoff(),nullptr); // Unknown outcome, not safe rollback.
+  EXPECT_TRUE(o.observe(actual,10.22+delay));
+  EXPECT_EQ(o.appliedCommitSequence(),2u);
+  const auto held=o.tick(10.22+delay,true);
+  EXPECT_EQ(held.trajectory_id,2);EXPECT_FALSE(held.allowed);
+  EXPECT_EQ(o.handoff(),nullptr); // Recorded fact, never a refreshed motion lease.
  }
+}
+TEST(ExecutionHandoff, BeforeRevocationAppliedFactCanArriveWhileStoppingWithoutResuming) {
+ Owner o("isolated_mock");beginUnapplied(o);ASSERT_TRUE(o.observe(initialCommit(o,o.tick(10.1,true)),10.11));
+ o.observe(proof(10.2,2,2),10.2);o.observe(ack(10.2,2,2),10.2);
+ auto p=o.tick(10.21,true);p.frame_id="d1max_loc_odom";
+ ASSERT_TRUE(o.prepareHandoff(p,candidateGoal(*o.pendingVersion(10.21)),100,10.21));
+ const auto actual=handoffCommit(*o.handoff(),10.22);
+ o.stop("cancel",10.23);
+ ASSERT_TRUE(o.observe(actual,11.));EXPECT_EQ(o.appliedCommitSequence(),2u);
+ p=o.tick(11.01,true);EXPECT_TRUE(p.revoked);EXPECT_FALSE(p.allowed);EXPECT_EQ(p.trajectory_id,2);
+ EXPECT_EQ(o.failureReason(),"cancel");
+}
+TEST(ExecutionInitialGeometry, ActualZeroOutputPinsInitialFactBeyondPreparationHeartbeats) {
+ Owner o("isolated_mock");beginUnapplied(o);const auto first=o.tick(10.1,true);
+ auto actual=initialCommit(o,first,10.11);
+ actual.demand_source_stamp=actual.demand_body_source_stamp=actual.body_source_stamp=first.source_stamp;
+ actual.measured_pose.header.stamp=actual.body_source_stamp;
+ auto demand=movingDemand(10.1,1);demand.permit_sequence=first.sequence;
+ demand.validation_sequence=first.validation_sequence;demand.velocity=actual.applied_velocity;
+ demand.safety_checked=false; // Zero is a write fact, not a free-space assertion.
+ ASSERT_TRUE(o.observe(demand,10.1));
+ ++demand.sequence;++demand.motion_validation_sequence;
+ ASSERT_TRUE(o.observe(demand,10.1));
+ actual.demand_sequence=demand.sequence;actual.motion_validation_sequence=demand.motion_validation_sequence;
+ for(int i=0;i<12;++i) {
+  const double time=10.2+.1*i;
+  ASSERT_TRUE(o.observe(sdk(time,i+2),time));
+  ASSERT_TRUE(o.observe(proof(time,i+2),time));ASSERT_TRUE(o.observe(ack(time,i+2),time));
+  auto renewal=o.tick(time,true);renewal.frame_id="d1max_loc_odom";o.notePublication(renewal,time);
+ }
+ o.stop("cancel",11.4);
+ ASSERT_TRUE(o.observe(actual,11.5));EXPECT_EQ(o.appliedCommitSequence(),1u);
+ const auto held=o.tick(11.51,true);EXPECT_TRUE(held.revoked);EXPECT_FALSE(held.allowed);
+ EXPECT_LT(seconds(actual.valid_until),11.5);
+ auto malformed=actual;++malformed.sequence;malformed.demand_sequence+=100;
+ EXPECT_FALSE(o.observe(malformed,11.52));
+}
+TEST(ExecutionHandoff, VendorAcknowledgementFactCannotRegressOrRenewItsOriginalLease) {
+ Owner o("isolated_mock");beginUnapplied(o);auto actual=initialCommit(o,o.tick(10.1,true),10.11);
+ actual.write_acknowledged=false;ASSERT_TRUE(o.observe(actual,10.11));
+ auto acknowledged=actual;++acknowledged.sequence;acknowledged.write_acknowledged=true;
+ ASSERT_TRUE(o.observe(acknowledged,10.8));EXPECT_EQ(o.appliedCommitSequence(),1u);
+ auto rollback=acknowledged;++rollback.sequence;rollback.write_acknowledged=false;
+ EXPECT_FALSE(o.observe(rollback,10.81));
+ auto redated=acknowledged;redated.sequence+=2;redated.valid_until=stamp(11.);
+ EXPECT_FALSE(o.observe(redated,10.82));
+ const auto held=o.tick(10.83,true);EXPECT_FALSE(held.allowed);
 }
 TEST(ExecutionOwner, RemainingProofOnlyForAlreadyCommittedCurve){Owner o("isolated_mock");prepare(o);
  auto p=proof(10.1,2);p.whole_curve=false;p.remaining_curve=true;p.checked_from_time=.1;p.valid_start_time=.2;
