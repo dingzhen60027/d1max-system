@@ -1,0 +1,54 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="460" viewBox="0 0 1440 460" role="img" aria-labelledby="title desc">
+  <title id="title">D1 Max Robot Navigation</title>
+  <desc id="desc">A schematic of a multi-floor route for the D1 Max navigation project.</desc>
+  <defs>
+    <linearGradient id="surface" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#e9eff2"/>
+      <stop offset="1" stop-color="#f8fafb"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1440" height="460" rx="12" fill="#f3f6f7"/>
+  <path d="M80 77h32" stroke="#38798b" stroke-width="4" stroke-linecap="round"/>
+  <text x="126" y="84" fill="#667f89" font-family="Arial, Helvetica, sans-serif" font-size="19" font-weight="600" letter-spacing="4">D1 MAX / ROBOTICS</text>
+
+  <text x="78" y="193" fill="#172c37" font-family="Arial, Helvetica, sans-serif" font-size="78" font-weight="700" letter-spacing="-2">D1 MAX</text>
+  <text x="80" y="260" fill="#172c37" font-family="Arial, Helvetica, sans-serif" font-size="50" font-weight="400" letter-spacing="1">NAVIGATION</text>
+  <path d="M81 303h72" stroke="#70a7b2" stroke-width="3" stroke-linecap="round"/>
+  <text x="80" y="357" fill="#657b86" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="600" letter-spacing="1.8">MAPPING  /  PLANNING  /  CONTROL</text>
+  <text x="80" y="393" fill="#9aabb2" font-family="Arial, Helvetica, sans-serif" font-size="15" letter-spacing="2.5">INDOOR &amp; OUTDOOR  ·  MULTI-FLOOR</text>
+
+  <!-- Abstract, illustrative floor outlines; not a measured site map. -->
+  <g fill="none" stroke="#b4c7ce" stroke-linejoin="round">
+    <path d="M786 239 1002 112 1311 244 1095 372Z" fill="url(#surface)" stroke="#c3d1d6" stroke-width="2"/>
+    <path d="M786 269 1002 142 1311 274 1095 402Z" fill="#edf2f4" stroke="#c3d1d6" stroke-width="2"/>
+    <path d="M786 239v30m309 103v30m216-158v30" stroke-width="2"/>
+    <path d="M840 241 1005 144 1255 251 1090 348Z" stroke="#cad8dd" stroke-width="1.5"/>
+    <path d="M886 214 960 245 1093 167m24 51 74 31-132 79-75-31z" stroke="#b8cbd0" stroke-width="2"/>
+    <path d="M834 266 998 170m-130 114 164-96m-130 114 164-96m-130 114 164-96" opacity=".7"/>
+    <path d="m1038 284 121 51m-88-71 121 51m-88-71 121 51" opacity=".7"/>
+    <path d="M1054 111 1132 65 1301 137 1223 183Z" fill="#fbfcfc" stroke="#c3d1d6" stroke-width="2"/>
+    <path d="M1054 111v18m169 54v18m78-64v18m-247-26 169 72 78-46" stroke-width="2"/>
+    <path d="m1088 110 44-26 134 57-44 26z" stroke="#cad8dd" stroke-width="1.5"/>
+  </g>
+
+  <g fill="none" stroke="#819da7" stroke-width="2" stroke-dasharray="5 7" opacity=".55">
+    <path d="M1145 211v-35m-78 82v-34m-163 76v-34"/>
+    <path d="M742 284 1000 132l350 149"/>
+  </g>
+
+  <!-- A simplified route and waypoints provide a navigation cue. -->
+  <path d="M856 284 935 238 Q945 232 955 236 L1021 264 Q1031 268 1041 262 L1120 216 Q1130 210 1140 214 L1190 235"
+        fill="none" stroke="#f6faf9" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M856 284 935 238 Q945 232 955 236 L1021 264 Q1031 268 1041 262 L1120 216 Q1130 210 1140 214 L1190 235"
+        fill="none" stroke="#398798" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="856" cy="284" r="8" fill="#398798" stroke="#f9fcfc" stroke-width="4"/>
+  <circle cx="1190" cy="235" r="10" fill="#f9fcfc" stroke="#398798" stroke-width="4"/>
+  <circle cx="1190" cy="235" r="3" fill="#398798"/>
+
+  <g transform="translate(1029 263) rotate(-30)">
+    <rect x="-16" y="-11" width="32" height="22" rx="6" fill="#203e49" stroke="#f8fbfb" stroke-width="3"/>
+    <path d="M-8-14v-4m16 4v-4M-8 14v4m16-4v4" stroke="#203e49" stroke-width="4" stroke-linecap="round"/>
+    <path d="M4-4 10 0 4 4" fill="none" stroke="#e3f1f2" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+</svg>
