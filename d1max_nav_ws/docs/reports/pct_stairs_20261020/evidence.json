@@ -1,0 +1,553 @@
+{
+  "schema": "d1max.pct_stair_geometry_audit/v1",
+  "read_only_map": true,
+  "execution_authorized": false,
+  "report_script": "/home/dndx/d1max_nav_ws/experiments/pct_stairs_20261020/stair_geometry_report.py",
+  "report_script_sha256": "f73777ec46ee338b6d89ea6acb617a456c6c6a3c7c96dac787c477ab5a3097a4",
+  "input_hashes": {
+    "/home/dndx/d1max_nav_ws/experiments/navigation_runtime/map/crossfloor_20261002/manifest.json": "48c707737d0b73796535bece11a2af1027a3472d01c6b03c31a4503d39c1b8db",
+    "/home/dndx/d1max_nav_ws/experiments/navigation_runtime/map/crossfloor_20261002/route.yaml": "d8570815edeb6fedb9f1be816df8e198925820be7b00f2ec4c54bea5c8230db7",
+    "/home/dndx/d1max_nav_ws/experiments/navigation_runtime/map/crossfloor_20261002/pct/tomogram.npz": "519953806989c8cd316c4c5f69920a087b1e6380eae035d4ffc8f1b415f5875a",
+    "/home/dndx/d1max_nav_ws/experiments/navigation_runtime/map/crossfloor_20261002/processed_map.pcd": "39e42785fd4a03a898cc654054350a70975f43bc4ed07bbf39415b4993e59bc2"
+  },
+  "routes": {
+    "Before": {
+      "input": {
+        "file": "/home/dndx/d1max_nav_ws/experiments/pct_stairs_20261020/before/full_crossfloor.json",
+        "sha256": "ebf78c442020785f2e5e290391d29b6c6a5392e4f3e17e8b22f3d731e098b9a3",
+        "map_sha256": "519953806989c8cd316c4c5f69920a087b1e6380eae035d4ffc8f1b415f5875a"
+      },
+      "validation": {
+        "checked_layer_cells": 204,
+        "checked_cells": 204,
+        "boundary_samples": 410,
+        "layer_transitions": 10,
+        "unobserved_ceiling_cells": 0,
+        "unknown_ceiling_policy": "allow_unobserved",
+        "minimum_measured_headroom_m": 1.9525377750396729,
+        "cost_threshold": 20.0,
+        "extra_erosion_cells": 0
+      },
+      "quality": {
+        "schema": "d1max.path_quality/v1",
+        "status": "ok",
+        "input_points": 910,
+        "spacing_m": 0.1,
+        "xy_length_m": 15.849057726633685,
+        "xyz_length_m": 19.919705635339213,
+        "xy_chord_m": 0.31622776601683567,
+        "length_chord_ratio": 50.1191211836531,
+        "closed_xy": false,
+        "z_range_m": 3.8592156171798706,
+        "xy_vertices": 907,
+        "safety_checked": false,
+        "warning_codes": [],
+        "lateral_deviation_max_m": 4.047715405015566,
+        "lateral_deviation_range_m": 4.0666386349020245,
+        "lateral_deviation_min_signed_m": -4.047715405015566,
+        "lateral_deviation_max_signed_m": 0.01892322988645795,
+        "interior_excluding_1m": {
+          "available": true,
+          "excluded_start_m": 1.0,
+          "excluded_end_m": 1.0,
+          "retained_arclength_m": 13.849057726633685,
+          "total_abs_turn_rad": 13.952928784590334,
+          "total_abs_turn_deg": 799.4439312036275,
+          "curvature_p95_per_m": 4.209734071333612,
+          "curvature_max_per_m": 28.237218416614997,
+          "curvature_samples": 139,
+          "lateral_deviation_max_m": 4.047715405015566,
+          "lateral_deviation_range_m": 3.9962715632659838,
+          "lateral_deviation_min_signed_m": -4.047715405015566,
+          "lateral_deviation_max_signed_m": -0.05144384174958222
+        },
+        "resampled_points": 160,
+        "resampled_xy_length_m": 15.745445636284735,
+        "total_abs_turn_rad": 14.798000444255791,
+        "total_abs_turn_deg": 847.862970688574,
+        "curvature_p95_per_m": 4.087017796572024,
+        "curvature_max_per_m": 28.237218416614997,
+        "curvature_samples": 158
+      },
+      "parts": {
+        "stair_lower": {
+          "schema": "d1max.path_quality/v1",
+          "status": "ok",
+          "input_points": 446,
+          "spacing_m": 0.1,
+          "xy_length_m": 7.566305030015503,
+          "xyz_length_m": 9.434674141936323,
+          "xy_chord_m": 7.3498299300051775,
+          "length_chord_ratio": 1.0294530760673224,
+          "closed_xy": false,
+          "z_range_m": 2.0314027070999146,
+          "xy_vertices": 443,
+          "safety_checked": false,
+          "warning_codes": [],
+          "lateral_deviation_max_m": 0.37030660159773165,
+          "lateral_deviation_range_m": 0.4687857598048253,
+          "lateral_deviation_min_signed_m": -0.37030660159773165,
+          "lateral_deviation_max_signed_m": 0.09847915820709366,
+          "interior_excluding_1m": {
+            "available": true,
+            "excluded_start_m": 1.0,
+            "excluded_end_m": 1.0,
+            "retained_arclength_m": 5.566305030015503,
+            "total_abs_turn_rad": 4.7503156669943465,
+            "total_abs_turn_deg": 272.1730390736487,
+            "curvature_p95_per_m": 3.1948318610860387,
+            "curvature_max_per_m": 7.754898628707097,
+            "curvature_samples": 56,
+            "lateral_deviation_max_m": 0.37030660159773165,
+            "lateral_deviation_range_m": 0.4687857598048253,
+            "lateral_deviation_min_signed_m": -0.37030660159773165,
+            "lateral_deviation_max_signed_m": 0.09847915820709366
+          },
+          "resampled_points": 77,
+          "resampled_xy_length_m": 7.552221353881161,
+          "total_abs_turn_rad": 5.556138504304023,
+          "total_abs_turn_deg": 318.34328668675033,
+          "curvature_p95_per_m": 2.680967579805642,
+          "curvature_max_per_m": 7.754898628707097,
+          "curvature_samples": 75
+        },
+        "stair_upper": {
+          "schema": "d1max.path_quality/v1",
+          "status": "ok",
+          "input_points": 465,
+          "spacing_m": 0.1,
+          "xy_length_m": 8.282752696618182,
+          "xyz_length_m": 10.485031493402888,
+          "xy_chord_m": 7.088018058667737,
+          "length_chord_ratio": 1.1685569404679264,
+          "closed_xy": false,
+          "z_range_m": 1.9172823429107666,
+          "xy_vertices": 465,
+          "safety_checked": false,
+          "warning_codes": [],
+          "lateral_deviation_max_m": 1.537884957129648,
+          "lateral_deviation_range_m": 1.53788495712965,
+          "lateral_deviation_min_signed_m": -1.537884957129648,
+          "lateral_deviation_max_signed_m": 1.9984014443252818e-15,
+          "interior_excluding_1m": {
+            "available": true,
+            "excluded_start_m": 1.0,
+            "excluded_end_m": 1.0,
+            "retained_arclength_m": 6.282752696618182,
+            "total_abs_turn_rad": 5.659505241597537,
+            "total_abs_turn_deg": 324.2657644757062,
+            "curvature_p95_per_m": 3.5774126296564717,
+            "curvature_max_per_m": 7.171278562060554,
+            "curvature_samples": 63,
+            "lateral_deviation_max_m": 1.537884957129648,
+            "lateral_deviation_range_m": 1.046815139226249,
+            "lateral_deviation_min_signed_m": -1.537884957129648,
+            "lateral_deviation_max_signed_m": -0.491069817903399
+          },
+          "resampled_points": 84,
+          "resampled_xy_length_m": 8.263422220963882,
+          "total_abs_turn_rad": 7.028881302270268,
+          "total_abs_turn_deg": 402.7252333185042,
+          "curvature_p95_per_m": 3.6050327254368355,
+          "curvature_max_per_m": 7.171278562060554,
+          "curvature_samples": 82
+        }
+      },
+      "seams": [
+        {
+          "following_segment": "stair_upper",
+          "point_index": 445,
+          "xyz": [
+            -28.70077819824219,
+            55.0457046508789,
+            1.3720836639404297
+          ],
+          "turn_deg": 172.72602253739967,
+          "tangent_sampling": "first points at least 0.05 m from the portal"
+        }
+      ],
+      "sample_cost_quantiles_0_50_90_100": [
+        0.0,
+        10.543667793273926,
+        14.02941608428955,
+        19.09830093383789
+      ],
+      "sample_mask_distance_quantiles_0_10_50_100_m": [
+        0.1,
+        0.14142135623730953,
+        0.30000000000000004,
+        0.7071067811865476
+      ],
+      "distance_semantics": "XY distance to an invalid cell in the same retained layer; not a physical robot clearance certificate"
+    },
+    "After": {
+      "input": {
+        "file": "/home/dndx/d1max_nav_ws/experiments/pct_stairs_20261020/after/full_crossfloor.json",
+        "sha256": "dad1f28bd331b738f8d144b02c002654a341e4b414e1bfec00a7564db381d50b",
+        "map_sha256": "519953806989c8cd316c4c5f69920a087b1e6380eae035d4ffc8f1b415f5875a"
+      },
+      "validation": {
+        "checked_layer_cells": 199,
+        "checked_cells": 199,
+        "boundary_samples": 396,
+        "layer_transitions": 10,
+        "unobserved_ceiling_cells": 0,
+        "unknown_ceiling_policy": "allow_unobserved",
+        "minimum_measured_headroom_m": 1.9725592136383057,
+        "cost_threshold": 20.0,
+        "extra_erosion_cells": 0
+      },
+      "quality": {
+        "schema": "d1max.path_quality/v1",
+        "status": "ok",
+        "input_points": 736,
+        "spacing_m": 0.1,
+        "xy_length_m": 15.427303805797797,
+        "xyz_length_m": 19.393606556579737,
+        "xy_chord_m": 0.31622776601683567,
+        "length_chord_ratio": 48.78541818170534,
+        "closed_xy": false,
+        "z_range_m": 3.8592156171798706,
+        "xy_vertices": 734,
+        "safety_checked": false,
+        "warning_codes": [],
+        "lateral_deviation_max_m": 3.8904344761814844,
+        "lateral_deviation_range_m": 3.9093577060679423,
+        "lateral_deviation_min_signed_m": -3.8904344761814844,
+        "lateral_deviation_max_signed_m": 0.01892322988645795,
+        "interior_excluding_1m": {
+          "available": true,
+          "excluded_start_m": 1.0,
+          "excluded_end_m": 1.0,
+          "retained_arclength_m": 13.427303805797797,
+          "total_abs_turn_rad": 9.453174804505771,
+          "total_abs_turn_deg": 541.6270192975877,
+          "curvature_p95_per_m": 2.9069805093461034,
+          "curvature_max_per_m": 6.752830606257056,
+          "curvature_samples": 135,
+          "lateral_deviation_max_m": 3.8904344761814844,
+          "lateral_deviation_range_m": 3.838990634431902,
+          "lateral_deviation_min_signed_m": -3.8904344761814844,
+          "lateral_deviation_max_signed_m": -0.05144384174958222
+        },
+        "resampled_points": 156,
+        "resampled_xy_length_m": 15.401834151068785,
+        "total_abs_turn_rad": 10.122459006757175,
+        "total_abs_turn_deg": 579.9741793813735,
+        "curvature_p95_per_m": 2.917405071958604,
+        "curvature_max_per_m": 6.752830606257056,
+        "curvature_samples": 154
+      },
+      "parts": {
+        "stair_lower": {
+          "schema": "d1max.path_quality/v1",
+          "status": "ok",
+          "input_points": 319,
+          "spacing_m": 0.1,
+          "xy_length_m": 7.340554168580243,
+          "xyz_length_m": 9.214225552632488,
+          "xy_chord_m": 7.151811651423667,
+          "length_chord_ratio": 1.0263908679864358,
+          "closed_xy": false,
+          "z_range_m": 2.024407982826233,
+          "xy_vertices": 317,
+          "safety_checked": false,
+          "warning_codes": [],
+          "lateral_deviation_max_m": 0.3823921871531608,
+          "lateral_deviation_range_m": 0.5815298720855654,
+          "lateral_deviation_min_signed_m": -0.3823921871531608,
+          "lateral_deviation_max_signed_m": 0.19913768493240455,
+          "interior_excluding_1m": {
+            "available": true,
+            "excluded_start_m": 1.0,
+            "excluded_end_m": 1.0,
+            "retained_arclength_m": 5.340554168580243,
+            "total_abs_turn_rad": 2.610903391658737,
+            "total_abs_turn_deg": 149.5937450584378,
+            "curvature_p95_per_m": 1.631224844928638,
+            "curvature_max_per_m": 1.9246183884824377,
+            "curvature_samples": 54,
+            "lateral_deviation_max_m": 0.3823921871531608,
+            "lateral_deviation_range_m": 0.5815298720855654,
+            "lateral_deviation_min_signed_m": -0.3823921871531608,
+            "lateral_deviation_max_signed_m": 0.19913768493240455
+          },
+          "resampled_points": 75,
+          "resampled_xy_length_m": 7.331881106292679,
+          "total_abs_turn_rad": 3.4990217281093448,
+          "total_abs_turn_deg": 200.4791774452373,
+          "curvature_p95_per_m": 1.7048375730339258,
+          "curvature_max_per_m": 5.176486369331802,
+          "curvature_samples": 73
+        },
+        "stair_upper": {
+          "schema": "d1max.path_quality/v1",
+          "status": "ok",
+          "input_points": 418,
+          "spacing_m": 0.1,
+          "xy_length_m": 8.086749637217554,
+          "xyz_length_m": 10.17938100394725,
+          "xy_chord_m": 6.887838857089536,
+          "length_chord_ratio": 1.1740619670412296,
+          "closed_xy": false,
+          "z_range_m": 1.9115080833435059,
+          "xy_vertices": 418,
+          "safety_checked": false,
+          "warning_codes": [],
+          "lateral_deviation_max_m": 1.4711314911946807,
+          "lateral_deviation_range_m": 1.4711314911946827,
+          "lateral_deviation_min_signed_m": -1.4711314911946807,
+          "lateral_deviation_max_signed_m": 1.9984014443252818e-15,
+          "interior_excluding_1m": {
+            "available": true,
+            "excluded_start_m": 1.0,
+            "excluded_end_m": 1.0,
+            "retained_arclength_m": 6.0867496372175545,
+            "total_abs_turn_rad": 5.080238958046202,
+            "total_abs_turn_deg": 291.07625121398627,
+            "curvature_p95_per_m": 3.1680291309730735,
+            "curvature_max_per_m": 7.343678129561379,
+            "curvature_samples": 61,
+            "lateral_deviation_max_m": 1.4711314911946807,
+            "lateral_deviation_range_m": 0.9906180888265868,
+            "lateral_deviation_min_signed_m": -1.4711314911946807,
+            "lateral_deviation_max_signed_m": -0.4805134023680939
+          },
+          "resampled_points": 82,
+          "resampled_xy_length_m": 8.071348052903334,
+          "total_abs_turn_rad": 6.30954925974468,
+          "total_abs_turn_deg": 361.51054321326296,
+          "curvature_p95_per_m": 3.1846336531279786,
+          "curvature_max_per_m": 7.343678129561379,
+          "curvature_samples": 80
+        }
+      },
+      "seams": [
+        {
+          "following_segment": "stair_upper",
+          "point_index": 318,
+          "xyz": [
+            -28.837839798607604,
+            54.876827077768596,
+            1.3121691942214966
+          ],
+          "turn_deg": 28.78958397557577,
+          "tangent_sampling": "first points at least 0.05 m from the portal"
+        }
+      ],
+      "sample_cost_quantiles_0_50_90_100": [
+        0.0,
+        10.474447250366211,
+        14.213537216186523,
+        19.09830093383789
+      ],
+      "sample_mask_distance_quantiles_0_10_50_100_m": [
+        0.1,
+        0.14142135623730953,
+        0.30000000000000004,
+        0.7071067811865476
+      ],
+      "distance_semantics": "XY distance to an invalid cell in the same retained layer; not a physical robot clearance certificate"
+    }
+  },
+  "published_route_contract": {
+    "available": true,
+    "checks": {
+      "lower_floor_xyz_and_layer_lists_unchanged": true,
+      "upper_floor_xyz_and_layer_lists_unchanged": true,
+      "down_xyz_exact_reverse_of_up": true,
+      "down_layers_exact_reverse_of_up": true,
+      "all_routes_match_same_production_map_sha256": true,
+      "after_source_samples_supported": true,
+      "reverse_source_samples_supported": true
+    },
+    "map_sha256_by_input": {
+      "Before": "519953806989c8cd316c4c5f69920a087b1e6380eae035d4ffc8f1b415f5875a",
+      "After": "519953806989c8cd316c4c5f69920a087b1e6380eae035d4ffc8f1b415f5875a",
+      "Reverse": "519953806989c8cd316c4c5f69920a087b1e6380eae035d4ffc8f1b415f5875a"
+    },
+    "source_support": {
+      "Before": {
+        "available": true,
+        "file": "/home/dndx/d1max_nav_ws/experiments/pct_stairs_20261020/before/full_crossfloor.source_snapshot.json",
+        "sha256": "4a133dca24e2af21b99b2f8052ed81fb56ae785615097abe2242dded7a86ca2e",
+        "evidence": {
+          "all_samples_supported": true,
+          "available": true,
+          "first_unsupported": [],
+          "maximum_nearest_return_distance_m": 0.0989113849658175,
+          "sample_spacing_m": 0.05,
+          "samples": 3729,
+          "source_map_sha256": "138e329bc1733ed1ea4d7dbe04b8dd545e3831a974a0d27464dbe3eff06f6da5",
+          "support_radius_m": 0.12,
+          "support_semantics": "measured_returns_not_free_space_or_foot_placement",
+          "unsupported_by_floor": {
+            "floor1": 0,
+            "floor2": 0,
+            "stair_lower": 0,
+            "stair_upper": 0
+          },
+          "unsupported_samples": 0,
+          "whole_swept_volume_verified": false
+        }
+      },
+      "After": {
+        "available": true,
+        "file": "/home/dndx/d1max_nav_ws/experiments/pct_stairs_20261020/after/full_crossfloor.source_snapshot.json",
+        "sha256": "8868324b569f5b56b62670531ee2c9a71b444b264e1457d8656250afa68172ab",
+        "evidence": {
+          "all_samples_supported": true,
+          "available": true,
+          "first_unsupported": [],
+          "maximum_nearest_return_distance_m": 0.0989113849658175,
+          "sample_spacing_m": 0.05,
+          "samples": 3590,
+          "source_map_sha256": "138e329bc1733ed1ea4d7dbe04b8dd545e3831a974a0d27464dbe3eff06f6da5",
+          "support_radius_m": 0.12,
+          "support_semantics": "measured_returns_not_free_space_or_foot_placement",
+          "unsupported_by_floor": {
+            "floor1": 0,
+            "floor2": 0,
+            "stair_lower": 0,
+            "stair_upper": 0
+          },
+          "unsupported_samples": 0,
+          "whole_swept_volume_verified": false
+        }
+      },
+      "Reverse": {
+        "available": true,
+        "file": "/home/dndx/d1max_nav_ws/experiments/pct_stairs_20261020/after/full_crossfloor_reverse.source_snapshot.json",
+        "sha256": "6482512949bd4e5d4f23ec82821f60bb711b94d6eef3e4416815dfea195d66fe",
+        "evidence": {
+          "all_samples_supported": true,
+          "available": true,
+          "first_unsupported": [],
+          "maximum_nearest_return_distance_m": 0.0989113849658175,
+          "sample_spacing_m": 0.05,
+          "samples": 3590,
+          "source_map_sha256": "138e329bc1733ed1ea4d7dbe04b8dd545e3831a974a0d27464dbe3eff06f6da5",
+          "support_radius_m": 0.12,
+          "support_semantics": "measured_returns_not_free_space_or_foot_placement",
+          "unsupported_by_floor": {
+            "floor1": 0,
+            "floor2": 0,
+            "stair_lower": 0,
+            "stair_upper": 0
+          },
+          "unsupported_samples": 0,
+          "whole_swept_volume_verified": false
+        }
+      }
+    },
+    "input_files": {
+      "Before": {
+        "file": "/home/dndx/d1max_nav_ws/experiments/pct_stairs_20261020/before/full_crossfloor.json",
+        "sha256": "ebf78c442020785f2e5e290391d29b6c6a5392e4f3e17e8b22f3d731e098b9a3"
+      },
+      "After": {
+        "file": "/home/dndx/d1max_nav_ws/experiments/pct_stairs_20261020/after/full_crossfloor.json",
+        "sha256": "dad1f28bd331b738f8d144b02c002654a341e4b414e1bfec00a7564db381d50b"
+      },
+      "Reverse": {
+        "file": "/home/dndx/d1max_nav_ws/experiments/pct_stairs_20261020/after/full_crossfloor_reverse.json",
+        "sha256": "6e6150b960dbd9ef2b3db35c80be5b8a23104915f50c15f376b2229d04202028"
+      }
+    },
+    "comparison_semantics": "Exact serialized XYZ/layer list equality, not approximate geometric comparison.",
+    "physical_execution_accepted": false
+  },
+  "cost": {
+    "count_semantics": "retained-layer cells, not unique physical XY surfaces",
+    "domain": {
+      "xy_min": [
+        -34.0,
+        49.3
+      ],
+      "xy_max": [
+        -27.0,
+        56.0
+      ],
+      "ground_z_exclusive": [
+        -0.5,
+        3.0
+      ]
+    },
+    "production_reconstruction_max_cost_difference": 0.0,
+    "official_equation_config": {
+      "kernel_size": 7,
+      "interval_min": 0.55,
+      "interval_free": 0.7,
+      "slope_max_rad": 0.6,
+      "step_max": 0.17,
+      "standable_ratio": 0.2,
+      "cost_barrier": 50.0,
+      "safe_margin": 0.1,
+      "inflation": 0.1
+    },
+    "stair": {
+      "retained_layer_cell_count": 4660,
+      "inflated_cost_quantiles_0_10_50_90_100": [
+        0.32694438099861145,
+        7.008208751678467,
+        12.349953651428223,
+        17.005523681640625,
+        19.66726303100586
+      ],
+      "raw_cost_quantiles_0_10_50_90_100": [
+        0.00732327438890934,
+        0.27767932415008545,
+        6.27968692779541,
+        13.101037979125977,
+        17.005523681640625
+      ],
+      "nonzero_headroom_penalty_count": 0,
+      "slope_equation_cell_count": 2933,
+      "crossable_step_equation_cell_count": 1727,
+      "inflation_raised_cell_count": 4036,
+      "cost_ge_8_count": 3932,
+      "cost_ge_15_count": 472
+    },
+    "landing": {
+      "retained_layer_cell_count": 1849,
+      "inflated_cost_quantiles_0_10_50_90_100": [
+        0.32694438099861145,
+        4.801214694976807,
+        10.078814506530762,
+        14.892698287963867,
+        19.09830093383789
+      ],
+      "raw_cost_quantiles_0_10_50_90_100": [
+        0.00732327438890934,
+        0.09791931509971619,
+        4.651219367980957,
+        10.047403335571289,
+        14.907596588134766
+      ],
+      "nonzero_headroom_penalty_count": 0,
+      "slope_equation_cell_count": 1051,
+      "crossable_step_equation_cell_count": 798,
+      "inflation_raised_cell_count": 1621,
+      "cost_ge_8_count": 1149,
+      "cost_ge_15_count": 149
+    },
+    "interpretation": "Higher cost reflects measured slope/step and max-cost inflation; these cells remain traversable. No colors, heights or masks were changed."
+  },
+  "lineage": {
+    "original_pcd_path": "/home/dndx/\u667a\u5143\u56db\u8db3\u673a\u5668\u4ebaD1 Max\u4e8c\u6b21\u5f00\u53d1\u6587\u6863\u8d44\u6599\u5305v0.1.0/d1max_ros2/map_manager/data/processed/20260923_141005_sc-pgo-0923-crossfloor-structure-v1_2c7218/processed_map.pcd",
+    "original_pcd_sha256": "138e329bc1733ed1ea4d7dbe04b8dd545e3831a974a0d27464dbe3eff06f6da5",
+    "retained_lineage_sha256": "3ed7be36ee0cb0b9f19ede6db8326ea081e9cfab5912fdcfcf19a8161d1829ea",
+    "protected_retained": {
+      "points": 58317,
+      "changed_z_points": 0,
+      "maximum_abs_z_change_m": 0.0
+    },
+    "flight_platform_roi_retained": {
+      "points": 30532,
+      "changed_z_points": 0,
+      "maximum_abs_z_change_m": 0.0
+    },
+    "protected_points_removed_by_later_visibility_stage": 3135,
+    "caveat": "The floor-conditioning stage preserves stairs; later historical visibility removal is separate and is not changed here."
+  }
+}

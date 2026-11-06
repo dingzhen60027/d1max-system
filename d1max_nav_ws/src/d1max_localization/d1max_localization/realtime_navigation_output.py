@@ -153,6 +153,9 @@ class RealtimeNavigationOutput(NavigationOutput):
             # wire below is observable but is never looped back as input.
             self.on_local(message)
             self.prediction_pub.publish(message)
+            model=self.predictor.evaluate_pose_only(now) if state is None else None
+            self.publish_pose_continuity(model,horizon=self.predictor.limits.pose_only_horizon,
+                imu_gap=self.predictor.limits.pose_only_imu_gap)
         super().tick()
         duration = time.perf_counter()-started
         self.rt_ticks += 1

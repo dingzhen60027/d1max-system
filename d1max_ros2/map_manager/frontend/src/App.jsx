@@ -9,6 +9,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert'
 import './bags.css'
 import './live-planning.css'
+import { readWorkspaceRoute } from './workspace-route.js'
 import RemoteLaunchButton from './RemoteLaunchButton.jsx'
 const Workspace3D = lazy(()=>import('./Workspace3D.jsx'))
 const Workspace2D = lazy(()=>import('./Workspace2D.jsx'))
@@ -17,7 +18,7 @@ const LivePlanningPanel = lazy(()=>import('./LivePlanningPanel.jsx'))
 export const GROUPS = {
  'planning':[{id:'live',name:'运行面板',icon:Route}],
  '3d':[{id:'maps',name:'原始点云',icon:Database},{id:'processed',name:'处理结果',icon:WandSparkles},{id:'planning',name:'规划产物',icon:Route},{id:'archived',name:'归档管理',icon:Archive},{id:'failures',name:'异常记录',icon:FileWarning}],
- '2d':[{id:'versions',name:'地图版本',icon:Map},{id:'build',name:'生成 2D 地图',icon:Grid2X2},{id:'nav2',name:'Nav2（独立）',icon:Route},{id:'archived',name:'归档管理',icon:Archive}],
+ '2d':[{id:'versions',name:'地图版本',icon:Map},{id:'build',name:'生成 2D 地图',icon:Grid2X2},{id:'archived',name:'归档管理',icon:Archive}],
  'bags':[{id:'recordings',name:'录制与文件',icon:Radio},{id:'archived',name:'Bag 归档',icon:Archive}],
 }
 export function navigate(path){window.location.hash=path}
@@ -26,12 +27,7 @@ function WorkspaceLink(props){
  return <SidebarMenuButton {...props} onClick={()=>setOpenMobile(false)}/>
 }
 function readRoute(){
- const [path,query='']=(location.hash.slice(1)||'/').split('?')
- const [,mode,originalSection]=path.split('/')
- const section=mode==='2d'&&originalSection==='navigation'?'nav2':originalSection
- if(mode==='2d'&&section==='localization')return {mode:'planning',section:'live',query:new URLSearchParams(query)}
- if(!GROUPS[mode])return {mode:'home',section:'',query:new URLSearchParams()}
- return {mode,section:GROUPS[mode].some(v=>v.id===section)?section:GROUPS[mode][0].id,query:new URLSearchParams(query)}
+ return readWorkspaceRoute(location.hash,GROUPS)
 }
 function PreviewArtwork({mode}){
  return <svg viewBox="0 0 520 210" aria-hidden="true" className={'portal-art '+mode}>

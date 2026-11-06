@@ -4,7 +4,7 @@ import json
 import pytest
 
 from d1max_localization.estimation.causal_prediction import CausalInertialPredictor
-from d1max_localization.estimation.prediction import PredictionLimits
+from d1max_localization.estimation.prediction import InertialPredictor, PredictionLimits
 from d1max_localization.estimation.navigation import NavigationLimits,NavigationState
 from d1max_localization.realtime_navigation_output import (
     predictor_parameters,prediction_envelope,quantiles_ms,causal_output_time,
@@ -118,6 +118,99 @@ def test_pending_notice_cannot_revive_rejected_state_or_mask_imu_expiry():
     assert not predictor.valid
 
 
+def weak_geometry_notice(now, posterior=100., **changes):
+    value=pending_notice(now,reason='weak_geometry',scan_end=100.1)
+    value.update(last_good_posterior_sec=posterior,finite_filter_state=True)
+    value.update(changes)
+    return value
+
+
+def test_finite_weak_scan_preserves_only_original_bounded_posterior_then_recovers():
+    limits=PredictionLimits(max_horizon=.35,max_coast=.1)
+    predictor=CausalInertialPredictor(limits)
+    before=InertialPredictor(limits)  # Former weak notice delegated to this exact core.
+    original=snapshot(100.)
+    original['inertial']['world_velocity']=[1.,0.,0.]
+    assert predictor.accept(original,100.12)
+    assert before.accept(original,100.12)
+    retained=(predictor.snapshot,predictor.snapshot_receipt,predictor.snapshot_publication)
+    imu_index=0
+    for target in (100.12,100.14,100.20,100.30,100.34,100.36,100.38):
+        while 100.+imu_index*.005<=target+1e-10:
+            acquisition=100.+imu_index*.005
+            assert predictor.push_imu(acquisition,(0.,0.,9.81),(0.,0.,0.),acquisition)
+            assert before.push_imu(acquisition,(0.,0.,9.81),(0.,0.,0.),acquisition)
+            imu_index+=1
+        assert predictor.accept(weak_geometry_notice(target),target)
+        assert before.accept(weak_geometry_notice(target),target)
+        assert before.evaluate(target) is None  # Same input used to revoke immediately.
+        state=predictor.evaluate(target)
+        if target<=100.35:
+            assert state is not None and state.source_stamp==100.
+            assert state.stamp==target and state.pose.position[0]==pytest.approx(target-100.)
+        else:
+            assert state is None  # Even endless weak notices cannot recharge it.
+        assert (predictor.snapshot,predictor.snapshot_receipt,predictor.snapshot_publication)==retained
+        assert predictor.epoch==1 and not predictor.fault
+    assert predictor.pending_notices==5
+    fresh=snapshot(100.40)
+    fresh['inertial']['world_velocity']=[1.,0.,0.]
+    assert predictor.accept(fresh,100.40)
+    assert predictor.push_imu(100.40,(0.,0.,9.81),(0.,0.,0.),100.40)
+    state=predictor.evaluate(100.40)
+    assert state is not None and state.source_stamp==100.40 and predictor.epoch==1
+
+
+@pytest.mark.parametrize('changes',[
+    {'finite_filter_state':False},{'finite_filter_state':1},
+    {'last_good_posterior_sec':100.001},{'last_good_posterior_sec':float('nan')},
+    {'last_good_posterior_sec':'100'},{'last_good_posterior_sec':0.},
+    {'epoch':2},{'fault':True},{'reason':'nonfinite_filter_state'},
+    {'reason':'initializing'},{'reason':'unknown'}, {'imu_quality_scope':'unknown'},
+])
+def test_weak_scan_without_exact_finite_posterior_evidence_cannot_preserve(changes):
+    predictor=CausalInertialPredictor(PredictionLimits(max_horizon=.35,max_coast=.1))
+    assert predictor.accept(snapshot(100.),100.)
+    assert predictor.push_imu(100.,(0.,0.,9.81),(0.,0.,0.),100.)
+    assert predictor.accept(weak_geometry_notice(100.02,**changes),100.02)
+    assert predictor.evaluate(100.02) is None and predictor.pending_notices==0
+    json.dumps(prediction_envelope(predictor,None,100.02,2),allow_nan=False)
+
+
+def test_finite_weak_scan_never_masks_imu_expiry_or_revives_a_bad_source():
+    predictor=CausalInertialPredictor(PredictionLimits(max_horizon=.35,max_coast=.1))
+    assert predictor.accept(snapshot(100.),100.)
+    assert predictor.push_imu(100.,(0.,0.,9.81),(0.,0.,0.),100.)
+    assert predictor.accept(weak_geometry_notice(100.11),100.11)
+    assert predictor.evaluate(100.11) is None and predictor.reason=='imu_stale'
+    # An unrelated invalid source cannot be papered over by a later weak notice.
+    assert predictor.accept(pending_notice(100.12,reason='initializing'),100.12)
+    assert predictor.accept(weak_geometry_notice(100.13),100.13)
+    assert not predictor.valid
+
+
+@pytest.mark.parametrize('native_sec',[100.1234567899,1800000000.1234567,1791791791.9999998])
+def test_weak_posterior_identity_matches_exact_native_wire_time(native_sec):
+    import math
+
+    source_ns=int(native_sec*10**9)  # The native odometry uint64 conversion.
+    source=source_ns*1e-9
+    predictor=CausalInertialPredictor(PredictionLimits(max_horizon=.35,max_coast=.1))
+    value=snapshot(source);value['stamp_ns']=str(source_ns)
+    assert predictor.accept(value,source)
+    assert predictor.push_imu(source,(0.,0.,9.81),(0.,0.,0.),source)
+    now=source+.02
+    assert predictor.accept(weak_geometry_notice(now,posterior=native_sec),now)
+    assert predictor.evaluate(now) is not None and predictor.pending_notices==1
+    # One different representable native source cannot be accepted as the
+    # same posterior, even at Unix epochs where floats are sub-microsecond.
+    other=math.nextafter(native_sec,math.inf)
+    while int(other*10**9)==source_ns:
+        other=math.nextafter(other,math.inf)
+    assert predictor.accept(weak_geometry_notice(now,posterior=other),now)
+    assert predictor.evaluate(now) is None and predictor.pending_notices==1
+
+
 def test_nanosecond_roundtrip_cannot_make_current_prediction_a_future_packet():
     from d1max_localization.estimation_ros import stamp_time
     from d1max_localization.navigation_wire import body_pair_message
@@ -178,6 +271,7 @@ def realtime_boundary():
     node.predictor = CausalInertialPredictor(PredictionLimits(**{
         key:value for key,value in prediction.items() if key in vars(PredictionLimits())}))
     node.now_s = Mock(return_value=10.2)
+    node.get_logger = Mock(return_value=Mock())
     node.imu_frame = prediction['imu_frame']
     for name in ('motion_pub','local_pub','local_state_pub','global_pub','state_pair_pub',
                  'pose_pub','path_pub','status_pub','pose_status_pub','map_pub',
@@ -189,7 +283,10 @@ def realtime_boundary():
     node.reset_client = Mock()
     node.reset_client.service_is_ready.return_value = False
     node.future = node.request_key = node.last_local_state_identity = None
+    node.last_local_state_lease = None
     node.last_local_unavailable = None
+    node.pose_continuity=None;node.pose_continuity_alignment=None
+    node.pose_continuity_sequence=0;node.pose_continuity_pub=Mock()
     node.predictor_status = {}
     node.last_error = ''
     for name in ('last_local_sent','last_map_sent','last_path','last_status',
@@ -198,6 +295,124 @@ def realtime_boundary():
                  'clock_target_quantization_ns_max'):
         setattr(node,name,0)
     return node
+
+
+def test_actual_realtime_weak_scan_keeps_deadlines_then_resumes_same_map_identity():
+    from sensor_msgs.msg import Imu
+    from std_msgs.msg import String
+    from nav_msgs.msg import Odometry
+    from d1max_localization.estimation_ros import stamp_time
+    from test_navigation_estimation import alignment, diagonal
+
+    node=realtime_boundary()
+    node.on_posterior(String(data=json.dumps(snapshot(10.2))))
+    next_imu=0
+    for tick in range(20):
+        now=10.22+tick*.02
+        node.now_s.return_value=now
+        while 10.195+next_imu*.005<=now+1e-9:
+            acquisition=10.195+next_imu*.005
+            message=Imu();message.header.frame_id=node.imu_frame
+            message.header.stamp=stamp_time(acquisition);message.linear_acceleration.z=9.81
+            node.on_imu(message);next_imu+=1
+        if tick==19:
+            node.on_posterior(String(data=json.dumps(snapshot(now))))
+            node.on_map(String(data=json.dumps(alignment(now))))
+        else:
+            notice=weak_geometry_notice(now,posterior=10.2,imu_quality_scan_end_sec=10.3)
+            node.on_posterior(String(data=json.dumps(notice)))
+        filtered=Odometry();filtered.header.stamp=stamp_time(now)
+        filtered.header.frame_id='d1max_loc_map';filtered.child_frame_id='d1max_loc_tracking'
+        filtered.pose.pose.orientation.w=1.;filtered.pose.covariance=diagonal()
+        node.on_filtered(filtered)
+        node.tick()
+    local=[call.args[0] for call in node.local_state_pub.publish.call_args_list if call.args[0].usable]
+    pairs=[call.args[0] for call in node.state_pair_pub.publish.call_args_list]
+    assert len(local)==18  # Real 20ms samples, then a truthful 60ms gap.
+    local_stamps=[m.source_stamp.sec+m.source_stamp.nanosec*1e-9 for m in local]
+    assert local_stamps[:-1]==pytest.approx([10.22+i*.02 for i in range(17)])
+    assert local_stamps[-1]==pytest.approx(10.60)
+    stamps=[m.source_stamp.sec+m.source_stamp.nanosec*1e-9 for m in pairs]
+    # One pre-existing real sample is published when the first EKF update
+    # arrives; the remaining pairs keep the exact local sample source times.
+    assert len(pairs)==19
+    assert stamps[:-1]==pytest.approx([10.20+i*.02 for i in range(18)])
+    assert stamps[-1]==pytest.approx(10.60)
+    assert node.core.key()==(1,'seed-a') and not node.core.fault and not node.core.filter_fault
+    assert node.predictor.pending_notices==17 and node.core.output_ready(10.60)
+    for message in local:
+        source=message.source_stamp.sec*10**9+message.source_stamp.nanosec
+        assert message.valid_until.sec*10**9+message.valid_until.nanosec==source+100_000_000
+    unavailable=[call.args[0] for call in node.local_state_pub.publish.call_args_list if not call.args[0].usable]
+    assert len(unavailable)==1 and unavailable[0].reason=='local_navigation_unavailable'
+    diagnostics=[call.args[0] for call in node.get_logger().info.call_args_list
+                 if call.args[0].startswith('LocalStateUnavailable ')]
+    assert len(diagnostics)==1  # Repeated unavailable ticks are one episode.
+    detail=json.loads(diagnostics[0].split(' ',1)[1])
+    unavailable_ns=unavailable[0].source_stamp.sec*10**9+unavailable[0].source_stamp.nanosec
+    prior_ns=local[-2].source_stamp.sec*10**9+local[-2].source_stamp.nanosec
+    assert detail['event_source_ns']==unavailable_ns==prior_ns+1
+    assert detail['reason']==unavailable[0].reason
+    assert (detail['epoch'],detail['seed'])==(1,'seed-a')
+    assert detail['source_timing']['posterior_stamp_sec']==pytest.approx(10.2)
+    assert detail['source_timing']['target_stamp_sec']==pytest.approx(10.54)
+    assert node.last_local_unavailable is None  # Genuine recovery ends it.
+    assert local[-1].posterior_stamp==stamp_time(10.60)
+    assert local[-1].valid_until==stamp_time(10.70)
+    # Expiry is explicit, not a repeated-pose heartbeat; the real new posterior
+    # restores the same seed/epoch, without reinitialization or a new task.
+
+
+@pytest.mark.parametrize('recover', [True, False])
+def test_actual_realtime_imu_boundary_does_not_revoke_unexpired_typed_state(recover):
+    """Production predictor -> output tick, no fabricated packet or extra IMU."""
+    from sensor_msgs.msg import Imu
+    from std_msgs.msg import String
+    from d1max_localization.estimation_ros import stamp_time
+
+    node = realtime_boundary()
+    node.on_posterior(String(data=json.dumps(snapshot(10.2))))
+    imu = Imu()
+    imu.header.frame_id = node.imu_frame
+    imu.header.stamp = stamp_time(10.2)
+    imu.linear_acceleration.z = 9.81
+    node.on_imu(imu)
+    for now in (10.2, 10.22, 10.24, 10.26, 10.28):
+        node.now_s.return_value = now
+        node.tick()
+    original = node.local_state_pub.publish.call_args.args[0]
+    assert original.usable and original.source_stamp == stamp_time(10.28)
+    assert original.imu_stamp == stamp_time(10.2)
+    assert original.valid_until == stamp_time(10.38)
+    count = node.local_state_pub.publish.call_count
+    for now in (10.300204, 10.32):
+        node.now_s.return_value = now
+        node.tick()
+        assert node.predictor.reason == 'imu_stale'
+        assert node.core.local_valid and not node.core.local_ready(now)
+        assert node.local_state_pub.publish.call_count == count
+    if recover:
+        node.now_s.return_value = 10.34
+        node.on_posterior(String(data=json.dumps(snapshot(10.34))))
+        imu.header.stamp = stamp_time(10.34)
+        node.on_imu(imu)
+        node.tick()
+        recovered = node.local_state_pub.publish.call_args.args[0]
+        assert recovered.usable and recovered.source_stamp == stamp_time(10.34)
+        assert recovered.imu_stamp == stamp_time(10.34)
+        assert recovered.valid_until == stamp_time(10.44)
+        assert node.core.key() == (1, 'seed-a')
+        assert all(call.args[0].usable for call in node.local_state_pub.publish.call_args_list)
+    else:
+        node.now_s.return_value = 10.38
+        node.tick()
+        unavailable = node.local_state_pub.publish.call_args.args[0]
+        assert not unavailable.usable and unavailable.reason == 'local_navigation_unavailable'
+        assert unavailable.source_stamp == stamp_time(10.280000001)
+        assert node.local_state_pub.publish.call_count == count+1
+        node.now_s.return_value = 10.40
+        node.tick()
+        assert node.local_state_pub.publish.call_count == count+1
 
 
 @pytest.mark.parametrize('global_gap',[None,'map','filter'])

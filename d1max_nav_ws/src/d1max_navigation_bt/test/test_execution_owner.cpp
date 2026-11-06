@@ -5,6 +5,8 @@
 #include "d1max_navigation_bt/body_pair_admission.hpp"
 #include "d1max_navigation_bt/preparation_budget.hpp"
 #include "d1max_navigation_bt/engine.hpp"
+#include "d1max_navigation_bt/task_contract.hpp"
+#include "d1max_navigation_bt/runtime_policy.hpp"
 using d1max_navigation_bt::PreparationBudget;
 using d1max_navigation_bt::PreparationLimits;
 using d1max_navigation_bt::PreparationStage;
@@ -37,8 +39,13 @@ d1max_navigation_bt_interfaces::msg::RouteSnapshot routeSnapshot(std::vector<std
  r.edge_segments.assign(points.size()-1,"floor");d1max_navigation_bt_interfaces::msg::RouteSegment segment;
  segment.segment_id="floor";segment.begin_index=0;segment.end_index=points.size()-1;r.segments.push_back(segment);return r;
 }
-void prepare(Owner&o){o.bind(ver());ASSERT_TRUE(o.bindRoute(routeSnapshot()));ASSERT_TRUE(o.observe(receipt(),10.));ASSERT_TRUE(o.observe(proof(),10.));ASSERT_TRUE(o.observe(ack(),10.));}
-void beginUnapplied(Owner&o){prepare(o);ASSERT_TRUE(o.begin("execution","confirm",1,10.));ASSERT_TRUE(o.observe(sdk(),10.1));}
+void prepare(Owner&o,const std::string&transport="isolated_mock"){
+ o.bind(ver());ASSERT_TRUE(o.bindRoute(routeSnapshot()));auto r=receipt();r.transport_mode=transport;
+ auto v=proof();v.transport_mode=transport;auto a=ack();a.transport_mode=transport;
+ ASSERT_TRUE(o.observe(r,10.));ASSERT_TRUE(o.observe(v,10.));ASSERT_TRUE(o.observe(a,10.));}
+void beginUnapplied(Owner&o,const std::string&transport="isolated_mock"){
+ prepare(o,transport);ASSERT_TRUE(o.begin("execution","confirm",1,10.));
+ auto s=sdk();s.transport_mode=transport;ASSERT_TRUE(o.observe(s,10.1));}
 MotionDemand movingDemand(double t,uint64_t seq){MotionDemand d;d.version=ver();d.execution_id="execution";
  d.control_epoch=1;d.sdk_session="sdk";d.sdk_arm_generation=1;d.sequence=seq;d.permit_sequence=seq;
  d.validation_sequence=seq;d.motion_validation_sequence=seq;d.braking_model_sha256=std::string(64,'b');
@@ -81,8 +88,8 @@ CommitAck initialCommit(Owner&o,Permit p,double time=10.11) {
  a.measured_pose.header.stamp=a.body_source_stamp;a.measured_pose.pose.orientation.w=1.;
  a.applied=a.write_submitted=a.write_acknowledged=true;return a;
 }
-void begin(Owner&o) {
- beginUnapplied(o);const auto p=o.tick(10.1,true);
+void begin(Owner&o,const std::string&transport="isolated_mock") {
+ beginUnapplied(o,transport);const auto p=o.tick(10.1,true);
  ASSERT_TRUE(o.observe(initialCommit(o,p,10.1),10.1));
 }
 GeometryReceipt geometryReceipt(const Permit&p,double at=10.1,uint64_t sequence=1,
@@ -118,23 +125,49 @@ CommitAck handoffCommit(const Handoff&h,double time,uint64_t sequence=2,bool app
  a.measured_pose.header.stamp=a.body_source_stamp;a.measured_pose.pose.orientation.w=1.;
  a.applied=applied;a.write_submitted=a.write_acknowledged=applied;return a;
 }
-Stationary stationaryWitness(double t=11.,uint64_t seq=1) {
+Stationary stationaryWitness(double t=11.,uint64_t seq=1,const std::string&transport="isolated_mock") {
  Stationary s;s.schema_version=1;s.version=ver();s.execution_id="execution";s.control_epoch=1;
- s.sdk_session="sdk";s.sdk_arm_generation=1;s.transport_mode="isolated_mock";
+ s.sdk_session="sdk";s.sdk_arm_generation=1;s.transport_mode=transport;
  s.sequence=seq;s.writer_commit_sequence=1;s.applied_trajectory_id=1;s.zero_write_sequence=3;
  s.zero_ack_at=stamp(10.2);s.mc_raw_stamp_ns=static_cast<uint64_t>(t*1e9);s.mc_clock_epoch="mc-clock";
- s.time_basis="isolated_simulated_source_clock";s.source_stamp=stamp(t);s.received_stamp=stamp(t+.01);
+ s.time_basis=transport=="live"?"source_delta_host_anchor_approximate":"isolated_simulated_source_clock";
+ s.source_stamp=stamp(t);s.received_stamp=stamp(t+.01);
  s.capture_lower_bound=stamp(t-.02);s.capture_upper_bound=s.received_stamp;s.mc_capture_delay_bound_sec=.02;
  s.valid_until=stamp(t+.25);s.stationary_samples=35;s.stationary_duration_sec=.65;
  s.measured_linear_mps=.005;s.measured_angular_radps=.002;s.nonzero_blocked=s.usable=true;return s;
 }
-void stationaryCandidate(Owner&o,double t=11.) {
- auto s=sdk(t+.01,2);ASSERT_TRUE(o.observe(s,t+.01));
- auto invalid=proof(t,2);invalid.valid=false;invalid.valid_until=stamp(0.);ASSERT_TRUE(o.observe(invalid,t+.01));
+Stop stopWitness(const std::string&transport="isolated_mock") {
+ Stop s;s.version=ver();s.execution_id="execution";s.control_epoch=1;s.sdk_session="sdk";
+ s.sdk_arm_generation=1;s.transport_mode=transport;s.stop_request_id="confirm";s.sequence=1;
+ s.mc_raw_stamp_ns=11300000000ULL;s.mc_clock_epoch="clock";
+ s.time_basis=transport=="live"?"source_delta_host_anchor_approximate":"isolated_simulated_source_clock";
+ s.source_stamp=stamp(11.3);s.stationary_samples=50;s.stationary_duration_sec=1.;
+ s.nonzero_blocked=s.stop_submitted=s.measured_stop_confirmed=true;return s;
+}
+Retirement retirementWitness(double t=10.3,uint64_t seq=1) {
+ Retirement r;r.schema_version=1;r.version=ver();r.execution_id="execution";r.control_epoch=1;
+ r.sdk_session="sdk";r.sdk_arm_generation=1;r.grant_request_id="confirm";r.sequence=seq;
+ r.source_stamp=stamp(t);r.transport_mode="isolated_mock";
+ r.nonzero_blocked=r.software_retired=r.motion_never_submitted=true;r.reason="take_control_failed";return r;
+}
+Grant::Request grantRequest() {
+ Grant::Request r;r.version=ver();r.execution_id="execution";r.control_epoch=1;
+ r.confirmation_id=r.request_id="confirm";r.sdk_session="sdk";r.source_stamp=stamp(10.);
+ r.transport_mode="isolated_mock";r.activate=true;return r;
+}
+Grant::Response rejectedGrant(const Grant::Request& r) {
+ Grant::Response out;out.version=r.version;out.request_id=r.request_id;out.execution_id=r.execution_id;
+ out.control_epoch=r.control_epoch;out.sdk_session=r.sdk_session;out.transport_mode=r.transport_mode;
+ out.definitely_not_admitted=true;out.reason="writer_not_ready_or_prior_not_stopped";return out;
+}
+void stationaryCandidate(Owner&o,double t=11.,const std::string&transport="isolated_mock") {
+ auto s=sdk(t+.01,2);s.transport_mode=transport;ASSERT_TRUE(o.observe(s,t+.01));
+ auto invalid=proof(t,2);invalid.transport_mode=transport;invalid.valid=false;invalid.reason="occupied";
+ invalid.valid_until=stamp(0.);ASSERT_TRUE(o.observe(invalid,t+.01));
  auto r=receipt();r.version.reference_generation=2;r.proposal_id="stationary-reference";
- r.expected_version=ver();r.expected_trajectory_id=1;r.source_stamp=stamp(t);r.valid_until=stamp(t+.3);
- ASSERT_TRUE(o.observe(r,t+.01));auto next=proof(t,3,2);next.version=r.version;next.proposal_id=r.proposal_id;
- ASSERT_TRUE(o.observe(next,t+.01));auto a=ack(t,3,2);a.version=r.version;ASSERT_TRUE(o.observe(a,t+.01));
+ r.expected_version=ver();r.expected_trajectory_id=1;r.source_stamp=stamp(t);r.valid_until=stamp(t+.3);r.transport_mode=transport;
+ ASSERT_TRUE(o.observe(r,t+.01));auto next=proof(t,3,2);next.version=r.version;next.proposal_id=r.proposal_id;next.transport_mode=transport;
+ ASSERT_TRUE(o.observe(next,t+.01));auto a=ack(t,3,2);a.version=r.version;a.transport_mode=transport;ASSERT_TRUE(o.observe(a,t+.01));
 }
 // The production navigator uses this same execution-failure contract in its
 // outer TaskContextValid gate, independent of FollowRoute's worker feedback.
@@ -162,6 +195,303 @@ struct ExecutionTaskBackend final : d1max_navigation_bt::Backend {
 }
 TEST(ExecutionOwner, PreviewCommitsGeometryButNeverPermission){Owner o("isolated_mock");prepare(o);auto p=o.tick(10.1,true);
  EXPECT_TRUE(p.geometry_committed);EXPECT_FALSE(p.allowed);EXPECT_EQ(p.phase,"preview");EXPECT_TRUE(o.canConfirm(10.1));}
+
+TEST(ExecutionInitialGeometry, OriginalShortLeaseCanPrepareAtCallbackButNotAtNextTenHzTimer) {
+ for(bool admission_first:{false,true}) {
+  Owner callback("isolated_mock"),timer_only("isolated_mock");
+  for(auto*o:{&callback,&timer_only}) {
+   o->bind(ver());ASSERT_TRUE(o->bindRoute(routeSnapshot()));ASSERT_TRUE(o->observe(receipt(),10.));
+  }
+  auto v=proof(10.02);v.valid_until=stamp(10.07);
+  auto a=ack(10.03);a.valid_until=v.valid_until;
+  for(auto*o:{&callback,&timer_only}) {
+   if(admission_first)ASSERT_TRUE(o->observe(a,10.031));else ASSERT_TRUE(o->observe(v,10.031));
+   EXPECT_FALSE(o->canConfirm(10.031));
+   if(admission_first)ASSERT_TRUE(o->observe(v,10.032));else ASSERT_TRUE(o->observe(a,10.032));
+  EXPECT_TRUE(o->canConfirm(10.032));
+  }
+  // Production's fast callback shares this same intent/Owner sequence. It
+  // neither ticks the tree nor assigns another timestamp to either proof.
+  d1max_navigation_bt::GoalExecutionIntent intent(true,"rviz-goal-request");
+  const d1max_navigation_bt::RouteBinding binding{"nav","task","route",std::string(64,'a')};
+  ASSERT_TRUE(intent.prepare(binding,true));ASSERT_TRUE(intent.consume(binding));
+  EXPECT_TRUE(callback.initialGeometryNeedsPublication(10.032));
+  ASSERT_TRUE(callback.begin("execution","confirm",1,10.032,"sdk"));
+  EXPECT_FALSE(callback.canPrepareInitialGeometry(10.032));
+  EXPECT_TRUE(intent.consumed()); // The fast path declines consumed intents before confirm.
+  EXPECT_FALSE(callback.begin("execution","repeated",2,10.032,"sdk"));
+  auto p=callback.tick(10.032,true);p.frame_id="d1max_loc_odom";
+  EXPECT_TRUE(p.geometry_committed);EXPECT_FALSE(p.allowed);EXPECT_EQ(p.phase,"arming");
+  EXPECT_EQ(p.version,v.version);EXPECT_EQ(p.validation_sequence,v.sequence);
+  callback.notePublication(p,10.032);
+  const auto installed=geometryReceipt(p,10.033,1,1,10.034);
+  ASSERT_TRUE(callback.observe(installed,10.034));
+  EXPECT_EQ(installed.validation_sequence,v.sequence);
+  EXPECT_EQ(v.valid_until,stamp(10.07));EXPECT_EQ(a.valid_until,stamp(10.07));
+  EXPECT_FALSE(timer_only.canConfirm(10.1));
+  EXPECT_FALSE(timer_only.begin("execution","too-late",1,10.1));
+  EXPECT_FALSE(timer_only.tick(10.1,true).geometry_committed);
+  // Capturing installation is not permission after the original proof expires.
+  ASSERT_TRUE(callback.observe(sdk(10.1),10.1));
+  EXPECT_FALSE(callback.tick(10.1,true).allowed);
+ }
+}
+TEST(ExecutionInitialGeometry, PlanningOnlyOriginalProofCanPrepareImmediatelyWithoutAnIntentOrGrant) {
+ Owner callback("live",30.,1.,{},true),timer_only("live",30.,1.,{},true);
+ for(auto*o:{&callback,&timer_only}) {
+  o->bind(ver());ASSERT_TRUE(o->bindRoute(routeSnapshot()));
+  auto r=receipt();r.transport_mode="live";ASSERT_TRUE(o->observe(r,10.));
+  auto v=proof(10.02);v.transport_mode="live";v.valid_until=stamp(10.07);
+  ASSERT_TRUE(o->observe(v,10.032));
+  EXPECT_TRUE(o->canPrepareInitialGeometry(10.032));EXPECT_FALSE(o->canConfirm(10.032));
+  EXPECT_FALSE(o->begin("execution","forbidden",1,10.032));
+ }
+ ASSERT_TRUE(callback.initialGeometryNeedsPublication(10.032));
+ auto p=callback.tick(10.032,true);p.frame_id="d1max_loc_odom";
+ ASSERT_TRUE(p.geometry_committed);EXPECT_FALSE(p.allowed);EXPECT_EQ(p.phase,"preview");
+ callback.notePublication(p,10.032);
+ EXPECT_FALSE(callback.initialGeometryNeedsPublication(10.04));
+ EXPECT_FALSE(callback.confirmed());EXPECT_TRUE(callback.executionId().empty());
+ EXPECT_EQ(callback.controlEpoch(),0u);
+ // A genuinely new native proof is an event, not repeated local heartbeats.
+ auto newer=proof(10.04,2);newer.transport_mode="live";newer.valid_until=stamp(10.09);
+ ASSERT_TRUE(callback.observe(newer,10.04));
+ EXPECT_TRUE(callback.initialGeometryNeedsPublication(10.04));
+ EXPECT_FALSE(timer_only.canPrepareInitialGeometry(10.1));
+ EXPECT_FALSE(timer_only.tick(10.1,true).geometry_committed);
+ EXPECT_FALSE(callback.tick(10.1,true).allowed);
+}
+TEST(ExecutionInitialGeometry, FastPreparationCannotUseExpiredForeignNegativeOrIncompletePair) {
+ for(int kind=0;kind<7;++kind) {
+  Owner o("isolated_mock");o.bind(ver());ASSERT_TRUE(o.bindRoute(routeSnapshot()));
+  auto r=receipt();auto v=proof(10.02);auto a=ack(10.03);
+  if(kind==0)v.valid_until=stamp(10.031);
+  if(kind==1)a.version.task_id="old-task";
+  if(kind==2)v.valid=false;
+  if(kind==3)a.accepted=false;
+  if(kind==4)r.accepted=false;
+  if(kind==5)a.validation_sequence=2;
+  if(kind==6)v.transport_mode="live";
+  o.observe(r,10.);o.observe(v,10.032);o.observe(a,10.032);
+  EXPECT_FALSE(o.canConfirm(10.032))<<kind;
+  EXPECT_FALSE(o.canPrepareInitialGeometry(10.032))<<kind;
+  EXPECT_FALSE(o.initialGeometryNeedsPublication(10.032))<<kind;
+  EXPECT_FALSE(o.begin("execution","confirm",1,10.032))<<kind;
+  EXPECT_FALSE(o.tick(10.032,true).geometry_committed)<<kind;
+ }
+}
+TEST(PlanningGeometryOwner, NativeWholeProofAndReferenceReceiptCommitWithoutTracker) {
+ Owner o("isolated_mock",30.,1.,{},true);o.bind(ver());ASSERT_TRUE(o.bindRoute(routeSnapshot()));
+ ASSERT_TRUE(o.observe(receipt(),10.));ASSERT_TRUE(o.observe(proof(),10.));
+ const auto p=o.tick(10.1,true);EXPECT_TRUE(p.geometry_committed);EXPECT_FALSE(p.allowed);
+ EXPECT_EQ(p.phase,"preview");EXPECT_EQ(p.trajectory_id,1);EXPECT_EQ(p.validation_sequence,1u);
+ EXPECT_EQ(p.version,ver());EXPECT_EQ(o.preparationEvidence(10.1),10000000000LL);
+ EXPECT_FALSE(o.canConfirm(10.1));EXPECT_FALSE(o.begin("execution","confirm",1,10.1));
+ EXPECT_FALSE(o.confirmed());EXPECT_TRUE(o.executionId().empty());EXPECT_EQ(o.controlEpoch(),0u);
+ EXPECT_FALSE(o.observe(sdk(),10.1));EXPECT_EQ(o.appliedCommitSequence(),0u);
+}
+TEST(ExecutionReferenceReceipt, RecoveredHistoricalAdmissionNeedsFreshExactPreparation) {
+ Owner o("isolated_mock");o.bind(ver());ASSERT_TRUE(o.bindRoute(routeSnapshot()));
+ const auto original=receipt();ASSERT_TRUE(o.observe(original,14.));
+ EXPECT_FALSE(o.canPrepareInitialGeometry(14.)); // Historical ACK alone is never current geometry.
+ ASSERT_TRUE(o.observe(proof(14.),14.));
+ EXPECT_FALSE(o.canPrepareInitialGeometry(14.)); // Motion purpose still needs actual tracker entry.
+ ASSERT_TRUE(o.observe(ack(14.),14.));EXPECT_TRUE(o.canPrepareInitialGeometry(14.));
+ ASSERT_TRUE(o.observe(original,14.1)); // Exact replay remains immutable/idempotent.
+ EXPECT_TRUE(o.canPrepareInitialGeometry(14.1));
+ EXPECT_FALSE(o.canPrepareInitialGeometry(14.41)); // Replay did not renew either current proof lease.
+}
+TEST(ExecutionReferenceReceipt, HistoricalFactCannotOverrideNegativeProofOrRetiredTask) {
+ Owner o("isolated_mock");o.bind(ver());ASSERT_TRUE(o.observe(receipt(),14.));
+ ASSERT_TRUE(o.observe(proof(14.),14.));ASSERT_TRUE(o.observe(ack(14.),14.));
+ EXPECT_TRUE(o.canPrepareInitialGeometry(14.));
+ auto blocked=proof(14.1,2);blocked.valid=false;blocked.reason="trajectory_occupied";
+ ASSERT_TRUE(o.observe(blocked,14.1));ASSERT_TRUE(o.observe(receipt(),14.1));
+ EXPECT_FALSE(o.canPrepareInitialGeometry(14.1));
+ o.stop("cancelled",14.2);EXPECT_FALSE(o.observe(receipt(),14.2));
+ EXPECT_FALSE(o.canPrepareInitialGeometry(14.2));
+}
+TEST(ExecutionReferenceReceipt, OriginalAdmissionIdentityTimeAndPredecessorStayBinding) {
+ for(int kind=0;kind<7;++kind) {
+  Owner o("isolated_mock");o.bind(ver());auto r=receipt();
+  if(kind==0)r.version.task_id="old-task";
+  if(kind==1)++r.version.localization_epoch;
+  if(kind==2)r.version.localization_seed_id="old-seed";
+  if(kind==3)r.source_stamp=stamp(14.01);
+  if(kind==4)r.valid_until=stamp(9.9);
+  if(kind==5)r.valid_until=stamp(10.501);
+  if(kind==6)r.accepted=false;
+  EXPECT_FALSE(o.observe(r,14.))<<kind;
+  ASSERT_TRUE(o.observe(proof(14.),14.));ASSERT_TRUE(o.observe(ack(14.),14.));
+  EXPECT_FALSE(o.canPrepareInitialGeometry(14.))<<kind;
+ }
+ Owner wrong("isolated_mock");wrong.bind(ver());auto predecessor=receipt();
+ predecessor.expected_version=ver();predecessor.expected_trajectory_id=17;
+ ASSERT_TRUE(wrong.observe(predecessor,14.));ASSERT_TRUE(wrong.observe(proof(14.),14.));
+ ASSERT_TRUE(wrong.observe(ack(14.),14.));EXPECT_FALSE(wrong.canPrepareInitialGeometry(14.));
+ Owner o("isolated_mock");o.bind(ver());ASSERT_TRUE(o.observe(receipt(),14.));
+ auto negative=receipt();negative.accepted=false;negative.source_stamp=stamp(14.);negative.valid_until=stamp(14.5);
+ EXPECT_FALSE(o.observe(negative,14.)); // A later negative cannot erase the genuine positive fact.
+ auto conflict=receipt();conflict.expected_trajectory_id=18;EXPECT_FALSE(o.observe(conflict,14.));
+ ASSERT_TRUE(o.observe(proof(14.),14.));ASSERT_TRUE(o.observe(ack(14.),14.));
+ EXPECT_TRUE(o.canPrepareInitialGeometry(14.));
+}
+TEST(ExecutionIdentityTime, RecordedStampUsesIdenticalRosClockArithmetic) {
+ builtin_interfaces::msg::Time t;t.sec=1774197216;t.nanosec=858544988;
+ // rclcpp::Time::seconds uses integer total nanoseconds divided by 1e9.
+ // The linked production rclcpp reproduction is retained in experiments.
+ const auto ns=static_cast<std::int64_t>(t.sec)*1000000000LL+t.nanosec;
+ const double ros_clock=static_cast<double>(ns)/1000000000.;
+ EXPECT_EQ(seconds(t),ros_clock);
+ EXPECT_TRUE(fresh(seconds(t),ros_clock,.5));
+}
+TEST(PlanningGeometryOwner, RecordedReceiptAndProofAcceptTheirExactRosClock) {
+ const auto exact=[](int32_t sec,uint32_t nsec){builtin_interfaces::msg::Time t;t.sec=sec;t.nanosec=nsec;return t;};
+ const auto ros_seconds=[](const auto&t){return static_cast<double>(static_cast<int64_t>(t.sec)*1000000000LL+t.nanosec)/1e9;};
+ Owner o("live",30.,.6,{},true);o.bind(ver());
+ auto r=receipt();r.transport_mode="live";
+ r.source_stamp=exact(1774197216,858544988);r.valid_until=exact(1774197217,358544988);
+ ASSERT_TRUE(o.observe(r,ros_seconds(r.source_stamp)));
+ auto v=proof();v.transport_mode="live";
+ v.source_stamp=v.check_end=exact(1774197217,165072128);
+ v.check_begin=exact(1774197217,157045220);v.body_source_stamp=exact(1774197217,141511680);
+ v.front_ray_source_stamp=exact(1774197216,799983104);v.rear_ray_source_stamp=exact(1774197216,799994880);
+ v.valid_until=exact(1774197217,299983104);v.checked_to_time=v.curve_duration=12.29509947311361;
+ ASSERT_TRUE(o.observe(v,ros_seconds(v.source_stamp)));
+ const auto p=o.tick(ros_seconds(exact(1774197217,201806068)),false);
+ EXPECT_TRUE(p.geometry_committed);EXPECT_EQ(p.trajectory_id,1);EXPECT_EQ(p.validation_sequence,1u);
+ EXPECT_FALSE(p.allowed);EXPECT_FALSE(o.confirmed());
+}
+TEST(ExecutionIdentityTime, NoFutureToleranceWasAdded) {
+ builtin_interfaces::msg::Time future;future.sec=1;future.nanosec=1;
+ // At this epoch a 1 ns difference is representable. Unix-epoch double
+ // seconds cannot resolve individual nanoseconds; do not claim otherwise.
+ EXPECT_GT(seconds(future),1.);EXPECT_FALSE(fresh(seconds(future),1.,.35));
+ Owner o("isolated_mock",30.,.6,{},true);o.bind(ver());
+ auto r=receipt();r.source_stamp=future;r.valid_until=stamp(1.2);
+ EXPECT_FALSE(o.observe(r,1.));
+ auto v=proof(1.);v.source_stamp=v.check_begin=v.check_end=future;
+ EXPECT_FALSE(o.observe(v,1.));
+}
+TEST(PlanningGeometryOwner, RecordedEpochTrueFutureExpiryAndIdentityStillReject) {
+ builtin_interfaces::msg::Time t;t.sec=1774197216;t.nanosec=858544988;
+ const auto ns=static_cast<int64_t>(t.sec)*1000000000LL+t.nanosec;
+ const double now=static_cast<double>(ns)/1e9;
+ for(int kind=0;kind<3;++kind) {
+  Owner o("isolated_mock",30.,.6,{},true);o.bind(ver());
+  auto r=receipt();r.source_stamp=t;r.valid_until=stamp(now+.2);
+  auto v=proof(now);v.source_stamp=v.check_begin=v.check_end=t;
+  if(kind==0){r.source_stamp.nanosec+=1000;v.source_stamp.nanosec+=1000;v.check_end=v.source_stamp;}
+  if(kind==1){r.valid_until=t;r.valid_until.nanosec-=1000;v.valid_until=r.valid_until;}
+  if(kind==2){r.version.task_id="wrong-task";v.version.task_id="wrong-task";}
+  EXPECT_FALSE(o.observe(r,now))<<kind;EXPECT_FALSE(o.observe(v,now))<<kind;
+  EXPECT_FALSE(o.tick(now,false).geometry_committed)<<kind;
+ }
+}
+TEST(PlanningGeometryOwner, ExecutionStillNeedsItsExactTrackerPreparation) {
+ Owner o("isolated_mock");o.bind(ver());ASSERT_TRUE(o.observe(receipt(),10.));ASSERT_TRUE(o.observe(proof(),10.));
+ EXPECT_FALSE(o.tick(10.1,true).geometry_committed);EXPECT_FALSE(o.canConfirm(10.1));
+ EXPECT_FALSE(o.begin("execution","confirm",1,10.1));
+ ASSERT_TRUE(o.observe(ack(),10.));EXPECT_TRUE(o.tick(10.1,true).geometry_committed);
+ EXPECT_TRUE(o.canConfirm(10.1));
+}
+TEST(PlanningGeometryOwner, TrackerFactsCannotInstallOrVetoPlanningGeometry) {
+ Owner o("isolated_mock",30.,1.,{},true);o.bind(ver());ASSERT_TRUE(o.observe(receipt(),10.));
+ ASSERT_TRUE(o.observe(proof(),10.));auto negative=ack();negative.accepted=false;
+ EXPECT_FALSE(o.observe(negative,10.));auto p=o.tick(10.1,true);ASSERT_TRUE(p.geometry_committed);
+ p.frame_id="d1max_loc_odom";o.notePublication(p,10.1);
+ EXPECT_FALSE(o.observe(geometryReceipt(p),10.1));
+ EXPECT_FALSE(o.observe(initialCommit(o,p),10.11));
+ EXPECT_TRUE(o.tick(10.12,true).geometry_committed);EXPECT_EQ(o.appliedCommitSequence(),0u);
+}
+TEST(PlanningGeometryOwner, MissingRejectedAndWrongPredecessorReceiptNeverCommit) {
+ for(int kind=0;kind<5;++kind) {
+  Owner o("isolated_mock",30.,1.,{},true);o.bind(ver());ASSERT_TRUE(o.observe(proof(),10.));
+  auto r=receipt();
+  if(kind==1)r.accepted=false;
+  if(kind==2)r.expected_version=ver();
+  if(kind==3)r.expected_trajectory_id=7;
+  if(kind==4)r.proposal_id="other-proposal";
+  if(kind)ASSERT_TRUE(o.observe(r,10.));
+  EXPECT_FALSE(o.tick(10.1,true).geometry_committed)<<kind;
+  EXPECT_EQ(o.preparationEvidence(10.1),0)<<kind;
+ }
+}
+TEST(PlanningGeometryOwner, WholeDomainFrameDeadlineAndSupportAreStillRequired) {
+ for(int kind=0;kind<9;++kind) {
+  Owner o("isolated_mock",30.,1.,{},true);o.bind(ver());ASSERT_TRUE(o.observe(receipt(),10.));
+  auto v=proof();
+  if(kind==0)v.whole_curve=false;
+  if(kind==1){v.whole_curve=false;v.remaining_curve=true;v.checked_from_time=v.valid_start_time=.5;v.reverse_margin_m=.2;}
+  if(kind==2)v.checked_to_time=.9;
+  if(kind==3)v.valid_start_time=1.1;
+  if(kind==4)v.frame_id="d1max_loc_map";
+  if(kind==5)v.valid_until=stamp(10.05);
+  if(kind==6)v.support_reference_id.clear();
+  if(kind==7)v.support_hash.clear();
+  if(kind==8)v.collision_policy="unrecognized";
+  ASSERT_TRUE(o.observe(v,10.));
+  EXPECT_FALSE(o.tick(10.1,true).geometry_committed)<<kind;
+ }
+}
+TEST(PlanningGeometryOwner, ScanDeadlineOwnsPerceptionFreshness) {
+ Owner o("isolated_mock",30.,1.,{},true);o.bind(ver());ASSERT_TRUE(o.observe(receipt(),10.));
+ auto v=proof();v.body_source_stamp=v.front_ray_source_stamp=v.rear_ray_source_stamp=stamp(9.);
+ v.valid_until=stamp(10.15);ASSERT_TRUE(o.observe(v,10.));
+ EXPECT_TRUE(o.tick(10.1,true).geometry_committed);
+ EXPECT_FALSE(o.tick(10.16,true).geometry_committed); // No downstream deadline extension.
+}
+TEST(PlanningGeometryOwner, LatestNegativeAndSourceExpiryAreNotRenewedByPreviewTicks) {
+ Owner o("isolated_mock",30.,1.,{},true);o.bind(ver());ASSERT_TRUE(o.observe(receipt(),10.));
+ ASSERT_TRUE(o.observe(proof(),10.));ASSERT_TRUE(o.tick(10.1,true).geometry_committed);
+ auto negative=proof(10.12,2);negative.valid=false;ASSERT_TRUE(o.observe(negative,10.12));
+ EXPECT_FALSE(o.tick(10.13,true).geometry_committed);EXPECT_EQ(o.preparationEvidence(10.13),0);
+ ASSERT_TRUE(o.observe(proof(10.14,3),10.14));ASSERT_TRUE(o.tick(10.15,true).geometry_committed);
+ const auto expired=o.tick(10.55,true);EXPECT_FALSE(expired.geometry_committed);EXPECT_FALSE(expired.allowed);
+ EXPECT_EQ(o.preparationEvidence(10.55),0);EXPECT_EQ(expired.phase,"preview");
+}
+TEST(PlanningGeometryOwner, FreshWholeProofRestagesGeometryWithExactVersionCAS) {
+ Owner o("isolated_mock",30.,1.,{},true);o.bind(ver());ASSERT_TRUE(o.observe(receipt(),10.));
+ ASSERT_TRUE(o.observe(proof(),10.));const auto first=o.tick(10.1,true);ASSERT_TRUE(first.geometry_committed);
+ ASSERT_TRUE(o.observe(proof(10.12,2),10.12));EXPECT_EQ(o.tick(10.13,true).validation_sequence,2u);
+ auto next=proof(10.14,3,2);next.version.reference_generation=2;next.proposal_id="next";
+ auto r=receipt();r.version=next.version;r.proposal_id=next.proposal_id;
+ r.expected_version=first.version;r.expected_trajectory_id=first.trajectory_id;
+ ASSERT_TRUE(o.observe(r,10.14));ASSERT_TRUE(o.observe(next,10.14));
+ const auto p=o.tick(10.15,true);EXPECT_TRUE(p.geometry_committed);EXPECT_FALSE(p.allowed);
+ EXPECT_EQ(p.version,next.version);EXPECT_EQ(p.trajectory_id,2);EXPECT_EQ(p.validation_sequence,3u);
+ EXPECT_EQ(o.appliedCommitSequence(),0u);EXPECT_FALSE(o.begin("wrong-caller","confirm",1,10.15));
+}
+TEST(PlanningGeometryOwner, NativeRenewalDoesNotNeedTrackerOrRedateReferenceReceipt) {
+ Owner o("isolated_mock",30.,1.,{},true);o.bind(ver());const auto original=receipt();
+ ASSERT_TRUE(o.observe(original,10.));ASSERT_TRUE(o.observe(proof(),10.));
+ ASSERT_TRUE(o.tick(10.1,true).geometry_committed);
+ // The original delivery lease is over. Fresh real native whole-curve
+ // evidence can still validate the already received exact reference.
+ const auto renewed=proof(11.,2);ASSERT_TRUE(o.observe(renewed,11.));
+ const auto p=o.tick(11.1,true);EXPECT_TRUE(p.geometry_committed);EXPECT_FALSE(p.allowed);
+ EXPECT_EQ(p.validation_sequence,2u);EXPECT_EQ(p.version,original.version);
+ EXPECT_EQ(o.preparationEvidence(11.1),11000000000LL);
+ EXPECT_EQ(o.preparationEvidence(11.2),11000000000LL); // Heartbeat is not a new body sample.
+ EXPECT_FALSE(o.tick(11.41,true).geometry_committed);
+}
+TEST(PlanningGeometryOwner, FollowPreparationBecomesReadyWithRealNativeBodyEvidence) {
+ Owner o("isolated_mock",30.,1.,{},true);o.bind(ver());ASSERT_TRUE(o.observe(receipt(),10.));
+ PreparationLimits limits;limits.waits={1.,1.,1.,1.};limits.episode=2.;limits.stable=.4;
+ PreparationBudget budget(limits);
+ ASSERT_TRUE(budget.observe(PreparationStage::Trajectory,9.95).empty());
+ for(int i=0;i<3;++i) {
+  const auto t=10.+i*.3;ASSERT_TRUE(o.observe(proof(t,i+1),t));
+  ASSERT_TRUE(o.tick(t+.1,true).geometry_committed);
+  const auto evidence=o.preparationEvidence(t+.1);
+  EXPECT_EQ(preparationStage(true,true,"following",evidence),PreparationStage::Ready);
+  ASSERT_TRUE(budget.observe(preparationStage(true,true,"following",evidence),t+.1,evidence).empty());
+ }
+ // Three distinct acquired body stamps reset the real preparation episode;
+ // no tracker/admission/SDK callback was needed to leave the wait stage.
+ ASSERT_TRUE(o.observe(proof(12.,4),12.));ASSERT_TRUE(o.tick(12.1,true).geometry_committed);
+ EXPECT_TRUE(budget.observe(PreparationStage::Ready,12.1,o.preparationEvidence(12.1)).empty());
+}
 TEST(ExecutionInitialGeometry, LatestUnadmittedProofCannotAdvanceFirstGeometryFloor) {
  Owner o("isolated_mock");beginUnapplied(o);
  auto first=o.tick(10.1,true);ASSERT_TRUE(first.allowed);EXPECT_EQ(first.validation_sequence,1u);
@@ -274,8 +604,10 @@ TEST(ExecutionOwner, McEvidenceHoldPreservesTaskAndRequiresStableSourceRecovery)
 }
 TEST(ExecutionOwner, McEvidenceHoldCannotRecoverFromRepeatedLocalEvidenceOrRenewBudget) {
  Owner o("isolated_mock");begin(o);ASSERT_TRUE(o.tick(10.1,true,101,"identity").allowed);
+ feedback(o,10.2,1); // The motion task had actually admitted a nonzero demand.
  auto unavailable=sdk(10.2,2);unavailable.grant_ready=false;unavailable.phase="holding";unavailable.reason="mc_stale";
  ASSERT_TRUE(o.observe(unavailable,10.2));auto p=o.tick(10.2,true,102,"identity");
+ p.frame_id="d1max_loc_odom";
  EXPECT_TRUE(o.supervise(p,10.2).empty());
  for(int i=1;i<=301;++i) {
   const double t=10.2+i*.1;const auto seq=static_cast<uint64_t>(i+2);
@@ -299,6 +631,76 @@ TEST(ExecutionOwner, McStaleReasonCannotSoftenActualSDKWithdrawal) {
   if(variant==2)s.phase="stopping";
   ASSERT_TRUE(o.observe(s,10.2));EXPECT_TRUE(o.stopping());EXPECT_FALSE(o.failureReason().empty());
   EXPECT_FALSE(o.tick(10.2,true).allowed);
+ }
+}
+TEST(ExecutionOwner, RobotStateEvidenceHoldRetainsExactTaskWithoutClaimingFreshMode) {
+ Owner o("isolated_mock");begin(o);ASSERT_TRUE(o.tick(10.1,true,101,"identity").allowed);
+ auto unavailable=sdk(10.2,2);unavailable.grant_ready=false;
+ unavailable.general_low_speed_confirmed=false;unavailable.phase="holding";
+ unavailable.reason="robot_state_stale";
+ ASSERT_TRUE(o.observe(unavailable,10.2));auto p=o.tick(10.2,true,102,"identity");
+ EXPECT_FALSE(p.allowed);EXPECT_FALSE(p.revoked);EXPECT_TRUE(p.geometry_committed);
+ EXPECT_EQ(p.reason,"robot_state_stale");EXPECT_FALSE(o.stopping());
+ EXPECT_TRUE(o.failureReason().empty());EXPECT_EQ(p.version.task_id,"task");
+ EXPECT_EQ(p.version.route_hash,ver().route_hash);EXPECT_EQ(p.trajectory_id,1);
+ // A fresh local body and native map proof are not substitutes for SDK mode
+ // state. They cannot unblock nonzero while that producer is still holding.
+ for(int i=0;i<8;++i) {
+  const double t=10.3+i*.1;const auto seq=static_cast<uint64_t>(i+3);
+  unavailable.source_stamp=stamp(t);unavailable.sequence=seq;
+  ASSERT_TRUE(o.observe(unavailable,t));ASSERT_TRUE(o.observe(proof(t,seq),t));
+  p=o.tick(t,true,103+i,"identity");
+  EXPECT_FALSE(p.allowed);EXPECT_FALSE(o.stopping());
+ }
+ // Fresh SDK state does not immediately revive an old command: stable new
+ // localization evidence and original new map proofs must complete recovery.
+ for(int i=0;i<=7;++i) {
+  const double t=11.1+i*.1;const auto seq=static_cast<uint64_t>(i+11);
+  ASSERT_TRUE(o.observe(sdk(t,seq),t));ASSERT_TRUE(o.observe(proof(t,seq),t));
+  p=o.tick(t,true,111+i,"identity");
+  if(i<6)EXPECT_FALSE(p.allowed);
+ }
+ EXPECT_TRUE(p.allowed);EXPECT_EQ(p.version.task_id,"task");
+ EXPECT_EQ(p.version.route_hash,ver().route_hash);EXPECT_EQ(p.trajectory_id,1);
+ EXPECT_FALSE(o.stopping());EXPECT_TRUE(o.failureReason().empty());
+}
+TEST(ExecutionOwner, RobotStateStaleCannotSoftenLossFaultBadModeOrChangedSDKSession) {
+ for(int variant=0;variant<7;++variant) {
+  Owner o("isolated_mock");begin(o);ASSERT_TRUE(o.tick(10.1,true).allowed);
+  auto s=sdk(10.2,2);s.grant_ready=false;s.general_low_speed_confirmed=false;
+  s.phase="holding";s.reason="robot_state_stale";
+  if(variant==0)s.control_owned=false;
+  if(variant==1)s.fault_latched=true;
+  if(variant==2)s.phase="stopping";
+  if(variant==3)s.reason="robot_mode_invalid";
+  if(variant==4)s.sdk_session="reconnected-sdk";
+  if(variant==5)s.sdk_arm_generation=2;
+  if(variant==6)s.general_low_speed_confirmed=true; // Inconsistent disposition.
+  if(variant==4)EXPECT_FALSE(o.observe(s,10.2));
+  else ASSERT_TRUE(o.observe(s,10.2));
+  EXPECT_TRUE(o.stopping());EXPECT_FALSE(o.failureReason().empty());
+  EXPECT_FALSE(o.tick(10.2,true).allowed);
+  EXPECT_TRUE(o.observe(sdk(10.3,3),10.3)); // Same old session may report fresh state, not revive authorization.
+  EXPECT_FALSE(o.tick(10.3,true).allowed); // Fresh late status cannot revive a withdrawal.
+ }
+}
+TEST(ExecutionOwner, RobotStateStaleStatusStillRequiresExactExecutionAndOriginalSource) {
+ for(int variant=0;variant<7;++variant) {
+  Owner o("isolated_mock");begin(o);ASSERT_TRUE(o.tick(10.1,true).allowed);
+  auto s=sdk(10.2,2);s.grant_ready=false;s.general_low_speed_confirmed=false;
+  s.phase="holding";s.reason="robot_state_stale";
+  if(variant==0)s.execution_id="old-execution";
+  if(variant==1)s.control_epoch=2;
+  if(variant==2)s.version.task_id="old-task";
+  if(variant==3)s.transport_mode="live";
+  if(variant==4)s.source_stamp=stamp(9.);
+  if(variant==5)s.sequence=1;
+  if(variant==6)s.sdk_session.clear();
+  EXPECT_FALSE(o.observe(s,10.2));EXPECT_FALSE(o.stopping());
+  EXPECT_TRUE(o.failureReason().empty());
+  // The ignored disposition does not make the previously original SDK and
+  // native proof leases immortal; source expiry still holds the exact task.
+  EXPECT_FALSE(o.tick(10.61,true).allowed);EXPECT_FALSE(o.stopping());
  }
 }
 TEST(ExecutionTask, HardSDKWithdrawalRetiresRunningFollowAndCannotReviveOnLateGrant) {
@@ -342,8 +744,9 @@ TEST(ExecutionTask, EvidenceHoldAndNormalGoalStopDoNotAbortRunningTask) {
 }
 TEST(LocalStateAdmission, IndependentLocalEvidenceDoesNotRequireASyntheticGlobalPose) {
  using State=d1max_planning_interfaces::msg::LocalNavigationState;State old,m;
- m.schema_version=1;m.session_id="nav";m.map_version_id="map";m.localization_epoch=1;m.localization_seed_id="seed";
+ m.schema_version=2;m.session_id="nav";m.map_version_id="map";m.localization_epoch=1;m.localization_seed_id="seed";
  m.source_stamp=m.posterior_stamp=m.imu_stamp=stamp(10.);m.usable=true;
+ m.valid_until=stamp(10.1);
  m.local_odometry.header.stamp=m.source_stamp;m.local_odometry.header.frame_id="d1max_loc_odom";
  m.local_odometry.child_frame_id="d1max_loc_base_link";m.local_odometry.pose.pose.orientation.w=1.;
  auto accept=[&](const State&s){return d1max_navigation_bt::acceptLocalState(s,old,"nav","map",10.05);};
@@ -359,8 +762,9 @@ TEST(LocalStateAdmission, IndependentLocalEvidenceDoesNotRequireASyntheticGlobal
 namespace {
 d1max_planning_interfaces::msg::LocalNavigationState taskLocalState() {
  d1max_planning_interfaces::msg::LocalNavigationState m;
- m.schema_version=1;m.session_id="nav";m.map_version_id="map";m.localization_epoch=1;m.localization_seed_id="seed";
+ m.schema_version=2;m.session_id="nav";m.map_version_id="map";m.localization_epoch=1;m.localization_seed_id="seed";
  m.source_stamp=m.posterior_stamp=stamp(10.08);m.imu_stamp=stamp(10.);m.extrapolation_sec=.08;m.usable=true;
+ m.valid_until=stamp(10.18);
  m.local_odometry.header.stamp=m.source_stamp;m.local_odometry.header.frame_id="d1max_loc_odom";
  m.local_odometry.child_frame_id="d1max_loc_base_link";m.local_odometry.pose.pose.orientation.w=1.;
  return m;
@@ -397,7 +801,8 @@ TEST(LocalStateAdmission, UsableEntryRequiresOriginalPropagationAndCausalTimesta
 TEST(LocalStateAdmission, NewEpochWithSlightClockRollbackWithdrawsOldExecutionIdentity) {
  auto old=taskLocalState();auto reset=old;reset.localization_epoch=2;reset.localization_seed_id="new";
  reset.source_stamp=reset.posterior_stamp=reset.imu_stamp=reset.local_odometry.header.stamp=stamp(10.03);
- reset.extrapolation_sec=0.;
+ reset.extrapolation_sec=0.;reset.valid_until=reset.source_stamp;
+ reset.valid_until.nanosec+=100000000U; // exact original-source + 100 ms, no double reconstruction.
  ASSERT_TRUE(d1max_navigation_bt::acceptLocalState(reset,old,"nav","map",10.1));
  EXPECT_FALSE(d1max_navigation_bt::localTaskInputsFresh(reset,"nav","map",1,"seed",10.1));
  // New-epoch loss must be observed even without a synthetic usable pose.
@@ -412,7 +817,7 @@ TEST(LocalStateAdmission, ProductionUnavailableEnvelopeRequiresNoSyntheticGeomet
  const auto old=taskLocalState();
  for(const auto* reason:{"local_navigation_unavailable","hard_localization_lost","lio_reset","localization_reset"}) {
   d1max_planning_interfaces::msg::LocalNavigationState event;
-  event.schema_version=1;event.session_id="nav";event.map_version_id="map";
+  event.schema_version=2;event.session_id="nav";event.map_version_id="map";
   event.localization_epoch=1;event.localization_seed_id="seed";
   event.source_stamp=stamp(10.081);event.usable=false;event.reason=reason;
   ASSERT_TRUE(d1max_navigation_bt::acceptLocalState(event,old,"nav","map",10.09))<<reason;
@@ -424,7 +829,7 @@ TEST(LocalStateAdmission, ProductionUnavailableEnvelopeRequiresNoSyntheticGeomet
 TEST(LocalStateAdmission, UnavailableEnvelopeCannotEraseNewerOrForeignIdentity) {
  const auto old=taskLocalState();
  d1max_planning_interfaces::msg::LocalNavigationState event;
- event.schema_version=1;event.session_id="nav";event.map_version_id="map";
+ event.schema_version=2;event.session_id="nav";event.map_version_id="map";
  event.localization_epoch=1;event.localization_seed_id="seed";event.source_stamp=stamp(10.081);
  event.usable=false;event.reason="hard_localization_lost";
  const auto accept=[&](const auto&m){return d1max_navigation_bt::acceptLocalState(m,old,"nav","map",10.09);};
@@ -434,7 +839,7 @@ TEST(LocalStateAdmission, UnavailableEnvelopeCannotEraseNewerOrForeignIdentity) 
   switch(kind) {
    case 0:bad.session_id="other";break;
    case 1:bad.map_version_id="other";break;
-   case 2:bad.schema_version=2;break;
+   case 2:bad.schema_version=1;break;
    case 3:bad.localization_epoch=0;break;
    case 4:bad.localization_seed_id.clear();break;
    case 5:bad.source_stamp=old.source_stamp;break;
@@ -458,18 +863,77 @@ TEST(LocalTaskContinuity, TimerPhaseCannotTearDownAdmittedTaskOrAuthorizeMotion)
  const auto m=taskLocalState();d1max_planning_interfaces::msg::LocalNavigationState old;
  ASSERT_TRUE(d1max_navigation_bt::acceptLocalState(m,old,"nav","map",10.09));
  ASSERT_TRUE(taskLocalFresh(m));
- // The control lease has really expired at use. No coarse task predicate is
- // substituted into Owner/SCAN/tracker/SDK authorization or receipt admission.
+ // Provider validated original IMU age at source; a consumer must not reopen
+ // that check against its later timer phase. Its source-bound lease is intact.
  EXPECT_FALSE(fresh(seconds(m.imu_stamp),10.14,.1));
- EXPECT_FALSE(d1max_navigation_bt::acceptLocalState(m,old,"nav","map",10.14));
+ EXPECT_TRUE(d1max_navigation_bt::acceptLocalState(m,old,"nav","map",10.14));
+ // An expired control lease still cannot authorize motion. Coarse task
+ // continuity is not a substitute for that deadline or a restamped source.
+ EXPECT_FALSE(d1max_navigation_bt::acceptLocalState(m,old,"nav","map",10.181));
+ EXPECT_TRUE(taskLocalFresh(m,10.181));
  EXPECT_EQ(m.source_stamp,stamp(10.08));EXPECT_EQ(m.imu_stamp,stamp(10.));
 }
-TEST(LocalTaskContinuity, RepeatedSnapshotCannotRenewSourceOrPosteriorLease) {
+TEST(LocalControlContinuity, LaterTimerConsumesOnlyOriginalProviderLease) {
+ const auto m=taskLocalState();
+ // The same source packet is valid at admission and at a later BT/SDK phase.
+ // Its IMU is 140 ms old at use but was only 80 ms old at the state source.
+ EXPECT_FALSE(fresh(seconds(m.imu_stamp),10.14,.1));
+ EXPECT_TRUE(d1max_navigation_bt::localControlInputsFresh(m,"nav","map",1,"seed",10.14));
+ const double lease_end=seconds(m.valid_until); // consume the original typed deadline, not a reconstructed double.
+ EXPECT_TRUE(d1max_navigation_bt::localControlInputsFresh(m,"nav","map",1,"seed",lease_end));
+ EXPECT_FALSE(d1max_navigation_bt::localControlInputsFresh(m,"nav","map",1,"seed",
+   std::nextafter(lease_end,std::numeric_limits<double>::infinity())));
+ EXPECT_TRUE(taskLocalFresh(m,10.180001)); // task liveness is NOT motion authority.
+ EXPECT_EQ(m.source_stamp,stamp(10.08));EXPECT_EQ(m.valid_until,stamp(10.18));
+}
+TEST(LocalControlContinuity, PosteriorAgeIsValidatedAtSourceNotChargedAgainAtDelivery) {
+ auto m=taskLocalState();m.posterior_stamp=stamp(9.69); // 390 ms at the 10.08 state source.
+ d1max_planning_interfaces::msg::LocalNavigationState old;
+ const double delivered=10.106; // A legitimate 26 ms delivery phase.
+ ASSERT_FALSE(fresh(seconds(m.posterior_stamp),delivered,.4));
+ EXPECT_TRUE(d1max_navigation_bt::acceptLocalState(m,old,"nav","map",delivered));
+ EXPECT_TRUE(taskLocalFresh(m,delivered));
+ EXPECT_TRUE(d1max_navigation_bt::localControlInputsFresh(m,"nav","map",1,"seed",delivered));
+ const double deadline=seconds(m.valid_until);
+ EXPECT_TRUE(d1max_navigation_bt::localControlInputsFresh(m,"nav","map",1,"seed",deadline));
+ EXPECT_FALSE(d1max_navigation_bt::localControlInputsFresh(m,"nav","map",1,"seed",
+   std::nextafter(deadline,std::numeric_limits<double>::infinity())));
+ EXPECT_TRUE(taskLocalFresh(m,10.479)); // Task continuity does not grant nonzero control.
+ EXPECT_FALSE(taskLocalFresh(m,10.481));
+ auto too_old=m;too_old.posterior_stamp=stamp(9.679);
+ EXPECT_FALSE(taskLocalFresh(too_old,delivered));
+ EXPECT_FALSE(d1max_navigation_bt::acceptLocalState(too_old,old,"nav","map",delivered));
+ auto future=m;future.posterior_stamp=stamp(10.081);
+ EXPECT_FALSE(d1max_navigation_bt::localControlInputsFresh(future,"nav","map",1,"seed",delivered));
+ EXPECT_EQ(m.posterior_stamp,stamp(9.69));EXPECT_EQ(m.source_stamp,stamp(10.08));
+ EXPECT_EQ(m.valid_until,stamp(10.18)); // Never re-date the original producer lease.
+}
+TEST(LocalControlContinuity, InvalidSourceContractCannotBorrowTaskFreshness) {
+ const auto m=taskLocalState();
+ for(int kind=0;kind<9;++kind) {
+  auto bad=m;
+  switch(kind) {
+   case 0:bad.usable=false;bad.reason="waiting_imu";break;
+   case 1:bad.usable=false;bad.reason="lio_reset";break;
+   case 2:bad.imu_stamp=stamp(9.9);bad.extrapolation_sec=.18;break;
+   case 3:bad.valid_until=stamp(10.180001);break;
+   case 4:bad.valid_until=bad.source_stamp;break;
+   case 5:bad.localization_epoch=2;break;
+   case 6:bad.localization_seed_id="reset";break;
+   case 7:bad.local_odometry.header.frame_id="map";break;
+   case 8:bad.posterior_stamp=stamp(10.09);break;
+  }
+  EXPECT_FALSE(d1max_navigation_bt::localControlInputsFresh(bad,"nav","map",1,"seed",10.14))<<kind;
+ }
+ EXPECT_FALSE(d1max_navigation_bt::localControlInputsFresh(m,"nav","map",1,"seed",10.079));
+ EXPECT_FALSE(d1max_navigation_bt::localControlInputsFresh(m,"foreign","map",1,"seed",10.14));
+}
+TEST(LocalTaskContinuity, RepeatedSnapshotCannotRenewSourceOrPosteriorPropagationBudget) {
  const auto m=taskLocalState();
  EXPECT_TRUE(taskLocalFresh(m,10.35));
  EXPECT_FALSE(taskLocalFresh(m,10.49));
  EXPECT_FALSE(d1max_navigation_bt::acceptLocalState(m,m,"nav","map",10.14));
- auto old_posterior=m;old_posterior.posterior_stamp=stamp(9.7);
+ auto old_posterior=m;old_posterior.posterior_stamp=stamp(9.679);
  EXPECT_FALSE(taskLocalFresh(old_posterior));
  auto future=m;future.source_stamp=future.local_odometry.header.stamp=stamp(10.15);
  future.extrapolation_sec=.15;EXPECT_FALSE(taskLocalFresh(future));
@@ -489,7 +953,7 @@ TEST(LocalTaskContinuity, ExplicitLossHardIdentityAndFramesRemainUnavailable) {
    case 6:bad.local_odometry.header.frame_id="map";break;
    case 7:bad.local_odometry.child_frame_id="lidar";break;
    case 8:bad.local_odometry.header.stamp=stamp(10.07);break;
-   case 9:bad.schema_version=2;break;
+   case 9:bad.schema_version=1;break;
   }
   EXPECT_FALSE(taskLocalFresh(bad))<<kind;
  }
@@ -548,9 +1012,9 @@ TEST(ExecutionTrackerFence, ForeignExpiredRepeatedAndMutatedInstallationCannotFe
 }
 TEST(ExecutionTrackerFence, LaterActualCASInstallationKeepsFixedFactsAndCanFenceItsOwnGeometry) {
  Owner o("isolated_mock");installedActual(o);
- auto r=receipt();r.version.reference_generation=2;r.expected_version=ver();r.expected_trajectory_id=1;
+ auto r=receipt();r.proposal_id="next-reference";r.version.reference_generation=2;r.expected_version=ver();r.expected_trajectory_id=1;
  r.source_stamp=stamp(10.2);r.valid_until=stamp(10.7);ASSERT_TRUE(o.observe(r,10.2));
- auto v=proof(10.2,2,2);v.version=r.version;ASSERT_TRUE(o.observe(v,10.2));
+ auto v=proof(10.2,2,2);v.version=r.version;v.proposal_id=r.proposal_id;ASSERT_TRUE(o.observe(v,10.2));
  auto a=ack(10.2,2,2);a.version=r.version;ASSERT_TRUE(o.observe(a,10.2));
  auto p=o.tick(10.21,true);p.frame_id="d1max_loc_odom";
  ASSERT_TRUE(o.prepareHandoff(p,candidateGoal(r.version),100,10.21));const auto grant=*o.handoff();
@@ -562,20 +1026,20 @@ TEST(ExecutionTrackerFence, LaterActualCASInstallationKeepsFixedFactsAndCanFence
  bad.reason="braking_envelope_reentry_required";EXPECT_FALSE(o.observe(bad,10.26));
  installed.sequence=3;installed.body_source_stamp=stamp(10.26);installed.reason=bad.reason;
  ASSERT_TRUE(o.observe(installed,10.26));EXPECT_FALSE(o.tick(10.26,true).allowed);
- v=proof(10.27,3,2);v.version=r.version;ASSERT_TRUE(o.observe(v,10.27));
+ v=proof(10.27,3,2);v.version=r.version;v.proposal_id=r.proposal_id;ASSERT_TRUE(o.observe(v,10.27));
  EXPECT_FALSE(o.tick(10.28,true).allowed);EXPECT_EQ(o.appliedCommitSequence(),2u);
 }
 TEST(ExecutionTrackerFence, PreparedFloorExpiryDoesNotEraseInstallationOrRenewActualCollisionEvidence) {
  Owner o("isolated_mock");installedActual(o);
- auto r=receipt();r.version.reference_generation=2;r.expected_version=ver();r.expected_trajectory_id=1;
+ auto r=receipt();r.proposal_id="next-reference";r.version.reference_generation=2;r.expected_version=ver();r.expected_trajectory_id=1;
  r.source_stamp=stamp(10.2);r.valid_until=stamp(10.7);ASSERT_TRUE(o.observe(r,10.2));
- auto v=proof(10.2,2,2);v.version=r.version;v.valid_until=stamp(10.31);ASSERT_TRUE(o.observe(v,10.2));
+ auto v=proof(10.2,2,2);v.version=r.version;v.proposal_id=r.proposal_id;v.valid_until=stamp(10.31);ASSERT_TRUE(o.observe(v,10.2));
  auto a=ack(10.2,2,2);a.version=r.version;a.valid_until=v.valid_until;ASSERT_TRUE(o.observe(a,10.2));
  auto p=o.tick(10.205,true);p.frame_id="d1max_loc_odom";
  ASSERT_TRUE(o.prepareHandoff(p,candidateGoal(r.version),100,10.205));const auto grant=*o.handoff();
  // An actual later native revision supports the SDK call. The software entry
  // installation still reports its unchanged original preparation floor.
- auto actual=proof(10.315,3,2);actual.version=r.version;actual.valid_until=stamp(10.37);
+ auto actual=proof(10.315,3,2);actual.version=r.version;actual.proposal_id=r.proposal_id;actual.valid_until=stamp(10.37);
  ASSERT_TRUE(o.observe(actual,10.315));auto call=handoffCommit(grant,10.32);call.valid_until=stamp(10.36);
  ASSERT_TRUE(o.observe(call,10.32));auto installed=geometryReceipt(grant.candidate,10.33,2,2,10.34);
  installed.admission_sequence=call.entry_admission_sequence;
@@ -591,9 +1055,9 @@ TEST(ExecutionTrackerFence, OnlyVerifiedStationaryReentryAppliedAckClearsTheGeom
  r.sequence=2;r.body_source_stamp=stamp(10.13);r.reason="braking_envelope_reentry_required";
  ASSERT_TRUE(o.observe(r,10.13));EXPECT_FALSE(o.tick(10.13,true).allowed);
  ASSERT_TRUE(o.observe(sdk(11.01,2),11.01));ASSERT_TRUE(o.observe(proof(11.,2),11.01));
- auto reference=receipt();reference.version.reference_generation=2;reference.expected_version=ver();reference.expected_trajectory_id=1;
+ auto reference=receipt();reference.proposal_id="next-reference";reference.version.reference_generation=2;reference.expected_version=ver();reference.expected_trajectory_id=1;
  reference.source_stamp=stamp(11.);reference.valid_until=stamp(11.3);ASSERT_TRUE(o.observe(reference,11.01));
- auto v=proof(11.,3,2);v.version=reference.version;ASSERT_TRUE(o.observe(v,11.01));
+ auto v=proof(11.,3,2);v.version=reference.version;v.proposal_id=reference.proposal_id;ASSERT_TRUE(o.observe(v,11.01));
  auto a=ack(11.,3,2);a.version=reference.version;ASSERT_TRUE(o.observe(a,11.01));
  auto p=o.tick(11.01,true);EXPECT_FALSE(p.allowed);EXPECT_EQ(o.pendingVersion(11.01),nullptr);
  ASSERT_TRUE(o.observe(stationaryWitness(),11.01));p.frame_id="d1max_loc_odom";
@@ -634,7 +1098,7 @@ TEST(ExecutionOwner, SustainedBlockedExecutionStopsAtBoundAndStillRequiresMCProo
  std::string failure;Permit emitted;
  for(int i=0;i<=301;++i){const double time=10.2+i*.1;
   ASSERT_TRUE(o.observe(sdk(time,i+2),time));
-  auto invalid=proof(time,i+2);invalid.valid=false;ASSERT_TRUE(o.observe(invalid,time));
+  auto invalid=proof(time,i+2);invalid.valid=false;invalid.reason="occupied";ASSERT_TRUE(o.observe(invalid,time));
   emitted=o.tick(time,true);failure=o.supervise(emitted,time);
   if(i<300){EXPECT_TRUE(failure.empty());EXPECT_FALSE(emitted.revoked);}
   if(!failure.empty())break;
@@ -652,6 +1116,7 @@ TEST(ExecutionOwner, SustainedBlockedExecutionStopsAtBoundAndStillRequiresMCProo
 }
 TEST(ExecutionOwner, ShortGoodProofCannotRenewBlockedBudget){
  Owner o("isolated_mock");begin(o);auto p=o.tick(10.1,true);p.allowed=false;p.phase="holding";p.reason="occupied";
+ auto negative=proof(10.1,2);negative.valid=false;negative.reason="occupied";ASSERT_TRUE(o.observe(negative,10.1));
  EXPECT_TRUE(o.supervise(p,10.1).empty());
  for(int i=1;i<300;++i){p.allowed=i%5==0;p.phase=p.allowed?"tracking":"holding";
   EXPECT_TRUE(o.supervise(p,10.1+i*.1).empty());}
@@ -660,6 +1125,7 @@ TEST(ExecutionOwner, ShortGoodProofCannotRenewBlockedBudget){
 }
 TEST(ExecutionOwner, ContinuousPermissionRecoveryStartsANewBlockedEpisode){
  Owner o("isolated_mock");begin(o);auto p=o.tick(10.1,true);p.allowed=false;p.phase="holding";p.reason="occupied";
+ auto negative=proof(10.1,2);negative.valid=false;negative.reason="occupied";ASSERT_TRUE(o.observe(negative,10.1));
  p.frame_id="d1max_loc_odom";auto b=body(10.1);o.supervise(p,10.1,&b);p.allowed=true;p.phase="tracking";
  for(int i=0;i<=15;++i){const double t=20.+i*.1;feedback(o,t,i+1,i*.02);b=body(t,i*.02);
   EXPECT_TRUE(o.supervise(p,t,&b).empty());}
@@ -698,6 +1164,40 @@ TEST(GoalLedger, FinalGoalIsImmutableWithinAnExactAnchorVersion){
  EXPECT_FALSE(ledger.observe(p));EXPECT_EQ(ledger.committed(ver())->goal_position.x,4.);
  ++p.version.reference_generation;++p.version.anchor_revision;ASSERT_TRUE(ledger.observe(p));
  ASSERT_NE(ledger.committed(p.version),nullptr);EXPECT_EQ(ledger.committed(p.version)->goal_position.x,8.);
+}
+TEST(GoalLedger, HistoricalDeliveryIsRouteBoundAndFullPayloadImmutable) {
+ GoalLedger ledger;auto p=candidateGoal(ver());p.proposal_id="proposal";p.transport_mode="isolated_mock";
+ p.source_stamp=stamp(10.);p.valid_until=stamp(10.4);
+ geometry_msgs::msg::PoseStamped point;point.pose.orientation.w=1.;p.reference.path.poses.push_back(point);
+ ASSERT_TRUE(historicalProposalMatchesRoute(p,routeSnapshot(),"isolated_mock",14.));
+ ASSERT_TRUE(ledger.observe(p));ASSERT_TRUE(ledger.observe(p));
+ ASSERT_NE(ledger.committed(p.version),nullptr);
+ for(int mutation=0;mutation<8;++mutation) {
+  auto wrong=p;
+  if(mutation==0)wrong.reference.path.poses[0].pose.position.x+=.01;
+  if(mutation==1)wrong.reference.path.poses[0].pose.orientation.z=.01;
+  if(mutation==2)wrong.expected_trajectory_id++;
+  if(mutation==3)wrong.proposal_id="same-version-different-id";
+  if(mutation==4)wrong.source_stamp=stamp(10.1);
+  if(mutation==5)wrong.valid_until=stamp(10.5);
+  if(mutation==6)wrong.reference.point_segment_kinds.push_back("stairs");
+  if(mutation==7)wrong.goal_yaw_tolerance_rad+=.01;
+  EXPECT_FALSE(ledger.observe(wrong))<<mutation;
+  EXPECT_EQ(*ledger.committed(p.version),p)<<mutation;
+ }
+ for(int mismatch=0;mismatch<9;++mismatch) {
+  auto wrong=p;
+  if(mismatch==0)wrong.version.task_id="retired-task";
+  if(mismatch==1)wrong.version.route_hash=std::string(64,'b');
+  if(mismatch==2)wrong.version.map_version_id="another-map";
+  if(mismatch==3)wrong.version.localization_epoch++;
+  if(mismatch==4)wrong.version.localization_seed_id="old-seed";
+  if(mismatch==5)wrong.source_stamp=stamp(14.01);
+  if(mismatch==6)wrong.valid_until=stamp(9.99);
+  if(mismatch==7)wrong.valid_until=stamp(10.501);
+  if(mismatch==8)wrong.transport_mode="live";
+  EXPECT_FALSE(historicalProposalMatchesRoute(wrong,routeSnapshot(),"isolated_mock",14.))<<mismatch;
+ }
 }
 TEST(BodyPairAdmission, OrderedUnusableWithdrawsButBadOrOldCannotErase){
  using State=d1max_planning_interfaces::msg::NavigationState;State old,m;
@@ -787,6 +1287,270 @@ TEST(ExecutionOwner, StopSubmissionAndSoftwareResultAreNotStopProof){Owner o("is
  o.measuredGoal(true,false,true,11.31,11.31);EXPECT_TRUE(o.goalStopped());EXPECT_EQ(o.tick(11.31,true).phase,"terminal");}
 TEST(ExecutionOwner, NoStopProofBecomesNeedsReviewAndNoSuccess){Owner o("isolated_mock");begin(o);o.stop("cancel",10.2);
  auto p=o.tick(15.3,true);EXPECT_EQ(p.phase,"needs_review");EXPECT_FALSE(p.allowed);EXPECT_FALSE(o.stopped());}
+TEST(ExecutionRetirement, FailedTakeControlBeforeFirstStateDoesNotInventMeasuredStop) {
+ Owner o("isolated_mock");prepare(o);ASSERT_TRUE(o.begin("execution","confirm",1,10.,"sdk"));
+ o.stop("sdk_grant_transport_failure",10.2);
+ EXPECT_TRUE(o.requiresPhysicalStop());EXPECT_FALSE(o.executionSoftwareRetired());
+ EXPECT_EQ(o.tick(15.3,true).phase,"needs_review");
+ ASSERT_TRUE(o.observe(retirementWitness(15.35),15.35));
+ EXPECT_TRUE(o.executionSoftwareRetired());EXPECT_FALSE(o.requiresPhysicalStop());
+ EXPECT_FALSE(o.stopped());EXPECT_FALSE(o.goalStopped());EXPECT_FALSE(o.needsReview());
+ EXPECT_EQ(o.failureReason(),"sdk_grant_transport_failure");
+ const auto p=o.tick(30.,true);EXPECT_TRUE(p.revoked);EXPECT_FALSE(p.allowed);
+ EXPECT_EQ(p.phase,"terminal_no_motion");
+ EXPECT_FALSE(o.begin("other","other-confirm",2,30.,"sdk"));
+}
+TEST(ExecutionRetirement, ExactLateWriterStateCannotResurrectRetiredPermission) {
+ Owner o("isolated_mock");prepare(o);ASSERT_TRUE(o.begin("execution","confirm",1,10.,"sdk"));
+ ASSERT_TRUE(o.observe(retirementWitness(),10.3));
+ ASSERT_TRUE(o.observe(sdk(10.31),10.31));
+ const auto p=o.tick(10.32,true);EXPECT_FALSE(p.allowed);EXPECT_TRUE(p.revoked);
+ EXPECT_FALSE(o.requiresPhysicalStop());EXPECT_FALSE(o.stopped());
+ EXPECT_EQ(p.phase,"terminal_no_motion");
+}
+TEST(ExecutionRetirement, RetiredWriterStateRevokesEvenIfRetirementTopicHasNotArrived) {
+ Owner o("isolated_mock");prepare(o);ASSERT_TRUE(o.begin("execution","confirm",1,10.,"sdk"));
+ auto s=sdk(10.3);s.phase="retired_without_motion";s.reason="take_control_failed";
+ ASSERT_TRUE(o.observe(s,10.3));EXPECT_TRUE(o.stopping());
+ EXPECT_TRUE(o.requiresPhysicalStop());EXPECT_FALSE(o.executionSoftwareRetired());
+ EXPECT_FALSE(o.tick(10.3,true).allowed);EXPECT_TRUE(o.tick(10.3,true).revoked);
+ ASSERT_TRUE(o.observe(retirementWitness(10.31),10.31));
+ EXPECT_FALSE(o.requiresPhysicalStop());EXPECT_TRUE(o.executionSoftwareRetired());
+ EXPECT_FALSE(o.stopped());
+}
+TEST(ExecutionRetirement, MeasuredStopAloneDoesNotClaimOutstandingTransactionsFinished) {
+ Owner o("isolated_mock");begin(o);o.stop("cancel",10.2);
+ ASSERT_TRUE(o.observe(stopWitness(),11.3));EXPECT_TRUE(o.stopped());
+ EXPECT_FALSE(o.executionSoftwareRetired());
+ auto r=retirementWitness(11.31);r.motion_never_submitted=false;
+ ASSERT_TRUE(o.observe(r,11.31));EXPECT_TRUE(o.executionSoftwareRetired());EXPECT_TRUE(o.stopped());
+}
+TEST(ExecutionRetirement, WriterSoftwareExitDoesNotEraseActualMotionStopObligation) {
+ Owner o("isolated_mock");begin(o);o.stop("cancel",10.2);
+ auto r=retirementWitness();r.motion_never_submitted=false;
+ ASSERT_TRUE(o.observe(r,10.3));EXPECT_TRUE(o.executionSoftwareRetired());
+ EXPECT_TRUE(o.requiresPhysicalStop());EXPECT_FALSE(o.stopped());
+ d1max_navigation_bt::LifecycleDrain drain;drain.configure();drain.activate();drain.begin();
+ // Shutdown software drain and admission for the next motion are distinct.
+ drain.observe(o.executionSoftwareRetired(),false);EXPECT_FALSE(drain.draining());
+ EXPECT_TRUE(o.requiresPhysicalStop());EXPECT_FALSE(o.stopped());
+ ASSERT_TRUE(o.observe(stopWitness(),11.3));EXPECT_TRUE(o.stopped());
+}
+TEST(ExecutionRetirement, RejectsForeignIncompletePendingAndStaleFacts) {
+ for(int kind=0;kind<18;++kind) {
+  Owner o("isolated_mock");prepare(o);ASSERT_TRUE(o.begin("execution","confirm",1,10.,"sdk"));
+  o.stop("cancel",10.2);auto r=retirementWitness();double now=10.3;
+  if(kind==0)r.schema_version=2;if(kind==1)r.version.task_id="other";
+  if(kind==2)r.version.route_hash=std::string(64,'b');if(kind==3)r.version.localization_epoch=2;
+  if(kind==4)r.version.anchor_id.clear();if(kind==5)r.execution_id="other";
+  if(kind==6)r.control_epoch=2;if(kind==7)r.sdk_session="other";
+  if(kind==8)r.sdk_arm_generation=0;if(kind==9)r.grant_request_id="old-confirm";
+  if(kind==10)r.sequence=0;if(kind==11)r.transport_mode="live";
+  if(kind==12)r.nonzero_blocked=false;if(kind==13)r.software_retired=false;
+  if(kind==14)r.pending_sdk_transactions=1;if(kind==15)now=10.81;
+  if(kind==16)r.source_stamp=stamp(9.9);if(kind==17)r.source_stamp=stamp(10.6);
+  EXPECT_FALSE(o.observe(r,now))<<kind;EXPECT_TRUE(o.requiresPhysicalStop())<<kind;
+  EXPECT_FALSE(o.executionSoftwareRetired())<<kind;EXPECT_FALSE(o.stopped())<<kind;
+ }
+}
+TEST(ExecutionRetirement, RequiresKnownSessionAndNeverChangesRetiredGeneration) {
+ Owner unknown("isolated_mock");prepare(unknown);ASSERT_TRUE(unknown.begin("execution","confirm",1,10.));
+ EXPECT_FALSE(unknown.observe(retirementWitness(),10.3));
+ Owner o("isolated_mock");beginUnapplied(o);o.stop("cancel",10.2);
+ auto r=retirementWitness();r.sdk_arm_generation=2;EXPECT_FALSE(o.observe(r,10.3));
+ r.sdk_arm_generation=1;ASSERT_TRUE(o.observe(r,10.3));
+ EXPECT_FALSE(o.observe(r,10.3));r.sequence=2;r.motion_never_submitted=false;
+ EXPECT_FALSE(o.observe(r,10.3));EXPECT_FALSE(o.requiresPhysicalStop());
+}
+TEST(ExecutionRetirement, ActualNonzeroSubmissionRejectsNoMotionCertificate) {
+ Owner o("isolated_mock");beginUnapplied(o);auto p=o.tick(10.1,true);
+ auto a=initialCommit(o,p,10.1);a.applied_velocity.linear.x=.2;
+ ASSERT_TRUE(o.observe(a,10.1));o.stop("cancel",10.2);
+ EXPECT_FALSE(o.observe(retirementWitness(),10.3));EXPECT_TRUE(o.requiresPhysicalStop());
+ auto r=retirementWitness();r.motion_never_submitted=false;
+ EXPECT_TRUE(o.observe(r,10.3));EXPECT_TRUE(o.requiresPhysicalStop());EXPECT_FALSE(o.stopped());
+}
+TEST(ExecutionRetirement, DelayedActualWriteContradictsNoMotionRatherThanReauthorizing) {
+ Owner o("isolated_mock");beginUnapplied(o);const auto p=o.tick(10.1,true);
+ auto a=initialCommit(o,p,10.1);a.applied_velocity.linear.x=.2;
+ o.stop("cancel",10.2);ASSERT_TRUE(o.observe(retirementWitness(),10.3));
+ ASSERT_TRUE(o.observe(a,10.31));EXPECT_TRUE(o.requiresPhysicalStop());
+ EXPECT_FALSE(o.executionSoftwareRetired());EXPECT_FALSE(o.stopped());
+ EXPECT_EQ(o.failureReason(),"writer_retirement_contradicted_by_nonzero_submission");
+ EXPECT_FALSE(o.tick(10.32,true).allowed);
+}
+TEST(ExecutionGrantRejection, ExactLateNotAdmittedReplyReleasesOnlyThisAttempt) {
+ Owner o("isolated_mock");prepare(o);ASSERT_TRUE(o.begin("execution","confirm",1,10.,"sdk"));
+ o.stop("cancel",10.2);EXPECT_EQ(o.tick(15.3,true).phase,"needs_review");
+ const auto req=grantRequest();ASSERT_TRUE(o.rejectUnadmittedGrant(req,rejectedGrant(req)));
+ EXPECT_FALSE(o.confirmed());EXPECT_FALSE(o.requiresPhysicalStop());EXPECT_TRUE(o.executionSoftwareRetired());
+ EXPECT_FALSE(o.stopped());EXPECT_FALSE(o.goalStopped());
+ EXPECT_EQ(o.failureReason(),"sdk_grant_rejected:writer_not_ready_or_prior_not_stopped");
+ EXPECT_FALSE(o.observe(sdk(15.4),15.4));
+ EXPECT_FALSE(o.tick(15.4,true).allowed);EXPECT_TRUE(o.tick(15.4,true).revoked);
+}
+TEST(ExecutionGrantRejection, RefusalCannotRetireAnObservedOrDifferentGrant) {
+ for(int kind=0;kind<8;++kind) {
+  Owner o("isolated_mock");prepare(o);ASSERT_TRUE(o.begin("execution","confirm",1,10.,"sdk"));
+  auto req=grantRequest();auto reply=rejectedGrant(req);
+  if(kind==0)ASSERT_TRUE(o.observe(sdk(),10.1));
+  if(kind==1)reply.definitely_not_admitted=false;if(kind==2)reply.duplicate=true;
+  if(kind==3)reply.accepted=true;if(kind==4)reply.execution_id="old-execution";
+  if(kind==5)reply.control_epoch=2;if(kind==6)reply.request_id="old-confirm";
+  if(kind==7){req.sdk_session="foreign";reply.sdk_session="foreign";}
+  EXPECT_FALSE(o.rejectUnadmittedGrant(req,reply))<<kind;
+  EXPECT_TRUE(o.confirmed())<<kind;EXPECT_TRUE(o.requiresPhysicalStop())<<kind;
+  EXPECT_FALSE(o.stopped())<<kind;
+ }
+}
+TEST(ExecutionGrantAdmissionRetry, ExactUnadmittedTelemetryKeepsRouteAndFollowForManualAndGoalAuthorization) {
+ for(bool goal_bound:{false,true})for(const std::string reason:{"robot_state_unavailable","mc_capture_unavailable"}) {
+  Owner o("isolated_mock");prepare(o);
+  const auto backend_owner=std::make_shared<ExecutionTaskBackend>(o);auto&backend=*backend_owner;
+  d1max_navigation_bt::Engine engine(backend_owner,DEFAULT_BT_XML);
+  engine.submit({"task","context"});for(int i=0;i<3;++i)ASSERT_EQ(engine.tick(),BT::NodeStatus::RUNNING);
+  ASSERT_EQ(backend.routes,1);ASSERT_EQ(backend.follows,1);
+  const d1max_navigation_bt::RouteBinding route{"nav","task","route",std::string(64,'a')};
+  d1max_navigation_bt::GoalExecutionIntent intent(goal_bound,goal_bound?"clicked-goal":"");
+  const std::string original_request=goal_bound?intent.requestId():"manual-execute";
+  d1max_navigation_bt::ConfirmationLedger authorization;
+  const auto approved=authorization.confirm(d1max_navigation_bt::task_schema_version,original_request,
+    route,route,true,true,true,false,true);
+  ASSERT_TRUE(approved.authorized);
+  if(goal_bound)ASSERT_TRUE(intent.consume(route));
+  ASSERT_TRUE(o.begin("execution",approved.confirmation_id,1,10.,"sdk"));
+  auto req=grantRequest();req.confirmation_id=req.request_id=approved.confirmation_id;
+  auto rejected=rejectedGrant(req);rejected.reason=reason;
+  ASSERT_TRUE(o.waitForUnadmittedTelemetryGrant(req,rejected));
+  EXPECT_TRUE(authorization.authorized());EXPECT_EQ(intent.consumed(),goal_bound);
+  EXPECT_FALSE(o.confirmed());EXPECT_FALSE(o.requiresPhysicalStop());EXPECT_FALSE(o.stopped());
+  EXPECT_TRUE(o.waitingUnadmittedGrant());EXPECT_TRUE(o.failureReason().empty());
+  auto preview=o.tick(10.1,true);EXPECT_FALSE(preview.allowed);EXPECT_FALSE(preview.revoked);
+  EXPECT_TRUE(preview.geometry_committed);EXPECT_EQ(preview.reason,"waiting_sdk_telemetry:"+reason);
+  EXPECT_EQ(engine.tick(),BT::NodeStatus::RUNNING);EXPECT_EQ(backend.follow_halts,0);
+  EXPECT_EQ(backend.routes,1);EXPECT_EQ(backend.follows,1);EXPECT_EQ(backend.finished,0);
+  // Retry uses the already-authorized original request, not a fresh click or
+  // a new route. Its new epoch excludes replies/status from the prior attempt.
+  const auto duplicate=authorization.confirm(d1max_navigation_bt::task_schema_version,original_request,
+    route,route,true,true,true,false,true);
+  ASSERT_TRUE(duplicate.authorized);ASSERT_TRUE(duplicate.duplicate);
+  EXPECT_EQ(duplicate.confirmation_id,approved.confirmation_id);
+  EXPECT_FALSE(o.canConfirm(10.5));EXPECT_FALSE(o.begin("execution",approved.confirmation_id,2,10.5,"sdk"));
+  ASSERT_TRUE(o.observe(proof(10.6,2),10.6));ASSERT_TRUE(o.observe(ack(10.6,2),10.6));
+  ASSERT_TRUE(o.begin("execution",approved.confirmation_id,2,10.6,"sdk"));
+  EXPECT_FALSE(o.waitingUnadmittedGrant());
+  EXPECT_FALSE(o.waitForUnadmittedTelemetryGrant(req,rejected));EXPECT_TRUE(o.confirmed());
+  EXPECT_FALSE(o.observe(sdk(10.61),10.61));
+  auto idle=sdk(10.61);idle.execution_id.clear();idle.control_epoch=0;idle.phase="idle";
+  idle.grant_ready=idle.control_owned=false;EXPECT_FALSE(o.observe(idle,10.61));
+  EXPECT_FALSE(o.stopping());EXPECT_TRUE(o.failureReason().empty());
+  auto current_sdk=sdk(10.61);current_sdk.control_epoch=2;ASSERT_TRUE(o.observe(current_sdk,10.61));
+  EXPECT_TRUE(o.tick(10.61,true).allowed);EXPECT_TRUE(o.failureReason().empty());
+  EXPECT_EQ(engine.tick(),BT::NodeStatus::RUNNING);EXPECT_EQ(backend.follow_halts,0);
+  EXPECT_EQ(backend.routes,1);EXPECT_EQ(backend.follows,1);
+ }
+}
+TEST(ExecutionGrantAdmissionRetry, OnlyPreciseSideEffectFreeTelemetryRejectionCanWait) {
+ for(const std::string reason:{"writer_not_ready_or_prior_not_stopped","writer_disconnected",
+   "prior_sdk_transactions_unretired","prior_stop_unconfirmed","robot_mode_unsupported",
+   "robot_estop_active","writer_fault_latched","take_control_timeout",""}) {
+  Owner o("isolated_mock");prepare(o);ASSERT_TRUE(o.begin("execution","confirm",1,10.,"sdk"));
+  const auto req=grantRequest();auto rejected=rejectedGrant(req);rejected.reason=reason;
+  EXPECT_FALSE(o.waitForUnadmittedTelemetryGrant(req,rejected))<<reason;
+  EXPECT_TRUE(o.confirmed());EXPECT_TRUE(o.requiresPhysicalStop());EXPECT_FALSE(o.waitingUnadmittedGrant());
+ }
+}
+TEST(ExecutionGrantAdmissionRetry, ForeignAmbiguousOrObservedGrantCannotBeRolledBack) {
+ for(int kind=0;kind<23;++kind) {
+  Owner o("isolated_mock");prepare(o);ASSERT_TRUE(o.begin("execution","confirm",1,10.,"sdk"));
+  auto req=grantRequest();auto rejected=rejectedGrant(req);rejected.reason="mc_capture_unavailable";
+  if(kind==0)ASSERT_TRUE(o.observe(sdk(),10.1));
+  if(kind==1)rejected.definitely_not_admitted=false;if(kind==2)rejected.duplicate=true;
+  if(kind==3)rejected.accepted=true;if(kind==4)rejected.execution_id="foreign";
+  if(kind==5)rejected.control_epoch=2;if(kind==6)rejected.request_id="foreign";
+  if(kind==7){req.sdk_session="foreign";rejected.sdk_session="foreign";}
+  if(kind==8)rejected.version.task_id="foreign";if(kind==9)rejected.sdk_session="foreign";
+  if(kind==10)rejected.transport_mode="live";if(kind==11)req.activate=false;
+  if(kind==12)req.confirmation_id="foreign";if(kind==13)req.request_id="foreign";
+  if(kind==14)req.execution_id="foreign";if(kind==15)req.control_epoch=2;
+  if(kind==16){req.version.localization_epoch=2;rejected.version=req.version;}
+  if(kind==17){req.version.localization_seed_id="reset";rejected.version=req.version;}
+  if(kind==18){req.version.anchor_revision=2;rejected.version=req.version;}
+  if(kind==19){req.version.reference_generation=2;rejected.version=req.version;}
+  if(kind==20){req.version.route_hash=std::string(64,'b');rejected.version=req.version;}
+  if(kind==21){req.version.context_sequence=2;rejected.version=req.version;}
+  if(kind==22){req.version.anchor_id.clear();rejected.version=req.version;}
+  EXPECT_FALSE(o.waitForUnadmittedTelemetryGrant(req,rejected))<<kind;
+  EXPECT_TRUE(o.confirmed())<<kind;EXPECT_TRUE(o.requiresPhysicalStop())<<kind;
+  EXPECT_FALSE(o.waitingUnadmittedGrant())<<kind;
+ }
+}
+TEST(ExecutionGrantAdmissionRetry, CancelAndReplacementFenceLateTelemetryReplies) {
+ for(const std::string reason:{"cancel","task_retired","localization_context_replaced"}) {
+  Owner o("isolated_mock");prepare(o);ASSERT_TRUE(o.begin("execution","confirm",1,10.,"sdk"));
+  const auto req=grantRequest();auto rejected=rejectedGrant(req);rejected.reason="robot_state_unavailable";
+  o.stop(reason,10.1);EXPECT_FALSE(o.waitForUnadmittedTelemetryGrant(req,rejected));
+  EXPECT_TRUE(o.stopping());EXPECT_FALSE(o.tick(10.1,true).allowed);
+ }
+ Owner old("isolated_mock");prepare(old);ASSERT_TRUE(old.begin("execution","confirm",1,10.,"sdk"));
+ const auto req=grantRequest();auto rejected=rejectedGrant(req);rejected.reason="mc_capture_unavailable";
+ ASSERT_TRUE(old.waitForUnadmittedTelemetryGrant(req,rejected));old.stop("task_retired",10.1);
+ EXPECT_FALSE(old.waitingUnadmittedGrant());EXPECT_FALSE(old.begin("execution","confirm",2,10.1,"sdk"));
+ Owner next("isolated_mock");auto identity=ver();identity.task_id="next-task";next.bind(identity);
+ EXPECT_FALSE(next.waitForUnadmittedTelemetryGrant(req,rejected));EXPECT_FALSE(next.confirmed());
+ EXPECT_FALSE(next.tick(10.1,true).allowed);
+}
+TEST(ExecutionGrantAdmissionRetry, SdkWaitDoesNotRestartInitialReferenceOrTrajectoryBudget) {
+ for(const auto stage:{PreparationStage::Reference,PreparationStage::Trajectory}) {
+  d1max_navigation_bt::GrantAdmissionWait admission;ASSERT_TRUE(admission.start(100.));
+  PreparationBudget initial;std::string problem;
+  for(int i=0;i<60;++i) {
+   const double now=100.+i*.5;
+   if(d1max_navigation_bt::initialPreparationBudgetApplies(false,true,admission.pending()))
+     problem=initial.observe(stage,now,0);
+   EXPECT_TRUE(problem.empty());EXPECT_FALSE(admission.expired(now,30.));
+   ASSERT_TRUE(admission.attempted(now));
+  }
+  // A good last packet cannot renew the shared admission deadline. The caller
+  // must retire at this policy boundary, not fabricate a prepared/ready phase.
+  EXPECT_TRUE(admission.expired(130.,30.));
+  EXPECT_TRUE(d1max_navigation_bt::initialPreparationBudgetApplies(false,false,true));
+  EXPECT_TRUE(d1max_navigation_bt::initialPreparationBudgetApplies(false,true,false));
+  EXPECT_FALSE(d1max_navigation_bt::initialPreparationBudgetApplies(true,false,false));
+  // Genuine initial preparation (no prior authorization) retains its original
+  // shorter phase budgets; this change is not a broad removal of timeouts.
+  PreparationBudget never_prepared;EXPECT_TRUE(never_prepared.observe(stage,100.).empty());
+  EXPECT_FALSE(never_prepared.observe(stage,stage==PreparationStage::Reference?105.:120.).empty());
+ }
+}
+TEST(ExecutionGrantAdmissionRetry, LateAdmittedSdkStateAfterCancelKeepsStopObligationWithoutResuming) {
+ Owner o("isolated_mock");prepare(o);ASSERT_TRUE(o.begin("execution","confirm",1,10.,"sdk"));
+ o.stop("cancel",10.1);ASSERT_TRUE(o.observe(sdk(10.11),10.11));
+ EXPECT_TRUE(o.stopping());EXPECT_TRUE(o.requiresPhysicalStop());
+ auto p=o.tick(10.12,true);EXPECT_FALSE(p.allowed);EXPECT_TRUE(p.revoked);
+ EXPECT_FALSE(o.begin("execution","confirm",2,10.12,"sdk"));
+}
+TEST(ExecutionOwner, LiveMeasuredStopDoesNotDependOnPhysicalAcceptanceReport) {
+ for(bool reported:{false,true}) {
+  Owner o("live");begin(o,"live");o.stop("goal_reached",10.2,true);
+  auto s=stopWitness("live");s.physical_acceptance_verified=reported;
+  ASSERT_TRUE(o.observe(s,11.3));EXPECT_EQ(s.physical_acceptance_verified,reported);
+  EXPECT_TRUE(o.stopped());EXPECT_FALSE(o.goalStopped());
+  o.measuredGoal(true,false,true,11.31,11.31);EXPECT_TRUE(o.goalStopped());
+ }
+}
+TEST(ExecutionOwner, LiveRuntimeStopStillRejectsStaleForeignAndUnmeasuredEvidence) {
+ for(int kind=0;kind<10;++kind) {
+  Owner o("live");begin(o,"live");o.stop("cancel",10.2);auto s=stopWitness("live");
+  ASSERT_FALSE(s.physical_acceptance_verified);double now=11.3;
+  if(kind==0)now=11.61;if(kind==1)s.sdk_session="foreign";
+  if(kind==2)s.version.localization_epoch+=1;if(kind==3)s.mc_raw_stamp_ns=0;
+  if(kind==4)s.measured_stop_confirmed=false;if(kind==5)s.measured_linear_mps=.031;
+  if(kind==6)s.stationary_duration_sec=.9;if(kind==7)s.stationary_samples=2;
+  if(kind==8)s.stop_request_id="foreign";if(kind==9)s.time_basis="isolated_simulated_source_clock";
+  EXPECT_FALSE(o.observe(s,now))<<kind;EXPECT_FALSE(o.stopped());
+ }
+}
 TEST(ExecutionOwner, NoReferenceReceiptDoesNotCommit){Owner o("isolated_mock");o.bind(ver());o.observe(proof(),10.);o.observe(ack(),10.);
  EXPECT_FALSE(o.canConfirm(10.1));EXPECT_FALSE(o.tick(10.1,true).geometry_committed);}
 TEST(ExecutionOwner, IncorrectExpectedRevisionDoesNotCommit){Owner o("isolated_mock");o.bind(ver());auto r=receipt();r.expected_version=ver();
@@ -878,16 +1642,31 @@ TEST(ExecutionOwner, NativeNegativeWithZeroDeadlineImmediatelyFencesPriorPositiv
  EXPECT_FALSE(o.observe(proof(10.12,1),10.12));EXPECT_FALSE(o.tick(10.12,true).allowed);
  auto newer=proof(10.13,3);ASSERT_TRUE(o.observe(newer,10.13));EXPECT_TRUE(o.tick(10.13,true).allowed);
 }
-TEST(ExecutionOwner, NegativeEvidenceStillRequiresActualFreshMatchingSources) {
+TEST(ExecutionOwner, NegativeEvidenceStillRequiresFreshMatchingDecision) {
  for(int kind=0;kind<4;++kind) {
   Owner o("isolated_mock");begin(o);ASSERT_TRUE(o.tick(10.1,true).allowed);
   auto invalid=proof(10.11,2);invalid.valid=false;invalid.valid_until=stamp(0.);
-  if(kind==0)invalid.body_source_stamp=stamp(9.);
+  if(kind==0)invalid.source_stamp=stamp(9.);
   if(kind==1)invalid.version.localization_epoch++;
-  if(kind==2)invalid.front_ray_source_stamp=stamp(9.);
+  if(kind==2)invalid.check_end=stamp(9.);
   if(kind==3)invalid.sequence=0;
   EXPECT_FALSE(o.observe(invalid,10.11));EXPECT_TRUE(o.tick(10.11,true).allowed);
  }
+}
+TEST(ExecutionOwner, ScanNegativeImmediatelyFencesWithoutRecheckingSensorAges) {
+ Owner o("isolated_mock");begin(o);ASSERT_TRUE(o.tick(10.1,true).allowed);
+ auto invalid=proof(10.11,2);invalid.valid=false;invalid.valid_until=stamp(0.);
+ invalid.body_source_stamp=invalid.front_ray_source_stamp=invalid.rear_ray_source_stamp=stamp(9.);
+ ASSERT_TRUE(o.observe(invalid,10.11));EXPECT_FALSE(o.tick(10.11,true).allowed);
+}
+TEST(ExecutionOwner, MotionProofDelegatesPerceptionAgeButRetainsCommandBodyTTL) {
+ Owner o("isolated_mock");begin(o);const auto d=movingDemand(10.2,1);auto m=motionProof(d);
+ m.body_source_stamp=m.front_ray_source_stamp=m.rear_ray_source_stamp=stamp(9.);
+ ASSERT_TRUE(o.observe(d,10.2));ASSERT_TRUE(o.observe(m,10.2));
+ auto expired=motionProof(movingDemand(10.21,2));expired.demand_body_source_stamp=stamp(9.);
+ EXPECT_FALSE(o.observe(expired,10.21));
+ expired=motionProof(movingDemand(10.22,2));expired.valid_until=stamp(10.21);
+ EXPECT_FALSE(o.observe(expired,10.22));
 }
 TEST(ExecutionOwner, CandidateSelectionIsLexicographicNotFastLaneSequencePriority) {
  Owner o("isolated_mock");beginUnapplied(o);auto p=o.tick(10.1,true);
@@ -942,6 +1721,90 @@ TEST(ExecutionHandoff, StationaryEvidenceFailuresCannotAuthorizeNewGeometry) {
   EXPECT_FALSE(o.observe(witness,11.01));EXPECT_EQ(o.pendingVersion(11.01),nullptr);
   EXPECT_FALSE(o.tick(11.02,true).allowed);EXPECT_FALSE(o.stopping());
  }
+}
+TEST(ExecutionHandoff, LiveRuntimeStationaryWitnessCanReenterButCannotRestoreUnsafeOldCurve) {
+ Owner o("live");beginUnapplied(o,"live");auto p=o.tick(10.1,true);
+ ASSERT_TRUE(o.observe(initialCommit(o,p),10.11));stationaryCandidate(o,11.,"live");
+ p=o.tick(11.01,true);ASSERT_FALSE(p.allowed);ASSERT_TRUE(p.geometry_committed);
+ auto witness=stationaryWitness(11.,1,"live");ASSERT_FALSE(witness.physical_acceptance_verified);
+ ASSERT_TRUE(o.observe(witness,11.01));const auto* next=o.pendingVersion(11.01);ASSERT_NE(next,nullptr);
+ p.frame_id="d1max_loc_odom";ASSERT_TRUE(o.prepareHandoff(p,candidateGoal(*next),100,11.01));
+ const auto grant=*o.handoff();EXPECT_EQ(grant.transition_mode,Handoff::STATIONARY_REENTRY);
+ EXPECT_FALSE(grant.stationary_evidence.physical_acceptance_verified);
+ EXPECT_EQ(grant.stationary_evidence.source_stamp,witness.source_stamp);
+ EXPECT_EQ(grant.stationary_evidence.valid_until,witness.valid_until);
+ EXPECT_FALSE(grant.incumbent.allowed);EXPECT_FALSE(o.tick(11.02,true).allowed);
+ ASSERT_TRUE(o.observe(handoffCommit(grant,11.05),11.05));
+ EXPECT_TRUE(o.tick(11.06,true).allowed);EXPECT_EQ(o.appliedCommitSequence(),2u);
+}
+TEST(ExecutionHandoff, LiveRuntimeStationaryReentryStillRejectsStaleAndForeignEvidence) {
+ for(int kind=0;kind<9;++kind) {
+  Owner o("live");begin(o,"live");stationaryCandidate(o,11.,"live");o.tick(11.01,true);
+  auto s=stationaryWitness(11.,1,"live");ASSERT_FALSE(s.physical_acceptance_verified);
+  if(kind==0)s.source_stamp=stamp(10.7);if(kind==1)s.received_stamp=stamp(10.7);
+  if(kind==2)s.sdk_session="foreign";if(kind==3)s.version.localization_epoch+=1;
+  if(kind==4)s.usable=false;if(kind==5)s.writer_commit_sequence+=1;
+  if(kind==6)s.measured_linear_mps=.031;if(kind==7)s.zero_ack_at=s.capture_lower_bound;
+  if(kind==8)s.mc_raw_stamp_ns=0;
+  EXPECT_FALSE(o.observe(s,11.01))<<kind;EXPECT_EQ(o.pendingVersion(11.01),nullptr);
+  EXPECT_FALSE(o.tick(11.02,true).allowed);
+ }
+}
+TEST(ExecutionHandoff, LiveMappedFutureMcSourceKeepsOriginalReceiptCaptureAndDeadline) {
+ Owner o("live");begin(o,"live");stationaryCandidate(o,11.,"live");auto p=o.tick(11.02,true);
+ auto s=stationaryWitness(11.,1,"live");
+ s.source_stamp=stamp(11.07);s.received_stamp=stamp(11.01);s.mc_capture_delay_bound_sec=.25;
+ s.capture_lower_bound=stamp(10.76);s.capture_upper_bound=s.received_stamp;s.valid_until=stamp(11.26);
+ ASSERT_TRUE(o.observe(s,11.02));const auto*next=o.pendingVersion(11.02);ASSERT_NE(next,nullptr);
+ p.frame_id="d1max_loc_odom";ASSERT_TRUE(o.prepareHandoff(p,candidateGoal(*next),100,11.02));
+ const auto& kept=o.handoff()->stationary_evidence;
+ EXPECT_EQ(kept.source_stamp,s.source_stamp);EXPECT_EQ(kept.received_stamp,s.received_stamp);
+ EXPECT_EQ(kept.capture_lower_bound,s.capture_lower_bound);EXPECT_EQ(kept.capture_upper_bound,s.capture_upper_bound);
+ EXPECT_EQ(kept.valid_until,s.valid_until);EXPECT_LE(seconds(o.handoff()->valid_until),11.26);
+ EXPECT_FALSE(o.tick(11.03,true).allowed); // no unsafe incumbent revival
+}
+TEST(ExecutionHandoff, ApproximateMappingDoesNotForgiveExpiredOrPostZeroUnprovenWitnesses) {
+ for(int kind=0;kind<8;++kind) {
+  Owner o("live");begin(o,"live");stationaryCandidate(o,11.,"live");o.tick(11.02,true);
+  auto s=stationaryWitness(11.,1,"live");
+  s.source_stamp=stamp(11.07);s.received_stamp=stamp(11.01);s.mc_capture_delay_bound_sec=.25;
+  s.capture_lower_bound=stamp(10.76);s.capture_upper_bound=s.received_stamp;s.valid_until=stamp(11.26);
+  double at=11.02;
+  if(kind==0)s.source_stamp=stamp(11.261);if(kind==1)at=11.261;
+  if(kind==2)s.capture_lower_bound=s.zero_ack_at;if(kind==3)s.capture_upper_bound=s.source_stamp;
+  if(kind==4)s.valid_until=stamp(11.32);if(kind==5)s.time_basis="isolated_simulated_source_clock";
+  if(kind==6)s.mc_capture_delay_bound_sec=.251;if(kind==7)s.mc_raw_stamp_ns=0;
+  EXPECT_FALSE(o.observe(s,at))<<kind;EXPECT_EQ(o.pendingVersion(at),nullptr)<<kind;
+  EXPECT_FALSE(o.tick(at,true).allowed)<<kind;
+ }
+ Owner mock("isolated_mock");begin(mock);stationaryCandidate(mock);mock.tick(11.02,true);
+ auto exact_clock=stationaryWitness();exact_clock.source_stamp=stamp(11.07);
+ exact_clock.mc_capture_delay_bound_sec=.25;exact_clock.valid_until=stamp(11.26);
+ EXPECT_FALSE(mock.observe(exact_clock,11.02));
+}
+TEST(ExecutionOwner, StopReportUsesOriginalMcReceiptWithoutMappedFutureAllowance) {
+ Owner o("live");begin(o,"live");o.stop("cancel",10.2);
+ auto s=stopWitness("live");s.source_stamp=stamp(11.36);
+ EXPECT_FALSE(o.observe(s,11.3));EXPECT_FALSE(o.stopped());
+ s.source_stamp=stamp(11.3);ASSERT_TRUE(o.observe(s,11.3));EXPECT_TRUE(o.stopped());
+}
+TEST(ExecutionHandoff, LiveRuntimeNewNegativeWitnessWithdrawsReentryWithoutOldProofResurrection) {
+ Owner o("live");begin(o,"live");stationaryCandidate(o,11.,"live");auto p=o.tick(11.01,true);
+ auto s=stationaryWitness(11.,1,"live");ASSERT_TRUE(o.observe(s,11.01));
+ p.frame_id="d1max_loc_odom";
+ ASSERT_TRUE(o.prepareHandoff(p,candidateGoal(*o.pendingVersion(11.01)),100,11.01));
+ auto lost=stationaryWitness(11.02,2,"live");lost.usable=false;
+ EXPECT_FALSE(o.observe(lost,11.03));ASSERT_NE(o.handoff(),nullptr);EXPECT_TRUE(o.handoff()->revoked);
+ EXPECT_FALSE(o.observe(s,11.03));EXPECT_FALSE(o.tick(11.03,true).allowed);
+}
+TEST(ExecutionHandoff, LiveRuntimeWitnessCannotReplaceNegativeCandidateCollisionProof) {
+ Owner o("live");begin(o,"live");stationaryCandidate(o,11.,"live");o.tick(11.01,true);
+ ASSERT_TRUE(o.observe(stationaryWitness(11.,1,"live"),11.01));
+ const auto* version=o.pendingVersion(11.01);ASSERT_NE(version,nullptr);
+ auto invalid=proof(11.02,4,2);invalid.version=*version;invalid.transport_mode="live";
+ invalid.proposal_id="stationary-reference";invalid.valid=false;
+ ASSERT_TRUE(o.observe(invalid,11.02));EXPECT_EQ(o.pendingVersion(11.02),nullptr);
+ EXPECT_FALSE(o.tick(11.02,true).allowed);EXPECT_EQ(o.appliedCommitSequence(),1u);
 }
 TEST(ExecutionHandoff, NewUnusableSDKWitnessImmediatelyWithdrawsStationaryTransaction) {
  Owner o("isolated_mock");beginUnapplied(o);auto p=o.tick(10.1,true);
@@ -1184,6 +2047,92 @@ TEST(ExecutionHandoff, NoAckCannotAssumeFailureAndRepeatedTicksCannotRenewTransi
  ASSERT_TRUE(o.observe(negative,11.01));EXPECT_EQ(o.handoff(),nullptr);EXPECT_EQ(o.appliedCommitSequence(),1u);
  EXPECT_FALSE(o.stopping());EXPECT_FALSE(o.observe(handoffCommit(grant,10.3),11.02));
 }
+TEST(ExecutionHandoff, LateNoWriteRejectionIsSoftwareFactNotRenewedMotionEvidence) {
+ for(const double delay:{.349,.351,.6,3.}) {
+  SCOPED_TRACE(delay);
+  Owner o("isolated_mock");beginUnapplied(o);ASSERT_TRUE(o.observe(initialCommit(o,o.tick(10.1,true)),10.11));
+  ASSERT_TRUE(o.observe(proof(10.2,2,2),10.2));ASSERT_TRUE(o.observe(ack(10.2,2,2),10.2));
+  auto p=o.tick(10.21,true);p.frame_id="d1max_loc_odom";
+  ASSERT_TRUE(o.prepareHandoff(p,candidateGoal(*o.pendingVersion(10.21)),100,10.21));
+  const auto grant=*o.handoff();
+  auto negative=handoffCommit(grant,10.22,2,false);negative.reason="no_write_admission_rejected";
+  const auto original=negative;
+  ASSERT_TRUE(o.observe(negative,10.22+delay));
+  EXPECT_EQ(negative,original);EXPECT_EQ(o.handoff(),nullptr);EXPECT_EQ(o.appliedCommitSequence(),1u);
+  EXPECT_EQ(o.handoffReason(),"writer_handoff_rejected:no_write_admission_rejected");
+  const auto held=o.tick(10.22+delay,true);
+  EXPECT_EQ(held.trajectory_id,1);EXPECT_FALSE(held.allowed);EXPECT_FALSE(held.revoked);
+  EXPECT_FALSE(o.stopping());EXPECT_FALSE(o.observe(negative,10.23+delay));
+ }
+}
+TEST(ExecutionHandoff, DelayedExpiredNoWriteFactReleasesOnlyItsOldTransaction) {
+ Owner o("isolated_mock");beginUnapplied(o);ASSERT_TRUE(o.observe(initialCommit(o,o.tick(10.1,true)),10.11));
+ ASSERT_TRUE(o.observe(proof(10.2,2,2),10.2));ASSERT_TRUE(o.observe(ack(10.2,2,2),10.2));
+ auto p=o.tick(10.21,true);p.frame_id="d1max_loc_odom";
+ ASSERT_TRUE(o.prepareHandoff(p,candidateGoal(*o.pendingVersion(10.21)),100,10.21));
+ const auto old=*o.handoff();auto negative=handoffCommit(old,11.01,2,false);negative.reason="handoff_expired";
+ ASSERT_GT(seconds(negative.applied_at),seconds(old.transition_deadline));
+ ASSERT_TRUE(o.observe(negative,11.61));EXPECT_EQ(o.handoff(),nullptr);EXPECT_EQ(o.appliedCommitSequence(),1u);
+ EXPECT_FALSE(o.tick(11.61,true).allowed); // No current SDK/curve lease was created by the fact.
+ // The old ACK is only a fact. Renew all actual SDK/curve evidence and satisfy
+ // the original source-evidenced recovery window after the stale-state HOLD.
+ uint64_t sequence=2;
+ for(const double t:{11.7,12.,12.4}) {
+  ASSERT_TRUE(o.observe(sdk(t,sequence),t));
+  ASSERT_TRUE(o.observe(proof(t,sequence*2-1,1),t));ASSERT_TRUE(o.observe(ack(t,sequence*2-1,1),t));
+  ASSERT_TRUE(o.observe(proof(t,sequence*2,3),t));ASSERT_TRUE(o.observe(ack(t,sequence*2,3),t));
+  p=o.tick(t+.01,true,static_cast<int64_t>(t*1e9),"epoch:1");++sequence;
+ }
+ p.frame_id="d1max_loc_odom";const auto* pending=o.pendingVersion(12.41);ASSERT_NE(pending,nullptr);
+ ASSERT_TRUE(o.prepareHandoff(p,candidateGoal(*pending),101,12.41));
+ const auto current=*o.handoff();ASSERT_NE(current.handoff_id,old.handoff_id);
+ negative.sequence=1000;
+ EXPECT_FALSE(o.observe(negative,12.42));
+ ASSERT_NE(o.handoff(),nullptr);EXPECT_EQ(*o.handoff(),current);EXPECT_EQ(o.appliedCommitSequence(),1u);
+ // A foreign old refusal cannot advance the global ACK floor and swallow
+ // the current transaction's genuine lower-sequence applied result.
+ ASSERT_TRUE(o.observe(handoffCommit(current,12.42,3),12.42));
+ EXPECT_EQ(o.handoff(),nullptr);EXPECT_EQ(o.appliedCommitSequence(),2u);
+}
+TEST(ExecutionHandoff, NoWriteFactRequiresExactPendingIdentityCASAndOriginalLegalTime) {
+ for(const double delay:{0.,.6})for(int kind=0;kind<24;++kind) {
+  SCOPED_TRACE(delay);
+  SCOPED_TRACE(kind);
+  Owner o("isolated_mock");beginUnapplied(o);ASSERT_TRUE(o.observe(initialCommit(o,o.tick(10.1,true)),10.11));
+  ASSERT_TRUE(o.observe(proof(10.2,2,2),10.2));ASSERT_TRUE(o.observe(ack(10.2,2,2),10.2));
+  auto p=o.tick(10.21,true);p.frame_id="d1max_loc_odom";
+  ASSERT_TRUE(o.prepareHandoff(p,candidateGoal(*o.pendingVersion(10.21)),100,10.21));
+  const auto grant=*o.handoff();auto negative=handoffCommit(grant,10.22,2,false);
+  if(kind==0)negative.schema_version=2;if(kind==1)negative.sequence=1;
+  if(kind==2)negative.execution_id="foreign";if(kind==3)negative.control_epoch++;
+  if(kind==4)negative.sdk_session="foreign";if(kind==5)negative.sdk_arm_generation++;
+  if(kind==6)negative.transport_mode="live";if(kind==7)negative.candidate_version.task_id="new-task";
+  if(kind==8)negative.candidate_version.route_hash=std::string(64,'f');
+  if(kind==9)negative.candidate_version.reference_generation++;
+  if(kind==10)negative.incumbent_trajectory_id++;if(kind==11)negative.candidate_trajectory_id++;
+  if(kind==12)negative.handoff_id="foreign";if(kind==13)negative.grant_sequence++;
+  if(kind==14)negative.previous_commit_sequence++;if(kind==15)negative.commit_sequence++;
+  if(kind==16)negative.permit_sequence++;if(kind==17)negative.applied_at=stamp(10.209999);
+  if(kind==18)negative.applied_at=stamp(10.220001+delay);
+  if(kind==19)negative.applied_at.nanosec=1000000000u;if(kind==20)negative.applied_at.sec=-1;
+  if(kind==21)negative.write_submitted=true;if(kind==22)negative.write_acknowledged=true;
+  if(kind==23)negative.incumbent_version.anchor_revision++;
+  EXPECT_FALSE(o.observe(negative,10.22+delay));
+  ASSERT_NE(o.handoff(),nullptr);EXPECT_EQ(*o.handoff(),grant);EXPECT_EQ(o.appliedCommitSequence(),1u);
+ }
+}
+TEST(ExecutionHandoff, LateNoWriteFactCannotClearCancellationOrResurrectExecution) {
+ Owner o("isolated_mock");beginUnapplied(o);ASSERT_TRUE(o.observe(initialCommit(o,o.tick(10.1,true)),10.11));
+ ASSERT_TRUE(o.observe(proof(10.2,2,2),10.2));ASSERT_TRUE(o.observe(ack(10.2,2,2),10.2));
+ auto p=o.tick(10.21,true);p.frame_id="d1max_loc_odom";
+ ASSERT_TRUE(o.prepareHandoff(p,candidateGoal(*o.pendingVersion(10.21)),100,10.21));
+ auto negative=handoffCommit(*o.handoff(),10.22,2,false);o.stop("new_target",10.23);
+ const auto revoked=*o.handoff();ASSERT_TRUE(revoked.revoked);
+ EXPECT_FALSE(o.observe(negative,10.82));
+ ASSERT_NE(o.handoff(),nullptr);EXPECT_EQ(*o.handoff(),revoked);
+ p=o.tick(10.82,true);EXPECT_TRUE(p.revoked);EXPECT_FALSE(p.allowed);
+ EXPECT_TRUE(o.stopping());EXPECT_EQ(o.appliedCommitSequence(),1u);
+}
 TEST(ExecutionHandoff, RevocationAndLateAckCannotResurrectAnOldExecution) {
  Owner o("isolated_mock");beginUnapplied(o);ASSERT_TRUE(o.observe(initialCommit(o,o.tick(10.1,true)),10.11));
  o.observe(proof(10.2,2,2),10.2);o.observe(ack(10.2,2,2),10.2);
@@ -1324,6 +2273,36 @@ TEST(ExecutionPublication, PriorTaskCanOnlyPublishStopWhileStillDraining){
  old.allowed=false;old.revoked=true;EXPECT_TRUE(publisher.prepare(old,"newtask",true,false));
  EXPECT_FALSE(publisher.prepare(old,"newtask",true,true));
 }
+TEST(ExecutionPublication, RetiredPreviewNotifiesExactOldGeometryOnceWithoutCompetingWithNewTask) {
+ PermitPublication publisher;Owner old("isolated_mock");prepare(old);
+ auto preview=old.tick(10.1,true);ASSERT_TRUE(preview.geometry_committed);
+ ASSERT_TRUE(publisher.prepare(preview,"task",false,false));
+ old.stop("superseded_by_new_task",10.11);
+ auto revoke=old.tick(10.12,false);
+ EXPECT_TRUE(revoke.revoked);EXPECT_FALSE(revoke.allowed);EXPECT_EQ(revoke.phase,"retired_geometry");
+ EXPECT_EQ(revoke.version,preview.version);EXPECT_EQ(revoke.trajectory_id,preview.trajectory_id);
+ EXPECT_TRUE(publisher.prepare(revoke,"newtask",false,false));
+ const auto sequence=revoke.sequence;
+ auto new_task=preview;new_task.version.task_id="newtask";
+ ASSERT_TRUE(publisher.prepare(new_task,"newtask",false,false));EXPECT_GT(new_task.sequence,sequence);
+ EXPECT_FALSE(publisher.prepare(revoke,"newtask",false,false));
+ ASSERT_TRUE(publisher.prepare(new_task,"newtask",false,false));EXPECT_EQ(new_task.sequence,4u);
+ EXPECT_FALSE(old.canConfirm(10.12));
+ EXPECT_FALSE(old.begin("late_execution","late_confirm",2,10.12));
+ EXPECT_FALSE(old.confirmed());EXPECT_FALSE(old.requiresPhysicalStop());EXPECT_FALSE(old.stopped());
+ // A fresh late result is geometry evidence, never resurrection of the task.
+ auto late=proof(10.13,2,2);ASSERT_TRUE(old.observe(late,10.13));
+ auto after=old.tick(10.14,true);
+ EXPECT_TRUE(after.revoked);EXPECT_FALSE(after.allowed);EXPECT_EQ(after.version,preview.version);
+ EXPECT_EQ(after.trajectory_id,preview.trajectory_id);EXPECT_EQ(old.preparationEvidence(10.14),0);
+}
+TEST(ExecutionPublication, ForeignPreviewHeartbeatCannotPretendToBeGeometryRetirement) {
+ PermitPublication publisher;auto stale=Permit{};stale.version=ver();stale.phase="preview";
+ EXPECT_FALSE(publisher.prepare(stale,"newtask",false,false));
+ stale.revoked=true;EXPECT_FALSE(publisher.prepare(stale,"newtask",false,false));
+ stale.phase="retired_geometry";stale.allowed=true;
+ EXPECT_FALSE(publisher.prepare(stale,"newtask",false,false));
+}
 TEST(ExecutionOwner, HumanMayConfirmActuallyInstalledPreviewAfterInitialAdmissionExpires){
  Owner o("isolated_mock");prepare(o);auto first=o.tick(10.01,true);
  first.frame_id="d1max_loc_odom";o.notePublication(first,10.01);
@@ -1425,6 +2404,61 @@ TEST(PreparationBudget, ProductionFeedbackMapsToCorrectBudgetNotGenericReference
  EXPECT_EQ(preparationStage(true,true,"following",0),PreparationStage::Trajectory);
  EXPECT_EQ(preparationStage(true,true,"following",123),PreparationStage::Ready);
 }
+TEST(PreparationBudget, PersistentLocalStagesSurviveSixtySecondsAndAcceptLateMeasuredRecovery){
+ const PreparationStage stages[]{PreparationStage::Pose,PreparationStage::Map,
+   PreparationStage::Reference,PreparationStage::Trajectory};
+ for(const auto stage:stages){
+  SCOPED_TRACE(static_cast<unsigned>(stage));
+  PreparationBudget budget(PreparationLimits{},true);
+  EXPECT_TRUE(budget.observe(stage,100.).empty());
+  EXPECT_TRUE(budget.observe(stage,130.).empty());
+  EXPECT_TRUE(budget.observe(stage,161.).empty());
+  // The caller keeps its same Follow task; this budget creates no route,
+  // SDK authority or substitute measurement while the local stage is waiting.
+  EXPECT_TRUE(budget.observe(PreparationStage::Ready,162.,162000000000LL).empty());
+  EXPECT_TRUE(budget.observe(PreparationStage::Ready,162.3,162300000000LL).empty());
+  EXPECT_TRUE(budget.observe(PreparationStage::Ready,162.61,162610000000LL).empty());
+  EXPECT_TRUE(budget.observe(stage,200.).empty());
+  EXPECT_TRUE(budget.observe(stage,261.).empty());
+ }
+}
+TEST(PreparationBudget, PersistentMixedWaitsAndMissingBodyProofDoNotLatchEpisodeFailure){
+ PreparationBudget budget(PreparationLimits{},true);
+ const PreparationStage stages[]{PreparationStage::Pose,PreparationStage::Map,
+   PreparationStage::Reference,PreparationStage::Trajectory};
+ for(unsigned i=0;i<=8;++i)
+  EXPECT_TRUE(budget.observe(stages[i%4],100.+i*10.).empty());
+ // Ready without a source remains a trajectory wait, not fabricated readiness.
+ EXPECT_EQ(preparationStage(true,true,"following",0),PreparationStage::Trajectory);
+ EXPECT_TRUE(budget.observe(PreparationStage::Ready,190.).empty());
+ EXPECT_TRUE(budget.observe(PreparationStage::Ready,251.).empty());
+ EXPECT_TRUE(budget.observe(PreparationStage::Ready,252.,252000000000LL).empty());
+ EXPECT_TRUE(budget.observe(PreparationStage::Ready,252.3,252300000000LL).empty());
+ EXPECT_TRUE(budget.observe(PreparationStage::Ready,252.61,252610000000LL).empty());
+}
+TEST(PreparationBudget, PersistentPolicyStillLatchesNonFiniteAndBackwardClockFailures){
+ const double invalid[]{99.,std::numeric_limits<double>::quiet_NaN(),
+   std::numeric_limits<double>::infinity()};
+ for(const double now:invalid){
+  PreparationBudget budget(PreparationLimits{},true);
+  ASSERT_TRUE(budget.observe(PreparationStage::Map,100.).empty());
+  EXPECT_EQ(budget.observe(PreparationStage::Ready,now,101000000000LL),"preparation_clock_invalid");
+  EXPECT_EQ(budget.observe(PreparationStage::Ready,200.,200000000000LL),"preparation_clock_invalid");
+ }
+}
+TEST(PreparationBudget, PersistentPolicyCannotAdmitMalformedLimits){
+ for(const double invalid:{0.,-1.,121.,std::numeric_limits<double>::quiet_NaN(),
+   std::numeric_limits<double>::infinity()}){
+  auto limits=PreparationLimits{};limits.waits[0]=invalid;
+  EXPECT_THROW((PreparationBudget{limits,true}),std::invalid_argument);
+ }
+ auto limits=PreparationLimits{};limits.episode=0.;
+ EXPECT_THROW((PreparationBudget{limits,true}),std::invalid_argument);
+ limits=PreparationLimits{};limits.stable=0.;
+ EXPECT_THROW((PreparationBudget{limits,true}),std::invalid_argument);
+ limits=PreparationLimits{};limits.episode=1.;limits.stable=1.;
+ EXPECT_THROW((PreparationBudget{limits,true}),std::invalid_argument);
+}
 TEST(ExecutionOwner, PreparationEvidenceRequiresCommittedAndFreshActualSource){
  Owner o("isolated_mock");prepare(o);EXPECT_EQ(o.preparationEvidence(10.01),0);
  o.tick(10.01,true);EXPECT_EQ(o.preparationEvidence(10.01),10000000000LL);
@@ -1437,19 +2471,118 @@ TEST(ExecutionOwner, PreparationEvidenceRequiresCommittedAndFreshActualSource){
 }
 TEST(ExecutionOwner, PermissionAndZeroMotionProofNeverCountAsProgress){
  Owner o("isolated_mock");begin(o);auto p=o.tick(10.1,true);p.frame_id="d1max_loc_odom";
- for(int i=0;i<=301;++i){const double t=10.2+i*.1;auto d=movingDemand(t,i+1);
+ for(int i=0;i<=601;++i){const double t=10.2+i*.1;auto d=movingDemand(t,i+1);
   d.velocity.linear.x=0.;d.hold=true;auto m=motionProof(d);
   ASSERT_TRUE(o.observe(d,t));ASSERT_TRUE(o.observe(m,t));auto b=body(t);
   const auto reason=o.supervise(p,t,&b);
-  if(i<300)EXPECT_TRUE(reason.empty());else {EXPECT_EQ(reason,"execution_blocked_timeout:waiting_admitted_nonzero_command");break;}
+  EXPECT_TRUE(reason.empty());EXPECT_EQ(o.progressReason(),"waiting_admitted_nonzero_command");
+  EXPECT_EQ(o.blockedAge(t),0.);
  }
- EXPECT_TRUE(o.stopping());EXPECT_FALSE(p.allowed);EXPECT_TRUE(p.revoked);
+ EXPECT_FALSE(o.stopping());EXPECT_TRUE(o.confirmed());EXPECT_FALSE(p.revoked);
+ EXPECT_EQ(p.version.route_hash,ver().route_hash); // pure zero is neither progress nor task failure.
+}
+TEST(ExecutionBootstrap, InstalledCurveWithoutAdmittedCommandRetainsConfirmedFixedRoute) {
+ // Real f2a452... evidence: tracker installation=1, writer commit=0,
+ // Safety accepted=0; the old supervisor killed this bootstrap at 30 s.
+ Owner o("isolated_mock");beginUnapplied(o);auto p=o.tick(10.1,true);p.frame_id="d1max_loc_odom";
+ o.notePublication(p,10.1);auto installed=geometryReceipt(p);
+ ASSERT_TRUE(o.observe(installed,10.1));
+ for(int i=0;i<=601;++i) {
+  const double t=10.2+i*.1;ASSERT_TRUE(o.observe(sdk(t,i+2),t));
+  ASSERT_TRUE(o.observe(proof(t,i+2),t));
+  installed.sequence=i+2;installed.body_source_stamp=stamp(t);ASSERT_TRUE(o.observe(installed,t));
+  p=o.tick(t,true);p.frame_id="d1max_loc_odom";const auto b=body(t);
+  EXPECT_TRUE(o.supervise(p,t,&b).empty());EXPECT_FALSE(o.stopping());
+  EXPECT_EQ(o.blockedAge(t),0.);EXPECT_EQ(o.progressReason(),"waiting_admitted_nonzero_command");
+  EXPECT_EQ(p.version.task_id,ver().task_id);EXPECT_EQ(p.version.route_id,ver().route_id);
+  EXPECT_EQ(p.version.route_hash,ver().route_hash);EXPECT_EQ(o.appliedCommitSequence(),0u);
+ }
+ EXPECT_TRUE(o.confirmed());EXPECT_TRUE(o.failureReason().empty());
+}
+TEST(ExecutionBootstrap, MissingWorkerEvidenceWaitsButDoesNotManufacturePermission) {
+ for(const auto* reason:{"missing_fresh_raw_ray_support_or_body_evidence","source_expired_during_check",
+     "curve_check_budget_exhausted","candidate:join_source_expired"}) {
+  Owner o("isolated_mock");beginUnapplied(o);auto p=o.tick(10.1,true);
+  for(int i=0;i<=301;++i) {
+   const double t=10.2+i*.1;ASSERT_TRUE(o.observe(sdk(t,i+2),t));
+   auto unavailable=proof(t,i+2);unavailable.valid=false;unavailable.valid_until=stamp(0.);unavailable.reason=reason;
+   ASSERT_TRUE(o.observe(unavailable,t));p=o.tick(t,true);p.frame_id="d1max_loc_odom";auto b=body(t);
+   EXPECT_FALSE(p.allowed);EXPECT_TRUE(o.supervise(p,t,&b).empty());
+   EXPECT_FALSE(p.revoked);EXPECT_FALSE(o.stopping());EXPECT_EQ(o.blockedAge(t),0.);
+  }
+  EXPECT_TRUE(o.confirmed());EXPECT_EQ(p.version.route_hash,ver().route_hash);
+ }
+}
+TEST(ExecutionBootstrap, CurrentNegativeEnvironmentEvidenceIsStillBoundedAndUnknownIsNotOccupied) {
+ for(const auto* reason:{"occupied","unknown_or_unobserved","measured_connection_support_invalid"}) {
+  Owner o("isolated_mock");beginUnapplied(o);o.tick(10.1,true);Permit p;std::string failure;
+  for(int i=0;i<=301;++i) {
+   const double t=10.2+i*.1;ASSERT_TRUE(o.observe(sdk(t,i+2),t));
+   auto rejected=proof(t,i+2);rejected.valid=false;rejected.reason=reason;rejected.valid_until=stamp(0.);
+   ASSERT_TRUE(o.observe(rejected,t));p=o.tick(t,true);p.frame_id="d1max_loc_odom";auto b=body(t);
+   failure=o.supervise(p,t,&b);EXPECT_FALSE(p.allowed);
+   if(!failure.empty())break;
+  }
+  EXPECT_EQ(failure,"execution_blocked_timeout:waiting_initial_tracker_admission");
+  EXPECT_TRUE(o.stopping());EXPECT_TRUE(p.revoked);EXPECT_FALSE(o.stopped());
+  EXPECT_EQ(p.version.route_hash,ver().route_hash);
+ }
+}
+TEST(ExecutionBootstrap, UnrelatedCandidateNegativeCannotBecomeCurrentObstruction) {
+ Owner o("isolated_mock");beginUnapplied(o);auto p=o.tick(10.1,true);p.frame_id="d1max_loc_odom";
+ for(int i=0;i<=301;++i) {
+  const double t=10.2+i*.1;ASSERT_TRUE(o.observe(sdk(t,i+2),t));
+  auto rejected=proof(t,i+2,2);rejected.valid=false;rejected.reason="occupied";rejected.valid_until=stamp(0.);
+  ASSERT_TRUE(o.observe(rejected,t));auto b=body(t);
+  EXPECT_TRUE(o.supervise(p,t,&b).empty());EXPECT_EQ(o.blockedAge(t),0.);
+ }
+ EXPECT_FALSE(o.stopping());EXPECT_EQ(p.trajectory_id,1);
+}
+TEST(ExecutionBootstrap, ExplicitCancellationAndSDKWithdrawalNeverRecoverOnLateGoodEvidence) {
+ for(int kind=0;kind<2;++kind) {
+  Owner o("isolated_mock");beginUnapplied(o);auto p=o.tick(10.1,true);p.frame_id="d1max_loc_odom";
+  auto b=body(10.2);ASSERT_TRUE(o.supervise(p,10.2,&b).empty());
+  if(kind==0)o.stop("explicit_cancel",10.3);
+  else {auto lost=sdk(10.3,2);lost.control_owned=false;lost.reason="control_lost";ASSERT_TRUE(o.observe(lost,10.3));}
+  for(int i=0;i<10;++i) {
+   const double t=10.4+i*.1;o.observe(sdk(t,i+3),t);o.observe(proof(t,i+3),t);
+   p=o.tick(t,true,104+i,"same-local-epoch");EXPECT_FALSE(p.allowed);EXPECT_TRUE(p.revoked);
+   b=body(t);EXPECT_TRUE(o.supervise(p,t,&b).empty());EXPECT_TRUE(o.stopping());
+  }
+  EXPECT_FALSE(o.begin("another_execution","confirm",2,12.));
+ }
+}
+TEST(ExecutionBootstrap, ExactNonzeroWriterSubmissionStartsProgressBudgetEvenIfFeedbackIsLost) {
+ Owner o("isolated_mock");beginUnapplied(o);auto p=o.tick(10.1,true);p.frame_id="d1max_loc_odom";
+ auto actual=initialCommit(o,p,10.1);actual.applied_velocity.linear.x=.2;
+ ASSERT_TRUE(o.observe(actual,10.1));std::string failure;
+ for(int i=0;i<=301;++i) {
+  const double t=10.2+i*.1;auto b=body(t);failure=o.supervise(p,t,&b);
+  if(!failure.empty())break;
+ }
+ EXPECT_EQ(failure,"execution_blocked_timeout:waiting_admitted_nonzero_command");
+ EXPECT_TRUE(o.stopping());EXPECT_TRUE(p.revoked);EXPECT_FALSE(o.stopped());
 }
 TEST(ExecutionOwner, NonzeroAdmittedButBodyStationaryStillTimesOut){
  Owner o("isolated_mock");begin(o);auto p=o.tick(10.1,true);p.frame_id="d1max_loc_odom";
  for(int i=0;i<=301;++i){const double t=10.2+i*.1;feedback(o,t,i+1);auto b=body(t);
   const auto reason=o.supervise(p,t,&b);
   if(i<300)EXPECT_TRUE(reason.empty());else {EXPECT_EQ(reason,"execution_blocked_timeout:waiting_measured_motion_progress");break;}
+ }
+}
+TEST(ExecutionOwner, DeadlineWinsOverLastStableRecoveryCallback) {
+ for(bool before_deadline:{false,true}) {
+  Owner o("isolated_mock");begin(o);auto p=o.tick(10.1,true);p.frame_id="d1max_loc_odom";
+  feedback(o,10.2,1);auto b=body(10.2);ASSERT_TRUE(o.supervise(p,10.2,&b).empty());
+  for(int i=1;i<=280;++i) {
+   const double t=10.2+i*.1;feedback(o,t,i+1);b=body(t);ASSERT_TRUE(o.supervise(p,t,&b).empty());
+  }
+  feedback(o,39.1,282,.04);b=body(39.1,.04);ASSERT_TRUE(o.supervise(p,39.1,&b).empty());
+  feedback(o,39.6,283,.08);b=body(39.6,.08);ASSERT_TRUE(o.supervise(p,39.6,&b).empty());
+  const double final=before_deadline?40.199:40.2;
+  feedback(o,final,284,.12);b=body(final,.12);const auto failure=o.supervise(p,final,&b);
+  if(before_deadline) {EXPECT_TRUE(failure.empty());EXPECT_FALSE(o.stopping());EXPECT_EQ(o.blockedAge(final),0.);}
+  else {EXPECT_EQ(failure,"execution_blocked_timeout:waiting_measured_motion_progress");EXPECT_TRUE(o.stopping());EXPECT_TRUE(p.revoked);}
  }
 }
 TEST(ExecutionOwner, ActualMotionInvalidIsDiagnosticAndCannotBeErasedByZeroProof){
@@ -1464,25 +2597,28 @@ TEST(ExecutionOwner, ActualMotionInvalidIsDiagnosticAndCannotBeErasedByZeroProof
 }
 TEST(ExecutionOwner, ShortPhysicalMovementCannotRenewBlockedEpisode){
  Owner o("isolated_mock");begin(o);auto p=o.tick(10.1,true);p.frame_id="d1max_loc_odom";
+ feedback(o,10.2,1);
  auto b=body(10.2);o.supervise(p,10.2,&b);
  for(int i=1;i<=301;++i){const double t=10.2+i*.1;b=body(t,i>10?.04:0.);
-  if(i==10||i==11)feedback(o,t,i);
+  if(i==10||i==11)feedback(o,t,i+1);
   const auto reason=o.supervise(p,t,&b);
   if(i<300)EXPECT_TRUE(reason.empty());else {EXPECT_FALSE(reason.empty());break;}
  }
 }
 TEST(ExecutionOwner, OnePositionStepWithContinuousCommandsIsNotStableRecovery){
  Owner o("isolated_mock");begin(o);auto p=o.tick(10.1,true);p.frame_id="d1max_loc_odom";
+ feedback(o,10.2,1);
  auto b=body(10.2);o.supervise(p,10.2,&b);
- for(int i=1;i<=301;++i){const double t=10.2+i*.1;feedback(o,t,i);b=body(t,i>=10?.04:0.);
+ for(int i=1;i<=301;++i){const double t=10.2+i*.1;feedback(o,t,i+1);b=body(t,i>=10?.04:0.);
   const auto reason=o.supervise(p,t,&b);
   if(i<300)EXPECT_TRUE(reason.empty());else {EXPECT_FALSE(reason.empty());break;}
  }
 }
 TEST(ExecutionOwner, BodySourceReplayCannotManufactureProgress){
  Owner o("isolated_mock");begin(o);auto p=o.tick(10.1,true);p.frame_id="d1max_loc_odom";
+ feedback(o,10.2,1);
  auto b=body(10.2);o.supervise(p,10.2,&b);
- for(int i=1;i<=301;++i){const double t=10.2+i*.1;feedback(o,t,i);b.local_odometry.pose.pose.position.x=i*.1;
+ for(int i=1;i<=301;++i){const double t=10.2+i*.1;feedback(o,t,i+1);b.local_odometry.pose.pose.position.x=i*.1;
   const auto reason=o.supervise(p,t,&b);
   if(i<300)EXPECT_TRUE(reason.empty());else {EXPECT_FALSE(reason.empty());break;}
  }
@@ -1593,13 +2729,30 @@ TEST(ExecutionOwner, FinalYawProgressUsesErrorReductionNotForwardDistance){
 }
 TEST(ExecutionOwner, ForeignVersionAndMismatchedMotionPairCannotRecover){
  for(int mode=0;mode<7;++mode){Owner o("isolated_mock");begin(o);auto p=o.tick(10.1,true);p.frame_id="d1max_loc_odom";
+  feedback(o,10.2,1);
   auto b=body(10.2);o.supervise(p,10.2,&b);
-  for(int i=1;i<=301;++i){const double t=10.2+i*.1;auto d=movingDemand(t,i);auto m=motionProof(d);
+  for(int i=1;i<=301;++i){const double t=10.2+i*.1;auto d=movingDemand(t,i+1);auto m=motionProof(d);
    if(mode==0)d.execution_id="old";if(mode==1)d.version.anchor_revision=2;if(mode==2)m.demand_body_source_stamp=stamp(t-.01);
    if(mode==3)m.demand_sequence++;if(mode==4)m.velocity.linear.x=.25;if(mode==5)m.sdk_arm_generation++;
    if(mode==6)m.braking_model_sha256=std::string(64,'c');
    o.observe(d,t);o.observe(m,t);b=body(t,i*.02);const auto reason=o.supervise(p,t,&b);
    if(i<300)EXPECT_TRUE(reason.empty());else {EXPECT_FALSE(reason.empty());break;}
+  }
+ }
+}
+TEST(ExecutionOwner, LiveRuntimeModelHashMismatchCannotClaimAdmittedMotion) {
+ Owner o("live");begin(o,"live");auto p=o.tick(10.1,true);p.frame_id="d1max_loc_odom";
+ auto admitted=movingDemand(10.2,1);admitted.transport_mode="live";
+ ASSERT_TRUE(o.observe(admitted,10.2));ASSERT_TRUE(o.observe(motionProof(admitted),10.2));
+ auto b=body(10.2);o.supervise(p,10.2,&b);
+ for(int i=1;i<=301;++i) {
+  const double t=10.2+i*.1;auto d=movingDemand(t,i+1);d.transport_mode="live";
+  auto m=motionProof(d);m.braking_model_sha256=std::string(64,'c');
+  ASSERT_TRUE(o.observe(d,t));ASSERT_TRUE(o.observe(m,t));b=body(t,i*.02);
+  const auto reason=o.supervise(p,t,&b);
+  if(i<300)EXPECT_TRUE(reason.empty());else {
+   EXPECT_EQ(reason,"execution_blocked_timeout:waiting_admitted_nonzero_command");
+   EXPECT_TRUE(o.stopping());break;
   }
  }
 }
@@ -1611,10 +2764,46 @@ TEST(ExecutionOwner, ActualSweepMayUseNewerCurveEvidenceThanOriginalDemandFloor)
   EXPECT_TRUE(o.supervise(p,t,&b).empty());}
  EXPECT_FALSE(o.stopping());
 }
+TEST(ExecutionOwner, LateralTrackingIsAdmittedMotionNotAFalseHold){
+ Owner o("isolated_mock");begin(o);auto p=o.tick(10.1,true);p.frame_id="d1max_loc_odom";
+ for(int i=0;i<500;++i){const double t=10.2+i*.1;auto d=movingDemand(t,i+1);
+  d.velocity.linear.x=0.;d.velocity.linear.y=.2;
+  ASSERT_TRUE(o.observe(d,t));ASSERT_TRUE(o.observe(motionProof(d),t));
+  auto b=body(t,i*.02,-1.5707963267948966);
+  auto progress=routeProgress(t,i+1,i*.02);progress.odom_body_pose.pose=b.local_odometry.pose.pose;
+  ASSERT_TRUE(o.observe(progress,t));
+  EXPECT_TRUE(o.supervise(p,t,&b).empty());}
+ EXPECT_FALSE(o.stopping());
+}
 TEST(ExecutionOwner, EarlierCurveEvidenceCannotSatisfyDemandFloor){
  Owner o("isolated_mock");begin(o);auto p=o.tick(10.1,true);p.frame_id="d1max_loc_odom";
- for(int i=0;i<=301;++i){const double t=10.2+i*.1;auto d=movingDemand(t,i+1);auto m=motionProof(d);
+ feedback(o,10.2,1);auto b=body(10.2);o.supervise(p,10.2,&b);
+ for(int i=1;i<=301;++i){const double t=10.2+i*.1;auto d=movingDemand(t,i+1);auto m=motionProof(d);
   m.trajectory_validation_sequence=d.validation_sequence-1;
   o.observe(d,t);o.observe(m,t);auto b=body(t,i*.02);const auto reason=o.supervise(p,t,&b);
   if(i<300)EXPECT_TRUE(reason.empty());else {EXPECT_FALSE(reason.empty());break;}}
+}
+TEST(CommandPipelineOwner, SubmittedOriginalDemandAgeUsesBoundRecordButActualBodyDoesNot) {
+ for(int fault=0;fault<5;++fault){Owner o("isolated_mock");o.configureCommandPipeline(.2);beginUnapplied(o);
+  const auto p=o.tick(10.1,true);auto actual=initialCommit(o,p,10.225);
+  actual.demand_source_stamp=actual.demand_body_source_stamp=stamp(10.1);
+  actual.body_source_stamp=actual.measured_pose.header.stamp=stamp(10.215);
+  if(fault==1)actual.demand_source_stamp=actual.demand_body_source_stamp=stamp(10.024);
+  if(fault==2)actual.body_source_stamp=actual.measured_pose.header.stamp=stamp(10.124);
+  if(fault==3)actual.valid_until=stamp(10.224);
+  if(fault==4)actual.demand_body_source_stamp=stamp(10.101);
+  EXPECT_EQ(o.observe(actual,10.225),fault==0)<<fault;
+  if(fault==0)EXPECT_EQ(o.appliedCommitSequence(),1u);
+ }
+ Owner legacy("isolated_mock");beginUnapplied(legacy);auto actual=initialCommit(legacy,legacy.tick(10.1,true),10.225);
+ actual.demand_source_stamp=actual.demand_body_source_stamp=stamp(10.1);
+ actual.body_source_stamp=actual.measured_pose.header.stamp=stamp(10.215);
+ EXPECT_FALSE(legacy.observe(actual,10.225));
+}
+TEST(CommandPipelineOwner, CannotChangeRecordBudgetAfterExecutionConfirmation) {
+ Owner o("isolated_mock");
+ for(double invalid:{.099,.501,std::numeric_limits<double>::quiet_NaN()})
+  EXPECT_THROW(o.configureCommandPipeline(invalid),std::invalid_argument);
+ o.configureCommandPipeline(.2);beginUnapplied(o);
+ EXPECT_THROW(o.configureCommandPipeline(.3),std::invalid_argument);
 }

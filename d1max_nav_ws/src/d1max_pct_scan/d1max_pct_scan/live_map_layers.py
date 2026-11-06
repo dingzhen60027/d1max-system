@@ -16,11 +16,12 @@ class LiveMapLayers(Node):
     def __init__(self, directory):
         super().__init__('d1max_live_map_layers')
         session = json.loads((directory/'session.json').read_text())
-        xyz, costs, blocked, metadata = build_layers(session)
         qos = QoSProfile(depth=1, reliability=ReliabilityPolicy.RELIABLE,
                          durability=DurabilityPolicy.TRANSIENT_LOCAL)
         self.messages, self.layer_publishers = [], []
-        for name, points, values in [('traversable_surface', xyz, costs), ('blocked_surface', blocked, None)]:
+        self.metadata = self.create_publisher(String, '/d1max/live_planning/map_layer_status', qos)
+
+        def add_layer(name, points, values=None):
             records = colored_records(points, values)
             message = PointCloud2(header=Header(frame_id=session['frame_id']), height=1,
                 width=len(records), fields=[PointField(name=n, offset=i*4,
@@ -28,10 +29,18 @@ class LiveMapLayers(Node):
                 point_step=16, row_step=16*len(records), is_dense=True, is_bigendian=False)
             message.data = array('B', records.tobytes())
             self.messages.append(message)
-            self.layer_publishers.append(self.create_publisher(PointCloud2, '/d1max/live_planning/'+name, qos))
-        self.metadata = self.create_publisher(String, '/d1max/live_planning/map_layer_status', qos)
+            publisher = self.create_publisher(PointCloud2, '/d1max/live_planning/'+name, qos)
+            self.layer_publishers.append(publisher)
+            message.header.stamp = self.get_clock().now().to_msg()
+            publisher.publish(message)
+
+        def publish_traversable(xyz, costs, metadata):
+            self.metadata.publish(String(data=json.dumps({**metadata, 'session_id': session['id']})))
+            add_layer('traversable_surface', xyz, costs)
+
+        _, _, blocked, metadata = build_layers(session, on_traversable=publish_traversable)
+        add_layer('blocked_surface', blocked)
         self.metadata.publish(String(data=json.dumps({**metadata, 'session_id': session['id']})))
-        self.publish_layers()
         self.create_timer(5., self.publish_layers)
         self.get_logger().info(json.dumps(metadata))
 

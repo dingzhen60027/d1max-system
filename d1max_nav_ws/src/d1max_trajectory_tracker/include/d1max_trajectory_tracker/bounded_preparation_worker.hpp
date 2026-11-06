@@ -41,13 +41,24 @@ public:
     token_.fetch_add(1);
     std::lock_guard<std::mutex> lock(mutex_);pending_.reset();completed_.reset();
   }
-  std::optional<Completion> take() {
+  std::optional<Completion> take(std::optional<std::uint64_t> expected_token={}) {
     std::lock_guard<std::mutex> lock(mutex_);
+    if(completed_&&completed_->token!=token_.load()) {completed_.reset();return {};}
+    // A temporary view of an older reserved candidate may poll while the
+    // latest preparation finishes. That view must not consume another
+    // candidate's only completion. Global invalidation above still retires
+    // stale work; this does not queue or resurrect any additional result.
+    if(expected_token&&completed_&&completed_->token!=*expected_token)return {};
     auto out=std::move(completed_);completed_.reset();
+    // invalidate() advances the atomic fence before it takes this mutex.
+    // Recheck after the move as well, preserving the original cancellation
+    // barrier if that advance races the read above.
     if(out&&out->token!=token_.load())return {};
     return out;
   }
 private:
+  friend struct BoundedPreparationWorkerTestAccess;
+  friend struct LocalFollowerTestAccess;
   struct Job {std::uint64_t token;Request request;};
   void run() {
     for(;;) {

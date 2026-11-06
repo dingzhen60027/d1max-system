@@ -89,12 +89,36 @@ def expand_native_curve(native, tomogram):
             # These are the genuine native retained-slice identities, not a
             # default floor. A change remains subject to overlap/step checking.
             layer = int(layers[index] if t < 0.5 else layers[index + 1])
-            ground = tomogram.surface_ground_z(xy, layer)
-            point = [float(xy[0]), float(xy[1]), ground]
-            if expanded and identities[-1] == layer and np.linalg.norm(np.asarray(point) - expanded[-1]) < 1e-9:
-                continue
-            expanded.append(point)
-            identities.append(layer)
+            selected = [layer]
+            first, last = int(layers[index]), int(layers[index+1])
+            if t == 0.5 and abs(last-first) > 1:
+                # Optimizer samples can omit adjacent retained aliases of one
+                # measured floor return. Restore identities at the unchanged
+                # polynomial switch XY, not a shortcut through stair heights.
+                direction = 1 if last > first else -1
+                selected = list(range(first, last+direction, direction))
+                for cell in tomogram.point_cells(xy):
+                    heights = []
+                    for alias in selected:
+                        reason = tomogram._reason(alias, cell)
+                        if reason:
+                            raise TomogramError('invalid_layer_alias',
+                                'Native retained-layer alias lacks admissible support',
+                                layers=[first, last], layer=alias, cell=list(cell), cause_code=reason)
+                        heights.append(float(tomogram.ground[(alias, *cell)]))
+                    # Numerical equality only, NOT the configurable step/height
+                    # tolerance. Different observed surfaces remain a hard skip.
+                    if max(heights)-min(heights) > 1e-6:
+                        raise TomogramError('nonadjacent_layer_transition',
+                            'Native retained-layer skip is not the same measured surface',
+                            layers=[first, last], cell=list(cell), ground_heights=heights)
+            for layer in selected:
+                ground = tomogram.surface_ground_z(xy, layer)
+                point = [float(xy[0]), float(xy[1]), ground]
+                if expanded and identities[-1] == layer and np.linalg.norm(np.asarray(point) - expanded[-1]) < 1e-9:
+                    continue
+                expanded.append(point)
+                identities.append(layer)
     return np.asarray(expanded), np.asarray(identities, dtype=int), {
         'quintic_segments': len(states) - 1, 'curve_partition_points': len(expanded),
         'curve_validation': 'quintic_cell_boundary_roots_and_interval_interiors'}
@@ -117,6 +141,7 @@ class TomogramRoute:
         self.path_refinement = path_refinement
         self.refinement_corner_cut_m = float(refinement_corner_cut_m)
         self.tomogram = tomogram if isinstance(tomogram, TomogramMap) else TomogramMap(tomogram)
+        self._clearance_cache = None
         self.source_ground = None
         if planning_strategy == 'native_astar_checked_smooth':
             import hashlib
@@ -168,31 +193,40 @@ class TomogramRoute:
                                    start['layer_id'], goal['layer_id'], return_details=True)
         if native is None:
             raise TomogramError('native_planning_failed', 'Native PCT A* / GPMP did not find a route')
+        optimizer_rejection = None
         try:
             path, layers, curve_checks = expand_native_curve(native, self.tomogram)
+            path, layers, checks = self._checked_endpoints(path, layers, start, goal)
         except TomogramError as exc:
-            raise TomogramError('invalid_curve', 'Native GPMP curve leaves the traversable surface',
-                                cause_code=exc.code, **exc.details) from exc
-        if len(path) < 2:
-            raise TomogramError('empty_native_curve', 'Native PCT returned insufficient curve data')
-        # The native search omits its start and uses grid centres. Add the
-        # precise editor endpoints, then validate both connectors as well.
-        path = np.vstack([start['xyz'], path, goal['xyz']])
-        layers = np.r_[start['layer_id'], layers, goal['layer_id']]
-        keep = np.r_[True, (np.linalg.norm(np.diff(path, axis=0), axis=1) > 1e-9)
-                           | (np.diff(layers) != 0)]
-        path, layers = path[keep], layers[keep]
-        if len(path) < 2:
-            path, layers = np.array([start['xyz'], goal['xyz']]), np.array([start_layer, goal_layer])
-        path[0], path[-1] = start['xyz'], goal['xyz']
-        layers[0], layers[-1] = start['layer_id'], goal['layer_id']
-        checks = self.tomogram.validate_path(path, layers)
+            if native.get('astar_path') is None or native.get('astar_layer_ids') is None:
+                raise TomogramError('invalid_curve', 'Native GPMP curve leaves the traversable surface',
+                                    cause_code=exc.code, **exc.details) from exc
+            optimizer_rejection = dict(code=exc.code, message=str(exc), details=exc.details)
+            try:
+                path, layers, checks = self._checked_endpoints(
+                    native['astar_path'], native['astar_layer_ids'], start, goal)
+            except TomogramError as search_error:
+                raise TomogramError('invalid_curve',
+                    'Neither GPMP nor the original native search has valid geometry',
+                    optimizer_rejection=optimizer_rejection,
+                    search_rejection=dict(code=search_error.code, details=search_error.details)) from search_error
+            curve_checks = dict(quintic_segments=0, curve_partition_points=len(path),
+                curve_validation='native_astar_polyline_cell_supercover_and_actual_slice_overlap')
         # Refinement is an explicit, independently checked optional stage.
-        # Never invoke it to rescue an invalid native curve or weaken a mask.
+        # An invalid GPMP curve is NEVER published or "repaired" unchecked.
+        # Refinement may instead consume the independently validated original
+        # search; every shortcut retains the same mask/support/connector rules.
         refinement = {'applied': False, 'reason': 'disabled'}
         native_geometry = None
-        algorithm = 'upstream PCT OfflineElePlanner + GPMP quintic'
+        algorithm = ('upstream PCT OfflineElePlanner A* (GPMP rejected)'
+                     if optimizer_rejection else 'upstream PCT OfflineElePlanner + GPMP quintic')
         if getattr(self, 'path_refinement', 'none') == 'visibility_c2':
+            # Keep the independently checked native geometry as a quality
+            # candidate. A visibility shortcut must not erase its corridor
+            # clearance merely because the shortcut is shorter.
+            original = dict(path=path.copy(), layers=layers.copy(), checks=checks,
+                curve_checks=dict(curve_checks), algorithm=algorithm,
+                refinement=dict(applied=False, reason='native_geometry_retained'))
             from .corridor_refinement import refine_corridor
             refinement = refine_corridor(self.tomogram, path, layers,
                                          corner_cut_m=self.refinement_corner_cut_m)
@@ -214,6 +248,12 @@ class TomogramRoute:
                     'curve_partition_points': len(path),
                 }
                 algorithm += ' + checked visibility/C2 corridor refinement'
+            selected = self._select_floor_quality(original, dict(
+                path=path, layers=layers, checks=checks, curve_checks=curve_checks,
+                algorithm=algorithm, refinement=refinement))
+            path, layers, checks = selected['path'], selected['layers'], selected['checks']
+            curve_checks, algorithm, refinement = (
+                selected['curve_checks'], selected['algorithm'], selected['refinement'])
         return {'path': path.tolist(), 'layer_ids': layers.tolist(),
                 'source_layer_ids': self.tomogram.source_layers[layers].tolist(),
                 'start_layer': int(start_layer), 'goal_layer': int(goal_layer),
@@ -228,10 +268,105 @@ class TomogramRoute:
                 'path_refinement': {key: value for key, value in refinement.items()
                                     if key not in ('path', 'layer_ids')},
                 'native_geometry': native_geometry,
+                'optimizer_rejection': optimizer_rejection,
                 'height_semantics': 'measured_ground_with_exact_selected_endpoints',
                 # Geometry diagnostics are not a replacement for collision checks.
                 'path_quality': path_quality(path),
                 **curve_checks, **checks}
+
+    def _select_floor_quality(self, original, simplified):
+        """One floor-quality objective after search, simplification and rounding.
+
+        These are optional route-quality candidates, not new admissibility
+        gates. Exact endpoints, layer identity and original map validation stay
+        mandatory. No usable centering candidate means keeping a valid route.
+        Stair resources deliberately use path_refinement='none'.
+        """
+        from .corridor_centering import (
+            ClearanceFieldCache, center_corridor, route_clearance_quality)
+        if np.any(original['layers'] != original['layers'][0]):
+            return simplified
+        if getattr(self, '_clearance_cache', None) is None:
+            self._clearance_cache = ClearanceFieldCache(self.tomogram)
+        cache = self._clearance_cache
+        candidates = [original, simplified]
+        for item in candidates:
+            item['clearance_quality'] = route_clearance_quality(
+                self.tomogram, item['path'], item['layers'], cache=cache)
+        # Visibility shortening can remove the useful corridor topology or
+        # create corner transitions that cannot be centred smoothly. Give the
+        # checked native route the same optional refinement, rather than
+        # treating the shortcut as the only seed. Exact duplicates need no
+        # second solve. All originals remain eligible on any soft rejection.
+        seeds = [('visibility', simplified)]
+        if (not np.array_equal(original['path'], simplified['path'])
+                or not np.array_equal(original['layers'], simplified['layers'])):
+            seeds.append(('native', original))
+        centering_attempts = []
+        for source, seed in seeds:
+            centered = center_corridor(self.tomogram, seed['path'], seed['layers'], cache=cache)
+            centering_attempts.append(dict(source=source, result=centered))
+            if not centered['applied']:
+                continue
+            points = np.asarray(centered['path'], dtype=float)
+            identities = np.asarray(centered['layer_ids'], dtype=int)
+            if not np.array_equal(points[0], original['path'][0]) or not np.array_equal(points[-1], original['path'][-1]):
+                raise TomogramError('refinement_endpoint_mismatch', 'Centering changed exact selected endpoints')
+            checks = self.tomogram.validate_path(points, identities)
+            candidates.append(dict(path=points, layers=identities, checks=checks,
+                algorithm=seed['algorithm']+' + checked corridor centering',
+                centering_source=source,
+                curve_checks=dict(curve_validation=centered['curve_validation'],
+                    quintic_segments=0, curve_partition_points=centered['curve_partition_points']),
+                refinement={key: value for key, value in centered.items() if key not in ('path', 'layer_ids')},
+                clearance_quality=centered['after_quality']))
+        available = [item for item in candidates if item['clearance_quality'].get('available')]
+        if not available:
+            return simplified
+        # Geometry is already checked. Score jointly values length and distance
+        # from this layer's non-traversable boundary, rather than demanding
+        # zero extra length even for a path which follows the wall all along.
+        selected = min(available, key=lambda item: (item['clearance_quality']['score'], len(item['path'])))
+        # Keep the legacy primary diagnostic for consumers, plus separate seed
+        # outcomes so a rejected shortcut no longer hides native refinement.
+        primary = next((attempt['result'] for attempt in centering_attempts
+                        if attempt['source'] == selected.get('centering_source')),
+                       centering_attempts[0]['result'])
+        report = dict(selected['refinement'])
+        report['clearance_selection'] = dict(
+            policy='length_clearance_and_turn_soft_objective',
+            selected='centered' if 'centering_source' in selected else
+                'native' if selected is original else 'visibility',
+            centering_source=selected.get('centering_source'),
+            native=original['clearance_quality'], visibility=simplified['clearance_quality'],
+            selected_quality=selected['clearance_quality'],
+            centering_applied=any(attempt['result']['applied'] for attempt in centering_attempts),
+            centering_reason=primary['reason'],
+            centering_candidate_failures=primary.get('candidate_failures', []),
+            centering_attempts=[dict(source=attempt['source'],
+                applied=attempt['result']['applied'], reason=attempt['result']['reason'],
+                candidate_failures=attempt['result'].get('candidate_failures', []))
+                for attempt in centering_attempts],
+            cache=dict(cache.stats))
+        return dict(selected, refinement=report)
+
+    def _checked_endpoints(self, path, layers, start, goal):
+        """Admit a distinct candidate; never inherit the optimizer's verdict."""
+        path, layers = np.asarray(path, dtype=float), np.asarray(layers)
+        if (path.ndim != 2 or path.shape[1] != 3 or len(path) < 2
+                or layers.shape != (len(path),) or not np.isfinite(path).all()
+                or not np.isfinite(layers).all() or not np.equal(layers, np.rint(layers)).all()):
+            raise TomogramError('invalid_native_path', 'Native route has malformed XYZ or slice identities')
+        # The search omits its start and uses grid centres. Exact editor
+        # endpoints and BOTH connecting edges are checked, not snapped away.
+        path = np.vstack([start['xyz'], path, goal['xyz']])
+        layers = np.r_[start['layer_id'], layers.astype(int), goal['layer_id']]
+        keep = np.r_[True, (np.linalg.norm(np.diff(path, axis=0), axis=1) > 1e-9) | (np.diff(layers) != 0)]
+        keep[-1] = True
+        path, layers = path[keep], layers[keep]
+        path[0], path[-1] = start['xyz'], goal['xyz']
+        layers[0], layers[-1] = start['layer_id'], goal['layer_id']
+        return path, layers, self.tomogram.validate_path(path, layers)
 
     def _plan_checked_astar(self,start,goal,started):
         from .source_identity_refinement import refine_source_identity

@@ -1,4 +1,4 @@
-"""Web Nav2 contracts only: fake CLI, no ROS, no systemd, no robot calls."""
+"""Retired Web Nav2 entry: fake CLI, no ROS, systemd or robot calls."""
 import json
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -39,52 +39,55 @@ class NavigationTests(unittest.TestCase):
         else: raise AssertionError(command)
         return SimpleNamespace(returncode=0,stdout=json.dumps(value),stderr='')
 
-    def start(self,**kwargs):
-        return self.runtime.start(StartNavigation(version_id=self.version['id'],show_rviz=False,**kwargs),self.version)
+    def existing_session(self, *, web_owned=False, live=False):
+        # An already-running historical process, not a new alternative task.
+        self.active=True; self.mode='live' if live else 'sim'; self.motion=live
+        if web_owned:
+            self.runtime.owner_path.write_text(json.dumps({'session_id':'c'*32}))
 
-    def test_start_is_simulation_by_default_and_duplicate_rejected(self):
-        self.start(); launch=next(c for c in self.calls if c[0]=='start')
-        self.assertEqual(launch,['start','--mode','sim','--web-owned','--headless'])
-        with self.assertRaises(HTTPException): self.start()
-        self.runtime.stop(); self.assertFalse(self.runtime.snapshot()['busy'])
+    def test_old_start_cannot_create_another_task_even_when_idle(self):
+        for mode in ('sim','live'):
+            for enabled in (False,True):
+                with self.assertRaises(HTTPException) as error:
+                    self.runtime.start(StartNavigation(version_id=self.version['id'],mode=mode,
+                                                       enable_motion=enabled),self.version)
+                self.assertEqual(error.exception.status_code,410)
+        self.assertEqual(self.calls,[])
+        self.assertFalse(self.runtime.owner_path.exists())
+        self.local.snapshot.assert_not_called()
 
-    def test_simulation_never_enables_motion(self):
-        with self.assertRaises(HTTPException): self.start(enable_motion=True)
-        self.assertFalse(any(c[0]=='start' for c in self.calls))
+    def test_old_arm_cannot_reactivate_existing_live_task(self):
+        self.existing_session(live=True)
+        with self.assertRaises(HTTPException) as error:
+            self.runtime.command(self.command('arm'))
+        self.assertEqual(error.exception.status_code,410)
+        self.assertEqual(self.calls,[])
 
-    def test_rviz_enabled_by_default(self):
-        self.runtime.start(StartNavigation(version_id=self.version['id']),self.version)
-        launch=next(c for c in self.calls if c[0]=='start')
-        self.assertNotIn('--headless',launch)
-
-    def test_live_requires_existing_same_map_localization_and_real_data(self):
-        for change in ({'phase':'stopped'},{'version_id':'grid-'+'b'*24},{'connection':{'active':True,'health':{'sdk_fresh':True,'lidar_fresh':True,'replay':True}}}):
-            original=self.local.snapshot.return_value.copy(); self.local.snapshot.return_value.update(change)
-            with self.assertRaises(HTTPException): self.start(mode='live',enable_motion=True)
-            self.local.snapshot.return_value=original
-        self.start(mode='live',enable_motion=True)
-        self.assertTrue(self.motion)
-        self.assertFalse(any('--operation' in c and c[c.index('--operation')+1]=='arm' for c in self.calls))
+    def test_old_status_and_stop_still_retire_existing_process(self):
+        self.existing_session()
+        self.assertEqual(self.runtime.snapshot()['phase'],'running')
+        self.runtime.stop()
+        self.assertFalse(self.runtime.snapshot()['busy'])
 
     def command(self,operation='disarm',**kwargs):
         return NavigationCommand(operation=operation,session_id='c'*32,version_id=self.version['id'],**kwargs)
 
     def test_stale_session_map_rejected_without_command(self):
-        self.start(); self.calls.clear()
+        self.existing_session(); self.calls.clear()
         for change in ({'session_id':'d'*32},{'version_id':'grid-'+'b'*24}):
             value=self.command().model_copy(update=change)
             with self.assertRaises(HTTPException): self.runtime.command(value)
         self.assertFalse(any(c[0]=='command' and c[c.index('--operation')+1]!='status' for c in self.calls))
 
     def test_safety_command_forwards_only_session_and_map(self):
-        self.start(); self.runtime.command(self.command())
+        self.existing_session(); self.runtime.command(self.command())
         args=self.calls[-1]
         self.assertEqual(args,['command','--operation','disarm','--session-id','c'*32,'--version-id',self.version['id']])
         with self.assertRaises(HTTPException): self.runtime.command(self.command('arm'))
 
     def test_close_stops_only_this_web_session(self):
         self.active=True; self.runtime.close(); self.assertTrue(self.active)
-        self.active=False; self.start(); self.runtime.close(); self.assertFalse(self.active)
+        self.existing_session(web_owned=True); self.runtime.close(); self.assertFalse(self.active)
 
     def test_api_csrf_busy_guard_and_payload_rejection(self):
         grid=Mock();grid.lock=threading.RLock();grid.job={'running':False};grid.item.return_value=self.version
@@ -93,7 +96,9 @@ class NavigationTests(unittest.TestCase):
             self.assertEqual(client.post('/api/navigation/stop',content='{}').status_code,415)
             self.assertEqual(client.post('/api/navigation/stop',json={},headers={'Origin':'https://evil.test'}).status_code,403)
             busy[0]=True
-            self.assertEqual(client.post('/api/navigation/start',json={'version_id':self.version['id']}).status_code,409)
+            self.assertEqual(client.post('/api/navigation/start',json={'version_id':self.version['id']}).status_code,410)
+            grid.item.assert_not_called()
+            self.assertEqual(self.calls,[])
             self.assertEqual(client.post('/api/navigation/command',json={'operation':'shell','session_id':'a','version_id':self.version['id']}).status_code,422)
             self.assertEqual(client.post('/api/navigation/start',json={'version_id':self.version['id'],'speed':2}).status_code,422)
             for operation in ('goal','cancel'):

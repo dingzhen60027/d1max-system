@@ -9,6 +9,10 @@ builtin_interfaces/Time source_stamp
 bool grant_ready
 bool control_owned
 bool general_low_speed_confirmed
+# Literal active locomotion mode. General flag above keeps its original meaning.
+string motion_mode
+bool motion_mode_confirmed
+bool mode_transition_active
 bool fault_latched
 string transport_mode
 string phase

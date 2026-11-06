@@ -73,3 +73,68 @@ TEST(ReferencePath, CubicSeedFollowsBentRouteRatherThanDirectShortcut) {
     EXPECT_LT((point-path.sample(s)).norm(),.08);
   }
 }
+
+namespace {
+void expectTwoExactAnchorsProduceUsableCubicSeed(const Vector3d &start,
+                                               const Vector3d &end) {
+  // This is the same seed/parameterization sequence used by PlannerManager
+  // after native A* returns a clear exact-reference edge. A two-anchor route
+  // must be resampled, never passed as two samples to the cubic fitter.
+  DiscreteReference path;
+  path.set({start, end});
+  ASSERT_EQ(path.points.size(), 2U);
+  const auto seed = scan_planner::sampleReferenceSeed(path, .3, .35, 0, 0, .2);
+  ASSERT_GE(seed.samples.size(), 7U);
+  ASSERT_TRUE(std::isfinite(seed.dt));
+  ASSERT_GT(seed.dt, 0.0);
+  ASSERT_TRUE(seed.samples.front().isApprox(start));
+  ASSERT_TRUE(seed.samples.back().isApprox(end));
+
+  Eigen::MatrixXd control;
+  const std::vector<Vector3d> derivatives(4, Vector3d::Zero());
+  scan_planner::UniformBspline::parameterizeToBspline(
+      seed.dt, seed.samples, derivatives, control);
+  ASSERT_TRUE(control.allFinite());
+  ASSERT_GE(control.cols(), 6);
+  scan_planner::UniformBspline curve(control, 3, seed.dt);
+  auto velocity = curve.getDerivative();
+  auto acceleration = velocity.getDerivative();
+  ASSERT_TRUE(std::isfinite(curve.getTimeSum()));
+  ASSERT_GT(curve.getTimeSum(), 0.0);
+  const Vector3d tangent = (end - start).normalized();
+  const double length = (end - start).norm();
+  const double endpoint_fit_tolerance = std::min(.01, .1 * length);
+  EXPECT_LT((curve.evaluateDeBoorT(0) - start).norm(), endpoint_fit_tolerance);
+  EXPECT_LT((curve.evaluateDeBoorT(curve.getTimeSum()) - end).norm(),
+            endpoint_fit_tolerance);
+  for (int i = 0; i <= 100; ++i) {
+    const double time = curve.getTimeSum() * i / 100.;
+    const Vector3d point = curve.evaluateDeBoorT(time);
+    const Vector3d speed = velocity.evaluateDeBoorT(time);
+    EXPECT_TRUE(point.allFinite());
+    EXPECT_TRUE(speed.allFinite());
+    EXPECT_TRUE(acceleration.evaluateDeBoorT(time).allFinite());
+    // The cubic seed may fit slightly beyond an endpoint, but must not invent
+    // the sideways voxel-centre detour removed from the A* representation.
+    const double progress = (point - start).dot(tangent);
+    EXPECT_LT(((point - start) - progress * tangent).norm(), 1e-8);
+    EXPECT_GE(progress, -endpoint_fit_tolerance);
+    EXPECT_LE(progress, length + endpoint_fit_tolerance);
+  }
+}
+}  // namespace
+
+TEST(ReferencePath, NativeTwoExactAnchorsResampleBeforeCubicFitting) {
+  expectTwoExactAnchorsProduceUsableCubicSeed(
+      {-.0988, 19.6841, -.1143}, {.0238, 20.2757, -.1475});
+}
+
+TEST(ReferencePath, ReversedNativeTwoExactAnchorsResampleBeforeCubicFitting) {
+  expectTwoExactAnchorsProduceUsableCubicSeed(
+      {.0238, 20.2757, -.1475}, {-.0988, 19.6841, -.1143});
+}
+
+TEST(ReferencePath, SubvoxelNativeTwoExactAnchorsResampleBeforeCubicFitting) {
+  expectTwoExactAnchorsProduceUsableCubicSeed(
+      {-.0988, 19.6841, -.1143}, {-.0988, 19.6921, -.1143});
+}

@@ -4,9 +4,19 @@
 #include <thread>
 #include <atomic>
 #include <condition_variable>
+#include <scan_planner_msgs/msg/bspline.hpp>
 #include "d1max_trajectory_tracker/tracker_core.hpp"
 #include "d1max_trajectory_tracker/execution_contract.hpp"
 using namespace d1max_trajectory_tracker;
+
+namespace d1max_trajectory_tracker {
+struct BoundedPreparationWorkerTestAccess {
+  template<class Request,class Result>
+  static bool completionReady(BoundedPreparationWorker<Request,Result>& worker) {
+    std::lock_guard<std::mutex> lock(worker.mutex_);return worker.completed_.has_value();
+  }
+};
+}
 
 namespace {
 ControlIdentity identity() {
@@ -54,9 +64,9 @@ Trajectory curve(std::int64_t id=1, double stamp=100.) {
   certify(t);
   return t;
 }
-void prepare(TrackerCore& core) {
+void prepare(TrackerCore& core,Odom initial=odom()) {
   ASSERT_TRUE(core.receiveTask(task(),100.,10.));
-  ASSERT_TRUE(core.receiveOdom(odom(),100.,10.));
+  ASSERT_TRUE(core.receiveOdom(initial,100.,10.));
   ASSERT_TRUE(core.receiveTrajectory(curve(),100.,10.));
 }
 }
@@ -143,6 +153,67 @@ TEST(TrackerJoinDiagnostic, FailedTrialPreservesOriginalFineNanosecondEvidenceAn
   const auto& d=core.joinDiagnostic();EXPECT_EQ(d.join_source_stamp_ns,99600000017LL);
   EXPECT_EQ(d.body_source_stamp_ns,100100000019LL);EXPECT_DOUBLE_EQ(d.curve_duration,4.);
   EXPECT_TRUE(core.hasInstalledGeometry());EXPECT_EQ(core.trajectoryId(),1);
+}
+TEST(TrackerLocalProvider, UsableStateIsNotReclassifiedByConsumerImuAge) {
+  const auto c=config();auto body=odom();body.source_stamp_ns=100000000000LL;
+  body.imu_stamp=99.9054;body.posterior_stamp=99.7943;body.extrapolation_sec=.0946;
+  // Exact observed shape: 25.9 ms delivery + 94.6 ms coast = 120.5 ms IMU age.
+  EXPECT_STREQ(sourceEvidenceFailure(body,100.0259,c),"body_imu_not_fresh");
+  body.provider_contract=body.provider_usable=true;
+  body.provider_valid_until_ns=100100000000LL;
+  body.provider_posterior_stamp_ns=99794300000LL;body.provider_imu_stamp_ns=99905400000LL;
+  EXPECT_EQ(sourceEvidenceFailure(body,100.0259,c),nullptr);
+  EXPECT_EQ(body.source_stamp_ns,100000000000LL);
+  EXPECT_EQ(body.provider_valid_until_ns,100100000000LL);
+  EXPECT_STREQ(sourceEvidenceFailure(body,100.1,c),"local_state_provider_expired");
+}
+TEST(TrackerLocalProvider, OriginalExpiryAndMalformedOrUnusableEvidenceFailClosed) {
+  auto good=odom();good.source_stamp_ns=100000000000LL;
+  good.provider_contract=good.provider_usable=true;good.provider_valid_until_ns=100080000017LL;
+  good.provider_posterior_stamp_ns=good.provider_imu_stamp_ns=good.source_stamp_ns;
+  const auto c=config();EXPECT_EQ(sourceEvidenceFailure(good,100.04,c),nullptr);
+  for(int variant=0;variant<8;++variant) {
+    auto bad=good;const char* why=nullptr;
+    if(variant==0){bad.provider_usable=false;why="local_state_provider_unusable";}
+    if(variant==1){bad.source_stamp_ns=0;why="local_state_source_invalid";}
+    if(variant==2){bad.provider_valid_until_ns=bad.source_stamp_ns;why="local_state_provider_deadline_invalid";}
+    if(variant==3){bad.provider_valid_until_ns=100100000001LL;why="local_state_provider_deadline_invalid";}
+    if(variant==4){bad.imu_stamp=100.01;why="local_state_provider_provenance_invalid";}
+    if(variant==5){bad.extrapolation_sec=std::numeric_limits<double>::quiet_NaN();why="local_state_provider_provenance_invalid";}
+    if(variant==6){bad.posterior_stamp=100.01;why="local_state_provider_provenance_invalid";}
+    if(variant==7){bad.imu_stamp=99.9;why="local_state_provider_provenance_invalid";}
+    EXPECT_STREQ(sourceEvidenceFailure(bad,100.04,c),why)<<variant;
+  }
+  EXPECT_STREQ(sourceEvidenceFailure(good,99.97,c),"local_state_source_in_future");
+  EXPECT_STREQ(sourceEvidenceFailure(good,100.080001,c),"local_state_provider_expired");
+}
+TEST(TrackerLocalProvider, RawEstimatorEvidenceMustStillBeValidAtOriginalSource) {
+  auto good=odom();good.source_stamp_ns=100000000000LL;
+  good.provider_contract=good.provider_usable=true;good.provider_valid_until_ns=100100000000LL;
+  good.provider_posterior_stamp_ns=good.provider_imu_stamp_ns=good.source_stamp_ns;
+  for(int variant=0;variant<3;++variant) {
+    auto bad=good;
+    if(variant==0){bad.posterior_stamp=99.599999999;bad.provider_posterior_stamp_ns=99599999999LL;}
+    if(variant==1){bad.imu_stamp=99.899999999;bad.provider_imu_stamp_ns=99899999999LL;bad.extrapolation_sec=.100000001;}
+    if(variant==2){bad.imu_stamp=99.9;bad.provider_imu_stamp_ns=99900000000LL;bad.extrapolation_sec=.100000001;}
+    EXPECT_STREQ(sourceEvidenceFailure(bad,100.0259,config()),"local_state_provider_source_evidence_invalid")<<variant;
+  }
+}
+TEST(TrackerLocalProvider, DuplicateCannotExtendLeaseAndExpiredStateKeepsInstalledGeometry) {
+  TrackerCore core(config());auto initial=odom();initial.imu_stamp=99.92;
+  initial.posterior_stamp=99.81;initial.extrapolation_sec=.08;prepare(core,initial);
+  auto body=odom(100.02,.005);
+  body.source_stamp_ns=100020000017LL;body.provider_contract=body.provider_usable=true;
+  body.provider_valid_until_ns=100120000017LL;
+  body.imu_stamp=99.9254;body.posterior_stamp=99.8143;body.extrapolation_sec=.0946;
+  body.provider_posterior_stamp_ns=99814300000LL;body.provider_imu_stamp_ns=99925400000LL;
+  ASSERT_TRUE(core.receiveOdom(body,100.0459,10.0459));core.refreshTaskLease(10.0459);
+  EXPECT_GT(core.step(100.0459,10.0459).forward,0.);
+  auto replay=body;replay.provider_valid_until_ns=100400000000LL;
+  EXPECT_FALSE(core.receiveOdom(replay,100.07,10.07));
+  EXPECT_EQ(core.odometry().provider_valid_until_ns,100120000017LL);
+  core.refreshTaskLease(10.13);EXPECT_EQ(core.step(100.13,10.13).forward,0.);
+  EXPECT_TRUE(core.holding());EXPECT_TRUE(core.hasInstalledGeometry());EXPECT_EQ(core.trajectoryId(),1);
 }
 TEST(TrackerV2, WrongEpochOdometryInvalidatesWholeTask) {
   TrackerCore core(config()); prepare(core);
@@ -459,9 +530,11 @@ wire::ExecutionPermit permitWire(const wire::ExecutionVersion& v=version()) {
   p.transport_mode="isolated_mock";p.frame_id="d1max_loc_odom";p.goal_position.x=2.;p.goal_position.z=.55;return p;
 }
 Config executionConfig(){auto c=config();c.require_support_reference=true;c.external_goal_completion=true;return c;}
-void stage(ExecutionContract& gate,Trajectory candidate=curve()) {
-  ASSERT_TRUE(gate.core().receiveOdom(odom(),100.,10.));gate.proposal(proposalWire(),100.);
-  gate.candidate(std::move(candidate));gate.support(supportWire());gate.validation(proofWire(),100.);
+void stage(ExecutionContract& gate,Trajectory candidate=curve(),Odom initial=odom(),
+    const std::string& mode="isolated_mock") {
+  ASSERT_TRUE(gate.core().receiveOdom(initial,100.,10.));auto p=proposalWire();p.transport_mode=mode;gate.proposal(p,100.);
+  gate.candidate(std::move(candidate));gate.support(supportWire());auto proof=proofWire();proof.transport_mode=mode;
+  gate.validation(proof,100.);
 }
 wire::ExecutionCommitAck initialWriterAck(const wire::ExecutionPermit& p) {
   wire::ExecutionCommitAck a;a.schema_version=1;a.sequence=1;a.applied=a.write_submitted=true;
@@ -470,16 +543,18 @@ wire::ExecutionCommitAck initialWriterAck(const wire::ExecutionPermit& p) {
   a.sdk_arm_generation=p.sdk_arm_generation;a.permit_sequence=p.sequence;a.transport_mode=p.transport_mode;
   a.applied_at=stamp(100.02);a.valid_until=p.valid_until;return a;
 }
-wire::ExecutionHandoffGrant stageWriterHandoff(ExecutionContract& gate,std::uint64_t generation=2) {
-  stage(gate);EXPECT_TRUE(gate.prepare(100.,10.)->accepted);auto incumbent=permitWire();
+wire::ExecutionHandoffGrant stageWriterHandoff(ExecutionContract& gate,std::uint64_t generation=2,
+    const std::string& mode="isolated_mock") {
+  stage(gate,curve(),odom(),mode);EXPECT_TRUE(gate.prepare(100.,10.)->accepted);auto incumbent=permitWire();
+  incumbent.transport_mode=mode;
   EXPECT_TRUE(gate.permit(incumbent,100.,10.));gate.step(100.02,10.02);
   EXPECT_TRUE(gate.commitAck(initialWriterAck(incumbent),100.02,10.02));
-  const auto v=version(generation);auto p=proposalWire(v);p.expected_version=incumbent.version;p.expected_trajectory_id=1;
+  const auto v=version(generation);auto p=proposalWire(v);p.transport_mode=mode;p.expected_version=incumbent.version;p.expected_trajectory_id=1;
   gate.proposal(p,100.02);auto t=curve(2);t.generation=generation;t.identity=d1max_trajectory_tracker::identity(v);gate.candidate(t);
-  gate.support(supportWire(v));auto proof=proofWire(v);proof.trajectory_id=2;proof.sequence=2;
+  gate.support(supportWire(v));auto proof=proofWire(v);proof.transport_mode=mode;proof.trajectory_id=2;proof.sequence=2;
   gate.validation(proof,100.02);EXPECT_TRUE(gate.prepare(100.02,10.02)->accepted);
   wire::ExecutionHandoffGrant g;g.schema_version=2;g.handoff_id="handoff";g.sequence=1;
-  g.expected_commit_sequence=1;g.incumbent=incumbent;g.candidate=permitWire(v);
+  g.expected_commit_sequence=1;g.incumbent=incumbent;g.candidate=permitWire(v);g.candidate.transport_mode=mode;
   g.candidate.sequence=2;g.candidate.trajectory_id=2;g.candidate.validation_sequence=2;g.candidate.geometry_committed=false;
   g.source_stamp=stamp(100.02);g.valid_until=g.transition_deadline=stamp(100.22);
   g.retain_incumbent_until=incumbent.valid_until;return g;
@@ -499,6 +574,48 @@ wire::ExecutionCommitAck preparedWriterAck(const wire::ExecutionHandoffGrant& g,
   a.measured_pose=x.measured_pose;a.measured_twist=x.measured_twist;a.applied_velocity=x.demand.velocity;
   a.curve_time=x.curve_time;a.applied=a.write_submitted=true;return a;
 }
+}
+TEST(TrackerLocalProvider, StateConsumptionLeaseDoesNotReplaceOriginalCommandPipelineOrInstallationFacts) {
+  ExecutionContract gate(executionConfig(),"isolated_mock",{},false,false,.2);
+  auto initial=odom();initial.imu_stamp=99.92;initial.posterior_stamp=99.81;initial.extrapolation_sec=.08;
+  stage(gate,curve(),initial);
+  ASSERT_TRUE(gate.prepare(100.,10.)->accepted);ASSERT_TRUE(gate.permit(permitWire(),100.,10.));
+  const auto installed=gate.geometryReceipt();ASSERT_TRUE(installed&&installed->installed);
+  auto body=odom(100.02,.005);body.source_stamp_ns=100020000017LL;
+  body.provider_contract=body.provider_usable=true;body.provider_valid_until_ns=100120000017LL;
+  body.imu_stamp=99.9254;body.posterior_stamp=99.8143;body.extrapolation_sec=.0946;
+  body.provider_posterior_stamp_ns=99814300000LL;body.provider_imu_stamp_ns=99925400000LL;
+  ASSERT_TRUE(gate.receiveOdom(body,100.0459,10.0459));
+  const auto demand=gate.step(100.0459,10.0459);
+  EXPECT_FALSE(demand.hold);EXPECT_GT(demand.velocity.linear.x,0.);
+  EXPECT_EQ(timeNs(demand.valid_until),timeNs(demand.source_stamp)+200000000LL);
+  EXPECT_EQ(timeNs(demand.body_source_stamp),body.source_stamp_ns);
+  EXPECT_EQ(gate.core().odometry().provider_valid_until_ns,100120000017LL);
+  const auto still_installed=gate.geometryReceipt();ASSERT_TRUE(still_installed&&still_installed->installed);
+  EXPECT_EQ(still_installed->installation_sequence,installed->installation_sequence);
+  EXPECT_EQ(still_installed->installed_at,installed->installed_at);
+  EXPECT_EQ(still_installed->validation_sequence,installed->validation_sequence);
+  const auto expired=gate.step(100.13,10.13);EXPECT_TRUE(expired.hold);
+  EXPECT_EQ(timeNs(expired.body_source_stamp),body.source_stamp_ns);
+  EXPECT_EQ(gate.core().odometry().provider_valid_until_ns,100120000017LL);
+  EXPECT_TRUE(gate.core().hasInstalledGeometry());EXPECT_EQ(gate.core().trajectoryId(),1);
+}
+TEST(TrackerLocalProvider, PreparedCommandUsesFixedTransactionBudgetButExpiredStateCannotProduceNewEntry) {
+  ExecutionContract gate(executionConfig(),"isolated_mock",{},true,false,.2);const auto grant=stageWriterHandoff(gate);
+  auto body=odom(100.04,.01);body.source_stamp_ns=100040000019LL;
+  body.provider_contract=body.provider_usable=true;body.provider_valid_until_ns=100140000019LL;
+  body.posterior_stamp=body.imu_stamp=100.04;
+  body.provider_posterior_stamp_ns=body.provider_imu_stamp_ns=body.source_stamp_ns;
+  ASSERT_TRUE(gate.receiveOdom(body,100.04,10.04));ASSERT_TRUE(gate.handoff(grant,100.04,10.04));
+  const auto prepared=gate.preparedStep(100.0659,10.0659);ASSERT_TRUE(prepared);
+  EXPECT_EQ(prepared->demand.valid_until,grant.transition_deadline);
+  EXPECT_EQ(prepared->entry_admission.valid_until,prepared->demand.valid_until);
+  EXPECT_EQ(timeNs(prepared->entry_source_stamp),body.source_stamp_ns);
+  EXPECT_EQ(timeNs(prepared->demand.body_source_stamp),body.source_stamp_ns);
+  EXPECT_EQ(grant.transition_deadline,stamp(100.22)); // no signed grant mutation
+  EXPECT_EQ(gate.core().odometry().provider_valid_until_ns,100140000019LL);
+  EXPECT_FALSE(gate.preparedStep(100.15,10.15));
+  EXPECT_EQ(gate.core().trajectoryId(),1);EXPECT_EQ(gate.writerCommitSequence(),1u);
 }
 TEST(TrackerGeometryReceipt, PreparationAndUnconnectedFreshBodyCannotClaimSoftwareInstallation) {
   ExecutionContract gate(executionConfig(),"isolated_mock",{},true);
@@ -531,6 +648,64 @@ TEST(TrackerEntryReobservation, FreshWholeProofUsesActualNewBoundaryNotAnExpired
   EXPECT_NEAR(gate.core().progressTime(),.5,.005);EXPECT_NEAR(gate.core().progressArc(),.125,.001);
   EXPECT_DOUBLE_EQ(original.join_source_stamp,100.);EXPECT_EQ(original.join_source_stamp_ns,100000000017LL);
   EXPECT_EQ(proof.valid_until,stamp(100.8)); // no original certificate lease was renewed
+}
+TEST(TrackerEntryReobservation, LiveTypedAdmissionDoesNotUseOldSolveClockAsTaskOwnership) {
+  ExecutionContract gate(executionConfig(),"isolated_mock");
+  auto original=curve(1,99.);original.join_source_stamp_ns=99000000017LL;
+  stage(gate,original);
+  const auto proof=proofWire();
+  const auto admission=gate.prepare(100.,10.);
+  ASSERT_TRUE(admission&&admission->accepted) << gate.lastPrepareReason();
+  ASSERT_TRUE(gate.permit(permitWire(),100.,10.)) << gate.lastPermitReject();
+  EXPECT_TRUE(gate.core().joinDiagnostic().entry_reobserved);
+  EXPECT_EQ(gate.core().joinDiagnostic().original_join_source_stamp_ns,99000000017LL);
+  EXPECT_DOUBLE_EQ(original.start_time,99.); // immutable solve source remains old
+  EXPECT_EQ(proof.valid_until,stamp(100.25));
+  const auto demand=gate.step(100.02,10.02);
+  EXPECT_FALSE(demand.hold);EXPECT_GT(demand.velocity.linear.x,0.);
+  EXPECT_FALSE(demand.safety_checked); // the original exact motion still needs SCAN's sweep
+}
+TEST(TrackerEntryReobservation, NewCurveIdentityAndActualEntryOrderRecertifiedReplacement) {
+  ExecutionContract gate(executionConfig(),"isolated_mock");stage(gate);
+  ASSERT_TRUE(gate.prepare(100.,10.)->accepted);
+  ASSERT_TRUE(gate.permit(permitWire(),100.,10.));
+  gate.step(100.02,10.02);
+  ASSERT_TRUE(gate.receiveOdom(odom(100.04,.01),100.04,10.04));
+  auto original=curve(2,99.9);original.join_source_stamp_ns=99900000017LL;
+  gate.candidate(original);
+  auto proof=proofWire();proof.sequence=2;proof.trajectory_id=2;
+  proof.source_stamp=proof.check_begin=proof.check_end=proof.body_source_stamp=
+    proof.front_ray_source_stamp=proof.rear_ray_source_stamp=stamp(100.04);
+  proof.valid_until=stamp(100.29);proof.valid_start_time=.04;proof.valid_start_arc_length=.01;
+  gate.validation(proof,100.04);
+  const auto admission=gate.prepare(100.04,10.04);
+  ASSERT_TRUE(admission&&admission->accepted) << gate.lastPrepareReason();
+  auto replacement=permitWire();replacement.sequence=2;replacement.trajectory_id=2;
+  replacement.validation_sequence=2;replacement.source_stamp=stamp(100.04);replacement.valid_until=stamp(100.24);
+  ASSERT_TRUE(gate.permit(replacement,100.04,10.04)) << gate.lastPermitReject();
+  EXPECT_EQ(gate.core().trajectoryId(),2);
+  EXPECT_NEAR(gate.core().progressTime(),.04,.005);
+  EXPECT_EQ(gate.core().joinDiagnostic().original_join_source_stamp_ns,99900000017LL);
+  EXPECT_DOUBLE_EQ(original.start_time,99.9);
+  const auto demand=gate.step(100.06,10.06);
+  EXPECT_FALSE(demand.hold);EXPECT_EQ(demand.trajectory_id,2);
+}
+TEST(TrackerEntryReobservation, OldSolveClockCannotOverrideTypedProofIdentityOrFutureClock) {
+  for(int variant=0;variant<4;++variant) {
+    ExecutionContract gate(executionConfig(),"isolated_mock");auto original=curve(1,99.);
+    if(variant==2)original.identity.task_id="retired-task";
+    if(variant==3)original.start_time=101.;
+    stage(gate,original);
+    double now=100.;
+    if(variant==0) {auto invalid=proofWire();invalid.sequence=2;invalid.valid=false;gate.validation(invalid,now);}
+    if(variant==1) {now=100.3;ASSERT_TRUE(gate.receiveOdom(odom(now),now,10.3));}
+    const auto admission=gate.prepare(now,now-90.);
+    EXPECT_FALSE(admission&&admission->accepted) << variant;
+    if(variant==0||variant==1) {ASSERT_TRUE(admission);EXPECT_EQ(admission->reason,"validation_not_fresh");}
+    if(variant==3) {ASSERT_TRUE(admission);EXPECT_EQ(admission->reason,"candidate:trajectory_start_in_future");}
+    EXPECT_FALSE(gate.permit(permitWire(),now,now-90.)) << variant;
+    EXPECT_FALSE(gate.core().hasInstalledGeometry());EXPECT_TRUE(gate.step(now+.02,now-89.98).hold);
+  }
 }
 TEST(TrackerEntryReobservation, CurrentMeasurementAndFiniteNativeDomainRemainStrict) {
   auto original=curve();original.join_source_stamp_ns=100000000017LL;
@@ -859,6 +1034,7 @@ TEST(TrackerWriterCAS, StationaryReentryRequiresOriginalSdkWitnessAndNewCurvePro
     e.applied_trajectory_id=1;e.zero_ack_at=stamp(99.4);e.mc_raw_stamp_ns=900;e.mc_clock_epoch="clock";
     e.time_basis="isolated_simulated_source_clock";e.source_stamp=stamp(100.04);e.received_stamp=stamp(100.04);
     e.capture_lower_bound=stamp(100.03);e.capture_upper_bound=stamp(100.04);e.valid_until=stamp(100.24);
+    e.mc_capture_delay_bound_sec=.01;
     e.stationary_samples=3;e.stationary_duration_sec=.64;e.nonzero_blocked=e.usable=true;
     if(variant==1)g.schema_version=1;
     if(variant==2)e.usable=false;
@@ -896,6 +1072,103 @@ TEST(TrackerWriterCAS, StationaryReentryRequiresOriginalSdkWitnessAndNewCurvePro
   }
 }
 
+namespace {
+wire::ExecutionHandoffGrant stageStationaryReentry(ExecutionContract& gate,const std::string& mode) {
+  auto g=stageWriterHandoff(gate,2,mode);g.transition_mode=wire::ExecutionHandoffGrant::STATIONARY_REENTRY;
+  auto body=odom(100.04);body.velocity_in_frame.setZero();body.planar_speed=0.;
+  EXPECT_TRUE(gate.core().receiveOdom(body,100.04,10.04));
+  auto invalid=proofWire();invalid.transport_mode=mode;invalid.sequence=3;invalid.valid=false;gate.validation(invalid,100.04);
+  auto holding=g.incumbent;holding.sequence=2;holding.allowed=false;holding.phase="holding";
+  EXPECT_TRUE(gate.permit(holding,100.04,10.04));
+  g.incumbent=holding;g.candidate.sequence=3;g.source_stamp=stamp(100.04);
+  g.valid_until=g.transition_deadline=stamp(100.24);g.retain_incumbent_until=g.source_stamp;
+  g.candidate.source_stamp=g.source_stamp;g.candidate.valid_until=g.valid_until;g.candidate.trajectory_id=3;
+  auto successor=curve(3,100.04);successor.generation=2;
+  successor.identity=d1max_trajectory_tracker::identity(g.candidate.version);
+  for(std::size_t i=0;i<successor.points.size();++i)successor.points[i]={std::max(0.,double(i)-2.)*.05,0.,.55};
+  for(std::size_t i=0;i<successor.knots.size();++i)successor.knots[i]=(double(i)-3.)*.5;
+  certify(successor);gate.candidate(successor);
+  auto proof=proofWire(g.candidate.version);proof.transport_mode=mode;proof.trajectory_id=3;proof.sequence=4;
+  proof.checked_to_time=proof.curve_duration=10.;gate.validation(proof,100.04);g.candidate.validation_sequence=4;
+  auto& e=g.stationary_evidence;e.schema_version=1;e.version=holding.version;e.execution_id=holding.execution_id;
+  e.control_epoch=holding.control_epoch;e.sdk_session=holding.sdk_session;e.sdk_arm_generation=holding.sdk_arm_generation;
+  e.transport_mode=mode;e.sequence=e.zero_write_sequence=e.writer_commit_sequence=1;e.applied_trajectory_id=1;
+  e.zero_ack_at=stamp(99.4);e.mc_raw_stamp_ns=900;e.mc_clock_epoch="clock";
+  e.time_basis=mode=="live"?"source_delta_host_anchor_approximate":"isolated_simulated_source_clock";
+  e.source_stamp=stamp(mode=="live"?100.10:100.04);e.received_stamp=stamp(100.04);
+  e.mc_capture_delay_bound_sec=.1;e.capture_lower_bound=stamp(99.94);e.capture_upper_bound=e.received_stamp;
+  e.valid_until=stamp(100.24);e.stationary_samples=3;e.stationary_duration_sec=.64;e.nonzero_blocked=e.usable=true;
+  return g;
+}
+}
+TEST(TrackerStationaryTime, LiveBoundedMappedLeadCanPrepareButCannotCommitWithoutWriterFact) {
+  ExecutionContract gate(executionConfig(),"live",std::string(64,'f'),true);
+  const auto g=stageStationaryReentry(gate,"live");const auto original=g.stationary_evidence;
+  ASSERT_EQ(timeNs(original.source_stamp)-timeNs(original.received_stamp),60000000LL);
+  ASSERT_TRUE(gate.handoff(g,100.04,10.04));
+  EXPECT_TRUE(gate.step(100.04,10.04).hold);EXPECT_EQ(gate.core().trajectoryId(),1);
+  const auto prepared=gate.preparedStep(100.06,10.06);ASSERT_TRUE(prepared);
+  EXPECT_EQ(prepared->demand.trajectory_id,3);EXPECT_EQ(g.stationary_evidence,original);
+  EXPECT_EQ(gate.writerCommitSequence(),1U);EXPECT_LE(timeNs(prepared->demand.valid_until),timeNs(original.valid_until));
+  const auto a=preparedWriterAck(g,*prepared);ASSERT_TRUE(gate.commitAck(a,100.06,10.06));
+  EXPECT_EQ(gate.core().trajectoryId(),3);EXPECT_EQ(gate.writerCommitSequence(),2U);
+}
+TEST(TrackerStationaryTime, ConservativeAnchorAcceptsMeasuredBoundAndPastMappingWithoutRenewal) {
+  for(const auto mapped_ns:{100140000000LL,100030000000LL,100040000000LL}) {
+    ExecutionContract gate(executionConfig(),"live",std::string(64,'f'),true);
+    auto g=stageStationaryReentry(gate,"live");g.stationary_evidence.source_stamp=stampNs(mapped_ns);
+    const auto original=g.stationary_evidence;
+    ASSERT_TRUE(gate.handoff(g,100.04,10.04))<<mapped_ns;
+    const auto prepared=gate.preparedStep(100.06,10.06);ASSERT_TRUE(prepared);
+    EXPECT_EQ(g.stationary_evidence,original);
+    EXPECT_LE(timeNs(prepared->demand.valid_until),timeNs(original.valid_until));
+    EXPECT_EQ(gate.core().trajectoryId(),1);EXPECT_EQ(gate.writerCommitSequence(),1U);
+  }
+}
+TEST(TrackerStationaryTime, BoundReceiptCaptureAndIdentityFailuresCannotEnterReentry) {
+  for(int variant=0;variant<25;++variant) {
+    SCOPED_TRACE(variant);ExecutionContract gate(executionConfig(),"live",std::string(64,'f'),true);
+    auto g=stageStationaryReentry(gate,"live");auto& e=g.stationary_evidence;
+    if(variant==0)e.source_stamp=stamp(100.140000001); // measured .1 s bound plus one ns
+    if(variant==1)e.mc_capture_delay_bound_sec=.250000001;
+    if(variant==2)e.mc_capture_delay_bound_sec=0.;
+    if(variant==3)e.mc_capture_delay_bound_sec=NAN;
+    if(variant==4)e.received_stamp=stamp(99.7);
+    if(variant==5)e.received_stamp=stamp(100.040000001);
+    if(variant==6)e.capture_lower_bound=e.zero_ack_at;
+    if(variant==7)e.capture_lower_bound=stamp(100.040000001);
+    if(variant==8)e.capture_upper_bound=stamp(100.039999999);
+    if(variant==9)e.capture_upper_bound=stamp(100.040000001);
+    if(variant==10)e.time_basis="unverified_clock";
+    if(variant==11)e.time_basis="isolated_simulated_source_clock";
+    if(variant==12)e.valid_until=stamp(100.290000001); // may not lease from future mapped source
+    if(variant==13){g.source_stamp=stamp(100.03);g.retain_incumbent_until=g.source_stamp;}
+    if(variant==14)e.version.task_id="old_task";
+    if(variant==15)e.sdk_session="old_sdk";
+    if(variant==16)++e.sdk_arm_generation;
+    if(variant==17)++e.writer_commit_sequence;
+    if(variant==18)++e.applied_trajectory_id;
+    if(variant==19)e.transport_mode="isolated_mock";
+    if(variant==20){e.source_stamp=stamp(99.7);e.capture_lower_bound=stamp(99.6);}
+    if(variant==21)e.source_stamp.nanosec=1000000000u;
+    if(variant==22)e.mc_capture_delay_bound_sec=-.1;
+    if(variant==23)e.zero_ack_at=e.capture_lower_bound;
+    if(variant==24)e.received_stamp.sec=-1;
+    EXPECT_FALSE(gate.handoff(g,100.04,10.04));EXPECT_FALSE(gate.preparedStep(100.04,10.04));
+    EXPECT_EQ(gate.core().trajectoryId(),1);EXPECT_EQ(gate.writerCommitSequence(),1U);
+  }
+}
+TEST(TrackerStationaryTime, ExactMockClockNeverBorrowsLiveFutureAllowance) {
+  for(int variant=0;variant<3;++variant) {
+    ExecutionContract gate(executionConfig(),"isolated_mock",std::string(64,'f'),true);
+    auto g=stageStationaryReentry(gate,"isolated_mock");
+    if(variant==1)g.stationary_evidence.source_stamp=stamp(100.040000001);
+    if(variant==2)g.stationary_evidence.time_basis="source_delta_host_anchor_approximate";
+    EXPECT_EQ(gate.handoff(g,100.04,10.04),variant==0)<<variant;
+    EXPECT_EQ(gate.core().trajectoryId(),1);EXPECT_EQ(gate.writerCommitSequence(),1U);
+  }
+}
+
 TEST(TrackerExecution, CandidatePreparationDoesNotActivateBeforeMatchingOwnerCommit) {
   ExecutionContract gate(executionConfig(),"isolated_mock");stage(gate);
   const auto ack=gate.prepare(100.,10.);ASSERT_TRUE(ack);ASSERT_TRUE(ack->accepted);
@@ -915,6 +1188,266 @@ TEST(TrackerExecution, GeometryOnlyCommitNeverProducesMotionAndCanLaterAuthorize
   EXPECT_TRUE(gate.core().active());EXPECT_DOUBLE_EQ(gate.step(100.02,10.02).velocity.linear.x,0.);
   p.allowed=true;p.phase="tracking";++p.sequence;ASSERT_TRUE(gate.permit(p,100.03,10.03));
   EXPECT_GT(gate.step(100.05,10.05).velocity.linear.x,0.);
+}
+TEST(TrackerHolonomicStartup, StationaryNativeEntryProducesDemandWithoutInventingMeasuredProgress) {
+  for(const std::string mode:{"live","isolated_mock"}) {
+    SCOPED_TRACE(mode);
+    auto settings=executionConfig();settings.motion_model="holonomic";
+    ExecutionContract gate(settings,mode,{},true);
+    auto trajectory=curve();
+    for(std::size_t i=0;i<trajectory.points.size();++i)
+      trajectory.points[i].x()=i<3?0.:.001*(i-2)*(i-2);
+    certify(trajectory);ASSERT_DOUBLE_EQ(trajectory.join_velocity.norm(),0.);
+    auto body=odom();body.planar_speed=0.;body.velocity_in_frame.setZero();
+    stage(gate,trajectory,body,mode);
+    const auto admission=gate.prepare(100.,10.);ASSERT_TRUE(admission&&admission->accepted);
+    auto permit=permitWire();permit.transport_mode=mode;permit.allowed=false;permit.phase="preview";
+    permit.sdk_session.clear();permit.sdk_arm_generation=0;
+    ASSERT_TRUE(gate.permit(permit,100.,10.));
+    EXPECT_TRUE(gate.step(100.01,10.01).hold); // Preview remains geometry only.
+    permit.allowed=true;permit.phase="tracking";permit.sdk_session="sdk";permit.sdk_arm_generation=1;
+    Eigen::Vector2d previous=Eigen::Vector2d::Zero();
+    for(int i=1;i<=40;++i) {
+      const double now=100.+.05*i;
+      body=odom(now);body.planar_speed=0.;body.velocity_in_frame.setZero();
+      ASSERT_TRUE(gate.receiveOdom(body,now,now-90.));
+      auto proof=proofWire();proof.transport_mode=mode;proof.sequence=i+1;
+      proof.source_stamp=proof.check_begin=proof.check_end=proof.body_source_stamp=
+        proof.front_ray_source_stamp=proof.rear_ray_source_stamp=stamp(now);
+      proof.valid_until=stamp(now+.25);gate.validation(proof,now);
+      permit.sequence=i+1;permit.validation_sequence=proof.sequence;
+      permit.source_stamp=stamp(now);permit.valid_until=stamp(now+.2);
+      ASSERT_TRUE(gate.permit(permit,now,now-90.));
+      const auto demand=gate.step(now,now-90.);
+      ASSERT_EQ(demand.reason,"tracking");EXPECT_FALSE(demand.hold);
+      const Eigen::Vector2d requested(demand.velocity.linear.x,demand.velocity.linear.y);
+      EXPECT_GT(requested.x(),0.);EXPECT_NEAR(requested.y(),0.,1e-12);
+      EXPECT_LE(requested.norm(),settings.kp_position*settings.min_lookahead_distance_m+1e-12);
+      EXPECT_LE((requested-previous).norm(),settings.max_acceleration*.05+1e-12);
+      EXPECT_FALSE(demand.safety_checked); // Native still owns the exact demand sweep.
+      EXPECT_EQ(demand.sdk_session,permit.sdk_session);EXPECT_EQ(demand.trajectory_id,1);
+      EXPECT_DOUBLE_EQ(gate.core().progressTime(),0.);
+      EXPECT_DOUBLE_EQ(gate.core().progressArc(),0.);
+      EXPECT_DOUBLE_EQ(gate.core().committedArc(),0.);
+      if(i==1) {
+        auto applied=initialWriterAck(permit);applied.applied_at=stamp(now);
+        ASSERT_TRUE(gate.commitAck(applied,now,now-90.));
+      }
+      EXPECT_EQ(gate.writerCommitSequence(),1U);previous=requested;
+    }
+  }
+}
+TEST(TrackerHolonomicStartup, SpatialBootstrapCannotBypassExpiredOrNewerInvalidNativeProof) {
+  for(int variant=0;variant<3;++variant) {
+    SCOPED_TRACE(variant);
+    auto settings=executionConfig();settings.motion_model="holonomic";
+    ExecutionContract gate(settings,"isolated_mock",{},true);auto trajectory=curve();
+    for(std::size_t i=0;i<trajectory.points.size();++i)
+      trajectory.points[i].x()=i<3?0.:.001*(i-2)*(i-2);
+    certify(trajectory);auto body=odom();body.planar_speed=0.;body.velocity_in_frame.setZero();
+    stage(gate,trajectory,body);ASSERT_TRUE(gate.prepare(100.,10.)->accepted);
+    auto permit=permitWire();
+    if(variant==0){permit.allowed=false;permit.phase="preview";}
+    ASSERT_TRUE(gate.permit(permit,100.,10.));
+    const double now=variant==1?100.3:100.05;
+    body=odom(now);body.planar_speed=0.;body.velocity_in_frame.setZero();
+    ASSERT_TRUE(gate.receiveOdom(body,now,now-90.));
+    if(variant==2) {
+      auto blocked=proofWire();blocked.sequence=2;blocked.valid=false;
+      blocked.source_stamp=blocked.check_begin=blocked.check_end=blocked.body_source_stamp=
+        blocked.front_ray_source_stamp=blocked.rear_ray_source_stamp=stamp(now);
+      blocked.valid_until=stamp(now+.25);gate.validation(blocked,now);
+      // A late positive predecessor must not replace the newer negative fact.
+      gate.validation(proofWire(),now);
+    }
+    const auto demand=gate.step(now,now-90.);
+    EXPECT_TRUE(demand.hold);EXPECT_DOUBLE_EQ(demand.velocity.linear.x,0.);
+    EXPECT_DOUBLE_EQ(demand.velocity.linear.y,0.);EXPECT_EQ(gate.core().trajectoryId(),1);
+    EXPECT_TRUE(gate.core().hasInstalledGeometry());EXPECT_DOUBLE_EQ(gate.core().progressArc(),0.);
+  }
+}
+TEST(TrackerHolonomicStartup, RejectedCandidateKeepsSafeStationaryEntryAndLimiterHistory) {
+  auto settings=executionConfig();settings.motion_model="holonomic";
+  ExecutionContract gate(settings,"isolated_mock",{},true);auto trajectory=curve();
+  for(std::size_t i=0;i<trajectory.points.size();++i)
+    trajectory.points[i].x()=i<3?0.:.001*(i-2)*(i-2);
+  certify(trajectory);auto body=odom();body.planar_speed=0.;body.velocity_in_frame.setZero();
+  stage(gate,trajectory,body);ASSERT_TRUE(gate.prepare(100.,10.)->accepted);
+  ASSERT_TRUE(gate.permit(permitWire(),100.,10.));const auto before=gate.step(100.05,10.05);
+  ASSERT_GT(before.velocity.linear.x,0.);
+  auto bad=trajectory;bad.id=2;for(auto& point:bad.points)point.z()+=.1;certify(bad);
+  gate.candidate(bad);auto proof=proofWire();proof.sequence=2;proof.trajectory_id=2;gate.validation(proof,100.05);
+  const auto admission=gate.prepare(100.05,10.05);ASSERT_TRUE(admission);EXPECT_FALSE(admission->accepted);
+  body=odom(100.1);body.planar_speed=0.;body.velocity_in_frame.setZero();
+  ASSERT_TRUE(gate.receiveOdom(body,100.1,10.1));const auto after=gate.step(100.1,10.1);
+  EXPECT_EQ(after.trajectory_id,1);EXPECT_EQ(after.reason,"tracking");EXPECT_FALSE(after.hold);
+  EXPECT_GE(after.velocity.linear.x,before.velocity.linear.x);
+  EXPECT_LE(after.velocity.linear.x-before.velocity.linear.x,settings.max_acceleration*.05+1e-12);
+  EXPECT_DOUBLE_EQ(gate.core().progressTime(),0.);EXPECT_EQ(gate.writerCommitSequence(),0U);
+}
+TEST(TrackerHolonomicStartup, AdmittedMidCurveStationaryBoundaryRestartsWithoutResettingProjection) {
+  auto settings=executionConfig();settings.motion_model="holonomic";
+  ExecutionContract gate(settings,"isolated_mock",{},true);auto trajectory=curve();
+  const double approach[]={-.015,0.,.015,.03,.045,.06,.0725,.08,.0825,.0825,.0825};
+  for(std::size_t i=0;i<trajectory.points.size();++i)
+    trajectory.points[i].x()=i<11?approach[i]:.0825+.001*(i-10)*(i-10);
+  certify(trajectory,100.,1.6);ASSERT_NEAR(trajectory.join_position.x(),.0825,1e-12);
+  ASSERT_DOUBLE_EQ(trajectory.join_velocity.norm(),0.);
+  auto body=odom(100.,.0825);body.planar_speed=0.;body.velocity_in_frame.setZero();
+  stage(gate,trajectory,body);
+  auto proof=proofWire();proof.sequence=2;proof.valid_start_time=trajectory.valid_start_time;
+  proof.valid_start_arc_length=trajectory.valid_start_arc_length;gate.validation(proof,100.);
+  const auto admission=gate.prepare(100.,10.);ASSERT_TRUE(admission&&admission->accepted)<<gate.lastPrepareReason();
+  auto permit=permitWire();permit.validation_sequence=2;ASSERT_TRUE(gate.permit(permit,100.,10.));
+  const auto command=gate.step(100.05,10.05);EXPECT_GT(command.velocity.linear.x,0.);
+  EXPECT_EQ(command.reason,"tracking");EXPECT_NEAR(gate.core().progressTime(),1.6,1e-12);
+  EXPECT_NEAR(gate.core().progressArc(),.0825,1e-6); // Neither restarted at 0 nor advanced by time.
+}
+TEST(TrackerWriterBootstrap, UnboundPreviewAcceptsFirstSdkBindingInSameOwnerEpoch) {
+  for(const std::string mode:{"live","isolated_mock"}) {
+    ExecutionContract gate(executionConfig(),mode,{},true);stage(gate,curve(),odom(),mode);
+    ASSERT_TRUE(gate.prepare(100.,10.)->accepted);
+    auto preview=permitWire();preview.transport_mode=mode;preview.allowed=false;preview.phase="preview";
+    preview.control_epoch=3;preview.sdk_session.clear();preview.sdk_arm_generation=0;preview.confirmation_id.clear();
+    ASSERT_TRUE(gate.permit(preview,100.,10.));
+    const auto before=gate.step(100.02,10.02);
+    EXPECT_EQ(before.reason,"geometry_only_no_motion_permission");EXPECT_TRUE(before.hold);
+    auto executing=preview;executing.sequence=2;executing.allowed=true;executing.phase="tracking";
+    executing.sdk_session="current_sdk";executing.sdk_arm_generation=3;executing.confirmation_id="confirmed_route";
+    executing.source_stamp=stamp(100.03);executing.valid_until=stamp(100.23);
+    ASSERT_TRUE(gate.permit(executing,100.03,10.03))<<mode;
+    const auto after=gate.step(100.05,10.05);
+    EXPECT_EQ(after.sdk_session,executing.sdk_session);EXPECT_EQ(after.sdk_arm_generation,3U);
+    EXPECT_EQ(after.execution_id,preview.execution_id);EXPECT_EQ(after.control_epoch,preview.control_epoch);
+    EXPECT_GT(after.velocity.linear.x,0.);EXPECT_FALSE(after.safety_checked);
+    EXPECT_EQ(gate.core().trajectoryId(),1);EXPECT_EQ(gate.writerCommitSequence(),0U);
+    auto applied=initialWriterAck(executing);applied.applied_at=stamp(100.05);
+    ASSERT_TRUE(gate.commitAck(applied,100.05,10.05));EXPECT_EQ(gate.writerCommitSequence(),1U);
+    ASSERT_TRUE(gate.receiveOdom(odom(100.07),100.07,10.07));
+    const auto continuing=gate.step(100.07,10.07);
+    EXPECT_GT(continuing.velocity.linear.x,0.);EXPECT_EQ(continuing.sdk_session,executing.sdk_session);
+    EXPECT_EQ(continuing.trajectory_id,1);EXPECT_EQ(gate.writerCommitSequence(),1U);
+  }
+}
+TEST(TrackerWriterBootstrap, EstablishedSdkBindingCannotBeReplacedBySameEpochOrLatePreview) {
+  for(int fault=0;fault<7;++fault) {
+    ExecutionContract gate(executionConfig(),"isolated_mock",{},true);stage(gate);
+    ASSERT_TRUE(gate.prepare(100.,10.)->accepted);auto executing=permitWire();
+    ASSERT_TRUE(gate.permit(executing,100.,10.));EXPECT_GT(gate.step(100.02,10.02).velocity.linear.x,0.);
+    auto late=executing;late.sequence=2;late.source_stamp=stamp(100.03);late.valid_until=stamp(100.23);
+    if(fault==0)late.sdk_session="other_sdk";
+    if(fault==1)++late.sdk_arm_generation;
+    if(fault==2)late.execution_id="other_exec";
+    if(fault==3){late.allowed=false;late.phase="preview";late.sdk_session.clear();late.sdk_arm_generation=0;}
+    if(fault==4){late.sdk_session.clear();late.sdk_arm_generation=0;}
+    if(fault==5){late.allowed=false;late.phase="arming";late.sdk_session="other_sdk";}
+    if(fault==6){late.allowed=false;late.phase="preview";late.sdk_session.clear();late.sdk_arm_generation=0;
+      late.execution_id.clear();late.control_epoch=0;late.confirmation_id.clear();}
+    EXPECT_FALSE(gate.permit(late,100.03,10.03))<<fault;
+    const auto retained=gate.step(100.04,10.04);
+    EXPECT_EQ(retained.sdk_session,executing.sdk_session);EXPECT_EQ(retained.sdk_arm_generation,executing.sdk_arm_generation);
+    EXPECT_EQ(retained.execution_id,executing.execution_id);EXPECT_EQ(retained.control_epoch,executing.control_epoch);
+    EXPECT_EQ(gate.core().trajectoryId(),1);EXPECT_EQ(gate.writerCommitSequence(),0U);
+  }
+}
+TEST(TrackerWriterBootstrap, FirstBindingStillRequiresMatchingOwnerAndCompleteAuthority) {
+  for(int fault=0;fault<10;++fault) {
+    ExecutionContract gate(executionConfig(),"isolated_mock",{},true);stage(gate);
+    ASSERT_TRUE(gate.prepare(100.,10.)->accepted);auto preview=permitWire();
+    preview.allowed=false;preview.phase="preview";preview.sdk_session.clear();preview.sdk_arm_generation=0;
+    ASSERT_TRUE(gate.permit(preview,100.,10.));
+    auto executing=permitWire();executing.sequence=2;executing.source_stamp=stamp(100.03);executing.valid_until=stamp(100.23);
+    if(fault==0)executing.execution_id="other_exec";
+    if(fault==1)++executing.control_epoch;
+    if(fault==2)executing.sdk_session.clear();
+    if(fault==3)executing.sdk_arm_generation=0;
+    if(fault==4)executing.confirmation_id.clear();
+    if(fault==5)executing.version.task_id="other_task";
+    if(fault==6)executing.valid_until=stamp(100.02);
+    if(fault==7)executing.version.anchor_revision=2;
+    if(fault==8)executing.trajectory_id=2;
+    if(fault==9)executing.version.route_hash=std::string(64,'b');
+    EXPECT_FALSE(gate.permit(executing,100.03,10.03))<<fault;
+    const auto retained=gate.step(100.04,10.04);
+    EXPECT_TRUE(retained.hold);EXPECT_TRUE(retained.sdk_session.empty());EXPECT_EQ(retained.sdk_arm_generation,0U);
+    EXPECT_EQ(gate.core().trajectoryId(),1);EXPECT_EQ(gate.writerCommitSequence(),0U);
+  }
+}
+TEST(TrackerWriterBootstrap, ReincarnationMustStageFreshDisallowedOwnerBeforeFirstBinding) {
+  ExecutionContract gate(executionConfig(),"isolated_mock",{},true);stage(gate);
+  ASSERT_TRUE(gate.prepare(100.,10.)->accepted);auto old=permitWire();
+  ASSERT_TRUE(gate.permit(old,100.,10.));gate.step(100.02,10.02);
+  ASSERT_TRUE(gate.commitAck(initialWriterAck(old),100.02,10.02));EXPECT_EQ(gate.writerCommitSequence(),1U);
+  auto arming=old;arming.sequence=2;++arming.control_epoch;arming.allowed=false;arming.phase="arming";
+  arming.sdk_session.clear();arming.sdk_arm_generation=0;arming.source_stamp=stamp(100.03);arming.valid_until=stamp(100.23);
+  ASSERT_TRUE(gate.permit(arming,100.03,10.03));EXPECT_EQ(gate.writerCommitSequence(),0U);
+  EXPECT_TRUE(gate.step(100.04,10.04).hold);
+  auto executing=arming;executing.sequence=3;executing.allowed=true;executing.phase="tracking";
+  executing.sdk_session="new_sdk";executing.sdk_arm_generation=2;
+  ASSERT_TRUE(gate.permit(executing,100.05,10.05));
+  EXPECT_GT(gate.step(100.06,10.06).velocity.linear.x,0.);
+  old.sequence=4;old.source_stamp=stamp(100.07);old.valid_until=stamp(100.27);
+  EXPECT_FALSE(gate.permit(old,100.07,10.07));
+  EXPECT_EQ(gate.step(100.08,10.08).sdk_session,"new_sdk");
+}
+TEST(TrackerWriterBootstrap, NormalGeometryAdvanceDuringGrantDoesNotBecomeNewTaskOrEpoch) {
+  ExecutionContract gate(executionConfig(),"isolated_mock",{},true);stage(gate);
+  ASSERT_TRUE(gate.prepare(100.,10.)->accepted);auto preview=permitWire();
+  preview.allowed=false;preview.phase="preview";preview.sdk_session.clear();preview.sdk_arm_generation=0;
+  ASSERT_TRUE(gate.permit(preview,100.,10.));
+  const auto next_version=version(2);auto proposal=proposalWire(next_version);gate.proposal(proposal,100.02);
+  auto next_curve=curve(2);next_curve.generation=2;next_curve.identity=identity(next_version);
+  gate.candidate(next_curve);gate.support(supportWire(next_version));auto proof=proofWire(next_version);
+  proof.trajectory_id=2;proof.sequence=2;gate.validation(proof,100.02);ASSERT_TRUE(gate.prepare(100.02,10.02)->accepted);
+  auto next=preview;next.sequence=2;next.version=next_version;next.trajectory_id=2;next.validation_sequence=2;
+  ASSERT_TRUE(gate.permit(next,100.02,10.02));EXPECT_EQ(gate.core().trajectoryId(),2);
+  // An arming lease may retain the pre-grant version. It has no authority to
+  // move or replace geometry, and must not turn the same task into a new one.
+  auto arming=preview;arming.sequence=3;arming.geometry_committed=false;arming.trajectory_id=0;arming.phase="arming";
+  ASSERT_TRUE(gate.permit(arming,100.03,10.03));EXPECT_TRUE(gate.step(100.03,10.03).hold);
+  next.sequence=4;next.allowed=true;next.phase="tracking";
+  next.sdk_session="current_sdk";next.sdk_arm_generation=1;
+  ASSERT_TRUE(gate.permit(next,100.04,10.04));
+  EXPECT_EQ(gate.step(100.05,10.05).sdk_session,"current_sdk");
+  EXPECT_GT(gate.step(100.06,10.06).velocity.linear.x,0.);
+  EXPECT_EQ(gate.core().trajectoryId(),2);EXPECT_EQ(gate.core().generation(),2U);
+}
+TEST(TrackerWriterBootstrap, HigherDisallowedCompleteGrantCanRetireUnboundOwnerWithoutEmptyIntermediate) {
+  for(const std::string phase:{"arming","holding"}) {
+    ExecutionContract gate(executionConfig(),"isolated_mock",{},true);stage(gate);
+    ASSERT_TRUE(gate.prepare(100.,10.)->accepted);auto preview=permitWire();
+    preview.allowed=false;preview.phase="preview";preview.sdk_session.clear();preview.sdk_arm_generation=0;
+    ASSERT_TRUE(gate.permit(preview,100.,10.));
+    auto arming=preview;arming.sequence=2;++arming.control_epoch;arming.execution_id="next_exec";arming.phase=phase;
+    arming.sdk_session="current_sdk";arming.sdk_arm_generation=2;
+    ASSERT_TRUE(gate.permit(arming,100.03,10.03));EXPECT_TRUE(gate.step(100.04,10.04).hold);
+    auto executing=arming;executing.sequence=3;executing.allowed=true;executing.phase="tracking";
+    ASSERT_TRUE(gate.permit(executing,100.05,10.05));
+    const auto demand=gate.step(100.06,10.06);
+    EXPECT_EQ(demand.execution_id,"next_exec");EXPECT_EQ(demand.sdk_session,"current_sdk");
+    EXPECT_GT(demand.velocity.linear.x,0.);EXPECT_EQ(gate.writerCommitSequence(),0U);
+    preview.sequence=4;preview.source_stamp=stamp(100.07);preview.valid_until=stamp(100.27);
+    EXPECT_FALSE(gate.permit(preview,100.07,10.07));
+  }
+}
+TEST(TrackerWriterBootstrap, UnboundOwnerCannotBeOverwrittenByForeignOrAllowedEpoch) {
+  for(int fault=0;fault<6;++fault) {
+    ExecutionContract gate(executionConfig(),"isolated_mock",{},true);stage(gate);
+    ASSERT_TRUE(gate.prepare(100.,10.)->accepted);auto preview=permitWire();
+    preview.allowed=false;preview.phase="preview";preview.sdk_session.clear();preview.sdk_arm_generation=0;
+    ASSERT_TRUE(gate.permit(preview,100.,10.));
+    auto wrong=preview;wrong.sequence=2;
+    if(fault==0)wrong.execution_id="other_exec";
+    if(fault==1){++wrong.control_epoch;wrong.phase="preview";}
+    if(fault==2){++wrong.control_epoch;wrong.allowed=true;wrong.sdk_session="sdk";wrong.sdk_arm_generation=2;wrong.phase="tracking";}
+    if(fault==3){wrong.sdk_session="sdk";}
+    if(fault==4){wrong.sdk_arm_generation=2;}
+    if(fault==5){wrong.execution_id.clear();wrong.control_epoch=0;wrong.confirmation_id.clear();}
+    EXPECT_FALSE(gate.permit(wrong,100.03,10.03))<<fault;
+    auto executing=permitWire();executing.sequence=3;
+    ASSERT_TRUE(gate.permit(executing,100.04,10.04))<<fault;
+    EXPECT_GT(gate.step(100.05,10.05).velocity.linear.x,0.);
+  }
 }
 TEST(TrackerExecution, ArmingHeartbeatDoesNotEraseCommittedGeometryOrNeedOldAdmission) {
   ExecutionContract gate(executionConfig(),"isolated_mock");stage(gate);
@@ -995,7 +1528,7 @@ TEST(TrackerExecution, NativeUnknownExpiredProofWrongOwnerAndMockLeakCannotCommi
   for(int variant=0;variant<6;++variant) {
     ExecutionContract gate(executionConfig(),"isolated_mock");stage(gate);auto proof=proofWire();
     if(variant==0)proof.valid=false;
-    if(variant==1)proof.front_ray_source_stamp=stamp(99.);
+    if(variant==1)proof.valid_until=stamp(99.);
     if(variant==2)proof.collision_policy="official_inflated_double_cylinder";
     proof.sequence=2;gate.validation(proof,100.);
     auto ack=gate.prepare(100.,10.);
@@ -1006,6 +1539,18 @@ TEST(TrackerExecution, NativeUnknownExpiredProofWrongOwnerAndMockLeakCannotCommi
     if(variant==5)p.validation_sequence=3;
     EXPECT_FALSE(gate.permit(p,100.,10.));EXPECT_FALSE(gate.core().active());
   }
+}
+TEST(TrackerExecution, ScanDeadlineOwnsPerceptionFreshnessWithoutRenewingEvidence) {
+  ExecutionContract gate(executionConfig(),"isolated_mock");stage(gate);
+  auto proof=proofWire();proof.sequence=2;
+  proof.body_source_stamp=proof.front_ray_source_stamp=proof.rear_ray_source_stamp=stamp(99.);
+  proof.valid_until=stamp(100.05);gate.validation(proof,100.);
+  ASSERT_TRUE(gate.prepare(100.,10.)->accepted);
+  auto permit=permitWire();permit.validation_sequence=2;
+  ASSERT_TRUE(gate.permit(permit,100.,10.));
+  EXPECT_GT(gate.step(100.02,10.02).velocity.linear.x,0.);
+  ASSERT_TRUE(gate.core().receiveOdom(odom(100.06),100.06,10.06));
+  EXPECT_TRUE(gate.step(100.06,10.06).hold); // Original SCAN deadline, not metadata rechecked here.
 }
 TEST(TrackerExecution, FreshNextProofDoesNotRevokeStillFreshLeasedPredecessor) {
   ExecutionContract gate(executionConfig(),"isolated_mock");stage(gate);ASSERT_TRUE(gate.prepare(100.,10.)->accepted);
@@ -1089,7 +1634,7 @@ TEST(TrackerExecution, MissingSupportAndStairSemanticsNeverBecomeFlatFloorByDefa
   for(int variant=0;variant<5;++variant) {
     ExecutionContract gate(executionConfig(),"isolated_mock");stage(gate);auto s=supportWire();
     if(variant==0)s.verified=false;
-    if(variant==1)s.floor_id="floor2";
+    if(variant==1)s.floor_id="floor3";
     if(variant==2)s.segment_kind="stairs";
     if(variant==3)s.required_mode="stair";
     if(variant==4)s.support_ground_xyz[2].z=2.;
@@ -1216,7 +1761,11 @@ TEST(TrackerV2, SupportRelativeHeightAllowsVerifiedCorridorButNotCrossFloorSuppo
   support.identity=new_t.identity;support.generation=2;
   EXPECT_TRUE(core.admitRevision(new_t,next,support,100.,10.,false));EXPECT_EQ(core.generation(),1);
   EXPECT_TRUE(core.admitRevision(new_t,next,support,100.,10.,true));EXPECT_EQ(core.generation(),2);
-  support.floor_id="floor2";next.id=3;EXPECT_FALSE(core.admitRevision(new_t,next,support,100.,10.,true));
+  // A known floor label alone is not wrong-floor geometry. Keep the measured
+  // body/candidate in the lower corridor and provide actual upper-floor Z.
+  support.floor_id="floor2";for(auto& p:support.ground)p.z()+=3.;next.id=3;
+  EXPECT_FALSE(core.admitRevision(new_t,next,support,100.,10.,true));
+  EXPECT_EQ(core.trajectoryId(),2);EXPECT_EQ(core.generation(),2);
 }
 
 TEST(TrackerSpatialBudget, FlatSlopeAndReversedOrRotatedTravelUseTheSameSpatialLimit) {
@@ -1392,6 +1941,13 @@ TEST(TrackerExecution, OnlyOwnExactFreshBlockedForwardTurnCanRequestDifferentMan
   const auto no_evidence=gate.step(100.30,10.30);
   EXPECT_TRUE(no_evidence.hold);EXPECT_FALSE(no_evidence.safety_checked);
 }
+TEST(TrackerExecution, ScanOccupiedVerdictIsNotDiscardedByAnotherSensorAgePolicy) {
+  ExecutionContract gate(executionConfig(),"isolated_mock",std::string(64,'f'));
+  const auto demand=ownTurningDemand(gate);auto feedback=occupiedFor(demand);
+  feedback.body_source_stamp=feedback.front_ray_source_stamp=feedback.rear_ray_source_stamp=stamp(99.);
+  ASSERT_TRUE(gate.motionValidation(feedback,100.04));
+  EXPECT_STREQ(gate.core().maneuverPhase(),"decelerating_for_turn");
+}
 
 TEST(TrackerExecution, OwnExactFreshStraightOccupiedReachesNativeDifferentEntryFeedback) {
   ExecutionContract gate(executionConfig(),"isolated_mock",std::string(64,'f'));
@@ -1451,8 +2007,8 @@ TEST(TrackerExecution, UnknownStaleForeignOrMutatedSweepCannotRequestTurn) {
       case 14:feedback.demand_source_stamp.nanosec++;break;
       case 15:feedback.demand_body_source_stamp.nanosec++;break;
       case 16:feedback.demand_valid_until.nanosec++;break;
-      case 17:feedback.front_ray_source_stamp=stamp(99.);break;
-      case 18:feedback.body_source_stamp=stamp(99.);break;
+      case 17:feedback.check_end=stamp(99.);break;
+      case 18:feedback.check_begin=stamp(100.032);break;
       case 19:feedback.transport_mode="live";break;
       case 20:feedback.trajectory_validation_sequence++;break;
       case 21:feedback.valid_until=stamp(100.035);break;
@@ -1565,6 +2121,35 @@ TEST(TrackerPreparationWorker, LatestPendingIsBoundedAndOldCompletionCannotWin) 
   for(int i=0;i<1000&&!out;++i) {out=worker.take();if(!out)std::this_thread::sleep_for(std::chrono::milliseconds(1));}
   ASSERT_TRUE(out&&out->result);EXPECT_EQ(out->token,latest);EXPECT_EQ(*out->result,3);
   {std::lock_guard<std::mutex> lock(mutex);EXPECT_EQ(built,(std::vector<int>{1,3}));}
+}
+
+TEST(TrackerPreparationWorker, ReservedOlderConsumerCannotStealLatestCompletedPreparation) {
+  BoundedPreparationWorker<int,int> worker([](const int& value,const auto&){return value;});
+  const auto original=worker.submit(2);
+  const auto latest=worker.submit(3);
+  for(int i=0;i<1000&&!BoundedPreparationWorkerTestAccess::completionReady(worker);++i)
+    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+  ASSERT_TRUE(BoundedPreparationWorkerTestAccess::completionReady(worker));
+  for(int i=0;i<50;++i)EXPECT_FALSE(worker.take(original));
+  const auto done=worker.take(latest);ASSERT_TRUE(done&&done->result);
+  EXPECT_EQ(done->token,latest);EXPECT_EQ(done->request,3);EXPECT_EQ(*done->result,3);
+  EXPECT_FALSE(worker.take(latest)); // Exactly one result, not a second queue.
+}
+
+TEST(TrackerPreparationWorker, TokenMatchedReadStillHonorsGlobalInvalidationAndLatestOnlySubmission) {
+  BoundedPreparationWorker<int,int> worker([](const int& value,const auto&){return value;});
+  const auto old=worker.submit(1);
+  for(int i=0;i<1000&&!BoundedPreparationWorkerTestAccess::completionReady(worker);++i)
+    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+  ASSERT_TRUE(BoundedPreparationWorkerTestAccess::completionReady(worker));
+  worker.invalidate();EXPECT_FALSE(worker.take(old));
+  const auto latest=worker.submit(2);
+  for(int i=0;i<1000&&!BoundedPreparationWorkerTestAccess::completionReady(worker);++i)
+    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+  ASSERT_TRUE(BoundedPreparationWorkerTestAccess::completionReady(worker));
+  EXPECT_FALSE(worker.take(old));
+  const auto done=worker.take(latest);ASSERT_TRUE(done&&done->result);
+  EXPECT_EQ(done->request,2);EXPECT_EQ(*done->result,2);
 }
 
 TEST(TrackerPreparationWorker, CancelNeverQueuesBehindBuildAndRetiredResultCannotReturn) {
@@ -1698,4 +2283,742 @@ TEST(TrackerExecution, FailedCommitStillFollowsOwnerLeaseForSuccessorProposal) {
   auto f=curve(4);f.generation=3;gate.candidate(f);gate.support(supportWire(version(3)));
   auto fv=proofWire(version(3));fv.proposal_id="proposal3";fv.trajectory_id=4;gate.validation(fv,100.05);
   EXPECT_FALSE(gate.prepare(100.05,10.05));
+}
+
+namespace {
+Config holonomicExecutionConfig() {
+  auto c=executionConfig();c.motion_model="holonomic";c.holonomic_yaw_policy="hold_heading";return c;
+}
+Trajectory holonomicCurve(double direction,std::int64_t id=1,std::uint64_t generation=1) {
+  auto t=curve(id);t.generation=generation;t.identity=d1max_trajectory_tracker::identity(version(generation));
+  const Eigen::Rotation2Dd rotation(direction);
+  for(auto& p:t.points)p.head<2>()=rotation*p.head<2>();
+  t.frozen_yaw=0.;certify(t);return t;
+}
+Odom holonomicBody(double direction,double now=100.) {
+  auto body=odom(now);body.velocity_in_frame={.25*std::cos(direction),.25*std::sin(direction),0.};return body;
+}
+wire::SupportReference holonomicSupport(double direction,const wire::ExecutionVersion& v=version()) {
+  auto support=supportWire(v);
+  for(auto& p:support.support_ground_xyz) {const double x=p.x;p.x=x*std::cos(direction);p.y=x*std::sin(direction);}
+  return support;
+}
+wire::ExecutionPermit holonomicPermit(double direction,const wire::ExecutionVersion& v=version()) {
+  auto p=permitWire(v);p.goal_position.x=2.*std::cos(direction);p.goal_position.y=2.*std::sin(direction);return p;
+}
+void stageHolonomic(ExecutionContract& gate,double direction,Trajectory candidate) {
+  ASSERT_TRUE(gate.core().receiveOdom(holonomicBody(direction),100.,10.));
+  auto proposal=proposalWire();proposal.goal_position=holonomicPermit(direction).goal_position;
+  gate.proposal(proposal,100.);gate.candidate(std::move(candidate));
+  gate.support(holonomicSupport(direction));gate.validation(proofWire(),100.);
+}
+wire::ExecutionHandoffGrant holonomicHandoff(ExecutionContract& gate,double direction,double frozen_yaw=0.) {
+  auto first=holonomicCurve(direction);first.frozen_yaw=frozen_yaw;
+  stageHolonomic(gate,direction,first);
+  EXPECT_TRUE(gate.prepare(100.,10.)->accepted);const auto incumbent=holonomicPermit(direction);
+  EXPECT_TRUE(gate.permit(incumbent,100.,10.));gate.step(100.02,10.02);
+  EXPECT_TRUE(gate.commitAck(initialWriterAck(incumbent),100.02,10.02));
+  const auto v=version(2);auto proposal=proposalWire(v);proposal.expected_version=incumbent.version;
+  proposal.expected_trajectory_id=1;proposal.goal_position=incumbent.goal_position;gate.proposal(proposal,100.02);
+  auto second=holonomicCurve(direction,2,2);second.frozen_yaw=frozen_yaw;
+  gate.candidate(second);gate.support(holonomicSupport(direction,v));
+  auto proof=proofWire(v);proof.trajectory_id=2;proof.sequence=2;gate.validation(proof,100.02);
+  EXPECT_TRUE(gate.prepare(100.02,10.02)->accepted);
+  wire::ExecutionHandoffGrant g;g.schema_version=2;g.handoff_id="holonomic-handoff";g.sequence=1;
+  g.expected_commit_sequence=1;g.incumbent=incumbent;g.candidate=holonomicPermit(direction,v);
+  g.candidate.sequence=2;g.candidate.trajectory_id=2;g.candidate.validation_sequence=2;g.candidate.geometry_committed=false;
+  g.source_stamp=stamp(100.02);g.valid_until=g.transition_deadline=stamp(100.22);
+  g.retain_incumbent_until=incumbent.valid_until;return g;
+}
+}
+
+TEST(TrackerHolonomicExecution, PureLateralDemandIsNotHoldAndProofLossZerosAllAxes) {
+  const double direction=1.5707963267948966;
+  ExecutionContract gate(holonomicExecutionConfig(),"isolated_mock",std::string(64,'f'));
+  stageHolonomic(gate,direction,holonomicCurve(direction));
+  auto admission=gate.prepare(100.,10.);ASSERT_TRUE(admission&&admission->accepted)<<gate.lastPrepareReason();
+  ASSERT_TRUE(gate.permit(holonomicPermit(direction),100.,10.));
+  const auto demand=gate.step(100.02,10.02);
+  EXPECT_FALSE(demand.hold);EXPECT_GT(demand.velocity.linear.y,0.);
+  EXPECT_NEAR(demand.velocity.linear.x,0.,1e-12);EXPECT_EQ(demand.velocity.angular.z,0.);
+  EXPECT_FALSE(demand.safety_checked); // Demand is not a native sweep certificate.
+  auto invalid=proofWire();invalid.sequence=2;invalid.valid=false;gate.validation(invalid,100.03);
+  const auto hold=gate.step(100.04,10.04);
+  EXPECT_TRUE(hold.hold);EXPECT_EQ(hold.velocity.linear.x,0.);EXPECT_EQ(hold.velocity.linear.y,0.);
+  EXPECT_EQ(hold.velocity.angular.z,0.);
+}
+
+TEST(TrackerHolonomicExecution, ReverseDemandAndPureSidewaysOccupiedFeedbackUseExactNativeSweep) {
+  for(double direction:{1.5707963267948966,3.141592653589793}) {
+    SCOPED_TRACE(direction);
+    ExecutionContract gate(holonomicExecutionConfig(),"isolated_mock",std::string(64,'f'));
+    stageHolonomic(gate,direction,holonomicCurve(direction));
+    ASSERT_TRUE(gate.prepare(100.,10.)->accepted);ASSERT_TRUE(gate.permit(holonomicPermit(direction),100.,10.));
+    const auto demand=gate.step(100.02,10.02);ASSERT_FALSE(demand.hold);
+    if(direction>3.) {EXPECT_LT(demand.velocity.linear.x,0.);} else {EXPECT_GT(demand.velocity.linear.y,0.);}
+    auto occupied=occupiedFor(demand),mutated=occupied;mutated.velocity.linear.y+=.001;
+    EXPECT_FALSE(gate.motionValidation(mutated,100.04));
+    ASSERT_TRUE(gate.motionValidation(occupied,100.04));
+    EXPECT_STREQ(gate.core().maneuverPhase(),"waiting_executable_entry");
+    const auto forwarded=gate.takeBlockedEntry();ASSERT_TRUE(forwarded);EXPECT_EQ(*forwarded,occupied);
+    const auto hold=gate.step(100.04,10.04);EXPECT_TRUE(hold.hold);
+    EXPECT_EQ(hold.velocity.linear.x,0.);EXPECT_EQ(hold.velocity.linear.y,0.);EXPECT_EQ(hold.velocity.angular.z,0.);
+    EXPECT_TRUE(gate.core().active());EXPECT_EQ(gate.core().trajectoryId(),1);
+  }
+}
+
+TEST(TrackerHolonomicExecution, PreparedDemandAndWriterAckPreserveExactLateralHistory) {
+  const double direction=1.5707963267948966;
+  ExecutionContract gate(holonomicExecutionConfig(),"isolated_mock",std::string(64,'f'),true);
+  const auto grant=holonomicHandoff(gate,direction);ASSERT_TRUE(gate.handoff(grant,100.02,10.02));
+  ASSERT_TRUE(gate.core().receiveOdom(holonomicBody(direction,100.04),100.04,10.04));
+  const auto prepared=gate.preparedStep(100.04,10.04);ASSERT_TRUE(prepared)<<gate.handoffReason();
+  EXPECT_FALSE(prepared->demand.hold);EXPECT_GT(prepared->demand.velocity.linear.y,.01);
+  EXPECT_NEAR(prepared->demand.velocity.linear.x,0.,1e-12);EXPECT_EQ(prepared->demand.velocity.angular.z,0.);
+  EXPECT_NEAR(prepared->measured_twist.linear.y,.25,1e-12);EXPECT_NEAR(prepared->curve_entry_twist.linear.y,.25,1e-12);
+  EXPECT_EQ(gate.core().trajectoryId(),1);EXPECT_EQ(prepared->demand.trajectory_id,2);
+  auto ack=preparedWriterAck(grant,*prepared),wrong=ack;wrong.applied_velocity.linear.y=0.;
+  EXPECT_FALSE(gate.commitAck(wrong,100.04,10.04));EXPECT_EQ(gate.writerCommitSequence(),1U);
+  ASSERT_TRUE(gate.commitAck(ack,100.04,10.04));EXPECT_EQ(gate.writerCommitSequence(),2U);
+  ASSERT_TRUE(gate.core().receiveOdom(holonomicBody(direction,100.06),100.06,10.06));
+  const auto next=gate.step(100.06,10.06);EXPECT_EQ(next.trajectory_id,2);
+  EXPECT_GT(next.velocity.linear.y,prepared->demand.velocity.linear.y);
+  EXPECT_LE(std::hypot(next.velocity.linear.x-ack.applied_velocity.linear.x,
+    next.velocity.linear.y-ack.applied_velocity.linear.y),holonomicExecutionConfig().max_acceleration*.02+1e-12);
+  EXPECT_FALSE(next.hold);
+}
+
+TEST(TrackerHolonomicExecution, TwentyHzMovingHandoffAndRejectedCandidateKeepHistoryUntilExactProofLoss) {
+  const double direction=1.5707963267948966;
+  ExecutionContract gate(holonomicExecutionConfig(),"isolated_mock",std::string(64,'f'),true);
+  const auto grant=holonomicHandoff(gate,direction,.2);ASSERT_TRUE(gate.handoff(grant,100.02,10.02));
+  auto body=holonomicBody(direction,100.07);body.position.y()=.0125;
+  ASSERT_TRUE(gate.receiveOdom(body,100.07,10.07));
+  const auto prepared=gate.preparedStep(100.07,10.07);ASSERT_TRUE(prepared)<<gate.handoffReason();
+  ASSERT_FALSE(prepared->demand.hold);EXPECT_GT(prepared->curve_time,0.);
+  EXPECT_GT(prepared->demand.velocity.linear.y,0.);EXPECT_GT(prepared->demand.velocity.angular.z,0.);
+  const auto ack=preparedWriterAck(grant,*prepared);ASSERT_TRUE(gate.commitAck(ack,100.07,10.07));
+  EXPECT_EQ(gate.core().trajectoryId(),2);EXPECT_GT(gate.core().progressArc(),0.);
+  body=holonomicBody(direction,100.12);body.position.y()=.025;
+  ASSERT_TRUE(gate.receiveOdom(body,100.12,10.12));
+  const auto next=gate.step(100.12,10.12);ASSERT_FALSE(next.hold);
+  const Eigen::Vector2d applied(ack.applied_velocity.linear.x,ack.applied_velocity.linear.y);
+  const Eigen::Vector2d command(next.velocity.linear.x,next.velocity.linear.y);
+  EXPECT_GT(next.velocity.linear.y,ack.applied_velocity.linear.y);
+  EXPECT_LE((command-applied).norm(),.35*.05+1e-12);
+  EXPECT_LE(std::abs(next.velocity.angular.z-ack.applied_velocity.angular.z),.8*.05+1e-12);
+  // A failed successor is not withdrawal of this independently leased curve.
+  auto bad=holonomicCurve(direction,3,2);bad.points.front().x()=NAN;gate.candidate(bad);
+  auto candidate_proof=proofWire(version(2));candidate_proof.trajectory_id=3;candidate_proof.sequence=3;
+  gate.validation(candidate_proof,100.12);
+  const auto rejected=gate.prepare(100.12,10.12);ASSERT_TRUE(rejected);EXPECT_FALSE(rejected->accepted);
+  body=holonomicBody(direction,100.17);body.position.y()=.0375;
+  ASSERT_TRUE(gate.receiveOdom(body,100.17,10.17));
+  const auto retained=gate.step(100.17,10.17);ASSERT_FALSE(retained.hold);EXPECT_EQ(retained.trajectory_id,2);
+  EXPECT_GT(retained.velocity.linear.y,next.velocity.linear.y);
+  EXPECT_LE(std::hypot(retained.velocity.linear.x-next.velocity.linear.x,
+    retained.velocity.linear.y-next.velocity.linear.y),.35*.05+1e-12);
+  EXPECT_LE(std::abs(retained.velocity.angular.z-next.velocity.angular.z),.8*.05+1e-12);
+  auto lost=proofWire(version(2));lost.trajectory_id=2;lost.sequence=4;lost.valid=false;gate.validation(lost,100.17);
+  body=holonomicBody(direction,100.22);body.position.y()=.05;
+  ASSERT_TRUE(gate.receiveOdom(body,100.22,10.22));
+  const auto hold=gate.step(100.22,10.22);EXPECT_TRUE(hold.hold);
+  EXPECT_EQ(hold.velocity.linear.x,0.);EXPECT_EQ(hold.velocity.linear.y,0.);EXPECT_EQ(hold.velocity.angular.z,0.);
+  EXPECT_EQ(gate.core().trajectoryId(),2);
+}
+
+TEST(TrackerHolonomicExecution, HoldHeadingMetadataIsRequiredAndCannotBeMutatedUnderSameCurveId) {
+  for(int variant=0;variant<3;++variant) {
+    auto candidate=holonomicCurve(0.);if(variant==0)candidate.frozen_yaw.reset();
+    if(variant==1)candidate.frozen_yaw=NAN;
+    if(variant==2)candidate.frozen_yaw=.4;
+    ExecutionContract gate(holonomicExecutionConfig(),"isolated_mock");stageHolonomic(gate,0.,candidate);
+    const auto admission=gate.prepare(100.,10.);ASSERT_TRUE(admission);
+    if(variant<2){EXPECT_FALSE(admission->accepted);continue;}
+    ASSERT_TRUE(admission->accepted);ASSERT_TRUE(gate.permit(holonomicPermit(0.),100.,10.));
+    candidate.frozen_yaw=-.4;gate.candidate(candidate); // Same ID must remain immutable.
+    const auto demand=gate.step(100.02,10.02);EXPECT_GT(demand.velocity.angular.z,0.);
+    EXPECT_GT(demand.velocity.linear.x,0.);EXPECT_NEAR(demand.velocity.linear.y,0.,1e-12);
+    EXPECT_FALSE(demand.hold);
+  }
+}
+
+namespace {
+scan_planner_msgs::msg::Bspline encodedHeldCurve(const Trajectory& t,double yaw) {
+  scan_planner_msgs::msg::Bspline encoded;encoded.order=t.order;encoded.knots=t.knots;
+  for(const auto& xyz:t.points) {
+    geometry_msgs::msg::Point p;p.x=xyz.x();p.y=xyz.y();p.z=xyz.z();encoded.pos_pts.push_back(p);
+  }
+  encoded.yaw_dt=t.knots[1]-t.knots[0];encoded.yaw_pts.assign(t.points.size(),yaw);return encoded;
+}
+}
+
+TEST(TrackerHolonomicEncoding, ProductionDecoderAcceptsLegacyAndConstantHeadingWithoutStaleValueReuse) {
+  auto encoded=encodedHeldCurve(holonomicCurve(0.),.4);std::optional<double> yaw=-1.;
+  ASSERT_TRUE(decodeFrozenHeading(encoded,yaw));ASSERT_TRUE(yaw);EXPECT_DOUBLE_EQ(*yaw,.4);
+  encoded.yaw_pts.back()+=2.*3.141592653589793;
+  ASSERT_TRUE(decodeFrozenHeading(encoded,yaw));ASSERT_TRUE(yaw);EXPECT_DOUBLE_EQ(*yaw,.4);
+  encoded.yaw_pts.clear();ASSERT_TRUE(decodeFrozenHeading(encoded,yaw));EXPECT_FALSE(yaw);
+}
+
+TEST(TrackerHolonomicEncoding, ProductionDecoderRejectsMalformedHeadingAndTiming) {
+  for(int variant=0;variant<12;++variant) {
+    SCOPED_TRACE(variant);auto encoded=encodedHeldCurve(holonomicCurve(0.),.4);
+    switch(variant) {
+      case 0:encoded.yaw_pts.pop_back();break;
+      case 1:encoded.knots.resize(1);break;
+      case 2:encoded.yaw_dt=0.;break;
+      case 3:encoded.yaw_dt=-.2;break;
+      case 4:encoded.yaw_dt=NAN;break;
+      case 5:encoded.yaw_dt=.3;break;
+      case 6:encoded.yaw_pts.front()=NAN;break;
+      case 7:encoded.yaw_pts.back()+=.01;break;
+      case 8:encoded.yaw_pts.back()=INFINITY;break;
+      case 9:encoded.knots.front()=NAN;break;
+      case 10:encoded.knots[1]=INFINITY;break;
+      case 11:encoded.knots[1]=encoded.knots[0];break;
+    }
+    std::optional<double> yaw=42.;EXPECT_FALSE(decodeFrozenHeading(encoded,yaw));EXPECT_FALSE(yaw);
+  }
+}
+
+TEST(TrackerHolonomicEncoding, NativeConstantYawEncodingReachesTheActualExecutionContract) {
+  auto candidate=holonomicCurve(0.);candidate.frozen_yaw.reset();
+  const auto encoded=encodedHeldCurve(candidate,-.4);
+  ASSERT_TRUE(decodeFrozenHeading(encoded,candidate.frozen_yaw));
+  ExecutionContract gate(holonomicExecutionConfig(),"isolated_mock");stageHolonomic(gate,0.,candidate);
+  const auto admission=gate.prepare(100.,10.);ASSERT_TRUE(admission&&admission->accepted);
+  ASSERT_TRUE(gate.permit(holonomicPermit(0.),100.,10.));
+  const auto demand=gate.step(100.02,10.02);
+  EXPECT_GT(demand.velocity.linear.x,0.);EXPECT_NEAR(demand.velocity.linear.y,0.,1e-12);
+  EXPECT_LT(demand.velocity.angular.z,0.);EXPECT_FALSE(demand.hold);
+}
+
+TEST(CommandPipelineBudget, OrdinaryDemandUsesConfiguredOriginalSourceCapNotLegacy100ms) {
+  ExecutionContract gate(executionConfig(),"isolated_mock",{},false,false,.2);
+  stage(gate);ASSERT_TRUE(gate.prepare(100.,10.)->accepted);
+  ASSERT_TRUE(gate.permit(permitWire(),100.,10.));
+  const auto demand=gate.step(100.02,10.02);
+  EXPECT_EQ(timeNs(demand.valid_until),timeNs(demand.source_stamp)+200000000LL);
+  EXPECT_EQ(timeNs(demand.body_source_stamp),100000000000LL);
+  // Command generation does not pretend the body was sampled on this tick.
+  EXPECT_NE(demand.source_stamp,demand.body_source_stamp);
+}
+TEST(CommandPipelineBudget, PreparedDemandStillUsesEveryOriginalConditionalCap) {
+  ExecutionContract gate(executionConfig(),"isolated_mock",{},true,false,.2);
+  auto grant=stageWriterHandoff(gate);ASSERT_TRUE(gate.handoff(grant,100.02,10.02));
+  const auto prepared=gate.preparedStep(100.03,10.03);ASSERT_TRUE(prepared);
+  EXPECT_EQ(prepared->demand.valid_until,grant.transition_deadline);
+  EXPECT_LE(timeNs(prepared->demand.valid_until),timeNs(prepared->demand.source_stamp)+200000000LL);
+  EXPECT_EQ(prepared->entry_source_stamp,prepared->demand.body_source_stamp);
+  // Retried control messages may get a new source only from a real new
+  // step; an already emitted message is never restamped by the contract.
+  const auto copy=*prepared;EXPECT_EQ(copy.demand.valid_until,prepared->demand.valid_until);
+}
+TEST(CommandPipelineBudget, InvalidUnboundBudgetCannotConstructMotionContract) {
+  for(double invalid:{.099,.501,std::numeric_limits<double>::quiet_NaN()})
+    EXPECT_THROW(ExecutionContract(executionConfig(),"isolated_mock",{},false,false,invalid),std::invalid_argument);
+}
+TEST(CommandPipelineBudget, DelayedOccupiedVerdictStillReachesTrackerWithoutRenewingCommand) {
+ for(int fault=0;fault<5;++fault){ExecutionContract gate(executionConfig(),"isolated_mock",std::string(64,'f'),false,false,.2);
+  const auto demand=ownStraightDemand(gate);auto feedback=occupiedFor(demand);
+  auto latest=odom(100.14);ASSERT_TRUE(gate.core().receiveOdom(latest,100.14,10.14));
+  feedback.check_begin=stamp(100.13);feedback.check_end=stamp(100.131);
+  feedback.body_source_stamp=stamp(100.14);
+  double now=100.145;
+  if(fault==1){feedback.valid_until=stamp(100.144);}
+  if(fault==2){feedback.demand_body_source_stamp=stamp(100.0);}
+  if(fault==3){feedback.check_begin=stamp(100.025);feedback.check_end=stamp(100.026);}
+  if(fault==4){now=100.221;ASSERT_TRUE(gate.core().receiveOdom(odom(now),now,10.221));}
+  EXPECT_EQ(gate.motionValidation(feedback,now),fault==0)<<fault;
+  if(fault==0){EXPECT_STREQ(gate.core().maneuverPhase(),"waiting_executable_entry");
+   const auto actual=gate.takeBlockedEntry();ASSERT_TRUE(actual);EXPECT_EQ(*actual,feedback);
+   EXPECT_EQ(actual->demand_source_stamp,demand.source_stamp);}
+  else EXPECT_FALSE(gate.takeBlockedEntry());
+ }
+}
+
+namespace {
+wire::RouteDeliveryReceipt retiredRoute(bool native=true) {
+  wire::RouteDeliveryReceipt r;r.schema_version=1;r.session_id="session";
+  r.task_id="task";r.route_id="route";r.route_hash=std::string(64,'a');
+  r.delivery_sequence=2;r.source_stamp=stamp(100.01);r.receipt_stamp=stamp(100.02);
+  r.status=wire::RouteDeliveryReceipt::RETIRED;
+  r.native_retirement_required=r.native_retirement_confirmed=native;
+  r.native_generation=native?2:0;return r;
+}
+wire::ExecutionPermit geometryPermit(wire::ExecutionVersion v=version()) {
+  auto p=permitWire(v);p.allowed=false;p.phase="preview";
+  p.execution_id.clear();p.confirmation_id.clear();p.sdk_session.clear();
+  p.control_epoch=p.sdk_arm_generation=0;return p;
+}
+}
+TEST(TrackerTaskRetirement, DurableExactRetirementReleasesNeverMotionDomainWithoutOldPermit) {
+  ExecutionContract gate(executionConfig(),"isolated_mock",{},true);stage(gate);
+  ASSERT_TRUE(gate.prepare(100.,10.)->accepted);
+  ASSERT_TRUE(gate.permit(geometryPermit(),100.,10.));
+  ASSERT_TRUE(gate.core().hasInstalledGeometry());
+  auto next_version=version(3);next_version.task_id="next";next_version.route_id="next-route";
+  next_version.route_hash=std::string(64,'d');
+  auto next=geometryPermit(next_version);next.sequence=2;next.geometry_committed=false;
+  // Merely receiving another goal's permit does not seize an active domain.
+  ASSERT_FALSE(gate.permit(next,100.02,10.02));
+  // The native/reference retirement fact closes the exact old route even when
+  // the old depth-one revoked permit was missed or never published.
+  ASSERT_TRUE(gate.retireRoute(retiredRoute(),100.02));
+  EXPECT_FALSE(gate.core().hasInstalledGeometry());EXPECT_TRUE(gate.step(100.02,10.02).hold);
+  EXPECT_TRUE(gate.retireRoute(retiredRoute(),100.03));
+  ASSERT_TRUE(gate.permit(next,100.03,10.03));
+  EXPECT_FALSE(gate.retireRoute(retiredRoute(),100.04));
+  auto old=geometryPermit();old.sequence=3;old.source_stamp=stamp(100.04);old.valid_until=stamp(100.24);
+  EXPECT_FALSE(gate.permit(old,100.04,10.04));
+  gate.proposal(proposalWire(),100.04);gate.candidate(curve());
+  auto late=proofWire();late.sequence=2;late.source_stamp=late.check_begin=late.check_end=stamp(100.04);
+  gate.validation(late,100.04);gate.support(supportWire());
+  EXPECT_FALSE(gate.prepare(100.04,10.04));
+  EXPECT_TRUE(gate.step(100.04,10.04).hold);
+}
+TEST(TrackerTaskRetirement, UnadmittedRouteFactIsSoftwareOnlyAndRemainsDurable) {
+  ExecutionContract gate(executionConfig(),"isolated_mock");
+  auto p=geometryPermit();p.geometry_committed=false;
+  ASSERT_TRUE(gate.permit(p,100.,10.));
+  ASSERT_TRUE(gate.retireRoute(retiredRoute(false),101.));
+  auto next_version=version();next_version.task_id="next";
+  auto next=geometryPermit(next_version);next.geometry_committed=false;next.sequence=2;
+  next.source_stamp=stamp(101.);next.valid_until=stamp(101.2);
+  EXPECT_TRUE(gate.permit(next,101.,11.));
+  EXPECT_TRUE(gate.step(101.,11.).hold); // Retirement grants no movement.
+}
+TEST(TrackerTaskRetirement, ForeignNonterminalAndMalformedFactsCannotCloseCurrentDomain) {
+  for(int fault=0;fault<18;++fault) {
+    ExecutionContract gate(executionConfig(),"isolated_mock");stage(gate);
+    ASSERT_TRUE(gate.prepare(100.,10.)->accepted);ASSERT_TRUE(gate.permit(geometryPermit(),100.,10.));
+    auto r=retiredRoute();
+    switch(fault) {
+      case 0:r.schema_version=0;break;
+      case 1:r.session_id="foreign";break;
+      case 2:r.task_id="foreign";break;
+      case 3:r.route_id="foreign";break;
+      case 4:r.route_hash=std::string(64,'b');break;
+      case 5:r.active=true;break;
+      case 6:r.status=wire::RouteDeliveryReceipt::ACCEPTED;break;
+      case 7:r.status=wire::RouteDeliveryReceipt::REJECTED;break;
+      case 8:r.native_retirement_confirmed=false;break;
+      case 9:r.native_generation=0;break;
+      case 10:r.native_retirement_required=false;break;
+      case 11:r.delivery_sequence=0;break;
+      case 12:r.source_stamp.nanosec=1000000000u;break;
+      case 13:r.receipt_stamp=stamp(100.2);break;
+      case 14:r.source_stamp=stamp(100.2);break;
+      case 15:r.receipt_stamp=stamp(99.8);break;
+      case 16:r.native_generation=1;break;
+      case 17:r.route_hash=std::string(64,'z');break;
+    }
+    EXPECT_FALSE(gate.retireRoute(r,100.02))<<fault;
+    EXPECT_TRUE(gate.core().hasInstalledGeometry())<<fault;
+  }
+}
+TEST(TrackerTaskRetirement, ConfirmedNativeBarrierBeforeIngressCannotReviveQueuedOldTask) {
+  ExecutionContract gate(executionConfig(),"isolated_mock",{},true);
+  ASSERT_TRUE(gate.retireRoute(retiredRoute(),100.02));
+  gate.proposal(proposalWire(),100.02);gate.candidate(curve());
+  gate.support(supportWire());gate.validation(proofWire(),100.02);
+  EXPECT_FALSE(gate.prepare(100.02,10.02));
+  auto old=geometryPermit();old.geometry_committed=false;
+  EXPECT_FALSE(gate.permit(old,100.02,10.02));
+  auto next_version=version(3);next_version.task_id="next";next_version.route_id="next-route";
+  next_version.route_hash=std::string(64,'d');
+  auto next=geometryPermit(next_version);next.geometry_committed=false;next.sequence=2;
+  ASSERT_TRUE(gate.permit(next,100.03,10.03));
+  // A delayed old barrier is neither a new task nor a reason to close next.
+  EXPECT_FALSE(gate.retireRoute(retiredRoute(),100.04));
+  next.sequence=3;EXPECT_TRUE(gate.permit(next,100.04,10.04));
+  EXPECT_TRUE(gate.step(100.04,10.04).hold);
+}
+
+TEST(TrackerStairSupport, NativeConsumesSourceAssociationWithoutInventingStepCapability) {
+  auto wire_support=supportWire();
+  wire_support.floor_id="stair_lower";wire_support.segment_kind="stair_up";
+  wire_support.required_mode="stair";
+  wire_support.max_support_slope_rad=wire_support.max_support_step_m=0.;
+  auto s=supportEvidence(wire_support);
+  const SupportIndex index(s.ground);
+  auto cfg=executionConfig();cfg.geometry_authority=GeometryAuthority::NativeScan;
+  EXPECT_TRUE(supportEvidenceValid(s,index,s.identity,s.generation,cfg));
+  cfg.geometry_authority=GeometryAuthority::LegacyTracker;
+  EXPECT_FALSE(supportEvidenceValid(s,index,s.identity,s.generation,cfg));
+  cfg.geometry_authority=GeometryAuthority::NativeScan;
+  for(int fault=0;fault<6;++fault) {
+    auto bad=s;
+    if(fault==0)bad.verified=false;
+    if(fault==1)bad.mode="general";
+    if(fault==2)bad.floor_id="floor1";
+    if(fault==3)bad.segment_kind="floor";
+    if(fault==4)bad.generation++;
+    if(fault==5)bad.max_step=.3; // not a provenance-only stair packet
+    EXPECT_FALSE(supportEvidenceValid(bad,index,s.identity,s.generation,cfg))<<fault;
+  }
+}
+
+TEST(TrackerStairSupport, MixedPortalConsumesCompleteSourceRegionsNotFlatStepLimits) {
+  auto message=supportWire();
+  message.reason="original_transition_surface_returns_associated";
+  message.max_support_slope_rad=message.max_support_step_m=0.;
+  wire::SupportRegion floor;floor.segment_id=message.version.segment_id;floor.floor_id="floor1";
+  floor.segment_kind="floor";floor.required_mode="general";floor.begin_index=0;floor.end_index=20;
+  wire::SupportRegion stair;stair.segment_id="stair_lower";stair.floor_id="stair_lower";
+  stair.segment_kind="stair_up";stair.required_mode="stair";stair.begin_index=20;
+  stair.end_index=message.support_ground_xyz.size();message.regions={floor,stair};
+  auto cfg=executionConfig();cfg.geometry_authority=GeometryAuthority::NativeScan;
+  for(int fault=-1;fault<9;++fault) {
+    auto changed=message;
+    if(fault==0)changed.regions.clear();
+    if(fault==1)changed.regions[1].begin_index++;
+    if(fault==2)changed.regions[1].end_index--;
+    if(fault==3)changed.regions[1].required_mode="general";
+    if(fault==4)changed.regions[0].segment_id="foreign";
+    if(fault==5)changed.reason="verified";
+    if(fault==6)changed.max_support_step_m=.3;
+    if(fault==7)changed.verified=false;
+    if(fault==8)changed.regions[1].segment_id=changed.regions[0].segment_id;
+    const auto source=supportEvidence(changed);const SupportIndex index(source.ground);
+    EXPECT_EQ(supportEvidenceValid(source,index,source.identity,source.generation,cfg),fault==-1)<<fault;
+    auto legacy=cfg;legacy.geometry_authority=GeometryAuthority::LegacyTracker;
+    EXPECT_FALSE(supportEvidenceValid(source,index,source.identity,source.generation,legacy))<<fault;
+  }
+  // Existing positive-threshold floor packets retain their original behavior.
+  const auto old=supportEvidence(supportWire());const SupportIndex index(old.ground);
+  EXPECT_TRUE(supportEvidenceValid(old,index,old.identity,old.generation,cfg));
+}
+
+TEST(TrackerStairSupport, OtherFloorFinalXYDoesNotBrakeAnIntermediateNativeCurve) {
+  for(bool forward:{false,true}) {
+    auto c=executionConfig();c.geometry_authority=GeometryAuthority::NativeScan;
+    c.motion_model="holonomic";c.align_then_forward=forward;c.holonomic_yaw_policy="path_tangent";
+    TrackerCore core(c);auto goal=task();goal.goal={0.,0.,3.55};
+    ASSERT_TRUE(core.receiveOdom(odom(),100.,10.));
+    ASSERT_TRUE(core.admitRevision(goal,curve(),supportEvidence(supportWire()),100.,10.,true))<<core.candidateReason();
+    const auto output=core.step(100.05,10.05);
+    EXPECT_GT(output.forward,0.);EXPECT_FALSE(core.controlDiagnostic().final_endpoint);
+    EXPECT_GT(core.controlDiagnostic().speed_cap,0.);
+    EXPECT_LE(output.forward,c.max_acceleration*.05+1e-10);
+  }
+}
+
+namespace {
+wire::SupportReference stairSteeringWire(double begin=-1.,double end=6.,double grade=.3,double elevation=0.) {
+  auto s=supportWire();s.stair_model_hash=std::string(64,'d');
+  wire::StairSurfaceModel surface;surface.surface_id="flight-surface";surface.segment_id="stair-A";
+  surface.kind="continuous_support_envelope";surface.pose.orientation.w=1.;surface.pose.position.z=elevation;
+  surface.support_grade=grade;surface.height_association_m=.18;surface.contact_tolerance_m=.02;
+  for(auto xy:{Eigen::Vector2d(begin,-.8),Eigen::Vector2d(end,-.8),
+      Eigen::Vector2d(end,.8),Eigen::Vector2d(begin,.8)}) {
+    geometry_msgs::msg::Point p;p.x=xy.x();p.y=xy.y();surface.polygon.push_back(p);
+  }
+  s.stair_model_surfaces.push_back(surface);return s;
+}
+Config stairSteeringConfig() {
+  auto c=executionConfig();c.geometry_authority=GeometryAuthority::NativeScan;
+  c.motion_model="holonomic";c.align_then_forward=true;c.holonomic_yaw_policy="path_tangent";
+  c.min_lookahead_distance_m=.4;c.max_lookahead_distance_m=.8;c.lookahead=1.2;
+  c.kp_yaw=.9;c.yaw_damping_gain=.4;c.steering_error_scale_rad=.02;
+  c.max_jerk=.7;c.max_yaw_jerk=4.;return c;
+}
+Trajectory stairSteeringCurve(double grade=.3,double ripple=0.) {
+  auto t=curve();t.points.clear();t.knots.clear();
+  for(int i=0;i<103;++i) {
+    const double x=(i-1)*.05;t.points.emplace_back(x,ripple*std::sin(5.*x),.55+grade*x);
+  }
+  for(int i=0;i<107;++i)t.knots.push_back((i-3)*.25);
+  certify(t);return t;
+}
+Odom stairSteeringOdom(const Trajectory& t,double yaw=0.) {
+  auto body=odom();body.position=t.join_position;body.velocity_in_frame=t.join_velocity;
+  body.planar_speed=body.velocity_in_frame.head<2>().norm();body.yaw=yaw;
+  body.orientation=Eigen::AngleAxisd(yaw,Eigen::Vector3d::UnitZ());return body;
+}
+}
+
+TEST(TrackerStairSteering, DecoderRetainsFiniteGeometryWithoutChangingObservationOrSource) {
+  auto wire=stairSteeringWire();const auto s=supportEvidence(wire);
+  ASSERT_TRUE(s.model_geometry_valid);ASSERT_EQ(s.steering_surfaces.size(),1U);
+  EXPECT_EQ(s.steering_surfaces[0].segment,"stair-A");
+  EXPECT_EQ(s.steering_surfaces[0].polygon.size(),4U);
+  EXPECT_DOUBLE_EQ(s.steering_surfaces[0].grade,.3);
+  EXPECT_DOUBLE_EQ(s.source_stamp,100.);EXPECT_EQ(s.verified,wire.verified);
+  auto changed=s;changed.steering_surfaces[0].origin.x()+=.01;
+  EXPECT_FALSE(sameSupportEvidenceGeometry(s,changed));
+  wire.stair_model_surfaces[0].pose.orientation.w=0.;
+  const auto malformed=supportEvidence(wire);EXPECT_FALSE(malformed.model_geometry_valid);
+  EXPECT_TRUE(malformed.steering_surfaces.empty());
+}
+
+TEST(TrackerStairSteering, FiniteXYZAssociationDistinguishesFloorsAndRespectsLandingBoundary) {
+  auto wire=stairSteeringWire();auto landing=wire.stair_model_surfaces[0];
+  landing.surface_id="landing";landing.kind="landing";landing.support_grade=0.;
+  landing.polygon[0].x=landing.polygon[3].x=-1.;landing.polygon[1].x=landing.polygon[2].x=0.;
+  wire.stair_model_surfaces.push_back(landing);
+  auto upper=wire.stair_model_surfaces[0];upper.surface_id="upper";upper.segment_id="stair-B";upper.pose.position.z=3.;
+  wire.stair_model_surfaces.push_back(upper);
+  const auto s=supportEvidence(wire);ASSERT_TRUE(s.model_geometry_valid);
+  const auto query=[&](const Eigen::Vector3d& p){return stairSteeringSurfaceAt(s.steering_surfaces,p,.55);};
+  ASSERT_TRUE(query({1.,0.,.85}));EXPECT_EQ(*query({1.,0.,.85}),0U);
+  ASSERT_TRUE(query({1.,0.,3.85}));EXPECT_EQ(*query({1.,0.,3.85}),2U);
+  EXPECT_FALSE(query({1.,0.,2.}));EXPECT_FALSE(query({1.,.81,.85}));
+  ASSERT_TRUE(query({0.,0.,.55}));EXPECT_EQ(*query({0.,0.,.55}),1U);
+  ASSERT_TRUE(query({1.,.8,.85})); // The actual polygon edge is retained.
+}
+
+TEST(TrackerStairSteering, EntranceAndExitWeightsAreContinuousAndDoNotCrossTheNextFlight) {
+  const std::vector<StairFlightRange> ranges{{"A",1.,4.,false},{"B",5.,8.,true}};
+  const auto far=stairSteeringPreview(ranges,0.,.4,.98);EXPECT_DOUBLE_EQ(far.weight,0.);
+  const auto entry=stairSteeringPreview(ranges,.5,.4,.98);EXPECT_GT(entry.weight,0.);EXPECT_LT(entry.weight,1.);
+  for(double boundary:{.02,1.,4.}) {
+    const auto before=stairSteeringPreview(ranges,boundary-1e-7,.4,.98);
+    const auto after=stairSteeringPreview(ranges,boundary+1e-7,.4,.98);
+    EXPECT_NEAR(before.weight,after.weight,1e-5)<<boundary;
+  }
+  const auto exit=stairSteeringPreview(ranges,3.8,.4,.98);
+  EXPECT_LE(exit.horizontal,4.);EXPECT_LT(exit.weight,.1);
+  const auto tail=stairSteeringPreview({{"A",0.,3.,true}},2.8,.4,.98);
+  EXPECT_DOUBLE_EQ(tail.weight,1.); // Sliding-window tail is not a real stair exit.
+  const std::vector<StairFlightRange> narrow_landing{{"A",1.,4.,false},{"B",4.2,8.,true}};
+  EXPECT_NEAR(stairSteeringPreview(narrow_landing,4.-1e-7,.4,.98).weight,
+    stairSteeringPreview(narrow_landing,4.+1e-7,.4,.98).weight,1e-8);
+}
+
+TEST(TrackerStairSteering, WindowEndingAtPhysicalExitDoesNotBecomeAnInteriorFlightTail) {
+  const auto s=supportEvidence(stairSteeringWire(-1.,2.,.3));
+  for(double end:{1.7,2.}) {
+    std::vector<Eigen::Vector3d> points;std::vector<double> horizontal;
+    for(int i=0;i<=100;++i){double x=end*i/100.;points.emplace_back(x,0.,.55+.3*x);horizontal.push_back(x);}
+    const auto ranges=stairCurveFlightRanges(s.steering_surfaces,points,horizontal,.55);
+    ASSERT_EQ(ranges.size(),1U);ASSERT_TRUE(ranges[0].ends_at_curve_tail);
+    EXPECT_NEAR(ranges[0].tail_exit_distance,2.-end,1e-10);
+    EXPECT_NEAR(stairSteeringPreview(ranges,1.5,.4,.98).weight,stairBlend(.5/.98),1e-10);
+  }
+  auto surface=s.steering_surfaces[0];surface.kind="unknown";
+  EXPECT_TRUE(stairCurveFlightRanges({surface},{{0.,0.,.55},{1.,0.,.85}},{0.,1.},.55).empty());
+  int calls=0;
+  EXPECT_TRUE(stairCurveFlightRanges(s.steering_surfaces,{{0.,0.,.55},{1.,0.,.85}},
+    {0.,1.},.55,[&] {return ++calls<2;}).empty());
+  EXPECT_EQ(calls,2);
+}
+
+TEST(TrackerStairSteering, UpAndDownUseOnlyTheAcceptedCurveAndLongFlightPreview) {
+  for(double grade:{-.3,.3})for(double ripple:{-.025,.025}) {
+    const auto c=stairSteeringConfig();auto t=stairSteeringCurve(grade,ripple);
+    auto s=supportEvidence(stairSteeringWire(-1.,6.,grade));auto b=stairSteeringOdom(t);
+    auto goal=task();goal.goal={7.,0.,.55+grade*7.};TrackerCore core(c);
+    ASSERT_TRUE(core.receiveOdom(b,100.,10.));
+    ASSERT_TRUE(core.admitRevision(goal,t,s,100.,10.,true))<<core.candidateReason();
+    const auto output=core.step(100.05,10.05);const auto& d=core.controlDiagnostic();
+    ASSERT_FALSE(output.frozen)<<output.reason;EXPECT_GT(output.forward,0.);EXPECT_DOUBLE_EQ(output.lateral,0.);
+    EXPECT_EQ(d.steering_curvature_source,"accepted_stair_flight_preview");
+    EXPECT_DOUBLE_EQ(d.steering_curvature,0.);
+    EXPECT_LT(std::abs(d.heading_error),.035); // Short tangent is about .12 rad.
+    EXPECT_DOUBLE_EQ(core.progressTime(),0.);EXPECT_DOUBLE_EQ(core.odometry().stamp,100.);
+  }
+}
+
+TEST(TrackerStairSteering, PlainFloorAndOtherFloorModelHaveIdenticalOutputs) {
+  const auto c=stairSteeringConfig();auto t=stairSteeringCurve(0.,.025);
+  const auto plain=supportEvidence(supportWire());const auto remote=supportEvidence(stairSteeringWire(-1.,6.,.3,3.));
+  TrackerCore a(c),b(c);auto goal=task();goal.goal={7.,0.,.55};const auto initial=stairSteeringOdom(t);
+  ASSERT_TRUE(a.receiveOdom(initial,100.,10.));ASSERT_TRUE(b.receiveOdom(initial,100.,10.));
+  ASSERT_TRUE(a.admitRevision(goal,t,plain,100.,10.,true));ASSERT_TRUE(b.admitRevision(goal,t,remote,100.,10.,true));
+  for(int tick=1;tick<=30;++tick) {
+    auto state=initial;state.stamp=state.posterior_stamp=state.imu_stamp=100.+tick*.05;
+    ASSERT_TRUE(a.receiveOdom(state,state.stamp,state.stamp-90.));ASSERT_TRUE(b.receiveOdom(state,state.stamp,state.stamp-90.));
+    a.refreshTaskLease(state.stamp-90.);b.refreshTaskLease(state.stamp-90.);
+    const auto oa=a.step(state.stamp,state.stamp-90.),ob=b.step(state.stamp,state.stamp-90.);
+    EXPECT_DOUBLE_EQ(oa.forward,ob.forward);EXPECT_DOUBLE_EQ(oa.lateral,ob.lateral);EXPECT_DOUBLE_EQ(oa.yaw_rate,ob.yaw_rate);
+    EXPECT_EQ(a.controlDiagnostic().steering_curvature_source,"accepted_curve_spatial_preview");
+  }
+}
+
+TEST(TrackerStairSteering, LateralRecoveryAndRealBendRemainOnAcceptedCurveWithoutSidewaysCommand) {
+  const auto c=stairSteeringConfig();
+  for(double side:{-1.,1.}) {
+    auto t=stairSteeringCurve();auto support=supportEvidence(stairSteeringWire());
+    auto body=stairSteeringOdom(t);auto goal=task();goal.goal={7.,0.,2.65};TrackerCore core(c);
+    ASSERT_TRUE(core.receiveOdom(body,100.,10.));
+    ASSERT_TRUE(core.admitRevision(goal,t,support,100.,10.,true));
+    body.stamp=body.posterior_stamp=body.imu_stamp=100.05;body.position.y()=side*.05;
+    ASSERT_TRUE(core.receiveOdom(body,100.05,10.05));core.refreshTaskLease(10.05);
+    auto output=core.step(100.05,10.05,true);
+    ASSERT_FALSE(output.frozen);EXPECT_GT(output.forward,0.);EXPECT_DOUBLE_EQ(output.lateral,0.);
+    EXPECT_LT(side*core.controlDiagnostic().yaw_target,0.);
+    EXPECT_LT(std::abs(core.controlDiagnostic().heading_error),.05);
+  }
+  auto t=stairSteeringCurve();for(auto& p:t.points)p.y()=.045*p.x()*p.x();certify(t);
+  auto support=supportEvidence(stairSteeringWire());auto body=stairSteeringOdom(t);
+  auto goal=task();goal.goal={7.,2.,2.65};TrackerCore core(c);
+  ASSERT_TRUE(core.receiveOdom(body,100.,10.));ASSERT_TRUE(core.admitRevision(goal,t,support,100.,10.,true));
+  const auto output=core.step(100.05,10.05,true);
+  EXPECT_GT(core.controlDiagnostic().yaw_target,.01);EXPECT_DOUBLE_EQ(output.lateral,0.);
+}
+
+TEST(TrackerStairSteering, RetainedPhysicalExitSurvivesExactPrefixRemovalInBothDirections) {
+  for(double direction:{-1.,1.}) {
+    // Two finite flights and a short landing; reverse the coordinates for
+    // downhill travel. No other floor or extrapolated point participates.
+    StairFlightRange previous{"A",1.,4.,false},next{"B",4.5,8.,true};
+    previous.exit_point={direction*4.,0.,direction*1.2};previous.has_exit_point=true;
+    previous.direction=next.direction={direction,0.};
+    StairSteeringHistory history;
+    const double since=history.precedingExitDistance({previous,next},4.3,.98,
+      {direction*4.3,0.,direction*1.2});
+    EXPECT_NEAR(since,.3,1e-12);
+    const auto full=stairSteeringPreview({previous,next},4.3,.4,.98,since);
+    next.begin-=4.2;next.end-=4.2;
+    const double after=history.precedingExitDistance({next},.1,.98,
+      {direction*4.3,0.,direction*1.2});
+    const auto suffix=stairSteeringPreview({next},.1,.4,.98,after);
+    EXPECT_NEAR(suffix.weight,full.weight,1e-12);
+    EXPECT_NEAR(suffix.horizontal+4.2,full.horizontal,1e-12);
+    // The stored exit is not a waypoint: all targets stay on the new curve.
+    EXPECT_LE(suffix.horizontal,next.end);
+    EXPECT_NEAR(history.precedingExitDistance({next},.4,.98,
+      {direction*4.6,0.,direction*1.23}),.6,1e-12);
+    // First observation on a landing has no manufactured prior flight.
+    StairSteeringHistory fresh;
+    EXPECT_TRUE(std::isinf(fresh.precedingExitDistance({next},.1,.98,
+      {direction*4.3,0.,direction*1.2})));
+    history.reset();
+    EXPECT_TRUE(std::isinf(history.precedingExitDistance({next},.1,.98,
+      {direction*4.3,0.,direction*1.2})));
+  }
+}
+
+TEST(TrackerStairSteering, PhysicalExitContextCannotCrossFlightOrReverseDirection) {
+  StairFlightRange previous{"A",1.,4.,false},next{"B",4.5,8.,true};
+  previous.exit_point={4.,0.,1.2};previous.has_exit_point=true;
+  previous.direction=next.direction={1.,0.};
+  for(bool reverse:{false,true}) {
+    StairSteeringHistory history;
+    EXPECT_NEAR(history.precedingExitDistance({previous,next},4.3,.98,{4.3,0.,1.2}),.3,1e-12);
+    auto changed=next;changed.begin-=4.2;changed.end-=4.2;
+    if(reverse)changed.direction={-1.,0.};else changed.segment="other-flight";
+    EXPECT_TRUE(std::isinf(history.precedingExitDistance({changed},.1,.98,{4.3,0.,1.2})));
+  }
+}
+
+TEST(TrackerStairSteering, ExitPersistsWhenNextFlightWasOutsidePreviousFiniteWindow) {
+  StairFlightRange previous{"A",1.,4.,false},next{"B",.3,3.8,true};
+  previous.exit_point={4.,0.,1.2};previous.has_exit_point=true;
+  previous.direction=next.direction={1.,0.};
+  for(bool exact_exit_tail:{false,true}) {
+    auto exit=previous;
+    if(exact_exit_tail){exit.ends_at_curve_tail=true;exit.tail_exit_distance=0.;}
+    StairSteeringHistory history;
+    EXPECT_TRUE(std::isinf(history.precedingExitDistance({exit},exact_exit_tail?4.:4.2,.98,
+      {exact_exit_tail?4.:4.2,0.,1.2})));
+    // A later accepted window contains only the next flight. The already
+    // observed predecessor was not part of this new spline at any point.
+    EXPECT_NEAR(history.precedingExitDistance({next},.1,.98,{4.3,0.,1.2}),.3,1e-12);
+  }
+  previous.ends_at_curve_tail=true;previous.tail_exit_distance=.5;
+  StairSteeringHistory interior_tail;
+  EXPECT_TRUE(std::isinf(interior_tail.precedingExitDistance({previous},4.,.98,{4.,0.,1.2})));
+  EXPECT_TRUE(std::isinf(interior_tail.precedingExitDistance({next},.1,.98,{4.3,0.,1.2})));
+}
+
+namespace {
+SupportEvidence shortLandingSupport() {
+  auto s=supportEvidence(stairSteeringWire(-1.,4.,.3));
+  auto landing=s.steering_surfaces.front();landing.id="landing";landing.segment="platform";
+  landing.kind="landing";landing.grade=0.;landing.intercept=1.2;
+  landing.polygon={{4.,-.8},{4.5,-.8},{4.5,.8},{4.,.8}};
+  auto next=landing;next.id="second";next.segment="stair-B";
+  next.kind="continuous_support_envelope";next.grade=.3;next.intercept=-.15;
+  next.polygon={{4.5,-.8},{10.,-.8},{10.,.8},{4.5,.8}};
+  s.steering_surfaces.push_back(landing);s.steering_surfaces.push_back(next);return s;
+}
+Trajectory shortLandingCurve(int first,int id,double stamp,double join) {
+  auto t=curve(id,stamp);t.points.clear();t.knots.clear();
+  t.body_heading_seed_yaw=0.;t.body_heading_sampling_intervals=1000;
+  for(int i=first;i<203;++i) {
+    const double x=(i-1)*.05,z=x<=4.?.3*x:(x<=4.5?1.2:1.2+.3*(x-4.5));
+    t.points.emplace_back(x,.04*std::sin(3.*x),z+.55);
+  }
+  for(std::size_t i=0;i<t.points.size()+4;++i)t.knots.push_back((double(i)-3.)*.25);
+  certify(t,stamp,join);
+  const auto cache=EntryCurveCache::build(t);
+  if(cache)t.valid_start_arc_length=curveArcAt(cache->times,cache->arcs,join);
+  return t;
+}
+}
+
+TEST(TrackerStairSteering, ProductionWindowCommitPreservesExitButAnchorModelAndTaskResetIt) {
+  const auto c=stairSteeringConfig();auto full=shortLandingCurve(0,1,100.,21.25);
+  auto s=shortLandingSupport();auto b=stairSteeringOdom(full);auto goal=task();goal.goal={12.,0.,4.};
+  TrackerCore incumbent(c);
+  ASSERT_TRUE(incumbent.receiveOdom(b,100.,10.));
+  ASSERT_TRUE(incumbent.admitRevision(goal,full,s,100.,10.,true,true))<<incumbent.candidateReason();
+  ASSERT_FALSE(incumbent.step(100.05,10.05,true).frozen);
+  const double inherited_preview=incumbent.controlDiagnostic().steering_preview_distance;
+  ASSERT_LT(inherited_preview,.6);
+  for(int variant:{0,1,2,3}) {
+    auto core=incumbent;auto candidate=shortLandingCurve(84,2,100.1,.25);
+    auto next_goal=goal;auto next_support=s;
+    if(variant==1)++next_goal.identity.anchor_revision;
+    if(variant==2)next_support.model_hash=std::string(64,'e');
+    if(variant==3){core.cancel("new_task");next_goal.identity.task_id="another-task";}
+    candidate.identity=next_goal.identity;next_support.identity=next_goal.identity;
+    auto body=b;body.stamp=body.posterior_stamp=body.imu_stamp=100.1;
+    ASSERT_TRUE(core.receiveOdom(body,100.1,10.1));
+    ASSERT_TRUE(core.admitRevision(next_goal,candidate,next_support,100.1,10.1,true,true))<<core.candidateReason();
+    core.refreshTaskLease(10.1);core.step(100.1,10.1,true);
+    // Cancellation has its independent one-tick stop; neither this scope
+    // check nor the stair bias authorizes resurrection of the old command.
+    if(variant==3)core.step(100.15,10.15,true);
+    const auto preview=core.controlDiagnostic().steering_preview_distance;
+    if(variant==0)EXPECT_NEAR(preview,inherited_preview,1e-4);
+    else EXPECT_GT(preview,1.);
+    EXPECT_DOUBLE_EQ(core.step(100.15,10.15,true).lateral,0.);
+  }
+}
+
+TEST(TrackerStairSteering, PreparedRefreshAndRejectedGeometryRetainLiveFiniteExitContext) {
+  const auto c=stairSteeringConfig();auto full=shortLandingCurve(0,1,100.,21.25);
+  auto s=shortLandingSupport();auto b=stairSteeringOdom(full);auto goal=task();goal.goal={12.,0.,4.};
+  TrackerCore current(c);
+  ASSERT_TRUE(current.receiveOdom(b,100.,10.));
+  ASSERT_TRUE(current.admitRevision(goal,full,s,100.,10.,true,true));
+  // Stage before the current controller has observed the predecessor exit.
+  auto prepared=current;auto candidate=shortLandingCurve(84,2,100.,.25);
+  ASSERT_TRUE(prepared.admitRevision(goal,candidate,s,100.,10.,true,true));
+  ASSERT_FALSE(current.step(100.05,10.05,true).frozen);
+  auto body=b;body.stamp=body.posterior_stamp=body.imu_stamp=100.1;
+  ASSERT_TRUE(current.receiveOdom(body,100.1,10.1));
+  ASSERT_TRUE(prepared.refreshPreparedState(current,100.1,10.1));
+  ASSERT_FALSE(prepared.step(100.1,10.1,true).frozen);
+  EXPECT_LT(prepared.controlDiagnostic().steering_preview_distance,.6);
+  ASSERT_TRUE(prepared.rollbackGeometry(current,100.1));
+  candidate.id=3;candidate.start_time=candidate.join_source_stamp=100.1;
+  ASSERT_TRUE(prepared.admitRevision(goal,candidate,s,100.1,10.1,true,true));
+  ASSERT_FALSE(prepared.step(100.15,10.15,true).frozen);
+  EXPECT_LT(prepared.controlDiagnostic().steering_preview_distance,.6);
+}
+
+TEST(TrackerStairSteering, DelayedCommittedAckPromotesGeometryWithoutRewindingLiveExitContext) {
+  const auto c=stairSteeringConfig();auto full=shortLandingCurve(0,1,100.,21.25);
+  auto s=shortLandingSupport();auto b=stairSteeringOdom(full);auto goal=task();goal.goal={12.,0.,4.};
+  TrackerCore live(c);
+  ASSERT_TRUE(live.receiveOdom(b,100.,10.));
+  ASSERT_TRUE(live.admitRevision(goal,full,s,100.,10.,true,true));
+  // Candidate receipt predates the first actual stair control tick. The
+  // frozen accepted_core therefore has no exit history yet.
+  auto accepted=live;auto candidate=shortLandingCurve(84,2,100.,.25);
+  ASSERT_TRUE(accepted.admitRevision(goal,candidate,s,100.,10.,true,true));
+  ASSERT_FALSE(live.step(100.05,10.05,true).frozen);
+  ASSERT_LT(live.controlDiagnostic().steering_preview_distance,.6);
+  auto body=b;body.stamp=body.posterior_stamp=body.imu_stamp=100.1;
+  ASSERT_TRUE(live.receiveOdom(body,100.1,10.1));
+  ASSERT_TRUE(live.rollbackGeometry(accepted,100.1,true));
+  ASSERT_EQ(live.trajectoryId(),2);
+  ASSERT_FALSE(live.step(100.1,10.1,true).frozen);
+  EXPECT_LT(live.controlDiagnostic().steering_preview_distance,.6);
+  EXPECT_DOUBLE_EQ(live.step(100.15,10.15,true).lateral,0.);
 }

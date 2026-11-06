@@ -15,6 +15,7 @@
 #include "use-ikfom.hpp"
 #include "utils.h"
 #include "stationary_initialization.hpp"
+#include "localization_gap_coast.hpp"
 
 namespace faster_lio {
 
@@ -54,6 +55,9 @@ class ImuProcess {
     bool Initialized() const { return !imu_need_init_; }
     int InitializationSamples() const { return std::max(0, init_iter_num_ - 1); }
     double AccelerationScale() const { return common::G_m_s2 / mean_acc_.norm(); }
+    common::V3D LastAngularRate() const { return angvel_last_; }
+    bool ResumeAfterMissingImu(const sensor_msgs::msg::Imu::SharedPtr& endpoint,
+        esekfom::esekf<state_ikfom,12,input_ikfom>& filter,const LocalizationCoastLimits& limits);
 
     std::ofstream fout_imu_;
     Eigen::Matrix<double, 12, 12> Q_;
@@ -86,6 +90,24 @@ class ImuProcess {
     bool imu_need_init_ = true;
     std::deque<sensor_msgs::msg::Imu::ConstSharedPtr> initialization_window_;
 };
+
+bool ImuProcess::ResumeAfterMissingImu(const sensor_msgs::msg::Imu::SharedPtr& endpoint,
+    esekfom::esekf<state_ikfom,12,input_ikfom>& filter,const LocalizationCoastLimits& limits) {
+    if(!bounded_scan_endpoints||!Initialized()||!endpoint)return false;
+    const double target=rclcpp::Time(endpoint->header.stamp).seconds();
+    auto state=filter.get_x();auto p=filter.get_P();
+    const common::V3D new_rate(endpoint->angular_velocity.x-state.bg.x(),
+        endpoint->angular_velocity.y-state.bg.y(),endpoint->angular_velocity.z-state.bg.z());
+    const double dt=target-last_lidar_end_time_;
+    if(!new_rate.allFinite()||std::max(new_rate.norm(),angvel_last_.norm())*dt>limits.rotation||
+       !CoastLocalizationFilter(state,p,dt,angvel_last_,limits))return false;
+    filter.change_x(state);filter.change_P(p);
+    // Set the exact received restart endpoint, not a made-up IMU at the old
+    // scan end. UndistortPcl can only integrate later real endpoint pairs.
+    last_imu_=endpoint;last_lidar_end_time_=target;
+    angvel_last_=new_rate;acc_s_last_.setZero();IMUpose_.clear();
+    return true;
+}
 
 ImuProcess::ImuProcess() : b_first_frame_(true), imu_need_init_(true) {
     init_iter_num_ = 1;

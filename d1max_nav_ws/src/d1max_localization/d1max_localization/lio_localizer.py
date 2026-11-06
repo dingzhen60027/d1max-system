@@ -112,6 +112,15 @@ class LioLocalizer(Node):
         self.imu_at=0.;self.cloud_at=0.;self.sdk_at=0.;self.robot_at=0.;self.head_direction=0
         self.speed_report={};self.speed_report_at=0.;self.last_error='';self.command_result=None
         self.last_command=None;self.last_output=0.;self.last_path=0.;self.pose_times=deque(maxlen=60)
+        # Typed manual intents retain their ORIGINAL source ordering. Mailbox
+        # delivery/created_at and a new UUID cannot make an older applied
+        # intent current again. Legacy/internal seeds do not own this fence.
+        self.last_applied_initial_intent_ns=0
+        self.last_applied_initial_intent_id=None
+        # A validated attempt may partially mutate the seed before publishing
+        # fails. Fence older deliveries without calling that attempt applied.
+        self.last_attempted_initial_intent_ns=0
+        self.last_attempted_initial_intent_id=None
         self.active_seed=None;self.confirmed_seed=None;self.verified_confirmations=0
         self.epoch_changed_at=0.
         self.path=deque(maxlen=int(self.p['trajectory_max_points']))
@@ -324,11 +333,22 @@ class LioLocalizer(Node):
             command=json.loads(path.read_text());identifier=command['id']
             if identifier==self.last_command:return
             self.last_command=identifier
-            transaction_intent_stamp(command,self.session['id'])
+            intent_ns=transaction_intent_stamp(command,self.session['id'])
+            if intent_ns is not None:
+                if ((identifier==self.last_applied_initial_intent_id
+                        and intent_ns==self.last_applied_initial_intent_ns)
+                        or (identifier==self.last_attempted_initial_intent_id
+                            and intent_ns==self.last_attempted_initial_intent_ns)):
+                    return  # Late rejection cannot erase applied/partial same-intent dedup.
+                if intent_ns<=max(self.last_applied_initial_intent_ns,self.last_attempted_initial_intent_ns):
+                    raise ValueError('初值意图源时间回退或重复，不能覆盖已应用或正在核对的新初值')
             if command['session_id']!=self.session['id'] or not 0<=time.time()-command['created_at']<=5:raise ValueError('初值已过期或会话不匹配')
             if command['created_at']<self.epoch_changed_at:raise ValueError('局部里程计轮次已变化，请重新提交初值')
             if not self.seed_ready():raise ValueError('等待 LIO 初始化和新鲜机头前向状态')
             pose=initial_tracking_pose(command,self.p['tracking_offset_body'],self.p['sdk_to_tracking_yaw'])
+            if intent_ns is not None:
+                self.last_attempted_initial_intent_ns=intent_ns
+                self.last_attempted_initial_intent_id=identifier
             stamp=self.now_s();application_started=True
             self.core.seed(pose,stamp);self.publish_seed(pose,stamp)
             self.path.clear()
@@ -337,6 +357,12 @@ class LioLocalizer(Node):
                 empty=RosPath();empty.header.frame_id=self.p['map_frame'];empty.header.stamp=self.get_clock().now().to_msg();self.path_pub.publish(empty)
             self.command_result={'id':identifier,'accepted':True,'message':'初值仅作为地图匹配种子，等待连续确认'}
             self.publish_initial_outcome(command,True,True,'initial_pose_seed_installed_not_localization_ready')
+            # Known rejection or partial application must not advance this
+            # successful-application watermark; the existing outcome reports
+            # partial work for owner review instead of silently retrying it.
+            if intent_ns is not None:
+                self.last_applied_initial_intent_ns=intent_ns
+                self.last_applied_initial_intent_id=identifier
         except (ValueError,KeyError,TypeError,OSError) as e:
             self.command_result={'id':self.last_command,'accepted':False,'message':str(e)}
             if command is not None:
@@ -389,7 +415,7 @@ class LioLocalizer(Node):
         if not self.p['time_alignment_verified']:warnings.append('传感器时间对齐未完成实机验收')
         if not self.fresh(self.sdk_at):warnings.append('MC 速度未就绪；不使用状态速度降级，不影响独立 LIO 运动估计')
         if self.core.fault:warnings.append('局部 LIO 已停止可信输出：'+self.core.fault)
-        if self.frontend.get('recovering'):warnings.append('IMU 缺口后重新初始化；请保持静止，完成后重新给地图初值')
+        if self.frontend.get('recovering'):warnings.append('IMU 缺口后重新初始化；请保持静止，地图定位需在当前轮次重新确认')
         if self.head_direction!=1:warnings.append('初值提交要求机头前向；当前头尾切换状态不符合，程序不会自动切换')
         if navigation.get('fault'):warnings.append('导航输出已暂停：'+navigation['fault'])
         status={'session_id':self.session['id'],'map_version_id':self.session['version_id'],'wall_time':time.time(),

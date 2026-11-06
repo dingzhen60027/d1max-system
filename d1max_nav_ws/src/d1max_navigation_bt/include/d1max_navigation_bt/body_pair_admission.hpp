@@ -4,8 +4,8 @@
 
 namespace d1max_navigation_bt {
 // Coarse task-stage continuity, NOT collision evidence or an execution lease.
-// Admission and high-frequency control still require the original 100 ms IMU
-// lease. A later BT timer may cross that lease while an already admitted local
+// Admission and high-frequency control require the original provider-issued
+// 100 ms consumption lease. A later BT timer may cross it while an admitted local
 // state retains its genuine identity/source/posterior; this must not restart
 // the FollowRoute workflow or re-date any state. Explicit loss still pauses.
 inline bool localTaskInputsFresh(const d1max_planning_interfaces::msg::LocalNavigationState& m,
@@ -15,26 +15,38 @@ inline bool localTaskInputsFresh(const d1max_planning_interfaces::msg::LocalNavi
   for(const auto*t:{&m.source_stamp,&m.posterior_stamp,&m.imu_stamp})
     if(t->nanosec>=1000000000U||ns(*t)<=0)return false;
   const auto source=ns(m.source_stamp),posterior=ns(m.posterior_stamp),imu=ns(m.imu_stamp);
-  if(m.schema_version!=1||!m.usable||m.session_id!=session||map.empty()||m.map_version_id!=map||
+  if(m.schema_version!=2||!m.usable||m.session_id!=session||map.empty()||m.map_version_id!=map||
      epoch==0||seed.empty()||m.localization_epoch!=epoch||m.localization_seed_id!=seed||
      m.local_odometry.header.stamp!=m.source_stamp||
      m.local_odometry.header.frame_id!="d1max_loc_odom"||m.local_odometry.child_frame_id!="d1max_loc_base_link"||
-     posterior>source||imu>source||!std::isfinite(m.extrapolation_sec)||
+     posterior>source||source-posterior>400000000LL||imu>source||source-imu>100000000LL||
+     m.valid_until.nanosec>=1000000000U||ns(m.valid_until)<=source||ns(m.valid_until)-source>100000000LL||
+     !std::isfinite(m.extrapolation_sec)||
      m.extrapolation_sec<0||m.extrapolation_sec>.1||
      std::abs((source-imu)*1e-9-m.extrapolation_sec)>1e-5||
-     !exec3::fresh(exec3::seconds(m.source_stamp),now,.4)||
-     !exec3::fresh(exec3::seconds(m.posterior_stamp),now,.4))return false;
+     !exec3::fresh(exec3::seconds(m.source_stamp),now,.4))return false;
   const auto&o=m.local_odometry;const auto&p=o.pose.pose.position;const auto&q=o.pose.pose.orientation;
   const auto&v=o.twist.twist;
   for(double value:{p.x,p.y,p.z,q.x,q.y,q.z,q.w,v.linear.x,v.linear.y,v.linear.z,v.angular.x,v.angular.y,v.angular.z})
     if(!std::isfinite(value))return false;
   return std::abs(q.x*q.x+q.y*q.y+q.z*q.z+q.w*q.w-1.)<=.001;
 }
+// Motion consumes the provider's original, source-bound lease.  The raw IMU
+// and LIO posterior were validated relative to source at production/admission;
+// rechecking either against a later BT timer would shorten that provider lease
+// by propagation age plus transport/timer delay.
+// Task continuity alone is deliberately insufficient for this predicate.
+inline bool localControlInputsFresh(const d1max_planning_interfaces::msg::LocalNavigationState& m,
+    const std::string& session,const std::string& map,uint64_t epoch,
+    const std::string& seed,double now) {
+  return localTaskInputsFresh(m,session,map,epoch,seed,now)&&
+    now>=exec3::seconds(m.source_stamp)&&now<=exec3::seconds(m.valid_until);
+}
 inline bool acceptLocalState(const d1max_planning_interfaces::msg::LocalNavigationState& m,
     const d1max_planning_interfaces::msg::LocalNavigationState& previous,
     const std::string& session,const std::string& map,double now) {
   const auto ns=[](const builtin_interfaces::msg::Time&t){return int64_t(t.sec)*1000000000LL+t.nanosec;};
-  if(m.schema_version!=1||m.session_id!=session||map.empty()||m.map_version_id!=map||
+  if(m.schema_version!=2||m.session_id!=session||map.empty()||m.map_version_id!=map||
      m.localization_epoch==0||m.localization_seed_id.empty()||m.source_stamp.nanosec>=1000000000U||
      m.localization_epoch<previous.localization_epoch||
      (m.localization_epoch==previous.localization_epoch&&ns(m.source_stamp)<=ns(previous.source_stamp))||
@@ -43,11 +55,10 @@ inline bool acceptLocalState(const d1max_planning_interfaces::msg::LocalNavigati
   // The producer deliberately leaves odometry and measurement stamps empty;
   // requiring them here would discard the very event that withdraws a lease.
   if(!m.usable)return m.reason.size()<=1024;
-  // Validate the SAME original propagation/time/geometry contract at entry.
-  // Task use may later survive the instantaneous IMU lease, but admission and
-  // control may not. Unavailable events above deliberately need no fake IMU.
-  return localTaskInputsFresh(m,session,map,m.localization_epoch,m.localization_seed_id,now)&&
-    exec3::fresh(exec3::seconds(m.imu_stamp),now,.1);
+  // Validate the provider's original source-bound contract at entry. Delivery
+  // time must not apply a second raw IMU age budget. Task continuity may later
+  // outlive consumption; it never authorizes motion.
+  return localControlInputsFresh(m,session,map,m.localization_epoch,m.localization_seed_id,now);
 }
 // Malformed/foreign/old messages neither erase the last good snapshot nor
 // renew its lifetime. An ordered, authenticated-by-context unusable event DOES

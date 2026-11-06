@@ -499,7 +499,7 @@ sys.exit(1)
     assert result.returncode==0,result.stderr
 
 
-@pytest.mark.parametrize('kind',['outside_release','unsealed','physical_true','wrong_kind','valid'])
+@pytest.mark.parametrize('kind',['outside_release','unsealed','physical_true','wrong_kind','stale_hash','valid'])
 def test_runtime_profile_readiness_matches_formal_launch_admission(tmp_path,kind):
     b=bundle(tmp_path)
     profile={'record_kind':'runtime_motion_profile','physical_acceptance_verified':False}
@@ -512,11 +512,23 @@ def test_runtime_profile_readiness_matches_formal_launch_admission(tmp_path,kind
     a={key:value for key,value in b['activation'].items() if key not in ('purpose','expected_sdk_session')}
     a.update(launch_policy='navigation',runtime_motion_profile=str(record),runtime_motion_profile_sha256=digest(record),
              release_manifest_sha256=digest(b['seal']))
+    if kind=='stale_hash':a['runtime_motion_profile_sha256']='0'*64
     write(b['activation_path'],a,private=True)
-    state=settle(module.MainlineReleaseProbe(b['nav'],b['activation_path']),lambda s:s['readiness']!='checking')
+    probe=module.MainlineReleaseProbe(b['nav'],b['activation_path'])
+    state=settle(probe,lambda s:s['readiness']!='checking')
     assert state['readiness']==('ready' if kind=='valid' else 'invalid')
     if kind!='valid':assert state['reason_code']=='physical_record_invalid'
     assert state['motion_authorized'] is False and state['sdk_connected'] is False
+    if kind=='stale_hash':
+        # Updating only the Web binding must refresh this same running probe:
+        # no Web/SDK restart, profile edit, or movement authorization is needed.
+        original_profile=record.read_bytes()
+        a['runtime_motion_profile_sha256']=digest(record)
+        write(b['activation_path'],a,private=True)
+        state=settle(probe,lambda s:s['readiness']!='checking')
+        assert state['readiness']=='ready' and state['reason_code']=='ready'
+        assert record.read_bytes()==original_profile
+        assert state['motion_authorized'] is False and state['sdk_connected'] is False
 
 
 def test_planning_only_can_defer_current_data_session_binding_without_reading_sdk(tmp_path):

@@ -8,6 +8,30 @@ class McHealthTests(unittest.TestCase):
         self.assertEqual(monitor_identity(report,100.1)['sdk_session'],'sdk-1')
         for bad in ({**report,'session':''},{**report,'wall_time':98.},{**report,'wall_time':101.},{**report,'mode':'replay'},None):
             self.assertEqual(monitor_identity(bad,100.1),{})
+
+    def test_runtime_configuration_valid_does_not_claim_physical_acceptance(self):
+        report=dict(mode='monitor',session='sdk-1',wall_time=100.,execution_v3=dict(
+            enabled=True,runtime_parameters_valid=True,runtime_profile_sha256='a'*64,
+            physical_acceptance_verified=False))
+        health=monitor_identity(report,100.1)
+        self.assertTrue(health['execution_record_valid'])
+        self.assertEqual(health['execution_profile_sha256'],'a'*64)
+        self.assertFalse(health['physical_acceptance_verified'])
+
+    def test_task_writer_protocol_is_not_legacy_curve_authority(self):
+        report=dict(mode='monitor',session='sdk-1',wall_time=100.,execution_v3=dict(
+            enabled=True,protocol='task_follower_v1',runtime_parameters_valid=True,
+            runtime_profile_sha256='a'*64,physical_acceptance_verified=False))
+        health=monitor_identity(report,100.1)
+        self.assertEqual(health['execution_protocol'],'task_follower_v1')
+        self.assertTrue(health['execution_task_writer_enabled'])
+        self.assertFalse(health['execution_v3_enabled'])
+        self.assertFalse(health['physical_acceptance_verified'])
+        for protocol in ('curve_cas_v3','',None,'unknown'):
+            report['execution_v3']['protocol']=protocol
+            self.assertFalse(monitor_identity(report,100.1)['execution_task_writer_enabled'])
+        report['execution_v3'].update(protocol='task_follower_v1',enabled=False)
+        self.assertFalse(monitor_identity(report,100.1)['execution_task_writer_enabled'])
     def setUp(self):
         self.report = dict(source='sdk_mc', received_at_unix=100., stream_fresh=True,
                            observed_hz=50., rate_ok=True, acknowledged=True, ack_on=True, state='streaming')

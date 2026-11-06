@@ -39,7 +39,7 @@ def test_execution_menu_capability_distinguishes_preview_live_and_simulation(upd
     assert live_view.execution_menu_capable(session(**updates)) is expected
 
 
-def construct(monkeypatch, tmp_path, value):
+def construct(monkeypatch, tmp_path, value, *, selection_model=None):
     (tmp_path/'session.json').write_text(json.dumps(value))
     publishers, subscriptions = [], []
     monkeypatch.setattr(live_view.Node, '__init__', lambda *a, **kw: None)
@@ -55,6 +55,13 @@ def construct(monkeypatch, tmp_path, value):
     monkeypatch.setattr(live_view.Node, 'create_timer', lambda *a, **kw: Mock())
     monkeypatch.setattr(live_view, 'ActionClient', Mock())
     monkeypatch.setattr(live_view, 'InteractiveMarkerServer', Mock())
+    # UI capability fixture supplies explicit geometry authority. A formal
+    # entry with missing map artifacts must not silently accept a free goal.
+    selection = selection_model or Mock(mode='ground')
+    if selection_model is None:
+        selection.floor_choices = [dict(floor_id='floor1', label='一楼')]
+        selection.feedback.return_value = dict(valid=True, reason='traversable')
+    monkeypatch.setattr(live_view.LiveGoalSelection, 'from_session', lambda _: selection)
     handler = Mock()
     handler.insert.side_effect = range(1, 20)
     menu_factory = Mock(return_value=handler, UNCHECKED=0, CHECKED=1)
@@ -134,3 +141,88 @@ def test_legacy_display_only_keeps_its_existing_preview_freeze(monkeypatch, tmp_
     assert '/d1max/live_planning/execution_frozen' in publishers
     assert '/d1max/localization/odometry/global' in subscriptions
     assert '规划到此处' in labels and '执行已预览路线' not in labels
+
+
+def test_formal_conditioned_map_exposes_both_goal_and_initial_floors_without_execution_change(
+        monkeypatch, tmp_path):
+    from test_live_goal_selection import conditioned_model
+    model = conditioned_model()
+    node, publishers, subscriptions, labels = construct(monkeypatch, tmp_path,
+        session(current_floor='floor1'), selection_model=model)
+    assert node.single_floor and node.typed_view is not None
+    assert node.initial_ground_bridge is model.bridge
+    assert labels.count('一楼') == 2 and labels.count('二楼') == 2
+    assert node.initial_floor_choices == ('floor1', 'floor2')
+    node.select_initial_floor('floor2')
+    assert node.initial_floor == 'floor2'
+    node.select_initial_floor('floor3')
+    assert node.initial_floor == 'floor2'
+    assert not node.motion_capable and not node.physical_motion_capable
+    assert '导航到此处' not in labels and '执行已预览路线' not in labels
+    assert '/d1max/live_planning/execution_frozen' not in publishers
+    assert '/d1max/localization/navigation/state' in subscriptions
+    # The same Navigate action still receives source-ground, never the
+    # conditioned PCT height, and optional yaw is not altered by the bridge.
+    report = model.edit([.13, .07, 3.0726])
+    node.goal_pose = Pose()
+    node.goal_pose.position.x, node.goal_pose.position.y, node.goal_pose.position.z = report['xyz']
+    node.goal_pose.orientation.z, node.goal_pose.orientation.w = .6, .8
+    node.goal_has_yaw = True
+    node.get_clock = lambda: SimpleNamespace(now=lambda: SimpleNamespace(
+        nanoseconds=10_000_000_000, to_msg=lambda: Time(sec=10)))
+    node.commit_goal(None)
+    request = node.navigate_client.send_goal_async.call_args.args[0]
+    assert request.goal.header.frame_id == 'd1max_loc_map'
+    assert request.goal.pose.position.z == pytest.approx(3.0726)
+    assert request.goal.pose.orientation == node.goal_pose.orientation
+    assert request.has_goal_yaw and request.request_execution is False
+
+
+def test_formal_second_floor_initial_pose_queries_source_field_adds_body_height_once(
+        monkeypatch, tmp_path):
+    from geometry_msgs.msg import PoseWithCovarianceStamped
+    from d1max_pct_scan.initial_pose_client import TRANSACTION
+    from test_live_goal_selection import conditioned_model
+    model = conditioned_model()
+    value = session(current_floor='floor1', body_height=.5,
+        initial_pose_transaction=TRANSACTION, map_pcd='/map.pcd',
+        input_hashes={'/map.pcd': 'a'*64})
+    node, _, _, _ = construct(monkeypatch, tmp_path, value, selection_model=model)
+    node.get_clock = lambda: SimpleNamespace(now=lambda: SimpleNamespace(
+        nanoseconds=10_000_000_000, to_msg=lambda: Time(sec=10)))
+    node.get_logger = lambda: Mock()
+    node.select_initial_floor('floor2')
+    pose = PoseWithCovarianceStamped()
+    pose.header.frame_id = 'd1max_loc_map'
+    pose.header.stamp = Time(sec=10)
+    pose.pose.pose.position.x, pose.pose.pose.position.y = .13, .07
+    pose.pose.pose.position.z = 0.  # RViz 2D tool does not supply floor height.
+    pose.pose.pose.orientation.w = 1.
+    node.initial(pose)
+    request = node.initial_pose_transaction.pending[0]
+    assert request.body_pose.header == pose.header
+    assert request.body_pose.pose.pose.position.x == .13
+    assert request.body_pose.pose.pose.position.y == .07
+    assert request.body_pose.pose.pose.position.z == pytest.approx(3.5726)
+    assert pose.pose.pose.position.z == 0.
+    assert request.source_map_sha256 == 'a'*64
+    node.cancel_pub.publish.assert_not_called()
+    node.navigate_client.send_goal_async.assert_not_called()
+    assert not (tmp_path/'initial_pose.json').exists()
+
+
+def test_formal_single_floor_map_only_offers_its_declared_initial_floor(monkeypatch, tmp_path):
+    node, _, _, labels = construct(monkeypatch, tmp_path, session())
+    assert node.initial_floor_choices == ('floor1',)
+    node.select_initial_floor('floor2')
+    assert node.initial_floor == 'floor1'
+    assert '二楼' not in labels
+
+
+def test_global_route_view_subscribes_only_to_compute_snapshot(monkeypatch, tmp_path):
+    node, _, subscriptions, labels = construct(monkeypatch, tmp_path,
+        session(planning_scope='global_route'))
+    assert '/d1max/live_planning/bt/route_snapshot' in subscriptions
+    assert '/d1max/live_planning/committed_route' not in subscriptions
+    assert node.freeze is None and not node.motion_capable
+    assert '执行已预览路线' not in labels

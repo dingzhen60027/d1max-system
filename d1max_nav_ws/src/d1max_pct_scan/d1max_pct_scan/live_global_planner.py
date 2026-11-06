@@ -36,11 +36,12 @@ from .live_global_contract import (
     RequestEvidence, supported_start_floor,
 )
 from .live_global_worker_cleanup import RetiredChildren
-from .live_goal_pause import (RetainedGlobalComputation, GoalIntent,
+from .live_goal_pause import (RetainedGlobalComputation, GoalIntent, GoalIdentity,
                               confirmed_goal_identity, hard_identity_issue)
 from .live_map_geometry import validate_map_binding
 from .live_scan_contract import validate_continuous_pose, checked_pose_status_envelope
 from .native_global_worker import native_worker
+from .navigation_surfaces import NavigationSurfaceResolver
 from .navigation_task_policy import POLICY_ID, RouteAction, TaskEvent, task_transition
 from .static_route_validation import StaticRouteValidator, validate_static_route
 from .atomic_navigation_inbox import uses_atomic_navigation
@@ -136,6 +137,8 @@ class LiveGlobalPlanner(Node):
                              source_frame=ORIGINAL_FRAME)
         self.source_route_builder = SourceRouteBuilder.from_artifacts(
             manifest_path, self.tomogram, self.bridge)
+        self.surface_resolver = None
+        LiveGlobalPlanner._navigation_surfaces(self)
         from d1max_pct_planner.native_runtime import prepare_native_environment
         self.native_environment = prepare_native_environment(
             self.route_settings['vendor_root'], os.environ)
@@ -225,6 +228,30 @@ class LiveGlobalPlanner(Node):
 
     def now_s(self):
         return self.get_clock().now().nanoseconds * 1e-9
+
+    def _navigation_surfaces(self):
+        """One measured support model for RViz goals and planner endpoints.
+
+        Floor-only maps retain their existing admission contract. A declared
+        stair topology extends that contract, not the traversable grid itself.
+        """
+        if not all(key in self.route_settings for key in ('stair_roi', 'anchors')):
+            return None
+        model = getattr(self, 'surface_resolver', None)
+        if model is None:
+            model = NavigationSurfaceResolver(self.tomogram, self.bridge, self.route_settings)
+            self.surface_resolver = model
+        return model
+
+    @staticmethod
+    def _planning_endpoint(surface):
+        # The editor permits a nearby free-XYZ draft, but native route
+        # endpoints are ground points (as for the existing floor selector).
+        # Do not pass the draft's height offset into a different native height
+        # tolerance or apply it again as a robot-body offset downstream.
+        ground = np.asarray(surface['planning_xyz'], dtype=float).copy()
+        ground[2] = surface['planning_ground_z']
+        return {**surface, 'xyz': ground, 'ground_z': float(ground[2])}
 
     def publish_empty(self, reason):
         empty = NavPath()
@@ -372,7 +399,14 @@ class LiveGlobalPlanner(Node):
         self.nav_received=self.pose_received=self.localizer_received=self.body_received=event.received
         self.body=np.asarray(state.global_body.position) if state is not None else None
         self.body_stamp=self.last_body_stamp=stamp
-        self.body_context=self.confirmed_identity() if state is not None else None
+        # Intake has already validated this exact state. Bind its identity
+        # without a second clock-sensitive lease lookup inside the callback:
+        # ordinary scheduling across the expiry boundary is a soft wait, not
+        # an uncaught exception terminating the planner. planning_context and
+        # confirmed_identity still check original freshness at every use.
+        self.body_context=(GoalIdentity(event.identity[0],message.map_version_id,
+            event.identity[1],event.identity[2],self.bridge.source_frame,self.tomogram.sha256)
+            if state is not None else None)
         self._revoke_if_context_lost()
 
     def on_navigation(self, message):
@@ -711,7 +745,15 @@ class LiveGlobalPlanner(Node):
                 and self.localizer.get('wall_time', 0.) > self.pause_wall)
 
     def on_cancel(self, _message):
-        self.revoke('explicit_user_cancel')
+        # Retire the request, not its immutable prewarmed map resources. A
+        # busy worker is still terminated by revoke; an idle worker (or the
+        # goal-free startup warmup) cannot produce an old goal result. BT waits
+        # for this request's retirement before dispatching the next one.
+        self.revoke('explicit_user_cancel', preserve_idle_worker=True)
+        # Cancellation is an ownership event, not a periodic liveness report.
+        # Notify the adapter now rather than adding up to 500 ms to preemption.
+        self.last_status_at = time.monotonic()
+        self.publish_status()
 
     def on_goal2d(self, message):
         self._new_goal(message, kind='2d')
@@ -731,11 +773,15 @@ class LiveGlobalPlanner(Node):
             return
         self.last_goal_stamp = stamp
         self.revoke('new_goal_cancels_previous_reference', preserve_idle_worker=True)
+        try:
+            identity = self.confirmed_identity()
+        except (GlobalPlanError, ValueError):
+            identity = None
         # A one-shot Action delivery can race a single localization callback.
         # Retain only the operator request (not a pose, route, or motion lease)
         # and start its calculation budget only when fresh input is available.
         self.waiting_goal = dict(message=deepcopy(message), kind=kind, stamp=stamp,
-            started=time.monotonic(), identity=getattr(self, '_last_confirmed_identity', None))
+            started=time.monotonic(), identity=identity)
         LiveGlobalPlanner._start_waiting_goal(self)
 
     def _start_waiting_goal(self):
@@ -782,7 +828,11 @@ class LiveGlobalPlanner(Node):
                 xyz = (float(goal_xy[0]), float(goal_xy[1]), 0.)
             else:
                 goal_xyz = finite_xyz([message.point.x, message.point.y, message.point.z], 'goal3d')
-                if getattr(self.bridge,'projection_kind',None)=='source_identity' and message.header.frame_id==self.bridge.source_frame:
+                model = LiveGlobalPlanner._navigation_surfaces(self)
+                if model is not None:
+                    selected = model.resolve_goal(goal_xyz, frame_id=message.header.frame_id)
+                    goal_floor = selected['region_id']
+                elif getattr(self.bridge,'projection_kind',None)=='source_identity' and message.header.frame_id==self.bridge.source_frame:
                     goal_floor=floor_from_original_ground_z(self.bridge,goal_xyz)
                 elif message.header.frame_id == self.bridge.planning_frame:
                     goal_floor = floor_from_planning_z(
@@ -818,14 +868,20 @@ class LiveGlobalPlanner(Node):
                 or time.monotonic() >= self.goal_deadline_monotonic):
             raise GlobalPlanError('total_goal_computation_deadline_expired')
         body = self.body.copy()
-        current_floor, projected = supported_start_floor(
-            self.bridge, body, height_interval_m=(self.p['body_height_min_m'],
-                                                 self.p['body_height_max_m']))
-        start_info = choose_floor_surface(
-            self.tomogram, projected.xyz[:2], current_floor,
-            self.route_settings['floor_z_ranges'],
-            hint_z=(float(projected.xyz[2]) if getattr(self.bridge,'projection_kind',None)=='source_identity'
-                    else self.bridge.floors[current_floor].reference_z_m))
+        model = LiveGlobalPlanner._navigation_surfaces(self)
+        if model is not None:
+            start_info = LiveGlobalPlanner._planning_endpoint(model.resolve_body(
+                body, (self.p['body_height_min_m'], self.p['body_height_max_m'])))
+        else:
+            current_floor, projected = supported_start_floor(
+                self.bridge, body, height_interval_m=(self.p['body_height_min_m'],
+                                                     self.p['body_height_max_m']))
+            start_info = choose_floor_surface(
+                self.tomogram, projected.xyz[:2], current_floor,
+                self.route_settings['floor_z_ranges'],
+                hint_z=(float(projected.xyz[2]) if getattr(self.bridge,'projection_kind',None)=='source_identity'
+                        else self.bridge.floors[current_floor].reference_z_m))
+        goal_info = None
         if intent.kind == '2d':
             if intent.frame_id != self.bridge.source_frame:
                 raise GlobalPlanError('2d_goal_must_use_original_localization_frame')
@@ -833,7 +889,12 @@ class LiveGlobalPlanner(Node):
                 if getattr(self.bridge,'projection_kind',None)=='source_identity'
                 else self.bridge.floors[intent.floor_id].reference_z_m)
         elif intent.kind == '3d':
-            if (getattr(self.bridge, 'projection_kind', None) == 'source_identity'
+            if model is not None:
+                selected = model.resolve_goal(intent.xyz, frame_id=intent.frame_id)
+                if selected['region_id'] != intent.floor_id:
+                    raise GlobalPlanError('goal_support_region_changed')
+                goal_info = LiveGlobalPlanner._planning_endpoint(selected)
+            elif (getattr(self.bridge, 'projection_kind', None) == 'source_identity'
                     and intent.frame_id == self.bridge.source_frame):
                 # An identity map keeps the measured local height. Its whole-
                 # floor median is a UI hint, not a replacement for a 3D goal.
@@ -854,10 +915,11 @@ class LiveGlobalPlanner(Node):
                 raise GlobalPlanError('3d_goal_frame_must_be_original_or_planning')
         else:
             raise GlobalPlanError('unknown_goal_kind')
-        goal_info = choose_floor_surface(
-            self.tomogram, intent.xyz[:2], intent.floor_id,
-            self.route_settings['floor_z_ranges'], hint_z=goal_hint)
-        if (not np.array_equal(start_info['xyz'][:2], projected.xyz[:2])
+        if goal_info is None:
+            goal_info = choose_floor_surface(
+                self.tomogram, intent.xyz[:2], intent.floor_id,
+                self.route_settings['floor_z_ranges'], hint_z=goal_hint)
+        if (not np.array_equal(start_info['xyz'][:2], body[:2])
                 or not np.array_equal(goal_info['xyz'][:2], intent.xyz[:2])):
             raise GlobalPlanError('endpoint_xy_was_modified')
         self.generation += 1
@@ -946,9 +1008,13 @@ class LiveGlobalPlanner(Node):
         # the FIRST route is still computing. Never drop the mission merely
         # because its current pose lies inside the protected stair volume.
         try:
-            supported_start_floor(self.bridge, self.body,
-                height_interval_m=(self.p['body_height_min_m'], self.p['body_height_max_m']))
-        except GlobalPlanError as exc:
+            model = LiveGlobalPlanner._navigation_surfaces(self)
+            interval = (self.p['body_height_min_m'], self.p['body_height_max_m'])
+            if model is not None:
+                model.resolve_body(self.body, interval)
+            else:
+                supported_start_floor(self.bridge, self.body, height_interval_m=interval)
+        except ValueError as exc:
             LiveGlobalPlanner._hold_goal(self, str(exc))
             return
         if self.replan_count >= MAX_SNAPSHOT_REPLANS:
@@ -1224,6 +1290,13 @@ class LiveGlobalPlanner(Node):
         commit_remaining = (max(0., self.p['commit_wait_timeout_s']-commit_elapsed)
                             if commit_elapsed is not None else None)
         waiting_goal = getattr(self, 'waiting_goal', None)
+        # The typed callback has no legacy JSON navigation_ready field. Report
+        # the same already-accepted pair's current lease, not historical valid
+        # metadata or this diagnostic publication's new wall time.
+        navigation_ready = (self.atomic_inbox.usable(
+            now_ns=self.get_clock().now().nanoseconds, monotonic=mono,
+            receipt_timeout_s=self.p['freshness_s']) if uses_atomic_navigation(self.p)
+            else self.navigation.get('navigation_ready') is True)
         value = dict(schema=1, mode='LIVE_SHADOW_NO_MOTION', session_id=self.p['session_id'],
                      received_at_unix=self.now_s(),callback_wall_time=time.time(),state=self.state,reason=self.reason,
                      planning_phase=phase, replan_count=self.replan_count,
@@ -1258,7 +1331,7 @@ class LiveGlobalPlanner(Node):
                      worker_metrics=self.worker_metrics,
                      native_warmup=getattr(self,'warmup',{}),
                      localization_valid=self.pose_status.get('valid') is True,
-                     navigation_ready=self.navigation.get('navigation_ready') is True,
+                     navigation_ready=navigation_ready,
                      scan_sensor_ready=self.scan.get('sensor_ready') is True,
                      localization_epoch=self.navigation.get('epoch'),
                      localization_seed_id=self.navigation.get('seed_id'),

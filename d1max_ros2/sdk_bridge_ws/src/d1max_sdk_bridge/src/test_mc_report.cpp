@@ -10,6 +10,17 @@ static McReport ready() {
   return r;
 }
 int main() {
+  { // Approximate mapping and evidence leases use distinct original clocks.
+    assert(d1monitor::mcMappedTimeConsistent(10.060,10.,.3));
+    assert(d1monitor::mcCaptureTimeFresh(10.060,10.,10.,.25,.25));
+    assert(d1monitor::mcCaptureTimeFresh(10.060,10.,10.249,.25,.25));
+    assert(!d1monitor::mcCaptureTimeFresh(10.060,10.,10.251,.25,.25));
+    assert(!d1monitor::mcCaptureTimeFresh(10.251,10.,10.,.25,.25));
+    assert(!d1monitor::mcCaptureTimeFresh(9.749,10.,10.,.25,.25));
+    assert(!d1monitor::mcCaptureTimeFresh(10.060,10.001,10.,.25,.25));
+    assert(!d1monitor::mcCaptureTimeFresh(10.060,10.,10.,.25,0.));
+    assert(!d1monitor::mcCaptureTimeFresh(10.060,10.,10.,.25,.251));
+  }
   {d1monitor::Inbox<int,2> q;q.push(1);q.push(2);q.push(3);int out=0;
    assert(q.dropped==1&&q.pop(out)&&out==2);assert(q.pop(out)&&out==3);assert(!q.pop(out));}
   {auto r=ready(); // Fixed storage wraps under a flood without changing the old 512 bound.

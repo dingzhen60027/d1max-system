@@ -201,11 +201,8 @@ namespace scan_planner
 
   void PlanningVisualization::displayOptimalTraj(UniformBspline position_traj, int id)
   {
-    if (optimal_list_pub->get_subscription_count() == 0)
-    {
-      return;
-    }
-
+    // Cache one immutable committed curve on the existing durable publisher,
+    // including when RViz is opened after navigation has started.
     const double duration = position_traj.getTimeSum();
     if (duration < 1e-6)
     {
@@ -240,6 +237,7 @@ namespace scan_planner
     sphere.type = visualization_msgs::msg::Marker::SPHERE_LIST;
     line_strip.type = visualization_msgs::msg::Marker::LINE_STRIP;
     sphere.action = line_strip.action = visualization_msgs::msg::Marker::ADD;
+    sphere.lifetime = line_strip.lifetime = rclcpp::Duration::from_seconds(0.);
     sphere.id = id;
     line_strip.id = id + 1000;
     sphere.pose.orientation.w = line_strip.pose.orientation.w = 1.0;
@@ -268,6 +266,16 @@ namespace scan_planner
 
     optimal_list_pub->publish(sphere);
     optimal_list_pub->publish(line_strip);
+  }
+
+  void PlanningVisualization::clearOptimalTraj(int id)
+  {
+    visualization_msgs::msg::Marker marker;
+    marker.header.frame_id=frame_id_;marker.header.stamp=node_->now();
+    marker.action=visualization_msgs::msg::Marker::DELETE;
+    marker.lifetime=rclcpp::Duration::from_seconds(0.);
+    marker.id=id;optimal_list_pub->publish(marker);
+    marker.id=id+1000;optimal_list_pub->publish(marker);
   }
 
   void PlanningVisualization::displayAStarList(std::vector<std::vector<Eigen::Vector3d>> a_star_paths, int id /* = Eigen::Vector4d(0.5,0.5,0,1)*/)

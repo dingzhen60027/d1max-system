@@ -1,5 +1,6 @@
 #include "d1max_navigation_bt/engine.hpp"
 #include "d1max_navigation_bt/preparation_budget.hpp"
+#include "d1max_navigation_bt/runtime_policy.hpp"
 
 #include <gtest/gtest.h>
 #include <algorithm>
@@ -34,6 +35,9 @@ struct FakeBackend final : Backend {
   int pauses{0}, resumes{0}, cancelled{0}, finished{0};
   bool completed_success{false};
   std::vector<std::string> calls;
+  struct TerminalEvent {std::string task, reason;bool success;};
+  std::vector<TerminalEvent> terminal_events;
+  std::vector<std::pair<std::string,std::string>> cancel_events;
   std::int64_t source_sequence{0};
   ReadyState contextValid(const TaskIdentity&) override { return context; }
   ReadyState initialLocalizationReady(const TaskIdentity&) override { return initial; }
@@ -52,11 +56,13 @@ struct FakeBackend final : Backend {
   void setPaused(const TaskIdentity&, bool paused, const std::string&) override {
     if (paused) ++pauses; else ++resumes;
   }
-  void finishTask(const TaskIdentity&, bool success, const std::string&) override {
+  void finishTask(const TaskIdentity& task, bool success, const std::string& reason) override {
     ++finished; completed_success = success;
+    terminal_events.push_back({task.task_id,reason,success});
   }
-  void cancelTask(const TaskIdentity& task, const std::string&) override {
+  void cancelTask(const TaskIdentity& task, const std::string& reason) override {
     ++cancelled; calls.push_back("cancel:" + task.task_id);
+    cancel_events.emplace_back(task.task_id,reason);
   }
 };
 
@@ -86,6 +92,32 @@ TEST_F(NavigationTree, NoTaskDoesNotRequestAnything) {
   EXPECT_EQ(engine.tick(), NodeStatus::IDLE);
   EXPECT_EQ(backend->routes, 0);
   EXPECT_FALSE(engine.snapshot().active);
+}
+
+TEST(NavigationTreeTransport, UncertainSendFailureTerminatesOnceWithoutResubmission) {
+  for(const bool following:{false,true}) {
+    auto backend=std::make_shared<FakeBackend>();
+    Engine engine(backend,DEFAULT_BT_XML);
+    engine.submit({"uncertain-send","session"});
+    ASSERT_EQ(engine.tick(),NodeStatus::RUNNING);
+    if(following) {
+      backend->route={NodeStatus::SUCCESS,"route_committed"};
+      ASSERT_EQ(engine.tick(),NodeStatus::RUNNING);
+      backend->follow={NodeStatus::FAILURE,"follow_send_failed:injected_send_failure"};
+    } else backend->route={NodeStatus::FAILURE,"compute_send_failed:injected_send_failure"};
+    ASSERT_EQ(engine.tick(),NodeStatus::FAILURE);
+    ASSERT_EQ(backend->finished,1);
+    EXPECT_FALSE(backend->completed_success);
+    EXPECT_FALSE(engine.snapshot().active);
+    // AsyncRequestState keeps uncertain transport ownership pending outside
+    // the tree. That is not permission to restart this completed BT action.
+    for(int tick=0;tick<20;++tick)EXPECT_EQ(engine.tick(),NodeStatus::FAILURE);
+    EXPECT_EQ(backend->routes,1);EXPECT_EQ(backend->follows,following?1:0);
+    EXPECT_EQ(backend->finished,1);
+    ASSERT_EQ(backend->terminal_events.size(),1U);
+    EXPECT_EQ(backend->terminal_events.front().task,"uncertain-send");
+    EXPECT_NE(backend->terminal_events.front().reason.find("_send_failed:"),std::string::npos);
+  }
 }
 
 TEST_F(NavigationTree, RealXmlAndRealBehaviorTreeNodesAreVisible) {
@@ -148,6 +180,34 @@ TEST_F(NavigationTree, CancelDuringInitialLocalizationDoesNotRequestRouteOrResum
   backend->initial = {true,"late_confirmed_pose"};
   EXPECT_EQ(engine.tick(),NodeStatus::IDLE);
   EXPECT_EQ(backend->routes,0);EXPECT_EQ(backend->cancelled,1);
+}
+
+TEST_F(NavigationTree, NewGoalDuringRealEpochRecoveryWaitsFreshIdentityAndOnlyLatestIntentPlans) {
+  startFollow();
+  const auto old_fault=taskLocalizationFault(true,true,true,"localization_context_replaced");
+  backend->context={old_fault.empty(),old_fault};
+  ASSERT_EQ(engine.tick(),NodeStatus::FAILURE);
+  EXPECT_EQ(backend->follow_halts,1);
+  EXPECT_EQ(backend->routes,1);
+  // Historical health can still name the old seed, but it cannot bind a new
+  // task. Only the new intent waits; the failed old tree is not resumed.
+  backend->context={taskLocalizationFault(false,true,true,old_fault).empty(),"unbound_intent"};
+  backend->initial={initialTaskIdentityReady(true,true,false,true),"waiting_new_epoch_confirmation"};
+  backend->route={NodeStatus::RUNNING,"not_requested"};
+  engine.submit({"new-2","session-1"});
+  for(int i=0;i<10;++i)ASSERT_EQ(engine.tick(),NodeStatus::RUNNING);
+  EXPECT_EQ(backend->routes,1);EXPECT_EQ(backend->follows,1);
+  engine.submit({"new-3","session-1"});
+  ASSERT_EQ(engine.tick(),NodeStatus::RUNNING);
+  EXPECT_EQ(engine.snapshot().task.task_id,"new-3");
+  backend->initial={initialTaskIdentityReady(true,true,true,false),"new_epoch_verified"};
+  ASSERT_EQ(engine.tick(),NodeStatus::RUNNING);
+  EXPECT_EQ(backend->routes,2);
+  EXPECT_EQ(backend->calls.back(),"route:new-3");
+  backend->route={NodeStatus::SUCCESS,"new_route_committed"};
+  ASSERT_EQ(engine.tick(),NodeStatus::RUNNING);
+  EXPECT_EQ(backend->follows,2);
+  EXPECT_EQ(backend->calls.back(),"follow:new-3");
 }
 
 TEST_F(NavigationTree, InitialLocalizationHasBoundedFailureWithoutStartingRoute) {
@@ -345,6 +405,26 @@ TEST_F(NavigationTree, CancelHaltsExactlyOnceAndNeverRestarts) {
   EXPECT_FALSE(engine.snapshot().active);
 }
 
+TEST_F(NavigationTree, ManualTakeoverRetiresFollowAndNewNavigationUsesTheSameLiveTree) {
+  startFollow();
+  engine.cancel("sdk_manual_takeover");
+  ASSERT_EQ(backend->follow_halts,1);
+  ASSERT_EQ(backend->cancel_events.size(),1u);
+  EXPECT_EQ(backend->cancel_events.front().second,"sdk_manual_takeover");
+  // Keeping the panel open, changing its mode, and releasing its jog do not
+  // submit or restart anything. Only a later, explicitly new goal may do so.
+  for(int i=0;i<20;++i)EXPECT_EQ(engine.tick(),NodeStatus::IDLE);
+  EXPECT_EQ(backend->routes,1);EXPECT_EQ(backend->follows,1);
+  backend->route={NodeStatus::RUNNING,"route_pending"};
+  engine.submit({"task-2","session-1"});
+  EXPECT_EQ(engine.tick(),NodeStatus::RUNNING);
+  EXPECT_EQ(backend->routes,2);EXPECT_EQ(backend->follows,1);
+  backend->route={NodeStatus::SUCCESS,"route_committed"};
+  EXPECT_EQ(engine.tick(),NodeStatus::RUNNING);
+  EXPECT_EQ(backend->follows,2);EXPECT_EQ(backend->cancelled,1);
+  EXPECT_EQ(engine.snapshot().task.task_id,"task-2");
+}
+
 TEST_F(NavigationTree, CancelDuringInitialReadinessNeverDispatchesAWorkerAfterRecovery) {
   backend->inputs = {false, "waiting_initial_pose"};
   engine.submit({"task-1", "session-1"});
@@ -381,6 +461,75 @@ TEST_F(NavigationTree, NewTaskRetiresOldBeforeRequestingNewRoute) {
   EXPECT_LT(halt, cancel);
   EXPECT_LT(cancel, route);
   EXPECT_EQ(backend->routes, 2);
+}
+
+TEST_F(NavigationTree, RapidReplacementKeepsOnlyLatestTargetBehindSoftwareRetirement) {
+  startFollow();
+  AsyncRequestState old_follow;ASSERT_TRUE(old_follow.begin());
+  engine.submit({"task-2", "session-1"});
+  for(int i=0;i<100;++i) {
+    // This is the same callback-independent tick guard used by NavigatorNode.
+    if(replacementTaskMayTick(false,""))engine.tick();
+  }
+  EXPECT_EQ(engine.snapshot().root_status,NodeStatus::IDLE);
+  EXPECT_EQ(backend->routes,1);EXPECT_EQ(backend->follows,1);
+  engine.submit({"task-3", "session-1"});
+  EXPECT_EQ(engine.snapshot().task.task_id,"task-3");
+  EXPECT_EQ(backend->cancelled,2);
+  EXPECT_EQ(std::count(backend->calls.begin(),backend->calls.end(),"cancel:task-1"),1);
+  EXPECT_EQ(std::count(backend->calls.begin(),backend->calls.end(),"cancel:task-2"),1);
+  EXPECT_FALSE(old_follow.acceptTerminal(true)); // late A result only retires A
+  const bool software_retired=!old_follow.pending();
+  const bool measured_stop=false;
+  backend->route={NodeStatus::RUNNING,"new_route_pending"};
+  if(replacementTaskMayTick(planningRetirementReady(true,software_retired,
+      software_retired&&measured_stop),""))engine.tick();
+  EXPECT_EQ(backend->routes,2);EXPECT_EQ(backend->follows,1);
+  EXPECT_EQ(std::count(backend->calls.begin(),backend->calls.end(),"route:task-2"),0);
+  EXPECT_EQ(std::count(backend->calls.begin(),backend->calls.end(),"route:task-3"),1);
+  EXPECT_FALSE(targetedCancelApplies("task-1",engine.snapshot().task.task_id));
+  EXPECT_EQ(engine.snapshot().task.task_id,"task-3");
+}
+
+TEST_F(NavigationTree, RetirementFaultEndsReplacementWithoutDispatchingItsRoute) {
+  startFollow();engine.submit({"task-2","session-1"});
+  backend->context={false,"previous_worker_cancellation_timeout"};
+  ASSERT_TRUE(replacementTaskMayTick(false,backend->context.reason));
+  EXPECT_EQ(engine.tick(),NodeStatus::FAILURE);
+  EXPECT_EQ(backend->routes,1);EXPECT_EQ(backend->follows,1);
+  EXPECT_EQ(backend->finished,1);EXPECT_FALSE(backend->completed_success);
+  backend->context={true,"late_retirement"};
+  EXPECT_EQ(engine.tick(),NodeStatus::FAILURE);
+  EXPECT_EQ(backend->routes,1); // late ACK cannot resurrect the failed goal
+}
+
+TEST_F(NavigationTree, MissingPhysicalStopDoesNotBlockNewestPlanningAfterSoftwareRetirement) {
+  startFollow();engine.submit({"task-2","session-1"});
+  const std::string waiting="previous_physical_stop_unconfirmed";
+  backend->context={true,planningRetirementReason(true,waiting)};
+  for(int i=0;i<400;++i)if(replacementTaskMayTick(
+      planningRetirementReady(true,false,false),backend->context.reason))engine.tick();
+  EXPECT_EQ(engine.snapshot().root_status,NodeStatus::IDLE);
+  EXPECT_EQ(backend->routes,1);EXPECT_EQ(backend->follows,1);
+  EXPECT_EQ(backend->finished,0);
+  engine.submit({"task-3","session-1"});
+  for(int i=0;i<50;++i)if(replacementTaskMayTick(
+      planningRetirementReady(true,false,false),backend->context.reason))engine.tick();
+  EXPECT_EQ(backend->routes,1);
+  // Actual SOFTWARE retirement permits new geometry. No physical stop or SDK
+  // grant is manufactured; those remain the execution authority's contract.
+  backend->route={NodeStatus::RUNNING,"new_route_pending"};
+  ASSERT_TRUE(replacementTaskMayTick(planningRetirementReady(true,true,false),
+    planningRetirementReason(true,waiting)));engine.tick();
+  EXPECT_EQ(backend->routes,2);EXPECT_EQ(backend->follows,1);
+  EXPECT_EQ(engine.snapshot().task.task_id,"task-3");
+  EXPECT_EQ(std::count(backend->calls.begin(),backend->calls.end(),"route:task-2"),0);
+  EXPECT_EQ(std::count(backend->calls.begin(),backend->calls.end(),"route:task-3"),1);
+  EXPECT_FALSE(targetedCancelApplies("task-1",engine.snapshot().task.task_id));
+  backend->route={NodeStatus::SUCCESS,"new_route_committed"};
+  EXPECT_EQ(engine.tick(),NodeStatus::RUNNING);
+  EXPECT_EQ(backend->follows,2); // one old Follow plus newest preparation
+  EXPECT_EQ(std::count(backend->calls.begin(),backend->calls.end(),"follow:task-3"),1);
 }
 
 TEST_F(NavigationTree, DuplicateGoalDeliveryIsIdempotentAndIdentityReuseRejected) {
@@ -424,6 +573,63 @@ TEST_F(NavigationTree, TerminalFollowFailureDoesNotBlindlyRestartLocalTask) {
   EXPECT_EQ(backend->follows, 1);
   EXPECT_EQ(backend->routes, 1);
   EXPECT_EQ(backend->finished, 1);
+}
+
+TEST_F(NavigationTree, LocalWaitReasonsAreNotTerminalEventsAndReplacementIsExplicitCancellation) {
+  startFollow();
+  // These are actual production local-executor reasons. None is a global
+  // task result: the current route remains committed while SCAN recovers.
+  for(const auto&reason:{"waiting_current_native_proof:missing","waiting_fresh_local_map",
+      "measured_projection_or_connection_invalid","measured_connection_support_invalid",
+      "following_local_executor_trajectory"}) {
+    backend->follow={NodeStatus::RUNNING,reason};
+    for(int i=0;i<100;++i)ASSERT_EQ(engine.tick(),NodeStatus::RUNNING);
+  }
+  EXPECT_TRUE(backend->terminal_events.empty());
+  EXPECT_TRUE(backend->cancel_events.empty());
+  EXPECT_EQ(backend->routes,1);EXPECT_EQ(backend->follows,1);
+  backend->route={NodeStatus::RUNNING,"next_route_pending"};
+  engine.submit({"task-2","session-1"});
+  ASSERT_EQ(backend->cancel_events.size(),1u);
+  EXPECT_EQ(backend->cancel_events.front(),std::make_pair(std::string("task-1"),
+    std::string("superseded_by_new_task")));
+  EXPECT_TRUE(backend->terminal_events.empty());
+  EXPECT_EQ(engine.tick(),NodeStatus::RUNNING);
+  EXPECT_EQ(backend->routes,2);EXPECT_EQ(backend->follows,1);
+  backend->route={NodeStatus::SUCCESS,"new_route_committed"};
+  EXPECT_EQ(engine.tick(),NodeStatus::RUNNING);
+  EXPECT_EQ(backend->follows,2);EXPECT_EQ(engine.snapshot().task.task_id,"task-2");
+  EXPECT_TRUE(backend->terminal_events.empty());
+}
+
+TEST_F(NavigationTree, ExactFailedGoalReasonIsLatchedOnceAndDoesNotContaminateReplacement) {
+  engine.submit({"task-1","session-1"});
+  ASSERT_EQ(engine.tick(),NodeStatus::RUNNING);
+  backend->route={NodeStatus::FAILURE,"compute_route_failed:invalid_curve"};
+  ASSERT_EQ(engine.tick(),NodeStatus::FAILURE);
+  for(int i=0;i<100;++i)EXPECT_EQ(engine.tick(),NodeStatus::FAILURE);
+  ASSERT_EQ(backend->terminal_events.size(),1u);
+  EXPECT_EQ(backend->terminal_events[0].task,"task-1");
+  EXPECT_EQ(backend->terminal_events[0].reason,"compute_route_failed:invalid_curve");
+  EXPECT_FALSE(backend->terminal_events[0].success);
+  EXPECT_TRUE(backend->cancel_events.empty());
+  backend->route={NodeStatus::RUNNING,"next_route_pending"};
+  engine.submit({"task-2","session-1"});
+  EXPECT_EQ(engine.tick(),NodeStatus::RUNNING);
+  backend->route={NodeStatus::SUCCESS,"new_route_committed"};
+  EXPECT_EQ(engine.tick(),NodeStatus::RUNNING);
+  EXPECT_EQ(engine.snapshot().task.task_id,"task-2");
+  EXPECT_EQ(engine.snapshot().active_node,"FollowRoute");
+  EXPECT_EQ(backend->routes,2);EXPECT_EQ(backend->follows,1);
+  EXPECT_EQ(backend->terminal_events.size(),1u);
+  // Canceling B is a distinct event, not another failure of A, and late
+  // callback/result readiness cannot restart either already-ended task.
+  engine.cancel("user_cancelled");
+  ASSERT_EQ(backend->cancel_events.size(),1u);
+  EXPECT_EQ(backend->cancel_events[0],std::make_pair(std::string("task-2"),std::string("user_cancelled")));
+  backend->follow={NodeStatus::SUCCESS,"late_old_follow_result"};
+  EXPECT_EQ(engine.tick(),NodeStatus::IDLE);
+  EXPECT_EQ(backend->terminal_events.size(),1u);
 }
 
 TEST_F(NavigationTree, IllegalBackendIdleIsDiagnosableAndFailsClosed) {
@@ -491,6 +697,104 @@ TEST(NavigationRouteDeadline, WorkerPrewarmHasItsOwnBoundedFailure) {
   EXPECT_EQ(engine.tick(),NodeStatus::FAILURE);
   EXPECT_EQ(engine.snapshot().reason,"global_worker_startup_timeout");
   EXPECT_EQ(backend->routes,1);EXPECT_EQ(backend->route_halts,1);
+  std::remove(path.c_str());
+}
+
+TEST(NavigationTreeLimits, FirstReadyAtExpiredWaitCannotDispatchGlobalWork) {
+  const auto path="/tmp/d1max_bt_first_ready_deadline_"+std::to_string(getpid())+".xml";
+  {std::ofstream file(path);file<<R"(<root main_tree_to_execute="Test"><BehaviorTree ID="Test">
+    <PauseOnUnavailable timeout_s="0.002"><ComputeGlobalRoute/></PauseOnUnavailable>
+    </BehaviorTree></root>)";}
+  auto backend=std::make_shared<FakeBackend>();backend->inputs={false,"waiting_source"};
+  Engine engine(backend,path);engine.submit({"first-ready-at-expiry","session"});
+  ASSERT_EQ(engine.tick(),NodeStatus::RUNNING);
+  std::this_thread::sleep_for(std::chrono::milliseconds(5));
+  backend->inputs={true,"ready"};
+  EXPECT_EQ(engine.tick(),NodeStatus::FAILURE);
+  EXPECT_EQ(backend->routes,0);EXPECT_EQ(backend->resumes,0);EXPECT_EQ(backend->finished,1);
+  EXPECT_NE(engine.snapshot().reason.find("navigation_input_wait_timeout"),std::string::npos);
+  std::remove(path.c_str());
+}
+
+TEST(NavigationTreeLimits, ThirdFreshRecoveryAtExpiredWaitCannotResumeOldFollow) {
+  const auto path="/tmp/d1max_bt_recovery_deadline_"+std::to_string(getpid())+".xml";
+  {std::ofstream file(path);file<<R"(<root main_tree_to_execute="Test"><BehaviorTree ID="Test">
+    <PauseOnUnavailable timeout_s="0.610"><FollowCommittedRoute/></PauseOnUnavailable>
+    </BehaviorTree></root>)";}
+  auto backend=std::make_shared<FakeBackend>();Engine engine(backend,path);
+  engine.submit({"recover-at-expiry","session"});ASSERT_EQ(engine.tick(),NodeStatus::RUNNING);
+  backend->inputs={false,"waiting_source"};ASSERT_EQ(engine.tick(),NodeStatus::RUNNING);
+  backend->inputs={true,"ready"};ASSERT_EQ(engine.tick(),NodeStatus::RUNNING);
+  std::this_thread::sleep_for(std::chrono::milliseconds(310));
+  ASSERT_EQ(engine.tick(),NodeStatus::RUNNING);
+  std::this_thread::sleep_for(std::chrono::milliseconds(310));
+  EXPECT_EQ(engine.tick(),NodeStatus::FAILURE);
+  EXPECT_EQ(backend->follows,1);EXPECT_EQ(backend->resumes,0);EXPECT_EQ(backend->follow_halts,1);
+  EXPECT_EQ(backend->finished,1);EXPECT_FALSE(backend->completed_success);
+  EXPECT_NE(engine.snapshot().reason.find("navigation_input_wait_timeout"),std::string::npos);
+  std::remove(path.c_str());
+}
+
+TEST(NavigationTreePersistence,CommittedRouteWaitRetainsSameFollowAndStableRecoveryWithoutRecompute) {
+  const auto path="/tmp/d1max_bt_persistent_local_wait_"+std::to_string(getpid())+".xml";
+  {std::ofstream file(path);file<<R"(<root main_tree_to_execute="Test"><BehaviorTree ID="Test">
+    <ReactiveSequence><TaskContextValid/>
+      <PauseOnUnavailable timeout_s="0.001" keep_committed_route_on_local_failure="true">
+        <SequenceStar><ComputeGlobalRoute/><FollowCommittedRoute/></SequenceStar>
+      </PauseOnUnavailable>
+    </ReactiveSequence></BehaviorTree></root>)";}
+  auto backend=std::make_shared<FakeBackend>();Engine engine(backend,path);
+  engine.submit({"same-task","session"});ASSERT_EQ(engine.tick(),NodeStatus::RUNNING);
+  backend->route={NodeStatus::SUCCESS,"fixed_route_committed"};ASSERT_EQ(engine.tick(),NodeStatus::RUNNING);
+  ASSERT_EQ(backend->routes,1);ASSERT_EQ(backend->follows,1);
+  backend->inputs={false,"waiting_fresh_local_map"};ASSERT_EQ(engine.tick(),NodeStatus::RUNNING);
+  // Exercise the real BT past its shortened deadline without a 60 s sleep;
+  // the authority/preparation tests separately advance their clocks past 60 s.
+  std::this_thread::sleep_for(std::chrono::milliseconds(5));
+  EXPECT_EQ(engine.tick(),NodeStatus::RUNNING);EXPECT_TRUE(engine.snapshot().active);
+  EXPECT_EQ(backend->follow_halts,0);EXPECT_EQ(backend->finished,0);
+  backend->inputs={true,"local_inputs_restored"};ASSERT_EQ(engine.tick(),NodeStatus::RUNNING);
+  std::this_thread::sleep_for(std::chrono::milliseconds(310));ASSERT_EQ(engine.tick(),NodeStatus::RUNNING);
+  std::this_thread::sleep_for(std::chrono::milliseconds(310));EXPECT_EQ(engine.tick(),NodeStatus::RUNNING);
+  EXPECT_EQ(backend->routes,1);EXPECT_EQ(backend->follows,1);EXPECT_EQ(backend->resumes,1);
+  EXPECT_EQ(engine.snapshot().task.task_id,"same-task");EXPECT_EQ(backend->cancelled,0);
+  backend->context={false,"sdk_authority_lost"};EXPECT_EQ(engine.tick(),NodeStatus::FAILURE);
+  EXPECT_EQ(backend->follow_halts,1);EXPECT_EQ(backend->finished,1);
+  std::remove(path.c_str());
+}
+
+TEST(NavigationTreePersistence,NewTaskCannotBorrowPriorRouteToWaitForeverBeforeGlobalCommit) {
+  const auto path="/tmp/d1max_bt_persistent_route_reset_"+std::to_string(getpid())+".xml";
+  {std::ofstream file(path);file<<R"(<root main_tree_to_execute="Test"><BehaviorTree ID="Test">
+    <PauseOnUnavailable timeout_s="0.001" keep_committed_route_on_local_failure="true">
+      <SequenceStar><ComputeGlobalRoute/><FollowCommittedRoute/></SequenceStar>
+    </PauseOnUnavailable></BehaviorTree></root>)";}
+  auto backend=std::make_shared<FakeBackend>();Engine engine(backend,path);
+  engine.submit({"first-task","session"});ASSERT_EQ(engine.tick(),NodeStatus::RUNNING);
+  backend->route={NodeStatus::SUCCESS,"fixed_route_committed"};ASSERT_EQ(engine.tick(),NodeStatus::RUNNING);
+  backend->inputs={false,"waiting_local_input"};ASSERT_EQ(engine.tick(),NodeStatus::RUNNING);
+  std::this_thread::sleep_for(std::chrono::milliseconds(5));ASSERT_EQ(engine.tick(),NodeStatus::RUNNING);
+  engine.submit({"new-task","session"});ASSERT_EQ(engine.tick(),NodeStatus::RUNNING);
+  std::this_thread::sleep_for(std::chrono::milliseconds(5));EXPECT_EQ(engine.tick(),NodeStatus::FAILURE);
+  EXPECT_EQ(backend->routes,1);EXPECT_EQ(backend->follows,1);EXPECT_EQ(backend->cancelled,1);
+  EXPECT_NE(engine.snapshot().reason.find("navigation_input_wait_timeout"),std::string::npos);
+  std::remove(path.c_str());
+}
+
+TEST(NavigationTreePersistence,UserCancelStillHaltsTheRetainedCommittedFollow) {
+  const auto path="/tmp/d1max_bt_persistent_cancel_"+std::to_string(getpid())+".xml";
+  {std::ofstream file(path);file<<R"(<root main_tree_to_execute="Test"><BehaviorTree ID="Test">
+    <PauseOnUnavailable timeout_s="0.001" keep_committed_route_on_local_failure="true">
+      <SequenceStar><ComputeGlobalRoute/><FollowCommittedRoute/></SequenceStar>
+    </PauseOnUnavailable></BehaviorTree></root>)";}
+  auto backend=std::make_shared<FakeBackend>();Engine engine(backend,path);
+  engine.submit({"retained-task","session"});ASSERT_EQ(engine.tick(),NodeStatus::RUNNING);
+  backend->route={NodeStatus::SUCCESS,"fixed_route_committed"};ASSERT_EQ(engine.tick(),NodeStatus::RUNNING);
+  backend->inputs={false,"local_no_path"};ASSERT_EQ(engine.tick(),NodeStatus::RUNNING);
+  std::this_thread::sleep_for(std::chrono::milliseconds(5));ASSERT_EQ(engine.tick(),NodeStatus::RUNNING);
+  engine.cancel("user_cancelled");EXPECT_EQ(engine.tick(),NodeStatus::IDLE);
+  EXPECT_FALSE(engine.snapshot().active);EXPECT_EQ(backend->follow_halts,1);EXPECT_EQ(backend->cancelled,1);
+  EXPECT_EQ(backend->routes,1);EXPECT_EQ(backend->follows,1);
   std::remove(path.c_str());
 }
 

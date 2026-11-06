@@ -10,6 +10,12 @@
 #include <array>
 #include <limits>
 #include <functional>
+#include <optional>
+#include <atomic>
+#include <condition_variable>
+#include <mutex>
+#include <thread>
+#include <stdexcept>
 #include <cv_bridge/cv_bridge.h>
 #include <cmath>
 #include <geometry_msgs/msg/pose_stamped.hpp>
@@ -26,6 +32,8 @@
 #include <std_msgs/msg/string.hpp>
 #include <d1max_planning_interfaces/msg/projected_rays.hpp>
 #include <plan_env/projected_rays.hpp>
+#include <plan_env/projected_ray_mailbox.hpp>
+#include <plan_env/coalesced_writer_wake.hpp>
 #include <tf2_ros/transform_broadcaster.h>
 #include <visualization_msgs/msg/marker.hpp>
 
@@ -40,6 +48,10 @@
 
 #include <plan_env/raycast.h>
 #include <plan_env/voxel_collision.hpp>
+#include <plan_env/observed_hit_bounds.hpp>
+#include <plan_env/blocked_voxel_watch.hpp>
+
+namespace scan_planner {class ParallelObservedRayVisits;}
 
 #define logit(x) (log((x) / (1 - (x))))
 
@@ -70,7 +82,24 @@ struct MappingParameters {
   Eigen::Vector3d local_update_range_;
   double resolution_, resolution_inv_;
   double obstacles_inflation_z_up, obstacles_inflation_z_down;
+  // Optional candidate-only geometry. -1 preserves the legacy strict values;
+  // it never changes the measured-evidence body envelope or raw swept proof.
+  double planning_obstacles_inflation_z_up{-1.0};
+  double planning_obstacles_inflation_z_down{-1.0};
   double double_cylinder_radius_, double_cylinder_offset_;
+  // Collision approximation only, never an entity-return filter. The box is
+  // centred on the supplied body pose; its dimensions do not set body height.
+  std::string collision_model_{"double_cylinder"};
+  double box_length_{-1.},box_width_{-1.};
+  // Optional stair-only extra XY clearance. Nominal entity dimensions are
+  // never reduced; ordinary floor queries retain box_length_/box_width_.
+  double box_nominal_length_{-1.},box_nominal_width_{-1.},stair_planar_clearance_{-1.};
+  bool stair_subvoxel_collision_{false};
+  // Disabled without explicitly qualified source tread evidence. This lower
+  // rigid-body extent is used ONLY for matched stair contacts, never all hits.
+  double stair_contact_body_below_{-1.};
+  double body_below_{-1.},body_above_{-1.};
+  double planning_body_below_{-1.},planning_body_above_{-1.};
   bool map_sliding_en_;
   double map_sliding_thresh_;
   int map_sliding_thresh_vox_;
@@ -119,19 +148,31 @@ struct MappingParameters {
 };
 
 // intermediate mapping data for fusion
+struct InflationColumn {
+  int x, y, begin_z, end_z;
+};
 
 struct MappingData {
   // main map data, occupancy of each voxel and Euclidean distance
 
   std::vector<double> occupancy_buffer_;
+  // Complete union of original endpoint octants, not observed-free evidence.
+  // Low eight bits are 2x2x2 hit cells; bit eight marks coarse-only history.
+  // Collision narrows only Z: these bits are grouped into lower/upper halves,
+  // keeping the full coarse XY area (5x5x2.5 cm at 5 cm map resolution).
+  // Missing/empty/tainted evidence always falls back to the whole coarse cell.
+  std::vector<std::uint16_t> occupied_hit_subvoxels_;
+  std::vector<scan_planner::ObservedHitBounds> occupied_hit_bounds_;
   std::vector<char> occupancy_buffer_inflate_;
   std::vector<int> occupancy_buffer_inflate_cnt_;
   vector<Eigen::Vector3i> inflate_offsets_;
+  std::vector<InflationColumn> inflate_columns_;
   // Official SCAN geometry is independent of the raw-evidence execution
   // policy. A strict writer retains a separate, bounded official layer.
   std::vector<char> planning_occupancy_buffer_inflate_;
   std::vector<int> planning_occupancy_buffer_inflate_cnt_;
   vector<Eigen::Vector3i> planning_inflate_offsets_;
+  std::vector<InflationColumn> planning_inflate_columns_;
 
   // raycast origin and sensor pose data
 
@@ -178,8 +219,8 @@ struct MappingData {
 
 class GridMap {
 public:
-  GridMap() {}
-  ~GridMap() {}
+  GridMap();
+  ~GridMap();
 
   enum { INVALID_IDX = -10000 };
 
@@ -196,13 +237,55 @@ public:
 
   inline void setOccupancy(Eigen::Vector3d pos, double occ = 1);
   inline void setOccupied(Eigen::Vector3d pos);
+  void setOccupiedHit(const Eigen::Vector3d& original_endpoint);
   inline int getOccupancy(Eigen::Vector3d pos);
   inline int getOccupancy(Eigen::Vector3i id);
   inline int getInflateOccupancy(Eigen::Vector3d pos, double yaw);
+  int getInflateOccupancy(Eigen::Vector3d pos,double yaw,double pitch,double roll);
   // Candidate geometry only. A zero is NOT observed-free motion evidence.
   inline int getPlanningInflateOccupancy(Eigen::Vector3d pos, double yaw);
+  int getPlanningInflateOccupancy(Eigen::Vector3d pos,double yaw,double pitch,double roll);
   std::string describeInflateOccupancy(const Eigen::Vector3d &position,double yaw);
+  // Literal-pose diagnostics. Unlike the two-argument query, this does not
+  // substitute a predicted stair attitude for an acquired body quaternion.
+  std::string describeInflateOccupancy(const Eigen::Vector3d &position,double yaw,double pitch,double roll);
   scan_planner::CollisionEvidence inspectInflateOccupancy(const Eigen::Vector3d &position,double yaw,bool detailed=false);
+  scan_planner::CollisionEvidence inspectInflateOccupancy(const Eigen::Vector3d &position,double yaw,
+      double pitch,double roll,bool detailed=false);
+  // Reader-local, version-bound query attitude. Never attached to the live
+  // writer or copied into a new snapshot. Optional failure means unavailable
+  // geometry (status 2), not an invented upright/clear body. ROS pitch, roll.
+  using QueryAttitudeProvider=std::function<std::optional<Eigen::Vector2d>(const Eigen::Vector3d&,double)>;
+  QueryAttitudeProvider exchangeQueryAttitudeProvider(QueryAttitudeProvider provider);
+  void setQueryAttitudeProvider(QueryAttitudeProvider provider);
+  void clearQueryAttitudeProvider();
+  // Optional stair-source geometry for the native 2.5-D search plane. This
+  // supplies candidate height only; it never changes a raw collision result.
+  using QuerySupportHeightProvider=std::function<std::optional<double>(const Eigen::Vector3d&)>;
+  QuerySupportHeightProvider exchangeQuerySupportHeightProvider(QuerySupportHeightProvider provider);
+  using QueryStairClearanceProvider=std::function<bool(const Eigen::Vector3d&)>;
+  QueryStairClearanceProvider exchangeQueryStairClearanceProvider(QueryStairClearanceProvider provider);
+  using QueryStairContactProvider=std::function<bool(const Eigen::Vector3d&,const Eigen::Vector3d&)>;
+  QueryStairContactProvider exchangeQueryStairContactProvider(QueryStairContactProvider provider);
+  // Independent, finite static structure prior. This returns a hard geometry
+  // intersection, never observed-free evidence, and never edits the raw map.
+  using QueryHardBoundaryProvider=std::function<bool(const Eigen::Vector3d&,double,double,double,
+      const scan_planner::BodyEnvelope&)>;
+  QueryHardBoundaryProvider exchangeQueryHardBoundaryProvider(QueryHardBoundaryProvider provider);
+  // Diagnostic-only bounded context, invoked solely by the existing failure
+  // description path. It cannot alter collision results or create map data.
+  using QueryHardBoundaryDiagnosticProvider=std::function<std::string(const Eigen::Vector3d&,
+      double,double,double,const scan_planner::BodyEnvelope&)>;
+  QueryHardBoundaryDiagnosticProvider exchangeQueryHardBoundaryDiagnosticProvider(
+      QueryHardBoundaryDiagnosticProvider provider);
+  bool stairContactConfigured() const {return mp_.stair_contact_body_below_>=0.;}
+  double collisionResolution() const {return mp_.resolution_;}
+  bool stairClearanceConfigured() const {return mp_.stair_planar_clearance_>=0.;}
+  bool stairSubvoxelConfigured() const {return mp_.stair_subvoxel_collision_;}
+  bool hasQuerySupportHeightProvider() const {return bool(query_support_height_provider_);}
+  std::optional<double> querySupportBodyHeight(const Eigen::Vector3d& expected_body) const {
+    return query_support_height_provider_?query_support_height_provider_(expected_body):std::nullopt;
+  }
   // Offline diagnostic enablement only; no live config or permission changed.
   scan_planner::NearFieldDiagnostics &nearFieldDiagnostics() {return near_field_diagnostics_;}
 
@@ -212,7 +295,17 @@ public:
   inline bool isKnownFree(const Eigen::Vector3i& id);
   inline bool isKnownOccupied(const Eigen::Vector3i& id);
 
-  void initMap(rclcpp::Node* node);
+  // One exclusive callback group owns all mutable map state and fusion.
+  // Formal projected rays use a separate serial decode/mailbox lane; it owns
+  // no map cells, source leases, timers or collision snapshot publication.
+  // Display rendering/publication has its own bounded, non-authoritative worker.
+  // A null group preserves the node default for
+  // legacy callers; formal sessions provide their dedicated writer group.
+  void initMap(rclcpp::Node* node, rclcpp::CallbackGroup::SharedPtr callback_group = {});
+  rclcpp::CallbackGroup::SharedPtr projectedIngressGroup()const {return projected_ingress_group_;}
+  scan_planner::NativePipelineHealth nativePipelineHealth()const {
+    return projected_ingress_.pipelineHealth();
+  }
 
   void publishMap();
   void publishMapInflate(bool all_info = false);
@@ -233,6 +326,7 @@ public:
   // the latest message arrival. Zero means explicitly invalidated/no cloud.
   double latestCloudStamp() const { return integrated_cloud_stamp_ns_ * 1e-9; }
   std::int64_t latestCloudStampNs() const { return integrated_cloud_stamp_ns_; }
+  const std::string &collisionFrame() const { return mp_.frame_id_; }
   // Acquisition BEGIN of the physical ray batch actually integrated. Never
   // receipt time, alignment time or acquisition_end.
   std::int64_t integratedRaySourceStamp(unsigned sensor) const {
@@ -246,10 +340,27 @@ public:
     std::array<std::int64_t,2> source_stamps{{0,0}};
   };
   FusionTiming fusionTiming() const {return fusion_timing_;}
+  // Writer-only elapsed-work diagnostics. Not copied into collision snapshots,
+  // not source clocks, and never used to extend sensor/evidence validity.
+  struct MapWorkTiming {
+    double initialize_ms{0.},traverse_ms{0.},occupancy_ms{0.};
+    double post_raycast_ms{0.},writer_transaction_ms{0.};
+    std::uint64_t points{0},ray_steps{0};
+    std::int64_t raycast_end_steady_ns{0};
+  };
+  MapWorkTiming mapWorkTiming() const {return map_work_timing_;}
   // Set before spinning. Runs on the existing serialized fusion writer only,
   // after all ray updates and source-lease checks have committed.
   void setCollisionUpdateCallback(std::function<void()> callback) {
     collision_update_callback_=std::move(callback);
+  }
+  // Serialized writer opportunity BEFORE the next expensive integration.
+  // The owner may deliver only an already pending, completed snapshot here.
+  // Return false only while that validation HEAD is still pending; owner
+  // replicas/solver copies must not defer new input. This is not a map update,
+  // source observation or extra publication timer.
+  void setCollisionPublicationRetryCallback(std::function<bool()> callback) {
+    collision_publication_retry_callback_=std::move(callback);
   }
   void requireObservedSnapshot() {
     if(!collision_snapshot_ || node_) throw std::logic_error("strict evidence query requires private snapshot");
@@ -258,11 +369,48 @@ public:
   }
   bool isRawRaySnapshot() const {return collision_snapshot_ && mp_.use_projected_rays_;}
   scan_planner::ObstacleDilation obstacleDilation() const {
+    if (mp_.collision_model_=="oriented_box")
+      return {mp_.double_cylinder_radius_,mp_.double_cylinder_offset_,
+        mp_.body_below_==-1. ? mp_.obstacles_inflation_z_up : mp_.body_below_,
+        mp_.body_above_==-1. ? mp_.obstacles_inflation_z_down : mp_.body_above_,
+        scan_planner::CollisionModel::OrientedBox,mp_.box_length_,mp_.box_width_};
     return {mp_.double_cylinder_radius_,mp_.double_cylinder_offset_,
       mp_.obstacles_inflation_z_up,mp_.obstacles_inflation_z_down};
   }
+  scan_planner::ObstacleDilation planningObstacleDilation() const {
+    auto shape=obstacleDilation();
+    if (mp_.planning_obstacles_inflation_z_up!=-1.) shape.up=mp_.planning_obstacles_inflation_z_up;
+    if (mp_.planning_obstacles_inflation_z_down!=-1.) shape.down=mp_.planning_obstacles_inflation_z_down;
+    if (shape.model==scan_planner::CollisionModel::OrientedBox) {
+      if (mp_.planning_body_below_!=-1.) shape.up=mp_.planning_body_below_;
+      if (mp_.planning_body_above_!=-1.) shape.down=mp_.planning_body_above_;
+    }
+    return shape;
+  }
   scan_planner::BodyEnvelope bodyEnvelope() const {
     return scan_planner::reflectedBodyEnvelope(obstacleDilation());
+  }
+  scan_planner::BodyEnvelope planningBodyEnvelope() const {
+    return scan_planner::reflectedBodyEnvelope(planningObstacleDilation());
+  }
+  scan_planner::BodyEnvelope queryBodyEnvelope(const Eigen::Vector3d& position,bool planning=true) const;
+  // Immutable render-only metadata, copied atomically to the display view.
+  // The legacy form requires an exact body-yaw source match. The full form
+  // carries attitude from the same acquisition, tolerating asynchronous callbacks
+  // within the existing pose-age budget. Neither form changes query geometry.
+  bool setVisualizationBodyEnvelope(const scan_planner::BodyEnvelope& body,
+      std::int64_t source_stamp_ns,const std::string& frame);
+  bool setVisualizationBodyEnvelope(const scan_planner::BodyEnvelope& body,double yaw,
+      std::int64_t source_stamp_ns,const std::string& frame);
+  bool setVisualizationBodyEnvelope(const scan_planner::BodyEnvelope& body,double yaw,
+      double pitch,double roll,std::int64_t source_stamp_ns,const std::string& frame);
+  // Rotating a stair OBB can move a corner by its full 3D reference radius,
+  // not just the yaw-only XY radius. Flat/no-profile sampling stays identical.
+  double queryBodyExtent(bool planning=true) const {
+    const auto body=planning?planningBodyEnvelope():bodyEnvelope();
+    const double xy=scan_planner::bodyExtent(body);
+    return query_attitude_provider_ && body.model==scan_planner::CollisionModel::OrientedBox
+      ? std::hypot(xy,std::max(body.below,body.above)):xy;
   }
   // Compatibility for older probes: these are obstacle-kernel dimensions,
   // NOT body up/down. New collision consumers must use bodyEnvelope().
@@ -278,14 +426,43 @@ public:
     if(collision_cache_clock_ns_==0)beginCollisionQuery();
     return rawCollisionStatus(cell);
   }
+  // The SCAN command reader uses the SAME selected policy as native search and
+  // trajectory geometry. In official mode an in-map unknown/weak cell is not
+  // an occupied veto; its raw state is still returned for diagnostics. This
+  // does not mutate odds, create FREE observations, or grant motion authority.
+  int collisionSnapshotStatus(const Eigen::Vector3i& cell,int* raw_status=nullptr);
+  void beginCollisionSnapshotProof() {
+    beginObservedProof();
+    if(planningRequiresObservedFree()) {
+      if(!mp_.require_observed_free_)throw std::logic_error("strict SCAN policy requires observed snapshot");
+      beginCollisionQuery();
+    } else collision_cache_deadline_ns_=std::numeric_limits<std::int64_t>::max();
+  }
+  // Acquired sensor time only; neither snapshot publication nor query time
+  // renews it. The motion checker also retains each ray/demand/body deadline.
+  bool collisionSnapshotSourceFresh() const {
+    const auto elapsed=std::chrono::duration_cast<std::chrono::nanoseconds>(
+        std::chrono::steady_clock::now()-snapshot_captured_).count();
+    if(!collision_snapshot_||node_||!mp_.use_projected_rays_||ray_clock_fault_||
+       snapshot_clock_ns_<=0||elapsed<0||
+       elapsed>std::numeric_limits<std::int64_t>::max()-snapshot_clock_ns_)return false;
+    const auto now=snapshot_clock_ns_+elapsed;
+    return integratedCloudFreshAt(now)&&
+      scan_planner::rayStampFresh(ray_integrated_stamps_[0],now,mp_.cloud_pose_max_age_)&&
+      scan_planner::rayStampFresh(ray_integrated_stamps_[1],now,mp_.cloud_pose_max_age_);
+  }
   std::int64_t observedProofDeadlineNs() const {return collision_cache_deadline_ns_;}
   // Each trajectory proof owns its queried evidence set. An earlier curve's
   // cached expiry must not become this curve's apparent minimum source time.
   void beginObservedProof() {
     if(!collision_snapshot_ || node_)throw std::logic_error("proof scope requires private snapshot");
-    observed_cylinder_cache_.clear();collision_cache_deadline_ns_=collision_cache_clock_ns_=0;
+    observed_cylinder_cache_.clear();planning_box_cache_.clear();
+    collision_cache_deadline_ns_=collision_cache_clock_ns_=0;
   }
   std::uint64_t localizationContextSequence() const { return localization_context_sequence_; }
+  // Metadata only: a borrowed query view must retain this source-clock fault,
+  // not silently fall back to a backup from before the fault/context reset.
+  bool rayEvidenceClockFault() const { return ray_clock_fault_; }
   // Consumers must use the map's validated source-age contract, not an
   // unrelated odometry timeout. This query never renews an integrated stamp.
   bool integratedCloudFreshAt(std::int64_t now_ns) const {
@@ -299,8 +476,14 @@ public:
   bool planningRequiresObservedFree() const { return mp_.planning_collision_policy_=="observed_free"; }
   const char *planningCollisionQueryPolicy() const { return mp_.planning_collision_policy_.c_str(); }
   const char *collisionQueryPolicy() const {
+    if (mp_.collision_model_=="oriented_box")
+      return mp_.require_observed_free_ ? "strict_observed_oriented_box" : "official_occupied_oriented_box";
     return mp_.require_observed_free_ ? "strict_observed_double_cylinder" :
         "official_inflated_double_cylinder";
+  }
+  const char *inflatedVisualizationSemantics() const {
+    return mp_.collision_model_=="oriented_box" ? "occupied_oriented_box_current_body_attitude_coarse_voxels" :
+        "double_cylinder_obstacle_inflation";
   }
   void resetCollisionDiagnostics() { unknown_collision_queries_=0; }
   std::uint64_t unknownCollisionQueries() const { return unknown_collision_queries_; }
@@ -316,12 +499,16 @@ public:
                                std::chrono::steady_clock::time_point captured) const;
   std::size_t collisionSnapshotBytes() const {
     return md_.occupancy_buffer_.size()*sizeof(double)+
+        md_.occupied_hit_subvoxels_.size()*sizeof(std::uint16_t)+
+        md_.occupied_hit_bounds_.size()*sizeof(scan_planner::ObservedHitBounds)+
         md_.occupancy_buffer_inflate_.size()*sizeof(md_.occupancy_buffer_inflate_[0])+
         md_.occupancy_buffer_inflate_cnt_.size()*sizeof(md_.occupancy_buffer_inflate_cnt_[0])+
         md_.inflate_offsets_.size()*sizeof(Eigen::Vector3i)+
+        md_.inflate_columns_.size()*sizeof(InflationColumn)+
         md_.planning_occupancy_buffer_inflate_.size()*sizeof(char)+
         md_.planning_occupancy_buffer_inflate_cnt_.size()*sizeof(int)+
         md_.planning_inflate_offsets_.size()*sizeof(Eigen::Vector3i)+
+        md_.planning_inflate_columns_.size()*sizeof(InflationColumn)+
         free_observation_stamps_.size()*sizeof(std::int64_t);
   }
 
@@ -332,6 +519,14 @@ private:
   MappingParameters mp_;
   MappingData md_;
   std::function<void()> collision_update_callback_;
+  std::function<bool()> collision_publication_retry_callback_;
+  // One executor yield per completed fusion, never a wait loop or a sensor
+  // deadline. The next runnable batch proceeds even if readers remain busy.
+  bool ray_pending_publication_yielded_{false};
+  // Writer-only scratch/worker. Never copied or shared with collision views.
+  std::unique_ptr<scan_planner::ParallelObservedRayVisits> parallel_ray_visits_;
+  bool parallel_ray_visits_enabled_{true},last_parallel_ray_visits_{false};
+  bool prepareParallelRayVisits(const std::array<std::int64_t,2>& sources);
 
   // get depth image and sensor pose
   void depthPoseCallback(const sensor_msgs::msg::Image::ConstSharedPtr& img,
@@ -346,6 +541,9 @@ private:
                            std::int64_t now_ns, std::chrono::steady_clock::time_point received);
   void processProjectedRays(std::int64_t now_ns, std::chrono::steady_clock::time_point now);
   void drainProjectedIngress();
+  void updateProjectedOccupancy(bool watchdog);
+  void transferProjectedIngress(std::int64_t source_now,std::chrono::steady_clock::time_point now);
+  void publishProjectedIngressContext();
   bool tryProjectedFusion(std::int64_t now_ns,std::chrono::steady_clock::time_point now,bool watchdog);
   std::chrono::nanoseconds projectedFusionWakeDelay(std::chrono::steady_clock::time_point now) const;
   void scheduleProjectedFusionWake();
@@ -363,11 +561,15 @@ private:
   };
   std::map<std::int64_t, PendingCloud> pending_clouds_;
   std::map<std::int64_t, PendingPose> pending_poses_;
-  struct PendingRays {
-    scan_planner::ProjectedRayBatch batch;
-    PairReceipt received;
-  };
-  std::array<std::optional<PendingRays>, 2> pending_rays_;
+  using PendingRays=scan_planner::PendingProjectedRays;
+  // Writer-owned frozen/pending batches, distinct from the two ingress slots.
+  // Legacy callers retain their original unpublished decode scratch.
+  // Retiring ready retains bounded storage, never a reusable source lease.
+  std::array<PendingRays, 2> pending_rays_;
+  scan_planner::ProjectedRayBatch ray_decode_scratch_;
+  scan_planner::ProjectedRayMailbox projected_ingress_;
+  scan_planner::ProjectedRayContextPtr projected_ingress_context_; // writer only
+  bool projected_ingress_enabled_{false}; // immutable after init
   std::array<std::int64_t, 2> ray_received_stamps_{{0,0}}, ray_integrated_stamps_{{0,0}};
   std::array<std::uint64_t, 2> ray_projection_sequences_{{0,0}}, ray_integrations_{{0,0}}, ray_drops_{{0,0}};
   std::array<PairReceipt, 2> ray_integrated_receipts_;
@@ -382,6 +584,7 @@ private:
   double ray_integration_period_s_{.2};
   std::int64_t ray_fusion_last_pair_stamp_{0};
   FusionTiming fusion_timing_;
+  MapWorkTiming map_work_timing_;
   std::uint64_t ray_timer_schedule_errors_{0};
   std::int64_t ray_timer_delay_ns_{20000000};
   scan_planner::ProjectedRayIngressDrain ray_ingress_last_drain_;
@@ -392,11 +595,25 @@ private:
   std::uint64_t occupancy_revision_{0};
   std::uint64_t cloud_pose_pairs_{0}, cloud_pose_pair_drops_{0};
   scan_planner::VoxelStatusCache observed_cylinder_cache_;
+  scan_planner::VoxelStatusCache planning_box_cache_;
   scan_planner::NearFieldDiagnostics near_field_diagnostics_;
+  // Diagnostic-only reader requests. The writer owns history; immutable map
+  // readers only copy completed history and can nonblockingly request 4 keys.
+  std::shared_ptr<scan_planner::BlockedVoxelWatchMailbox> blocked_voxel_mailbox_{
+      std::make_shared<scan_planner::BlockedVoxelWatchMailbox>()};
+  scan_planner::BlockedVoxelWatch blocked_voxel_watch_;
+  scan_planner::BlockedVoxelWatchSnapshot blocked_voxel_watch_snapshot_;
+  std::uint64_t blocked_voxel_context_{1};
+  PairReceipt blocked_voxel_last_log_{};
+  scan_planner::BlockedVoxelRawState blockedVoxelRawState(const scan_planner::BlockedVoxelKey& key);
+  std::string blockedVoxelWatchJson() const;
   std::vector<scan_planner::RayDiagnosticMetadata> projected_diagnostics_;
   // Fixed-size ring sidecar, not diagnostic witnesses. Only real traversals
   // renew it. Scan BEGIN is a conservative source-time bound for every ray.
   std::vector<std::int64_t> free_observation_stamps_, projected_ray_stamps_;
+  // Measured hits and censored self-return endpoints share the same measured
+  // segment, but only the former may add occupied evidence at its endpoint.
+  std::vector<std::uint8_t> projected_ray_kinds_;
   std::int64_t ray_query_clock_ns_{0}, ray_tick_clock_ns_{0};
   std::int64_t ray_tick_effective_ns_{0};
   PairReceipt ray_tick_receipt_{};
@@ -416,14 +633,94 @@ private:
   int rawCollisionStatus(const Eigen::Vector3i &cell);
   std::uint64_t unknown_collision_queries_{0};
   int observedCylinderStatus(const Eigen::Vector3d &center);
+  int boxOccupancy(const Eigen::Vector3d &position,double yaw,bool planning);
+  int boxOccupancy(const Eigen::Vector3d &position,double yaw,double pitch,double roll,bool planning);
+  bool stairSubvoxelQueryAllowed(const Eigen::Vector3d& position,bool strict) const;
+  bool occupiedSubvoxelIntersects(const Eigen::Vector3i& cell,int address,
+      const scan_planner::OrientedBoxVoxel3DQuery& fine_query,
+      scan_planner::SubvoxelCollisionCounts* diagnostic=nullptr,
+      const scan_planner::OrientedBoxVoxel3DQuery* rigid_query=nullptr,
+      bool refine_vertical=true) const;
+  void recordOccupiedHit(const Eigen::Vector3d& point,const Eigen::Vector3i& cell,int address);
+  void markCoarseOnlyOccupancy(int address);
+  inline int getInflateOccupancyYawOnly(Eigen::Vector3d pos,double yaw);
+  inline int getPlanningInflateOccupancyYawOnly(Eigen::Vector3d pos,double yaw);
+  QueryAttitudeProvider query_attitude_provider_;
+  QuerySupportHeightProvider query_support_height_provider_;
+  QueryStairClearanceProvider query_stair_clearance_provider_;
+  QueryStairContactProvider query_stair_contact_provider_;
+  QueryHardBoundaryProvider query_hard_boundary_provider_;
+  QueryHardBoundaryDiagnosticProvider query_hard_boundary_diagnostic_provider_;
+  void invalidateCollisionQueryCaches() {
+    observed_cylinder_cache_.clear();planning_box_cache_.clear();
+  }
   std::string localization_context_payload_, localization_seed_;
   std::uint64_t localization_context_sequence_{0}, localization_epoch_{0};
   std::array<sensor_msgs::msg::PointCloud2, 2> visualization_cache_;
   std::array<std::uint64_t, 2> visualization_revision_{{
       std::numeric_limits<std::uint64_t>::max(), std::numeric_limits<std::uint64_t>::max()}};
   std::array<int, 2> visualization_clip_{{0, 0}};
+  std::array<std::string, 2> visualization_model_;
+  bool visualization_obb_packet_ready_{false};
   std::array<std::uint64_t, 2> visualization_builds_{{0, 0}};
+  // Display-only coarse-voxel C-space at the last real body attitude, not a collision map or
+  // observed-free proof. The display worker owns one bounded mask/difference buffer;
+  // none of these arrays are copied to collision snapshots or queried by A*.
+  std::int64_t visualization_body_stamp_ns_{0};
+  double visualization_body_yaw_{std::numeric_limits<double>::quiet_NaN()};
+  struct VisualizationBodyEnvelope {
+    scan_planner::BodyEnvelope body;
+    std::int64_t source_stamp_ns;
+    std::string frame;
+    std::optional<double> yaw;
+    double pitch{0.},roll{0.};
+  };
+  std::shared_ptr<const VisualizationBodyEnvelope> visualization_body_envelope_;
+  bool setVisualizationBodyEnvelopeImpl(const scan_planner::BodyEnvelope& body,
+      std::optional<double> yaw,double pitch,double roll,
+      std::int64_t source_stamp_ns,const std::string& frame);
+  bool visualization_obb_kernel_ready_{false};
+  std::array<double, 8> visualization_obb_kernel_key_{};
+  std::vector<Eigen::Vector2i> visualization_obb_xy_offsets_;
+  // A tilted box has a different exact contiguous Z interval in each XY column.
+  std::vector<scan_planner::VerticalVoxelSpan> visualization_obb_z_spans_;
+  std::vector<int> visualization_obb_difference_;
+  std::vector<char> visualization_obb_mask_;
+  std::uint64_t visualization_obb_mask_revision_{std::numeric_limits<std::uint64_t>::max()};
+  Eigen::Vector3i visualization_obb_mask_min_{0, 0, 0};
+  Eigen::Vector3i visualization_obb_mask_max_{0, 0, 0};
+  std::uint64_t visualization_obb_mask_builds_{0};
+  std::uint64_t visualization_obb_kernel_builds_{0};
+  std::size_t visualization_obb_interval_writes_{0};
+  bool prepareOrientedVisualizationMask();
   sensor_msgs::msg::PointCloud2 &cachedVisualization(bool inflated);
+  // Render-only state has one byte of exact display classifications per cell,
+  // not another occupancy/evidence map. It can never lend collision evidence.
+  bool visualization_only_{false};
+  std::vector<unsigned char> visualization_raw_flags_;
+  std::int64_t visualization_capture_ns_{0};
+  std::uint64_t visualization_capture_generation_{0};
+  bool visualization_raw_requested_{false},visualization_inflated_requested_{false};
+  bool visualization_depth_requested_{false};
+  std::function<bool()> visualization_current_;
+  bool visualizationRawCell(std::size_t address,unsigned char flag) const;
+  rclcpp::Time visualizationStamp() const;
+  bool visualizationCurrent() const;
+  void copyVisualizationTo(GridMap& out,std::int64_t stamp,bool raw,bool inflated,bool depth) const;
+  void startVisualizationWorker();
+  void stopVisualizationWorker();
+  bool submitVisualization(std::int64_t stamp,bool raw,bool inflated,bool depth);
+  void runVisualizationWorker();
+  std::unique_ptr<GridMap> visualization_view_;
+  std::mutex visualization_mutex_;
+  std::condition_variable visualization_wake_;
+  std::thread visualization_worker_;
+  std::atomic<bool> visualization_stop_{false};
+  std::atomic<std::uint64_t> visualization_generation_{0};
+  bool visualization_ready_{false};
+  // The private sink makes the exact same bounded handoff testable without
+  // creating a ROS node. Production uses the existing cloud/TF publishers.
+  std::function<void(GridMap&)> visualization_sink_;
 
   // update occupancy by raycasting
   void updateOccupancyCallback();
@@ -450,9 +747,10 @@ private:
   void applyOccupancyUpdate(const Eigen::Vector3i& id, double new_log_odds);
   void applyOccupancyUpdateAtIndex(const Eigen::Vector3i& id, int addr, double new_log_odds);
   void rebuildInflationOffsets();
+  static std::vector<InflationColumn> inflationColumns(const vector<Eigen::Vector3i>& offsets);
   void updateInflation(const Eigen::Vector3i& id, int delta, const std::vector<char>* ignore_mask = nullptr);
   void updateInflationLayer(const Eigen::Vector3i& id, int delta,
-                            const vector<Eigen::Vector3i>& offsets,
+                            const std::vector<InflationColumn>& columns,
                             std::vector<int>& cnt_buffer,
                             std::vector<char>& flag_buffer,
                             const std::vector<char>* ignore_mask);
@@ -466,6 +764,9 @@ private:
   typedef shared_ptr<message_filters::Synchronizer<SyncPolicyImagePose>> SynchronizerImagePose;
 
   rclcpp::Node* node_{nullptr};
+  rclcpp::CallbackGroup::SharedPtr callback_group_;
+  rclcpp::CallbackGroup::SharedPtr projected_ingress_group_;
+  scan_planner::CoalescedWriterWake::SharedPtr projected_writer_wake_;
   std::shared_ptr<tf2_ros::TransformBroadcaster> tf_broadcaster_;
   shared_ptr<message_filters::Subscriber<sensor_msgs::msg::Image>> depth_sub_;
   shared_ptr<message_filters::Subscriber<nav_msgs::msg::Odometry>> depth_pose_sub_;
@@ -534,6 +835,7 @@ inline void GridMap::boundIndex(Eigen::Vector3i& id) {
 }
 
 inline bool GridMap::isUnknown(const Eigen::Vector3i& id) {
+  if(visualization_only_)throw std::logic_error("render-only map has no collision evidence");
   Eigen::Vector3i id1 = id;
   boundIndex(id1);
   return md_.occupancy_buffer_[toAddress(id1)] < mp_.clamp_min_log_ - 1e-3;
@@ -546,6 +848,7 @@ inline bool GridMap::isUnknown(const Eigen::Vector3d& pos) {
 }
 
 inline bool GridMap::isKnownFree(const Eigen::Vector3i& id) {
+  if(visualization_only_)throw std::logic_error("render-only map has no collision evidence");
   Eigen::Vector3i id1 = id;
   boundIndex(id1);
   int adr = toAddress(id1);
@@ -556,6 +859,7 @@ inline bool GridMap::isKnownFree(const Eigen::Vector3i& id) {
 }
 
 inline bool GridMap::isKnownOccupied(const Eigen::Vector3i& id) {
+  if(visualization_only_)throw std::logic_error("render-only map has no collision evidence");
   Eigen::Vector3i id1 = id;
   boundIndex(id1);
   int adr = toAddress(id1);
@@ -587,6 +891,7 @@ inline void GridMap::setOccupancy(Eigen::Vector3d pos, double occ) {
 }
 
 inline int GridMap::getOccupancy(Eigen::Vector3d pos) {
+  if(visualization_only_)throw std::logic_error("render-only map has no collision evidence");
   if (!isInMap(pos)) return -1;
 
   Eigen::Vector3i id;
@@ -596,7 +901,19 @@ inline int GridMap::getOccupancy(Eigen::Vector3d pos) {
 }
 
 inline int GridMap::getInflateOccupancy(Eigen::Vector3d pos, double yaw) {
+  if(visualization_only_)throw std::logic_error("render-only map has no collision evidence");
+  if(!pos.allFinite()||!std::isfinite(yaw))return -1;
+  if(query_attitude_provider_) {
+    const auto attitude=query_attitude_provider_(pos,yaw);
+    return attitude?getInflateOccupancy(pos,yaw,attitude->x(),attitude->y()):2;
+  }
+  return getInflateOccupancyYawOnly(pos,yaw);
+}
+
+inline int GridMap::getInflateOccupancyYawOnly(Eigen::Vector3d pos, double yaw) {
+  if(visualization_only_)throw std::logic_error("render-only map has no collision evidence");
   if (!pos.allFinite() || !std::isfinite(yaw)) return -1;
+  if (mp_.collision_model_=="oriented_box") return boxOccupancy(pos,yaw,false);
   Eigen::Vector3d heading(std::cos(yaw), std::sin(yaw), 0.0);
   Eigen::Vector3d front = pos + mp_.double_cylinder_offset_ * heading;
   Eigen::Vector3d rear = pos - mp_.double_cylinder_offset_ * heading;
@@ -627,12 +944,24 @@ inline int GridMap::getInflateOccupancy(Eigen::Vector3d pos, double yaw) {
 }
 
 inline int GridMap::getPlanningInflateOccupancy(Eigen::Vector3d pos, double yaw) {
+  if(visualization_only_)throw std::logic_error("render-only map has no collision evidence");
+  if(!pos.allFinite()||!std::isfinite(yaw))return -1;
+  if(query_attitude_provider_) {
+    const auto attitude=query_attitude_provider_(pos,yaw);
+    return attitude?getPlanningInflateOccupancy(pos,yaw,attitude->x(),attitude->y()):2;
+  }
+  return getPlanningInflateOccupancyYawOnly(pos,yaw);
+}
+
+inline int GridMap::getPlanningInflateOccupancyYawOnly(Eigen::Vector3d pos, double yaw) {
+  if(visualization_only_)throw std::logic_error("render-only map has no collision evidence");
   if (!pos.allFinite() || !std::isfinite(yaw)) return -1;
   if (planningRequiresObservedFree()) {
     // Invalid mixed configurations must never silently weaken the explicitly
     // requested strict planning policy (initMap rejects them as well).
-    return mp_.require_observed_free_ ? getInflateOccupancy(pos,yaw) : 2;
+    return mp_.require_observed_free_ ? getInflateOccupancyYawOnly(pos,yaw) : 2;
   }
+  if (mp_.collision_model_=="oriented_box") return boxOccupancy(pos,yaw,true);
   const Eigen::Vector3d heading(std::cos(yaw),std::sin(yaw),0.);
   const auto front=(pos+mp_.double_cylinder_offset_*heading).eval();
   const auto rear=(pos-mp_.double_cylinder_offset_*heading).eval();
@@ -656,6 +985,7 @@ inline int GridMap::getInflateOccupancyFromBuffer(Eigen::Vector3d pos, const std
 }
 
 inline int GridMap::getOccupancy(Eigen::Vector3i id) {
+  if(visualization_only_)throw std::logic_error("render-only map has no collision evidence");
   if (!isInMap(id))
     return -1;
 

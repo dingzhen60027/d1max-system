@@ -1,11 +1,13 @@
 #include "plan_env/grid_map.h"
 #include <plan_env/voxel_collision.hpp>
 #include <plan_env/observed_ray.hpp>
+#include <plan_env/parallel_observed_rays.hpp>
 #include <cmath>
 #include <limits>
 #include <stdexcept>
 #include <string>
 #include <sstream>
+#include <type_traits>
 #include <geometry_msgs/msg/transform_stamped.hpp>
 #include <nlohmann/json.hpp>
 #include <rcl/timer.h>
@@ -21,9 +23,26 @@ void load_parameter(rclcpp::Node *node, const std::string &name, T &value, const
 }
 }  // namespace
 
-void GridMap::initMap(rclcpp::Node *node)
+GridMap::GridMap() {}
+
+GridMap::~GridMap()
+{
+  // The executor owner joins all role callbacks before this destructor.
+  // Remove the waitable too: the node must not retain a callable capturing
+  // this map after the role owner has retired it.
+  if(projected_writer_wake_) {
+    projected_writer_wake_->close();
+    if(node_)node_->get_node_waitables_interface()->remove_waitable(projected_writer_wake_,callback_group_);
+  }
+  if(occ_timer_)occ_timer_->cancel();
+  if(vis_timer_)vis_timer_->cancel();
+  stopVisualizationWorker();
+}
+
+void GridMap::initMap(rclcpp::Node *node, rclcpp::CallbackGroup::SharedPtr callback_group)
 {
   node_ = node;
+  callback_group_ = std::move(callback_group);
 
   /* get parameter */
   double x_size, y_size, z_size;
@@ -37,8 +56,22 @@ void GridMap::initMap(rclcpp::Node *node)
   
   load_parameter(node_, "grid_map.obstacles_inflation_z_up", mp_.obstacles_inflation_z_up, -1.0);
   load_parameter(node_, "grid_map.obstacles_inflation_z_down", mp_.obstacles_inflation_z_down, -1.0);
+  load_parameter(node_, "grid_map.planning_obstacles_inflation_z_up", mp_.planning_obstacles_inflation_z_up, -1.0);
+  load_parameter(node_, "grid_map.planning_obstacles_inflation_z_down", mp_.planning_obstacles_inflation_z_down, -1.0);
   load_parameter(node_, "grid_map.double_cylinder_radius", mp_.double_cylinder_radius_, -1.0);
   load_parameter(node_, "grid_map.double_cylinder_offset", mp_.double_cylinder_offset_, 0.0);
+  load_parameter(node_, "grid_map.collision_model", mp_.collision_model_, std::string("double_cylinder"));
+  load_parameter(node_, "grid_map.box_length", mp_.box_length_, -1.0);
+  load_parameter(node_, "grid_map.box_width", mp_.box_width_, -1.0);
+  load_parameter(node_, "grid_map.box_nominal_length", mp_.box_nominal_length_, -1.0);
+  load_parameter(node_, "grid_map.box_nominal_width", mp_.box_nominal_width_, -1.0);
+  load_parameter(node_, "grid_map.stair_planar_clearance", mp_.stair_planar_clearance_, -1.0);
+  load_parameter(node_, "grid_map.stair_subvoxel_collision", mp_.stair_subvoxel_collision_, false);
+  load_parameter(node_, "grid_map.stair_contact_body_below", mp_.stair_contact_body_below_, -1.0);
+  load_parameter(node_, "grid_map.body_below", mp_.body_below_, -1.0);
+  load_parameter(node_, "grid_map.body_above", mp_.body_above_, -1.0);
+  load_parameter(node_, "grid_map.planning_body_below", mp_.planning_body_below_, -1.0);
+  load_parameter(node_, "grid_map.planning_body_above", mp_.planning_body_above_, -1.0);
   load_parameter(node_, "grid_map.map_sliding_en", mp_.map_sliding_en_, true);
   load_parameter(node_, "grid_map.map_sliding_thresh", mp_.map_sliding_thresh_, mp_.resolution_);
 
@@ -172,13 +205,15 @@ void GridMap::initMap(rclcpp::Node *node)
 
   /* init callback */
   tf_broadcaster_ = std::make_shared<tf2_ros::TransformBroadcaster>(*node_);
+  rclcpp::SubscriptionOptions writer_options;
+  writer_options.callback_group = callback_group_;
 
   if (mp_.sensor_type_ == "depth")
   {
     depth_sub_ = std::make_shared<message_filters::Subscriber<sensor_msgs::msg::Image>>();
     depth_pose_sub_ = std::make_shared<message_filters::Subscriber<nav_msgs::msg::Odometry>>();
-    depth_sub_->subscribe(node_, "depth", rmw_qos_profile_sensor_data);
-    depth_pose_sub_->subscribe(node_, "sensor_pose", rmw_qos_profile_sensor_data);
+    depth_sub_->subscribe(node_, "depth", rmw_qos_profile_sensor_data, writer_options);
+    depth_pose_sub_->subscribe(node_, "sensor_pose", rmw_qos_profile_sensor_data, writer_options);
 
     sync_image_pose_.reset(new message_filters::Synchronizer<SyncPolicyImagePose>(
         SyncPolicyImagePose(100), *depth_sub_, *depth_pose_sub_));
@@ -188,31 +223,52 @@ void GridMap::initMap(rclcpp::Node *node)
   else if (mp_.sensor_type_ == "lidar")
   {
     if (mp_.use_projected_rays_) {
+      // Formal sessions register this group with its own serial executor.
+      // No-group archived callers preserve their original single-lane path.
+      if(callback_group_) {
+        projected_ingress_group_=node_->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive,false);
+        projected_ingress_enabled_=true;
+        projected_writer_wake_=std::make_shared<scan_planner::CoalescedWriterWake>(
+          node_->get_node_base_interface()->get_context(),[this]{updateProjectedOccupancy(false);});
+        node_->get_node_waitables_interface()->add_waitable(projected_writer_wake_,callback_group_);
+      }
+      auto ingress_options=writer_options;
+      if(projected_ingress_group_)ingress_options.callback_group=projected_ingress_group_;
       projected_rays_sub_=node_->create_subscription<d1max_planning_interfaces::msg::ProjectedRays>(
           "projected_rays",rclcpp::SensorDataQoS().keep_last(scan_planner::kProjectedRayIngressDepth),
           [this](const d1max_planning_interfaces::msg::ProjectedRays::ConstSharedPtr message) {
+            if(projected_ingress_enabled_) {
+              projected_ingress_.recordCallback();
+              projected_ingress_.accept(*message,node_->now().nanoseconds(),std::chrono::steady_clock::now());
+              drainProjectedIngress();
+              // Coalesce readiness into ONE turn of the existing writer,
+              // never an integration/timer mutation on the receiver lane.
+              // Original watchdog remains a fallback if guard trigger fails.
+              projected_writer_wake_->notify();
+              return;
+            }
             ++ray_ingress_callback_count_;
             acceptProjectedRays(*message,node_->now().nanoseconds(),std::chrono::steady_clock::now());
             drainProjectedIngress();
             tryProjectedFusion(node_->now().nanoseconds(),std::chrono::steady_clock::now(),false);
             publishProjectedRaysStatus(node_->now().nanoseconds(),std::chrono::steady_clock::now());
             scheduleProjectedFusionWake();
-          });
+          }, ingress_options);
       projected_rays_status_pub_=node_->create_publisher<std_msgs::msg::String>(
           "grid_map/projected_rays_status",rclcpp::QoS(1).reliable());
     } else {
     lidar_pose_sub_ = node_->create_subscription<nav_msgs::msg::Odometry>(
         "sensor_pose", rclcpp::SensorDataQoS(),
-        std::bind(&GridMap::sensorPoseCallback, this, std::placeholders::_1));
+        std::bind(&GridMap::sensorPoseCallback, this, std::placeholders::_1), writer_options);
     cloud_sub_ = node_->create_subscription<sensor_msgs::msg::PointCloud2>(
         "cloud", rclcpp::SensorDataQoS(),
-        std::bind(&GridMap::cloudCallback, this, std::placeholders::_1));
+        std::bind(&GridMap::cloudCallback, this, std::placeholders::_1), writer_options);
     }
   }
 
   sliding_map_frame_sub_ = node_->create_subscription<nav_msgs::msg::Odometry>(
       "body_pose", rclcpp::SensorDataQoS(),
-      std::bind(&GridMap::slidingMapFrameCallback, this, std::placeholders::_1));
+      std::bind(&GridMap::slidingMapFrameCallback, this, std::placeholders::_1), writer_options);
 
   if (!node_->has_parameter("grid_map.integration_rate_hz"))
     node_->declare_parameter<double>("grid_map.integration_rate_hz",5.0);
@@ -223,9 +279,9 @@ void GridMap::initMap(rclcpp::Node *node)
   // The cheap watchdog can notice a just-completed pair at the rate boundary;
   // actual ray integration remains capped by tryProjectedFusion's steady clock.
   occ_timer_ = node_->create_wall_timer(std::chrono::duration<double>(mp_.use_projected_rays_?.02:ray_integration_period_s_),
-                                        std::bind(&GridMap::updateOccupancyCallback, this));
+                                        std::bind(&GridMap::updateOccupancyCallback, this), callback_group_);
   vis_timer_ = node_->create_wall_timer(std::chrono::duration<double>(1.0 / mp_.visualization_rate_hz_),
-                                        std::bind(&GridMap::visCallback, this));
+                                        std::bind(&GridMap::visCallback, this), callback_group_);
 
   if (mp_.require_localization_context_)
   {
@@ -236,7 +292,7 @@ void GridMap::initMap(rclcpp::Node *node)
         "grid_map/localization_context", context_qos,
         [this](std_msgs::msg::String::ConstSharedPtr msg) {
           if (applyLocalizationContext(msg->data)) localization_context_ack_pub_->publish(*msg);
-        });
+        }, writer_options);
   }
 
   map_pub_ = node_->create_publisher<sensor_msgs::msg::PointCloud2>("grid_map/occupancy", rclcpp::SensorDataQoS());
@@ -281,6 +337,40 @@ void GridMap::updateMapBoundaryFromIndex()
 
 void GridMap::rebuildInflationOffsets()
 {
+  if (mp_.collision_model_!="double_cylinder" && mp_.collision_model_!="oriented_box")
+    throw std::invalid_argument("grid_map.collision_model must be double_cylinder or oriented_box");
+  for (double extent:{mp_.body_below_,mp_.body_above_,mp_.planning_body_below_,mp_.planning_body_above_})
+    if (!std::isfinite(extent) || (extent!=-1. && extent<0.))
+      throw std::invalid_argument("box body extent must be -1 or finite nonnegative");
+  const auto strict_body=bodyEnvelope(),planning_body=planningBodyEnvelope();
+  scan_planner::validateBodyEnvelope(strict_body);
+  scan_planner::validateBodyEnvelope(planning_body);
+  if(!std::isfinite(mp_.stair_contact_body_below_) ||
+      (mp_.stair_contact_body_below_!=-1. && (mp_.stair_contact_body_below_<0. ||
+        mp_.stair_contact_body_below_>std::min(strict_body.below,planning_body.below) ||
+        !mp_.stair_subvoxel_collision_ || strict_body.model!=scan_planner::CollisionModel::OrientedBox)))
+    throw std::invalid_argument("stair contact requires a contained rigid box and original-hit evidence");
+  if(!std::isfinite(mp_.stair_planar_clearance_) || mp_.stair_planar_clearance_<-1. ||
+      (mp_.stair_planar_clearance_<0. && mp_.stair_planar_clearance_!=-1.))
+    throw std::invalid_argument("stair planar clearance must be -1 or finite nonnegative");
+  if(stairClearanceConfigured()) {
+    if(strict_body.model!=scan_planner::CollisionModel::OrientedBox ||
+        !std::isfinite(mp_.box_nominal_length_) || mp_.box_nominal_length_<=0. ||
+        !std::isfinite(mp_.box_nominal_width_) || mp_.box_nominal_width_<=0. ||
+        mp_.box_nominal_length_+2.*mp_.stair_planar_clearance_>strict_body.length+1e-12 ||
+        mp_.box_nominal_width_+2.*mp_.stair_planar_clearance_>strict_body.width+1e-12)
+      throw std::invalid_argument("stair box must retain positive nominal dimensions within normal box clearance");
+  }
+  if (planning_body.below>strict_body.below || planning_body.above>strict_body.above)
+    throw std::invalid_argument("candidate body envelope must be contained by execution envelope");
+  if (strict_body.model==scan_planner::CollisionModel::OrientedBox) {
+    const double extent=scan_planner::bodyExtent(strict_body);
+    const double xy=std::ceil(2.*extent/mp_.resolution_)+3.;
+    const double z=std::ceil((strict_body.below+strict_body.above)/mp_.resolution_)+3.;
+    if (!std::isfinite(mp_.resolution_) || mp_.resolution_<=0. || !std::isfinite(xy*z) || xy*xy*z>200000.)
+      throw std::invalid_argument("oriented box footprint exceeds bounded voxel query budget");
+  }
+  const auto previous_planning_offsets=md_.planning_inflate_offsets_;
   {
     // Upstream ROS 1 348e8a59 / ros2-community d0b921c9 discretization.
     // In particular, XY offsets at exactly the radius are excluded; this is
@@ -291,9 +381,21 @@ void GridMap::rebuildInflationOffsets()
         !std::isfinite(mp_.obstacles_inflation_z_up) || mp_.obstacles_inflation_z_up<0. ||
         !std::isfinite(mp_.obstacles_inflation_z_down) || mp_.obstacles_inflation_z_down<0.)
       throw std::invalid_argument("invalid cylinder voxel geometry");
+    const auto validate_planning=[](double value,double strict_value) {
+      if (!std::isfinite(value) || (value!=-1.0 && (value<0. || value>strict_value)))
+        throw std::invalid_argument("planning cylinder extent must be -1 or nonnegative and no larger than strict extent");
+    };
+    validate_planning(mp_.planning_obstacles_inflation_z_up,mp_.obstacles_inflation_z_up);
+    validate_planning(mp_.planning_obstacles_inflation_z_down,mp_.obstacles_inflation_z_down);
+    const auto planning=planningObstacleDilation();
+    // The legacy non-strict buffer is also exposed by getInflateOccupancy.
+    // Do not narrow it unless the independent strict raw-evidence layer exists.
+    if (!mp_.require_observed_free_ &&
+        (planning_body.below<strict_body.below || planning_body.above<strict_body.above))
+      throw std::invalid_argument("narrow planning geometry requires independent strict evidence layer");
     const double xy=std::ceil(radius/mp_.resolution_);
-    const double up=std::ceil(mp_.obstacles_inflation_z_up/mp_.resolution_);
-    const double down=std::ceil(mp_.obstacles_inflation_z_down/mp_.resolution_);
+    const double up=std::ceil(planning.up/mp_.resolution_);
+    const double down=std::ceil(planning.down/mp_.resolution_);
     if ((2.*xy+1.)*(2.*xy+1.)*(up+down+1.)>200000.)
       throw std::invalid_argument("cylinder voxel kernel exceeds bounded budget");
     md_.planning_inflate_offsets_.clear();
@@ -305,26 +407,33 @@ void GridMap::rebuildInflationOffsets()
           md_.planning_inflate_offsets_.emplace_back(x,y,z);
       }
   }
+  md_.planning_inflate_columns_=inflationColumns(md_.planning_inflate_offsets_);
   if (mp_.require_observed_free_) {
     md_.inflate_offsets_=scan_planner::conservativeCylinderInflation(
         mp_.resolution_,mp_.double_cylinder_radius_,
         mp_.obstacles_inflation_z_up,mp_.obstacles_inflation_z_down);
+    md_.inflate_columns_=inflationColumns(md_.inflate_offsets_);
     // Only the fusion owner has incremental counters. Private strict proof
     // snapshots preserve copied geometry without allocating another writer.
-    if (!collision_snapshot_ && md_.planning_occupancy_buffer_inflate_.size()!=md_.occupancy_buffer_.size()) {
+    const bool planning_offsets_changed=previous_planning_offsets.size()!=md_.planning_inflate_offsets_.size() ||
+      !std::equal(previous_planning_offsets.begin(),previous_planning_offsets.end(),
+        md_.planning_inflate_offsets_.begin(),[](const auto &a,const auto &b){return (a.array()==b.array()).all();});
+    if (!collision_snapshot_ && (planning_offsets_changed ||
+        md_.planning_occupancy_buffer_inflate_.size()!=md_.occupancy_buffer_.size())) {
       md_.planning_occupancy_buffer_inflate_.assign(md_.occupancy_buffer_.size(),0);
       md_.planning_occupancy_buffer_inflate_cnt_.assign(md_.occupancy_buffer_.size(),0);
       for (std::size_t address=0;address<md_.occupancy_buffer_.size();++address) {
         if (md_.occupancy_buffer_[address]<=mp_.min_occupancy_log_) continue;
         Eigen::Vector3i id;hashIdToGlobalIndex(static_cast<int>(address),id);
-        updateInflationLayer(id,1,md_.planning_inflate_offsets_,md_.planning_occupancy_buffer_inflate_cnt_,
+        updateInflationLayer(id,1,md_.planning_inflate_columns_,md_.planning_occupancy_buffer_inflate_cnt_,
             md_.planning_occupancy_buffer_inflate_,nullptr);
       }
     }
   } else {
     md_.inflate_offsets_=md_.planning_inflate_offsets_;
+    md_.inflate_columns_=md_.planning_inflate_columns_;
   }
-  observed_cylinder_cache_.clear();
+  invalidateCollisionQueryCaches();
 }
 
 std::int64_t GridMap::collisionQueryClock()
@@ -343,9 +452,13 @@ std::int64_t GridMap::collisionQueryClock()
 void GridMap::copyCollisionSnapshotTo(GridMap &out,std::int64_t source_now_ns,
     std::chrono::steady_clock::time_point captured) const
 {
+  if(visualization_only_ || out.visualization_only_)
+    throw std::logic_error("render-only state cannot become a collision snapshot");
   if (&out==this || out.node_) throw std::invalid_argument("snapshot destination must be a distinct memory-only map");
   out.mp_=mp_;
   out.md_.occupancy_buffer_=md_.occupancy_buffer_;
+  out.md_.occupied_hit_subvoxels_=md_.occupied_hit_subvoxels_;
+  out.md_.occupied_hit_bounds_=md_.occupied_hit_bounds_;
   out.md_.occupancy_buffer_inflate_=md_.occupancy_buffer_inflate_;
   out.md_.planning_occupancy_buffer_inflate_=md_.planning_occupancy_buffer_inflate_;
   // Incremental inflation counters belong to fusion only. Collision readers
@@ -357,6 +470,8 @@ void GridMap::copyCollisionSnapshotTo(GridMap &out,std::int64_t source_now_ns,
     std::vector<int>().swap(out.md_.planning_occupancy_buffer_inflate_cnt_);
   out.md_.inflate_offsets_=md_.inflate_offsets_;
   out.md_.planning_inflate_offsets_=md_.planning_inflate_offsets_;
+  out.md_.inflate_columns_=md_.inflate_columns_;
+  out.md_.planning_inflate_columns_=md_.planning_inflate_columns_;
   out.free_observation_stamps_=free_observation_stamps_;
   out.integrated_cloud_stamp_ns_=integrated_cloud_stamp_ns_;
   out.ray_integrated_stamps_=ray_integrated_stamps_;
@@ -371,10 +486,21 @@ void GridMap::copyCollisionSnapshotTo(GridMap &out,std::int64_t source_now_ns,
   out.free_evidence_revision_=free_evidence_revision_;
   out.enforce_free_freshness_=enforce_free_freshness_;
   out.ray_clock_fault_=ray_clock_fault_;
+  out.blocked_voxel_context_=blocked_voxel_context_;
+  out.blocked_voxel_mailbox_=blocked_voxel_mailbox_;
+  out.blocked_voxel_watch_snapshot_=blocked_voxel_watch_snapshot_;
   out.collision_snapshot_=true;
+  out.parallel_ray_visits_.reset();
+  out.last_parallel_ray_visits_=false;
+  out.query_attitude_provider_={}; // A new snapshot cannot inherit another curve's attitude contract.
+  out.query_support_height_provider_={};
+  out.query_stair_clearance_provider_={};
+  out.query_stair_contact_provider_={};
+  out.query_hard_boundary_provider_={};
+  out.query_hard_boundary_diagnostic_provider_={};
   out.snapshot_clock_ns_=mp_.use_projected_rays_ ? collisionQueryClockAt(source_now_ns,captured) : source_now_ns;
   out.snapshot_captured_=captured;
-  out.observed_cylinder_cache_.clear();
+  out.invalidateCollisionQueryCaches();
   out.collision_cache_deadline_ns_=out.collision_cache_clock_ns_=0;
   out.unknown_collision_queries_=0;
   // No copied callback, ROS clock owner, pending acquisition, visualization or
@@ -383,6 +509,18 @@ void GridMap::copyCollisionSnapshotTo(GridMap &out,std::int64_t source_now_ns,
 
 std::int64_t GridMap::collisionQueryClockAt(std::int64_t source,PairReceipt now) const
 {
+  if(collision_snapshot_) {
+    // Solver acquisition may copy an exclusively borrowed, completed owner
+    // snapshot rather than touch the live writer. Such a map intentionally
+    // has no writer tick/receipt state. Carry its already aged effective
+    // clock forward instead of fabricating a fresh observation or resetting
+    // the clock to zero. All per-ray/cloud/free acquisition stamps stay fixed.
+    const auto elapsed=std::chrono::duration_cast<std::chrono::nanoseconds>(
+        now-snapshot_captured_).count();
+    if(source<=0 || snapshot_clock_ns_<=0 || elapsed<0 ||
+       elapsed>std::numeric_limits<std::int64_t>::max()-snapshot_clock_ns_)return 0;
+    return std::max(source,snapshot_clock_ns_+elapsed);
+  }
   if (source<=0 || ray_tick_clock_ns_<=0 || source<ray_tick_clock_ns_) return 0;
   const auto elapsed=std::chrono::duration_cast<std::chrono::nanoseconds>(
       now-ray_tick_receipt_).count();
@@ -395,7 +533,7 @@ void GridMap::advanceRayEvidenceClock(std::int64_t source,PairReceipt now,bool a
 {
   const auto prior_effective=age_by_steady?collisionQueryClockAt(source,now):source;
   if(ray_tick_clock_ns_>0 && source<ray_tick_clock_ns_) {
-    ray_clock_fault_=true;observed_cylinder_cache_.clear();
+    ray_clock_fault_=true;invalidateCollisionQueryCaches();
   }
   ray_tick_effective_ns_=std::max(source,prior_effective);
   ray_tick_clock_ns_=source;ray_tick_receipt_=now;ray_query_clock_ns_=source;
@@ -408,7 +546,7 @@ void GridMap::beginCollisionQuery()
   if (collision_cache_clock_ns_>0 && (now<=0 || (!node_ && now<collision_cache_clock_ns_)))
     ray_clock_fault_=true;
   if (now<=0 || now<collision_cache_clock_ns_ || now>=collision_cache_deadline_ns_) {
-    observed_cylinder_cache_.clear();
+    invalidateCollisionQueryCaches();
     collision_cache_deadline_ns_=std::numeric_limits<std::int64_t>::max();
   }
   collision_cache_clock_ns_=now>0?std::max(now,collision_cache_clock_ns_):now;
@@ -416,6 +554,7 @@ void GridMap::beginCollisionQuery()
 
 int GridMap::rawCollisionStatus(const Eigen::Vector3i &cell)
 {
+  if(visualization_only_)throw std::logic_error("render-only map has no collision evidence");
   if (!isInMap(cell)) return -1;
   const auto address=toAddress(cell);
   const double odds=md_.occupancy_buffer_[address];
@@ -438,6 +577,25 @@ int GridMap::rawCollisionStatus(const Eigen::Vector3i &cell)
   return 0;
 }
 
+int GridMap::collisionSnapshotStatus(const Eigen::Vector3i& cell,int* raw_status)
+{
+  if(!collision_snapshot_||node_||!mp_.use_projected_rays_)
+    throw std::logic_error("SCAN swept query requires private raw-ray snapshot");
+  if(!isInMap(cell)) {if(raw_status)*raw_status=-1;return -1;}
+  const double odds=md_.occupancy_buffer_[toAddress(cell)];
+  if(planningRequiresObservedFree()) {
+    if(!mp_.require_observed_free_)throw std::logic_error("strict SCAN query requires observed snapshot");
+    if(collision_cache_clock_ns_==0)beginCollisionQuery();
+    const int state=rawCollisionStatus(cell);if(raw_status)*raw_status=state;return state;
+  }
+  if(mp_.planning_collision_policy_!="official")
+    throw std::logic_error("unknown SCAN collision policy");
+  const int raw=scan_planner::strictRawVoxelStatus(odds,mp_.clamp_min_log_,mp_.min_occupancy_log_);
+  if(raw_status)*raw_status=raw;
+  // Invalid numeric map contents are not ordinary unknown observations.
+  return !std::isfinite(odds)?2:odds>mp_.min_occupancy_log_?1:0;
+}
+
 int GridMap::observedCylinderStatus(const Eigen::Vector3d &center)
 {
   if (!center.allFinite() || !isInMap(center)) return -1;
@@ -457,8 +615,392 @@ int GridMap::observedCylinderStatus(const Eigen::Vector3d &center)
   return state;
 }
 
+int GridMap::boxOccupancy(const Eigen::Vector3d &position,double yaw,bool planning)
+{
+  if (!position.allFinite() || !std::isfinite(yaw) || !isInMap(position)) return -1;
+  const auto body=queryBodyEnvelope(position,planning);
+  if(query_hard_boundary_provider_&&query_hard_boundary_provider_(position,yaw,0.,0.,body))return 1;
+  const bool strict=!planning && mp_.require_observed_free_;
+  if (strict) beginCollisionQuery();
+  const bool refine_vertical=stairSubvoxelQueryAllowed(position,strict);
+  if(refine_vertical||(!strict&&stairContactConfigured()&&query_stair_contact_provider_)) {
+    // Fine evidence makes exact body Z relevant even while its coarse Z span
+    // stays unchanged. Do not use the legacy span-only upright pose cache.
+    const scan_planner::OrientedBoxVoxel3DQuery fine_query(position,yaw,0.,0.,mp_.resolution_,body);
+    std::optional<scan_planner::OrientedBoxVoxel3DQuery> rigid_query;
+    if(stairContactConfigured()&&query_stair_contact_provider_) {
+      auto rigid=body;rigid.below=mp_.stair_contact_body_below_;
+      rigid_query.emplace(position,yaw,0.,0.,mp_.resolution_,rigid);
+    }
+    return scan_planner::orientedBoxStatus(position,yaw,mp_.resolution_,body,
+      [&](const Eigen::Vector3i& cell) {
+        if(!isInMap(cell))return -1;
+        const int address=toAddress(cell);const double odds=md_.occupancy_buffer_[address];
+        if(!std::isfinite(odds))return 2;
+        if(odds<=mp_.min_occupancy_log_)return 0;
+        return occupiedSubvoxelIntersects(cell,address,fine_query,nullptr,
+          rigid_query?&*rigid_query:nullptr,refine_vertical)?1:0;
+      });
+  }
+  Eigen::Vector3i index;posToIndex(position,index);
+  const auto span=scan_planner::verticalVoxelSpan(position.z(),body.below,body.above,mp_.resolution_);
+  auto &cache=strict ? observed_cylinder_cache_ : planning_box_cache_;
+  const int state=cache.getPoseShapeExact(toAddress(index),span.low,span.high,
+      position.x(),position.y(),yaw,body.length,body.width,[&]() {
+    if (!strict) {
+      // Same exact OBB voxel set and official occupied-only semantics as the
+      // per-voxel query below. Every intersecting XY column shares a Z span:
+      // check bounds/address once, then traverse the contiguous ring row.
+      // No auxiliary map, yaw bin, stale cache or free evidence is introduced.
+      int result=0;
+      const int z_size=mp_.map_voxel_num_.z(),yz_stride=mp_.map_voxel_num_.y()*z_size;
+      const auto &lo=mp_.map_bound_min_idx_,&hi=mp_.map_bound_max_idx_;
+      scan_planner::forEachOrientedBoxColumn(position,yaw,mp_.resolution_,body,
+        [&](int x,int y,const scan_planner::VerticalVoxelSpan &zs) {
+          if (x<lo.x()||x>hi.x()||y<lo.y()||y>hi.y()) {result=-1;return true;}
+          if (zs.low<lo.z()||zs.high>hi.z()) result=-1;
+          const int first=std::max(zs.low,lo.z()),last=std::min(zs.high,hi.z());
+          if (first>last) return true;
+          const int row=getLocalIndex(x,0)*yz_stride+getLocalIndex(y,1)*z_size;
+          int local_z=getLocalIndex(first,2);
+          for (std::int64_t z=first;z<=last;++z) {
+            const double odds=md_.occupancy_buffer_[row+local_z];
+            if (std::isfinite(odds)) {
+              if (odds>mp_.min_occupancy_log_) {result=1;return false;}
+            } else if (result==0) result=2;
+            if (++local_z==z_size) local_z=0;
+          }
+          return true;
+        });
+      return result;
+    }
+    return scan_planner::orientedBoxStatus(position,yaw,mp_.resolution_,body,
+      [this,strict](const Eigen::Vector3i &cell) {
+        if (!isInMap(cell)) return -1;
+        if (strict) return rawCollisionStatus(cell);
+        // Official candidate semantics: occupied only, without claiming that
+        // unseen/weak evidence was observed free. Unlike a circular inflated
+        // buffer, these cells are intersected by the ACTUAL requested OBB yaw.
+        const double odds=md_.occupancy_buffer_[toAddress(cell)];
+        return !std::isfinite(odds) ? 2 : odds>mp_.min_occupancy_log_ ? 1 : 0;
+      });
+  });
+  if (strict && state==2) ++unknown_collision_queries_;
+  if (strict && state==0 && mp_.use_projected_rays_ && enforce_free_freshness_) {
+    const auto now=collisionQueryClock();
+    if (ray_clock_fault_ || now<=0 || now<collision_cache_clock_ns_ ||
+        now>=collision_cache_deadline_ns_) return 2;
+  }
+  return state;
+}
+
+GridMap::QueryAttitudeProvider GridMap::exchangeQueryAttitudeProvider(QueryAttitudeProvider provider)
+{
+  if(!provider&&!query_attitude_provider_)return {}; // Flat/no-profile scope is exactly a no-op.
+  if(node_||visualization_only_)throw std::logic_error("query attitude requires a private collision reader");
+  auto previous=std::move(query_attitude_provider_);query_attitude_provider_=std::move(provider);
+  observed_cylinder_cache_.clear();planning_box_cache_.clear();
+  return previous;
+}
+
+void GridMap::setQueryAttitudeProvider(QueryAttitudeProvider provider)
+{exchangeQueryAttitudeProvider(std::move(provider));}
+void GridMap::clearQueryAttitudeProvider()
+{exchangeQueryAttitudeProvider({});}
+
+GridMap::QuerySupportHeightProvider GridMap::exchangeQuerySupportHeightProvider(QuerySupportHeightProvider provider)
+{
+  if(!provider&&!query_support_height_provider_)return {};
+  if(node_||visualization_only_)throw std::logic_error("query support requires a private collision reader");
+  auto previous=std::move(query_support_height_provider_);
+  query_support_height_provider_=std::move(provider);return previous;
+}
+
+GridMap::QueryStairClearanceProvider GridMap::exchangeQueryStairClearanceProvider(QueryStairClearanceProvider provider)
+{
+  if(!provider&&!query_stair_clearance_provider_)return {};
+  if(node_||visualization_only_)throw std::logic_error("query clearance requires a private collision reader");
+  auto previous=std::move(query_stair_clearance_provider_);
+  query_stair_clearance_provider_=std::move(provider);invalidateCollisionQueryCaches();return previous;
+}
+
+GridMap::QueryStairContactProvider GridMap::exchangeQueryStairContactProvider(QueryStairContactProvider provider)
+{
+  if(!provider&&!query_stair_contact_provider_)return {};
+  if(node_||visualization_only_)throw std::logic_error("query contacts require a private collision reader");
+  auto previous=std::move(query_stair_contact_provider_);
+  query_stair_contact_provider_=std::move(provider);invalidateCollisionQueryCaches();return previous;
+}
+
+GridMap::QueryHardBoundaryProvider GridMap::exchangeQueryHardBoundaryProvider(QueryHardBoundaryProvider provider)
+{
+  if(!provider&&!query_hard_boundary_provider_)return {};
+  if(node_||visualization_only_)throw std::logic_error("query boundaries require a private collision reader");
+  auto previous=std::move(query_hard_boundary_provider_);
+  query_hard_boundary_provider_=std::move(provider);invalidateCollisionQueryCaches();return previous;
+}
+
+GridMap::QueryHardBoundaryDiagnosticProvider GridMap::exchangeQueryHardBoundaryDiagnosticProvider(
+    QueryHardBoundaryDiagnosticProvider provider)
+{
+  if(!provider&&!query_hard_boundary_diagnostic_provider_)return {};
+  if(node_||visualization_only_)throw std::logic_error("query boundary diagnostics require a private collision reader");
+  auto previous=std::move(query_hard_boundary_diagnostic_provider_);
+  query_hard_boundary_diagnostic_provider_=std::move(provider);return previous;
+}
+
+scan_planner::BodyEnvelope GridMap::queryBodyEnvelope(const Eigen::Vector3d& position,bool planning) const
+{
+  auto body=planning?planningBodyEnvelope():bodyEnvelope();
+  if(body.model==scan_planner::CollisionModel::OrientedBox && stairClearanceConfigured() &&
+      position.allFinite() && query_stair_clearance_provider_ && query_stair_clearance_provider_(position)) {
+    body.length=mp_.box_nominal_length_+2.*mp_.stair_planar_clearance_;
+    body.width=mp_.box_nominal_width_+2.*mp_.stair_planar_clearance_;
+  }
+  return body;
+}
+
+bool GridMap::stairSubvoxelQueryAllowed(const Eigen::Vector3d& position,bool strict) const
+{
+  return !strict && mp_.stair_subvoxel_collision_ &&
+      mp_.collision_model_=="oriented_box" && position.allFinite() &&
+      query_stair_clearance_provider_ && query_stair_clearance_provider_(position);
+}
+
+bool GridMap::occupiedSubvoxelIntersects(const Eigen::Vector3i& cell,int address,
+    const scan_planner::OrientedBoxVoxel3DQuery& fine_query,
+    scan_planner::SubvoxelCollisionCounts* diagnostic,
+    const scan_planner::OrientedBoxVoxel3DQuery* rigid_query,bool refine_vertical) const
+{
+  const auto evidence=static_cast<std::size_t>(address)<md_.occupied_hit_subvoxels_.size()?
+      md_.occupied_hit_subvoxels_[address]:std::uint16_t{0};
+  if(!evidence || (evidence&0xff00U)) {
+    if(diagnostic)++diagnostic->coarse_fallback;
+    return true;
+  }
+  if(diagnostic)++diagnostic->refined_coarse;
+  const bool has_bounds=static_cast<std::size_t>(address)<md_.occupied_hit_bounds_.size();
+  if(refine_vertical&&has_bounds) {
+    const auto bounds=md_.occupied_hit_bounds_[address].world(cell,mp_.resolution_);
+    if(diagnostic)++diagnostic->tested_subcells;
+    if(fine_query.allHitBoundsBelowBody(bounds.first,bounds.second)||
+        !fine_query.intersectsVerticalBounds(cell,bounds.first.z(),bounds.second.z()))return false;
+  }
+  bool intersects=!refine_vertical;
+  // The complete endpoint union remains 2x2x2, but this fix concerns vertical
+  // stair quantization only. Do not reduce an obstacle's coarse XY footprint.
+  for(int half=0;refine_vertical&&half<2;++half)if(evidence&(half?0xaaU:0x55U)) {
+    if(diagnostic)++diagnostic->tested_subcells;
+    if(fine_query.intersectsVerticalHalf(cell,half!=0)) {
+      if(diagnostic)++diagnostic->intersecting_subcells;
+      intersects=true;
+      if(!diagnostic&&!rigid_query)return true;
+    }
+  }
+  // Do not turn an occupied tread into FREE. Only explain a lower-envelope
+  // contact, outside the rigid chassis SAT, by the ALL-hit bounds and
+  // separately qualified original tread surface for this immutable version.
+  // Unknown/coarse-only history returned above; a new/mixed hit cannot be
+  // overwritten by subsequent ground observations.
+  if(intersects&&rigid_query&&query_stair_contact_provider_&&has_bounds) {
+    const auto bounds=md_.occupied_hit_bounds_[address].world(cell,mp_.resolution_);
+    // Use the same conservative measured Z union as the full-envelope query.
+    // A coarse voxel may cross the chassis bottom while every hit is below it;
+    // testing the entire voxel here would reintroduce that quantization error.
+    // For a tilted chassis, coarse XY can likewise cross its bottom while ALL
+    // actual hits remain below that plane. Reuse the full body's separating
+    // plane proof before the same SAT. Side faces keep coarse XY and contact
+    // still needs independent qualified support; touching/mixed hits block.
+    const bool rigid_intersects=refine_vertical?
+        (!rigid_query->allHitBoundsBelowBody(bounds.first,bounds.second)&&
+         rigid_query->intersectsVerticalBounds(cell,bounds.first.z(),bounds.second.z())):
+        rigid_query->intersects(cell);
+    if(!rigid_intersects&&query_stair_contact_provider_(bounds.first,bounds.second)) {
+      if(diagnostic)++diagnostic->qualified_support_contacts;
+      return false;
+    }
+  }
+  return intersects;
+}
+
+void GridMap::markCoarseOnlyOccupancy(int address)
+{
+  if(static_cast<std::size_t>(address)>=md_.occupied_hit_subvoxels_.size())return;
+  auto& evidence=md_.occupied_hit_subvoxels_[address];
+  if(evidence&0xff00U)return;
+  evidence|=scan_planner::kCoarseOnlyHitEvidence;
+  invalidateCollisionQueryCaches();++occupancy_revision_;
+}
+
+void GridMap::recordOccupiedHit(const Eigen::Vector3d& point,const Eigen::Vector3i& cell,int address)
+{
+  if(static_cast<std::size_t>(address)>=md_.occupied_hit_subvoxels_.size())return;
+  auto& evidence=md_.occupied_hit_subvoxels_[address];
+  if(evidence&0xff00U)return;
+  const auto bit=scan_planner::hitSubvoxelBit(point,cell,mp_.resolution_);
+  // A hit cannot retroactively explain an existing coarse-only/weak history.
+  // Keep union bits even while coarse odds are weak; clear only on actual
+  // clamp-min free evidence, reset, or ring-cell reuse.
+  if(!bit || !std::isfinite(md_.occupancy_buffer_[address]) ||
+      (!evidence && md_.occupancy_buffer_[address]>mp_.clamp_min_log_)) {
+    markCoarseOnlyOccupancy(address);return;
+  }
+  bool bounds_changed=false;
+  if(static_cast<std::size_t>(address)<md_.occupied_hit_bounds_.size())
+    bounds_changed=md_.occupied_hit_bounds_[address].include(point,cell,mp_.resolution_,evidence==0);
+  if((evidence&bit)&&!bounds_changed)return;
+  evidence|=bit;invalidateCollisionQueryCaches();++occupancy_revision_;
+}
+
+void GridMap::setOccupiedHit(const Eigen::Vector3d& original_endpoint)
+{
+  if(!original_endpoint.allFinite()||!isInMap(original_endpoint))return;
+  Eigen::Vector3i cell;posToIndex(original_endpoint,cell);
+  const int address=toAddress(cell);
+  recordOccupiedHit(original_endpoint,cell,address);
+  applyOccupancyUpdateAtIndex(cell,address,mp_.clamp_max_log_);
+}
+
+bool GridMap::setVisualizationBodyEnvelope(const scan_planner::BodyEnvelope& body,
+    std::int64_t source_stamp_ns,const std::string& frame)
+{return setVisualizationBodyEnvelopeImpl(body,{},0.,0.,source_stamp_ns,frame);}
+
+bool GridMap::setVisualizationBodyEnvelope(const scan_planner::BodyEnvelope& body,double yaw,
+    std::int64_t source_stamp_ns,const std::string& frame)
+{return setVisualizationBodyEnvelopeImpl(body,yaw,0.,0.,source_stamp_ns,frame);}
+
+bool GridMap::setVisualizationBodyEnvelope(const scan_planner::BodyEnvelope& body,double yaw,
+    double pitch,double roll,std::int64_t source_stamp_ns,const std::string& frame)
+{return setVisualizationBodyEnvelopeImpl(body,yaw,pitch,roll,source_stamp_ns,frame);}
+
+bool GridMap::setVisualizationBodyEnvelopeImpl(const scan_planner::BodyEnvelope& body,
+    std::optional<double> yaw,double pitch,double roll,
+    std::int64_t source_stamp_ns,const std::string& frame)
+{
+  if(source_stamp_ns<=0 || frame.empty() || frame!=mp_.frame_id_ || (yaw&&!std::isfinite(*yaw)) ||
+      !std::isfinite(pitch)||!std::isfinite(roll))return false;
+  try {scan_planner::validateBodyEnvelope(body);} catch(const std::invalid_argument&) {return false;}
+  std::shared_ptr<const VisualizationBodyEnvelope> value=
+      std::make_shared<const VisualizationBodyEnvelope>(VisualizationBodyEnvelope{body,source_stamp_ns,frame,yaw,pitch,roll});
+  auto previous=std::atomic_load_explicit(&visualization_body_envelope_,std::memory_order_acquire);
+  do {
+    if(previous&&previous->source_stamp_ns>source_stamp_ns)return false;
+  } while(!std::atomic_compare_exchange_weak_explicit(&visualization_body_envelope_,&previous,value,
+      std::memory_order_acq_rel,std::memory_order_acquire));
+  return true;
+}
+
+int GridMap::getInflateOccupancy(Eigen::Vector3d position,double yaw,double pitch,double roll)
+{
+  if(visualization_only_)throw std::logic_error("render-only map has no collision evidence");
+  if(!position.allFinite()||!std::isfinite(yaw)||!std::isfinite(pitch)||!std::isfinite(roll))return -1;
+  if(pitch==0.&&roll==0.)return getInflateOccupancyYawOnly(position,yaw);
+  if(mp_.collision_model_!="oriented_box")return -1; // No invented tilted-cylinder approximation.
+  return boxOccupancy(position,yaw,pitch,roll,false);
+}
+
+int GridMap::getPlanningInflateOccupancy(Eigen::Vector3d position,double yaw,double pitch,double roll)
+{
+  if(visualization_only_)throw std::logic_error("render-only map has no collision evidence");
+  if(!position.allFinite()||!std::isfinite(yaw)||!std::isfinite(pitch)||!std::isfinite(roll))return -1;
+  if(pitch==0.&&roll==0.)return getPlanningInflateOccupancyYawOnly(position,yaw);
+  if(planningRequiresObservedFree())
+    return mp_.require_observed_free_?getInflateOccupancy(position,yaw,pitch,roll):2;
+  if(mp_.collision_model_!="oriented_box")return -1;
+  return boxOccupancy(position,yaw,pitch,roll,true);
+}
+
+int GridMap::boxOccupancy(const Eigen::Vector3d &position,double yaw,double pitch,double roll,bool planning)
+{
+  if(!position.allFinite()||!std::isfinite(yaw)||!std::isfinite(pitch)||!std::isfinite(roll)||!isInMap(position))return -1;
+  if(pitch==0.&&roll==0.)return boxOccupancy(position,yaw,planning);
+  const bool strict=!planning&&mp_.require_observed_free_;
+  if(strict)beginCollisionQuery();
+  // First implementation intentionally has no pose cache: all XYZ/RPY affect
+  // the intersected set, including asymmetric rotated body-Z extents.
+  const auto body=queryBodyEnvelope(position,planning);
+  if(query_hard_boundary_provider_&&query_hard_boundary_provider_(position,yaw,pitch,roll,body))return 1;
+  int state=0;
+  if(!strict) {
+    // Occupied-only policy: finite nonoccupied raw cells cannot affect the
+    // result. Test SAT only for occupied/invalid/outside candidates, avoiding
+    // fifteen separating-axis evaluations on every empty voxel during A*.
+    const scan_planner::OrientedBoxVoxel3DQuery query(position,yaw,pitch,roll,mp_.resolution_,body);
+    std::optional<scan_planner::OrientedBoxVoxel3DQuery> fine_query;
+    std::optional<scan_planner::OrientedBoxVoxel3DQuery> rigid_query;
+    const bool refine_vertical=stairSubvoxelQueryAllowed(position,false);
+    if(refine_vertical||(stairContactConfigured()&&query_stair_contact_provider_))
+      fine_query.emplace(position,yaw,pitch,roll,mp_.resolution_,body);
+    if(fine_query&&stairContactConfigured()&&query_stair_contact_provider_) {
+      auto rigid=body;rigid.below=mp_.stair_contact_body_below_;
+      rigid_query.emplace(position,yaw,pitch,roll,mp_.resolution_,rigid);
+    }
+    const auto xs=scan_planner::verticalVoxelSpan(query.center.x(),query.extent.x(),query.extent.x(),mp_.resolution_);
+    const auto ys=scan_planner::verticalVoxelSpan(query.center.y(),query.extent.y(),query.extent.y(),mp_.resolution_);
+    const auto zs=scan_planner::verticalVoxelSpan(query.center.z(),query.extent.z(),query.extent.z(),mp_.resolution_);
+    const double cells=(double(xs.high)-xs.low+1.)*(double(ys.high)-ys.low+1.)*(double(zs.high)-zs.low+1.);
+    if(!std::isfinite(cells)||cells>200000.)throw std::invalid_argument("spatial oriented box voxel query exceeds bounded budget");
+    // The ring buffer is contiguous along Z. As in the existing upright
+    // query, resolve its two horizontal modulo indices once per column,
+    // not three integer divisions for each empty voxel. The visited AABB,
+    // SAT contacts and outside/invalid/occupied priorities are unchanged.
+    const int z_size=mp_.map_voxel_num_.z(),yz_stride=mp_.map_voxel_num_.y()*z_size;
+    const auto &lo=mp_.map_bound_min_idx_,&hi=mp_.map_bound_max_idx_;
+    const int initial_z=getLocalIndex(zs.low,2);
+    for(std::int64_t x=xs.low;x<=xs.high&&state!=1;++x) {
+      const bool inside_x=x>=lo.x()&&x<=hi.x();
+      const int x_row=inside_x?getLocalIndex(static_cast<int>(x),0)*yz_stride:0;
+      for(std::int64_t y=ys.low;y<=ys.high&&state!=1;++y) {
+        const bool inside_xy=inside_x&&y>=lo.y()&&y<=hi.y();
+        const int row=inside_xy?x_row+getLocalIndex(static_cast<int>(y),1)*z_size:0;
+        int local_z=initial_z;
+        for(std::int64_t z=zs.low;z<=zs.high;++z) {
+          const Eigen::Vector3i cell(static_cast<int>(x),static_cast<int>(y),static_cast<int>(z));
+          int next=-1;
+          if(inside_xy&&z>=lo.z()&&z<=hi.z()) {
+            const double odds=md_.occupancy_buffer_[row+local_z];
+            if(++local_z==z_size)local_z=0;
+            if(std::isfinite(odds)&&odds<=mp_.min_occupancy_log_)continue;
+            next=std::isfinite(odds)?1:2;
+          } else if(++local_z==z_size)local_z=0;
+          if(query.intersects(cell)) {
+            if(next==1 && fine_query && !occupiedSubvoxelIntersects(cell,toAddress(cell),*fine_query,
+                nullptr,rigid_query?&*rigid_query:nullptr,refine_vertical))continue;
+            state=scan_planner::mergeCollisionStatus(state,next);
+          }
+          if(state==1)break;
+        }
+      }
+    }
+  } else state=scan_planner::orientedBoxStatus(position,yaw,pitch,roll,mp_.resolution_,body,
+      [&](const Eigen::Vector3i &cell) {
+        if(!isInMap(cell))return -1;
+        return rawCollisionStatus(cell);
+      });
+  if(strict&&state==2)++unknown_collision_queries_;
+  if(strict&&state==0&&mp_.use_projected_rays_&&enforce_free_freshness_) {
+    const auto now=collisionQueryClock();
+    if(ray_clock_fault_||now<=0||now<collision_cache_clock_ns_||now>=collision_cache_deadline_ns_)return 2;
+  }
+  return state;
+}
+
 scan_planner::CollisionEvidence GridMap::inspectInflateOccupancy(const Eigen::Vector3d &position,double yaw,bool detailed)
 {
+  if(visualization_only_)throw std::logic_error("render-only map has no collision evidence");
+  if(query_attitude_provider_ && position.allFinite() && std::isfinite(yaw)) {
+    const auto attitude=query_attitude_provider_(position,yaw);
+    if(!attitude) {
+      scan_planner::CollisionEvidence evidence;evidence.attitude_resolved=false;return evidence;
+    }
+    return inspectInflateOccupancy(position,yaw,attitude->x(),attitude->y(),detailed);
+  }
+  return inspectInflateOccupancy(position,yaw,0.,0.,detailed);
+}
+
+scan_planner::CollisionEvidence GridMap::inspectInflateOccupancy(const Eigen::Vector3d &position,double yaw,double pitch,double roll,bool detailed)
+{
+  if(visualization_only_)throw std::logic_error("render-only map has no collision evidence");
   // Rate-limited raw-evidence diagnostic, not the official collision decision.
   // Reverse the active inflation kernel; strict mode further intersects the
   // actual cylinder AABB. Counts include overlapping cells, and unknown raw
@@ -466,7 +1008,67 @@ scan_planner::CollisionEvidence GridMap::inspectInflateOccupancy(const Eigen::Ve
   scan_planner::CollisionEvidence evidence;
   beginCollisionQuery();
   std::map<std::array<int,3>,std::size_t> unique;
-  if (!position.allFinite() || !std::isfinite(yaw)) {evidence.counts[3]=1;return evidence;}
+  if (!position.allFinite() || !std::isfinite(yaw)||!std::isfinite(pitch)||!std::isfinite(roll)) {evidence.counts[3]=1;return evidence;}
+  evidence.modeled_hard_boundary_collision=query_hard_boundary_provider_&&
+    query_hard_boundary_provider_(position,yaw,pitch,roll,queryBodyEnvelope(position,false));
+  std::optional<scan_planner::OrientedBoxVoxel3DQuery> fine_query;
+  std::optional<scan_planner::OrientedBoxVoxel3DQuery> rigid_query;
+  const bool refine_vertical=stairSubvoxelQueryAllowed(position,mp_.require_observed_free_);
+  if(refine_vertical||(!mp_.require_observed_free_&&stairContactConfigured()&&query_stair_contact_provider_)) {
+    auto body=queryBodyEnvelope(position,false);
+    fine_query.emplace(position,yaw,pitch,roll,mp_.resolution_,body);
+    if(stairContactConfigured()&&query_stair_contact_provider_) {
+      body.below=mp_.stair_contact_body_below_;
+      rigid_query.emplace(position,yaw,pitch,roll,mp_.resolution_,body);
+    }
+    evidence.subvoxel_narrowphase=true;
+  }
+  const auto record=[&](const Eigen::Vector3i &cell,unsigned shape_mask) {
+    int state=-1;
+    double odds=std::numeric_limits<double>::quiet_NaN();
+    if (isInMap(cell)) {
+      odds=md_.occupancy_buffer_[toAddress(cell)];
+      state=rawCollisionStatus(cell);
+    }
+    const int slot=state<0 ? 3:state;
+    if (slot && !evidence.counts[slot]) evidence.first[slot-1]=cell;
+    ++evidence.counts[slot];
+    // Capture the result of the existing narrowphase call, not a second map
+    // walk. Raw occupied counts intentionally remain unchanged.
+    bool occupied_intersects=state==1;
+    if(state==1&&fine_query)
+      occupied_intersects=occupiedSubvoxelIntersects(cell,toAddress(cell),*fine_query,&evidence.subvoxels,
+          rigid_query?&*rigid_query:nullptr,refine_vertical);
+    if(detailed) {
+      const std::array<int,3> key{{cell.x(),cell.y(),cell.z()}};
+      auto found=unique.find(key);
+      if(found==unique.end()) {
+        scan_planner::CollisionVoxelDiagnostic voxel;
+        voxel.index=cell;voxel.log_odds=odds;voxel.native_state=state;
+        voxel.occupied_intersects=occupied_intersects;
+        voxel.occupied_narrowphase_applied=state==1&&fine_query.has_value();
+        if(state==1&&static_cast<std::size_t>(toAddress(cell))<md_.occupied_hit_subvoxels_.size())
+          voxel.occupied_hit_subvoxel_mask=md_.occupied_hit_subvoxels_[toAddress(cell)];
+        voxel.raw_state=state<0?-1:scan_planner::strictRawVoxelStatus(
+            odds,mp_.clamp_min_log_,mp_.min_occupancy_log_);
+        if(state>=0 && static_cast<std::size_t>(toAddress(cell))<free_observation_stamps_.size())
+          voxel.free_observation_stamp_ns=free_observation_stamps_[toAddress(cell)];
+        voxel.classification=state<0 ? scan_planner::RawVoxelDiagnostic::Outside :
+            scan_planner::diagnoseRawVoxel(odds,mp_.clamp_min_log_,mp_.min_occupancy_log_,mp_.unknown_flag_);
+        if (voxel.raw_state==0 && state==2) voxel.classification=scan_planner::RawVoxelDiagnostic::StaleFree;
+        ++evidence.classification_counts[static_cast<std::size_t>(voxel.classification)];
+        unique.emplace(key,evidence.voxels.size());evidence.voxels.push_back(voxel);
+        ++evidence.unique_counts[slot];found=unique.find(key);
+      }
+      evidence.voxels[found->second].cylinder_mask|=shape_mask;
+    }
+  };
+  if (mp_.collision_model_=="oriented_box") {
+    scan_planner::forEachOrientedBoxVoxel(position,yaw,pitch,roll,mp_.resolution_,queryBodyEnvelope(position,false),
+      [&](const Eigen::Vector3i &cell) {record(cell,4U);return true;});
+    return evidence;
+  }
+  if(pitch!=0.||roll!=0.){evidence.counts[3]=1;return evidence;}
   const Eigen::Vector3d heading(std::cos(yaw),std::sin(yaw),0.);
   for (int side:{-1,1}) {
     const Eigen::Vector3d center=position+side*mp_.double_cylinder_offset_*heading;
@@ -480,34 +1082,7 @@ scan_planner::CollisionEvidence GridMap::inspectInflateOccupancy(const Eigen::Ve
       const Eigen::Vector3i cell=index-offset;
       if (mp_.require_observed_free_ && (cell.z()<span.low || cell.z()>span.high ||
           !scan_planner::cylinderIntersectsVoxelXY(center,cell,mp_.resolution_,mp_.double_cylinder_radius_))) continue;
-      int state=-1;
-      double odds=std::numeric_limits<double>::quiet_NaN();
-      if (isInMap(cell)) {
-        odds=md_.occupancy_buffer_[toAddress(cell)];
-        state=rawCollisionStatus(cell);
-      }
-      const int slot=state<0 ? 3:state;
-      if (slot && !evidence.counts[slot]) evidence.first[slot-1]=cell;
-      ++evidence.counts[slot];
-      if(detailed) {
-        const std::array<int,3> key{{cell.x(),cell.y(),cell.z()}};
-        auto found=unique.find(key);
-        if(found==unique.end()) {
-          scan_planner::CollisionVoxelDiagnostic voxel;
-          voxel.index=cell;voxel.log_odds=odds;voxel.native_state=state;
-          voxel.raw_state=state<0?-1:scan_planner::strictRawVoxelStatus(
-              odds,mp_.clamp_min_log_,mp_.min_occupancy_log_);
-          if(state>=0 && static_cast<std::size_t>(toAddress(cell))<free_observation_stamps_.size())
-            voxel.free_observation_stamp_ns=free_observation_stamps_[toAddress(cell)];
-          voxel.classification=state<0 ? scan_planner::RawVoxelDiagnostic::Outside :
-              scan_planner::diagnoseRawVoxel(odds,mp_.clamp_min_log_,mp_.min_occupancy_log_,mp_.unknown_flag_);
-          if (voxel.raw_state==0 && state==2) voxel.classification=scan_planner::RawVoxelDiagnostic::StaleFree;
-          ++evidence.classification_counts[static_cast<std::size_t>(voxel.classification)];
-          unique.emplace(key,evidence.voxels.size());evidence.voxels.push_back(voxel);
-          ++evidence.unique_counts[slot];found=unique.find(key);
-        }
-        evidence.voxels[found->second].cylinder_mask|=side<0 ? 1U:2U;
-      }
+      record(cell,side<0 ? 1U:2U);
     }
   }
   return evidence;
@@ -516,58 +1091,195 @@ scan_planner::CollisionEvidence GridMap::inspectInflateOccupancy(const Eigen::Ve
 std::string GridMap::describeInflateOccupancy(const Eigen::Vector3d &position,double yaw)
 {
   if (!position.allFinite() || !std::isfinite(yaw)) return "nonfinite_query";
-  const auto evidence=inspectInflateOccupancy(position,yaw,true);
+  double pitch=0.,roll=0.;
+  if(query_attitude_provider_) {
+    const auto attitude=query_attitude_provider_(position,yaw);
+    if(!attitude)return std::string("query_policy=")+collisionQueryPolicy()+" collision=2 attitude=unavailable evidence_counts=not_queried";
+    pitch=attitude->x();roll=attitude->y();
+    if(!std::isfinite(pitch)||!std::isfinite(roll))return "nonfinite_query_attitude";
+  }
+  return describeInflateOccupancy(position,yaw,pitch,roll);
+}
+
+std::string GridMap::describeInflateOccupancy(const Eigen::Vector3d &position,double yaw,double pitch,double roll)
+{
+  if(!position.allFinite()||!std::isfinite(yaw))return "nonfinite_query";
+  if(!std::isfinite(pitch)||!std::isfinite(roll))return "nonfinite_query_attitude";
+  // Resolve once: the query, witness counts and printed geometry must describe
+  // the same immutable reader contract, never a yaw-only proxy of a tilted body.
+  const auto evidence=inspectInflateOccupancy(position,yaw,pitch,roll,true);
   const auto &counts=evidence.counts;
-  std::ostringstream out;out.precision(4);
+  // The official occupied-only policy does not maintain the strict free-age
+  // cache clock. Diagnostics must read the actual reader clock, not report
+  // (zero - epoch stamp) as a huge negative age. Do not update evidence/cache
+  // deadlines or manufacture a timestamp when this reader has no clock.
+  const auto diagnostic_now=collisionQueryClock();
+  const auto age_ms=[diagnostic_now](std::int64_t source) {
+    return diagnostic_now>0 && source>0 && diagnostic_now>=source ?
+        static_cast<double>(diagnostic_now-source)*1e-6 :
+        std::numeric_limits<double>::quiet_NaN();
+  };
+  std::ostringstream out;out.precision(9);
   out<<"query_policy="<<collisionQueryPolicy();
-  if (!mp_.require_observed_free_) out<<" collision="<<getInflateOccupancy(position,yaw);
+  if (!mp_.require_observed_free_) out<<" collision="<<getInflateOccupancy(position,yaw,pitch,roll);
   out<<" evidence_counts="<<(mp_.require_observed_free_?"strict_with_free_expiry":"raw_evidence")
      <<" free="<<counts[0]<<" occupied="<<counts[1]<<" unknown="<<counts[2]<<" outside="<<counts[3]
      <<" raw_overlap=["<<counts[0]<<","<<counts[1]<<","<<counts[2]<<","<<counts[3]<<"]"
      <<" unique_voxels=["<<evidence.unique_counts[0]<<","<<evidence.unique_counts[1]<<","<<evidence.unique_counts[2]<<","<<evidence.unique_counts[3]<<"]";
-  const auto body=bodyEnvelope();
-  out<<" body_z=["<<position.z()-body.below<<","<<position.z()+body.above<<"]"
+  out<<" hit_subvoxel_narrowphase="<<evidence.subvoxel_narrowphase
+     <<" hit_subvoxel_geometry="<<(stairContactConfigured()?"coarse_xy_all_hit_vertical_bounds":"coarse_xy_vertical_halves")
+     <<" refined_coarse_witnesses="<<evidence.subvoxels.refined_coarse
+     <<" hit_subcells_tested="<<evidence.subvoxels.tested_subcells
+     <<" hit_subcells_intersecting="<<evidence.subvoxels.intersecting_subcells
+     <<" coarse_witness_fallback="<<evidence.subvoxels.coarse_fallback;
+  out<<" qualified_stair_contacts="<<evidence.subvoxels.qualified_support_contacts;
+  out<<" modeled_hard_boundary_collision="<<evidence.modeled_hard_boundary_collision;
+  const auto body=queryBodyEnvelope(position,false);
+  if(evidence.modeled_hard_boundary_collision&&query_hard_boundary_diagnostic_provider_)
+    out<<" model_hard_witness="<<query_hard_boundary_diagnostic_provider_(position,yaw,pitch,roll,body);
+  double z_min=position.z()-body.below,z_max=position.z()+body.above;
+  if (body.model==scan_planner::CollisionModel::OrientedBox) {
+    out<<" body_xy_box=["<<body.length<<","<<body.width<<"] yaw="<<yaw<<" pitch="<<pitch<<" roll="<<roll;
+    if(pitch!=0.||roll!=0.) {
+      const scan_planner::OrientedBoxVoxel3DQuery box(position,yaw,pitch,roll,mp_.resolution_,body);
+      z_min=box.center.z()-box.extent.z();z_max=box.center.z()+box.extent.z();
+      out<<" body_geometry=spatial_obb body_center=["<<box.center.x()<<","<<box.center.y()<<","<<box.center.z()<<"]";
+    }
+  }
+  out<<" body_z=["<<z_min<<","<<z_max<<"]"
      <<" never_observed="<<evidence.classification_counts[static_cast<std::size_t>(scan_planner::RawVoxelDiagnostic::NeverObserved)]
      <<" observed_insufficient="<<evidence.classification_counts[static_cast<std::size_t>(scan_planner::RawVoxelDiagnostic::Insufficient)]
      <<" stale_free="<<evidence.classification_counts[static_cast<std::size_t>(scan_planner::RawVoxelDiagnostic::StaleFree)]
-     <<" source_query_ns="<<collision_cache_clock_ns_
+     <<" query_xyz=["<<position.x()<<","<<position.y()<<","<<position.z()<<"]"
+     <<" map_revision="<<occupancyRevision()<<" frame="<<mp_.frame_id_
+     <<" source_query_ns="<<diagnostic_now
      <<" front_source_ns="<<integratedRaySourceStamp(0)<<" rear_source_ns="<<integratedRaySourceStamp(1)
-     <<" front_age_ms="<<(collision_cache_clock_ns_-integratedRaySourceStamp(0))*1e-6
-     <<" rear_age_ms="<<(collision_cache_clock_ns_-integratedRaySourceStamp(1))*1e-6;
+     <<" front_age_ms="<<age_ms(integratedRaySourceStamp(0))
+     <<" rear_age_ms="<<age_ms(integratedRaySourceStamp(1));
+  if(query_support_height_provider_) {
+    const auto support=query_support_height_provider_(position);
+    // This is the supported BODY reference Z, not the ground height.
+    if(support && std::isfinite(*support))out<<" support_body_z="<<*support;
+    else out<<" support_body_z=unavailable";
+  }
+  constexpr std::size_t max_witnesses=64;
+  std::size_t reported=0;
+  out<<" occupied_witnesses=[";
+  for(const auto& voxel:evidence.voxels) {
+    if(voxel.classification!=scan_planner::RawVoxelDiagnostic::Occupied)continue;
+    if(reported==max_witnesses)break;
+    if(reported++)out<<",";
+    const Eigen::Vector3d point=(voxel.index.cast<double>().array()+.5)*mp_.resolution_;
+    out<<"["<<point.x()<<","<<point.y()<<","<<point.z()<<"]";
+  }
+  out<<"] occupied_witnesses_omitted="<<(evidence.unique_counts[1]-reported);
+  // Keep the historical coarse centre list, and separately expose which
+  // source-backed cells actually touch this exact body. At most 64 detailed
+  // records are formatted; finding the first true hit reuses the evidence
+  // already gathered above, with no collision query or map mutation.
+  const scan_planner::CollisionVoxelDiagnostic* first_effective=nullptr;
+  std::array<const scan_planner::CollisionVoxelDiagnostic*,4> bounded_hits{};
+  std::size_t effective_hits=0;
+  reported=0;out<<" occupied_witness_details=[";
+  for(const auto& voxel:evidence.voxels) {
+    if(voxel.classification!=scan_planner::RawVoxelDiagnostic::Occupied)continue;
+    if(!first_effective&&voxel.occupied_intersects)first_effective=&voxel;
+    if(voxel.occupied_intersects) {
+      if(effective_hits<bounded_hits.size())bounded_hits[effective_hits]=&voxel;
+      ++effective_hits;
+    }
+    if(reported==max_witnesses)continue;
+    if(reported++)out<<",";
+    const Eigen::Vector3d point=(voxel.index.cast<double>().array()+.5)*mp_.resolution_;
+    out<<"{\"cell\":["<<point.x()<<","<<point.y()<<","<<point.z()<<"],\"hit_mask\":"
+       <<voxel.occupied_hit_subvoxel_mask<<",\"narrowphase\":"
+       <<(voxel.occupied_narrowphase_applied?"true":"false")<<",\"refined_intersects\":"
+       <<(voxel.occupied_intersects?"true":"false")<<"}";
+  }
+  out<<"] occupied_witness_details_omitted="<<(evidence.unique_counts[1]-reported);
+  // The centres/mask above cannot distinguish voxel quantisation from actual
+  // return height. Serialize only the already retained ALL-hit endpoint union
+  // for at most four real collision witnesses. Coarse/untracked history has
+  // no such evidence; never print its default bytes as measured coordinates.
+  // No additional geometry/support query and no change to the verdict.
+  out<<" collision_hit_bounds=[";
+  const auto bounded_count=std::min(effective_hits,bounded_hits.size());
+  for(std::size_t i=0;i<bounded_count;++i) {
+    if(i)out<<",";
+    const auto& voxel=*bounded_hits[i];const auto address=toAddress(voxel.index);
+    const auto mask=voxel.occupied_hit_subvoxel_mask;
+    const bool available=mask&&!(mask&0xff00U)&&address>=0&&
+        static_cast<std::size_t>(address)<md_.occupied_hit_bounds_.size();
+    const Eigen::Vector3d center=(voxel.index.cast<double>().array()+.5)*mp_.resolution_;
+    out<<"{\"cell\":["<<center.x()<<","<<center.y()<<","<<center.z()<<"],\"available\":"
+       <<(available?"true":"false");
+    if(available) {
+      const auto bounds=md_.occupied_hit_bounds_[address].world(voxel.index,mp_.resolution_);
+      out<<",\"lo\":["<<bounds.first.x()<<","<<bounds.first.y()<<","<<bounds.first.z()
+         <<"],\"hi\":["<<bounds.second.x()<<","<<bounds.second.y()<<","<<bounds.second.z()<<"]";
+    }
+    out<<"}";
+  }
+  out<<"] collision_hit_bounds_omitted="<<(effective_hits-bounded_count);
+  if(bounded_count && blocked_voxel_mailbox_) {
+    scan_planner::BlockedVoxelWatchRequest request;
+    request.context_generation=blocked_voxel_context_;
+    request.count=static_cast<std::uint8_t>(bounded_count);
+    for(std::size_t i=0;i<bounded_count;++i) {
+      const auto& key=bounded_hits[i]->index;
+      request.cells[i]={{key.x(),key.y(),key.z()}};
+    }
+    // No map mutation, extra query, wait, or influence on this verdict.
+    blocked_voxel_mailbox_->tryOffer(request);
+  }
+  const auto write_ray_witness=[&](const Eigen::Vector3i& cell,const char* label) {
+    if(!near_field_diagnostics_.enabled())out<<label<<"disabled";
+    else if(!near_field_diagnostics_.contains(cell))out<<label<<"outside_diagnostic_roi";
+    else if(const auto* witnesses=near_field_diagnostics_.find(cell)) {
+      for(const auto& witness:witnesses->last)if(witness) {
+        const auto& w=*witness;const auto& m=w.metadata;
+        out<<label<<"{sensor:"<<m.sensor_id<<",hit:"<<w.hit<<",vote:"<<w.contributed_vote
+           <<",scan_ns:"<<m.scan_stamp_ns<<",acquisition_end_ns:"<<m.acquisition_end_ns
+           <<",source_age_ms:"<<age_ms(m.acquisition_end_ns)
+           <<",alignment_ns:"<<m.alignment_stamp_ns<<",received_ns:"<<m.received_ns
+           <<",source_index:"<<m.source_index<<",offset_ns:"<<m.offset_time_ns
+           <<",source_fields_available:"<<m.source_fields_available
+           <<",origin:["<<w.origin.x()<<","<<w.origin.y()<<","<<w.origin.z()<<"]"
+           <<",endpoint:["<<w.endpoint.x()<<","<<w.endpoint.y()<<","<<w.endpoint.z()<<"]}";
+      }
+    } else out<<label<<"not_retained";
+  };
+  if(first_effective) {
+    const Eigen::Vector3d point=(first_effective->index.cast<double>().array()+.5)*mp_.resolution_;
+    out<<" collision_occupied_cell=("<<point.x()<<","<<point.y()<<","<<point.z()<<")"
+       <<" collision_occupied_hit_mask="<<first_effective->occupied_hit_subvoxel_mask;
+    write_ray_witness(first_effective->index," collision_ray_witness=");
+  } else out<<" collision_occupied_cell=none";
   std::int64_t oldest_free=std::numeric_limits<std::int64_t>::max();
   for(const auto& voxel:evidence.voxels)if(voxel.free_observation_stamp_ns>0)
     oldest_free=std::min(oldest_free,voxel.free_observation_stamp_ns);
   if(oldest_free!=std::numeric_limits<std::int64_t>::max())
-    out<<" oldest_free_source_ns="<<oldest_free<<" oldest_free_age_ms="<<(collision_cache_clock_ns_-oldest_free)*1e-6;
+    out<<" oldest_free_source_ns="<<oldest_free<<" oldest_free_age_ms="<<age_ms(oldest_free);
   const char *labels[]={" occupied_cell="," unknown_cell="," outside_cell="};
   for (int i=0;i<3;++i) if(counts[i+1]) {
     const Eigen::Vector3d point=(evidence.first[i].cast<double>().array()+.5)*mp_.resolution_;
     out<<labels[i]<<"("<<point.x()<<","<<point.y()<<","<<point.z()<<")";
-    if(i<2) {
-      if(!near_field_diagnostics_.enabled())out<<" ray_witness=disabled";
-      else if(!near_field_diagnostics_.contains(evidence.first[i]))out<<" ray_witness=outside_diagnostic_roi";
-      else if(const auto* witnesses=near_field_diagnostics_.find(evidence.first[i])) {
-        for(const auto& witness:witnesses->last)if(witness) {
-          const auto& w=*witness;const auto& m=w.metadata;
-          out<<" ray_witness={sensor:"<<m.sensor_id<<",hit:"<<w.hit<<",vote:"<<w.contributed_vote
-             <<",scan_ns:"<<m.scan_stamp_ns<<",acquisition_end_ns:"<<m.acquisition_end_ns
-             <<",source_age_ms:"<<(collision_cache_clock_ns_-m.acquisition_end_ns)*1e-6
-             <<",alignment_ns:"<<m.alignment_stamp_ns<<",received_ns:"<<m.received_ns
-             <<",source_index:"<<m.source_index<<",offset_ns:"<<m.offset_time_ns
-             <<",source_fields_available:"<<m.source_fields_available
-             <<",origin:["<<w.origin.x()<<","<<w.origin.y()<<","<<w.origin.z()<<"]"
-             <<",endpoint:["<<w.endpoint.x()<<","<<w.endpoint.y()<<","<<w.endpoint.z()<<"]}";
-        }
-      } else out<<" ray_witness=not_retained";
-    }
+    if(i<2)write_ray_witness(evidence.first[i]," ray_witness=");
   }
   return out.str();
 }
 
 void GridMap::resetAllMapData()
 {
+  blocked_voxel_watch_.setContext(++blocked_voxel_context_);
+  blocked_voxel_watch_snapshot_=blocked_voxel_watch_.snapshot();
+  // Invalidate an in-flight display without waiting for its rendering or ROS
+  // publication. A frame already handed to middleware cannot be recalled.
+  visualization_generation_.fetch_add(1,std::memory_order_release);
+  std::atomic_store_explicit(&visualization_body_envelope_,
+      std::shared_ptr<const VisualizationBodyEnvelope>{},std::memory_order_release);
   near_field_diagnostics_.clear();
-  observed_cylinder_cache_.clear();
+  invalidateCollisionQueryCaches();
   collision_cache_deadline_ns_=collision_cache_clock_ns_=0;
   if(mp_.use_projected_rays_) free_observation_stamps_.assign(md_.occupancy_buffer_.size(),0);
   else free_observation_stamps_.clear();
@@ -578,6 +1290,11 @@ void GridMap::resetAllMapData()
   integrated_cloud_stamp_ns_ = 0;
   ray_integrated_stamps_.fill(0);
   std::fill(md_.occupancy_buffer_.begin(), md_.occupancy_buffer_.end(), mp_.clamp_min_log_ - mp_.unknown_flag_);
+  if(mp_.stair_subvoxel_collision_)
+    md_.occupied_hit_subvoxels_.assign(md_.occupancy_buffer_.size(),0);
+  else std::vector<std::uint16_t>().swap(md_.occupied_hit_subvoxels_);
+  if(stairContactConfigured())md_.occupied_hit_bounds_.assign(md_.occupancy_buffer_.size(),{});
+  else std::vector<scan_planner::ObservedHitBounds>().swap(md_.occupied_hit_bounds_);
   std::fill(md_.occupancy_buffer_inflate_.begin(), md_.occupancy_buffer_inflate_.end(), 0);
   std::fill(md_.occupancy_buffer_inflate_cnt_.begin(), md_.occupancy_buffer_inflate_cnt_.end(), 0);
   std::fill(md_.planning_occupancy_buffer_inflate_.begin(), md_.planning_occupancy_buffer_inflate_.end(), 0);
@@ -614,6 +1331,10 @@ bool GridMap::applyLocalizationContext(const std::string &payload)
     // A new map-context sequence is an explicit evidence rebuild, separate
     // from goal/reference generation. ACK must never preserve the old grid.
     resetAllMapData();
+    visualization_body_stamp_ns_=0;
+    visualization_body_yaw_=std::numeric_limits<double>::quiet_NaN();
+    visualization_obb_kernel_ready_=false;
+    visualization_revision_[1]=std::numeric_limits<std::uint64_t>::max();
     ray_clock_fault_=false;ray_query_clock_ns_=ray_tick_clock_ns_=ray_tick_effective_ns_=0;
     localization_epoch_ = epoch;
     localization_seed_ = seed;
@@ -621,6 +1342,12 @@ bool GridMap::applyLocalizationContext(const std::string &payload)
     localization_context_barrier_ns_ = barrier;
     ray_integrations_.fill(0);ray_drops_.fill(0);ray_unattributed_drops_=0;
     localization_context_payload_ = payload;
+    publishProjectedIngressContext();
+    // Publish this already-reset, source-invalid context before its ACK. If
+    // the new source never sends another ray, readers must still learn that
+    // old-coordinate snapshots no longer describe the live map. A reliable
+    // identical retry returned above and cannot renew or republish evidence.
+    if(collision_update_callback_)collision_update_callback_();
     return true;
   } catch (const nlohmann::json::exception &) {
     return false;
@@ -645,39 +1372,65 @@ void GridMap::hashIdToGlobalIndex(int addr, Eigen::Vector3i& id_g) const
   }
 }
 
+std::vector<InflationColumn> GridMap::inflationColumns(const vector<Eigen::Vector3i>& offsets)
+{
+  std::vector<InflationColumn> columns;
+  for (const auto& offset:offsets) {
+    if (!columns.empty() && columns.back().x==offset.x() &&
+        columns.back().y==offset.y() &&
+        static_cast<std::int64_t>(columns.back().end_z)+1==offset.z()) {
+      columns.back().end_z=offset.z();
+    } else {
+      columns.push_back({offset.x(),offset.y(),offset.z(),offset.z()});
+    }
+  }
+  return columns;
+}
+
 void GridMap::updateInflationLayer(const Eigen::Vector3i& id, int delta,
-                                   const vector<Eigen::Vector3i>& offsets,
+                                   const std::vector<InflationColumn>& columns,
                                    std::vector<int>& cnt_buffer,
                                    std::vector<char>& flag_buffer,
                                    const std::vector<char>* ignore_mask)
 {
-  // Inflation may touch thousands of cells for each occupied-state change.
-  // Their window is fixed and bounds are checked below: cache ring constants
-  // once, rather than issue three integer divisions for every kernel cell.
+  // The existing kernels are ordered in contiguous vertical columns. Clip
+  // each column once and update its contiguous ring-buffer runs, rather than
+  // repeating XYZ bounds/address arithmetic for every voxel. Do not replace
+  // or approximate the kernel: holes, ordering, per-update zero clamp and
+  // sliding's ignore mask retain their original meaning.
   const scan_planner::ObservedRayMapIndex index(mp_.map_bound_min_idx_,mp_.map_voxel_num_);
-  for (const auto& offset : offsets)
-  {
-    const Eigen::Vector3i inf_id = id + offset;
-    if (!isInMap(inf_id))
-      continue;
-
-    const int addr = index.address(inf_id);
-    if (ignore_mask && (*ignore_mask)[addr])
-      continue;
-
-    cnt_buffer[addr] += delta;
-    if (cnt_buffer[addr] < 0)
-      cnt_buffer[addr] = 0;
-    flag_buffer[addr] = cnt_buffer[addr] > 0 ? 1 : 0;
+  const auto &minimum=mp_.map_bound_min_idx_,&maximum=mp_.map_bound_max_idx_;
+  const int z_size=mp_.map_voxel_num_.z();
+  int minimum_local_z=minimum.z()%z_size;
+  if(minimum_local_z<0)minimum_local_z+=z_size;
+  for(const auto& column:columns) {
+    const int x=id.x()+column.x,y=id.y()+column.y;
+    const int begin_z=std::max(id.z()+column.begin_z,minimum.z());
+    const int end_z=std::min(id.z()+column.end_z,maximum.z());
+    if(x<minimum.x()||x>maximum.x()||y<minimum.y()||y>maximum.y()||begin_z>end_z)continue;
+    int address=index.address({x,y,begin_z});
+    int local_z=begin_z-minimum.z()+minimum_local_z;
+    if(local_z>=z_size)local_z-=z_size;
+    int remaining=end_z-begin_z+1;
+    while(remaining>0) {
+      const int count=std::min(remaining,z_size-local_z);
+      for(int at=address;at<address+count;++at) {
+        if(ignore_mask&&(*ignore_mask)[at])continue;
+        cnt_buffer[at]=std::max(0,cnt_buffer[at]+delta);
+        flag_buffer[at]=cnt_buffer[at]>0?1:0;
+      }
+      remaining-=count;
+      address+=count-z_size;local_z=0;
+    }
   }
 }
 
 void GridMap::updateInflation(const Eigen::Vector3i& id, int delta, const std::vector<char>* ignore_mask)
 {
-  updateInflationLayer(id, delta, md_.inflate_offsets_, md_.occupancy_buffer_inflate_cnt_,
+  updateInflationLayer(id, delta, md_.inflate_columns_, md_.occupancy_buffer_inflate_cnt_,
                        md_.occupancy_buffer_inflate_, ignore_mask);
   if (!md_.planning_occupancy_buffer_inflate_cnt_.empty())
-    updateInflationLayer(id,delta,md_.planning_inflate_offsets_,md_.planning_occupancy_buffer_inflate_cnt_,
+    updateInflationLayer(id,delta,md_.planning_inflate_columns_,md_.planning_occupancy_buffer_inflate_cnt_,
                          md_.planning_occupancy_buffer_inflate_,ignore_mask);
 }
 
@@ -687,6 +1440,8 @@ void GridMap::applyOccupancyUpdate(const Eigen::Vector3i& id, double new_log_odd
     return;
 
   const int addr = toAddress(id);
+  if(!std::isfinite(new_log_odds)||new_log_odds>mp_.clamp_min_log_)
+    markCoarseOnlyOccupancy(addr);
   applyOccupancyUpdateAtIndex(id,addr,new_log_odds);
 }
 
@@ -697,6 +1452,11 @@ void GridMap::applyOccupancyUpdateAtIndex(const Eigen::Vector3i& id,int addr,dou
   // Source stamps, hit/miss counters and witnesses have already been updated
   // by the complete-ray walk, outside this log-odds-only operation.
   const double old_log_odds=md_.occupancy_buffer_[addr];
+  if(new_log_odds==mp_.clamp_min_log_ &&
+      static_cast<std::size_t>(addr)<md_.occupied_hit_subvoxels_.size() &&
+      md_.occupied_hit_subvoxels_[addr]) {
+    md_.occupied_hit_subvoxels_[addr]=0;invalidateCollisionQueryCaches();++occupancy_revision_;
+  }
   if(old_log_odds==new_log_odds &&
       (new_log_odds!=0. || std::signbit(old_log_odds)==std::signbit(new_log_odds))) return;
   const bool was_occ = old_log_odds > mp_.min_occupancy_log_;
@@ -707,7 +1467,7 @@ void GridMap::applyOccupancyUpdateAtIndex(const Eigen::Vector3i& id,int addr,dou
       mp_.clamp_min_log_,mp_.min_occupancy_log_) != scan_planner::strictRawVoxelStatus(
       new_log_odds,mp_.clamp_min_log_,mp_.min_occupancy_log_);
   if (was_known!=now_known || was_occ!=now_occ || (mp_.require_observed_free_ && free_changed)) {
-    observed_cylinder_cache_.clear();
+    invalidateCollisionQueryCaches();
     ++occupancy_revision_; // Also wake strict planners when unknown becomes observed.
   }
 
@@ -720,7 +1480,8 @@ void GridMap::applyOccupancyUpdateAtIndex(const Eigen::Vector3i& id,int addr,dou
 
 void GridMap::resetCellByAddress(int addr)
 {
-  observed_cylinder_cache_.clear();
+  invalidateCollisionQueryCaches();
+  if(static_cast<std::size_t>(addr)<md_.occupied_hit_subvoxels_.size())md_.occupied_hit_subvoxels_[addr]=0;
   if(static_cast<std::size_t>(addr)<free_observation_stamps_.size()) free_observation_stamps_[addr]=0;
   if (md_.occupancy_buffer_[addr]>=mp_.clamp_min_log_) ++occupancy_revision_;
   Eigen::Vector3i id_g;
@@ -741,7 +1502,8 @@ void GridMap::resetCellByAddress(int addr)
 
 void GridMap::resetCellByAddressForSliding(int addr, const std::vector<char>& clear_mask)
 {
-  observed_cylinder_cache_.clear();
+  invalidateCollisionQueryCaches();
+  if(static_cast<std::size_t>(addr)<md_.occupied_hit_subvoxels_.size())md_.occupied_hit_subvoxels_[addr]=0;
   if(static_cast<std::size_t>(addr)<free_observation_stamps_.size()) free_observation_stamps_[addr]=0;
   if (md_.occupancy_buffer_[addr]>=mp_.clamp_min_log_) ++occupancy_revision_;
   Eigen::Vector3i id_g;
@@ -894,6 +1656,7 @@ int GridMap::setCacheOccupancy(Eigen::Vector3d pos, int occ)
     return INVALID_IDX;
 
   int idx_ctns = toAddress(id);
+  if(occ==1)recordOccupiedHit(pos,id,idx_ctns);
   cacheOccupancyAtIndex(id,idx_ctns,occ);
 
   return idx_ctns;
@@ -967,12 +1730,59 @@ void GridMap::projectDepthImage()
   }
 }
 
+bool GridMap::prepareParallelRayVisits(const std::array<std::int64_t,2>& sources)
+{
+  // Only the unchanged official projected-ray visitor is accelerated. Strict
+  // evidence/diagnostics retain the original path, including failure prefixes.
+  if(!parallel_ray_visits_enabled_||collision_snapshot_||mp_.require_observed_free_||
+     !mp_.use_projected_rays_||near_field_diagnostics_.enabled()||
+     !std::isfinite(mp_.max_ray_length_)||mp_.max_ray_length_<=0.||
+     md_.proj_points_cnt<4096||static_cast<std::size_t>(md_.proj_points_cnt)>
+       scan_planner::ParallelObservedRayVisits::kMaxRays)return false;
+  try {
+    if(!parallel_ray_visits_)
+      parallel_ray_visits_=std::make_unique<scan_planner::ParallelObservedRayVisits>();
+    auto& prepared=parallel_ray_visits_->rays();prepared.clear();prepared.reserve(md_.proj_points_cnt);
+    for(int i=0;i<md_.proj_points_cnt;++i) {
+      const auto& origin=md_.proj_origins_[i];auto end=md_.proj_points_[i];
+      if(!isInMap(origin))return false;
+      // Clipping changes endpoint inclusion, independently of whether the
+      // original measured endpoint is a real hit or a censored self return.
+      bool original_endpoint=true;
+      if(!scan_planner::clipObservedRay(origin,mp_.local_update_range_,end,original_endpoint))return false;
+      if(!isInMap(end)) {original_endpoint=false;end=closetPointInMap(end,origin);}
+      const double length=(end-origin).norm();
+      if(length>mp_.max_ray_length_) {
+        original_endpoint=false;end=(end-origin)/length*mp_.max_ray_length_+origin;
+      }
+      bool include_end=!original_endpoint;
+      if(static_cast<std::size_t>(i)<projected_ray_kinds_.size() && projected_ray_kinds_[i]==1 &&
+          ((end/mp_.resolution_).array().floor()==
+           (md_.proj_points_[i]/mp_.resolution_).array().floor()).all())
+        include_end=false; // A sub-voxel clip must not clear the censored hit cell.
+      prepared.push_back({origin,end,static_cast<unsigned char>(
+          projected_ray_stamps_[i]==sources[0]?1:2),include_end});
+    }
+    // This preflight is conservative: otherwise the original traversal must
+    // enforce the exact global 16M budget and partially integrated prefix.
+    return parallel_ray_visits_->run(mp_.map_bound_min_idx_,mp_.map_voxel_num_,
+                                    mp_.resolution_,16000000);
+  } catch(...) {
+    // Recoverable allocation/thread-creation/preflight failures precede job
+    // publication. Submitted work is retired before a normal return; a broken
+    // synchronization primitive after dispatch fails closed inside run().
+    return false;
+  }
+}
+
 bool GridMap::raycastProcess()
 {
   const auto ray_started=std::chrono::steady_clock::now();
+  map_work_timing_={};
+  last_parallel_ray_visits_=false;
   const bool complete_rays=mp_.use_projected_rays_ || mp_.require_observed_free_;
   free_evidence_recovered_=false;
-  observed_cylinder_cache_.clear();
+  invalidateCollisionQueryCaches();
   // if (md_.proj_points_.size() == 0)
   if (md_.proj_points_cnt == 0)
     return false;
@@ -980,6 +1790,23 @@ bool GridMap::raycastProcess()
   updateSlidingMap(md_.ray_pos_);
   const scan_planner::ObservedRayMapIndex ray_index(mp_.map_bound_min_idx_,mp_.map_voxel_num_);
   if(near_field_diagnostics_.enabled()) near_field_diagnostics_.beginIntegration();
+  // A fused production batch has at most one original acquisition stamp per
+  // physical source. Keep two per-source visit bits in the existing scratch
+  // byte instead of rereading a 64-bit evidence stamp on every repeated DDA
+  // visit. The traversal, endpoint votes and first visit from EACH source are
+  // unchanged. Arbitrary per-point source streams and diagnostics use the
+  // original general visitor below.
+  std::array<std::int64_t,2> visit_sources{{0,0}};
+  bool source_visit_bits=mp_.use_projected_rays_&&!near_field_diagnostics_.enabled()&&
+      projected_ray_stamps_.size()==static_cast<std::size_t>(md_.proj_points_cnt);
+  if(source_visit_bits)for(const auto source:projected_ray_stamps_) {
+    if(source<=0){source_visit_bits=false;break;}
+    if(!visit_sources[0])visit_sources[0]=source;
+    else if(source!=visit_sources[0]) {
+      if(!visit_sources[1])visit_sources[1]=source;
+      else if(source!=visit_sources[1]){source_visit_bits=false;break;}
+    }
+  }
 
   md_.raycast_num_ += 1;
   if (complete_rays) {
@@ -1008,50 +1835,66 @@ bool GridMap::raycastProcess()
   Eigen::Vector3d ray_pt, pt_w;
   std::size_t observed_ray_budget=16000000;
   bool complete=true;
+  const auto traversal_started=std::chrono::steady_clock::now();
+  last_parallel_ray_visits_=source_visit_bits&&prepareParallelRayVisits(visit_sources);
+  if(last_parallel_ray_visits_)observed_ray_budget-=parallel_ray_visits_->steps();
 
   for (int i = 0; i < md_.proj_points_cnt; ++i)
   {
-    pt_w = md_.proj_points_[i];
+    // A successful speculative pass already evaluated the identical clipping
+    // arithmetic. Reuse that immutable endpoint; do not normalize/floor the
+    // same 120k real rays a second time during serial evidence commit.
+    pt_w = last_parallel_ray_visits_?parallel_ray_visits_->rays()[i].end:md_.proj_points_[i];
     const bool has_ray_stamp=mp_.use_projected_rays_ &&
         static_cast<std::size_t>(i)<projected_ray_stamps_.size();
     const auto ray_source_stamp=has_ray_stamp ? projected_ray_stamps_[i] : std::int64_t{0};
+    const unsigned char source_visit_mask=source_visit_bits?
+        static_cast<unsigned char>(ray_source_stamp==visit_sources[0]?1:2):0;
     const bool record_ray_diagnostics=near_field_diagnostics_.enabled() &&
         static_cast<std::size_t>(i)<projected_diagnostics_.size();
     const Eigen::Vector3d &origin=mp_.use_projected_rays_ ? md_.proj_origins_[i] : md_.ray_pos_;
-    if (mp_.use_projected_rays_ && !isInMap(origin)) { complete=false;break; }
-    bool endpoint_is_hit=true;
-    if (!scan_planner::clipObservedRay(origin,mp_.local_update_range_,pt_w,endpoint_is_hit))
+    if (!last_parallel_ray_visits_ && mp_.use_projected_rays_ && !isInMap(origin)) { complete=false;break; }
+    const bool censored_endpoint=mp_.use_projected_rays_ &&
+        static_cast<std::size_t>(i)<projected_ray_kinds_.size() && projected_ray_kinds_[i]==1;
+    // A censored self return is not a new free-space endpoint. Preserve only
+    // the observed prefix and exclude its original endpoint voxel, exactly as
+    // for a real hit. A nearer range/map clip is free and may include its end.
+    bool original_endpoint=last_parallel_ray_visits_?!parallel_ray_visits_->rays()[i].include_end:true;
+    if (!last_parallel_ray_visits_ && !scan_planner::clipObservedRay(origin,mp_.local_update_range_,pt_w,original_endpoint))
       continue;
 
     // set flag for projected point
 
-    if (!isInMap(pt_w))
+    if (!last_parallel_ray_visits_ && !isInMap(pt_w))
     {
-      endpoint_is_hit=false;
+      original_endpoint=false;
       pt_w = closetPointInMap(pt_w, origin);
 
       length = (pt_w - origin).norm();
       if (length > mp_.max_ray_length_)
       {
-        endpoint_is_hit=false;
+        original_endpoint=false;
         pt_w = (pt_w - origin) / length * mp_.max_ray_length_ + origin;
       }
       vox_idx = mp_.use_projected_rays_ ? INVALID_IDX : setCacheOccupancy(pt_w, 0);
     }
     else
     {
-      length = (pt_w - origin).norm();
+      length = last_parallel_ray_visits_?0.:(pt_w - origin).norm();
 
       if (length > mp_.max_ray_length_)
       {
-        endpoint_is_hit=false;
+        original_endpoint=false;
         pt_w = (pt_w - origin) / length * mp_.max_ray_length_ + origin;
         vox_idx = mp_.use_projected_rays_ ? INVALID_IDX : setCacheOccupancy(pt_w, 0);
       }
       else
       {
-        if (mp_.use_projected_rays_ && endpoint_is_hit) {
+        if (mp_.use_projected_rays_ && original_endpoint && !censored_endpoint) {
           Eigen::Vector3i cell;posToIndex(pt_w,cell);vox_idx=ray_index.address(cell);
+          // Every endpoint contributes geometry, even when this cell already
+          // received its one probabilistic vote in this fused batch.
+          recordOccupiedHit(pt_w,cell,vox_idx);
           if(record_ray_diagnostics) {
             scan_planner::RayWitness witness;
             witness.metadata=projected_diagnostics_[i];witness.origin=origin;
@@ -1064,7 +1907,7 @@ bool GridMap::raycastProcess()
             md_.flag_rayend_[vox_idx]=md_.raycast_num_;
             cacheOccupancyAtIndex(cell,vox_idx,1);
           }
-        } else vox_idx = mp_.use_projected_rays_ ? INVALID_IDX : setCacheOccupancy(pt_w, endpoint_is_hit ? 1 : 0);
+        } else vox_idx = mp_.use_projected_rays_ ? INVALID_IDX : setCacheOccupancy(pt_w, original_endpoint ? 1 : 0);
       }
     }
 
@@ -1082,12 +1925,59 @@ bool GridMap::raycastProcess()
 
     if (complete_rays)
     {
+      bool include_endpoint=!original_endpoint;
+      if(censored_endpoint &&
+          ((pt_w/mp_.resolution_).array().floor()==
+           (md_.proj_points_[i]/mp_.resolution_).array().floor()).all())
+        include_endpoint=false; // Original self-return voxel is never a miss.
       // Sharing an endpoint/crossed voxel does not mean the remaining rays
       // coincide. Complete real rays, but give each free cell only one vote.
-      complete=scan_planner::visitObservedRayIndexed(origin,pt_w,mp_.resolution_,
-          !endpoint_is_hit,observed_ray_budget,mp_.map_voxel_num_,
-          [this,i,&origin,&pt_w,has_ray_stamp,ray_source_stamp,record_ray_diagnostics](const Eigen::Vector3i &cell,int address) {
-            if (!isInMap(cell)) return;
+      // DDA cells are component-wise between its own floor-indexed endpoints.
+      // A fixed axis-aligned window is convex: when both are in bounds every
+      // visited cell is in bounds too. Keep the original per-cell path when
+      // diagnostics are enabled, and for any clipped/boundary ray that cannot
+      // establish this exact predicate. Use division like DDA, not a rounded
+      // inverse-resolution multiplication near a voxel face.
+      const bool fast_visitor=!near_field_diagnostics_.enabled();
+      bool ray_inside_window=last_parallel_ray_visits_;
+      if(!ray_inside_window) {
+        const Eigen::Vector3i start_cell=(origin/mp_.resolution_).array().floor().cast<int>();
+        const Eigen::Vector3i end_cell=(pt_w/mp_.resolution_).array().floor().cast<int>();
+        ray_inside_window=fast_visitor&&isInMap(start_cell)&&isInMap(end_cell);
+      }
+      // GCC -O3 otherwise outlines this closure even in the by-source hot
+      // path (millions of calls per fusion). Keep exactly the same visitor
+      // in the DDA loop; this is a GCC/Clang code-generation hint, not a
+      // shortcut of ray visits, occupancy votes or original source clocks.
+      const auto visitor=
+          [this,i,&origin,&pt_w,has_ray_stamp,ray_source_stamp,record_ray_diagnostics,
+           fast_visitor,ray_inside_window,source_visit_mask](const Eigen::Vector3i &cell,int address,auto source_mode)
+#if defined(__GNUC__) || defined(__clang__)
+              __attribute__((always_inline))
+#endif
+              {
+            constexpr bool by_source=decltype(source_mode)::value;
+            if (!ray_inside_window&&!isInMap(cell)) return;
+            // -1 is still untouched scratch state. Encoded 0/1/2 mean first
+            // source / second source / both; this scratch byte is NOT the
+            // observed/free classification or a source-lease certificate.
+            bool already_voted=false;
+            if constexpr(by_source) {
+              const auto visited=static_cast<unsigned char>(md_.flag_traverse_[address]+1);
+              if(visited&source_visit_mask)return;
+              already_voted=visited!=0;
+              md_.flag_traverse_[address]=static_cast<char>((visited|source_visit_mask)-1);
+            }
+            // Return only from this visitor, NEVER stop DDA or refund its
+            // budget. A different ray still traverses its entire remaining
+            // segment. Same-round duplicate free votes with no newer real
+            // source have nothing to change; diagnostic witnesses retain all
+            // original visits on the slow path. A newer peer stamp must pass.
+            if constexpr(!by_source) {
+              if(fast_visitor&&md_.flag_traverse_[address]==md_.raycast_num_&&
+                 (!has_ray_stamp||static_cast<std::size_t>(address)>=free_observation_stamps_.size()||
+                  ray_source_stamp<=free_observation_stamps_[address]))return;
+            }
             if(has_ray_stamp &&
                 static_cast<std::size_t>(address)<free_observation_stamps_.size()) {
               auto &old=free_observation_stamps_[address];
@@ -1107,17 +1997,34 @@ bool GridMap::raycastProcess()
                 old=incoming;
               }
             }
-            if(record_ray_diagnostics) {
+            if constexpr(!by_source) {if(record_ray_diagnostics) {
               scan_planner::RayWitness witness;
               witness.metadata=projected_diagnostics_[i];witness.origin=origin;
               witness.endpoint=md_.proj_points_[i];witness.integrated_endpoint=pt_w;
               witness.contributed_vote=md_.flag_traverse_[address]!=md_.raycast_num_;
               near_field_diagnostics_.record(cell,witness);
+            }}
+            if constexpr(by_source) {
+              if(already_voted)return;
+            } else {
+              if (md_.flag_traverse_[address]==md_.raycast_num_) return;
+              md_.flag_traverse_[address]=md_.raycast_num_;
             }
-            if (md_.flag_traverse_[address]==md_.raycast_num_) return;
-            md_.flag_traverse_[address]=md_.raycast_num_;
             cacheOccupancyAtIndex(cell,address,0);
-          });
+          };
+      // Select the visitor once per ray, rather than branching on its source
+      // encoding for millions of traversed cells.
+      if(last_parallel_ray_visits_)
+        parallel_ray_visits_->replay(static_cast<std::size_t>(i),
+            [&](const Eigen::Vector3i& cell,int address){visitor(cell,address,std::true_type{});});
+      else if(source_visit_mask)
+        complete=scan_planner::visitObservedRayIndexed(origin,pt_w,mp_.resolution_,
+            include_endpoint,observed_ray_budget,mp_.map_voxel_num_,
+            [&](const Eigen::Vector3i& cell,int address){visitor(cell,address,std::true_type{});});
+      else
+        complete=scan_planner::visitObservedRayIndexed(origin,pt_w,mp_.resolution_,
+            include_endpoint,observed_ray_budget,mp_.map_voxel_num_,
+            [&](const Eigen::Vector3i& cell,int address){visitor(cell,address,std::false_type{});});
       if (!complete) break;
       continue;
     }
@@ -1159,6 +2066,7 @@ bool GridMap::raycastProcess()
     }
   }
 
+  const auto traversal_finished=std::chrono::steady_clock::now();
   min_x = min(min_x, md_.ray_pos_(0));
   min_y = min(min_y, md_.ray_pos_(1));
   min_z = min(min_z, md_.ray_pos_(2));
@@ -1185,12 +2093,34 @@ bool GridMap::raycastProcess()
 
   // std::cout << "cache all: " << md_.cache_voxel_.size() << std::endl;
 
+  // Fixed diagnostic address set, resolved AFTER sliding. No per-ray work.
+  const auto watched=blocked_voxel_watch_.snapshot();
+  std::array<int,scan_planner::kBlockedVoxelWatchCells> watched_addresses{{-1,-1,-1,-1}};
+  bool watching=false;
+  if(mp_.use_projected_rays_)for(std::size_t i=0;i<watched.cells.size();++i) {
+    const auto& cell=watched.cells[i];
+    const Eigen::Vector3i index(cell.key[0],cell.key[1],cell.key[2]);
+    if(cell.active&&isInMap(index)) {watched_addresses[i]=ray_index.address(index);watching=true;}
+  }
+
   while (!md_.cache_voxel_.empty())
   {
 
     Eigen::Vector3i idx = md_.cache_voxel_.front();
     const int idx_ctns = ray_index.address(idx);
     md_.cache_voxel_.pop();
+
+    const bool watched_cell=watching&&std::find(watched_addresses.begin(),watched_addresses.end(),idx_ctns)!=watched_addresses.end();
+    const auto old_odds=watched_cell?md_.occupancy_buffer_[idx_ctns]:0.;
+    const auto hit_votes=watched_cell?md_.count_hit_[idx_ctns]:0;
+    const auto miss_votes=watched_cell?md_.count_hit_and_miss_[idx_ctns]-hit_votes:0;
+    const auto report_update=[&](scan_planner::BlockedVoxelUpdate outcome) {
+      if(!watched_cell)return;
+      const auto odds=md_.occupancy_buffer_[idx_ctns];
+      blocked_voxel_watch_.recordUpdate({{idx.x(),idx.y(),idx.z()}},
+          {old_odds,true,old_odds>mp_.min_occupancy_log_},
+          {odds,true,odds>mp_.min_occupancy_log_},hit_votes,miss_votes,outcome);
+    };
 
     double log_odds_update =
         md_.count_hit_[idx_ctns] >= md_.count_hit_and_miss_[idx_ctns] - md_.count_hit_[idx_ctns] ? mp_.prob_hit_log_ : mp_.prob_miss_log_;
@@ -1199,28 +2129,46 @@ bool GridMap::raycastProcess()
 
     if (log_odds_update >= 0 && md_.occupancy_buffer_[idx_ctns] >= mp_.clamp_max_log_)
     {
+      report_update(scan_planner::BlockedVoxelUpdate::HitSaturated);
       continue;
     }
     else if (log_odds_update <= 0 && md_.occupancy_buffer_[idx_ctns] <= mp_.clamp_min_log_)
     {
       applyOccupancyUpdateAtIndex(idx, idx_ctns, mp_.clamp_min_log_);
+      report_update(scan_planner::BlockedVoxelUpdate::MissSaturated);
       continue;
     }
 
     bool in_local = idx(0) >= min_id(0) && idx(0) <= max_id(0) && idx(1) >= min_id(1) &&
                     idx(1) <= max_id(1) && idx(2) >= min_id(2) && idx(2) <= max_id(2);
-    if (!in_local)
+    if (!mp_.use_projected_rays_ && !in_local)
     {
       // Never turn an out-of-window cell into observed free merely because
       // this frame's integration window does not include it.
+      report_update(scan_planner::BlockedVoxelUpdate::OutsideLocalUpdate);
       continue;
     }
+
+    // Projected rays were already clipped against EACH physical sensor's
+    // measured origin, local range and map bounds. Cropping those real visits
+    // again around the averaged sliding-window centre drops valid miss votes
+    // when the second sensor joins a fusion. It can leave an occupied cell at
+    // maximum odds even while its free-observation stamp keeps advancing.
 
     const double new_log_odds =
         std::min(std::max(md_.occupancy_buffer_[idx_ctns] + log_odds_update, mp_.clamp_min_log_),
                  mp_.clamp_max_log_);
     applyOccupancyUpdateAtIndex(idx, idx_ctns, new_log_odds);
+    report_update(scan_planner::BlockedVoxelUpdate::Applied);
   }
+  const auto ray_finished=std::chrono::steady_clock::now();
+  map_work_timing_.initialize_ms=std::chrono::duration<double,std::milli>(traversal_started-ray_started).count();
+  map_work_timing_.traverse_ms=std::chrono::duration<double,std::milli>(traversal_finished-traversal_started).count();
+  map_work_timing_.occupancy_ms=std::chrono::duration<double,std::milli>(ray_finished-traversal_finished).count();
+  map_work_timing_.points=md_.proj_points_cnt;
+  map_work_timing_.ray_steps=16000000-observed_ray_budget;
+  map_work_timing_.raycast_end_steady_ns=std::chrono::duration_cast<std::chrono::nanoseconds>(
+      ray_finished.time_since_epoch()).count();
   if (!complete && node_)
     RCLCPP_WARN_THROTTLE(node_->get_logger(), *node_->get_clock(), 1000,
       "[GridMap] observed-ray traversal incomplete; this scan cannot authorize planning");
@@ -1228,7 +2176,7 @@ bool GridMap::raycastProcess()
     RCLCPP_INFO_THROTTLE(node_->get_logger(), *node_->get_clock(), 5000,
       "[GridMap] complete ray integration: query_policy=%s points=%d steps=%zu duration_ms=%.3f complete=%d",
       collisionQueryPolicy(),md_.proj_points_cnt,16000000-observed_ray_budget,
-      std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-ray_started).count(),
+      std::chrono::duration<double,std::milli>(ray_finished-ray_started).count(),
       static_cast<int>(complete));
   return complete;
 }
@@ -1261,23 +2209,143 @@ Eigen::Vector3d GridMap::closetPointInMap(const Eigen::Vector3d &pt, const Eigen
 
 void GridMap::visCallback()
 {
+  // Copy only display classifications on the fusion owner. The single worker
+  // owns expensive OBB dilation, PointCloud2 conversion and all visual output.
+  // If it is busy, skip this display frame: never queue behind it or take a
+  // collision-reader slot away from current-curve renewal.
+  startVisualizationWorker();
+  submitVisualization(node_->now().nanoseconds(),
+      map_pub_->get_subscription_count()>0,map_inf_pub_->get_subscription_count()>0,
+      depth_cloud_pub_->get_subscription_count()>0);
+}
 
-  publishMap();
-  publishMapInflate(true);
-  publishSlidingMapFrame();
-  publishSlidingMapBBox();
-  publishDepthCloud();
+bool GridMap::visualizationRawCell(std::size_t address,unsigned char flag) const
+{
+  if(visualization_only_)return (visualization_raw_flags_[address]&flag)!=0;
+  const double odds=md_.occupancy_buffer_[address];
+  if(flag==1)return odds>mp_.min_occupancy_log_; // Historical raw OBB display.
+  if(flag==2)return std::isfinite(odds)&&odds>mp_.min_occupancy_log_; // OBB mask.
+  return !(odds<mp_.min_occupancy_log_); // Historical non-OBB raw display.
+}
+
+rclcpp::Time GridMap::visualizationStamp() const
+{
+  // A display snapshot has its capture timestamp, not worker completion time.
+  // This is not a ray source timestamp and grants no perception/control lease.
+  return visualization_only_?rclcpp::Time(visualization_capture_ns_):node_->now();
+}
+
+bool GridMap::visualizationCurrent() const
+{
+  return !visualization_only_ || (visualization_current_&&visualization_current_());
+}
+
+void GridMap::copyVisualizationTo(GridMap& out,std::int64_t stamp,
+    bool raw,bool inflated,bool depth) const
+{
+  if(&out==this || out.node_ || out.collision_snapshot_ ||
+      !out.md_.occupancy_buffer_.empty() || !out.free_observation_stamps_.empty())
+    throw std::logic_error("visualization destination must have no collision storage");
+  out.visualization_only_=true;out.mp_=mp_;
+  out.md_.has_ray_pose_=md_.has_ray_pose_;out.md_.ray_pos_=md_.ray_pos_;
+  out.md_.sliding_map_frame_pos_=md_.sliding_map_frame_pos_;
+  out.visualization_body_stamp_ns_=visualization_body_stamp_ns_;
+  out.visualization_body_yaw_=visualization_body_yaw_;
+  out.pair_barrier_ns_=pair_barrier_ns_;
+  std::atomic_store_explicit(&out.visualization_body_envelope_,
+      std::atomic_load_explicit(&visualization_body_envelope_,std::memory_order_acquire),
+      std::memory_order_release);
+  out.occupancy_revision_=occupancy_revision_;
+  out.visualization_capture_ns_=stamp;
+  out.visualization_capture_generation_=visualization_generation_.load(std::memory_order_acquire);
+  out.visualization_raw_requested_=raw;out.visualization_inflated_requested_=inflated;
+  out.visualization_depth_requested_=depth;
+  if(raw || inflated) {
+    out.visualization_raw_flags_.resize(md_.occupancy_buffer_.size());
+    for(std::size_t i=0;i<md_.occupancy_buffer_.size();++i) {
+      const double odds=md_.occupancy_buffer_[i];
+      out.visualization_raw_flags_[i]=(odds>mp_.min_occupancy_log_?1:0)|
+        (std::isfinite(odds)&&odds>mp_.min_occupancy_log_?2:0)|
+        (!(odds<mp_.min_occupancy_log_)?4:0);
+    }
+    if(inflated && mp_.collision_model_!="oriented_box")
+      out.md_.occupancy_buffer_inflate_=md_.occupancy_buffer_inflate_;
+    else out.md_.occupancy_buffer_inflate_.clear();
+  }
+  out.md_.proj_points_cnt=depth?md_.proj_points_cnt:0;
+  if(depth)out.md_.proj_points_.assign(md_.proj_points_.begin(),
+      md_.proj_points_.begin()+md_.proj_points_cnt);
+  else out.md_.proj_points_.clear();
+  out.map_pub_=map_pub_;out.map_inf_pub_=map_inf_pub_;
+  out.depth_cloud_pub_=depth_cloud_pub_;out.sliding_map_bbox_pub_=sliding_map_bbox_pub_;
+  out.tf_broadcaster_=tf_broadcaster_;
+}
+
+void GridMap::startVisualizationWorker()
+{
+  if(visualization_worker_.joinable() || visualization_stop_)return;
+  visualization_view_=std::make_unique<GridMap>();
+  visualization_view_->visualization_current_=[this] {
+    return !visualization_stop_.load(std::memory_order_acquire) &&
+      visualization_view_->visualization_capture_generation_==
+        visualization_generation_.load(std::memory_order_acquire);
+  };
+  visualization_worker_=std::thread([this]{runVisualizationWorker();});
+}
+
+void GridMap::stopVisualizationWorker()
+{
+  visualization_stop_.store(true,std::memory_order_release);
+  visualization_generation_.fetch_add(1,std::memory_order_release);
+  visualization_wake_.notify_all();
+  if(visualization_worker_.joinable())visualization_worker_.join();
+}
+
+bool GridMap::submitVisualization(std::int64_t stamp,bool raw,bool inflated,bool depth)
+{
+  std::unique_lock<std::mutex> lock(visualization_mutex_,std::try_to_lock);
+  if(!lock || visualization_stop_ || !visualization_view_ || visualization_ready_)return false;
+  copyVisualizationTo(*visualization_view_,stamp,raw,inflated,depth);
+  visualization_ready_=true;lock.unlock();visualization_wake_.notify_one();return true;
+}
+
+void GridMap::runVisualizationWorker()
+{
+  std::unique_lock<std::mutex> lock(visualization_mutex_);
+  while(!visualization_stop_) {
+    // stopVisualizationWorker deliberately never takes this mutex (rendering
+    // may be busy). A bounded wait also closes the notify-before-wait shutdown
+    // race without making the fusion owner or destructor wait for that mutex.
+    visualization_wake_.wait_for(lock,std::chrono::milliseconds(100),
+        [this]{return visualization_stop_||visualization_ready_;});
+    if(visualization_stop_)break;
+    if(!visualization_ready_)continue;
+    visualization_ready_=false;
+    // Keep this exclusive render lease through conversion/publication. The
+    // writer ONLY try_locks it, so an arbitrarily slow display drops frames
+    // instead of delaying fusion. There is no pending queue or growing pool.
+    try {
+      auto& view=*visualization_view_;
+      if(!view.visualizationCurrent())continue;
+      if(visualization_sink_)visualization_sink_(view);
+      else {
+        if(view.visualization_raw_requested_)view.publishMap();
+        if(view.visualization_inflated_requested_)view.publishMapInflate(true);
+        if(view.visualization_depth_requested_)view.publishDepthCloud();
+        view.publishSlidingMapFrame();view.publishSlidingMapBBox();
+      }
+    } catch(const std::bad_alloc&) {std::terminate();}
+    catch(const std::exception& error) {
+      if(node_)RCLCPP_ERROR_THROTTLE(node_->get_logger(),*node_->get_clock(),2000,
+        "Display frame dropped: %s",error.what());
+    }
+  }
 }
 
 void GridMap::updateOccupancyCallback()
 {
   if (mp_.use_projected_rays_) {
-    drainProjectedIngress();
-    const auto now=std::chrono::steady_clock::now();
-    const auto source_now=node_->now().nanoseconds();
-    tryProjectedFusion(source_now,now,true);
-    publishProjectedRaysStatus(node_->now().nanoseconds(),std::chrono::steady_clock::now());
-    scheduleProjectedFusionWake();
+    updateProjectedOccupancy(true);
     return;
   }
   if (mp_.exact_cloud_pose_sync_ && mp_.sensor_type_ == "lidar")
@@ -1323,13 +2391,31 @@ void GridMap::updateOccupancyCallback()
   md_.use_cloud_update_ = false;
 }
 
+void GridMap::updateProjectedOccupancy(bool watchdog)
+{
+  // Timer and coalesced input wake both belong to the SAME exclusive writer.
+  // A readiness wake does not get the watchdog's missing-peer permission.
+  if(projected_ingress_enabled_)transferProjectedIngress(node_->now().nanoseconds(),std::chrono::steady_clock::now());
+  else drainProjectedIngress();
+  const auto now=std::chrono::steady_clock::now();
+  tryProjectedFusion(node_->now().nanoseconds(),now,watchdog);
+  publishProjectedRaysStatus(node_->now().nanoseconds(),std::chrono::steady_clock::now());
+  scheduleProjectedFusionWake();
+}
+
 void GridMap::drainProjectedIngress()
 {
-  // Subscription and watchdog share the default mutually-exclusive writer
-  // group even when the node's control subscriptions run on another thread.
-  ray_ingress_last_drain_={};
   if(!projected_rays_sub_)return;
   rclcpp::MessageInfo info;
+  if(projected_ingress_enabled_) {
+    // Only the serial ingress executor takes this subscription in formal
+    // sessions. Map watchdogs consume decoded mailboxes, never the RMW queue.
+    projected_ingress_.recordDrain(scan_planner::drainProjectedRayIngress<d1max_planning_interfaces::msg::ProjectedRays>(
+      [this,&info](auto& message){return projected_rays_sub_->take(message,info);},
+      [this](const auto& message){return projected_ingress_.accept(message,node_->now().nanoseconds(),std::chrono::steady_clock::now());}));
+    return;
+  }
+  ray_ingress_last_drain_={};
   ray_ingress_last_drain_=scan_planner::drainProjectedRayIngress<d1max_planning_interfaces::msg::ProjectedRays>(
     [this,&info](auto& message){return projected_rays_sub_->take(message,info);},
     [this](const auto& message){return acceptProjectedRays(message,node_->now().nanoseconds(),std::chrono::steady_clock::now());});
@@ -1337,26 +2423,96 @@ void GridMap::drainProjectedIngress()
   ray_ingress_drain_accepted_count_+=ray_ingress_last_drain_.accepted;
 }
 
+void GridMap::publishProjectedIngressContext()
+{
+  if(!projected_ingress_enabled_)return;
+  auto context=std::make_shared<scan_planner::ProjectedRayContext>();
+  context->session=mp_.localization_session_id_;context->seed=localization_seed_;
+  context->frame=mp_.frame_id_;context->epoch=localization_epoch_;
+  context->sequence=localization_context_sequence_;context->barrier=localization_context_barrier_ns_;
+  context->pair_barrier=pair_barrier_ns_;context->maximum_age=mp_.cloud_pose_max_age_;
+  context->diagnostics=near_field_diagnostics_.enabled();
+  projected_ingress_context_=std::move(context);
+  projected_ingress_.setContext(projected_ingress_context_);
+}
+
+void GridMap::transferProjectedIngress(std::int64_t source_now,std::chrono::steady_clock::time_point now)
+{
+  // Only the writer can call this or read pending_rays_. The ingress producer
+  // keeps accepting into its own bounded slots during the subsequent raycast.
+  const auto report=projected_ingress_.takeLatest(projected_ingress_context_,pending_rays_,source_now);
+  ray_unattributed_drops_+=report.unattributed;
+  ray_ingress_callback_count_=report.callbacks;
+  ray_ingress_drain_taken_count_=report.drain_taken;ray_ingress_drain_accepted_count_=report.drain_accepted;
+  ray_ingress_last_drain_=report.last_drain;
+  for(std::size_t sensor=0;sensor<2;++sensor) {
+    ray_drops_[sensor]+=report.drops[sensor];
+    auto& pending=pending_rays_[sensor];
+    if(!pending.ready)continue;
+    // Second identity fence on the consumer boundary; a reset never imports
+    // a partially decoded or former-coordinate batch, even if it was latest.
+    if(!projected_ingress_context_ || pending.context!=projected_ingress_context_ ||
+       pending.batch.stamp_ns<=pair_barrier_ns_) {pending.ready=false;++ray_drops_[sensor];continue;}
+    if(report.taken[sensor])pending.writer_received=now;
+    if(pending.batch.stamp_ns>ray_received_stamps_[sensor] &&
+       pending.projection_sequence>ray_projection_sequences_[sensor]) {
+      ray_received_stamps_[sensor]=pending.batch.stamp_ns;
+      ray_projection_sequences_[sensor]=pending.projection_sequence;
+      ray_accept_clock_ns_[sensor]=pending.accepted_ns;
+    }
+  }
+}
+
+namespace {
+std::optional<std::chrono::nanoseconds> projectedFusionPeriod(double seconds)
+{
+  using Nanoseconds=std::chrono::nanoseconds;
+  // Use one conservative integral duration for admission and timer scheduling.
+  // In particular, 0.1 * 1.5 is slightly greater than 0.15 in double: comparing
+  // those independently can reject the exact 150 ms watchdog boundary.
+  // Leave room for the 3/2 watchdog duration before converting to int64.
+  constexpr auto maximum=Nanoseconds::max()/2;
+  if(!std::isfinite(seconds)||seconds<=0.||
+     seconds>=std::chrono::duration<double>(maximum).count())return std::nullopt;
+  const auto period=std::chrono::ceil<Nanoseconds>(std::chrono::duration<double>(seconds));
+  if(period<=Nanoseconds::zero()||period>maximum)return std::nullopt;
+  return period;
+}
+}
+
 bool GridMap::tryProjectedFusion(std::int64_t now_ns,std::chrono::steady_clock::time_point now,bool watchdog)
 {
-  const double elapsed=ray_fusion_started_?std::chrono::duration<double>(now-ray_fusion_last_start_).count():
-    std::numeric_limits<double>::infinity();
-  if(!std::isfinite(ray_integration_period_s_)||ray_integration_period_s_<=0.||elapsed<ray_integration_period_s_)return false;
-  if(!pending_rays_[0]&&!pending_rays_[1])return false; // No clock/lease renewal without new observations.
+  const auto period=projectedFusionPeriod(ray_integration_period_s_);
+  if(!period)return false;
+  const auto elapsed=now-ray_fusion_last_start_;
+  if(ray_fusion_started_&&(now<ray_fusion_last_start_||elapsed<*period))return false;
+  if(!pending_rays_[0].ready&&!pending_rays_[1].ready)return false; // No clock/lease renewal without new observations.
   std::int64_t pair=0;
-  if(pending_rays_[0]&&pending_rays_[1])pair=std::min(pending_rays_[0]->batch.stamp_ns,pending_rays_[1]->batch.stamp_ns);
+  if(pending_rays_[0].ready&&pending_rays_[1].ready)pair=std::min(pending_rays_[0].batch.stamp_ns,pending_rays_[1].batch.stamp_ns);
   // Rate limiting belongs to the steady integration clock above. Requiring
   // another full period of *acquisition* advance here introduces a second
-  // unsynchronised throttle: a fresh complete 10 Hz pair can miss the 5 Hz
+  // unsynchronised throttle: a fresh complete pair can miss the integration
   // boundary and wait another scan. Both sources must instead be genuinely
   // newer than their own last integrated observations. Their original stamps
-  // and the 500 ms evidence deadlines are never extended by this scheduling.
+  // and configured source-age deadlines are never extended by this scheduling.
   const bool pair_ready=pair>0 &&
-      pending_rays_[0]->batch.stamp_ns>ray_integrated_stamps_[0] &&
-      pending_rays_[1]->batch.stamp_ns>ray_integrated_stamps_[1];
+      pending_rays_[0].batch.stamp_ns>ray_integrated_stamps_[0] &&
+      pending_rays_[1].batch.stamp_ns>ray_integrated_stamps_[1];
   // Missing one sensor must still allow its peer to add OCCUPIED evidence;
   // the absent sensor's acquisition stamp remains old and will block motion.
-  if(!pair_ready&&(!watchdog||elapsed<ray_integration_period_s_*1.5))return false;
+  const auto watchdog_period=*period+(*period+std::chrono::nanoseconds(1))/2;
+  if(!pair_ready&&(!watchdog||(ray_fusion_started_&&elapsed<watchdog_period)))return false;
+  // A completed map can still await a validation slot. If its first retry
+  // is busy, yield this executor turn once instead of immediately starting
+  // another long raycast. The existing publication timer/next ray callback
+  // can deliver it when a reader releases. Keep pending rays and all source,
+  // integration and rate clocks untouched. A second runnable call must fuse
+  // even if still busy, so a long owner cannot indefinitely stop new input.
+  if(collision_publication_retry_callback_ && !collision_publication_retry_callback_() &&
+     !ray_pending_publication_yielded_) {
+    ray_pending_publication_yielded_=true;
+    return false;
+  }
   ray_fusion_started_=true;ray_fusion_last_start_=now;
   if(pair>0)ray_fusion_last_pair_stamp_=pair;
   processProjectedRays(now_ns,now);return true;
@@ -1366,13 +2522,12 @@ std::chrono::nanoseconds GridMap::projectedFusionWakeDelay(std::chrono::steady_c
 {
   // This is a wake-up deadline, never an integration permission. The actual
   // start-to-start cap remains in tryProjectedFusion, including after a late
-  // callback. No absolute-phase catch-up can create a <200 ms integration.
+  // callback. No absolute-phase catch-up may shorten the configured period.
   constexpr std::int64_t maximum=20000000,minimum=1000000;
-  if(!ray_fusion_started_||!std::isfinite(ray_integration_period_s_)||
-     ray_integration_period_s_<=0.||now<ray_fusion_last_start_)return std::chrono::nanoseconds(maximum);
-  const auto period=std::chrono::duration_cast<std::chrono::nanoseconds>(
-      std::chrono::duration<double>(ray_integration_period_s_));
-  const auto remaining=std::chrono::duration_cast<std::chrono::nanoseconds>(ray_fusion_last_start_+period-now).count();
+  const auto period=projectedFusionPeriod(ray_integration_period_s_);
+  if(!ray_fusion_started_||!period||now<ray_fusion_last_start_)return std::chrono::nanoseconds(maximum);
+  const auto elapsed=std::chrono::duration_cast<std::chrono::nanoseconds>(now-ray_fusion_last_start_);
+  const auto remaining=(*period-elapsed).count();
   // At/past due with no complete pair, continue bounded watchdog polling; ray
   // callbacks can still integrate immediately. Never busy-spin for data.
   if(remaining<=0)return std::chrono::nanoseconds(maximum);
@@ -1551,10 +2706,13 @@ bool GridMap::acceptProjectedRays(const d1max_planning_interfaces::msg::Projecte
       !scan_planner::rayStampFresh(alignment,now_ns,mp_.cloud_pose_max_age_)) {
     ++ray_unattributed_drops_;return false;
   }
-  auto batch=scan_planner::decodeProjectedRays(message.rays,mp_.frame_id_,near_field_diagnostics_.enabled());
-  if (!batch) { ++ray_unattributed_drops_;return false; }
-  const auto sensor=batch->sensor_id;
-  for(auto &meta:batch->diagnostics) {
+  if(!scan_planner::decodeProjectedRaysInto(message.rays,mp_.frame_id_,
+      near_field_diagnostics_.enabled(),ray_decode_scratch_)) {
+    ++ray_unattributed_drops_;return false;
+  }
+  auto &batch=ray_decode_scratch_;
+  const auto sensor=batch.sensor_id;
+  for(auto &meta:batch.diagnostics) {
     meta.context_sequence=message.context_sequence;meta.projection_sequence=message.projection_sequence;
     meta.received_ns=now_ns;meta.alignment_stamp_ns=alignment;meta.acquisition_end_ns=end;
   }
@@ -1563,16 +2721,22 @@ bool GridMap::acceptProjectedRays(const d1max_planning_interfaces::msg::Projecte
   }
   // One bounded latest acquisition per physical source, not one fused queue
   // where the faster front callback can continually overwrite the rear.
-  if (pending_rays_[sensor]) ++ray_drops_[sensor];
+  if (pending_rays_[sensor].ready) ++ray_drops_[sensor];
   ray_received_stamps_[sensor]=begin;ray_projection_sequences_[sensor]=message.projection_sequence;
   ray_accept_clock_ns_[sensor]=now_ns;
-  pending_rays_[sensor]=PendingRays{std::move(*batch),received};
+  auto &pending=pending_rays_[sensor];
+  std::swap(pending.batch,batch);pending.received=pending.writer_received=received;pending.ready=true;
   return true;
 }
 
 void GridMap::processProjectedRays(std::int64_t now_ns,std::chrono::steady_clock::time_point now)
 {
   if (!mp_.use_projected_rays_) return;
+  // This runnable transaction starts a new bounded publication opportunity;
+  // tryProjectedFusion has already retried/yielded for its predecessor.
+  ray_pending_publication_yielded_=false;
+  map_work_timing_={};
+  last_parallel_ray_visits_=false;
   ++fusion_timing_.sequence;
   fusion_timing_.begin_ns=now_ns;
   fusion_timing_.begin_steady_ns=std::chrono::duration_cast<std::chrono::nanoseconds>(now.time_since_epoch()).count();
@@ -1580,46 +2744,69 @@ void GridMap::processProjectedRays(std::int64_t now_ns,std::chrono::steady_clock
   advanceRayEvidenceClock(now_ns,now,node_!=nullptr);
   beginCollisionQuery();
   md_.proj_points_.clear();md_.proj_origins_.clear();md_.proj_points_cnt=0;
-  projected_ray_stamps_.clear();
+  projected_ray_stamps_.clear();projected_ray_kinds_.clear();
   projected_diagnostics_.clear();
   std::array<std::int64_t,2> included{{0,0}};
   std::array<PairReceipt,2> receipts;
   Eigen::Vector3d roi_center=Eigen::Vector3d::Zero();
   unsigned sources=0;
+  bool fusion_complete=false;
   for (std::size_t sensor=0;sensor<2;++sensor) {
     auto &pending=pending_rays_[sensor];
-    if (!pending) continue;
-    const double receipt_age=std::chrono::duration<double>(now-pending->received).count();
-    if (pending->batch.stamp_ns<=pair_barrier_ns_ || receipt_age<0. || receipt_age>mp_.cloud_pose_pair_wait_ ||
-        !scan_planner::rayStampFresh(pending->batch.stamp_ns,now_ns,mp_.cloud_pose_max_age_)) {
-      ++ray_drops_[sensor];pending.reset();continue;
+    if (!pending.ready) continue;
+    // The receiver is now independent of a busy writer. Keep first receipt
+    // for integrated total age, but preserve the original pair-wait meaning:
+    // time actually waiting in the writer's pending set, not prior fusion.
+    const double receipt_age=std::chrono::duration<double>(now-pending.writer_received).count();
+    const double first_receipt_age=std::chrono::duration<double>(now-pending.received).count();
+    if (pending.batch.stamp_ns<=pair_barrier_ns_ || first_receipt_age<0. ||
+        receipt_age<0. || receipt_age>mp_.cloud_pose_pair_wait_ ||
+        !scan_planner::rayStampFresh(pending.batch.stamp_ns,now_ns,mp_.cloud_pose_max_age_)) {
+      ++ray_drops_[sensor];pending.ready=false;continue;
     }
-    const auto &batch=pending->batch;
+    const auto &batch=pending.batch;
     ray_integration_start_ns_[sensor]=now_ns;
     ray_integration_start_stamps_[sensor]=batch.stamp_ns;
     ray_pending_wait_s_[sensor]=receipt_age;
     // This representative is ONLY a sliding-window centre. It never replaces
     // a measured ray origin, and supplies no synthetic free evidence.
     roi_center+=batch.origins.front();++sources;
-    included[sensor]=batch.stamp_ns;receipts[sensor]=pending->received;
+    included[sensor]=batch.stamp_ns;receipts[sensor]=pending.received;
     md_.proj_points_.insert(md_.proj_points_.end(),batch.endpoints.begin(),batch.endpoints.end());
     md_.proj_origins_.insert(md_.proj_origins_.end(),batch.origins.begin(),batch.origins.end());
     projected_ray_stamps_.insert(projected_ray_stamps_.end(),batch.endpoints.size(),batch.stamp_ns);
+    if(batch.ray_kinds.empty())
+      projected_ray_kinds_.insert(projected_ray_kinds_.end(),batch.endpoints.size(),0);
+    else
+      projected_ray_kinds_.insert(projected_ray_kinds_.end(),batch.ray_kinds.begin(),batch.ray_kinds.end());
     if(near_field_diagnostics_.enabled()) {
       for(auto meta:batch.diagnostics) {meta.integration_ns=now_ns;projected_diagnostics_.push_back(meta);}
     }
-    pending.reset();
+    pending.ready=false;
   }
   if (sources) {
     md_.ray_pos_=roi_center/static_cast<double>(sources);md_.ray_q_=Eigen::Quaterniond::Identity();
     md_.has_cloud_=md_.has_ray_pose_=true;md_.proj_points_cnt=static_cast<int>(md_.proj_points_.size());
+    blocked_voxel_watch_.setContext(blocked_voxel_context_);
+    scan_planner::BlockedVoxelWatchRequest watch_request;
+    if(blocked_voxel_mailbox_&&blocked_voxel_mailbox_->tryTake(watch_request))
+      blocked_voxel_watch_.acceptRequest(watch_request);
+    scan_planner::BlockedVoxelFusion watch_fusion;
+    watch_fusion.sequence=fusion_timing_.sequence;
+    watch_fusion.source_stamps_ns=included;
+    for(std::size_t i=0;i<2;++i)if(included[i])watch_fusion.projection_sequences[i]=ray_projection_sequences_[i];
+    const auto watch_sampler=[this](const scan_planner::BlockedVoxelKey& key){return blockedVoxelRawState(key);};
+    blocked_voxel_watch_.beginFusion(watch_fusion,watch_sampler);
     const bool complete=raycastProcess();
+    blocked_voxel_watch_.finishFusion(watch_sampler);
+    blocked_voxel_watch_snapshot_=blocked_voxel_watch_.snapshot();
+    fusion_complete=complete;
     if(!complete) {
       // Incomplete batches cannot lend fresh regional leases to a later
       // successful remote batch. Keep obstacle odds; revoke free certificates
       // until genuine reobservation. Rare failure path, O(N).
       std::fill(free_observation_stamps_.begin(),free_observation_stamps_.end(),0);
-      observed_cylinder_cache_.clear();
+      invalidateCollisionQueryCaches();
     } else if(free_evidence_recovered_) ++free_evidence_revision_;
     for (std::size_t sensor=0;sensor<2;++sensor) if (included[sensor]) {
       if (complete) {
@@ -1642,9 +2829,55 @@ void GridMap::processProjectedRays(std::int64_t now_ns,std::chrono::steady_clock
   fusion_timing_.end_ns=now_ns;
   fusion_timing_.end_steady_ns=std::chrono::duration_cast<std::chrono::nanoseconds>(now.time_since_epoch()).count();
   fusion_timing_.source_stamps=ray_integrated_stamps_;
-  // Snapshot publication belongs to this transaction, not an unrelated 5 Hz
+  if(fusion_complete)projected_ingress_.completedFusion(projected_ingress_context_,
+      fusion_timing_.sequence,fusion_timing_.end_steady_ns);
+  // Snapshot publication belongs to this transaction, not an unrelated periodic
   // timer that can copy the preceding frame just before fusion finishes.
   if(collision_update_callback_)collision_update_callback_();
+  const auto transaction_end=std::chrono::steady_clock::now();
+  const auto transaction_end_ns=std::chrono::duration_cast<std::chrono::nanoseconds>(
+      transaction_end.time_since_epoch()).count();
+  map_work_timing_.writer_transaction_ms=(transaction_end_ns-fusion_timing_.begin_steady_ns)*1e-6;
+  if(map_work_timing_.raycast_end_steady_ns)
+    map_work_timing_.post_raycast_ms=(transaction_end_ns-map_work_timing_.raycast_end_steady_ns)*1e-6;
+}
+
+scan_planner::BlockedVoxelRawState GridMap::blockedVoxelRawState(const scan_planner::BlockedVoxelKey& key)
+{
+  const Eigen::Vector3i index(key[0],key[1],key[2]);
+  if(!isInMap(index))return {};
+  const auto odds=md_.occupancy_buffer_[toAddress(index)];
+  return {odds,true,odds>mp_.min_occupancy_log_};
+}
+
+std::string GridMap::blockedVoxelWatchJson() const
+{
+  nlohmann::json cells=nlohmann::json::array();
+  for(const auto& cell:blocked_voxel_watch_snapshot_.cells) {
+    if(!cell.count)continue;
+    nlohmann::json events=nlohmann::json::array();
+    // Retain the fixed 16 actual fusion updates, including the clear event
+    // after failure diagnostics cease. No pre-watch history is invented.
+    for(std::size_t i=0;i<cell.count;++i) {
+      const auto& sample=cell.samples[(cell.next+scan_planner::kBlockedVoxelWatchHistory-cell.count+i)%scan_planner::kBlockedVoxelWatchHistory];
+      // Compress repeated no-change rounds in text only. The bounded native
+      // history still retains every fusion, and the latest round is included.
+      if(i+1<cell.count && sample.before.log_odds==sample.after.log_odds &&
+         sample.transition==scan_planner::BlockedVoxelTransition::Unchanged)continue;
+      events.push_back({{"fusion",sample.fusion.sequence},{"source_stamps_ns",sample.fusion.source_stamps_ns},
+        {"projection_sequences",sample.fusion.projection_sequences},{"hit_votes",sample.hit_votes},
+        {"miss_votes",sample.miss_votes},{"old_odds",sample.before.log_odds},{"new_odds",sample.after.log_odds},
+        {"in_map",sample.after.in_map},{"occupied",sample.after.occupied},
+        {"update",scan_planner::blockedVoxelUpdateName(sample.outcome)},
+        {"transition",scan_planner::blockedVoxelTransitionName(sample.transition)}});
+    }
+    cells.push_back({{"index",cell.key},{"context",cell.context_generation},{"active",cell.active},{"events",events}});
+  }
+  return nlohmann::json{{"context",blocked_voxel_watch_snapshot_.context_generation},
+    {"history_revision",blocked_voxel_watch_snapshot_.history_revision},
+    {"vote_semantics","deduplicated_per_fusion_not_raw_ray_counts"},
+    {"sources_semantics","fusion_inputs_not_per_cell_ray_attribution"},
+    {"prewatch_history","unavailable"},{"cells",cells}}.dump();
 }
 
 void GridMap::publishProjectedRaysStatus(std::int64_t now_ns,std::chrono::steady_clock::time_point now)
@@ -1653,6 +2886,11 @@ void GridMap::publishProjectedRaysStatus(std::int64_t now_ns,std::chrono::steady
   const bool valid=integrated_cloud_stamp_ns_>0 &&
       scan_planner::rayStampFresh(integrated_cloud_stamp_ns_,now_ns,mp_.cloud_pose_max_age_);
   if (!ray_status_schedule_.due(now,integrated_cloud_stamp_ns_,valid,localization_context_sequence_)) return;
+  if(node_&&blocked_voxel_watch_snapshot_.history_revision&&
+     (blocked_voxel_last_log_==PairReceipt{}||now-blocked_voxel_last_log_>=std::chrono::seconds(1))) {
+    blocked_voxel_last_log_=now;
+    RCLCPP_INFO(node_->get_logger(),"BlockedVoxelTrace %s",blockedVoxelWatchJson().c_str());
+  }
   nlohmann::json sources=nlohmann::json::array();
   const auto source_age=[](std::int64_t at,std::int64_t stamp)->nlohmann::json {
     return at>0 && stamp>0?nlohmann::json((at-stamp)*1e-9):nlohmann::json(nullptr);
@@ -1673,6 +2911,8 @@ void GridMap::publishProjectedRaysStatus(std::int64_t now_ns,std::chrono::steady
     {"epoch",localization_epoch_},{"seed_id",localization_seed_},{"sequence",localization_context_sequence_},
     {"barrier_ns",localization_context_barrier_ns_},{"received_at_unix",wall_time},{"valid",valid},
     {"collision_query_policy",collisionQueryPolicy()},
+    {"collision_model",mp_.collision_model_},
+    {"inflated_visualization_semantics",inflatedVisualizationSemantics()},
     {"reason",valid?"integrated_both_sources":"waiting_fresh_integrated_rays"},
     {"source_stamp_ns",integrated_cloud_stamp_ns_},{"sources",sources},
     {"fusion",{{"sequence",fusion_timing_.sequence},{"begin_ns",fusion_timing_.begin_ns},
@@ -1682,22 +2922,50 @@ void GridMap::publishProjectedRaysStatus(std::int64_t now_ns,std::chrono::steady
       {"map_revision",occupancyRevision()},{"next_wake_delay_ns",ray_timer_delay_ns_},
       {"schedule_errors",ray_timer_schedule_errors_}}},
     {"integrated_counts",{{"0",ray_integrations_[0]},{"1",ray_integrations_[1]}}},
+    {"work",{{"initialize_ms",map_work_timing_.initialize_ms},{"traverse_ms",map_work_timing_.traverse_ms},
+      {"occupancy_ms",map_work_timing_.occupancy_ms},{"post_raycast_ms",map_work_timing_.post_raycast_ms},
+      {"writer_transaction_ms",map_work_timing_.writer_transaction_ms},
+      {"points",map_work_timing_.points},{"ray_steps",map_work_timing_.ray_steps},
+      {"parallel_traversal",last_parallel_ray_visits_}}},
     {"ingress",{{"queue_depth",scan_planner::kProjectedRayIngressDepth},
+      {"independent_receiver",projected_ingress_enabled_},
+      {"accepted_clock_semantics",projected_ingress_enabled_?"ingress_callback_before_decode":"writer_callback_before_decode"},
+      {"pending_wait_semantics","writer_admission_to_fusion"},
+      {"writer_wake_failures",projected_writer_wake_?projected_writer_wake_->failureCount():0},
       {"callback_count",ray_ingress_callback_count_},{"drain_taken_count",ray_ingress_drain_taken_count_},
       {"drain_accepted_count",ray_ingress_drain_accepted_count_},
       {"last_drain_taken",ray_ingress_last_drain_.taken},{"last_drain_accepted",ray_ingress_last_drain_.accepted}}},
     {"unattributed_drop_count",ray_unattributed_drops_}}.dump();
   projected_rays_status_pub_->publish(result);
+  if(node_) {
+    const auto age_ms=[](std::int64_t at,std::int64_t stamp) {
+      return at>0&&stamp>0?(at-stamp)*1e-6:std::numeric_limits<double>::quiet_NaN();
+    };
+    RCLCPP_INFO_THROTTLE(node_->get_logger(),*node_->get_clock(),1000,
+      "RayPipelineTrace fusion=%lu valid=%d source_bound_ms=%.3f front_accept_age_ms=%.3f rear_accept_age_ms=%.3f front_pending_ms=%.3f rear_pending_ms=%.3f integration_ms=%.3f front_integrated_age_ms=%.3f rear_integrated_age_ms=%.3f front_source_ns=%ld rear_source_ns=%ld initialize_ms=%.3f traverse_ms=%.3f occupancy_ms=%.3f post_raycast_ms=%.3f writer_transaction_ms=%.3f points=%lu steps=%lu parallel=%d",
+      fusion_timing_.sequence,static_cast<int>(valid),mp_.cloud_pose_max_age_*1000.,
+      age_ms(ray_accept_clock_ns_[0],ray_received_stamps_[0]),age_ms(ray_accept_clock_ns_[1],ray_received_stamps_[1]),
+      ray_pending_wait_s_[0]*1000.,ray_pending_wait_s_[1]*1000.,
+      (fusion_timing_.end_steady_ns-fusion_timing_.begin_steady_ns)*1e-6,
+      age_ms(now_ns,ray_integrated_stamps_[0]),age_ms(now_ns,ray_integrated_stamps_[1]),
+      ray_integrated_stamps_[0],ray_integrated_stamps_[1],
+      map_work_timing_.initialize_ms,map_work_timing_.traverse_ms,map_work_timing_.occupancy_ms,
+      map_work_timing_.post_raycast_ms,map_work_timing_.writer_transaction_ms,
+      map_work_timing_.points,map_work_timing_.ray_steps,static_cast<int>(last_parallel_ray_visits_));
+  }
   ray_status_schedule_.markPublished(now,integrated_cloud_stamp_ns_,valid,localization_context_sequence_);
 }
 
 void GridMap::invalidateCloudPosePairs(std::int64_t barrier)
 {
+  // Close before clearing the map/context, so an old decode that finishes
+  // during reset cannot become admissible after the new context ACK.
+  projected_ingress_context_.reset();projected_ingress_.setContext({});
   pair_barrier_ns_ = std::max(pair_barrier_ns_, barrier);
   cloud_pose_pair_drops_ += pending_clouds_.size();
   pending_clouds_.clear();
   pending_poses_.clear();
-  for (auto &pending:pending_rays_) pending.reset();
+  for (auto &pending:pending_rays_) pending.ready=false;
   ray_received_stamps_.fill(0);ray_integrated_stamps_.fill(0);ray_projection_sequences_.fill(0);
   ray_fusion_last_pair_stamp_=0;
   ray_accept_clock_ns_.fill(0);ray_integration_start_ns_.fill(0);ray_integration_start_stamps_.fill(0);
@@ -1754,8 +3022,34 @@ void GridMap::slidingMapFrameCallback(const nav_msgs::msg::Odometry::ConstShared
 {
   if (mp_.strict_input_frames_ && pose->header.frame_id != mp_.frame_id_) return;
   const geometry_msgs::msg::Point &pos = pose->pose.pose.position;
-  if (!std::isfinite(pos.x) || !std::isfinite(pos.y) || !std::isfinite(pos.z)) return;
-  md_.sliding_map_frame_pos_ = Eigen::Vector3d(pos.x, pos.y, pos.z);
+  const bool position_valid=std::isfinite(pos.x) && std::isfinite(pos.y) && std::isfinite(pos.z);
+  if (position_valid) md_.sliding_map_frame_pos_ = Eigen::Vector3d(pos.x, pos.y, pos.z);
+  // body_pose is the measured robot pose. Projected-ray fusion deliberately
+  // uses an identity ray quaternion; sensor extrinsics are not a body heading.
+  // This history is exclusively for display and changes no map/query state.
+  if (pose->header.frame_id!=mp_.frame_id_) return;
+  if (pose->header.stamp.sec<0 || pose->header.stamp.nanosec>=1000000000U) return;
+  const auto source=static_cast<std::int64_t>(pose->header.stamp.sec)*1000000000LL+
+      pose->header.stamp.nanosec;
+  if (source<=visualization_body_stamp_ns_ || source<=pair_barrier_ns_) return;
+  const auto &q=pose->pose.pose.orientation;
+  Eigen::Quaterniond body_q(q.w,q.x,q.y,q.z);
+  const double norm=body_q.norm();
+  if (!position_valid || !body_q.coeffs().allFinite() || !std::isfinite(norm) || norm<1e-6) {
+    // A newer explicitly invalid body sample must not keep displaying an old
+    // orientation as current. Foreign/duplicate/older samples cannot clear it.
+    visualization_body_stamp_ns_=source;
+    visualization_body_yaw_=std::numeric_limits<double>::quiet_NaN();
+    visualization_obb_kernel_ready_=false;
+    visualization_revision_[1]=std::numeric_limits<std::uint64_t>::max();
+    return;
+  }
+  body_q.normalize();
+  const auto rotation=body_q.toRotationMatrix();
+  const double yaw=std::atan2(rotation(1,0),rotation(0,0));
+  if (!std::isfinite(yaw)) return;
+  visualization_body_stamp_ns_=source;
+  visualization_body_yaw_=yaw;
 }
 
 void GridMap::cloudCallback(const sensor_msgs::msg::PointCloud2::ConstSharedPtr &img)
@@ -1874,13 +3168,132 @@ void GridMap::processCloud(const sensor_msgs::msg::PointCloud2::ConstSharedPtr &
   projected_cloud_stamp_ns_ = rclcpp::Time(img->header.stamp).nanoseconds();
 }
 
+bool GridMap::prepareOrientedVisualizationMask()
+{
+  if (visualization_body_stamp_ns_<=0 || !std::isfinite(visualization_body_yaw_)) return false;
+  auto body=planningBodyEnvelope();
+  double yaw=visualization_body_yaw_,pitch=0.,roll=0.;
+  const auto selected=std::atomic_load_explicit(&visualization_body_envelope_,std::memory_order_acquire);
+  if(selected && selected->source_stamp_ns>pair_barrier_ns_ &&
+      selected->frame==mp_.frame_id_ && selected->body.model==body.model) {
+    if(!selected->yaw && selected->source_stamp_ns==visualization_body_stamp_ns_)body=selected->body;
+    else if(selected->yaw && std::isfinite(mp_.cloud_pose_max_age_) && mp_.cloud_pose_max_age_>0. &&
+        std::abs(static_cast<long double>(selected->source_stamp_ns)-visualization_body_stamp_ns_)<=
+            mp_.cloud_pose_max_age_*1e9L) {
+      // The independent owner and writer receive body_pose asynchronously.
+      // Use the complete original-sample pair, never new yaw + old shape.
+      body=selected->body;yaw=*selected->yaw;pitch=selected->pitch;roll=selected->roll;
+    }
+  }
+  const std::array<double,8> key{{mp_.resolution_,body.length,body.width,
+      body.below,body.above,yaw,pitch,roll}};
+  bool kernel_changed=!visualization_obb_kernel_ready_;
+  if (kernel_changed || key!=visualization_obb_kernel_key_) {
+    // The same production SAT/face-contact rule as boxOccupancy(), sampled
+    // only at lattice body centres. No quantized yaw or clearance is added.
+    std::vector<Eigen::Vector2i> xy;
+    std::vector<scan_planner::VerticalVoxelSpan> spans;
+    const Eigen::Vector3d canonical=Eigen::Vector3d::Constant(mp_.resolution_*.5);
+    if(pitch==0.&&roll==0.) {
+      // Keep the existing level/yaw-only fast path and exact point ordering.
+      scan_planner::forEachOrientedBoxColumn(canonical,yaw,mp_.resolution_,body,
+        [&](int x,int y,const auto &span) {xy.emplace_back(x,y);spans.push_back(span);return true;});
+    } else {
+      // Reuse the same production 3-D SAT, not an upright bounding box.
+      // A convex OBB intersects a contiguous range in each voxel column.
+      scan_planner::forEachOrientedBoxVoxel(canonical,yaw,pitch,roll,mp_.resolution_,body,
+        [&](const Eigen::Vector3i& cell) {
+          if(xy.empty()||xy.back().x()!=cell.x()||xy.back().y()!=cell.y()) {
+            xy.emplace_back(cell.x(),cell.y());spans.push_back({cell.z(),cell.z()});
+          } else {
+            if(cell.z()!=spans.back().high+1)throw std::logic_error("noncontiguous box visualization column");
+            spans.back().high=cell.z();
+          }
+          return true;
+        });
+    }
+    const bool same=visualization_obb_kernel_ready_ && xy.size()==visualization_obb_xy_offsets_.size() &&
+      std::equal(xy.begin(),xy.end(),visualization_obb_xy_offsets_.begin(),
+        [](const auto &a,const auto &b){return (a.array()==b.array()).all();}) &&
+      spans.size()==visualization_obb_z_spans_.size() &&
+      std::equal(spans.begin(),spans.end(),visualization_obb_z_spans_.begin(),
+        [](const auto&a,const auto&b){return a.low==b.low&&a.high==b.high;});
+    // Real yaw changes that intersect exactly the same discrete cells may
+    // reuse that mask. This is set equality, not a yaw-bin approximation.
+    kernel_changed=!same;
+    visualization_obb_xy_offsets_=std::move(xy);visualization_obb_z_spans_=std::move(spans);
+    visualization_obb_kernel_key_=key;visualization_obb_kernel_ready_=true;
+    ++visualization_obb_kernel_builds_;
+  }
+  const auto &lo=mp_.map_bound_min_idx_,&hi=mp_.map_bound_max_idx_;
+  if (!kernel_changed && visualization_obb_mask_revision_==occupancy_revision_ &&
+      (visualization_obb_mask_min_.array()==lo.array()).all() &&
+      (visualization_obb_mask_max_.array()==hi.array()).all()) return true;
+  const Eigen::Vector3i count=hi-lo+Eigen::Vector3i::Ones();
+  if ((count.array()<=0).any() || (count.array()!=mp_.map_voxel_num_.array()).any())
+    throw std::logic_error("invalid oriented visualization map extent");
+  const std::size_t nx=count.x(),ny=count.y(),nz=count.z(),row_size=nz+1;
+  if (nx*ny*nz!=(visualization_only_?visualization_raw_flags_.size():md_.occupancy_buffer_.size()))
+    throw std::logic_error("invalid oriented visualization raw buffer");
+  visualization_obb_difference_.assign(nx*ny*row_size,0);
+  visualization_obb_mask_.assign(nx*ny*nz,0);
+  visualization_obb_interval_writes_=0;
+  const int ring_z_size=mp_.map_voxel_num_.z(),ring_yz=mp_.map_voxel_num_.y()*ring_z_size;
+  for (int x=lo.x();x<=hi.x();++x) for (int y=lo.y();y<=hi.y();++y) {
+    const int raw_row=getLocalIndex(x,0)*ring_yz+getLocalIndex(y,1)*ring_z_size;
+    int local_z=getLocalIndex(lo.z(),2),run_first=0;bool in_run=false;
+    const auto emit=[&](int first,int last) {
+      // Invert obstacle offsets to body-centre offsets, including asymmetric
+      // body Z: centre=[hit.low-body.above,hit.high+body.below]. Higher hits
+      // must be processed before applying the output's display-height clip.
+      for (std::size_t i=0;i<visualization_obb_xy_offsets_.size();++i) {
+        const auto &offset=visualization_obb_xy_offsets_[i];
+        const auto &span=visualization_obb_z_spans_[i];
+        const int lower=std::max(lo.z(),first-span.high);
+        const int upper=std::min(hi.z(),last-span.low);
+        if (lower>upper)continue;
+        const int target_x=x-offset.x(),target_y=y-offset.y();
+        if (target_x<lo.x() || target_x>hi.x() || target_y<lo.y() || target_y>hi.y()) continue;
+        const std::size_t row=(static_cast<std::size_t>(target_x-lo.x())*ny+target_y-lo.y())*row_size;
+        ++visualization_obb_difference_[row+lower-lo.z()];
+        --visualization_obb_difference_[row+upper-lo.z()+1];
+        ++visualization_obb_interval_writes_;
+      }
+    };
+    for (int z=lo.z();z<=hi.z();++z) {
+      const bool occupied=visualizationRawCell(raw_row+local_z,2);
+      if (occupied && !in_run) {run_first=z;in_run=true;}
+      if (!occupied && in_run) {emit(run_first,z-1);in_run=false;}
+      if (++local_z==ring_z_size) local_z=0;
+    }
+    if (in_run) emit(run_first,hi.z());
+  }
+  for (std::size_t column=0;column<nx*ny;++column) {
+    int overlaps=0;
+    for (std::size_t z=0;z<nz;++z) {
+      overlaps+=visualization_obb_difference_[column*row_size+z];
+      visualization_obb_mask_[column*nz+z]=overlaps>0;
+    }
+  }
+  visualization_obb_mask_revision_=occupancy_revision_;
+  visualization_obb_mask_min_=lo;visualization_obb_mask_max_=hi;
+  ++visualization_obb_mask_builds_;
+  visualization_revision_[1]=std::numeric_limits<std::uint64_t>::max();
+  return true;
+}
+
 sensor_msgs::msg::PointCloud2 &GridMap::cachedVisualization(bool inflated)
 {
+  const bool oriented=inflated && mp_.collision_model_=="oriented_box";
+  const bool oriented_ready=oriented && prepareOrientedVisualizationMask();
   const std::size_t layer = inflated ? 1 : 0;
   const int clip = md_.has_ray_pose_ ? static_cast<int>(std::floor(
       (md_.ray_pos_.z() + mp_.vis_height_) * mp_.resolution_inv_ - .5)) :
       std::numeric_limits<int>::max();
-  if (visualization_revision_[layer] == occupancy_revision_ && visualization_clip_[layer] == clip)
+  if (visualization_revision_[layer] == occupancy_revision_ && visualization_clip_[layer] == clip &&
+      visualization_cache_[layer].header.frame_id==mp_.frame_id_ &&
+      visualization_model_[layer]==mp_.collision_model_ &&
+      (!oriented || visualization_obb_packet_ready_==oriented_ready))
     return visualization_cache_[layer];
   pcl::PointXYZ pt;
   pcl::PointCloud<pcl::PointXYZ> cloud;
@@ -1907,8 +3320,11 @@ sensor_msgs::msg::PointCloud2 &GridMap::cachedVisualization(bool inflated)
            local_z = local_z + 1 == z_size ? 0 : local_z + 1)
       {
         const int address = row_address + local_z;
-        if (inflated ? md_.occupancy_buffer_inflate_[address] == 0 :
-                       md_.occupancy_buffer_[address] < mp_.min_occupancy_log_)
+        const std::size_t visual_address=(static_cast<std::size_t>(x-min_cut.x())*mp_.map_voxel_num_.y()+
+            y-min_cut.y())*mp_.map_voxel_num_.z()+z-min_cut.z();
+        if (oriented ? !oriented_ready || visualization_obb_mask_[visual_address]==0 :
+            inflated ? md_.occupancy_buffer_inflate_[address] == 0 :
+            !visualizationRawCell(address,mp_.collision_model_=="oriented_box"?1:4))
           continue;
 
         Eigen::Vector3d pos;
@@ -1928,6 +3344,8 @@ sensor_msgs::msg::PointCloud2 &GridMap::cachedVisualization(bool inflated)
   pcl::toROSMsg(cloud, visualization_cache_[layer]);
   visualization_revision_[layer] = occupancy_revision_;
   visualization_clip_[layer] = clip;
+  visualization_model_[layer]=mp_.collision_model_;
+  if(oriented)visualization_obb_packet_ready_=oriented_ready;
   ++visualization_builds_[layer];
   return visualization_cache_[layer];
 }
@@ -1936,7 +3354,8 @@ void GridMap::publishMap()
 {
   if (map_pub_->get_subscription_count() == 0) return;
   auto &cloud_msg = cachedVisualization(false);
-  cloud_msg.header.stamp = node_->now();
+  if(!visualizationCurrent())return;
+  cloud_msg.header.stamp = visualizationStamp();
   map_pub_->publish(cloud_msg);
 }
 
@@ -1944,7 +3363,8 @@ void GridMap::publishMapInflate(bool /*all_info*/)
 {
   if (map_inf_pub_->get_subscription_count() == 0) return;
   auto &cloud_msg = cachedVisualization(true);
-  cloud_msg.header.stamp = node_->now();
+  if(!visualizationCurrent())return;
+  cloud_msg.header.stamp = visualizationStamp();
   map_inf_pub_->publish(cloud_msg);
 }
 
@@ -1952,9 +3372,10 @@ void GridMap::publishSlidingMapFrame()
 {
   if (mp_.sliding_map_frame_id_.empty())
     return;
+  if(!visualizationCurrent())return;
 
   geometry_msgs::msg::TransformStamped transform;
-  transform.header.stamp = node_->now();
+  transform.header.stamp = visualizationStamp();
   transform.header.frame_id = mp_.frame_id_;
   transform.child_frame_id = mp_.sliding_map_frame_id_;
   transform.transform.translation.x = md_.sliding_map_frame_pos_.x();
@@ -1968,10 +3389,11 @@ void GridMap::publishSlidingMapBBox()
 {
   if (sliding_map_bbox_pub_->get_subscription_count() == 0)
     return;
+  if(!visualizationCurrent())return;
 
   visualization_msgs::msg::Marker marker;
   marker.header.frame_id = mp_.frame_id_;
-  marker.header.stamp = node_->now();
+  marker.header.stamp = visualizationStamp();
   marker.ns = "sliding_map";
   marker.id = 0;
   marker.type = visualization_msgs::msg::Marker::LINE_LIST;
@@ -2103,6 +3525,7 @@ void GridMap::publishDepthCloud()
 
   sensor_msgs::msg::PointCloud2 cloud_msg;
   pcl::toROSMsg(cloud, cloud_msg);
-  cloud_msg.header.stamp = node_->now();
+  if(!visualizationCurrent())return;
+  cloud_msg.header.stamp = visualizationStamp();
   depth_cloud_pub_->publish(cloud_msg);
 }

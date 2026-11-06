@@ -16,7 +16,9 @@ public:
   MockTelemetry(std::string session,std::string map,bool local_enabled)
     :session_(std::move(session)),map_(std::move(map)),local_enabled_(local_enabled){}
   std::optional<MockMcSample> local(const d1max_planning_interfaces::msg::LocalNavigationState&m,double now) {
-    if(!local_enabled_||m.schema_version!=1)return {};
+    if(!local_enabled_||m.schema_version!=2||m.valid_until.nanosec>=1000000000U||
+       secs(m.valid_until)<=secs(m.source_stamp)||secs(m.valid_until)-secs(m.source_stamp)>.100000001||
+       now<secs(m.source_stamp)||now>secs(m.valid_until))return {};
     return admit(m,now);
   }
   std::optional<MockMcSample> global(const d1max_planning_interfaces::msg::NavigationState&m,double now) {

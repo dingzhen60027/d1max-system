@@ -2,11 +2,18 @@
 #include <d1max_planning_interfaces/msg/execution_version.hpp>
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 #include <initializer_list>
 #include <string>
 namespace d1max_navigation_bt::exec3 {
 using Version=d1max_planning_interfaces::msg::ExecutionVersion;
-inline double seconds(const builtin_interfaces::msg::Time&t){return t.sec+t.nanosec*1e-9;}
+inline double seconds(const builtin_interfaces::msg::Time&t){
+  // Match rclcpp::Time::seconds(): combine in integer nanoseconds before the
+  // single floating conversion. Separate sec/nsec arithmetic can round one
+  // ULP above the very same ROS clock and fail the strict no-future guard.
+  const auto ns=static_cast<std::int64_t>(t.sec)*1000000000LL+t.nanosec;
+  return static_cast<double>(ns)/1000000000.;
+}
 inline builtin_interfaces::msg::Time stamp(double t){
   builtin_interfaces::msg::Time out;out.sec=static_cast<int32_t>(std::floor(t));
   out.nanosec=static_cast<uint32_t>(std::max(0.,(t-out.sec)*1e9));return out;

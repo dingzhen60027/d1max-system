@@ -188,6 +188,11 @@ namespace lbfgs
          *  of the interval of uncertainty is less than this parameter.
          */
         double xtol;
+
+        // Internal compatibility selection. Source-supported stair solves use
+        // the upstream safeguarded cubic direction; existing flat callers keep
+        // the original branch unless they explicitly select the corrected one.
+        bool corrected_cubic_bound = false;
     };
 
     /**
@@ -356,7 +361,7 @@ namespace lbfgs
     {                                                                \
         (cm) = (v)-r * d;                                            \
     }                                                                \
-    else if (a < 0)                                                  \
+    else if (corrected_cubic_bound ? d > 0 : a < 0)                  \
     {                                                                \
         (cm) = (xmax);                                               \
     }                                                                \
@@ -514,7 +519,8 @@ namespace lbfgs
                                      double *dt,
                                      const double tmin,
                                      const double tmax,
-                                     int *brackt)
+                                     int *brackt,
+                                     bool corrected_cubic_bound = false)
     {
         int bound;
         int dsign = *dt * (*dx / fabs(*dx)) < 0.;
@@ -898,7 +904,7 @@ namespace lbfgs
                     &stx, &fxm, &dgxm,
                     &sty, &fym, &dgym,
                     stp, &fm, &dgm,
-                    stmin, stmax, &brackt);
+                    stmin, stmax, &brackt, param->corrected_cubic_bound);
 
                 /* Reset the function and gradient values for f. */
                 fx = fxm + stx * dgtest;
@@ -916,7 +922,7 @@ namespace lbfgs
                     &stx, &fx, &dgx,
                     &sty, &fy, &dgy,
                     stp, f, &dg,
-                    stmin, stmax, &brackt);
+                    stmin, stmax, &brackt, param->corrected_cubic_bound);
             }
 
             /*

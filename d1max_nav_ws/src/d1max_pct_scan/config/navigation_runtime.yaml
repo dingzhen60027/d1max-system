@@ -1,8 +1,13 @@
 # One operational policy for the existing navigation mainline.
 # These are task/recovery budgets, not collision or movement permissions.
+execution_mode_policy: fixed_stair
+# Operator-selected runtime mapping; not a claim of STAIR physical calibration.
+execution_stair_runtime_parameter_source: general_runtime_reuse
 global_route_timeout_s: 10.0
 worker_startup_timeout_s: 60.0
 recovery_timeout_s: 30.0
+# Local blockage is a wait state, not the lifetime of the committed task.
+keep_committed_route_on_local_failure: true
 stable_duration_s: 0.6
 component_callback_timeout_s: 1.5
 dependency_heartbeat_timeout_s: 1.5

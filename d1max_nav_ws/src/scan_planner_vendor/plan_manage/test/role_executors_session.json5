@@ -1,0 +1,6 @@
+{
+  "mode": "peer",
+  "connect": {"endpoints": []},
+  "listen": {"endpoints": []},
+  "scouting": {"multicast": {"enabled": false}, "gossip": {"enabled": false}}
+}

@@ -78,6 +78,25 @@ def test_operator_preview_profile_uses_bounded_three_quarter_second_budget(confi
     assert params['grid_map.preview_only'] is True
 
 
+@pytest.mark.parametrize('policy', ['official', 'observed_free'])
+def test_legacy_planning_proxy_requires_an_independent_strict_layer(config, policy):
+    config.pop('preview_ray_exclusion', None)
+    config.update(mode='LIVE_VISUALIZATION_NO_MOTION', motion_control_enabled=False,
+                  perception_timeout_s=.5, perception_backend='per_sensor_rays',
+                  scan_collision_policy=policy)
+    params = live_session.scan_parameters(config, 'test')
+    strict = params['grid_map.require_observed_free']
+    assert strict is (policy == 'observed_free')
+    from d1max_pct_scan.robot_profile import load_robot_profile
+    profile=load_robot_profile(live_session.paths.nav_root()/'src/d1max_scan_planner/config/d1max_robot.yaml')
+    assert params['grid_map.obstacles_inflation_z_up'] == profile['engineering']['box_body_below_m']
+    assert params['grid_map.obstacles_inflation_z_down'] == profile['engineering']['box_body_above_m']
+    assert params['grid_map.planning_obstacles_inflation_z_up'] == profile['engineering']['box_body_below_m']
+    assert params['grid_map.planning_obstacles_inflation_z_down'] == profile['engineering']['box_body_above_m']
+    assert config['motion_control_enabled'] is False
+    assert params['manager.preview_body_heading_contract'] is (not strict)
+
+
 @pytest.mark.parametrize('override,enabled', [
     ({}, True),
     ({'mode': 'LIVE_NAVIGATION', 'motion_control_enabled': True}, False),
@@ -251,7 +270,7 @@ def test_rviz_topics_initial_and_goal_are_distinct():
     assert not any('cmd_vel' in str(t) for t in topics)
     assert any(v['Class'] == 'rviz_default_plugins/Orbit' for v in manager['Views']['Saved'])
     names = [d['Name'] for d in displays]
-    assert '全局路径' in names and '局部轨迹' in names
+    assert '全局路径' in names and '局部轨迹（已提交）' in names
     assert '机器狗坐标系' in names
     assert not any('PCT' in name or 'SCAN' in name for name in names)
     assert configuration['Panels'][0]['Session ID'] == 'rviz-test-session'

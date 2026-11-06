@@ -1,7 +1,8 @@
 """One worker, one replaceable waiting request, one result; no ROS ownership.
 
-The caller owns admission/commit. Worker results are never callbacks into that
-owner and never refresh a source timestamp. invalidate fences in-flight work.
+The caller owns admission/commit. A worker may wake that owner's executor, but
+never delivers results or mutates ownership there. Source timestamps remain
+literal; invalidate fences in-flight work.
 """
 from dataclasses import dataclass
 from threading import Condition, Thread
@@ -16,8 +17,11 @@ class PreparedResult:
 
 
 class LatestPreparation:
-    def __init__(self, prepare):
+    def __init__(self, prepare, notify_ready=None):
         self.prepare = prepare
+        if notify_ready is not None and not callable(notify_ready):
+            raise ValueError('preparation_ready_notification_must_be_callable')
+        self.notify_ready = notify_ready
         self._cv = Condition()
         self._ticket = 0
         self._request = self._result = None
@@ -70,3 +74,16 @@ class LatestPreparation:
                 if not self._closed and ticket == self._ticket:
                     self._result = result
                     self._cv.notify_all()
+                    notify = self.notify_ready
+                else:
+                    notify = None
+            # Only wake the serialized owner; never deliver, commit or change
+            # source/receipt timestamps on this worker thread. A concurrent
+            # cancel may invalidate the slot before the owner takes it, which
+            # is harmless. The ordinary owner timer remains a fallback if its
+            # executor/context is already shutting down.
+            if notify is not None:
+                try:
+                    notify()
+                except Exception:
+                    pass

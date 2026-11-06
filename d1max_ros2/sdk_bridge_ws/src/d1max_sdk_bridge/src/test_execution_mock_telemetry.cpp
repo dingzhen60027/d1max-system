@@ -6,9 +6,10 @@ using namespace d1monitor::execution3;
 using Local=d1max_planning_interfaces::msg::LocalNavigationState;
 using Global=d1max_planning_interfaces::msg::NavigationState;
 template<class Message> static Message sample(double time) {
-  Message m;m.schema_version=std::is_same_v<Message,Local>?1:2;
+  Message m;m.schema_version=2;
   m.session_id="session";m.map_version_id="map";m.localization_epoch=1;m.localization_seed_id="seed";
   m.source_stamp=m.posterior_stamp=m.imu_stamp=stamp(time);m.usable=true;
+  if constexpr(std::is_same_v<Message,Local>)m.valid_until=stamp(time+.1);
   m.local_odometry.header.stamp=m.source_stamp;m.local_odometry.header.frame_id="d1max_loc_odom";
   m.local_odometry.child_frame_id="d1max_loc_base_link";
   m.local_odometry.twist.twist.linear.x=.12;m.local_odometry.twist.twist.angular.z=.23;return m;
@@ -36,7 +37,7 @@ int main() {
   for(int variant=0;variant<13;++variant) {
     auto bad=sample<Local>(10.);
     switch(variant) {
-      case 0:bad.schema_version=2;break;case 1:bad.session_id="foreign";break;
+      case 0:bad.schema_version=1;break;case 1:bad.session_id="foreign";break;
       case 2:bad.map_version_id="foreign";break;case 3:bad.usable=false;break;
       case 4:bad.localization_epoch=0;break;case 5:bad.localization_seed_id.clear();break;
       case 6:bad.local_odometry.header.frame_id="map";break;

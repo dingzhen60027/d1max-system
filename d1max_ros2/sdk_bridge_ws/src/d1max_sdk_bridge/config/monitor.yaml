@@ -7,6 +7,17 @@ d1max_sdk_monitor:
     navigation_max_lateral_mps: 0.0
     navigation_max_yaw_radps: 0.50
     navigation_command_timeout_sec: 0.25
+    # User selects STAIR before navigation. No automatic SetMode / posture
+    # commands; floors, stair flights and landings retain one actuation mode.
+    execution_mode_policy: fixed_stair
+    # User-authorized reuse of the complete existing GENERAL runtime mapping
+    # (axis response, smoothing and exact zero). Not measured STAIR calibration.
+    execution_stair_runtime_parameter_source: general_runtime_reuse
+    # Optional physical STAIR measurement records are separate from runtime
+    # configuration. Empty does not block explicitly configured runtime reuse
+    # and never sets any measured/physical acceptance flag true.
+    execution_mode_capability_record: ""
+    execution_mode_capability_sha256: ""
     # Operator authorized APP -> SDK handoff. Only OnControlAvailable may arm
     # TakeControl; never infer availability from MC absence or control_source.
     # No motion/posture/mode/e-stop-release commands are enabled by this option.

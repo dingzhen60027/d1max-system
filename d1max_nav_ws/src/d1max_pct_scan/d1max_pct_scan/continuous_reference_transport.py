@@ -11,9 +11,11 @@ from dataclasses import dataclass
 import math
 
 from .control_frame_contract import BodySample, Context, Rigid, create_anchor
-from .continuous_reference import ContinuousReference, Observation
+from .continuous_reference import ContinuousReference, Observation, validate_execution_mode_policy
 from .route_ingress import RouteIngress
 from .source_route_ros import from_message
+from .atomic_projection_state import ATOMIC_OUTPUT_LEASE_NS, validate as validate_pair
+from .rolling_reference_policy import WindowProgress
 
 STAGING_REFERENCE_TOPIC = '/d1max/live_planning/bt/staging/reference_path'
 STAGING_NATIVE_PARAMETERS = {'fsm.reference_path_z_offset': 0., 'grid_map.frame_id': 'd1max_loc_odom'}
@@ -48,7 +50,7 @@ class ContinuousReferenceTransport:
     def __init__(self, *, session_id, map_version_id, expected_hashes,
                  body_height_m, body_height_calibration_id, publish_staging,
                  freshness_s=.5, context_sequence=1, native_reference_path_z_offset=0.,
-                 reference_horizon_m=4.):
+                 reference_horizon_m=4., preview_only=False, execution_mode_policy='segment_modes'):
         if (set(expected_hashes) != {'source_map_sha256', 'tomogram_sha256', 'conditioning_sha256'}
                 or any(not isinstance(v, str) or len(v) != 64
                        or any(c not in '0123456789abcdef' for c in v) for v in expected_hashes.values())
@@ -64,6 +66,11 @@ class ContinuousReferenceTransport:
         self.height, self.height_id, self.freshness = body_height_m, body_height_calibration_id, freshness_s
         self.publish = publish_staging
         self.reference_horizon_m = float(reference_horizon_m)
+        if type(preview_only) is not bool:
+            raise ValueError('explicit_preview_capability_required')
+        self.preview_only=preview_only
+        self.portal_geometry=None
+        self.execution_mode_policy=validate_execution_mode_policy(execution_mode_policy)
         self.context_sequence = context_sequence
         self.core = self.route = self.snapshot = self.latest_pair = None
         self.latest_local = None
@@ -71,12 +78,14 @@ class ContinuousReferenceTransport:
         self.pending_core = None
         self._pending_received_monotonic = None
         self._pending_end_arc_m = self._accepted_end_arc_m = None
+        self._pending_start_arc_m = self._accepted_start_arc_m = None
+        self._pending_issue_arc_m = self._accepted_issue_arc_m = None
         self.generation = 0
         self.quarantined = False
         self._reset_pair = None
+        self._latest_pair_measurement_ns = self._reset_pair_measurement_ns = None
         self._retired_generation = 0
         self._retired_stamp_ns = 0
-        self._segment_transition_pending = False
         self.status = dict(phase='waiting_route_and_navigation', execution_eligible=False,
                            physical_stop_confirmed=False)
 
@@ -87,20 +96,37 @@ class ContinuousReferenceTransport:
                 or receipt < 0 or not 0 <= now-receipt <= self.freshness):
             raise ValueError('staging_state_source_or_receipt_stale')
 
+    def _fresh_pair_output(self, observation, current_source_ns, now_monotonic):
+        self._fresh(observation.body.source_ns,observation.received_monotonic,
+                    current_source_ns,now_monotonic)
+        if current_source_ns-observation.body.source_ns > ATOMIC_OUTPUT_LEASE_NS:
+            raise ValueError('staging_navigation_output_lease_expired')
+
+    @property
+    def empty_ownership(self):
+        """No task geometry or outstanding retirement owned by this transport.
+
+        Native publication is owned by the node's prepared ledger, not the
+        staging callback. The recovery caller must check that separate fact.
+        A generation counter is deliberately not an ownership proof.
+        """
+        return (self.ingress.active_identity is None
+            and all(value is None for value in (self.route,self.snapshot,self.core,
+                self.pending,self.pending_core,self.accepted))
+            and self._retired_generation == 0 and self._retired_stamp_ns == 0)
+
     def _pair(self, message, *, received_monotonic, current_source_ns, now_monotonic):
         if (message.schema_version != 2 or not message.usable
                 or message.session_id != self.ingress.session_id
                 or message.map_version_id != self.ingress.map_version_id):
             raise ValueError('staging_navigation_identity_or_usability_invalid')
-        source = nanoseconds(message.source_stamp)
-        posterior, imu = nanoseconds(message.posterior_stamp), nanoseconds(message.imu_stamp)
-        if (not 0 < posterior <= source or not 0 < imu <= source
-                or not math.isfinite(message.extrapolation_sec)
-                or not 0 <= message.extrapolation_sec <= .1
-                or abs((source-imu)*1e-9-message.extrapolation_sec) > 1e-5):
-            raise ValueError('staging_navigation_measurement_provenance_invalid')
-        for stamp in (source, posterior, imu):
-            self._fresh(stamp, received_monotonic, current_source_ns, now_monotonic)
+        # Use the same original output lease as the publisher/local inbox.
+        # Raw posterior/IMU provenance is validated at output source, not aged
+        # again here by delivery latency. Receipt and geometry remain literal.
+        state=validate_pair(message,session_id=self.ingress.session_id,
+            map_version_id=self.ingress.map_version_id,now_ns=current_source_ns)
+        source=state.source_ns
+        self._fresh(source,received_monotonic,current_source_ns,now_monotonic)
         context = Context(message.session_id, message.localization_epoch,
                           message.localization_seed_id, message.map_version_id)
         samples = []
@@ -140,7 +166,8 @@ class ContinuousReferenceTransport:
             self.pending_core = None
             self._pending_received_monotonic = None
             self._pending_end_arc_m = self._accepted_end_arc_m = None
-            self._segment_transition_pending = False
+            self._pending_start_arc_m = self._accepted_start_arc_m = None
+            self._pending_issue_arc_m = self._accepted_issue_arc_m = None
             self.status.update(phase='reference_cancel_staged', physical_stop_confirmed=False)
             return cancel
         if self.route is not None:
@@ -157,6 +184,7 @@ class ContinuousReferenceTransport:
         try:
             pair = self._pair(message, received_monotonic=received_monotonic,
                               current_source_ns=current_source_ns, now_monotonic=now_monotonic)
+            measurement_ns = (nanoseconds(message.posterior_stamp),nanoseconds(message.imu_stamp))
             if self.latest_pair:
                 if pair[0].body.context.epoch < self.latest_pair[0].body.context.epoch:
                     raise ValueError('staging_navigation_epoch_regressed')
@@ -166,14 +194,16 @@ class ContinuousReferenceTransport:
             if self.quarantined:
                 old = self.latest_pair[0].body.context if self.latest_pair else None
                 previous = self._reset_pair
-                if (pair[0].body.context != old
+                if ((pair[0].body.context != old or self.empty_ownership)
                         and (previous is None or pair[0].body.context.epoch >= previous[0].body.context.epoch)
                         and (previous is None or pair[0].body.source_ns > previous[0].body.source_ns)):
                     self._reset_pair = pair
+                    self._reset_pair_measurement_ns = measurement_ns
                 raise ValueError('staging_context_quarantined')
             if self.core is not None and pair[0].body.context != self.core.context:
                 self.quarantined = True
                 self._reset_pair = pair
+                self._reset_pair_measurement_ns = measurement_ns
                 self.discard_pending()
                 self.core._progress = None
                 self.core.candidate_anchor = None
@@ -182,6 +212,7 @@ class ContinuousReferenceTransport:
                     and pair[0].body.source_ns <= self.latest_pair[0].body.source_ns):
                 return None  # duplicate receipt must not renew source/receipt leases
             self.latest_pair = pair
+            self._latest_pair_measurement_ns = measurement_ns
             # Global pairs establish candidate anchors. They must not move the
             # local progress backwards when the independent local stream leads.
             if self.latest_local is None or pair[1].body.source_ns>self.latest_local.body.source_ns:
@@ -198,6 +229,8 @@ class ContinuousReferenceTransport:
             revision = (self.core.candidate_anchor or self.core.anchor).revision+1
             self.core.observe_pair(*pair, revision=revision, current_source_ns=current_source_ns,
                                    now_monotonic=now_monotonic)
+            self._project_pending_sample(pair[1],current_source_ns=current_source_ns,
+                now_monotonic=now_monotonic)
             last=self.core._last_sample
             progress = (self.core.project(pair[1],current_source_ns=current_source_ns,
                 now_monotonic=now_monotonic) if last is None or pair[1].body.source_ns>last[0]
@@ -209,9 +242,6 @@ class ContinuousReferenceTransport:
                 measured_arc_m=progress.measured_arc_m, confirmed_arc_m=progress.confirmed_arc_m,
                 source_ns=progress.source_ns, anchor_id=progress.anchor_id,
                 candidate_anchor_id=(self.core.candidate_anchor.anchor_id if self.core.candidate_anchor else ''))
-            if self._segment_transition_pending:
-                self._segment_transition_pending = False
-                return self.propose_window(current_source_ns=current_source_ns, now_monotonic=now_monotonic)
             # No native reference publication on odometry or map correction.
             return progress
         except ValueError as error:
@@ -234,13 +264,32 @@ class ContinuousReferenceTransport:
             raise ValueError('staging_localization_context_reset_requires_retirement')
         if self.quarantined:
             raise ValueError('staging_context_quarantined')
+        # Gate the shared input before either geometry changes observation
+        # history; stale receipt time is not a candidate projection failure.
+        self._fresh(sample.body.source_ns,sample.received_monotonic,
+            current_source_ns,now_monotonic)
         self.latest_local=sample
         if self.core is None:
             return None  # A local sample never fabricates a global anchor.
+        self._project_pending_sample(sample,current_source_ns=current_source_ns,
+            now_monotonic=now_monotonic)
         progress=self.core.project(sample,current_source_ns=current_source_ns,now_monotonic=now_monotonic)
-        if self.pending_core is not None and self.pending_core is not self.core:
+        self.status.update(measured_arc_m=progress.measured_arc_m,confirmed_arc_m=progress.confirmed_arc_m,
+            source_ns=progress.source_ns,anchor_id=progress.anchor_id)
+        return progress
+
+    def _project_pending_sample(self,sample,*,current_source_ns,now_monotonic):
+        # Distinct incumbent/candidate geometry must each observe the same
+        # literal sample. Losing old-segment correspondence must not hide a
+        # real exit crossing from the pending segment. The incumbent still
+        # projects independently afterwards and its exception is not masked.
+        candidate=self.pending_core
+        if candidate is not None and candidate is not self.core:
+            last=candidate._last_sample
+            if last is not None and sample.body.source_ns<=last[0]:
+                return  # A delayed global pair cannot rewind/renew local evidence.
             try:
-                self.pending_core.project(sample,current_source_ns=current_source_ns,now_monotonic=now_monotonic)
+                candidate.project(sample,current_source_ns=current_source_ns,now_monotonic=now_monotonic)
             except ValueError as error:
                 # A successor anchor is only a candidate. Its correspondence
                 # failure cannot suppress the already-valid measured progress
@@ -254,13 +303,39 @@ class ContinuousReferenceTransport:
                 # A projection failure is not proof that the sole writer did
                 # not select this prepared geometry. Keep its identity until
                 # the owner lane retires it or commits the matching snapshot.
-                self.pending_core._progress = None
+                candidate._progress = None
                 self.status.update(phase='candidate_projection_rejected',
                     rejected_pending_generation=rejected['generation'] if rejected else 0,
                     rejected_pending_identity=rejected,pending_reason=str(error))
-        self.status.update(measured_arc_m=progress.measured_arc_m,confirmed_arc_m=progress.confirmed_arc_m,
-            source_ns=progress.source_ns,anchor_id=progress.anchor_id)
-        return progress
+
+    def recover_empty_context(self, *, context_sequence, context, native_reference_unretired,
+                              current_source_ns, now_monotonic):
+        """Recover initialization after a hard event with no task to retire.
+
+        Called only after the node matches the exact new context ACK and its
+        prepared/publication ledger proves no native work remains. The saved
+        pair retains all original acquisition and receipt times. This method
+        neither republishes geometry nor resets delivery/retired-task fences.
+        """
+        if (not self.quarantined or not self.empty_ownership
+                or native_reference_unretired is not False
+                or type(context_sequence) is not int or context_sequence != self.context_sequence
+                or self._reset_pair is None or self._reset_pair_measurement_ns is None):
+            raise ValueError('empty_owner_and_new_context_ack_required')
+        pair=self._reset_pair
+        identity=pair[0].body.context
+        if context != (identity.session,identity.epoch,identity.seed):
+            raise ValueError('empty_context_ack_does_not_match_latest_navigation')
+        for observation in pair:
+            self._fresh_pair_output(observation,current_source_ns,now_monotonic)
+        self.latest_pair=pair
+        self._latest_pair_measurement_ns=self._reset_pair_measurement_ns
+        self.latest_local=pair[1]
+        self._reset_pair=self._reset_pair_measurement_ns=None
+        self.quarantined=False
+        self.status.update(phase='waiting_new_task_after_empty_context_reset',
+                           execution_eligible=False,physical_stop_confirmed=False,reason='')
+        return True
 
     def recover_retired_context(self, *, retired_generation, context_sequence, context,
                                 current_source_ns, now_monotonic):
@@ -278,9 +353,10 @@ class ContinuousReferenceTransport:
         if context != (identity.session,identity.epoch,identity.seed):
             raise ValueError('retired_context_ack_does_not_match_latest_navigation')
         for observation in self._reset_pair:
-            self._fresh(observation.body.source_ns, observation.received_monotonic,
-                        current_source_ns, now_monotonic)
+            self._fresh_pair_output(observation,current_source_ns,now_monotonic)
         self.latest_pair,self._reset_pair = self._reset_pair,None
+        self._latest_pair_measurement_ns=self._reset_pair_measurement_ns
+        self._reset_pair_measurement_ns=None
         self.latest_local=self.latest_pair[1]
         self.quarantined = False
         self._retired_generation = self._retired_stamp_ns = 0
@@ -296,12 +372,15 @@ class ContinuousReferenceTransport:
                 or context.session != wire.session_id or context.map_version != wire.map_version_id):
             self.quarantined = True
             self._reset_pair = self.latest_pair
+            self._reset_pair_measurement_ns=self._latest_pair_measurement_ns
             raise ValueError('staging_route_and_navigation_context_disagree')
         for sample in self.latest_pair:
-            self._fresh(sample.body.source_ns, sample.received_monotonic, current_source_ns, now_monotonic)
+            self._fresh_pair_output(sample,current_source_ns,now_monotonic)
         core = ContinuousReference(self.snapshot, context=context, task_id=self.route.task_id,
             anchor=create_anchor(global_.body, local.body, 1), body_height_m=self.height,
-            body_height_calibration_id=self.height_id, freshness_s=self.freshness)
+            body_height_calibration_id=self.height_id, freshness_s=self.freshness,
+            preview_only=self.preview_only,execution_mode_policy=self.execution_mode_policy,
+            portal_geometry=self.portal_geometry)
         core.project(local, current_source_ns=current_source_ns, now_monotonic=now_monotonic)
         self.core = core
         return self.propose_window(current_source_ns=current_source_ns, now_monotonic=now_monotonic)
@@ -319,20 +398,31 @@ class ContinuousReferenceTransport:
     def request_segment_transition(self, *, current_source_ns, now_monotonic, mode=None):
         if self.quarantined or self.core is None or self.pending is not None or self.accepted is None:
             raise ValueError('staging_segment_transition_owner_not_ready')
-        segment = self.core.advance_segment(current_source_ns=current_source_ns,
-            now_monotonic=now_monotonic, mode=mode)
-        self._segment_transition_pending = True
-        self.status.update(phase='waiting_next_segment_measurement', next_segment_id=segment)
-        return segment
+        sample=self.latest_local or (self.latest_pair[1] if self.latest_pair else None)
+        if sample is None:
+            raise ValueError('segment_transition_requires_exact_measured_sample')
+        staged=self.core.prepare_segment_transition(sample,current_source_ns=current_source_ns,
+            now_monotonic=now_monotonic,mode=mode)
+        output=self._publish_window(staged,current_source_ns=current_source_ns,now_monotonic=now_monotonic)
+        self.status.update(phase='waiting_next_segment_geometry_commit',next_segment_id=output.segment_id)
+        return output.segment_id
 
     def propose_window(self, *, current_source_ns, now_monotonic):
         if self.quarantined or self.core is None or self.pending is not None:
             raise ValueError('staging_window_owner_or_pending_candidate_invalid')
-        from d1max_planning_interfaces.msg import ReferencePath
-        from geometry_msgs.msg import PoseStamped
+        # A spatial refresh must not turn every tiny global-pair correction
+        # into an anchor transaction. Retain sub-threshold corrections in the
+        # current core until the EXISTING correction_due batch is reached;
+        # otherwise Native cannot recognize ordinary overlapping windows and
+        # every moving curve races an unnecessary exact-predecessor replace.
         staged = (self.core.prepare_reanchor(self.latest_local or self.latest_pair[1],
             current_source_ns=current_source_ns, now_monotonic=now_monotonic)
-            if self.core.candidate_anchor is not None else self.core)
+            if self.correction_ready(current_source_ns=current_source_ns) else self.core)
+        return self._publish_window(staged,current_source_ns=current_source_ns,now_monotonic=now_monotonic)
+
+    def _publish_window(self,staged,*,current_source_ns,now_monotonic):
+        from d1max_planning_interfaces.msg import ReferencePath
+        from geometry_msgs.msg import PoseStamped
         window = staged.window(current_source_ns=current_source_ns, now_monotonic=now_monotonic,
                                horizon_m=self.reference_horizon_m)
         output = ReferencePath()
@@ -349,13 +439,15 @@ class ContinuousReferenceTransport:
             pose.pose.position.x, pose.pose.position.y, pose.pose.position.z = xyz
             pose.pose.orientation.w = 1.
             output.path.poses.append(pose)
-        output.point_segment_ids = [window.segment_id]*len(output.path.poses)
-        output.point_segment_kinds = [window.segment_kind]*len(output.path.poses)
-        output.point_required_modes = [window.required_mode]*len(output.path.poses)
+        output.point_segment_ids = list(window.point_segment_ids)
+        output.point_segment_kinds = list(window.point_segment_kinds)
+        output.point_required_modes = list(window.point_required_modes)
         self.pending = deepcopy(output)
         self.pending_core = staged
         self._pending_received_monotonic = window.received_monotonic
         self._pending_end_arc_m = window.end_arc_m
+        self._pending_start_arc_m = window.start_arc_m
+        self._pending_issue_arc_m = window.issued_confirmed_arc_m
         self.publish(deepcopy(output))
         self.status.update(phase='waiting_reference_receipt', pending_generation=output.generation,
             anchor_id=window.anchor_id, source_ns=window.source_ns)
@@ -368,6 +460,20 @@ class ContinuousReferenceTransport:
         a, b = self.core.anchor.map_from_odom, self.core.candidate_anchor.map_from_odom
         cosine = min(1., abs(sum(x*y for x, y in zip(a.xyzw, b.xyzw))))
         return math.dist(a.xyz, b.xyz) >= .05 or 2.*math.acos(cosine) >= .02
+
+    def correction_ready(self, *, current_source_ns):
+        """A correction transaction is separate from rolling the odom window.
+
+        An expired optional global pair cannot be applied, but it must not
+        block extending valid incumbent geometry from fresh local progress.
+        Keep the candidate literal for diagnostics; only a genuinely new
+        global/local pair can renew it. _publish_window still checks measured
+        progress freshness, context and semantic bounds. A future candidate
+        is deliberately NOT hidden here: prepare_reanchor must reject it.
+        """
+        if not self.correction_due():
+            return False
+        return current_source_ns-self.core.candidate_anchor.source_ns <= self.freshness*1e9
 
     def covers_current_segment_end(self):
         """Geometry-only coverage, not authorization or a collision lease."""
@@ -392,6 +498,15 @@ class ContinuousReferenceTransport:
                 or self.core._progress is None):
             return None
         return self._accepted_end_arc_m-self.core._progress.confirmed_arc_m
+
+    def rolling_window_progress(self):
+        """Original geometry bounds and live progress; no commit-time reset."""
+        if (self.core is None or self.accepted is None or self.core._progress is None
+                or any(v is None for v in (self._accepted_start_arc_m,
+                    self._accepted_end_arc_m,self._accepted_issue_arc_m))):
+            return None
+        return WindowProgress(self._accepted_start_arc_m,self._accepted_end_arc_m,
+            self._accepted_issue_arc_m,self.core._progress.confirmed_arc_m)
 
     def accepted_route_progress(self, *, current_source_ns, now_monotonic):
         """Return source-bound facts from the committed core, never pending.
@@ -419,10 +534,32 @@ class ContinuousReferenceTransport:
         self.pending = self.pending_core = None
         self._pending_received_monotonic = None
         self._pending_end_arc_m = None
+        self._pending_start_arc_m = self._pending_issue_arc_m = None
 
     def commit_pending(self, *, current_source_ns, now_monotonic, owner_committed=False):
         """Called only after the formal owner commits this exact prepared version."""
         if self.pending is None or self.pending_core is None or self.quarantined:
+            raise ValueError('no_prepared_reference_to_commit')
+        accepted=self._install_committed_window(self.pending,self.pending_core,
+            received_monotonic=self._pending_received_monotonic,
+            end_arc_m=self._pending_end_arc_m,start_arc_m=self._pending_start_arc_m,
+            issue_arc_m=self._pending_issue_arc_m,current_source_ns=current_source_ns,
+            now_monotonic=now_monotonic,owner_committed=owner_committed)
+        self.discard_pending()
+        return accepted
+
+    def _install_committed_window(self,reference,core,*,received_monotonic,
+                                  end_arc_m,start_arc_m,issue_arc_m,
+                                  current_source_ns,now_monotonic,owner_committed=False):
+        """Adopt the caller-verified owner fact, independent of the pending slot.
+
+        The node first joins the exact native receipt, original validation and
+        successful commit. A delayed fact may describe an older prepared
+        window while a successor is already preparing or awaiting its receipt.
+        Installing accepted geometry must not retire that successor. This
+        internal helper does not authorize motion or renew an input/proof.
+        """
+        if reference is None or core is None or self.quarantined:
             raise ValueError('no_prepared_reference_to_commit')
         progress_error = ''
         if owner_committed:
@@ -431,30 +568,31 @@ class ContinuousReferenceTransport:
             # after that delivery deadline. Require CURRENT source-timed body
             # evidence; do not renew/rewrite the original proposal stamp.
             local=self.latest_local or (self.latest_pair[1] if self.latest_pair else None)
-            if local is not None and local.body.context != self.pending_core.context:
+            if local is not None and local.body.context != core.context:
                 raise ValueError('committed_reference_current_context_missing')
             try:
                 if local is None:
                     raise ValueError('committed_reference_current_body_missing')
                 self._fresh(local.body.source_ns,local.received_monotonic,current_source_ns,now_monotonic)
-                last = self.pending_core._last_sample
+                last = core._last_sample
                 if last is None or local.body.source_ns > last[0]:
-                    self.pending_core.project(local,current_source_ns=current_source_ns,now_monotonic=now_monotonic)
-                self.pending_core._require_progress(current_source_ns, now_monotonic)
+                    core.project(local,current_source_ns=current_source_ns,now_monotonic=now_monotonic)
+                core._require_progress(current_source_ns, now_monotonic)
             except ValueError as error:
                 # A BT geometry commit is already a fact. Failing current
                 # measured projection cannot roll it back to an old anchor.
                 # Adopt geometry but emit no RouteProgress until a new real
                 # sample successfully projects; this supplies no motion lease.
                 progress_error = str(error)
-                self.pending_core._progress = None
+                core._progress = None
         else:
-            self._fresh(nanoseconds(self.pending.path.header.stamp), self._pending_received_monotonic,
+            self._fresh(nanoseconds(reference.path.header.stamp), received_monotonic,
                         current_source_ns, now_monotonic)
-            self.pending_core._require_progress(current_source_ns, now_monotonic)
-        self.core, self.accepted = self.pending_core, deepcopy(self.pending)
-        self._accepted_end_arc_m = self._pending_end_arc_m
-        self.discard_pending()
+            core._require_progress(current_source_ns, now_monotonic)
+        self.core, self.accepted = core, deepcopy(reference)
+        self._accepted_end_arc_m = end_arc_m
+        self._accepted_start_arc_m = start_arc_m
+        self._accepted_issue_arc_m = issue_arc_m
         self.status.update(phase='reference_receipt_acknowledged',
             accepted_generation=self.accepted.generation, anchor_id=self.core.anchor.anchor_id,
             committed_progress_reason=progress_error)

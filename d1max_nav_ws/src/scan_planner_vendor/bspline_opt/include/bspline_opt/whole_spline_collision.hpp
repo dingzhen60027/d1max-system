@@ -2,6 +2,8 @@
 
 #include <bspline_opt/uniform_bspline.h>
 #include <bspline_opt/spline_heading_contract.hpp>
+#include <bspline_opt/near_curve_direction.hpp>
+#include <bspline_opt/forward_entry_heading.hpp>
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
@@ -20,22 +22,26 @@ struct SplineCollisionResult {
   double yaw{0.};
 };
 
-// Shared full-curve query for internal optimization and preview admission.
+// Shared full-curve query for internal optimization and candidate admission.
 // Cubic derivative control points bound speed by the convex-hull property,
 // so each time interval travels at most resolution/4, even for a closed loop.
-// Default execution behavior remains tangent based. The explicitly enabled
-// no-motion preview contract additionally validates measured yaw and all sweeps;
+// Legacy behavior remains tangent based unless explicitly enabled. The formal
+// measured-body contract validates initial yaw and every rotation sweep equally
+// in preview and writer-enabled sessions, without granting motion permission;
 // the outer admission check still owns body pose freshness and source validity.
 template<class Query>
 SplineCollisionResult checkWholeSplineCollision(UniformBspline &curve,double resolution,
     Query occupied,std::size_t query_budget=50000,
-    const SplineHeadingContract &heading={}) {
+    const SplineHeadingContract &input_heading={}) {
+  auto heading=input_heading;
   SplineCollisionResult result;
   const auto points=curve.getControlPoint();
   // Check the empty/default spline before reading its uninitialized scalar data.
   if (points.rows()!=3 || points.cols()<4 || !points.allFinite() ||
       !std::isfinite(resolution) || resolution<=0. || query_budget<2) return result;
-  if (heading.preview_only_enabled && !validPreviewHeadingContract(heading)) return result;
+  const bool measured_heading=measuredHeadingEnabled(heading);
+  if ((measured_heading||heading.policy!=BodyHeadingPolicy::PathTangent)&&
+      !validMeasuredHeadingContract(heading)) return result;
   query_budget=std::min<std::size_t>(query_budget,50000);
   if (curve.getOrder()!=3 || !std::isfinite(curve.getInterval()) || curve.getInterval()<=0.)
     return result;
@@ -59,23 +65,35 @@ SplineCollisionResult checkWholeSplineCollision(UniformBspline &curve,double res
     }
   }
   if (!std::isfinite(speed_bound)) return result;
-  if (heading.preview_only_enabled) previous_yaw=heading.measured_yaw;
+  if (measured_heading) previous_yaw=heading.measured_yaw;
   const double required=std::ceil(std::max(duration*speed_bound/(resolution*.25),
-      heading.preview_only_enabled ? duration/.02 : 0.));
+      measured_heading ? duration/.02 : 0.));
   if (!std::isfinite(required) || required>static_cast<double>(query_budget-1)) {
     result.state=SplineCollisionState::SampleBudgetExceeded;return result;
   }
   const std::size_t intervals=std::max<std::size_t>(1,static_cast<std::size_t>(required));
+  if(measured_heading&&!resolveForwardEntryHeading(heading,duration,static_cast<std::uint32_t>(intervals),
+       [&](double t){return curve.evaluateDeBoorT(t);},
+       [&](double t){return velocity.evaluateDeBoorT(t);},[]{return true;}))return result;
   const double dt=duration/static_cast<double>(intervals);
   Eigen::Vector3d previous_position=curve.evaluateDeBoorT(0.);
+  std::optional<double> entry_yaw;
+  if(measured_heading&&heading.align_then_forward&&heading.policy==BodyHeadingPolicy::PathTangent&&
+      velocity.evaluateDeBoorT(0.).head<2>().norm()<heading.minimum_direction_speed) {
+    const auto direction=nearCurveDirection(
+      [&](double t){const auto p=curve.evaluateDeBoorT(t);return CurveDirectionPoint{p.x(),p.y(),p.z()};},
+      [&](double t){const auto v=velocity.evaluateDeBoorT(t);return CurveDirectionPoint{v.x(),v.y(),v.z()};},
+      0.,duration);
+    if(direction)entry_yaw=std::atan2(direction->direction[1],direction->direction[0]);
+  }
   for (std::size_t i=0;i<=intervals;++i) {
     result.time=duration*(static_cast<double>(i)/intervals);
     const Eigen::Vector3d position=curve.evaluateDeBoorT(result.time);
     Eigen::Vector3d tangent=velocity.evaluateDeBoorT(result.time);
     if (!position.allFinite() || !tangent.allFinite()) return result;
     result.velocity=tangent;
-    if (heading.preview_only_enabled) {
-      const double yaw=previewBodyHeading(tangent,previous_yaw,heading);
+    if (measured_heading) {
+      const double yaw=i==0&&entry_yaw?*entry_yaw:bodyHeadingAtCurveTime(tangent,previous_yaw,heading,result.time);
       const auto query=[&](const Eigen::Vector3d &p,double candidate_yaw) {
         result.position=p;result.yaw=candidate_yaw;
         if (result.queries>=query_budget) {

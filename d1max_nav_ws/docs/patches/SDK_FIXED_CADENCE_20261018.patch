@@ -1,0 +1,499 @@
+--- a/src/execution_scheduler.hpp
++++ b/src/execution_scheduler.hpp
+@@ -62,9 +62,14 @@
+  private:PeriodicDeadline phase_;double period_,normal_after_;
+ };
+ 
+-// A latest-command writer has no useful fixed phase relative to its 20 Hz
+-// producer. A fresh accepted command may use an available send opportunity at
+-// once; ordinary NONZERO admissions still remain at least one period apart.
++// The first real command establishes the writer's absolute steady phase.
++// Later opportunities advance from that phase, NOT from actual admission:
++// adding 50 ms to each delayed wake accumulates normal scheduling jitter into
++// a full producer period of latency. Fresh input still uses an idle slot at
++// once, and only the newest accepted original command can be selected.
++// A very late send skips a following slot less than half a period away, so
++// overdue work cannot become a compressed catch-up burst. Normal small jitter
++// can produce e.g. 49.7/50.3 ms intervals without an accumulating phase shift.
+ // Empty/expired/HOLD polls do not spend the next ordinary opportunity. The
+ // periodic health watchdog and original source deadline stay independent, so
+ // an event-driven sender cannot retain stale velocity while waiting for input.
+@@ -83,7 +88,7 @@
+   bool normalDue(double now)const{return std::isfinite(now)&&now>=normal_after_;}
+   bool pending()const{return observed_>consumed_;}
+   uint64_t observed()const{return observed_;}
+-  uint64_t skipped()const{return watchdog_.skipped();}
++  uint64_t skipped()const{return watchdog_.skipped()+normal_skipped_;}
+   void complete(double started,double completed,uint64_t selected_revision,bool normal_opportunity,
+       std::optional<double> nonzero_submitted_at={}){
+     if(!std::isfinite(started)||!std::isfinite(completed)||completed<started||
+@@ -91,10 +96,28 @@
+          *nonzero_submitted_at<normal_after_||*nonzero_submitted_at<started||*nonzero_submitted_at>completed)))
+       throw std::invalid_argument("writer_command_admission_clock_regressed");
+     if(normal_opportunity)consumed_=std::max(consumed_,selected_revision);
+-    if(nonzero_submitted_at)normal_after_=*nonzero_submitted_at+period_;
++    if(nonzero_submitted_at){
++      if(!phase_started_){normal_after_=*nonzero_submitted_at+period_;phase_started_=true;}
++      else {
++        normal_after_+=period_;
++        // Keep the original phase. Skip, rather than send, a slot too close
++        // to the preceding actual call after a major OS/vendor delay.
++        const auto earliest=*nonzero_submitted_at+period_*.5;
++        if(normal_after_<earliest){
++          const auto count=static_cast<uint64_t>(std::ceil((earliest-normal_after_)/period_));
++          normal_after_+=count*period_;normal_skipped_+=count;
++        }
++      }
++      // Vendor blocking must not turn completed slots into replay work.
++      if(normal_after_<=completed){
++        const auto count=static_cast<uint64_t>(std::floor((completed-normal_after_)/period_))+1;
++        normal_after_+=count*period_;normal_skipped_+=count;
++      }
++    }
+     if(completed>=watchdog_.next())watchdog_.complete(completed);
+   }
+  private:
+-  PeriodicDeadline watchdog_;double period_,normal_after_;uint64_t observed_=0,consumed_=0;
++  PeriodicDeadline watchdog_;double period_,normal_after_;uint64_t observed_=0,consumed_=0,normal_skipped_=0;
++  bool phase_started_=false;
+ };
+ }
+--- a/src/execution_transport_core.hpp
++++ b/src/execution_transport_core.hpp
+@@ -22,6 +22,7 @@
+ #include <optional>
+ #include <set>
+ #include <string>
++#include <string_view>
+ #include <stdexcept>
+ #include "execution_policy.hpp"
+ #include "mc_capture_time.hpp"
+@@ -57,12 +58,20 @@
+ struct TaskCommandReorderStats {
+   uint64_t deferred=0,completed=0,discarded=0;bool pending=false;
+ };
++// Fixed-size observation of admission attempts, including a deferred command
++// retried by its real owner-lease callback. Never used to authorize a command.
++struct TaskCommandAdmission {
++  uint64_t attempts=0,accepted=0,rejected=0,deferred=0,sequence=0;
++  double at=0.;const char* reason="none";
++  builtin_interfaces::msg::Time source,body_source,valid_until;
++};
+ // Last expiry fact only, retained for diagnostics after the original command
+ // is cleared. It cannot be selected, replayed or extend any source deadline.
+ struct TaskCommandExpiry {
+   uint64_t count=0,sequence=0;double observed_at=0.;
+   std::string execution_id;
+   builtin_interfaces::msg::Time source,body_source,body_valid_until,valid_until;
++  uint64_t admission_sequence=0;double admission_at=0.;const char* admission_reason="none";
+ };
+ inline double secs(const builtin_interfaces::msg::Time&t){return t.sec+t.nanosec*1e-9;}
+ inline int64_t sourceNs(const builtin_interfaces::msg::Time&t){return static_cast<int64_t>(t.sec)*1000000000LL+t.nanosec;}
+@@ -306,25 +315,41 @@
+     return true;
+   }
+   bool localCommand(const LocalCommand&c,double now) {
++    ++task_command_admission_.attempts;task_command_admission_.sequence=c.sequence;
++    task_command_admission_.at=now;task_command_admission_.source=c.source_stamp;
++    task_command_admission_.body_source=c.body_source_stamp;task_command_admission_.valid_until=c.valid_until;
++    const bool accepted=admitLocalCommand(c,now);
++    if(accepted)++task_command_admission_.accepted;
++    else if(task_command_admission_.reason==std::string_view("lease_deferred"))++task_command_admission_.deferred;
++    else ++task_command_admission_.rejected;
++    return accepted;
++  }
++  TaskCommandAdmission taskCommandAdmission()const{return task_command_admission_;}
++private:
++  bool admitLocalCommand(const LocalCommand&c,double now) {
++    const auto reject=[this](const char*why){task_command_admission_.reason=why;return false;};
+     if(!task_follower_||c.schema_version!=1||execution_.empty()||stopping_||!completeTask(c.version)||
+        !task(binding_,c.version)||c.execution_id!=execution_||c.control_epoch!=epoch_||
+-       c.sdk_session!=session_||c.sdk_arm_generation!=generation_||c.transport_mode!=mode_||
+-       c.sequence<=demand_seq_||c.lease_sequence<=task_resume_lease_floor_||
+-       c.body_frame!="d1max_loc_base_link"||!taskCommandTime(c,now)||
+-       sourceNs(c.source_stamp)<=task_command_source_floor_||sourceNs(c.body_source_stamp)<task_body_source_floor_||
+-       !twistFinite(c.velocity)||c.velocity.linear.z!=0.||c.velocity.angular.x!=0.||c.velocity.angular.y!=0.||
++       c.sdk_session!=session_||c.sdk_arm_generation!=generation_||c.transport_mode!=mode_)
++      return reject("task_identity_or_retired");
++    if(c.sequence<=demand_seq_||c.lease_sequence<=task_resume_lease_floor_)return reject("sequence_or_lease_floor");
++    if(c.body_frame!="d1max_loc_base_link")return reject("body_frame");
++    if(!taskCommandTime(c,now))return reject("original_time_contract");
++    if(sourceNs(c.source_stamp)<=task_command_source_floor_||sourceNs(c.body_source_stamp)<task_body_source_floor_)
++      return reject("source_order");
++    if(!twistFinite(c.velocity)||c.velocity.linear.z!=0.||c.velocity.angular.x!=0.||c.velocity.angular.y!=0.||
+        (kinematic_profile_!="holonomic_xyyaw"&&(c.velocity.linear.x<0.||c.velocity.linear.y!=0.))||
+-       (c.hold&&planarMotionNonzero(c.velocity))||mc_hold_||robot_hold_||
+-       secs(c.source_stamp)<=mc_resume_floor_||secs(c.source_stamp)<=robot_resume_floor_)
+-      return false;
++       (c.hold&&planarMotionNonzero(c.velocity)))return reject("velocity_contract");
++    if(mc_hold_||robot_hold_||secs(c.source_stamp)<=mc_resume_floor_||secs(c.source_stamp)<=robot_resume_floor_)
++      return reject("telemetry_hold_or_resume_floor");
+     // A newer explicit zero/HOLD is a stop fact, not a future permission.
+     // It retires older pending/nonzero work even if its referenced lease is
+     // still in transit. Invalid/stale/foreign packets above have no effect.
+     const bool zero=!planarMotionNonzero(c.velocity);
+     const auto command_source=sourceNs(c.source_stamp);
+-    if(!zero&&command_source<=task_zero_source_barrier_ns_)return false;
++    if(!zero&&command_source<=task_zero_source_barrier_ns_)return reject("zero_source_barrier");
+     if(zero){
+-      if(command_source<task_zero_source_barrier_ns_)return false;
++      if(command_source<task_zero_source_barrier_ns_)return reject("zero_source_barrier");
+       // An unknown lease must not poison accepted sequence floors, but the
+       // already observed zero has its OWN source-time retirement barrier.
+       // Otherwise an older delayed positive on an existing lease could revive
+@@ -340,7 +365,7 @@
+       // Only the first lease may be unknown. An explicit owner HOLD, revoke,
+       // or expired known owner remains a real barrier, not a reorder guess.
+       if(permit_seq_==0&&c.lease_sequence>0)return deferTaskCommand(c);
+-      return false;
++      return reject("owner_lease_unavailable");
+     }
+     const auto lease=std::find_if(task_leases_.begin(),task_leases_.end(),[&](const TaskLease&p){
+       return p.sequence==c.lease_sequence&&p.allowed&&!p.revoked&&
+@@ -349,7 +374,7 @@
+     });
+     if(lease==task_leases_.end()){
+       if(c.lease_sequence>permit_seq_)return deferTaskCommand(c);
+-      return false;
++      return reject("causal_owner_lease_missing");
+     }
+     demand_seq_=c.sequence;task_command_source_floor_=sourceNs(c.source_stamp);task_body_source_floor_=sourceNs(c.body_source_stamp);
+     task_command_=c;
+@@ -366,8 +391,10 @@
+     demand_.sequence=c.sequence;demand_.permit_sequence=c.lease_sequence;demand_.trajectory_id=c.trajectory_id;
+     demand_.source_stamp=c.source_stamp;demand_.body_source_stamp=c.body_source_stamp;demand_.valid_until=c.valid_until;
+     demand_.velocity=task_command_.velocity;demand_.hold=c.hold;
++    task_command_admission_.reason="accepted";
+     return true;
+   }
++public:
+   bool permit(const Permit&p,double now) {
+     if(task_follower_)return false;
+     if(execution_.empty()||p.execution_id!=execution_||p.control_epoch!=epoch_||!task(binding_,p.version)||
+@@ -917,6 +944,7 @@
+     if(!pending_task_command_||sourceNs(c.source_stamp)>=sourceNs(pending_task_command_->source_stamp)){
+       discardPendingTaskCommand();pending_task_command_=c;++task_command_reorder_deferred_;
+     }
++    task_command_admission_.reason="lease_deferred";
+     return false; // Deferred is not accepted or authorized to move.
+   }
+   bool taskCommandTime(const LocalCommand&c,double now)const {
+@@ -941,6 +969,9 @@
+         task_command_expiry_.body_source=task_command_.body_source_stamp;
+         task_command_expiry_.body_valid_until=task_command_.body_valid_until;
+         task_command_expiry_.valid_until=task_command_.valid_until;
++        task_command_expiry_.admission_sequence=task_command_admission_.sequence;
++        task_command_expiry_.admission_at=task_command_admission_.at;
++        task_command_expiry_.admission_reason=task_command_admission_.reason;
+       }
+       clearTaskCommand();phase_="holding";reason_="waiting_local_command";return geometry_msgs::msg::Twist{};
+     }
+@@ -1263,6 +1294,7 @@
+   bool task_have_command_=false,task_selected_=false;uint64_t task_resume_lease_floor_=0;
+   TaskCommandTiming selected_task_timing_;
+   TaskCommandExpiry task_command_expiry_;
++  TaskCommandAdmission task_command_admission_;
+   std::optional<LocalCommand>pending_task_command_;
+   uint64_t task_command_reorder_deferred_=0,task_command_reorder_completed_=0,task_command_reorder_discarded_=0;
+   std::int64_t task_zero_source_barrier_ns_=0;
+--- a/src/sdk_monitor_bridge.cpp
++++ b/src/sdk_monitor_bridge.cpp
+@@ -315,8 +315,8 @@
+         urgent_seen=urgent;const auto started=mono();
+         command_seen=execution_command_revision_.load(std::memory_order_acquire);
+         if(task_writer)command_deadline.observe(command_seen);
+-        // An urgent revoke can submit zero before the next normal slot, but
+-        // can never accelerate nonzero commands above the normal 20 Hz pace.
++        // Urgent zero is independent of the absolute nominal 20 Hz send
++        // phase. Ordinary OS jitter must not rebase that phase every cycle.
+         const bool urgent_only=task_writer?(urgent_wake||!command_deadline.normalDue(started)):started<deadline.next();
+         const bool no_fresh_command=task_writer&&!command_deadline.pending();
+         uint64_t selected_revision=command_seen;
+@@ -1108,6 +1108,7 @@
+     d1monitor::execution3::TaskCommandTiming mapping_timing;
+     d1monitor::execution3::TaskCommandReorderStats command_reorder;
+     d1monitor::execution3::TaskCommandExpiry command_expiry;
++    d1monitor::execution3::TaskCommandAdmission command_admission;
+     std::string mapping_reason,last_raw_zero_reason,mapping_execution_id;
+     uint64_t mapping_epoch=0,mapping_generation=0;
+     uint64_t mapped_zero_ticks=0,mapped_nonzero_ticks=0,raw_zero_ticks=0,raw_restarts=0,mapped_yaw_reversals=0;
+@@ -1115,6 +1116,7 @@
+       if(execution3_){execution_state=execution3_->state(wall());stop_trace=execution3_->report(wall());mc_capture_lower=execution3_->mcCaptureLowerBound();
+         command_reorder=execution3_->taskCommandReorderStats();
+         command_expiry=execution3_->taskCommandExpiry();
++        command_admission=execution3_->taskCommandAdmission();
+         mc_capture_upper=execution3_->mcCaptureUpperBound();mc_capture_bound=execution3_->mcCaptureDelayBound();
+         mc_source_fresh=execution3_->mcSourceFresh(wall(),mc_clock_epoch());}
+       v3_moves=execution_submitted_moves_;sdk_version=sdk_version_;
+@@ -1130,12 +1132,23 @@
+     if(command_expiry.count>last_command_expiry_trace_count_&&mono()-last_command_expiry_trace_at_>=1.) {
+       last_command_expiry_trace_count_=command_expiry.count;last_command_expiry_trace_at_=mono();
+       RCLCPP_INFO(get_logger(),
+-        "SDKCommandExpiry count=%lu execution=%s command_seq=%lu tick_unix=%.9f source_to_tick_ms=%.3f body_to_tick_ms=%.3f body_remaining_ms=%.3f command_remaining_ms=%.3f",
++        "SDKCommandExpiry count=%lu execution=%s command_seq=%lu tick_unix=%.9f source_to_tick_ms=%.3f body_to_tick_ms=%.3f body_remaining_ms=%.3f command_remaining_ms=%.3f last_admission_seq=%lu last_admission_unix=%.9f last_admission_reason=%s",
+         command_expiry.count,command_expiry.execution_id.c_str(),command_expiry.sequence,command_expiry.observed_at,
+         1000.*(command_expiry.observed_at-d1monitor::execution3::secs(command_expiry.source)),
+         1000.*(command_expiry.observed_at-d1monitor::execution3::secs(command_expiry.body_source)),
+         1000.*(d1monitor::execution3::secs(command_expiry.body_valid_until)-command_expiry.observed_at),
+-        1000.*(d1monitor::execution3::secs(command_expiry.valid_until)-command_expiry.observed_at));
++        1000.*(d1monitor::execution3::secs(command_expiry.valid_until)-command_expiry.observed_at),
++        command_expiry.admission_sequence,command_expiry.admission_at,command_expiry.admission_reason);
++    }
++    if(command_admission.attempts>last_command_admission_trace_count_&&mono()-last_command_admission_trace_at_>=1.) {
++      last_command_admission_trace_count_=command_admission.attempts;last_command_admission_trace_at_=mono();
++      RCLCPP_INFO(get_logger(),
++        "SDKCommandAdmission attempts=%lu accepted=%lu rejected=%lu deferred=%lu command_seq=%lu admission_unix=%.9f reason=%s source_to_admission_ms=%.3f body_to_admission_ms=%.3f remaining_original_deadline_ms=%.3f",
++        command_admission.attempts,command_admission.accepted,command_admission.rejected,command_admission.deferred,
++        command_admission.sequence,command_admission.at,command_admission.reason,
++        1000.*(command_admission.at-d1monitor::execution3::secs(command_admission.source)),
++        1000.*(command_admission.at-d1monitor::execution3::secs(command_admission.body_source)),
++        1000.*(d1monitor::execution3::secs(command_admission.valid_until)-command_admission.at));
+     }
+     if(stop_trace.mc_raw_stamp_ns&&stop_trace.stop_submitted) {
+       RCLCPP_INFO_THROTTLE(get_logger(),*get_clock(),1000,
+@@ -1353,6 +1366,7 @@
+   int execution_last_nonzero_yaw_sign_=0;
+   double last_mapping_trace_attempt_=0.,last_mapping_trace_receipt_=0.;
+   uint64_t last_command_expiry_trace_count_=0;double last_command_expiry_trace_at_=0.;
++  uint64_t last_command_admission_trace_count_=0;double last_command_admission_trace_at_=0.;
+   std::string execution_profile_sha256_; // Immutable profile actually admitted by this writer.
+   uint64_t execution_submitted_moves_=0;
+   d1monitor::SDKWriteTransactions execution_writes_;
+--- a/src/test_task_writer.cpp
++++ b/src/test_task_writer.cpp
+@@ -32,11 +32,11 @@
+   c.lease_sequence=lease_seq;c.sequence=seq;c.source_stamp=c.body_source_stamp=stamp(at);
+   c.body_valid_until=c.valid_until=afterNs(c.body_source_stamp,100000000LL);c.body_frame="d1max_loc_base_link";
+   c.velocity.linear.x=.2;c.transport_mode="isolated_mock";c.trajectory_id=1;return c;}
+-static Transport writer(bool planar_stop=false){Transport t("sdk","isolated_mock");t.configureTaskFollower(true);
++static Transport writer(bool planar_stop=false,double at=10.){Transport t("sdk","isolated_mock");t.configureTaskFollower(true);
+   t.configureMcCaptureBound(.02,"isolated_simulated_source_clock");
+   auto policy=testExecutionPolicy();if(planar_stop)policy.velocity_metric="planar_xy_with_vertical_guard_v1";
+   t.configureExecutionPolicy(policy,.8);t.configureBrakingModel(std::string(64,'c'),.3,.5,"holonomic_xyyaw");
+-  t.setSDKTransactions(0,false);assert(t.grant(request(),10.,healthy()).accepted);return t;}
++  t.setSDKTransactions(0,false);assert(t.grant(request(at),at,healthy()).accepted);return t;}
+ static void ready(Transport&t,double at=10.,uint64_t seq=1){assert(t.taskLease(lease(at,seq),at));assert(t.localCommand(command(at,seq,seq),at));}
+ static bool moving(const std::optional<geometry_msgs::msg::Twist>&v){return v&&planarMotionNonzero(*v);}
+ static bool sdkMoving(const SdkMoveFractions&v){return static_cast<float>(v.forward_back)!=0.f||
+@@ -44,19 +44,22 @@
+ 
+ struct DeliverySweep {
+   unsigned nonzero=0,zero_edges=0,expired=0,accepted=0;
+-  double minimum_spacing=std::numeric_limits<double>::infinity(),maximum_spacing=0.,maximum_body_age=0.;
++  double minimum_spacing=std::numeric_limits<double>::infinity(),maximum_spacing=0.,maximum_body_age=0.,maximum_source_age=0.;
+ };
+ // Drive the PRODUCTION scheduler and Transport at every input, watchdog and
+ // ORIGINAL command deadline, not only at producer receipts. The environment
+ // below supplies clock/callback events; it does not replace admission or copy
+ // any task, freshness, SDK mapping or scheduler decision into a toy transport.
+ static DeliverySweep sweepDelivery(double phase,double body_age,const std::vector<double>&delays,
+-    double lease_delay=0.,bool callbacks_first=true,unsigned samples=160){
++    double lease_delay=0.,bool callbacks_first=true,unsigned samples=160,
++    double command_horizon=.1,unsigned skip_every=0,
++    const std::vector<double>&wake_lateness={0.},double admission_delay=0.){
+   struct Event{double at;bool owner;uint64_t seq;};
+   std::vector<Event> events;events.reserve(samples+samples/2+2);
+   const auto end=10.+phase+samples*.05-.001;
+   for(uint64_t i=0;i<=samples/2+1;++i)events.push_back({10.+i*.1+lease_delay,true,i+1});
+-  for(uint64_t i=0;i<samples;++i)events.push_back({10.+phase+.001+i*.05+delays[i%delays.size()],false,i+1});
++  for(uint64_t i=0;i<samples;++i)if(!skip_every||(i+1)%skip_every)
++    events.push_back({10.+phase+.001+i*.05+delays[i%delays.size()],false,i+1});
+   std::stable_sort(events.begin(),events.end(),[callbacks_first](const Event&a,const Event&b){
+     if(a.at!=b.at)return a.at<b.at;
+     return callbacks_first?a.owner>b.owner:a.owner<b.owner;});
+@@ -70,7 +73,7 @@
+     if(deadline)*deadline=std::nextafter(*deadline,std::numeric_limits<double>::infinity());
+     const double wake=schedule.next(deadline);
+     const double input=next_event<events.size()?events[next_event].at:std::numeric_limits<double>::infinity();
+-    now=std::max(now,std::min(wake,input));if(now>end)break;
++    now=std::max(now,std::min(wake,input))+wake_lateness[(iterations-1)%wake_lateness.size()];if(now>end)break;
+     // Both orderings matter when a deadline and callback share a clock value.
+     const bool consume_inputs=callbacks_first||input<wake;
+     const auto deliver=[&]{while(next_event<events.size()&&events[next_event].at<=now){
+@@ -82,12 +85,20 @@
+         auto c=command(generated,event.seq,(event.seq-1)/2+1);
+         c.body_source_stamp=afterNs(c.source_stamp,-static_cast<int64_t>(std::llround(body_age*1e9)));
+         c.body_valid_until=c.valid_until=afterNs(c.body_source_stamp,100000000LL);
++        c.valid_until=earlier(c.valid_until,afterNs(c.source_stamp,
++          static_cast<int64_t>(std::llround(command_horizon*1e9))));
+         if(t.localCommand(c,event.at)){++revision;++result.accepted;}
+       }
+     }};
+     if(consume_inputs)deliver();
+     schedule.observe(revision);
+     const bool urgent_only=!schedule.normalDue(now),no_fresh_command=!schedule.pending();
++    const auto started=now;
++    // State/input callbacks are independently scheduled while the writer is
++    // late or preparing its vendor call. Select the latest original sample,
++    // exactly as execution_tick does after taking the state lock.
++    now+=admission_delay;
++    if(consume_inputs)deliver();
+     const auto selected_revision=revision;
+     auto output=t.tick(now,healthy());
+     if((urgent_only||no_fresh_command)&&moving(output))output.reset();
+@@ -96,13 +107,14 @@
+       if(positive){
+         const auto timing=t.selectedTaskCommandTiming();assert(timing.present);
+         result.maximum_body_age=std::max(result.maximum_body_age,now-secs(timing.body_source));
++        result.maximum_source_age=std::max(result.maximum_source_age,now-secs(timing.source));
+         if(last_nonzero>=0){result.minimum_spacing=std::min(result.minimum_spacing,now-last_nonzero);
+           result.maximum_spacing=std::max(result.maximum_spacing,now-last_nonzero);}
+         last_nonzero=now;submitted=now;++result.nonzero;primed=true;
+       }else if(primed&&moving_before)++result.zero_edges;
+       moving_before=positive;t.moveAttempted(positive);t.writeCalled(now,true,positive);
+     }
+-    schedule.complete(now,now,selected_revision,!urgent_only&&!no_fresh_command,submitted);
++    schedule.complete(started,now,selected_revision,!urgent_only&&!no_fresh_command,submitted);
+     if(!consume_inputs)deliver();
+   }
+   result.expired=t.taskCommandExpiry().count;assert(!t.stopping());return result;
+@@ -110,6 +122,16 @@
+ 
+ int main(){unsigned cases=0;
+   const auto run=[&](const char*name,const std::function<void()>&test){test();++cases;std::cout<<"PASS "<<name<<'\n';};
++  run("writer_persistent_wake_and_admission_lateness_does_not_accumulate_phase",[]{
++    for(const auto&late:std::vector<std::vector<double>>{{.0002},{.0003},{.002},{.0002,.001,.002,.0005}}){
++      const auto r=sweepDelivery(0.,.022,{.001},0.,true,1000,.1,0,late,.0002);
++      std::cout<<"persistent writer jitter: max_source_age_ms="<<r.maximum_source_age*1000.
++        <<", min_interval_ms="<<r.minimum_spacing*1000.<<", max_interval_ms="<<r.maximum_spacing*1000.
++        <<", sent="<<r.nonzero<<", expiries="<<r.expired<<'\n';
++      assert(r.accepted==1000&&r.nonzero==1000&&r.zero_edges==0&&r.expired==0);
++      assert(r.maximum_source_age<.005&&r.minimum_spacing>.048&&r.maximum_spacing<.054);
++    }
++  });
+   run("same_original_input_fixed_poll_phase_expires_but_fresh_command_delivery_does_not",[]{
+     auto before=writer(),after=writer();
+     assert(before.taskLease(lease(),10.)&&after.taskLease(lease(),10.));
+@@ -165,7 +187,9 @@
+           {.040,{.001,.003,.005}}}){
+         const auto result=sweepDelivery(phase,scenario.first,scenario.second,0.,callbacks_first);
+         assert(result.accepted==160&&result.nonzero>100&&result.zero_edges==0&&result.expired==0);
+-        assert(result.minimum_spacing>=.05-1e-10&&result.maximum_body_age<=.100);
++        // Nominal 20 Hz permits phase jitter, but a delayed send may never
++        // be followed by a sub-half-period catch-up call.
++        assert(result.minimum_spacing>=.025-1e-10&&result.maximum_body_age<=.100);
+         minimum_sends=std::min(minimum_sends,result.nonzero);
+         maximum_spacing=std::max(maximum_spacing,result.maximum_spacing);
+         maximum_body_age=std::max(maximum_body_age,result.maximum_body_age);
+@@ -191,6 +215,77 @@
+     std::cout<<"infeasible source budget: "<<result.zero_edges<<" true deadline zero edges / "
+       <<result.expired<<" original expiries; TTL unchanged\n";
+   });
++  run("recorded_short_lease_and_missing_input_produce_independent_zero_edges",[]{
++    // Latest real run: body is only ~22 ms old, but Native sometimes binds a
++    // command to a geometry deadline ~42 ms after its source. A 50 ms producer
++    // cannot bridge that interval even with an immediate event-driven writer.
++    const auto complete=sweepDelivery(0.,.022,{.001},0.,true,80);
++    const auto short_lease=sweepDelivery(0.,.022,{.001},0.,true,80,.042);
++    // An omitted intermediate command instead leaves the last 100 ms body
++    // deadline to expire at command source +78 ms. These are distinct causes.
++    const auto missing=sweepDelivery(0.,.022,{.001},0.,true,80,.1,8);
++    assert(complete.accepted==80&&complete.zero_edges==0&&complete.expired==0);
++    assert(short_lease.accepted==80&&short_lease.zero_edges>=79&&short_lease.expired>=79);
++    assert(missing.accepted==70&&missing.zero_edges>=9&&missing.expired>=9);
++    std::cout<<"recorded timing regimes: complete_expiries="<<complete.expired
++      <<", 42ms_lease_expiries="<<short_lease.expired<<", omitted_input_expiries="<<missing.expired<<'\n';
++  });
++  run("new_original_command_replaces_short_lease_before_next_send_slot",[]{
++    auto t=writer();d1monitor::CommandWriterDeadline schedule(10.,.05);
++    assert(t.taskLease(lease(),10.));auto c=command();c.valid_until=stamp(10.042);
++    assert(t.localCommand(c,10.001));schedule.observe(1);
++    assert(moving(t.tick(10.001,healthy())));schedule.complete(10.001,10.001,1,true,10.001);
++    auto newer=command(10.04,2);newer.valid_until=stamp(10.082);
++    assert(t.localCommand(newer,10.041));schedule.observe(2);
++    assert(!schedule.normalDue(10.042)); // Wait for the normal slot, not a zero.
++    assert(moving(t.tick(10.042,healthy()))&&t.taskCommandExpiry().count==0);
++    assert(schedule.normalDue(10.051)&&moving(t.tick(10.051,healthy())));
++    assert(t.selectedTaskCommandTiming().sequence==2&&t.taskCommandExpiry().count==0);
++  });
++  run("blocked_vendor_and_long_idle_keep_only_latest_without_replaying_or_resetting_phase",[]{
++    auto t=writer();ready(t);d1monitor::CommandWriterDeadline schedule(10.,.05);
++    schedule.observe(1);assert(moving(t.tick(10.,healthy())));
++    // The first call is blocked outside state. Its real ROS input callback
++    // accepts a later command while the vendor has not returned.
++    assert(t.localCommand(command(10.06,2),10.061));schedule.observe(2);
++    schedule.complete(10.,10.12,1,true,10.);
++    assert(schedule.pending()&&!schedule.normalDue(10.12));
++    assert(schedule.normalDue(10.150001)&&moving(t.tick(10.150001,healthy())));
++    assert(t.selectedTaskCommandTiming().sequence==2);
++    schedule.complete(10.150001,10.150001,2,true,10.150001);
++    assert(!schedule.pending());
++    // Source expiry still submits zero immediately, not at the next phase.
++    assert(!moving(t.tick(10.160001,healthy()))&&t.taskCommandExpiry().count==1);
++    schedule.complete(10.160001,10.160001,2,false);
++    assert(!t.taskCommandDeadline()&&!schedule.pending());
++    // Long idle does not enqueue old opportunities. A genuinely new granted
++    // writer identity and fresh input can use the idle opportunity once.
++    auto replacement=writer(false,20.001);ready(replacement,20.001);
++    schedule.observe(100);assert(schedule.normalDue(20.001));
++    assert(moving(replacement.tick(20.001,healthy())));
++    schedule.complete(20.001,20.002,100,true,20.001);
++    assert(!schedule.pending()&&!schedule.normalDue(20.025));
++    schedule.observe(101);assert(!schedule.normalDue(20.025)&&schedule.normalDue(20.051));
++  });
++  run("admission_diagnostics_preserve_rejection_and_capture_expiry_context",[]{
++    auto t=writer();ready(t);auto a=t.taskCommandAdmission();
++    assert(a.attempts==1&&a.accepted==1&&a.rejected==0&&std::string(a.reason)=="accepted");
++    auto late=command(10.02,2);assert(!t.localCommand(late,10.121));
++    assert(std::string(t.taskCommandAdmission().reason)=="original_time_contract");
++    assert(!moving(t.tick(10.122,healthy())));
++    const auto expiry=t.taskCommandExpiry();assert(expiry.sequence==1&&expiry.admission_sequence==2&&
++      expiry.admission_at==10.121&&std::string(expiry.admission_reason)=="original_time_contract");
++    auto fresh=command(10.13,3);assert(t.localCommand(fresh,10.131));
++    auto foreign=command(10.14,4);foreign.version.task_id="other";
++    assert(!t.localCommand(foreign,10.141));assert(std::string(t.taskCommandAdmission().reason)=="task_identity_or_retired");
++    assert(moving(t.tick(10.142,healthy()))&&t.selectedTaskCommandTiming().sequence==3);
++    assert(t.taskCommandExpiry().admission_sequence==2); // Immutable expiry fact.
++    auto waiting=command(10.15,5,2);assert(!t.localCommand(waiting,10.151));
++    assert(std::string(t.taskCommandAdmission().reason)=="lease_deferred");
++    assert(t.taskLease(lease(10.15,2),10.152));
++    a=t.taskCommandAdmission();assert(a.attempts==6&&a.accepted==3&&a.rejected==2&&a.deferred==1);
++    assert(std::string(a.reason)=="accepted"&&moving(t.tick(10.153,healthy())));
++  });
+   run("new_event_does_not_bypass_expiry_revoke_estop_or_foreign_task",[]{
+     for(int kind=0;kind<4;++kind){auto t=writer();ready(t);assert(moving(t.tick(10.,healthy())));
+       auto c=command(10.02,2);
+--- a/src/test_execution_scheduler.cpp
++++ b/src/test_execution_scheduler.cpp
+@@ -35,11 +35,11 @@
+   assert(std::abs(commands.next(10.051)-10.051)<1e-9);
+   commands.complete(10.051,10.0511,2,false);
+   commands.complete(10.052,10.060,2,true,10.058);
+-  commands.observe(3);assert(!commands.normalDue(10.1079)&&commands.normalDue(10.108001));
++  commands.observe(3);assert(!commands.normalDue(10.1019)&&commands.normalDue(10.102001));
+   // A new command arriving during a blocked vendor call is still pending;
+   // only the revision captured at selection is consumed.
+   commands.observe(4);commands.complete(10.108,10.201,3,true,10.109);
+-  assert(commands.next()<=10.201&&commands.normalDue(10.201));
++  assert(commands.pending()&&!commands.normalDue(10.201)&&commands.normalDue(10.202001));
+   invalid=false;try{commands.complete(10.201,10.202,4,false,10.201);}
+     catch(const std::invalid_argument&){invalid=true;}assert(invalid);
+   // A burst coalesces to one newest opportunity rather than replaying 1000
+@@ -50,6 +50,27 @@
+   assert(burst.pending()&&!burst.normalDue(20.04)&&burst.observed()==1001);
+   burst.complete(20.051,20.052,1001,true,20.051);
+   assert(!burst.pending()&&!burst.normalDue(20.10));
++  // Small execution lateness never accumulates against a fixed producer.
++  d1monitor::CommandWriterDeadline phase(30.,.05);phase.observe(1);
++  phase.complete(30.,30.0002,1,true,30.0002);
++  for(uint64_t i=1;i<=10000;++i){
++    const auto due=30.0002+i*.05;phase.observe(i+1);
++    const auto jitter=(i%4)*.0005;
++    assert(phase.normalDue(due+jitter+1e-10));
++    phase.complete(due+jitter+1e-10,due+jitter+.0002,i+1,true,due+jitter+.0001);
++    assert(!phase.normalDue(due+.0499)&&phase.normalDue(due+.050001));
++  }
++  // A 40 ms late send must skip the near 10 ms catch-up slot. Even a
++  // multi-second blocked vendor returns only a latest opportunity, no queue.
++  for(double late:{.04,.15,.5}){
++    d1monitor::CommandWriterDeadline skip(40.,.05);skip.observe(1);
++    skip.complete(40.,40.,1,true,40.);
++    skip.observe(100);const double actual=40.05+late;
++    skip.complete(actual,actual+.0001,100,true,actual);
++    assert(!skip.pending()&&!skip.normalDue(actual+.0249));
++    skip.observe(101);assert(skip.pending());
++    assert(skip.normalDue(actual+.0751));
++  }
+   // Force publication into the exact predicate-to-wait race window. The old
+   // atomic+notify form completes while the waiter still owns the wait mutex;
+   // the production helper must instead wait until condition_variable::wait

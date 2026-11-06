@@ -15,7 +15,7 @@ from pathlib import Path
 import subprocess
 from datetime import datetime, timezone
 from single_floor_entry_preflight import (elf_dependency_paths, verify_localization_dependencies,
-    startup_prefixes, capture_startup_closure)
+    startup_prefixes, capture_startup_closure, source_backed_python_cache)
 
 
 def elf_environment(path, native, native_environment):
@@ -64,6 +64,25 @@ def navigation_launch_bindings(app_root):
     )}
 
 
+def snapshot_source_files(root):
+    """Seal reproducible source inputs, not import-created Python bytecode.
+
+    Reading a frozen source snapshot for an offline comparison may recreate
+    __pycache__. Those derived files are not the deployed Python source and
+    must not make the unchanged runtime fail its next integrity preflight.
+    Keep all other files, including native objects and non-Python caches.
+    """
+    root = Path(root)
+    members = {str(path): path for path in root.rglob('*') if path.is_file()}
+    return (path for path in members.values() if not source_backed_python_cache(path, members))
+
+
+def without_python_caches(files):
+    """Filter the complete inventory, including legacy runtime input sources."""
+    return {path: digest for path, digest in files.items()
+            if not source_backed_python_cache(path, files)}
+
+
 def main():
     from ament_index_python.packages import get_package_prefix, get_package_share_directory
     from d1max_pct_planner import paths
@@ -80,7 +99,14 @@ def main():
     imported=Path(importlib.util.find_spec('d1max_pct_scan').origin).resolve()
     if release/'application/install' not in imported.parents:
         raise ValueError('source_or_old_application_import_not_a_release')
-    prepare(preflight)
+    purpose=descriptor.get('default_session_purpose','execution')
+    if purpose=='planning_only':
+        # Pure artifact verification, never an SDK connection. The live graph
+        # binds the real current SDK session only when explicitly started.
+        prepare(preflight,purpose=purpose,transport_mode='live',
+                expected_sdk_session='integrity-preflight-not-sdk')
+    else:
+        prepare(preflight,purpose=purpose)
     verify(preflight,seal_runtime=True)
     runtime=json.loads((preflight/'runtime_bundle.json').read_text())
     session=json.loads((preflight/'session.json').read_text())
@@ -115,8 +141,8 @@ def main():
     source_snapshot=release/'source_snapshot'
     if not source_snapshot.is_dir():
         raise ValueError('release_source_snapshot_missing')
-    for path in source_snapshot.rglob('*'):
-        if path.is_file():add(path)
+    for path in snapshot_source_files(source_snapshot):
+        add(path)
     # Live-only artifacts must be sealed even though no physical record exists
     # yet. No launch / SDK import is needed to inspect their bytes and linkage.
     for package,executables in {
@@ -159,6 +185,7 @@ def main():
         if result.returncode or 'not found' in result.stdout:
             raise ValueError('unresolved_release_library:'+path)
         for target in elf_dependency_paths(result.stdout):add(target)
+    files = without_python_caches(files)
     manifest=dict(schema=3,created_at=datetime.now(timezone.utc).isoformat(),
         activation=False,physical_acceptance=False,transport='rmw_zenoh_cpp',
         purpose='Integrity-sealed candidate, no deployment or motion authorization',

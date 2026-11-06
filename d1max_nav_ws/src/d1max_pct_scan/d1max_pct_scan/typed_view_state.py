@@ -5,8 +5,20 @@ does not require an already localized NavigationState (a circular dependency).
 The localization owner still validates sensor readiness before using the seed.
 """
 import math
+from dataclasses import dataclass
 
 from .atomic_projection_state import validate
+
+
+@dataclass(frozen=True)
+class TypedDisplayContext:
+    """Accepted localization identity and current output availability.
+
+    Identity can outlive a short source gap for displaying an immutable route.
+    It is never a pose sample, collision proof or permission to execute.
+    """
+    identity: tuple | None
+    ready: bool
 
 
 class TypedViewState:
@@ -33,6 +45,11 @@ class TypedViewState:
         if any(v < 0 for v in ages):
             return 0.
         return max(0., min(.4-ages[0], .4-ages[1], .1-ages[2], .4-(monotonic-self.received)))
+
+    def display_context(self, *, now_ns, monotonic):
+        return TypedDisplayContext(
+            self.state.identity if self.state is not None else None,
+            self.lease(now_ns=now_ns, monotonic=monotonic) > 0.)
 
 
 def seed_command(message, *, now, session_id, body_z, command_id):

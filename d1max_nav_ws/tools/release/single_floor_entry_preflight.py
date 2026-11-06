@@ -18,6 +18,34 @@ def sha(path):
     return digest.hexdigest()
 
 
+def source_backed_python_cache(path, files):
+    """Legacy seals may contain import-created caches, never source identities.
+
+    Only a normal .pyc/.pyo with its existing, separately sealed .py is
+    derived. Sourceless bytecode, symlinks, native libraries and other files
+    inside __pycache__ remain ordinary integrity inputs. Keep this stdlib-only
+    boundary rule identical in the Web and SDK entrypoints (cross-tested), so
+    neither imports unverified release code before its file check.
+    """
+    path = Path(path)
+    if not path.is_absolute() or path.suffix not in ('.pyc', '.pyo') or path.is_symlink():
+        return False
+    try:
+        source = (Path(importlib.util.source_from_cache(str(path.with_suffix('.pyc'))))
+                  if path.parent.name == '__pycache__' else path.with_suffix('.py'))
+    except ValueError:
+        # source_from_cache assumes no dots in the source stem and cannot
+        # decode pytest's versioned rewrite tag. Both are real Python caches.
+        # Match only those known tags, then retain the same sealed-source test.
+        match = re.fullmatch(
+            r'(.+)\.cpython-[0-9]+(?:-pytest-[0-9][A-Za-z0-9_.+-]*)?'
+            r'(?:\.opt-[A-Za-z0-9]+)?\.py[co]', path.name)
+        if path.parent.name != '__pycache__' or match is None:
+            return False
+        source = path.parent.parent/(match.group(1)+'.py')
+    return (str(source) in files and source.is_file() and not source.is_symlink())
+
+
 def elf_dependency_paths(output):
     """ldd addresses delimit paths; whitespace is valid inside a path."""
     for line in output.splitlines():
@@ -305,7 +333,11 @@ def verify(release):
     files = manifest.get('files')
     if manifest.get('schema') != 3 or not isinstance(files, dict) or not files:
         raise ValueError('release_manifest_schema')
+    ignored_caches = 0
     for path, expected in files.items():
+        if source_backed_python_cache(path, files):
+            ignored_caches += 1
+            continue
         if not Path(path).is_absolute() or sha(path) != expected:
             raise ValueError('release_changed:' + path)
     if str(descriptor_path) not in files:
@@ -344,7 +376,8 @@ def verify(release):
         raise ValueError('zenoh_runtime_not_sealed')
     ctypes.CDLL(str(rmw), mode=os.RTLD_LOCAL | os.RTLD_NOW)
     return dict(release=str(release), entry_module='d1max_pct_scan.single_floor_session',
-                verified_files=len(files), rmw='rmw_zenoh_cpp',
+                verified_files=len(files)-ignored_caches, ignored_runtime_caches=ignored_caches,
+                rmw='rmw_zenoh_cpp',
                 started_processes=False, sdk_connected=False, motion_authorized=False)
 
 

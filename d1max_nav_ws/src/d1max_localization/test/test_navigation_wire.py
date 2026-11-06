@@ -2,7 +2,7 @@ from copy import deepcopy
 import pytest
 from nav_msgs.msg import Odometry
 from d1max_localization.estimation_ros import stamp_time
-from d1max_localization.navigation_wire import body_pair_message
+from d1max_localization.navigation_wire import body_pair_message, local_body_message
 
 
 def values():
@@ -45,6 +45,39 @@ def test_latest_global_with_old_local_cannot_be_called_atomic_pair():
 def test_invalid_pose_not_encoded_as_good_state():
     item=values(); item['local'].pose.pose.position.z=float('nan')
     with pytest.raises(ValueError): body_pair_message(**item)
+
+
+def test_local_provider_uses_same_integer_imu_bound_as_consumers():
+    item = values()
+    item.pop('global_')
+    item.update(imu_stamp=10.1, extrapolation_sec=.1)
+    result = local_body_message(**item)
+    assert result.schema_version == 2 and result.usable
+    assert result.valid_until == stamp_time(10.3)
+    # A float consistency tolerance is not permission to exceed the source
+    # provenance bound by a few microseconds and make consumers disagree.
+    item['imu_stamp'] = 10.099995
+    with pytest.raises(ValueError):
+        local_body_message(**item)
+
+
+def test_pair_and_local_provider_agree_at_exact_provenance_bound():
+    item=values();item.update(posterior_stamp=9.8,imu_stamp=10.1,extrapolation_sec=.1)
+    pair=body_pair_message(**item)
+    local_item=dict(item);local_item.pop('global_')
+    local=local_body_message(**local_item)
+    assert pair.source_stamp==local.source_stamp
+    assert pair.posterior_stamp==local.posterior_stamp==stamp_time(9.8)
+    assert pair.imu_stamp==local.imu_stamp==stamp_time(10.1)
+    assert local.valid_until==stamp_time(10.3)
+
+
+@pytest.mark.parametrize('measurement', ['posterior_stamp','imu_stamp'])
+def test_pair_provider_rejects_overdue_provenance_at_original_output(measurement):
+    item=values()
+    if measurement=='posterior_stamp':item[measurement]=9.799999999
+    else:item.update(imu_stamp=10.099999999,extrapolation_sec=.1)
+    with pytest.raises(ValueError):body_pair_message(**item)
 
 
 def test_real_navigation_publisher_uses_estimator_identity_and_same_output_sample():

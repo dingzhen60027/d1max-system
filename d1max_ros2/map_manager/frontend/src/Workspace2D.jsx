@@ -16,7 +16,6 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Progress } from '@/components/ui/progress'
 import { Spinner } from '@/components/ui/spinner'
 const MapEditor = lazy(()=>import('./MapEditor.jsx'))
-const NavigationPanel = lazy(()=>import('./NavigationPanel.jsx'))
 const defaults={filter_enabled:false,statistical_mean_k:20,statistical_std_dev_mul:.5,radius:.3,radius_min_points:4,z_min:.4,z_max:1.5,resolution:.05,padding:.5,min_points_per_cell:1,background:'unknown'}
 async function api(path,options={}){
  const r=await fetch('/api/2d'+path,{headers:{'Content-Type':'application/json'},...options})
@@ -104,7 +103,7 @@ export default function Workspace2D({section,query,navigate}){
  useEffect(()=>{setSearch('');setChecked(new Set());setCompare(false)},[section])
  useEffect(()=>{setSelectedId(id=>versions.some(v=>v.id===id)?id:versions[0]?.id||'')},[data,section])
  useEffect(()=>setCompare(false),[selectedId])
- const selected=versions.find(v=>v.id===selectedId),active=data?.versions.find(v=>v.selected)
+ const selected=versions.find(v=>v.id===selectedId)
  const parent=selected?.parent_version?data?.versions.find(v=>v.id===selected.parent_version):null
  const run=async(path,options,success)=>{
   if(lock.current)return false
@@ -115,7 +114,7 @@ export default function Workspace2D({section,query,navigate}){
  const archive=(v)=>run('/versions/'+v.id,{method:'PATCH',body:JSON.stringify({archived:!v.archived})},v.archived?'地图已恢复':'地图已归档')
  const deletion=(ids)=>ask('永久删除 '+ids.length+' 个 2D 版本？','会真实删除这些已归档版本的 PGM、YAML、定位 PCD 和参数记录；源 PCD 和其他版本不会删除，操作无法恢复。','/archive/delete',post({version_ids:ids}),'所选归档已清理',true)
  const job=data?.job||{},blocked=busy||job.running||cloudBusy
- const headings={versions:'2D 地图版本',build:'从 PCD 生成 2D 地图',nav2:'Nav2（独立）',archived:'2D 归档'}
+ const headings={versions:'2D 地图版本',build:'从 PCD 生成 2D 地图',archived:'2D 归档'}
  return <div className="workspace2d">
   <header className="workspace-heading"><div><h1>{headings[section]}</h1></div><div className="heading-actions"><Button variant="outline" onClick={refresh}><RefreshCw/>重新扫描</Button>{section!=='build'&&<Button onClick={()=>navigate('/2d/build')}><Plus/>生成 2D 地图</Button>}</div></header>
   {error&&<Alert variant="destructive" className="workspace-notice" role="alert"><FileWarning/><AlertTitle>操作未完成</AlertTitle><AlertDescription>{error}</AlertDescription><Button variant="ghost" size="icon-xs" onClick={()=>setError('')} aria-label="关闭错误提示"><X/></Button></Alert>}
@@ -124,7 +123,7 @@ export default function Workspace2D({section,query,navigate}){
   {job.running&&<div className="grid-job"><Spinner/><div><strong>2D 地图生成中 · {job.progress||0}%</strong><span>{job.logs?.at(-1)}</span><Progress value={job.progress||0}/></div><Button variant="outline" disabled={busy||job.status==='cancelling'} onClick={()=>run('/cancel',post({}),'已请求取消；当前步骤完成后停止')}>{job.status==='cancelling'?'取消中':'取消生成'}</Button></div>}
   {!job.running&&['failed','interrupted'].includes(job.status)&&<Alert variant="destructive" className="workspace-notice"><FileWarning/><AlertTitle>上次生成未完成</AlertTitle><AlertDescription>{job.error}</AlertDescription></Alert>}
   {!data?<div className="page-loading"><Spinner/>加载中…</div>:section==='build'?<div className="grid-build-scroll"><GridBuildForm sources={sources} profiles={data.profiles} sourceQuery={query.get('source')} busy={blocked} onBuild={async body=>{if(await run('/build',post(body),'地图生成已启动'))navigate('/2d/versions')}} onSaveProfile={body=>run('/profiles',post(body),'YAML 方案已保存')}/></div>
-  :section==='nav2'?<Suspense fallback={<div className="page-loading"><Spinner/>加载 Nav2…</div>}><NavigationPanel version={active} navigate={navigate} otherBusy={blocked}/></Suspense>:<div className="grid-workspace">
+  :<div className="grid-workspace">
    <Card className="grid-version-list"><div className="resource-list-head"><strong>{section==='archived'?'已归档版本':'地图版本'}</strong><Badge variant="secondary">{versions.length}</Badge></div><div className="search"><Search/><Input aria-label="搜索2D地图" value={search} onChange={e=>setSearch(e.target.value)} placeholder="搜索版本名称"/></div>
     {section==='archived'&&<div className="grid-archive-tools"><label><Checkbox aria-label="全选2D归档" checked={list.length>0&&list.every(v=>checked.has(v.id))} onCheckedChange={v=>setChecked(v?new Set(list.map(x=>x.id)):new Set())}/>全选</label><Button variant="outline" size="sm" disabled={!checked.size||busy} onClick={()=>deletion([...checked].filter(id=>versions.some(v=>v.id===id)))}>删除所选</Button><Button variant="destructive" size="sm" disabled={!versions.length||busy} onClick={()=>deletion(versions.map(v=>v.id))}>全部删除</Button></div>}
     <ScrollArea className="grid-version-scroll">{list.map(v=><div className={'grid-version '+(v.id===selectedId?'selected':'')} key={v.id}>{section==='archived'&&<Checkbox aria-label={'选择 '+v.name} checked={checked.has(v.id)} onCheckedChange={value=>setChecked(current=>{const next=new Set(current);value?next.add(v.id):next.delete(v.id);return next})}/>}<button onClick={()=>setSelectedId(v.id)}><img src={v.map_preview_url} alt=""/><span><strong>{v.name}</strong><small>{v.width} × {v.height} · {v.parameters.resolution} m/格</small><span className="version-status">{v.selected?<Badge>当前选用</Badge>:<Badge variant="outline">{v.origin==='2d-edited'?'修订版':'候选版'}</Badge>}<time>{v.created_at?.slice(5,16).replace('T',' ')}</time></span></span></button></div>)}

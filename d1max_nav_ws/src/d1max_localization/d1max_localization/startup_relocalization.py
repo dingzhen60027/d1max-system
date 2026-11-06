@@ -1,7 +1,8 @@
 """Pure startup state/identity/time contract, separate from coarse registration.
 
-Never authorizes motion and never retries a global seed after a verified
-localization has existed. A manual seed always wins over an in-flight result.
+Never authorizes motion. A new LIO epoch requires a new, independently matched
+and continuously verified map seed; an old map anchor is never propagated across
+the reset. A manual seed always wins over an in-flight automatic result.
 """
 from collections import deque
 from dataclasses import dataclass
@@ -14,6 +15,7 @@ from .math_utils import Pose3, compose, inverse, interpolate_pose, pose_innovati
 
 @dataclass(frozen=True)
 class StartupConfig:
+    automatic_epoch_recovery: bool = True
     stationary_window_s: float = .6
     stationary_speed_mps: float = .08
     stationary_angular_rps: float = .12
@@ -24,7 +26,11 @@ class StartupConfig:
     retry_limit: int = 2
 
     def __post_init__(self):
+        if type(self.automatic_epoch_recovery) is not bool:
+            raise ValueError('invalid_startup_parameter:automatic_epoch_recovery')
         for key, value in vars(self).items():
+            if key == 'automatic_epoch_recovery':
+                continue
             if type(value) not in (int, float) or not math.isfinite(value) or value <= 0:
                 raise ValueError('invalid_startup_parameter:' + key)
         if (self.stationary_window_s < .5 or self.stationary_speed_mps > .15
@@ -47,6 +53,11 @@ class StartupRelocalization:
         self.seed_id = None
         self.seed_at = None
         self.ever_seeded = False
+        self.ever_localized = False
+        self.seed_epoch = None
+        self.localized_epoch = None
+        self.manual_seed_epoch = None
+        self.automatic_blocker = None
         self.attempts = 0
         self.map_sha256 = None
         self.result = None
@@ -59,11 +70,30 @@ class StartupRelocalization:
             return
         self.history.append((stamp, pose, float(np.linalg.norm(linear)), float(np.linalg.norm(angular))))
 
-    def reset_epoch(self,epoch):
-        if epoch<=self.epoch:return
-        self.history.clear();self.request=None
-        if self.ever_seeded:self.state=self.reason='manual_required_after_local_reset'
-        self.epoch=epoch
+    @property
+    def seeded_current_epoch(self):
+        return self.seed_epoch == self.epoch and self.seed_id is not None
+
+    def reset_epoch(self, epoch):
+        if type(epoch) is not int or epoch <= self.epoch:
+            return False
+        self.history.clear()
+        self.request = None
+        self.seed_id = self.seed_at = self.seed_epoch = None
+        self.manual_seed_epoch = None
+        self.result = None
+        self.attempts = 0  # A real epoch transition, never a timer/status retry.
+        self.epoch = epoch
+        if self.automatic_blocker:
+            self.state, self.reason = 'failed', self.automatic_blocker
+        elif not self.enabled:
+            self.state = self.reason = 'disabled'
+        elif self.ever_seeded and not self.config.automatic_epoch_recovery:
+            self.state = self.reason = 'manual_required_after_local_reset'
+        else:
+            self.state = 'waiting_lio'
+            self.reason = ('waiting_new_epoch_global_localization' if self.ever_seeded else self.state)
+        return True
 
     def stationary(self, now):
         c = self.config
@@ -80,8 +110,9 @@ class StartupRelocalization:
         if self.attempts>=self.config.retry_limit:
             self.fail('global_search_attempt_limit_manual_available')
             return None
-        if (not self.enabled or self.ever_seeded or self.request is not None
-                or self.state == 'failed' or not self.map_sha256
+        if (not self.enabled or self.seeded_current_epoch or self.request is not None
+                or self.state in ('failed', 'disabled', 'manual_required_after_local_reset')
+                or self.automatic_blocker or not self.map_sha256
                 or not 0 <= now - source_stamp <= self.config.max_source_age_s or not self.stationary(now)):
             return None
         source_pose = interpolate_pose([(round(t * 1e9), p) for t, p, _, _ in self.history],
@@ -96,7 +127,7 @@ class StartupRelocalization:
 
     def accept(self, result, now):
         r = self.request
-        if (r is None or self.ever_seeded or r['epoch'] != self.epoch
+        if (r is None or self.seeded_current_epoch or r['epoch'] != self.epoch
                 or result.get('request_id') != r['request_id']
                 or result.get('map_sha256') != self.map_sha256):
             return None
@@ -132,6 +163,9 @@ class StartupRelocalization:
     def mark_seed(self, seed_id, now, source):
         self.request = None
         self.ever_seeded = True
+        self.seed_epoch = self.epoch
+        if source == 'manual':
+            self.manual_seed_epoch = self.epoch
         self.seed_id, self.seed_at = seed_id, now
         self.state, self.reason = 'confirming', source + '_seed_requires_continuous_verification'
 
@@ -140,23 +174,35 @@ class StartupRelocalization:
             return
         if active_seed == self.seed_id == confirmed_seed and pose_valid:
             self.state = self.reason = 'ready'
+            self.ever_localized = True
+            self.localized_epoch = self.epoch
         elif now - self.seed_at > self.config.confirmation_timeout_s:
             self.fail('initial_pose_confirmation_timeout_manual_available')
 
-    def fail(self, reason):
+    def fail(self, reason, *, persistent=False):
         self.request = None
         self.state, self.reason = 'failed', reason
+        if persistent:
+            self.automatic_blocker = reason
 
-    def retry(self):
-        if not self.enabled or self.ever_seeded or self.state != 'failed' or self.attempts >= self.config.retry_limit:
+    def retry(self, *, automatic=False):
+        if (not self.enabled or self.automatic_blocker or self.state != 'failed'
+                or self.manual_seed_epoch == self.epoch or self.localized_epoch == self.epoch
+                or self.attempts >= self.config.retry_limit
+                or (automatic and self.attempts == 0)):
             return False
         self.request = None
+        self.seed_id = self.seed_at = self.seed_epoch = None
         self.state = self.reason = 'waiting_lio'
         return True
 
     def status(self):
         return dict(schema=1, state=self.state, reason=self.reason, attempts=self.attempts,
-            automatic_initialization_only=True, session_id=self.session_id, local_epoch=self.epoch,
+            automatic_initialization_only=not self.config.automatic_epoch_recovery,
+            automatic_epoch_recovery=self.config.automatic_epoch_recovery,
+            ever_localized=self.ever_localized, seed_epoch=self.seed_epoch,
+            attempt_scope='local_epoch', attempt_limit=self.config.retry_limit,
+            session_id=self.session_id, local_epoch=self.epoch,
             map_sha256=self.map_sha256, seed_id=self.seed_id,
             request_id=self.request['request_id'] if self.request else None,
             manual_initial_pose_available=True, result=self.result)

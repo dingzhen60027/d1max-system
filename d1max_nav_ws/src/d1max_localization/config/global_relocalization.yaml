@@ -13,5 +13,26 @@ lio_localizer:
     global_relocalization.registration.min_inlier_ratio: 0.60
     global_relocalization.registration.max_rmse_m: 0.20
     global_relocalization.registration.ambiguity_margin: 0.06
+    # Angle BETWEEN measured gravity directions, not robot pitch or floor slope.
+    # A robot pitched 45 degrees on stairs remains eligible when its measured
+    # tracking-frame gravity rotates consistently into the map's gravity.
+    global_relocalization.registration.gravity_max_error_rad: 0.5235987755982988
+    # This evidence applies ONLY to this exact original-coordinate PCD. Other
+    # maps must supply their own auditable contract; never assume arbitrary +Z.
+    # The loader checks every file hash, the recorded initial gravity, the
+    # PGO anchor transform and the byte-exact coordinate-preservation manifest.
+    global_relocalization.gravity.map_contract_json: >-
+      {"schema":1,"kind":"lio_pgo_preserved_records",
+       "map_sha256":"138e329bc1733ed1ea4d7dbe04b8dd545e3831a974a0d27464dbe3eff06f6da5",
+       "frame_id":"d1max_loc_map",
+       "evidence":{
+         "frontend_config":{"path":"/home/dndx/d1max_nav_ws/maps/runs/20260923_132601_150357_central_imu_faster_lio_sc_pgo_zenoh/config/frontend.yaml","sha256":"211d44daf5ef155f8bd2cd273c92b3a66972f1a84e59d0c95a75e6232021b3d6"},
+         "frontend_state":{"path":"/home/dndx/d1max_nav_ws/maps/runs/20260923_132601_150357_central_imu_faster_lio_sc_pgo_zenoh/frontend_state.csv","sha256":"b10f0f8c0045d82b2c5e3ea09a1a0b1f26dd3a543a426aa2e5a10d9af7a3268f"},
+         "pgo_odometry":{"path":"/home/dndx/d1max_nav_ws/maps/runs/20260923_132601_150357_central_imu_faster_lio_sc_pgo_zenoh/sc_pgo/odom_poses.txt","sha256":"813f5ed0dcaf40b6bd197bafed31a5788d2d3cb9fffbe5b8fa18ed44fc256f06"},
+         "pgo_optimized":{"path":"/home/dndx/d1max_nav_ws/maps/runs/20260923_132601_150357_central_imu_faster_lio_sc_pgo_zenoh/sc_pgo/optimized_poses.txt","sha256":"f0e47835d9795ee6677714f50bb418c8098491e8360636ae722bb482d487b1d7"},
+         "processed_manifest":{"path":"/home/dndx/智元四足机器人D1 Max二次开发文档资料包v0.1.0/d1max_ros2/map_manager/data/processed/20260923_141005_sc-pgo-0923-crossfloor-structure-v1_2c7218/manifest.json","sha256":"030e35f375d48181ce190345e9e706bcce661d7bb5c8c8b4c84f3a4ccc4b1afc"}}}
     global_relocalization.startup.stationary_window_s: 0.6
+    # Reuse the sole seed owner after a real LIO reset, with a fresh global
+    # match and fine-matcher confirmation. Never carry an old epoch anchor.
+    global_relocalization.startup.automatic_epoch_recovery: true
     global_relocalization.startup.confirmation_timeout_s: 15.0

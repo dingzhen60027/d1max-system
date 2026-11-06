@@ -19,6 +19,7 @@ import yaml
 from .live_runtime import child_failure_reason, file_sha256, stop_owned_children
 from .live_visualization import configure as configure_rviz
 from .robot_profile import load_robot_profile, scan_robot_parameters
+from .reference_geometry_contract import NATIVE_START_DISTANCE_M
 from .navigation_contract import (localization_contract, artifact_identity, seal_bundle,
     verify_bundle, deployment_evidence, verify_deployment, validate_perception_branch)
 from .live_view_reload import (VERSION as UI_RELOAD_VERSION, REQUEST_TTL,
@@ -135,7 +136,8 @@ def scan_parameters(cfg, session_id):
     profile = cfg.get('robot_profile_snapshot') or load_robot_profile(cfg['robot_profile'])
     if profile['engineering']['ground_exclusion_height_m'] <= params['grid_map.resolution']:
         raise ValueError('Ground exclusion must exceed the actual voxel height')
-    params.update(scan_robot_parameters(profile))
+    require_observed_free = cfg.get('scan_collision_policy', 'official') == 'observed_free'
+    params.update(scan_robot_parameters(profile, strict_layer_available=require_observed_free))
     params.update({
         'use_sim_time': False, 'fsm.navi_mode': 3,
         'fsm.require_tagged_reference': True, 'fsm.navigation_session_id': session_id,
@@ -143,10 +145,13 @@ def scan_parameters(cfg, session_id):
         'fsm.odom_timeout': .5, 'fsm.max_replan_interval': 1.,
         'fsm.reference_goal_xy_tolerance': .20, 'fsm.reference_goal_z_tolerance': .15,
         'fsm.reference_path_guidance': True, 'fsm.reference_path_z_offset': cfg['body_height'],
-        'fsm.reference_start_tolerance': 1., 'grid_map.frame_id': cfg['frame_id'],
+        # Same bounded route projection as ContinuousReference. The former
+        # independent 1 m sphere rejected valid 1.0--1.4 m lateral detours.
+        # This admits search input only; Native still checks its real connector.
+        'fsm.reference_start_tolerance': NATIVE_START_DISTANCE_M, 'grid_map.frame_id': cfg['frame_id'],
         'grid_map.sliding_map_frame_id': 'd1max_live_scan_' + session_id[:8],
         'grid_map.strict_input_frames': True, 'grid_map.maximum_cloud_pose_dt': .25,
-        'grid_map.require_observed_free': cfg.get('scan_collision_policy', 'official') == 'observed_free',
+        'grid_map.require_observed_free': require_observed_free,
         'grid_map.cloud_pose_max_age': timeout,
         'grid_map.preview_only': timeout > .5 or preview_heading,
         'grid_map.require_localization_context': True,

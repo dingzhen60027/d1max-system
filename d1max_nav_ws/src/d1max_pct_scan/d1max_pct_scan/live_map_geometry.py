@@ -29,7 +29,61 @@ def initial_goal_from_candidates(planning_xyz, original_xyz, source_indices, can
     return original_xyz[chosen].tolist()
 
 
-def map_surfaces(xyz, bridge, settings):
+def _display_converter(points, labels, bridge):
+    """Prepare model membership once, without changing the route bridge.
+
+    Display cells are independent. The legacy bridge may reject a batch for
+    one unsupported cell; recursively splitting it must not repeat thousands
+    of scalar model/polygon queries. Keep its exact conversions and failures,
+    including contiguous outside-model runs, but reuse point-local model work.
+    """
+    from .pointcloud_helpers.ground_path_bridge import ParametricGroundPathBridge
+    if not isinstance(bridge, ParametricGroundPathBridge) or not np.isfinite(points).all():
+        return lambda ids: bridge.to_localization_ground(points[ids], labels[ids]).xyz
+    model = bridge.stair_model
+    owner = np.full(len(points), -1, dtype=int)
+    overlaps = np.zeros(len(points), dtype=bool)
+    heights = np.zeros(len(points), dtype=float)
+    invalid = np.zeros(len(points), dtype=bool)
+    for number, surface in enumerate(model.surfaces):
+        ids = np.flatnonzero(model.contains(surface, points[:, :2]))
+        if not len(ids):
+            continue
+        ground = model.ground_at(surface, points[ids, :2])
+        keep = np.abs(ground-points[ids, 2]) <= surface['ground_replacement_band_m']
+        ids, ground = ids[keep], ground[keep]
+        overlaps[ids] |= owner[ids] >= 0
+        owner[ids], heights[ids] = number, ground
+    # Equal-height seams and ambiguous overlapping interiors retain the
+    # production scalar tie-break/error contract, not a new display heuristic.
+    for index in np.flatnonzero(overlaps):
+        try:
+            surface = bridge.model_surface_at(points[index])
+            heights[index] = model.ground_at(surface, points[index, :2])
+        except ValueError:
+            invalid[index] = True
+
+    def convert(ids):
+        if invalid[ids].any():
+            raise ValueError('ambiguous_stair_model_surface')
+        modeled = owner[ids] >= 0
+        if not modeled.any():
+            return bridge.original.to_localization_ground(points[ids], labels[ids]).xyz
+        result = points[ids].copy()
+        result[modeled, 2] = heights[ids[modeled]]
+        outside = np.flatnonzero(~modeled)
+        for run in np.split(outside, np.flatnonzero(np.diff(outside) > 1)+1):
+            if len(run):
+                selected = ids[run]
+                result[run] = bridge.original.to_localization_ground(
+                    points[selected], labels[selected]).xyz
+        return result
+    return convert
+
+
+def map_surfaces(xyz, bridge, settings, *, surface_kind='traversable'):
+    if surface_kind not in ('traversable', 'blocked'):
+        raise ValueError('Unsupported terrain display surface kind')
     points = np.asarray(xyz, dtype=float).reshape(-1, 3)
     if getattr(bridge,'projection_kind',None)=='source_identity':
         # Display real source-coordinate surfaces; no plane or inverse field.
@@ -52,11 +106,27 @@ def map_surfaces(xyz, bridge, settings):
     labels[stair & (points[:, 2] <= midpoint)] = 'stair_lower'
     labels[stair & (points[:, 2] > midpoint)] = 'stair_upper'
     output, indices = [], []
+    mapping = getattr(bridge, 'stair_mapping', None)
+    if mapping is not None and surface_kind == 'blocked':
+        # Regularization changes only measured stair support rows, not walls
+        # or railings in the protected ROI. Those blocked display cells retain
+        # their original coordinates; requiring a ground correspondence would
+        # silently hide the surrounding structure. This never admits free or
+        # unknown cells, and does not change any planner/collision input.
+        ids = np.flatnonzero(protected)
+        if len(ids):
+            distances = mapping._planning_tree.query(points[ids], workers=1)[0]
+            unchanged = ids[distances > mapping.radius+1e-9]
+            if len(unchanged):
+                output.append(points[unchanged].copy())
+                indices.append(unchanged)
+                labels[unchanged] = ''
+    prepared_convert = _display_converter(points, labels, bridge)
     def convert(ids):
         if not len(ids):
             return
         try:
-            result = bridge.to_localization_ground(points[ids], labels[ids])
+            result = prepared_convert(ids)
         except ValueError:
             # Grid samples are independent display cells, not a new route.
             # Split to isolate unsupported samples without weakening the bridge.
@@ -64,7 +134,7 @@ def map_surfaces(xyz, bridge, settings):
                 middle = len(ids)//2
                 convert(ids[:middle]); convert(ids[middle:])
             return
-        output.append(result.xyz)
+        output.append(result)
         indices.append(ids)
     for label in np.unique(labels[labels != '']):
         ids = np.flatnonzero(labels == label)
@@ -74,7 +144,7 @@ def map_surfaces(xyz, bridge, settings):
             else (np.empty((0, 3), dtype='<f4'), np.empty(0, dtype=int)))
 
 
-def build_layers(session):
+def build_layers(session, *, on_traversable=None):
     from .pointcloud_helpers.ground_path_bridge import GroundPathBridge
     from d1max_pct_planner.tomogram_map import TomogramMap
     from d1max_pct_planner.tomogram_display import surface_clouds
@@ -107,12 +177,9 @@ def build_layers(session):
     if len(xyz)+len(blocked) > 1000000:
         raise ValueError('Terrain visualization exceeds one-million-cell display budget')
     original, ids = map_surfaces(xyz, bridge, settings)
-    red, red_ids = map_surfaces(blocked, bridge, settings)
     metadata = {'frame_id': bridge.source_frame, 'planning_frame': bridge.planning_frame,
-        'resolution': tomogram.resolution, 'traversable_cells': len(original), 'blocked_cells': len(red),
-        'unsupported_omitted_cells': len(xyz)+len(blocked)-len(ids)-len(red_ids),
+        'resolution': tomogram.resolution, 'traversable_cells': len(original),
         'unsupported_traversable_cells': len(xyz)-len(ids),
-        'unsupported_blocked_cells': len(blocked)-len(red_ids),
         'source_tomogram_sha256': tomogram.sha256, 'ground_display_only': True,
         'estimated_inverse_not_tf': True, 'motion_enabled': False}
     floor = session.get('current_floor', 'floor1')
@@ -130,12 +197,20 @@ def build_layers(session):
             reviewed_removed_source_records=cleanup.get('removed_points', 0))
         if len(original):
             metadata['initial_goal_xyz']=original[len(original)//2].tolist()
-        return original,costs[ids],red,metadata
-    candidates = np.flatnonzero(np.abs(xyz[ids, 2]-bridge.floors[floor].reference_z_m)
-                               <= bridge.limits.max_ground_residual_m)
-    if len(candidates):
-        anchor = raw['anchors']['start' if floor == 'floor1' else 'goal']['xyz']
-        metadata['initial_goal_xyz'] = initial_goal_from_candidates(xyz, original, ids, candidates, anchor)
+    else:
+        candidates = np.flatnonzero(np.abs(xyz[ids, 2]-bridge.floors[floor].reference_z_m)
+                                   <= bridge.limits.max_ground_residual_m)
+        if len(candidates):
+            anchor = raw['anchors']['start' if floor == 'floor1' else 'goal']['xyz']
+            metadata['initial_goal_xyz'] = initial_goal_from_candidates(xyz, original, ids, candidates, anchor)
+    if on_traversable is not None:
+        # Send the complete green layer before building the optional red one.
+        # Unknown red counts are omitted; final metadata below stays unchanged.
+        on_traversable(original, costs[ids], dict(metadata))
+    red, red_ids = map_surfaces(blocked, bridge, settings, surface_kind='blocked')
+    metadata.update(blocked_cells=len(red),
+        unsupported_omitted_cells=len(xyz)+len(blocked)-len(ids)-len(red_ids),
+        unsupported_blocked_cells=len(blocked)-len(red_ids))
     return original, costs[ids], red, metadata
 
 

@@ -1,0 +1,40 @@
+{
+  "schema": "d1max.reviewed_flat_corridors/v1",
+  "source_map_sha256": "138e329bc1733ed1ea4d7dbe04b8dd545e3831a974a0d27464dbe3eff06f6da5",
+  "review": {
+    "confirmed_clear_flat_floor": true,
+    "statement": "对，走廊中间是平地，没有这些固定障碍",
+    "source": "User confirmation on 2026-10-14; central polygon extended once by 0.15m per edge to cover complete 0.1m PCT voxel footprints, explicitly authorized after boundary record inspection",
+    "nominal_polygon_xy": [[-21.5, 45.8], [-17.5, 45.0], [-17.6, 44.5], [-21.6, 45.3]],
+    "bounded_edge_extension_m": 0.15,
+    "additional_cell_footprint_margin_m": 0.075,
+    "cell_footprint_reason": "Runtime source-point audit found 10 peak cells whose centres were inside the reviewed polygon but whose highest contributing original returns lay just outside it. Cover one 0.1m PCT half-cell diagonal (rounded up to 0.075m) around the existing reviewed region; retain every wall/upper-structure and stair guard.",
+    "long_corridor_confirmation": "User confirmed the whole long corridor interior is flat without these fixed low obstacles; extend only along the already tested 37.830005m central segment, not other corridors or upper floors",
+    "long_corridor_nominal_halfwidth_m": 0.25,
+    "long_corridor_voxel_coverage_margin_m": 0.15,
+    "long_corridor_endpoint_margin_m": 0.15,
+    "residual_interval_reason": "Start at the existing 0.035m floor-snap boundary. The 2026-10-15 runtime audit found remaining 0.114m and 0.1434m ground peaks INSIDE the already reviewed flat corridor, beyond the former 0.10m cap. Extend only the bounded low-return band to 0.17m, retaining the same XY regions, observed lower support, wall/upper-structure protection and staircase exclusions.",
+    "scope": "static_planning_map_only",
+    "coordinate_relation": "Original localization/source XY; no localization PCD change, no TF, no real-time obstacle filtering"
+  },
+  "regions": [
+    {
+      "id": "reviewed_central_corridor_duplicate_layer",
+      "floor_id": "floor1",
+      "polygon_xy": [[-21.67650452162436, 46.06475678243656], [-17.235243217563458, 45.17650452162437], [-17.423495478375642, 44.23524321756344], [-21.86475678243655, 45.12349547837563]],
+      "residual_min_m": 0.035,
+      "residual_max_m": 0.17
+    },
+    {
+      "id": "reviewed_long_corridor_central_band",
+      "floor_id": "floor1",
+      "polygon_xy": [[6.346540400594871, 38.81856328862179], [-30.928019618342148, 47.53441028795746], [-30.71171728080135, 48.45945801579337], [6.562842738135672, 39.7436110164577]],
+      "residual_min_m": 0.035,
+      "residual_max_m": 0.17
+    }
+  ],
+  "stair_exclusion_xy": [
+    [[-34.0, 49.3], [-26.5, 49.3], [-26.5, 57.0], [-34.0, 57.0]],
+    [[-34.0, 47.0], [-27.0, 47.0], [-27.0, 56.0], [-34.0, 56.0]]
+  ]
+}

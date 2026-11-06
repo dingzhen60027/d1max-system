@@ -24,6 +24,40 @@ struct GridMapTestAccess {
     Eigen::Vector3i index;map.posToIndex(point,index);
     map.md_.occupancy_buffer_[map.toAddress(index)]=-1.01;
   }
+  static GridMap::Ptr d1BoxCorridor(bool walls=true) {
+    auto map=make();auto &p=map->mp_;
+    p.map_size_=p.map_voxel_num_.cast<double>()*.05;
+    p.map_origin_idx_={0,400,0};map->updateMapBoundaryFromIndex();
+    p.collision_model_="oriented_box";p.box_length_=.93;p.box_width_=.30;
+    p.body_below_=p.body_above_=p.planning_body_below_=p.planning_body_above_=.25;
+    std::fill(map->md_.occupancy_buffer_.begin(),map->md_.occupancy_buffer_.end(),-1.);
+    map->rebuildInflationOffsets();
+    if(walls)for(int y=320;y<480;++y) for(double x:{-.425,.425})
+      map->setOccupied({x,(y+.5)*.05,-.125});
+    return map;
+  }
+  static void strict(GridMap &map) {
+    map.mp_.require_observed_free_=true;map.mp_.planning_collision_policy_="observed_free";
+  }
+  static GridMap::Ptr d1NarrowEntrance() {
+    auto map=d1BoxCorridor(false);
+    map->mp_.box_length_=1.03;map->mp_.box_width_=.40;
+    // A deterministic fixture, not a claim about measured site clearance:
+    // 60 cm clear entrance opening into a landing, with the actual body model.
+    // The 40 cm-wide D1 fits when aligned; a diagonal start-to-goal chord does
+    // not. These are actual occupied cells, not a mocked collision callback.
+    for(int y=320;y<377;++y)for(double x:{-.325,.325})
+      map->setOccupied({x,(y+.5)*.05,-.125});
+    return map;
+  }
+  static GridMap::Ptr recordedStairWindow() {
+    auto map=d1BoxCorridor(false);
+    // The recorded odom endpoints, with a deterministic observed-free map,
+    // not a reconstruction of the unavailable live voxel/ray snapshot.
+    map->mp_.map_origin_idx_={820,-940,30};map->updateMapBoundaryFromIndex();
+    map->mp_.box_length_=.98;map->mp_.box_width_=.35;
+    map->rebuildInflationOffsets();return map;
+  }
 };
 
 namespace {
@@ -34,6 +68,12 @@ const std::vector<RecordedEndpoints> recorded{
   // scan.log replan 68 / 1790459836.552673583; another reference subsegment.
   {{.5932,1.7957,.0351},{.5389,3.6195,.0253},{.875,2.025,.025}}
 };
+const std::vector<std::pair<Point,Point>> recorded_short_slopes{
+  // 6855a7d.../scan.log:39158-39160, 21:56:23.239-240.
+  {{41.1496797,-47.015827,1.54355193},{41.1142381,-47.0091852,1.58992909}},
+  // Same session scan.log:39894-39896, 21:56:38.502-503.
+  {{41.1495375,-47.0074963,1.54566969},{41.1183636,-47.0028517,1.60574631}}
+};
 
 Point snap(const Point &point,const Point &a,const Point &b) {
   const Point centre=(a+b)*.5;
@@ -43,7 +83,7 @@ Point snap(const Point &point,const Point &a,const Point &b) {
 }
 
 void checkWholePath(GridMap &map,const std::vector<Point> &path,const Point &start,const Point &end) {
-  ASSERT_GE(path.size(),3U);
+  ASSERT_GE(path.size(),2U); // An exact collision-free straight edge needs no snapping point.
   EXPECT_LT((path.front()-start).norm(),1e-12);
   EXPECT_LT((path.back()-end).norm(),1e-12);
   // Include exact connectors, at four times finer spacing than production.
@@ -121,7 +161,7 @@ TEST(ReferenceLatticeConnector, HeadingUnsafeConnectorIsNotReplacedByFreeEndpoin
   ASSERT_EQ(map->getInflateOccupancy(c.start,connector_yaw),1);
   AStar planner;planner.initGridMap(map,{100,100,32});
   ASSERT_EQ(planner.AstarSearch(.05,c.start,c.end,false,true),ASTAR_RET::SUCCESS);
-  const auto path=planner.getPath();ASSERT_GE(path.size(),3U);
+  const auto path=planner.getPath();ASSERT_GE(path.size(),2U);
   EXPECT_GT((path[1]-nearest_free).norm(),.01);
   checkWholePath(*map,path,c.start,c.end);
 }
@@ -138,7 +178,7 @@ TEST(ReferenceLatticeConnector, FreeNearestCellWithBlockedLinkUsesTheSameBounded
   ASSERT_EQ(map->getInflateOccupancy(c.start,connector_yaw),1);
   AStar planner;planner.initGridMap(map,{100,100,32});
   ASSERT_EQ(planner.AstarSearch(.05,c.start,c.end,false,true),ASTAR_RET::SUCCESS);
-  const auto path=planner.getPath();ASSERT_GE(path.size(),3U);
+  const auto path=planner.getPath();ASSERT_GE(path.size(),2U);
   EXPECT_GT((path[1]-nearest).norm(),.01);
   checkWholePath(*map,path,c.start,c.end);
   // Reverse direction must validate the incoming connector too.
@@ -172,4 +212,385 @@ TEST(ReferenceLatticeConnector, StrictUnobservedSnapCellBesideObservedFreeEndpoi
   EXPECT_NE(exact->getInflateOccupancy(c.end,yaw),0);
   EXPECT_EQ(strict.AstarSearch(.05,c.start,c.end,false,true),ASTAR_RET::INIT_UNOBSERVED);
   EXPECT_TRUE(strict.getPath().empty());
+}
+
+TEST(ReferenceLatticeConnector, D1BoxRecordedAnchorsKeepExactEndpointsWithoutSnapTurn) {
+  // Actual 21:32:49 endpoint coordinates, with a deterministic synthetic
+  // corridor. This reproduces the discretization, not the missing real map.
+  auto map=GridMapTestAccess::d1BoxCorridor();
+  const Point a(-.0988,19.6841,-.1143),b(.0238,20.2757,-.1475);
+  const double yaw=std::atan2(b.y()-a.y(),b.x()-a.x());
+  EXPECT_EQ(map->getPlanningInflateOccupancy(a,yaw),0);
+  EXPECT_EQ(map->getPlanningInflateOccupancy(b,yaw),0);
+  // The 25 mm snapping displacement is NOT the robot's requested heading.
+  const Point snapped(-.075,19.675,-.125);
+  EXPECT_EQ(map->getPlanningInflateOccupancy(a,std::atan2(snapped.y()-a.y(),snapped.x()-a.x())),1);
+  for(bool reverse:{false,true}) {
+    AStar search;search.initGridMapFromEnvironment(map);
+    const Point start=reverse?b:a,end=reverse?a:b;
+    ASSERT_EQ(search.AstarSearch(.05,start,end,false,true),ASTAR_RET::SUCCESS);
+    const auto path=search.getPath();ASSERT_GE(path.size(),2U);
+    EXPECT_LT((path.front()-start).norm(),1e-12);
+    EXPECT_LT((path.back()-end).norm(),1e-12);
+    // Every returned edge, including the actual first/last edge, is checked
+    // at its own bearing. No forced endpoint yaw can hide a real collision.
+    for(std::size_t i=1;i<path.size();++i) {
+      const Point delta=path[i]-path[i-1];
+      const double edge_yaw=std::atan2(delta.y(),delta.x());
+      const int n=std::max(1,int(std::ceil(delta.norm()/.00625)));
+      for(int k=0;k<=n;++k)
+        EXPECT_EQ(map->getPlanningInflateOccupancy(path[i-1]+delta*(double(k)/n),edge_yaw),0);
+    }
+  }
+}
+
+TEST(ReferenceLatticeConnector, D1BoxSubvoxelReferenceDoesNotDriveToCentreAndBack) {
+  auto map=GridMapTestAccess::d1BoxCorridor();
+  const Point a(.0238,20.2757,-.1475),b(.0238,20.2837,-.1475);
+  for(bool reverse:{false,true}) {
+    AStar search;search.initGridMapFromEnvironment(map);
+    const Point start=reverse?b:a,end=reverse?a:b;
+    ASSERT_EQ(search.AstarSearch(.05,start,end,false,true),ASTAR_RET::SUCCESS);
+    const auto path=search.getPath();ASSERT_EQ(path.size(),2U);
+    EXPECT_LT((path.front()-start).norm(),1e-12);
+    EXPECT_LT((path.back()-end).norm(),1e-12);
+    EXPECT_NEAR((path.back()-path.front()).norm(),.008,1e-12);
+  }
+}
+
+TEST(ReferenceLatticeConnector, D1BoxTrueTurnStillUsesItsOwnBearing) {
+  auto map=GridMapTestAccess::d1BoxCorridor();
+  const Point a(-.0988,19.6841,-.1143),b(.1238,19.6841,-.1143);
+  // Both poses fit along the corridor. The requested real sideways heading
+  // does not: the body cannot be frozen along the old reference to pass it.
+  EXPECT_EQ(map->getPlanningInflateOccupancy(a,std::acos(-1.)*.5),0);
+  EXPECT_EQ(map->getPlanningInflateOccupancy(b,std::acos(-1.)*.5),0);
+  EXPECT_EQ(map->getPlanningInflateOccupancy(a,0.),1);
+  AStar search;search.initGridMapFromEnvironment(map);
+  EXPECT_EQ(search.AstarSearch(.05,a,b,false,true),ASTAR_RET::INIT_START_OCCUPIED);
+  EXPECT_TRUE(search.getPath().empty());
+}
+
+TEST(ReferenceLatticeConnector, D1BoxMidCorridorObstacleAndSealedWallCannotBeSkipped) {
+  const Point a(-.0988,19.6841,-.1143),b(.0238,21.2757,-.1475);
+  for(bool sealed:{false,true}) {
+    auto map=GridMapTestAccess::d1BoxCorridor();
+    if(sealed)for(int x=-8;x<8;++x) map->setOccupied({(x+.5)*.05,20.475,-.125});
+    else map->setOccupied({.025,20.475,-.125});
+    const double yaw=std::atan2(b.y()-a.y(),b.x()-a.x());
+    ASSERT_EQ(map->getPlanningInflateOccupancy(a,yaw),0);
+    ASSERT_EQ(map->getPlanningInflateOccupancy(b,yaw),0);
+    ASSERT_EQ(map->getPlanningInflateOccupancy({.025,20.475,-.125},yaw),1);
+    AStar search;search.initGridMapFromEnvironment(map);
+    const auto result=search.AstarSearch(.05,a,b,false,true);
+    if(result==ASTAR_RET::SUCCESS) {
+      ASSERT_FALSE(sealed);
+      // A nonsealed obstacle is allowed only through a real, fully checked
+      // detour. In particular the direct edge cannot ignore its middle.
+      const auto path=search.getPath();ASSERT_GT(path.size(),2U);
+      checkWholePath(*map,path,a,b);
+    } else EXPECT_TRUE(search.getPath().empty());
+  }
+}
+
+TEST(ReferenceLatticeConnector, D1BoxStrictUnknownRemainsUnknownAtExactPose) {
+  auto map=GridMapTestAccess::d1BoxCorridor();GridMapTestAccess::strict(*map);
+  const Point a(-.0988,19.6841,-.1143),b(.0238,20.2757,-.1475);
+  GridMapTestAccess::unknown(*map,a);
+  AStar search;search.initGridMapFromEnvironment(map);
+  EXPECT_EQ(search.AstarSearch(.05,a,b,false,true),ASTAR_RET::INIT_UNOBSERVED);
+  EXPECT_TRUE(search.getPath().empty());
+}
+
+TEST(ReferenceLatticeConnector, D1BoxMiddleUnknownCannotBeIgnoredByDirectEdge) {
+  auto map=GridMapTestAccess::d1BoxCorridor();GridMapTestAccess::strict(*map);
+  const Point a(-.0988,19.6841,-.1143),b(.0238,21.2757,-.1475);
+  for(int x=-8;x<8;++x)GridMapTestAccess::unknown(*map,{(x+.5)*.05,20.475,-.125});
+  const double yaw=std::atan2(b.y()-a.y(),b.x()-a.x());
+  ASSERT_EQ(map->getPlanningInflateOccupancy(a,yaw),0);
+  ASSERT_EQ(map->getPlanningInflateOccupancy(b,yaw),0);
+  ASSERT_EQ(map->getPlanningInflateOccupancy({.025,20.475,-.125},yaw),2);
+  AStar search;search.initGridMapFromEnvironment(map);
+  EXPECT_NE(search.AstarSearch(.05,a,b,false,true),ASTAR_RET::SUCCESS);
+  EXPECT_TRUE(search.getPath().empty());
+}
+
+TEST(ReferenceLatticeConnector, D1BoxBlockedDirectEdgeStillFindsNativeTurningDetour) {
+  auto map=GridMapTestAccess::d1BoxCorridor(false);
+  const Point a(-1.013,20.011,-.125),b(1.008,20.018,-.125);
+  map->setOccupied({.025,20.025,-.125});
+  AStar search;search.initGridMapFromEnvironment(map);
+  ASSERT_EQ(search.AstarSearch(.05,a,b,false,true),ASTAR_RET::SUCCESS);
+  const auto path=search.getPath();ASSERT_GT(path.size(),2U);
+  double detour=0.;for(const auto &p:path)detour=std::max(detour,std::abs(p.y()-20.));
+  EXPECT_GT(detour,.15);
+  checkWholePath(*map,path,a,b);
+}
+
+TEST(ReferenceLatticeConnector, D1ExactReferenceCancellationAndDeadlineNeverReusePath) {
+  auto map=GridMapTestAccess::d1BoxCorridor();
+  const Point a(-.0988,19.6841,-.1143),b(.0238,20.2757,-.1475);
+  using Clock=std::chrono::steady_clock;
+  const auto base=Clock::now();auto now=base;int calls=0;
+  auto budget=std::make_shared<scan_planner::SolveBudget>(std::chrono::milliseconds(400),[&]{return now;});
+  AStar search([&]{++calls;return now;});search.initGridMapFromEnvironment(map);search.setSolveBudget(budget);
+  ASSERT_EQ(search.AstarSearch(.05,a,b,false,true),ASTAR_RET::SUCCESS);
+  budget->cancel();
+  EXPECT_EQ(search.AstarSearch(.05,a,b,false,true),ASTAR_RET::SEARCH_ERR);
+  EXPECT_EQ(search.lastSearchReason(),"solve_cancelled");EXPECT_TRUE(search.getPath().empty());
+  const auto deadline=base+std::chrono::milliseconds(400);
+  budget=std::make_shared<scan_planner::SolveBudget>(std::chrono::milliseconds(400),[&]{return now;});
+  search.setSolveBudget(budget);now=deadline;
+  EXPECT_EQ(search.AstarSearch(.05,a,b,false,true),ASTAR_RET::SEARCH_ERR);
+  EXPECT_TRUE(search.lastSearchTimedOut());EXPECT_TRUE(search.getPath().empty());
+  EXPECT_EQ(budget->deadline(),deadline);
+}
+
+TEST(ReferenceLatticeConnector, D1SameCellVerticalReferenceIsNotInventedAsTraversable) {
+  auto map=GridMapTestAccess::d1BoxCorridor(false);AStar search;search.initGridMapFromEnvironment(map);
+  const Point a(.0238,20.2757,-.1475),b(.0238,20.2757,-.1375);
+  EXPECT_EQ(search.AstarSearch(.05,a,b,false,true),ASTAR_RET::SEARCH_ERR);
+  EXPECT_EQ(search.lastSearchReason(),"vertical_only_search_unsupported");
+  EXPECT_TRUE(search.getPath().empty());
+}
+
+TEST(ReferenceLatticeConnector, RecordedShortSlopeSameXYCellChecksExactEdgeBothDirections) {
+  for(const auto &[a,b]:recorded_short_slopes)for(bool reverse:{false,true}) {
+    auto map=GridMapTestAccess::recordedStairWindow();
+    Eigen::Vector3i ia,ib;map->posToIndex(a,ia);map->posToIndex(b,ib);
+    ASSERT_EQ(ia.head<2>(),ib.head<2>());ASSERT_NE(ia.z(),ib.z());
+    ASSERT_GT((a-b).head<2>().norm(),.03);
+    const Point start=reverse?b:a,end=reverse?a:b;
+    AStar search;search.initGridMapFromEnvironment(map);
+    ASSERT_EQ(search.AstarSearch(.05,start,end,false,true),ASTAR_RET::SUCCESS)
+        <<"reverse="<<reverse<<" reason="<<search.lastSearchReason();
+    ASSERT_EQ(search.getPath().size(),2U);
+    checkWholePath(*map,search.getPath(),start,end);
+    EXPECT_EQ(search.lastSearchReason(),"success");
+    // Legacy snapped search still cannot invent a vertical lattice edge.
+    EXPECT_EQ(search.AstarSearch(.05,start,end,false),ASTAR_RET::SEARCH_ERR);
+    EXPECT_EQ(search.lastSearchReason(),"vertical_only_search_unsupported");
+    EXPECT_TRUE(search.getPath().empty());
+  }
+}
+
+TEST(ReferenceLatticeConnector, RecordedShortSlopeMissingMiddleSupportCannotAliasIntoSuccess) {
+  const auto &[a,b]=recorded_short_slopes.back();
+  for(bool reverse:{false,true}) {
+    auto map=GridMapTestAccess::recordedStairWindow();
+    // The production attitude contract rejects an unavailable support patch.
+    // Endpoints alone are valid, so only the real whole-edge query sees it.
+    map->setQueryAttitudeProvider([&](const Point &p,double)->std::optional<Eigen::Vector2d> {
+      const double fraction=(p.z()-a.z())/(b.z()-a.z());
+      if(fraction>.2&&fraction<.8)return std::nullopt;
+      return Eigen::Vector2d::Zero();
+    });
+    const Point start=reverse?b:a,end=reverse?a:b;
+    const double yaw=std::atan2(end.y()-start.y(),end.x()-start.x());
+    ASSERT_EQ(map->getPlanningInflateOccupancy(start,yaw),0);
+    ASSERT_EQ(map->getPlanningInflateOccupancy(end,yaw),0);
+    ASSERT_EQ(map->getPlanningInflateOccupancy((a+b)*.5,yaw),2);
+    AStar search;search.initGridMapFromEnvironment(map);
+    EXPECT_EQ(search.AstarSearch(.05,start,end,false,true),ASTAR_RET::INIT_UNOBSERVED);
+    EXPECT_EQ(search.lastSearchReason(),"exact_reference_short_edge_blocked");
+    EXPECT_TRUE(search.getPath().empty());
+  }
+}
+
+TEST(ReferenceLatticeConnector, RecordedShortSlopeOccupiedEndpointsRemainOccupied) {
+  const auto &[a,b]=recorded_short_slopes.back();
+  for(bool reverse:{false,true}) {
+    auto map=GridMapTestAccess::recordedStairWindow();map->setOccupied((a+b)*.5);
+    const Point start=reverse?b:a,end=reverse?a:b;
+    AStar search;search.initGridMapFromEnvironment(map);
+    EXPECT_EQ(search.AstarSearch(.05,start,end,false,true),ASTAR_RET::INIT_START_OCCUPIED);
+    EXPECT_TRUE(search.getPath().empty());
+  }
+}
+
+TEST(ReferenceLatticeConnector, RecordedShortSlopeNativeMiddleBodyCollisionCannotAliasIntoSuccess) {
+  const auto &[a,b]=recorded_short_slopes.back();
+  const double forward_yaw=std::atan2(b.y()-a.y(),b.x()-a.x());
+  const Point heading(std::cos(forward_yaw),std::sin(forward_yaw),0.);
+  for(bool reverse:{false,true}) {
+    auto map=GridMapTestAccess::recordedStairWindow();
+    // A synthetic changing support attitude creates a swept-body collision
+    // between free exact endpoints. This uses a real occupied GridMap voxel,
+    // not an occupancy callback. Reverse travel keeps the same world tilt.
+    map->setQueryAttitudeProvider([&](const Point &p,double yaw)->std::optional<Eigen::Vector2d> {
+      const double fraction=std::clamp((p.z()-a.z())/(b.z()-a.z()),0.,1.);
+      return Eigen::Vector2d(.65*4.*fraction*(1.-fraction)*std::cos(yaw-forward_yaw),0.);
+    });
+    map->setOccupied((a+b)*.5-.21*heading+Point(0.,0.,.40));
+    const Point start=reverse?b:a,end=reverse?a:b;
+    const double yaw=std::atan2(end.y()-start.y(),end.x()-start.x());
+    ASSERT_EQ(map->getPlanningInflateOccupancy(start,yaw),0);
+    ASSERT_EQ(map->getPlanningInflateOccupancy(end,yaw),0);
+    ASSERT_EQ(map->getPlanningInflateOccupancy((a+b)*.5,yaw),1);
+    AStar search;search.initGridMapFromEnvironment(map);
+    EXPECT_EQ(search.AstarSearch(.05,start,end,false,true),ASTAR_RET::INIT_CONNECTOR_COLLISION);
+    EXPECT_EQ(search.lastSearchReason(),"exact_reference_short_edge_blocked");
+    EXPECT_TRUE(search.getPath().empty());
+  }
+}
+
+TEST(ReferenceLatticeConnector, RecordedShortSlopeTrueVerticalStillUnsupportedBothDirections) {
+  const Point a=recorded_short_slopes.back().first;
+  const Point b(a.x(),a.y(),recorded_short_slopes.back().second.z());
+  auto map=GridMapTestAccess::recordedStairWindow();AStar search;search.initGridMapFromEnvironment(map);
+  for(bool reverse:{false,true}) {
+    EXPECT_EQ(search.AstarSearch(.05,reverse?b:a,reverse?a:b,false,true),ASTAR_RET::SEARCH_ERR);
+    EXPECT_EQ(search.lastSearchReason(),"vertical_only_search_unsupported");
+    EXPECT_TRUE(search.getPath().empty());
+  }
+}
+
+TEST(ReferenceLatticeConnector, RecordedShortSlopeSharesCancellationAndOriginalDeadline) {
+  using Clock=std::chrono::steady_clock;
+  const auto &[a,b]=recorded_short_slopes.back();
+  for(bool cancel:{false,true}) {
+    auto map=GridMapTestAccess::recordedStairWindow();const auto base=Clock::now();auto now=base;
+    auto budget=std::make_shared<scan_planner::SolveBudget>(std::chrono::milliseconds(400),[&]{return now;});
+    map->setQueryAttitudeProvider([&](const Point &p,double)->std::optional<Eigen::Vector2d> {
+      const double fraction=(p.z()-a.z())/(b.z()-a.z());
+      if(fraction>.2&&fraction<.8) {
+        if(cancel)budget->cancel();else now=base+std::chrono::milliseconds(401);
+      }
+      return Eigen::Vector2d::Zero();
+    });
+    AStar search([&]{return now;});search.initGridMapFromEnvironment(map);search.setSolveBudget(budget);
+    EXPECT_EQ(search.AstarSearch(.05,a,b,false,true),ASTAR_RET::SEARCH_ERR);
+    EXPECT_EQ(search.lastSearchReason(),cancel?"solve_cancelled":"search_deadline_exceeded");
+    EXPECT_EQ(search.lastSearchTimedOut(),!cancel);EXPECT_TRUE(search.getPath().empty());
+    EXPECT_EQ(budget->deadline(),base+std::chrono::milliseconds(400));
+  }
+}
+
+TEST(ReferenceLatticeConnector, D1ZeroLengthReferenceCannotReturnAFalseCubicSeed) {
+  auto map=GridMapTestAccess::d1BoxCorridor();AStar search;search.initGridMapFromEnvironment(map);
+  const Point a(-.0988,19.6841,-.1143),b(.0238,20.2757,-.1475);
+  ASSERT_EQ(search.AstarSearch(.05,a,b,false,true),ASTAR_RET::SUCCESS);
+  for(const Point &end:{a,Point(a+Point(0.,5e-7,0.))}) {
+    EXPECT_EQ(search.AstarSearch(.05,a,end,false,true),ASTAR_RET::INIT_ERR);
+    EXPECT_EQ(search.lastSearchReason(),"zero_length_reference");
+    EXPECT_TRUE(search.getPath().empty());
+  }
+}
+
+TEST(ReferenceLatticeConnector, D1ExactDirectEdgeChecksCancellationAndOriginalBudgetWhileSampling) {
+  using Clock=std::chrono::steady_clock;
+  for(bool cancel:{false,true}) {
+    auto map=GridMapTestAccess::d1BoxCorridor();const auto base=Clock::now();auto now=base;int calls=0;
+    auto budget=std::make_shared<scan_planner::SolveBudget>(std::chrono::milliseconds(400),[&]{return now;});
+    AStar search([&] {
+      if(++calls==8) {if(cancel)budget->cancel();else now=base+std::chrono::milliseconds(401);}
+      return now;
+    });
+    search.initGridMapFromEnvironment(map);search.setSolveBudget(budget);
+    EXPECT_EQ(search.AstarSearch(.05,{-.0988,19.6841,-.1143},{.0238,20.2757,-.1475},false,true),ASTAR_RET::SEARCH_ERR);
+    EXPECT_GE(calls,8);EXPECT_TRUE(search.getPath().empty());
+    EXPECT_EQ(search.lastSearchTimedOut(),!cancel);
+    EXPECT_EQ(budget->deadline(),base+std::chrono::milliseconds(400));
+  }
+}
+
+TEST(ReferenceLatticeConnector, NarrowEntranceDoesNotRequireDiagonalChordPose) {
+  auto map=GridMapTestAccess::d1NarrowEntrance();
+  const Point a(.025,17.025,-.125),b(1.025,20.025,-.125);
+  const double chord=std::atan2(b.y()-a.y(),b.x()-a.x());
+  ASSERT_EQ(map->getPlanningInflateOccupancy(a,std::acos(-1.)*.5),0);
+  ASSERT_EQ(map->getPlanningInflateOccupancy(a,chord),1);
+  for(bool reverse:{false,true}) {
+    AStar search;search.initGridMapFromEnvironment(map);
+    const Point start=reverse?b:a,end=reverse?a:b;
+    auto budget=std::make_shared<scan_planner::SolveBudget>(std::chrono::milliseconds(400));
+    search.setSolveBudget(budget);
+    ASSERT_EQ(search.AstarSearch(.05,start,end,false,true,{!reverse,reverse}),ASTAR_RET::SUCCESS)
+        <<"reverse="<<reverse<<" reason="<<search.lastSearchReason();
+    checkWholePath(*map,search.getPath(),start,end);
+  }
+}
+
+TEST(ReferenceLatticeConnector, NarrowEntranceTrueOccupiedAndUnknownEndpointsRemainRejected) {
+  const Point a(.025,17.025,-.125),b(1.025,20.025,-.125);
+  for(bool strict:{false,true})for(bool reverse:{false,true}) {
+    auto map=GridMapTestAccess::d1NarrowEntrance();
+    if(strict) {GridMapTestAccess::strict(*map);GridMapTestAccess::unknown(*map,a);}
+    else map->setOccupied(a);
+    AStar search;search.initGridMapFromEnvironment(map);
+    const Point start=reverse?b:a,end=reverse?a:b;
+    EXPECT_NE(search.AstarSearch(.05,start,end,false,true,{true,true}),ASTAR_RET::SUCCESS);
+    EXPECT_TRUE(search.getPath().empty());
+  }
+}
+
+TEST(ReferenceLatticeConnector, NarrowEntranceFrozenBodyHeadingIsNotOverridden) {
+  auto map=GridMapTestAccess::d1NarrowEntrance();
+  const Point a(.025,17.025,-.125),b(1.025,20.025,-.125);
+  for(bool reverse:{false,true}) {
+    AStar search;search.initGridMapFromEnvironment(map);
+    const Point start=reverse?b:a,end=reverse?a:b;
+    search.setFrozenBodyYaw(std::atan2(end.y()-start.y(),end.x()-start.x()));
+    EXPECT_NE(search.AstarSearch(.05,start,end,false,true,{true,true}),ASTAR_RET::SUCCESS);
+    EXPECT_TRUE(search.getPath().empty());
+  }
+}
+
+TEST(ReferenceLatticeConnector, NarrowEntranceFailureNamesBlockedEndpointNotAdmissibleChord) {
+  auto map=GridMapTestAccess::d1NarrowEntrance();
+  const Point a(.025,17.025,-.125),b(1.025,20.025,-.125);
+  map->setOccupied(b);AStar search;search.initGridMapFromEnvironment(map);
+  EXPECT_EQ(search.AstarSearch(.05,a,b,false,true,{true,true}),ASTAR_RET::INIT_TARGET_OCCUPIED);
+  EXPECT_TRUE(search.getPath().empty());
+}
+
+TEST(ReferenceLatticeConnector, NarrowEntranceKeepsOriginalEndpointHeightPlane) {
+  auto map=GridMapTestAccess::d1NarrowEntrance();
+  const Point a(.025,17.025,-.125),b(1.025,20.025,.275);
+  for(bool reverse:{false,true}) {
+    AStar search;search.initGridMapFromEnvironment(map);
+    const Point start=reverse?b:a,end=reverse?a:b;
+    search.setSolveBudget(std::make_shared<scan_planner::SolveBudget>(std::chrono::milliseconds(400)));
+    ASSERT_EQ(search.AstarSearch(.05,start,end,false,true,{!reverse,reverse}),ASTAR_RET::SUCCESS);
+    const auto path=search.getPath();checkWholePath(*map,path,start,end);
+    // This is native endpoint-plane interpolation, not terrain validation.
+    // The admission fix cannot flatten stairs or move either reference end.
+    for(const auto& p:path) {
+      EXPECT_GE(p.z(),a.z()-.025-1e-12);EXPECT_LE(p.z(),b.z()+.025+1e-12);
+    }
+  }
+}
+
+TEST(ReferenceLatticeConnector, NarrowEntranceAdmissionSharesCancellationAndDeadline) {
+  using Clock=std::chrono::steady_clock;
+  for(bool cancel:{false,true}) {
+    auto map=GridMapTestAccess::d1NarrowEntrance();const auto base=Clock::now();auto now=base;int calls=0;
+    auto budget=std::make_shared<scan_planner::SolveBudget>(std::chrono::milliseconds(400),[&]{return now;});
+    AStar search([&] {
+      if(++calls==8) {if(cancel)budget->cancel();else now=base+std::chrono::milliseconds(401);}
+      return now;
+    });
+    search.initGridMapFromEnvironment(map);search.setSolveBudget(budget);
+    EXPECT_EQ(search.AstarSearch(.05,{.025,17.025,-.125},{1.025,20.025,-.125},false,true,{true,false}),ASTAR_RET::SEARCH_ERR);
+    EXPECT_GE(calls,8);EXPECT_TRUE(search.getPath().empty());
+    EXPECT_EQ(search.lastSearchTimedOut(),!cancel);
+    EXPECT_EQ(budget->deadline(),base+std::chrono::milliseconds(400));
+  }
+}
+
+TEST(ReferenceLatticeConnector, NarrowEntranceIntermediateAnchorsKeepLegacyRecoveryOrder) {
+  auto map=GridMapTestAccess::d1NarrowEntrance();
+  const Point a(.025,17.025,-.125),b(1.025,20.025,-.125);
+  for(bool reverse:{false,true}) {
+    AStar search;search.initGridMapFromEnvironment(map);
+    const Point start=reverse?b:a,end=reverse?a:b;
+    const auto expected=reverse?ASTAR_RET::INIT_TARGET_OCCUPIED:ASTAR_RET::INIT_START_OCCUPIED;
+    // Only the OTHER endpoint is immutable. This narrow intermediate anchor
+    // must still be offered to its owner's retreat/advance recovery first.
+    EXPECT_EQ(search.AstarSearch(.05,start,end,false,true,{reverse,!reverse}),expected);
+    EXPECT_TRUE(search.getPath().empty());
+    // All historical callers also retain the original selection policy.
+    EXPECT_EQ(search.AstarSearch(.05,start,end,false,true),expected);
+    EXPECT_TRUE(search.getPath().empty());
+  }
 }

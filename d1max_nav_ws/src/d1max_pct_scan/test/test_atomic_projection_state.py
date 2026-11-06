@@ -77,3 +77,26 @@ def test_value_snapshot_is_not_mutated_by_ros_object_reuse():
     m=message(); before=deepcopy(m); out=check(m)
     m.local_odometry.pose.pose.position.x=99.
     assert out.local_body.position[0] == before.local_odometry.pose.pose.position.x
+
+
+def test_output_lease_does_not_charge_valid_coast_and_delivery_twice():
+    m=message()
+    m.posterior_stamp=stamp(9_610_000_000)
+    m.imu_stamp=stamp(9_905_400_000)
+    m.extrapolation_sec=.0946
+    out=check(m,10_025_900_000)
+    assert out.source_ns==10_000_000_000
+    assert out.posterior_ns==9_610_000_000
+    assert out.imu_ns==9_905_400_000
+    assert out.valid_until_ns==10_100_000_000
+    assert check(m,10_100_000_000).valid_until_ns==out.valid_until_ns
+    with pytest.raises(ValueError):check(m,10_100_000_001)
+
+
+@pytest.mark.parametrize('field,original,coast',[
+    ('posterior_stamp',9_599_999_999,0.),
+    ('imu_stamp',9_899_999_999,.1),
+])
+def test_output_lease_does_not_waive_at_source_measurement_bounds(field,original,coast):
+    m=message();setattr(m,field,stamp(original));m.extrapolation_sec=coast
+    with pytest.raises(ValueError):check(m,10_000_000_000)

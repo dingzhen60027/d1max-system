@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 
 from d1max_pct_planner.tomogram_map import TomogramError, TomogramMap
-from d1max_pct_planner.tomogram_route import TomogramRoute
+from d1max_pct_planner.tomogram_route import TomogramRoute, expand_native_curve
 
 
 def scene():
@@ -31,6 +31,72 @@ def route_with_fake(tomogram, path, layers):
     route.tomogram, route.height_tolerance_m = tomogram, .08
     route.planner = FakeNative(path, layers)
     return route
+
+
+def retained_alias_curve(first=0, last=2):
+    data = np.zeros((5, 3, 9, 9), dtype=np.float32)
+    data[4] = 2.
+    tomo = TomogramMap(dict(data=data, resolution=.1, center=[0., 0.],
+        slice_h0=0., slice_dh=.5, selected_source_layers=[4, 5, 6]),
+        unknown_ceiling_policy='reject', max_ground_step_m=.17)
+    native = dict(path=np.array([[-.2, 0., 0.], [.2, 0., 0.]]),
+        layer_ids=[first, last], native_states=np.array([
+            [4., 0., 0., 2., 0., 0.], [4., 0., 0., 6., 0., 0.]]),
+        native_sample_dt=1.)
+    return tomo, native
+
+
+@pytest.mark.parametrize('first,last', [(0, 2), (2, 0)])
+def test_native_same_ground_retained_alias_skip_restores_checked_adjacent_identities(first, last):
+    tomo, native = retained_alias_curve(first, last)
+    path, layers, metadata = expand_native_curve(native, tomo)
+    assert layers[0] == first and layers[-1] == last
+    assert np.max(np.abs(np.diff(layers))) == 1
+    alias = np.flatnonzero(layers == 1)
+    assert len(alias) == 1
+    # All inserted ownership records share the exact native polynomial switch
+    # XY and literal measured ground Z. No map values or curve shape are moved.
+    np.testing.assert_allclose(path[alias[0]-1:alias[0]+2], [[0., 0., 0.]]*3, atol=1e-12)
+    checked = tomo.validate_path(path, layers)
+    assert checked['layer_transitions'] == 2
+    assert checked['cost_threshold'] == 20 and metadata['quintic_segments'] == 1
+    assert metadata['curve_validation'] == 'quintic_cell_boundary_roots_and_interval_interiors'
+
+
+@pytest.mark.parametrize('failure', ['blocked', 'unknown_ground', 'unknown_ceiling',
+    'low_ceiling', 'boundary_blocked', 'different_height', 'different_floor'])
+def test_retained_alias_restore_never_bridges_invalid_intermediate_or_different_surface(failure):
+    tomo, native = retained_alias_curve()
+    if failure == 'blocked':
+        tomo.cost[1, 4, 4] = 50.
+    elif failure == 'unknown_ground':
+        tomo.ground[1, 4, 4] = np.nan
+        tomo.ground_known[1, 4, 4] = False
+    elif failure == 'unknown_ceiling':
+        tomo.ceiling_known[1, 4, 4] = False
+    elif failure == 'low_ceiling':
+        tomo.headroom[1, 4, 4] = .1
+    elif failure == 'boundary_blocked':
+        # Move the exact switch onto a cell boundary. Both supercover sides
+        # must qualify, not only the rint-selected centre.
+        native['native_states'][:, 3] += .5
+        tomo.cost[1, 5, 4] = 50.
+    elif failure == 'different_height':
+        tomo.ground[1] = .01  # Still within normal .17 step, but NOT an alias.
+    else:
+        tomo.ground[2] = 3.
+    with pytest.raises(TomogramError) as rejected:
+        expand_native_curve(native, tomo)
+    assert rejected.value.code in ('invalid_layer_alias', 'nonadjacent_layer_transition')
+
+
+def test_direct_skipped_layer_path_is_still_rejected_even_when_slices_share_ground():
+    tomo, native = retained_alias_curve()
+    # The strict path validator and source-identity A* admission do not gain a
+    # generic skipped-layer fallback from the GPMP reconstruction repair.
+    with pytest.raises(TomogramError) as rejected:
+        tomo.validate_path(native['path'], native['layer_ids'])
+    assert rejected.value.code == 'nonadjacent_layer_transition'
 
 
 def test_layered_route_preserves_both_free_xyz_endpoints_and_requested_layers():

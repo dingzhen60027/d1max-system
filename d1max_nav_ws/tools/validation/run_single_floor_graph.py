@@ -51,6 +51,7 @@ def child(directory,duration,case):
     from d1max_navigation_bt_interfaces.action import Navigate
     from d1max_navigation_bt_interfaces.srv import ConfirmExecution
     from geometry_msgs.msg import TransformStamped
+    from builtin_interfaces.msg import Time
     from nav_msgs.msg import Path as NavPath
     from sensor_msgs.msg import PointCloud2,PointField
     from std_msgs.msg import String
@@ -352,10 +353,11 @@ def child(directory,duration,case):
                 self.counts['plant_global_state']+=1
                 self.state_sources['global'].append(dict(elapsed_s=wall-self.start_wall,source_ns=ns))
             if not missing_local:
-                self.local_state_pub.publish(LocalNavigationState(schema_version=1,session_id=m.session_id,
+                deadline=Time();stamp(deadline,ns+100_000_000)
+                self.local_state_pub.publish(LocalNavigationState(schema_version=2,session_id=m.session_id,
                     map_version_id=m.map_version_id,localization_epoch=m.localization_epoch,
                     localization_seed_id=m.localization_seed_id,local_odometry=m.local_odometry,
-                    source_stamp=m.source_stamp,posterior_stamp=m.posterior_stamp,imu_stamp=m.imu_stamp,
+                    source_stamp=m.source_stamp,posterior_stamp=m.posterior_stamp,imu_stamp=m.imu_stamp,valid_until=deadline,
                     usable=m.usable,reason=m.reason))
                 self.counts['plant_local_state']+=1
                 o=m.local_odometry

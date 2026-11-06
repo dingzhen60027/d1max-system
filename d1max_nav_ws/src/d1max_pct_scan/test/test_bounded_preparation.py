@@ -46,3 +46,54 @@ def test_worker_failure_is_a_versioned_result_not_an_owner_callback():
         worker.submit('candidate',1)
         assert take_when_done(worker).error=='ValueError:bad_support'
     finally:assert worker.close()
+
+
+def test_completion_wakes_owner_after_unlock_without_taking_its_result():
+    from threading import get_ident
+    owner=get_ident();woken=Event();threads=[]
+    worker=None
+    def notify():
+        # Taking the condition here would deadlock if notification ran while
+        # the producer still held it. The result still belongs to the owner.
+        with worker._cv:
+            assert worker._result.key=='candidate'
+        threads.append(get_ident());woken.set()
+    worker=LatestPreparation(lambda value:value*2,notify_ready=notify)
+    try:
+        worker.submit('candidate',7);assert woken.wait(1.)
+        assert threads and threads[0]!=owner
+        result=worker.take()
+        assert result.key=='candidate' and result.value==14
+        assert worker.take() is None
+    finally:assert worker.close()
+
+
+def test_invalidated_inflight_work_does_not_wake_or_overwrite_new_task():
+    started,release,woken=Event(),Event(),Event()
+    notifications=[]
+    def prepare(value):
+        if value=='old':started.set();assert release.wait(1.)
+        return value
+    def notify():notifications.append(True);woken.set()
+    worker=LatestPreparation(prepare,notify_ready=notify)
+    try:
+        worker.submit('old-task','old');assert started.wait(1.)
+        worker.invalidate();worker.submit('new-task','new');release.set()
+        assert woken.wait(1.)
+        result=worker.take()
+        assert result.key=='new-task' and result.value=='new'
+        assert len(notifications)==1
+    finally:release.set();assert worker.close()
+
+
+def test_notification_shutdown_failure_preserves_timer_fallback_and_worker():
+    called=Event()
+    def unavailable_executor():called.set();raise RuntimeError('context closed')
+    worker=LatestPreparation(lambda value:value,notify_ready=unavailable_executor)
+    try:
+        worker.submit('first',1);assert called.wait(1.)
+        assert take_when_done(worker).key=='first'
+        # A wake failure cannot kill the worker or strand later preparation.
+        worker.submit('second',2)
+        assert take_when_done(worker).key=='second'
+    finally:assert worker.close()

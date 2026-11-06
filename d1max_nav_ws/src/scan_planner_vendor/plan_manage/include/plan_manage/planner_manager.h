@@ -6,10 +6,15 @@
 
 #include <bspline_opt/bspline_optimizer.h>
 #include <bspline_opt/uniform_bspline.h>
+#include <bspline_opt/trajectory_timing.hpp>
 #include <plan_env/grid_map.h>
 #include <plan_manage/plan_container.hpp>
 #include <plan_manage/trajectory_collision.hpp>
 #include <plan_manage/candidate_adoption.hpp>
+#include <plan_manage/moving_splice.hpp>
+#include <plan_manage/final_endpoint_reseed.hpp>
+#include <plan_manage/reference_failure_diagnostics.hpp>
+#include <plan_manage/planning_support.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <traj_utils/planning_visualization.h>
 
@@ -38,6 +43,8 @@ namespace scan_planner
       std::uint64_t context_sequence{0};
       MeasuredBodyPose solve_body;
       bool single_segment{false};
+      Eigen::Vector3d solve_velocity{Eigen::Vector3d::Zero()};
+      std::optional<PlannedTrajectorySplice> splice;
     };
     // No subscriptions, timers or writable live GridMap are constructed here.
     void initSolveWorker(const SCANPlannerManager &owner);
@@ -53,15 +60,30 @@ namespace scan_planner
     bool planGlobalTrajWaypoints(const Eigen::Vector3d &start_pos, const Eigen::Vector3d &start_vel, const Eigen::Vector3d &start_acc,
                                  const std::vector<Eigen::Vector3d> &waypoints, const Eigen::Vector3d &end_vel, const Eigen::Vector3d &end_acc);
 
-    void initPlanModules(rclcpp::Node *node, PlanningVisualization::Ptr vis = nullptr);
-    void setLocalReference(const std::vector<Eigen::Vector3d> &points) { local_reference_ = points; }
+    void initPlanModules(rclcpp::Node *node, PlanningVisualization::Ptr vis = nullptr,
+                         rclcpp::CallbackGroup::SharedPtr map_callback_group = {});
+    void setLocalReference(const std::vector<Eigen::Vector3d> &points,bool final_endpoint_reseed=false,
+                           bool has_start_projection_connector=false,
+                           std::shared_ptr<const PlanningSupport> geometry_support={}) {
+      local_reference_=points;final_endpoint_reseed_=final_endpoint_reseed;
+      local_reference_has_projection_connector_=has_start_projection_connector;
+      local_reference_support_=std::move(geometry_support);
+    }
     void setMeasuredBodyPose(const MeasuredBodyPose &pose, const std::string &frame, double maximum_age) {
       measured_body_pose_=pose; measured_body_frame_=frame; measured_body_maximum_age_=maximum_age;
     }
     void setMeasuredBodyVelocity(const Eigen::Vector3d &velocity) { measured_body_velocity_=velocity; }
     void setMeasuredJoinSingleSegment(bool value) { measured_join_single_segment_=value; }
+    void setPlannedSplice(std::optional<PlannedTrajectorySplice> value) { planned_splice_=std::move(value); }
+    const std::optional<PlannedTrajectorySplice>& acceptedSplice()const{return accepted_splice_;}
     const std::optional<CandidateJoinEvidence> &acceptedJoinEvidence() const { return accepted_join_; }
+    const std::optional<PreviewCandidateGeometryEvidence>& acceptedPreviewGeometryEvidence() const {
+      return accepted_preview_geometry_;
+    }
+    const CandidateAcceptanceDiagnostics& candidateAcceptanceDiagnostics() const { return candidate_acceptance_; }
     const std::string &lastFailurePhase() const { return last_failure_phase_; }
+    // Pure planning diagnostics, not a motion-admission/body-yaw certificate.
+    const BoundaryTimingResult &lastTimingResult() const { return last_timing_result_; }
     // This only cancels an existing solve; transport/worker ownership must
     // deliver cancellation independently before claiming bounded ROS cancel.
     void cancelSolve() {
@@ -76,6 +98,7 @@ namespace scan_planner
     }
     bool hasPreviewHeadingContract() const { return accepted_heading_contract_.preview_only_enabled; }
     const SplineHeadingContract &acceptedHeadingContract() const { return accepted_heading_contract_; }
+    BodyHeadingPolicy configuredHeadingPolicy()const {return preview_heading_contract_.policy;}
     double previewCurveProgressTime() const { return preview_curve_progress_time_; }
     CurveCheckEvidence recheckPreviewTrajectory() {
       // A manually moved robot in no-motion preview still has real measured
@@ -100,6 +123,7 @@ namespace scan_planner
     // A preview candidate is not an incumbent until the caller's final source
     // gate succeeds. Failed/aged solves must not overwrite accepted geometry.
     bool commitPreviewCandidate();
+    bool commitPreviewCandidate(const SolveBudget::Ptr& budget);
     void discardPreviewCandidate() { pending_preview_candidate_.reset(); }
 
     PlanParameters pp_;
@@ -119,13 +143,25 @@ namespace scan_planner
         std::numeric_limits<double>::quiet_NaN())};
     bool measured_join_single_segment_{false};
     std::optional<CandidateJoinEvidence> accepted_join_;
+    std::optional<PlannedTrajectorySplice> planned_splice_,accepted_splice_;
+    bool planning_only_geometry_{false};
+    bool rolling_candidate_connection_{false};
+    PreviewCandidateAcceptancePolicy preview_candidate_policy_;
+    std::optional<PreviewCandidateGeometryEvidence> accepted_preview_geometry_;
+    CandidateAcceptanceDiagnostics candidate_acceptance_;
     std::string measured_body_frame_;
     double measured_body_maximum_age_{0.};
     std::vector<Eigen::Vector3d> local_reference_;
+    std::shared_ptr<const PlanningSupport> local_reference_support_;
+    bool local_reference_has_projection_connector_{false};
+    bool final_endpoint_reseed_{false};
     std::string last_failure_phase_{"failed_optimization"};
+    std::optional<ReferenceSearchFailureDiagnostic> reference_failure_diagnostic_;
+    std::chrono::steady_clock::time_point next_reference_failure_diagnostic_{};
     std::vector<Eigen::Vector3d> attempt_blocked_points_, attempt_detour_seed_;
     double reference_detour_anchor_margin_{.5};
     SplineHeadingContract preview_heading_contract_;
+    BoundaryTimingResult last_timing_result_;
     SplineHeadingContract attempt_heading_contract_, accepted_heading_contract_;
     double preview_curve_progress_time_{0.};
     struct PreviewCandidate {
@@ -133,6 +169,9 @@ namespace scan_planner
       SplineHeadingContract heading;
       rclcpp::Time solved_at;
       std::uint64_t context_sequence;
+      MeasuredBodyPose solve_body;
+      Eigen::Vector3d solve_velocity;
+      std::optional<PlannedTrajectorySplice> splice;
     };
     std::optional<PreviewCandidate> pending_preview_candidate_;
     /* main planning algorithms & modules */
@@ -143,11 +182,15 @@ namespace scan_planner
     int continuous_failures_count_{0};
 
     void updateTrajInfo(const UniformBspline &position_traj, const rclcpp::Time time_now);
-    bool checkDynamicFeasibility(UniformBspline position_traj);
+    bool checkDynamicFeasibility(UniformBspline position_traj,
+                                 const SolveBudget::Ptr& validation_budget = {},
+                                 const std::function<bool()>& validation_current = {});
     bool checkWholeTrajectoryCollision(UniformBspline &position_traj,
         std::size_t query_budget=200000, double wall_budget_seconds=0., bool diagnostic=true,
         double measured_curve_time=0., const SplineHeadingContract &heading_contract={},
-        CurveCheckEvidence *evidence=nullptr, int *query_failure_state=nullptr);
+        CurveCheckEvidence *evidence=nullptr, int *query_failure_state=nullptr,
+        MeasuredConnectionPolicy connection=MeasuredConnectionPolicy::CandidateAdmission,
+        double preview_connector_m=NoMotionPreviewConnectionPolicy::max_connector_m);
 
     void reparamBspline(UniformBspline &bspline, vector<Eigen::Vector3d> &start_end_derivative, double ratio, Eigen::MatrixXd &ctrl_pts, double &dt,
                         double &time_inc);

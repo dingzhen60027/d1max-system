@@ -61,7 +61,7 @@ def validate(config):
 
 
 def run(config_path, *, pcd_only=False):
-    from .flat_floor import condition_flat_floor
+    from .flat_floor import condition_flat_floor, unify_classified_floor_support
     started = time.monotonic()
     config_path = Path(config_path).resolve(strict=True)
     cfg = validate(load_config(config_path))
@@ -88,6 +88,11 @@ def run(config_path, *, pcd_only=False):
     if cfg.get('obstacle_cleanup') is not None:
         print(json.dumps({'stage': 'structural_obstacle_cleanup'}), flush=True)
         structural_indices, structural_stage = structural_cleanup(result, cfg['obstacle_cleanup'])
+    protected = np.zeros(len(cloud.xyz), dtype=bool)
+    if structural_stage is not None:
+        protected[structural_indices] = (structural_stage['wall_protected_mask']
+                                        | structural_stage['low_object_protected_mask'])
+    unify_classified_floor_support(result, structure_protected=protected, original_xyz=cloud.xyz)
     selected = np.flatnonzero(result['planning_mask'])
     clutter = np.flatnonzero(~result['keep_mask'])
     unsupported = np.flatnonzero(result['keep_mask'] & ~result['conditioning_mask'])

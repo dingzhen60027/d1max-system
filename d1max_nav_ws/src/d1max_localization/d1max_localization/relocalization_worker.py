@@ -33,7 +33,8 @@ def _run(connection, map_path, cache_dir, parameters, expected_map_sha256):
             request = connection.recv()
             if request is None:
                 return
-            result = index.search(request['points'], request['request_id'])
+            result = index.search(request['points'], request['request_id'], request.get('gravity'),
+                                  geometry_only=request.get('geometry_only', False))
             # All failures (including early insufficient-geometry/deadline
             # exits) must carry identity so the owner can retire the request.
             result.update(request_id=request['request_id'],map_sha256=index.map_sha256,
@@ -64,10 +65,11 @@ class RegistrationWorker:
         self.process.start()
         child.close()
 
-    def submit(self, points, request_id):
+    def submit(self, points, request_id, gravity=None, *, geometry_only=False):
         if self.state != 'ready':
             return False
-        self.connection.send(dict(points=points, request_id=request_id))
+        self.connection.send(dict(points=points, request_id=request_id, gravity=gravity,
+                                  geometry_only=geometry_only))
         self.request_id = request_id
         self.state = 'searching'
         self.deadline = time.monotonic() + self.config.search_timeout_s

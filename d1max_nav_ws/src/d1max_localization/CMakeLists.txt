@@ -36,6 +36,7 @@ if(BUILD_TESTING)
   find_package(ament_cmake_gtest REQUIRED)
   find_package(ament_cmake_pytest REQUIRED)
   ament_add_pytest_test(test_startup_relocalization test/test_startup_relocalization.py TIMEOUT 30)
+  ament_add_pytest_test(test_registration_gravity test/test_registration_gravity.py TIMEOUT 30)
   ament_add_pytest_test(test_lio_localizer test/test_lio_localizer.py TIMEOUT 30)
   ament_add_pytest_test(test_global_registration_native test/test_global_registration_native.py TIMEOUT 60
     ENV "OMP_NUM_THREADS=2" "OPENBLAS_NUM_THREADS=2")

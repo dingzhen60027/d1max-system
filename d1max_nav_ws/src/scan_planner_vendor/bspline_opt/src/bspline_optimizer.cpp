@@ -5,6 +5,7 @@
 #include <cmath>
 #include <bspline_opt/reference_path.hpp>
 #include <bspline_opt/whole_spline_collision.hpp>
+#include <bspline_opt/planar_curvature_cost.hpp>
 // using namespace std;
 
 namespace scan_planner
@@ -23,7 +24,18 @@ namespace scan_planner
     lambda_reference_ = get_double("optimization.lambda_reference", 0.0);
     if (!std::isfinite(lambda_reference_) || lambda_reference_ < 0.0)
       throw std::invalid_argument("lambda_reference must be finite and nonnegative");
+    lambda_planar_curvature_ = get_double("optimization.lambda_planar_curvature", 0.0);
+    preferred_turn_radius_ = get_double("optimization.preferred_turn_radius", 1.0);
+    if (!std::isfinite(lambda_planar_curvature_) || lambda_planar_curvature_ < 0.0 ||
+        !std::isfinite(preferred_turn_radius_) || preferred_turn_radius_ <= 0.0)
+      throw std::invalid_argument("planar curvature weight/radius must be finite and nonnegative/positive");
     dist0_ = get_double("optimization.dist0", -1.0);
+    soft_clearance_.distance=get_double("optimization.soft_clearance_distance",0.);
+    const double soft_budget=get_double("optimization.soft_clearance_budget_ms",30.);
+    if(!std::isfinite(soft_clearance_.distance)||soft_clearance_.distance<0.||soft_clearance_.distance>.5||
+        !std::isfinite(soft_budget)||soft_budget<1.||soft_budget>100.)
+      throw std::invalid_argument("invalid optional soft clearance distance/budget");
+    soft_clearance_.work_budget_ms=static_cast<int>(soft_budget);
     max_vel_ = get_double("optimization.max_vel", -1.0);
     max_acc_ = get_double("optimization.max_acc", -1.0);
     if (!node->has_parameter("optimization.order")) node->declare_parameter<int>("optimization.order", 3);
@@ -33,6 +45,53 @@ namespace scan_planner
   void BsplineOptimizer::setEnvironment(const GridMap::Ptr &env)
   {
     this->grid_map_ = env;
+  }
+
+  bool BsplineOptimizer::coupledCurveWithinSupport(UniformBspline& curve,
+      const SupportHeightCoupling& coupling,const SolveBudget::Ptr& budget) const {
+    if(!coupling.active())return true;
+    // This bounds only the new height parameterization, not movement or raw
+    // occupancy. A finite flight plane must never become an infinite lift
+    // surface. Query actual curve poses at native collision sampling density;
+    // unsupported output rejects this candidate, not the incumbent/task.
+    const auto result=checkWholeSplineCollision(curve,grid_map_->getResolution(),
+        [&](const Eigen::Vector3d& position,double) {
+          if(!solveAllowed(budget))return -1;
+          return coupling.contains(position,support_height_sampler_)?0:1;
+        },50000,heading_contract_);
+    return result.state==SplineCollisionState::Clear;
+  }
+
+  SoftClearanceReport BsplineOptimizer::improveTrajectoryClearance(UniformBspline& accepted,
+      const SoftClearanceAdmission& admission,const SoftClearanceWorkContext& context)
+  {
+    if(!grid_map_)return {};
+    // Lateral comfort probes intentionally test points outside the accepted
+    // curve. Their unknown-space diagnostics must not leak into the caller's
+    // final-collision failure classification, including early quality exits.
+    struct ClearProbeDiagnostics {
+      GridMap& map;
+      ~ClearProbeDiagnostics(){map.resetCollisionDiagnostics();}
+    } clear_probe_diagnostics{*grid_map_};
+    auto options=soft_clearance_;options.preferred_turn_radius=preferred_turn_radius_;
+    SupportHeightCoupling support_height;
+    if(support_height_sampler_) {
+      support_height.prepare(accepted.getControlPoint(),accepted.getInterval(),support_height_sampler_,
+          [this]{return solveAllowed(solve_budget_);});
+      if(!support_height.bound()) {
+        // Mixed planes have no single affine height increment. Retain the
+        // already accepted curve, not a shifted XY curve with stale heights.
+        SoftClearanceReport report;report.reason="mixed_support_baseline_preserved";return report;
+      }
+    }
+    const SoftClearanceAdmission constrained_admission=[&](UniformBspline& curve,const SolveBudget::Ptr& budget) {
+      return coupledCurveWithinSupport(curve,support_height,budget)&&admission(curve,budget);
+    };
+    return improveSoftClearance(accepted,grid_map_->getResolution(),options,
+        heading_contract_,solve_budget_,[this,&support_height](const Eigen::Vector3d& position,double yaw) {
+          if(!support_height.contains(position,support_height_sampler_))return -1;
+          return grid_map_->getPlanningInflateOccupancy(position,yaw);
+        },constrained_admission,context,support_height.active()?&support_height:nullptr);
   }
 
   double BsplineOptimizer::estimateSegmentYaw(const Eigen::Vector3d &from, const Eigen::Vector3d &to) const
@@ -84,6 +143,42 @@ namespace scan_planner
    * But I will merge then someday.*/
   std::vector<std::vector<Eigen::Vector3d>> BsplineOptimizer::initControlPoints(Eigen::MatrixXd &init_points, bool flag_first_init /*= true*/)
   {
+    if (flag_first_init) use_actual_stair_curve_=false;
+    return initControlPointsImpl(init_points,flag_first_init);
+  }
+
+  std::vector<std::vector<Eigen::Vector3d>> BsplineOptimizer::initControlPointsWithSpline(
+      Eigen::MatrixXd &init_points, double interval, bool flag_first_init)
+  {
+    if (!std::isfinite(interval) || interval<=0.) {
+      control_points_initialized_=false;
+      use_actual_stair_curve_=false;
+      last_failure_phase_="failed_curve_validation";
+      return {};
+    }
+    bspline_interval_=interval;
+    use_actual_stair_curve_=true;
+    return initControlPointsImpl(init_points,flag_first_init);
+  }
+
+  bool BsplineOptimizer::actualStairCurveClear(const Eigen::MatrixXd &points)
+  {
+    if (!use_actual_stair_curve_ || !grid_map_ ||
+        !grid_map_->hasQuerySupportHeightProvider() || !solveAllowed(solve_budget_) ||
+        order_!=3 || points.rows()!=3 || points.cols()<=2*order_ ||
+        !points.allFinite() || !std::isfinite(bspline_interval_) || bspline_interval_<=0.)
+      return false;
+    UniformBspline curve(points,3,bspline_interval_);
+    const auto collision=checkWholeSplineCollision(curve,grid_map_->getResolution(),
+        [this](const Eigen::Vector3d &position,double yaw) {
+          return queryOccupancy(position,yaw);
+        },50000,heading_contract_);
+    return collision.state==SplineCollisionState::Clear && solveAllowed(solve_budget_);
+  }
+
+  std::vector<std::vector<Eigen::Vector3d>> BsplineOptimizer::initControlPointsImpl(
+      Eigen::MatrixXd &init_points, bool flag_first_init)
+  {
     control_points_initialized_=false;
     if (flag_first_init) last_failure_phase_.clear();
     if (!solveAllowed(solve_budget_)) return {};
@@ -106,6 +201,7 @@ namespace scan_planner
     int same_occ_state_times = ENOUGH_INTERVAL + 1;
     bool occ, last_occ = false;
     int last_query_state=0;
+    bool actual_curve_checked=false;
     bool flag_got_start = false, flag_got_end = false, flag_got_end_maybe = false;
     int i_end = (int)init_points.cols() - order_; // Include the terminal third.
     for (int i = order_; i <= i_end; ++i)
@@ -117,6 +213,18 @@ namespace scan_planner
         double sample_yaw = estimateSegmentYaw(init_points.col(i - 1), init_points.col(i));
         last_query_state = queryOccupancy(sample_pt, sample_yaw);
         occ = last_query_state!=0;
+        // Control points are not body positions. Only when the polygon proxy
+        // reports a collision, query the actual cubic once using the same
+        // native footprint/heading contract as final admission. This avoids
+        // adding full-curve work to collision-free polygon iterations.
+        if (occ && !actual_curve_checked) {
+          actual_curve_checked=true;
+          if (actualStairCurveClear(init_points)) {
+            control_points_initialized_=true;
+            return {};
+          }
+          if (!solveAllowed(solve_budget_)) return {};
+        }
         // cout << setprecision(5);
         // cout << (a * init_points.col(i-1) + (1-a) * init_points.col(i)).transpose() << " occ1=" << occ << endl;
 
@@ -764,7 +872,12 @@ namespace scan_planner
 
   bool BsplineOptimizer::check_collision_and_rebound(void)
   {
+    if (!solveAllowed(solve_budget_)) {
+      force_stop_type_=STOP_FOR_ERROR;
+      return false;
+    }
     int last_query_state=0;
+    bool actual_curve_checked=false;
     const auto query=[&](const Eigen::Vector3d &point,double yaw) {
       last_query_state=queryOccupancy(point,yaw);return last_query_state;
     };
@@ -797,6 +910,14 @@ namespace scan_planner
 
       if (occ)
       {
+        if (!actual_curve_checked) {
+          actual_curve_checked=true;
+          if (actualStairCurveClear(cps_.points)) return false;
+          if (!solveAllowed(solve_budget_)) {
+            force_stop_type_=STOP_FOR_ERROR;
+            return false;
+          }
+        }
         flag_new_obs_valid = true;
 
         int j;
@@ -1006,6 +1127,9 @@ namespace scan_planner
   {
     if (!control_points_initialized_) return false;
     setBsplineInterval(ts);
+    if(order_==3) support_height_coupling_.prepare(cps_.points, ts, support_height_sampler_,
+        [this]{return solveAllowed(solve_budget_);});
+    else support_height_coupling_.reset();
 
     bool flag_success = rebound_optimize();
 
@@ -1019,10 +1143,15 @@ namespace scan_planner
 
     setControlPoints(init_points);
     setBsplineInterval(ts);
+    if(order_==3) support_height_coupling_.prepare(cps_.points, ts, support_height_sampler_,
+        [this]{return solveAllowed(solve_budget_);});
+    else support_height_coupling_.reset();
 
     bool flag_success = refine_optimize();
 
-    optimal_points = cps_.points;
+    // A failed refinement is not a candidate. In particular, callers may keep
+    // a previously checked curve in this output while trying optional retiming.
+    if (flag_success) optimal_points = cps_.points;
 
     return flag_success;
   }
@@ -1041,6 +1170,7 @@ namespace scan_planner
     auto t1 = t0;
     auto t2 = t0;
     int restart_nums = 0, rebound_times = 0;
+    bool corrected_rounding_retry_used = false;
     ;
     bool flag_force_return, flag_occ, success;
     new_lambda2_ = lambda2_;
@@ -1063,11 +1193,39 @@ namespace scan_planner
       lbfgs_params.mem_size = 16;
       lbfgs_params.max_iterations = 200;
       lbfgs_params.g_epsilon = 0.01;
+      // Preserve successful flat optimization exactly. A stair support scope binds
+      // this provider for both the owner and its immutable solve snapshot.
+      // Only the cubic interpolation direction changes; no failed result is
+      // accepted and the original solve budget and full checks still apply.
+      lbfgs_params.corrected_cubic_bound =
+          corrected_rounding_retry_used ||
+          (grid_map_ && grid_map_->hasQuerySupportHeightProvider());
 
       /* ---------- optimize ---------- */
       t1 = std::chrono::steady_clock::now();
       int result = lbfgs::lbfgs_optimize(variable_num_, q, &final_cost, BsplineOptimizer::costFunctionRebound, NULL, BsplineOptimizer::earlyExit, this, &lbfgs_params);
       if (!solveAllowed(solve_budget_)) return false;
+      if (result == lbfgs::LBFGSERR_ROUNDING_ERROR &&
+          !lbfgs_params.corrected_cubic_bound && !corrected_rounding_retry_used &&
+          control_points_initialized_ && force_stop_type_ == DONT_STOP)
+      {
+        // One numerical recovery for this complete Rebound call, not another
+        // per-collision/rebound restart. Keep the original absolute budget.
+        corrected_rounding_retry_used = true;
+        lbfgs_params.corrected_cubic_bound = true;
+        // A failed line search restores q to its last accepted iterate, but
+        // the callback may have left cps_ at a rejected trial. Fixed PVA
+        // columns lie outside this variable block and are never rewritten.
+        restoreOptimizationVariables(q, variable_num_);
+        result = lbfgs::lbfgs_optimize(variable_num_, q, &final_cost,
+            BsplineOptimizer::costFunctionRebound, NULL,
+            BsplineOptimizer::earlyExit, this, &lbfgs_params);
+        if (!solveAllowed(solve_budget_)) return false;
+      }
+      // An unsuccessful line search may leave cps_ at its rejected trial.
+      // For the constrained parameterization, publish/check the accepted q
+      // with exactly the same height mapping used by the cost function.
+      if (support_height_coupling_.active()) restoreOptimizationVariables(q, variable_num_);
       t2 = std::chrono::steady_clock::now();
       double time_ms = std::chrono::duration<double, std::milli>(t2 - t1).count();
       double total_time_ms = std::chrono::duration<double, std::milli>(t2 - t0).count();
@@ -1082,6 +1240,11 @@ namespace scan_planner
         flag_force_return = false;
 
         UniformBspline traj = UniformBspline(cps_.points, 3, bspline_interval_);
+        if(!coupledCurveWithinSupport(traj,support_height_coupling_,solve_budget_)) {
+          RCLCPP_WARN(rclcpp::get_logger("bspline_opt"),
+              "SupportHeightCoupling rejected rebound candidate outside bound finite plane; keep incumbent");
+          last_failure_phase_="failed_optimization";return false;
+        }
         const auto collision=checkWholeSplineCollision(traj,grid_map_->getResolution(),
             [this](const Eigen::Vector3d &position,double yaw) {
               return queryOccupancy(position,yaw);
@@ -1136,6 +1299,9 @@ namespace scan_planner
       }
       else
       {
+        last_failure_phase_ = result == lbfgs::LBFGSERR_ROUNDING_ERROR ?
+            "failed_rebound_linesearch_rounding" :
+            "failed_rebound_optimizer_" + std::to_string(result);
         RCLCPP_WARN(rclcpp::get_logger("bspline_opt"),
                     "Solver error. Return=%d, %s; skip this plan", result, lbfgs::lbfgs_strerror(result));
         // while (ros::ok());
@@ -1149,6 +1315,7 @@ namespace scan_planner
 
   bool BsplineOptimizer::refine_optimize()
   {
+    last_failure_phase_.clear();
     if (!solveAllowed(solve_budget_)) return false;
     iter_num_ = 0;
     int start_id = order_;
@@ -1170,11 +1337,28 @@ namespace scan_planner
       lbfgs_params.mem_size = 16;
       lbfgs_params.max_iterations = 200;
       lbfgs_params.g_epsilon = 0.001;
+      lbfgs_params.corrected_cubic_bound =
+          grid_map_ && grid_map_->hasQuerySupportHeightProvider();
 
       if (!solveAllowed(solve_budget_)) return false;
       force_stop_type_=DONT_STOP;
       int result = lbfgs::lbfgs_optimize(variable_num_, q, &final_cost, BsplineOptimizer::costFunctionRefine, NULL, BsplineOptimizer::earlyExit, this, &lbfgs_params);
       if (!solveAllowed(solve_budget_)) return false;
+      // L-BFGS restores q on a failed line search; the evaluation callback may
+      // still have left cps_ at a rejected trial. Match the existing Rebound
+      // numerical recovery once, using the SAME absolute solve budget and the
+      // accepted iterate. A support-scoped solve already uses this correction.
+      if (result == lbfgs::LBFGSERR_ROUNDING_ERROR &&
+          !lbfgs_params.corrected_cubic_bound && force_stop_type_ == DONT_STOP)
+      {
+        restoreOptimizationVariables(q, variable_num_);
+        lbfgs_params.corrected_cubic_bound = true;
+        result = lbfgs::lbfgs_optimize(variable_num_, q, &final_cost,
+            BsplineOptimizer::costFunctionRefine, NULL, BsplineOptimizer::earlyExit,
+            this, &lbfgs_params);
+        if (!solveAllowed(solve_budget_)) return false;
+      }
+      restoreOptimizationVariables(q, variable_num_);
       if (result == lbfgs::LBFGS_CONVERGENCE ||
           result == lbfgs::LBFGSERR_MAXIMUMITERATION ||
           result == lbfgs::LBFGS_ALREADY_MINIMIZED ||
@@ -1184,11 +1368,20 @@ namespace scan_planner
       }
       else
       {
+        last_failure_phase_ = result == lbfgs::LBFGSERR_ROUNDING_ERROR ?
+            "failed_refine_linesearch_rounding" :
+            "failed_refine_optimizer_" + std::to_string(result);
         RCLCPP_ERROR(rclcpp::get_logger("bspline_opt"),
                      "Solver error while refining: return=%d, %s", result, lbfgs::lbfgs_strerror(result));
+        return false;
       }
 
       UniformBspline traj = UniformBspline(cps_.points, 3, bspline_interval_);
+      if(!coupledCurveWithinSupport(traj,support_height_coupling_,solve_budget_)) {
+        RCLCPP_WARN(rclcpp::get_logger("bspline_opt"),
+            "SupportHeightCoupling rejected refine candidate outside bound finite plane; keep incumbent");
+        last_failure_phase_="failed_optimization";return false;
+      }
       double tm, tmp;
       traj.getTimeSpan(tm, tmp);
       double t_step = (tmp - tm) / ((traj.evaluateDeBoorT(tmp) - traj.evaluateDeBoorT(tm)).norm() / grid_map_->getResolution()); // Step size is defined as the maximum size that can passes through every grid.
@@ -1227,7 +1420,7 @@ namespace scan_planner
   void BsplineOptimizer::combineCostRebound(const double *x, double *grad, double &f_combine, const int n)
   {
 
-    memcpy(cps_.points.data() + 3 * order_, x, n * sizeof(x[0]));
+    restoreOptimizationVariables(x, n);
 
     /* ---------- evaluate cost and gradient ---------- */
     double f_smoothness, f_distance, f_feasibility;
@@ -1251,16 +1444,22 @@ namespace scan_planner
       f_combine += lambda_reference_ * referenceSampleCost(cps_.points, reference_path_samples_, reference_gradient);
       grad_3D += lambda_reference_ * reference_gradient;
     }
-    // Ground robot: rebound changes XY only. Keep the supplied reference's
-    // height profile; an obstacle is never avoided by lifting the body over it.
-    grad_3D.row(2).setZero();
+    if (lambda_planar_curvature_ > 0.0)
+    {
+      Eigen::MatrixXd curvature_gradient;
+      f_combine += lambda_planar_curvature_ * planarCurvatureCost(cps_.points, preferred_turn_radius_, curvature_gradient);
+      grad_3D += lambda_planar_curvature_ * curvature_gradient;
+    }
+    // Preserve the supplied residual to a bound stair plane as XY changes;
+    // otherwise retain SCAN's exact XY-only behavior. Never optimize free Z.
+    support_height_coupling_.pullback(grad_3D);
     memcpy(grad, grad_3D.data() + 3 * order_, n * sizeof(grad[0]));
   }
 
   void BsplineOptimizer::combineCostRefine(const double *x, double *grad, double &f_combine, const int n)
   {
 
-    memcpy(cps_.points.data() + 3 * order_, x, n * sizeof(x[0]));
+    restoreOptimizationVariables(x, n);
 
     /* ---------- evaluate cost and gradient ---------- */
     double f_smoothness, f_fitness, f_feasibility;
@@ -1287,7 +1486,13 @@ namespace scan_planner
       f_combine += lambda_reference_ * referenceSampleCost(cps_.points, reference_path_samples_, reference_gradient);
       grad_3D += lambda_reference_ * reference_gradient;
     }
-    grad_3D.row(2).setZero(); // Preserve the ground reference during refinement too.
+    if (lambda_planar_curvature_ > 0.0)
+    {
+      Eigen::MatrixXd curvature_gradient;
+      f_combine += lambda_planar_curvature_ * planarCurvatureCost(cps_.points, preferred_turn_radius_, curvature_gradient);
+      grad_3D += lambda_planar_curvature_ * curvature_gradient;
+    }
+    support_height_coupling_.pullback(grad_3D);
     memcpy(grad, grad_3D.data() + 3 * order_, n * sizeof(grad[0]));
   }
 

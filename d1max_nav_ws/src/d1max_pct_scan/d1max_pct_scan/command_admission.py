@@ -14,10 +14,10 @@ class CommandAdmission:
 
     def expire(self,now_ns):
         for key,message in tuple(self.pending.items()):
-            if (now_ns-stamp_ns(message.source_stamp)>100_000_000
+            if (now_ns-stamp_ns(message.source_stamp)>self.core.command_pipeline_bound_ns
                     or now_ns>=stamp_ns(message.valid_until)):
                 del self.pending[key]
-        if self.recent is not None and (now_ns-stamp_ns(self.recent.source_stamp)>100_000_000
+        if self.recent is not None and (now_ns-stamp_ns(self.recent.source_stamp)>self.core.command_pipeline_bound_ns
                 or now_ns>=stamp_ns(self.recent.valid_until)):
             self.recent=None
 

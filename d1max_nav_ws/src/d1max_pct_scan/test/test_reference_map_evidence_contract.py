@@ -7,7 +7,7 @@ from copy import deepcopy
 import pytest
 
 from d1max_pct_scan.continuous_reference_node import ReferenceCallbacks
-from test_continuous_reference_node import harness,admit
+from test_continuous_reference_node import harness,admit,curve_validation
 from test_continuous_reference_transport import state,envelope
 from d1max_pct_scan.continuous_reference_transport import nanoseconds,set_stamp
 
@@ -69,7 +69,20 @@ def test_observed_native_rejections_and_provenance_are_preserved(failure):
     assert not callback.map_fresh()
 
 
-@pytest.mark.parametrize('age',[0.,-.1,.500000001,float('nan'),float('inf')])
+def test_runtime_600ms_budget_is_accepted_without_renewing_sources_or_body():
+    callback,clock=configured(.6)
+    original=evidence(callback,clock,557_000_000)
+    assert callback.on_map(original) and callback.map_fresh()
+    assert callback.transport.freshness==.4
+    assert callback.map_evidence_age_ns==600_000_000
+    clock.ns+=43_000_000
+    assert callback.map_fresh()
+    clock.ns+=1
+    assert callback.on_map(original) and not callback.map_fresh()
+    assert callback.map_report==original
+
+
+@pytest.mark.parametrize('age',[0.,-.1,.600000001,float('nan'),float('inf')])
 def test_reference_cannot_configure_more_than_native_evidence_contract(age):
     with pytest.raises(ValueError,match='map_evidence_age_exceeds_native_contract'):
         configured(age)
@@ -94,7 +107,7 @@ def test_stricter_receipt_budget_does_not_replace_raw_map_source_budget():
     assert callback.transport.freshness==.3
 
 
-def test_stricter_body_delivery_budget_is_bound_to_original_proposal():
+def test_stricter_original_proposal_bounds_native_admission_not_late_geometry_receipt():
     from d1max_planning_interfaces.msg import ReferenceReceipt
     callback,clock=strict_callback();callback.on_route(envelope())
     proposal=deepcopy(callback.proposal)
@@ -104,7 +117,13 @@ def test_stricter_body_delivery_budget_is_bound_to_original_proposal():
         source_stamp=proposal.source_stamp,valid_until=proposal.valid_until,
         accepted=True,transport_mode='isolated_mock')
     clock.ns+=300_000_001;clock.mono+=.300000001
-    assert not callback.on_receipt(receipt)
+    late_admission=deepcopy(receipt)
+    set_stamp(late_admission.source_stamp,clock.ns)
+    set_stamp(late_admission.valid_until,clock.ns+300_000_000)
+    assert not callback.on_receipt(late_admission)
+    # The native receipt is a durable original admission FACT, not a sensor or
+    # permission lease. Delivery delay does not erase that fact or re-date it.
+    assert callback.on_receipt(receipt)
     assert callback.transport.accepted is None
     assert callback.proposal==proposal  # Rejection never re-dates the candidate.
     with pytest.raises(ValueError,match='source_and_monotonic_receipt_must_both_be_fresh'):
@@ -120,6 +139,9 @@ def test_stricter_debug_admission_uses_same_budget_without_renewing_map_evidence
         checked_map_source_stamp_ns=clock.ns,checked_body_source_stamp_ns=clock.ns)
     debug.header.frame_id='d1max_loc_odom';set_stamp(debug.header.stamp,clock.ns)
     assert callback.on_debug(debug)
+    # A diagnostic alone was never a native collision certificate. Keep this
+    # stricter-clock fixture on the real typed-proof admission path.
+    assert callback.on_validation(curve_validation(callback,clock,debug=debug))
     assert callback.tick()['spline_visual_valid']
     if expired=='header':
         clock.ns+=300_000_001

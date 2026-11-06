@@ -80,6 +80,15 @@ def test_accepted_debug_requires_matching_valid_spline_not_just_native_success()
     assert state.active.plan_id == 7 and state.pending is None
 
 
+@pytest.mark.parametrize('phase', ['waiting_reference_extension', 'waiting_reference_support',
+                                  'waiting_side_target'])
+def test_native_wait_reason_survives_display_contract(phase):
+    state = LocalDebugGate()
+    assert receive(state, event=snapshot(valid=False, phase=phase)) == 'clear'
+    assert state.phase == phase
+    assert state.active is None and state.pending is None
+
+
 def test_success_after_valid_spline_draws_immediately_and_is_not_a_goal_inference():
     state = LocalDebugGate()
     assert receive(state) == 'draw'

@@ -18,9 +18,14 @@ def fixture(monkeypatch):
         return {'xyz': moved, 'keep_mask': np.ones(len(points), bool),
                 'conditioning_mask': np.ones(len(points), bool), 'statistics': {},
                 'floor_z': points[:, 2], 'floor_support_mask': np.ones(len(points), bool),
+                'floor_snap_mask': np.zeros(len(points), bool),
+                'metric_support_added_mask': np.zeros(len(points), bool),
                 'anchors': {'xy': poses[:, :2], 'z': poses[:, 2]}}
     monkeypatch.setattr(runner, 'condition_flat_floor', condition)
-    monkeypatch.setattr(runner, 'structural_cleanup', lambda *_: None)
+    monkeypatch.setattr(runner, 'structural_cleanup', lambda result, _: (
+        np.arange(len(result['xyz'])), {'wall_protected_mask': np.zeros(len(result['xyz']), bool),
+                                       'low_object_protected_mask': np.zeros(len(result['xyz']), bool)}))
+    monkeypatch.setattr(runner, 'unify_classified_floor_support', lambda *_args, **_kw: None)
     points = np.array([[0., 0., -.6], [0., 0., 3.1], [1., 0., 1.3], [1., 0., -.5], [1., 0., 3.1]])
     poses = np.array([[0., 0., 0.], [.2, 0., 0.], [0., 0., 3.6], [.2, 0., 3.6]])
     cfg = {'protected_regions': [{'min': [.9, -.1, -1.], 'max': [1.1, .1, 4.]}],

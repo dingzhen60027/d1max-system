@@ -18,5 +18,7 @@ if [[ -n "${D1MAX_MONITOR_RELEASE:-}" ]]; then
   set -u
 fi
 # The helper holds a process-lifetime lock, retains the ROS duplicate check and
-# consumes motion opt-in only inside the existing managed service invocation.
+# consumes legacy opt-in only inside the existing managed service invocation.
+# The selected mainline starts task_follower_v1 only; it does not take control
+# until the BT's one task grant, and never starts a second SDK writer.
 exec python3 "${D1MAX_MONITOR_DIR}/scripts/sdk_motion_startup.py" _launch

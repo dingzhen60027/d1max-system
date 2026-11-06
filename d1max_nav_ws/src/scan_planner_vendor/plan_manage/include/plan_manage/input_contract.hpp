@@ -29,11 +29,41 @@ inline bool periodicReplanDue(double now, double last_attempt, double interval)
 // Event requests share the actual solver submission clock, not the periodic
 // preview clock (which can advance without a solve). There is still only one
 // worker and every admitted solve retains its original 400 ms SolveBudget.
+// Zero disables only the additional submission spacing, not worker/deadline
+// backpressure. Negative/non-finite intervals and a backwards clock reject.
 inline bool formalReseedSubmissionDue(std::chrono::steady_clock::time_point now,
-    std::chrono::steady_clock::time_point last_submission,bool worker_running)
+    std::chrono::steady_clock::time_point last_submission,bool worker_running,
+    double minimum_interval_s=.1)
 {
-  return !worker_running && (last_submission==std::chrono::steady_clock::time_point{} ||
-    now-last_submission>=std::chrono::milliseconds(500));
+  return !worker_running && std::isfinite(minimum_interval_s) && minimum_interval_s>=0. &&
+    (last_submission==std::chrono::steady_clock::time_point{} ||
+    std::chrono::duration<double>(now-last_submission).count()>=minimum_interval_s);
+}
+
+// A false dispatch result may mean no solve was attempted. The 100 Hz FSM
+// must not count waiting for its single worker/snapshot/submission clock as
+// repeated optimizer failures. A completed failed turn is counted separately.
+inline bool nativePlanningAttemptDeferred(bool worker_running,bool snapshot_pending,
+    const std::string& phase) {
+  return worker_running||snapshot_pending||phase=="waiting_solve_budget";
+}
+
+// A source-pair/connection or measured-heading miss can recover with a new actual body sample;
+// it is not evidence of a blocked environment. Do not require the stationary
+// robot to move 15 cm before retrying the very candidate needed to move it.
+inline bool nativeConnectionWait(const std::string& phase) {
+  return phase=="waiting_measured_target_heading" ||
+      phase=="failed_curve_validation" || phase=="waiting_splice_incumbent" ||
+      phase=="waiting_splice_validation" || phase=="candidate_measured_join_rejected" ||
+      phase=="candidate_source_expired" || phase=="candidate_source_changed";
+}
+
+// The robot moving while a candidate is being computed is a new planning
+// boundary, not an obstacle/optimizer failure. Only these adoption outcomes
+// can skip the environmental backoff, and only with fresh changed input.
+inline bool nativeLatestStateRetry(const std::string& phase) {
+  return phase=="candidate_measured_join_rejected"||
+      phase=="candidate_source_expired"||phase=="candidate_source_changed";
 }
 
 // Snapshot contention and an exhausted whole-turn deadline are scheduling
@@ -45,7 +75,18 @@ inline bool formalReseedSubmissionDue(std::chrono::steady_clock::time_point now,
 inline bool nativeResourceWait(const std::string &phase)
 {
   return phase == "waiting_snapshot_slot" || phase == "solve_deadline_exceeded" ||
-      phase == "solve_search_deadline_exceeded";
+      phase == "solve_search_deadline_exceeded" || phase=="candidate_adoption_budget_exhausted" ||
+      phase == "waiting_reference_support";
+}
+
+// A solver/retiming miss is not proof that the environment must physically
+// change. Retry under the configured cooldown when fresh REAL planning input
+// arrives, even if a saturated map's occupancy bits stay unchanged. This
+// classification only requests computation; geometry/unknown, malformed
+// input, cancellation and unclassified exceptions keep their existing fences.
+inline bool nativeNumericalReplanFailure(const std::string &phase)
+{
+  return phase=="failed_optimization"||phase=="failed_rebound_search"||phase=="failed_dynamics";
 }
 
 // These are selector envelope QUERY counts, never unique physical voxels.

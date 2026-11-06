@@ -30,6 +30,23 @@ urdf_reference_only:
   front_lidar_xyz_m: [0.4043, 0.0, -0.0377]
   rear_lidar_xyz_m: [-0.4043, 0.0, -0.0377]
   lua300c_imu_xyz_m: [0.0, 0.0, 0.00569]
+  # Asset-space bounds, NOT a physically accepted sensor/robot calibration.
+  # max.urdf sha256 d53b63b6026c97296a5dd42d0bf98c4781034c2871ed531b24218595017b20fe
+  # BASE_LINK.STL sha256 9ab81ddedd0bd423fb1292f652162842bee3c80a7138e630516aa4a05917ebd3
+  torso_bounds_base_m:
+    min: [-0.461078018, -0.118556112, -0.089300000]
+    max: [0.461078018, 0.118556112, 0.087410957]
+  # Outer mesh extent; the CAD wheel radius is about 9.6 cm, not diameter.
+  foot_mesh_outer_diameter_m: 0.19191625714302063
+  foot_mesh_thickness_m: 0.04649881273508072
+  # Operator clarified 2026-10-10: previous 9 cm referred to radius.
+  operator_wheel_dimensions_approx_m: {diameter: 0.19, thickness: 0.05}
+  operator_wheel_dimensions_confirmed_at: '2026-10-10'
+  operator_previous_wheel_diameter_description_m: 0.09
+  wheel_diameter_provenance_conflict: false
+  # Joint units/mapping, acquisition timing, posture and actual wheel model
+  # are not physically calibrated. These bounds do not enable a self-filter.
+  entity_self_filter_calibrated: false
 engineering:
   mode: standing_preview_only
   motion_authorized: false
@@ -41,24 +58,37 @@ engineering:
   # 0.585 m standing height minus URDF BASE_LINK mesh top 0.087 m ~= 0.498 m.
   body_reference_height_m: 0.50
   body_height_calibrated: false
-  # Native SCAN two-circle approximation. Extents 0.98 x 0.58 m exceed the
-  # standing dimensions, but do NOT prove coverage of rectangle corners,
-  # moving legs, payload, prone posture or the real swept volume.
-  collision_model: native_double_cylinder_approximation
-  # Derive native approximation from official standing width/length:
-  # radius=width/2+lateral_margin=0.29;
-  # center_offset=length/2+longitudinal_margin-radius=0.20.
+  # Ground-to-reference is a support/route conversion, NOT torso thickness.
+  # Keep this independent from both candidate and execution collision kernels.
+  # Operator-requested rigid proxy, not a claimed full wheel/leg envelope.
+  # Width 0.30 m is the torso approximation, not the ~0.50 m feet outer span.
+  # Center is BASE_LINK; lidar ground height is a separate stance input.
+  collision_model: native_oriented_box_approximation
+  box_length_m: 0.93
+  box_width_m: 0.30
+  box_height_m: 0.50
+  box_body_below_m: 0.25
+  box_body_above_m: 0.25
+  box_geometry_provenance: operator_rigid_proxy_centered_base_link_not_measured
+  # Retained only for selecting the legacy cylinder model.
   footprint_lateral_margin_m: 0.05
   footprint_longitudinal_margin_m: 0.025
   collision_envelope_validated: false
-  # Engineering assumption, NOT a statement that obstacles below this are safe.
-  # Must exceed the 0.08 m voxel height to separate sampled ground from legs.
-  # Validate body height, terrain and this exclusion together before motion.
+  # Historical engineering context, NOT a filter or a certificate that low
+  # obstacles may be crossed. No raw ground/leg/wheel returns are erased.
   ground_exclusion_height_m: 0.10
   safety_scan_above_base_m: 0.80
-  # Obstacle UP dilation covers the body BELOW its reference, not above it.
-  # body_reference_height_m - ground_exclusion_height_m = 0.40 m.
+  # Legacy cylinder execution envelope. Obstacle-UP
+  # dilation covers BELOW the body reference; obstacle-DOWN covers ABOVE it.
   obstacle_dilation_up_m: 0.40
   obstacle_dilation_down_m: 0.45
+  # Legacy cylinder candidate-search proxy is a torso-level geometric model.
+  # .08930 m CAD lower extent + .03070 m engineering margin = .12000 m.
+  # This does not cover moving wheel/leg geometry and cannot grant motion.
+  planning_torso_lower_margin_m: 0.03070
+  planning_body_below_m: 0.12
+  planning_body_above_m: 0.45
+  planning_geometry_provenance: cad_torso_with_unvalidated_margin
+  planning_geometry_validated: false
   vertical_envelope_validated: false
   sdk_speed_mapping_validated: false

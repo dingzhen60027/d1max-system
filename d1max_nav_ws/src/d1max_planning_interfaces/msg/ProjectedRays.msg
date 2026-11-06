@@ -11,6 +11,9 @@ uint64 projection_sequence
 builtin_interfaces/Time acquisition_end
 # One map_from_odom alignment, derived from an exact-stamp pose pair, for all rays.
 builtin_interfaces/Time alignment_stamp
-# Version-1 64-byte ray schema documented by d1max_localization/PERCEPTION_RAYS.md.
+# Legacy 64-byte source metadata, or projected 68-byte extension documented by
+# d1max_pct_scan/PERCEPTION_RAY_PROJECTOR.md: UINT8 ray_kind at offset 64
+# (0 measured hit, 1 self-censored endpoint); bytes 65..67 must be zero.
+# Censored endpoints are neither hit nor free; only their measured prefix clears.
 # XYZ and origin_XYZ are in rays.header.frame_id (map or odom); source fields unchanged.
 sensor_msgs/PointCloud2 rays

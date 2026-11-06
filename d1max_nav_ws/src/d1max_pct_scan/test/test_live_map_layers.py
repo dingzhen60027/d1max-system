@@ -42,6 +42,33 @@ def test_independent_surfaces_use_bounded_real_inverse_and_omit_unsupported_cell
     np.testing.assert_allclose(points[0], [.1, .1, -.65])  # No map rewrite.
 
 
+def test_regularization_keeps_unmodified_blocked_structure_not_unobserved_ground(tmp_path):
+    from tools.pointcloud_preprocessing.tests.test_stair_ground_mapping import artifact, load
+    source, arrays, descriptor = artifact(tmp_path)
+    mapping = load(tmp_path, source, descriptor)
+    anchors = {'xy': np.array([[0., 0.], [1., 0.], [0., 1.], [1., 1.]]),
+               'z': np.full(4, -.75), 'slopes': np.zeros((4, 2))}
+    one = FloorField('floor1', -.65, (-2., 2.3), anchors, anchors['xy'],
+                     {'conditioning_support_radius_m': .5})
+    two = FloorField('floor2', 3.15, (2.7, 7.), {**anchors, 'z': np.full(4, 3.05)},
+                     anchors['xy'], {'conditioning_support_radius_m': .5})
+    bridge = GroundPathBridge({'floor1': one, 'floor2': two},
+        [{'min': [.4, .4, -2.], 'max': [.7, .7, 7.]}], stair_mapping=mapping)
+    settings = {'stair_roi': ([-1., -1., -2.], [1., 1., 7.])}
+    # First cell is mapped support, second is an unchanged protected wall;
+    # third has no corresponding field outside the protected domain.
+    points = np.array([arrays['planning_xyz'][0], [.5, .5, 1.9], [20., 20., -.65]])
+    blocked, ids = map_surfaces(points, bridge, settings, surface_kind='blocked')
+    by_id = {int(index): point for index, point in zip(ids, blocked)}
+    assert set(by_id) == {0, 1}
+    assert np.allclose(by_id[0], source[0], atol=1e-7)
+    assert np.allclose(by_id[1], points[1], atol=1e-7)
+    _, ground_ids = map_surfaces(points, bridge, settings)
+    assert ground_ids.tolist() == [0]
+    with pytest.raises(ValueError, match='surface kind'):
+        map_surfaces(points, bridge, settings, surface_kind='unknown')
+
+
 def test_real_cost_colors_and_rgb_payload_are_not_flat_white():
     xyz = np.array([[0., 1., 2.], [1., 2., 3.], [2., 3., 4.]])
     values = colored_records(xyz, [0., 10., 20.])

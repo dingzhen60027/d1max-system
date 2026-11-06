@@ -1,7 +1,9 @@
 """Asynchronous ROS actions around the existing PCT and SCAN implementations.
 
-The BT owns task sequencing. This adapter is the sole public reference owner;
-PCT outputs are private candidates, and SCAN keeps its native collision checks.
+The BT owns task sequencing. This adapter delivers the fixed route to the sole
+reference manager; PCT outputs are private candidates. Formal local workflow
+feedback comes only from the typed executor contract, not SCAN diagnostic JSON.
+SCAN keeps its native collision checks.
 No SDK client, velocity publisher, controller, or automatic localization input.
 """
 from copy import deepcopy
@@ -22,19 +24,32 @@ from std_msgs.msg import Empty, String
 from d1max_navigation_bt_interfaces.action import ComputeRoute, FollowRoute
 from d1max_navigation_bt_interfaces.msg import NavigationHealth, RouteSnapshot as RouteSnapshotMessage
 from d1max_navigation_bt_interfaces.msg import RouteReference
-from d1max_planning_interfaces.msg import LocalPlanDebug
+from d1max_planning_interfaces.msg import LocalPlanDebug, RouteDeliveryReceipt
 
 from .bt_adapter_contract import (ArrivalEvidence, route_fingerprint,
                                   stamp_seconds, valid_compute_request, valid_task)
 from .bt_follow_policy import (FOLLOW_DEFAULTS, FollowRecovery, classify_follow,
                                validate_follow_policy)
+from .formal_follow_status import (FormalFollowContext, classify_formal_follow,
+                                  route_delivery_rejection_stage)
 from .live_scan_contract import (fresh, localization_identity_context,
                                  validate_continuous_pose)
 from .source_route_ros import from_message as decode_route, to_message as encode_route
 from .atomic_navigation_inbox import uses_atomic_navigation
+from .bt_task_identity import BoundedTaskHistory
 
 PREFIX = '/d1max/live_planning/'
 COMPUTE_FAILURE_STATES = frozenset(('goal_rejected', 'planning_failed', 'expired', 'result_rejected'))
+FEEDBACK_PERIOD_S = .2
+
+
+def diagnostic_progress_m(value):
+    """Display only: malformed diagnostics must not interrupt task callbacks."""
+    try:
+        result = float(value or 0.)
+    except (TypeError, ValueError, OverflowError):
+        return 0.
+    return result if math.isfinite(result) and result >= 0 else 0.
 
 
 def same_execution_task(a,b):
@@ -54,7 +69,7 @@ class NavigationBTAdapters(Node):
     def __init__(self):
         super().__init__('d1max_navigation_bt_adapters')
         defaults = dict(session_id='', localization_session_id='', execution_mode='preview',
-            pipeline_contract='',map_version_id='',transport_mode='live',
+            pipeline_contract='',map_version_id='',transport_mode='live',execution_architecture='task_follower_v1',
             expected_source_map_sha256='', expected_tomogram_sha256='', expected_conditioning_sha256='',
             map_frame='d1max_loc_map', body_frame='d1max_loc_base_link',
             tracking_frame='d1max_loc_tracking', freshness_s=.5, result_timeout_s=60.,
@@ -64,6 +79,8 @@ class NavigationBTAdapters(Node):
         defaults.update(FOLLOW_DEFAULTS)
         self.p = {k: self.declare_parameter(k, v).value for k, v in defaults.items()}
         validate_follow_policy(self.p)
+        if self.p['execution_architecture'] not in ('task_follower_v1','curve_writer_v3'):
+            raise ValueError('explicit_execution_architecture_required')
         if (os.environ.get('RMW_IMPLEMENTATION') != 'rmw_zenoh_cpp'
                 or not self.p['session_id'] or len(self.p['session_id']) > 128
                 or not self.p['localization_session_id'] or self.p['execution_mode'] not in ('preview','single_floor')
@@ -105,8 +122,17 @@ class NavigationBTAdapters(Node):
             self.create_subscription(String, PREFIX+'reference_refresh_request', self.on_refresh, 5)
         if uses_atomic_navigation(self.p):
             from d1max_planning_interfaces.msg import NavigationState,ExecutionPermit,StopReport
+            delivery_qos = QoSProfile(depth=8, reliability=ReliabilityPolicy.RELIABLE,
+                                      durability=DurabilityPolicy.TRANSIENT_LOCAL)
+            self.create_subscription(RouteDeliveryReceipt,PREFIX+'execution/route_delivery_receipt',
+                self.on_route_delivery_receipt,delivery_qos)
             self.create_subscription(NavigationState,'/d1max/localization/navigation/state',self.on_atomic_state,qos_profile_sensor_data)
-            self.create_subscription(ExecutionPermit,PREFIX+'execution/permit',self.on_execution_permit,5)
+            if self.task_follower():
+                from d1max_planning_interfaces.msg import TaskExecutionLease,LocalExecutionStatus
+                self.create_subscription(TaskExecutionLease,PREFIX+'execution/task_lease',self.on_task_lease,delivery_qos)
+                self.create_subscription(LocalExecutionStatus,PREFIX+'execution/local_status',self.on_local_execution_status,delivery_qos)
+            else:
+                self.create_subscription(ExecutionPermit,PREFIX+'execution/permit',self.on_execution_permit,5)
             self.create_subscription(StopReport,PREFIX+'execution/stop_report',self.on_stop_report,5)
             if self.p['local_state_enabled']:
                 from d1max_planning_interfaces.msg import LocalNavigationState
@@ -142,7 +168,7 @@ class NavigationBTAdapters(Node):
         self.executions = {}
         self.native_cancel_ack = None
         self.arrival = ArrivalEvidence()
-        self.used_tasks = set()
+        self.used_tasks = BoundedTaskHistory(self.p['session_id'], legacy_limit=4096)
         self.last_feedback = -math.inf
         self.reference_delivery_sequence = 0
         self.atomic_state=None
@@ -151,6 +177,8 @@ class NavigationBTAdapters(Node):
         from .local_navigation_state import LocalNavigationInbox
         self.local_inbox=LocalNavigationInbox()
         self.execution_permit=None
+        self.task_lease=self.local_execution_status=self.local_goal_event=None
+        self.lease_received=self.local_execution_received=-math.inf
         self.stop_report=None
         self.permit_received=self.stop_received=-math.inf
 
@@ -171,6 +199,7 @@ class NavigationBTAdapters(Node):
             # hard loss cannot be hidden by recovery before the next timer.
             if event.hard_failure:
                 self.execution_permit=self.stop_report=None
+                self.task_lease=self.local_execution_status=self.local_goal_event=None
                 if self.compute is not None:
                     self.begin_cancel(self.compute,'atomic_navigation_hard_loss',compute=True)
                 if self.follow is not None:
@@ -186,6 +215,7 @@ class NavigationBTAdapters(Node):
             monotonic=time.monotonic())
         if event is not None and event.hard_failure:
             self.execution_permit=self.stop_report=None
+            self.task_lease=self.local_execution_status=self.local_goal_event=None
             if self.compute is not None: self.begin_cancel(self.compute,'local_navigation_hard_loss',compute=True)
             if self.follow is not None: self.begin_cancel(self.follow,'local_navigation_hard_loss',compute=False)
 
@@ -215,6 +245,7 @@ class NavigationBTAdapters(Node):
         return context
 
     def on_execution_permit(self,message):
+        if self.task_follower():return
         snapshot=self.snapshot
         v=message.version
         if (snapshot is None or v.schema_version!=3 or v.session_id!=self.p['session_id']
@@ -241,14 +272,83 @@ class NavigationBTAdapters(Node):
             slot['wait_reason']='waiting_fresh_final_global_localization'
 
     def on_stop_report(self,message):
-        permit=self.execution_permit
+        from .atomic_projection_state import stamp_ns
+        permit=self.task_lease if self.task_follower() else self.execution_permit
+        try:
+            source=stamp_ns(message.source_stamp)
+        except (ValueError,TypeError,AttributeError):return False
         if (permit is None or not same_execution_task(message.version,permit.version) or message.execution_id!=permit.execution_id
                 or message.control_epoch!=permit.control_epoch or message.sdk_session!=permit.sdk_session
                 or message.sdk_arm_generation!=permit.sdk_arm_generation
                 or message.transport_mode!=self.p.get('transport_mode','live')
-                or not fresh(stamp_seconds(message.source_stamp),self.now_s(),.4)
-                or self.stop_report is not None and message.sequence<=self.stop_report.sequence): return
+                or self.stop_report is not None and message.sequence<=self.stop_report.sequence): return False
+        if self.task_follower():
+            # A writer-owned stop completion is immutable, not a live sensor
+            # lease. TaskExecutionAuthority validates the MC samples and stop
+            # boundary; follow_tick additionally requires its fresh terminal
+            # goal lease before this matching event can complete the action.
+            if (not 0<source<=self.get_clock().now().nanoseconds or message.sequence<=0
+                    or not self.task_feedback_matches(message)
+                    or message.stop_request_id!=permit.confirmation_id):return False
+        elif not fresh(stamp_seconds(message.source_stamp),self.now_s(),.4):return False
         self.stop_report=deepcopy(message); self.stop_received=time.monotonic()
+        return True
+
+    def task_follower(self):
+        return self.p.get('execution_architecture','curve_writer_v3')=='task_follower_v1'
+
+    def task_feedback_matches(self,message):
+        snapshot=self.snapshot;v=message.version
+        return bool(snapshot and v.schema_version==3 and v.session_id==self.p['session_id']
+            and v.task_id==snapshot['task_id'] and v.route_id==snapshot['route_id']
+            and v.route_hash==snapshot['source_snapshot'].route_hash
+            and v.map_version_id==snapshot['context'][2]
+            and (v.localization_epoch,v.localization_seed_id)==snapshot['context'][:2]
+            and message.transport_mode==self.p.get('transport_mode','live'))
+
+    def on_task_lease(self,message):
+        from .atomic_projection_state import stamp_ns
+        try:
+            source,deadline=stamp_ns(message.source_stamp),stamp_ns(message.valid_until)
+        except (ValueError,TypeError,AttributeError):return False
+        if (not self.task_follower() or message.schema_version!=1 or not self.task_feedback_matches(message)
+                or not 0<source<=self.get_clock().now().nanoseconds
+                or not 0<=deadline-source<=350_000_000
+                or not fresh(stamp_seconds(message.source_stamp),self.now_s(),.35)
+                or self.task_lease is not None and message.sequence<=self.task_lease.sequence):return False
+        old=self.task_lease
+        if old and old.execution_id and (message.execution_id!=old.execution_id or message.control_epoch!=old.control_epoch):return False
+        self.task_lease=deepcopy(message);self.lease_received=time.monotonic();return True
+
+    def on_local_execution_status(self,message):
+        from .atomic_projection_state import stamp_ns
+        try:
+            source=stamp_ns(message.source_stamp)
+            body=stamp_ns(message.body_source_stamp);deadline=stamp_ns(message.body_valid_until)
+        except (ValueError,TypeError,AttributeError):return False
+        lease=self.task_lease
+        if (not self.task_follower() or message.schema_version!=1 or not self.task_feedback_matches(message)
+                or not 0<source<=self.get_clock().now().nanoseconds
+                or not fresh(stamp_seconds(message.source_stamp),self.now_s(),.5)
+                or self.local_execution_status is not None and message.sequence<=self.local_execution_status.sequence):return False
+        if message.ready and (not 0<body<=source or not source<=self.get_clock().now().nanoseconds<=deadline
+                or not 0<=deadline-body<=100_000_000):return False
+        if self.local_execution_status and source<stamp_ns(self.local_execution_status.source_stamp):return False
+        if lease and lease.execution_id and (message.execution_id!=lease.execution_id or message.control_epoch!=lease.control_epoch):return False
+        self.local_execution_status=deepcopy(message);self.local_execution_received=time.monotonic()
+        slot=self.follow
+        if (slot and slot['cancel'] is None and lease and lease.execution_id and message.at_goal
+                and message.request_stop and message.execution_id==lease.execution_id
+                and message.control_epoch==lease.control_epoch):
+            # The first actual request is the stop boundary. Repeated status
+            # publications must not push it beyond an already proved MC stop.
+            if self.local_goal_event is None:
+                self.local_goal_event=deepcopy(message)
+            if slot.get('arrival_wait_started') is None:
+                slot['arrival_wait_started']=self.local_execution_received
+                slot['wait_phase']='waiting_final_arrival_evidence'
+                slot['wait_reason']='waiting_matching_goal_stop_report'
+        return True
 
     def now_s(self):
         return self.get_clock().now().nanoseconds * 1e-9
@@ -303,6 +403,77 @@ class NavigationBTAdapters(Node):
         if self.native_cancel_ack is not None and stamp <= self.native_cancel_ack['stamp']:
             return
         self.native_cancel_ack = dict(stamp=stamp, received=time.monotonic(), generation=message.generation)
+
+    def on_route_delivery_receipt(self, message):
+        """A bound delivery event, not a pose lease or a physical-stop proof.
+
+        A transmitted route may have been rejected before any native work was
+        created. Only the sole reference writer's exact cancellation receipt
+        can prove that case retired; an empty JSON status cannot prove it.
+        The one-shot disposition remains a software fact if transport delivery
+        is delayed. Its original timestamps and exact delivery binding are
+        retained; accepting it does not refresh any state or motion evidence.
+        """
+        slot=self.follow
+        if slot is None or not slot['typed_delivery'] or self.snapshot is None:
+            return False
+        try:
+            if (message.schema_version!=1 or type(message.active) is not bool
+                    or type(message.native_retirement_required) is not bool
+                    or type(message.native_retirement_confirmed) is not bool
+                    or not isinstance(message.reason,str) or len(message.reason)>1024):
+                return False
+            def ns(stamp):
+                if stamp.sec<0 or not 0<=stamp.nanosec<1_000_000_000:
+                    raise ValueError('route_receipt_timestamp_invalid')
+                return stamp.sec*1_000_000_000+stamp.nanosec
+            source_ns,receipt_ns=ns(message.source_stamp),ns(message.receipt_stamp)
+            if (source_ns<=0 or receipt_ns<=0
+                    or receipt_ns>self.get_clock().now().nanoseconds
+                    or receipt_ns+100_000_000<source_ns):
+                return False
+            delivery=(slot.get('active_delivery') if message.active else
+                      slot['cancel'].get('delivery') if slot['cancel'] is not None else None)
+            if delivery is None or (message.session_id,message.task_id,message.route_id,
+                    message.route_hash,message.delivery_sequence,source_ns)!=delivery:
+                return False
+            if message.active:
+                if message.status not in (RouteDeliveryReceipt.ACCEPTED,RouteDeliveryReceipt.REJECTED):
+                    return False
+                # Once cancellation starts, a delayed active receipt cannot
+                # revive the task or bypass the inactive delivery fence.
+                if slot['cancel'] is not None or slot['active_receipt'] is not None:
+                    return False
+                slot['active_receipt']=deepcopy(message)
+                if self.task_follower():
+                    retry=slot.get('delivery_retry')
+                    if retry is not None and time.monotonic() >= retry['deadline']:
+                        self.begin_cancel(slot, 'reference_delivery_retry_timeout:prior_route_retirement_pending',
+                                          compute=False)
+                        return True
+                    if message.status==RouteDeliveryReceipt.ACCEPTED:
+                        slot['delivery_retry']=None
+                    elif not route_delivery_rejection_stage(message).terminal:
+                        if retry is None:
+                            retry=slot['delivery_retry']=dict(deadline=time.monotonic()+
+                                self.p.get('readiness_timeout_s',30.))
+                        retry['next_send']=time.monotonic()+FEEDBACK_PERIOD_S
+                slot['committed']=message.status==RouteDeliveryReceipt.ACCEPTED
+            else:
+                if (message.status!=RouteDeliveryReceipt.RETIRED
+                        or (message.native_retirement_required and
+                            (not message.native_retirement_confirmed or message.native_generation<=0))
+                        or (not message.native_retirement_required and
+                            (message.native_retirement_confirmed or message.native_generation!=0))
+                        or slot['cancel'].get('receipt') is not None):
+                    return False
+                slot['cancel']['receipt']=deepcopy(message)
+                slot['cancel']['receipt_received']=time.monotonic()
+        except (ValueError,TypeError,AttributeError,OverflowError):
+            return False
+        # The timer is a watchdog, not another 50 ms delivery/retirement delay.
+        self.follow_tick()
+        return True
 
     def identity(self):
         if uses_atomic_navigation(self.p):
@@ -397,8 +568,13 @@ class NavigationBTAdapters(Node):
             return
 
     def compute_goal(self, request):
+        try:
+            available=(not self.used_tasks.contains(request.task_id)
+                and self.used_tasks.can_remember(request.task_id))
+        except ValueError:
+            return GoalResponse.REJECT
         if (self.compute or self.follow or self.reserved_compute or self.reserved_follow
-                or self.quarantine or request.task_id in self.used_tasks
+                or self.quarantine or not available
                 or not valid_compute_request(request, self.p['session_id'], self.p['map_frame'])):
             return GoalResponse.REJECT
         self.reserved_compute = True
@@ -408,11 +584,12 @@ class NavigationBTAdapters(Node):
         self.reserved_compute = False
         self.snapshot = None
         self.execution_permit=self.stop_report=None
+        self.task_lease=self.local_execution_status=self.local_goal_event=None
         self.candidates.clear()
-        self.used_tasks.add(handle.request.task_id)
-        if len(self.used_tasks) > 4096:
-            # Session-level budget, not silent task-ID reuse.
-            self.quarantine = 'task_budget_requires_new_session'
+        # Admission already reserved this unique task. Formal BT counters need
+        # only a watermark; legacy capacity is checked before accepting work,
+        # never converted into a permanent fault on the accepted task.
+        self.used_tasks.remember(handle.request.task_id)
         self.compute = dict(handle=handle, future=Future(), began=time.monotonic(),
                             dispatched=False, cancel=None, context=None, goal_stamp=0.,
                             wait_phase='waiting_worker', wait_reason='waiting_private_worker_ready')
@@ -465,10 +642,13 @@ class NavigationBTAdapters(Node):
     def accept_follow(self, handle):
         self.reserved_follow = False
         self.follow = dict(handle=handle, future=Future(), context=self.snapshot['context'],
-            committed=False, cancel=None, reference_stamp=0., refresh_count=0,
+            published=False, committed=False, typed_delivery=uses_atomic_navigation(self.p),
+            active_delivery=None,active_receipt=None,cancel=None,reference_stamp=0.,refresh_count=0,
+            delivery_retry=None,
             last_refresh_id=0, started=time.monotonic(),
             recovery=FollowRecovery(self.p), measured_arrival_stamp=0.,
             arrival_wait_started=None,
+            feedback_plan_id=-1,
             wait_phase='waiting_reference', wait_reason='waiting_reference_delivery')
         self.executions[id(handle)] = self.follow
         self.arrival.reset()
@@ -505,30 +685,70 @@ class NavigationBTAdapters(Node):
 
     def publish_reference(self, slot):
         message = self.stamped_path(self.snapshot['route'])
-        self.publish_route_delivery(message.header.stamp, active=True)
+        self.publish_route_delivery(message.header.stamp, active=True, slot=slot)
         # Display compatibility only. The production bridge trusts the typed
         # RouteReference envelope and never a Path-only task.
         self.reference_pub.publish(message)
-        slot['committed'], slot['reference_stamp'] = True, stamp_seconds(message.header.stamp)
-        slot['reference_stamp_ns'] = message.header.stamp.sec*1_000_000_000+message.header.stamp.nanosec
-        slot['reference_delivery_sequence'] = self.reference_delivery_sequence
 
-    def publish_route_delivery(self, stamp, *, active):
+    def publish_route_delivery(self, stamp, *, active, slot):
         snapshot = self.snapshot
         self.reference_delivery_sequence += 1
         wire = encode_route(snapshot['source_snapshot'], session_id=self.p['session_id'],
             task_id=snapshot['task_id'], route_id=snapshot['route_id'],
             epoch=snapshot['context'][0], seed_id=snapshot['context'][1], stamp=stamp)
-        self.route_reference_pub.publish(RouteReference(schema_version=2,
+        message=RouteReference(schema_version=2,
             source_stamp=stamp, session_id=wire.session_id, task_id=wire.task_id,
             route_id=wire.route_id, route_hash=wire.route_hash,
-            delivery_sequence=self.reference_delivery_sequence, active=active, snapshot=wire))
+            delivery_sequence=self.reference_delivery_sequence, active=active, snapshot=wire)
+        source_ns=stamp.sec*1_000_000_000+stamp.nanosec
+        binding=(message.session_id,message.task_id,message.route_id,message.route_hash,
+                 message.delivery_sequence,source_ns)
+        # Install the exact binding BEFORE publishing: a receipt may arrive
+        # immediately, including in the production callback executor.
+        if active:
+            slot['published']=True
+            slot['committed']=not slot['typed_delivery']
+            slot['active_delivery'],slot['active_receipt']=binding,None
+            slot['reference_stamp']=stamp_seconds(stamp)
+            slot['reference_stamp_ns']=source_ns
+            slot['reference_delivery_sequence']=message.delivery_sequence
+        else:
+            slot['cancel']['delivery']=binding
+        self.route_reference_pub.publish(message)
+
+    def retry_route_delivery(self, slot, *, ready):
+        """Single-flight retry of an explicitly unadmitted route, not a reset.
+
+        Keep published, the immutable route and the original recovery deadline.
+        Only a fresh sequence with an exact preceding refusal may be sent. The
+        receiver remains the sole owner of its prior native retirement barrier.
+        No inactive/clear is sent here and no JSON status can open that barrier.
+        """
+        receipt=slot['active_receipt']
+        retry=slot.get('delivery_retry')
+        if retry is not None and time.monotonic() >= retry['deadline']:
+            self.begin_cancel(slot, 'reference_delivery_retry_timeout:prior_route_retirement_pending',
+                              compute=False)
+            return True
+        if receipt is None or receipt.status!=RouteDeliveryReceipt.REJECTED:
+            return False  # One attempt is still in flight, or already accepted.
+        stage=route_delivery_rejection_stage(receipt)
+        if stage.terminal:
+            self.begin_cancel(slot,stage.reason,compute=False)
+            return True
+        if (retry is not None and ready and time.monotonic() >= retry['next_send']
+                and self.route_reference_pub.get_subscription_count()>0):
+            # A new delivery time is not a refreshed sensor/proof timestamp.
+            # Do not republish the unchanged display Path on a handshake retry.
+            stamp=self.stamped_path(self.snapshot['route']).header.stamp
+            self.publish_route_delivery(stamp,active=True,slot=slot)
+        return slot['cancel'] is not None
 
     def begin_cancel(self, slot, reason, *, compute):
         if slot['cancel'] is not None:
             return
         slot['cancel'] = dict(reason=reason, wall=self.now_s(), mono=time.monotonic(),
-                              generation=self.scan.get('generation', 0))
+            generation=(self.scan.get('generation', 0) if not compute and not slot['typed_delivery'] else 0))
         if compute:
             # Nothing was sent while waiting for heavy worker startup. The
             # active slot itself proves there can be no old worker request to
@@ -536,11 +756,11 @@ class NavigationBTAdapters(Node):
             if slot['dispatched']:
                 self.worker_cancel_pub.publish(Empty())
         else:
-            if slot['committed']:
+            if slot['published']:
                 empty = Path()
                 empty.header.frame_id = self.p['map_frame']
                 message = self.stamped_path(empty)
-                self.publish_route_delivery(message.header.stamp, active=False)
+                self.publish_route_delivery(message.header.stamp, active=False, slot=slot)
                 self.reference_pub.publish(message)
             # Compute succeeded earlier, but the legacy worker still owns its
             # completed intent/display. End that private owner as part of the
@@ -584,16 +804,21 @@ class NavigationBTAdapters(Node):
                         retirement_confirmed=True),
                 compute=True, canceled=cancel['reason'] == 'user_cancel')
             return True
-        key = 'worker' if compute else 'scan'
-        status = getattr(self, key)
-        fresh_ack = (self.fresh_status(key) and self.received[key] > cancel['mono']
-                     and status.get('received_at_unix', 0.) > cancel['wall'])
-        if compute or not slot['committed']:
+        if compute or not slot['published']:
             # Follow accepted but no public reference ever sent: only the
             # completed private global intent exists. Do not invent a native
             # operation/ACK by publishing an empty reference to a missing peer.
             acknowledged = self.worker_retired(cancel)
+        elif slot['typed_delivery']:
+            # This exact inactive-delivery event proves software retirement,
+            # even if the active delivery never entered native SCAN. Neither
+            # a rejected active receipt nor an empty status is that proof.
+            acknowledged=(slot['cancel'].get('receipt') is not None
+                          and self.worker_retired(cancel))
         else:
+            status = self.scan
+            fresh_ack = (self.fresh_status('scan') and self.received['scan'] > cancel['mono']
+                         and status.get('received_at_unix', 0.) > cancel['wall'])
             native = self.native_cancel_ack
             acknowledged = (fresh_ack and status.get('active_reference') is False
                 and type(status.get('generation')) is int
@@ -818,19 +1043,29 @@ class NavigationBTAdapters(Node):
             ready = self.ready_local_task_identity() == slot['context']
         except ValueError:
             ready = False
-        local_ready = self.local_ready(slot['context'])
-        if not slot['committed']:
-            if ready and local_ready and self.route_reference_pub.get_subscription_count() > 0:
+        formal = uses_atomic_navigation(self.p) and self.task_follower()
+        if formal and self.retry_route_delivery(slot,ready=ready):
+            return
+        # A committed route is input to reference preparation, not the result
+        # of it. The reference manager owns map/context readiness and queues
+        # this immutable delivery until its own inputs are usable. Waiting for
+        # its SCAN diagnostic here couples the upstream task to a downstream
+        # preparation result. Legacy bridges retain their original handshake.
+        local_ready = False if formal else self.local_ready(slot['context'])
+        if not slot['published']:
+            if ready and (formal or local_ready) and self.route_reference_pub.get_subscription_count() > 0:
                 self.publish_reference(slot)
         scan = self.scan
         same_delivery = False
-        same_reference = (self.fresh_status('scan') and scan.get('active_reference') is True
+        same_native_delivery = False
+        same_reference = slot['committed'] if formal else (
+            self.fresh_status('scan') and scan.get('active_reference') is True
             and scan.get('owner_reference_stamp') == slot['reference_stamp'])
-        if uses_atomic_navigation(self.p):
+        if uses_atomic_navigation(self.p) and not formal:
             # Delivery is an exact identity acknowledgement, not a float-clock
             # comparison. Unix-epoch ns * 1e-9 and sec + ns * 1e-9 can differ
             # by one ULP even when they describe the very same ROS Time.
-            same_delivery = (self.fresh_status('scan')
+            same_native_delivery = (self.fresh_status('scan')
                 and scan.get('owner_task_id') == slot['handle'].request.task_id
                 and scan.get('owner_route_id') == self.snapshot['route_id']
                 and scan.get('owner_route_hash') == self.snapshot['source_snapshot'].route_hash
@@ -838,7 +1073,8 @@ class NavigationBTAdapters(Node):
                 and scan['owner_delivery_sequence'] == slot.get('reference_delivery_sequence')
                 and type(scan.get('owner_reference_stamp_ns')) is int
                 and scan['owner_reference_stamp_ns'] == slot.get('reference_stamp_ns'))
-            same_reference = same_delivery and scan.get('active_reference') is True
+            same_delivery=(slot['committed'] if slot['typed_delivery'] else same_native_delivery)
+            same_reference = same_delivery and same_native_delivery and scan.get('active_reference') is True
         if same_reference:
             # Bounded handshake attempts belong to an unaccepted delivery
             # episode, not the lifetime of a long navigation task.
@@ -851,12 +1087,15 @@ class NavigationBTAdapters(Node):
                 <= goal['goal_yaw_tolerance_rad'])
         try: global_ready=self.ready_identity()==slot['context']
         except ValueError: global_ready=False
-        reached = self.arrival.observe(body=self.body or (), endpoint=(endpoint.x, endpoint.y, endpoint.z),
-            stamp=self.body_source, valid=global_ready and local_ready and same_reference and heading_ready,
-            body_height=self.p['body_height'], xy_tolerance=self.p['goal_xy_tolerance_m'],
-            z_tolerance=self.p['goal_z_tolerance_m'])
+        reached = False
+        if not uses_atomic_navigation(self.p):
+            reached = self.arrival.observe(body=self.body or (), endpoint=(endpoint.x, endpoint.y, endpoint.z),
+                stamp=self.body_source, valid=global_ready and local_ready and same_reference and heading_ready,
+                body_height=self.p['body_height'], xy_tolerance=self.p['goal_xy_tolerance_m'],
+                z_tolerance=self.p['goal_z_tolerance_m'])
         if uses_atomic_navigation(self.p):
-            permit=self.execution_permit; stop=self.stop_report
+            permit=self.task_lease if self.task_follower() else self.execution_permit
+            stop=self.stop_report
             arrival_wait=slot.get('arrival_wait_started')
             if (arrival_wait is not None
                     and time.monotonic()-arrival_wait>=self.p['arrival_evidence_timeout_s']):
@@ -871,16 +1110,28 @@ class NavigationBTAdapters(Node):
             position_ready=bool(global_ready and self.body and heading_ready
                 and math.hypot(self.body[0]-endpoint.x,self.body[1]-endpoint.y)<=self.p['goal_xy_tolerance_m']
                 and abs(self.body[2]-self.p['body_height']-endpoint.z)<=self.p['goal_z_tolerance_m'])
-            stopped_goal_event=bool(permit and permit.phase=='terminal' and permit.reason=='goal_reached'
+            local_goal=self.local_goal_event
+            terminal_goal=bool(permit and (self.task_follower() and local_goal
+                and local_goal.at_goal and local_goal.request_stop and local_goal.execution_id==permit.execution_id
+                and local_goal.control_epoch==permit.control_epoch and same_execution_task(local_goal.version,permit.version)
+                and permit.phase=='terminal' and permit.reason=='goal_reached'
+                and permit.revoked and not permit.allowed
+                or not self.task_follower() and permit.phase=='terminal' and permit.reason=='goal_reached'))
+            stopped_goal_event=bool(terminal_goal
                 and stop and stop.measured_stop_confirmed and stop.nonzero_blocked
                 and same_execution_task(stop.version,permit.version) and stop.execution_id==permit.execution_id
                 and stop.control_epoch==permit.control_epoch and stop.sdk_session==permit.sdk_session
                 and stop.sdk_arm_generation==permit.sdk_arm_generation
                 and self.body_source>=stamp_seconds(stop.source_stamp)
+                and (not self.task_follower() or stop.stop_submitted
+                    and stop.stop_request_id==permit.confirmation_id
+                    and stamp_seconds(local_goal.source_stamp)<=stamp_seconds(stop.source_stamp)
+                        <=stamp_seconds(permit.source_stamp))
                 and fresh(stamp_seconds(permit.source_stamp),self.now_s(),.4)
                 and self.now_s()<=stamp_seconds(permit.valid_until)
-                and fresh(stamp_seconds(stop.source_stamp),self.now_s(),.4)
-                and 0<=time.monotonic()-self.permit_received<=.4 and 0<=time.monotonic()-self.stop_received<=.4)
+                and 0<=time.monotonic()-(self.lease_received if self.task_follower() else self.permit_received)<=.4
+                and (self.task_follower() or fresh(stamp_seconds(stop.source_stamp),self.now_s(),.4)
+                    and 0<=time.monotonic()-self.stop_received<=.4))
             # Control completion is expressed in the committed odom anchor.
             # A subsequent map correction can disagree with the source-map
             # goal. Retire explicitly for review instead of waiting forever
@@ -902,22 +1153,54 @@ class NavigationBTAdapters(Node):
             slot['wait_reason']=('waiting_fresh_final_global_localization' if not global_ready
                 else 'waiting_matching_goal_stop_report')
             return
+        if formal:
+            epoch, seed, map_version = slot['context']
+            status = classify_formal_follow(context=FormalFollowContext(
+                session_id=self.p['session_id'], task_id=self.snapshot['task_id'],
+                route_id=self.snapshot['route_id'], route_hash=self.snapshot['digest'],
+                map_version_id=map_version, localization_epoch=epoch,
+                localization_seed_id=seed, transport_mode=self.p.get('transport_mode', 'live')),
+                pose_ready=ready, published=slot['published'],
+                subscriber_ready=self.route_reference_pub.get_subscription_count() > 0,
+                active_delivery=slot['active_delivery'], active_receipt=slot['active_receipt'],
+                local_status=self.local_execution_status,
+                local_status_received=self.local_execution_received,
+                now_ns=self.get_clock().now().nanoseconds, now_monotonic=time.monotonic())
+            stage, evidence = status.stage, status.evidence_source_ns
+            slot['feedback_plan_id'] = status.trajectory_id
+        else:
+            stage = self.legacy_follow_stage(slot, ready, local_ready,
+                same_reference, same_delivery, same_native_delivery)
+            evidence = scan.get('received_at_unix', 0.) if self.fresh_status('scan') else 0.
+        slot['wait_phase'], slot['wait_reason'] = stage.phase, stage.reason
+        problem = slot['recovery'].observe(stage, time.monotonic(), evidence_stamp=evidence)
+        if problem and (stage.terminal or not uses_atomic_navigation(self.p)):
+            self.begin_cancel(slot, problem, compute=False)
+
+    def legacy_follow_stage(self, slot, ready, local_ready, same_reference,
+                            same_delivery, same_native_delivery):
+        """Compatibility diagnostics never decide formal task-follower state."""
+        scan = self.scan
         pending_phase = ''
-        if (same_delivery and scan.get('native_reference_received') is True
+        if (same_delivery and (not slot['typed_delivery'] or same_native_delivery)
+                and scan.get('native_reference_received') is True
                 and type(scan.get('pending_reference_generation')) is int
                 and scan['pending_reference_generation'] > 0
-                and scan.get('local_debug_generation') == scan['pending_reference_generation']):
+                and type(scan.get('native_pending_debug_generation')) is int
+                and scan['native_pending_debug_generation'] == scan['pending_reference_generation']):
             # Source node binds this durable diagnostic outcome to the exact
             # pending reference. It is not a renewable sensor/curve lease.
             pending_phase = str(scan.get('native_pending_phase') or '')[:120]
+        if slot['typed_delivery'] and same_delivery and not same_reference and not pending_phase:
+            pending_phase='waiting_native_reference'
         stage = classify_follow(pose_ready=ready, map_ready=local_ready,
-            committed=slot['committed'], subscriber_ready=self.route_reference_pub.get_subscription_count() > 0,
+            committed=slot['published'], subscriber_ready=self.route_reference_pub.get_subscription_count() > 0,
             same_reference=same_reference, scan=scan, pending_native_phase=pending_phase)
-        slot['wait_phase'], slot['wait_reason'] = stage.phase, stage.reason
-        problem = slot['recovery'].observe(stage, time.monotonic(),
-            evidence_stamp=scan.get('received_at_unix', 0.) if self.fresh_status('scan') else 0.)
-        if problem and (stage.terminal or not uses_atomic_navigation(self.p)):
-            self.begin_cancel(slot, problem, compute=False)
+        receipt=slot['active_receipt']
+        if (slot['typed_delivery'] and receipt is not None
+                and receipt.status==RouteDeliveryReceipt.REJECTED and stage.phase=='waiting_reference'):
+            stage=type(stage)(stage.phase,'reference_delivery_rejected:'+receipt.reason,stage.budget,stage.terminal)
+        return stage
 
     def tick(self):
         self.compute_tick()
@@ -960,7 +1243,7 @@ class NavigationBTAdapters(Node):
         # ready retains legacy startup/global meaning. BT reads the capability
         # it needs for the current stage, never a renamed global status.
         self.health_pub.publish(health)
-        if time.monotonic()-self.last_feedback < .2:
+        if time.monotonic()-self.last_feedback < FEEDBACK_PERIOD_S:
             return
         self.last_feedback = time.monotonic()
         if self.compute is not None:
@@ -975,8 +1258,10 @@ class NavigationBTAdapters(Node):
             self.follow['handle'].publish_feedback(FollowRoute.Feedback(
                 phase='canceling' if slot['cancel'] else slot['wait_phase'],
                 reason=slot['cancel']['reason'] if slot['cancel'] else slot['wait_reason'],
-                local_plan_id=int(self.scan.get('last_spline_id') or -1),
-                progress_m=float(self.scan.get('local_debug_progress_arc_m') or 0.)))
+                local_plan_id=(slot['feedback_plan_id'] if uses_atomic_navigation(self.p) and self.task_follower()
+                    else int(self.scan.get('last_spline_id') or -1)),
+                # Display-only progress; no task/control decision consumes it.
+                progress_m=diagnostic_progress_m(self.scan.get('local_debug_progress_arc_m'))))
 
 
 def main(args=None):

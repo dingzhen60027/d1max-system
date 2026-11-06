@@ -45,7 +45,7 @@ public:
     route_=s;arc_=std::move(arc);task_=v;transport_=transport;return true;
   }
   template<class State>void observeBody(const State&s) {
-    constexpr unsigned schema=std::is_same_v<State,d1max_planning_interfaces::msg::LocalNavigationState>?1u:2u;
+    constexpr unsigned schema=2u;
     if(!route_||s.schema_version!=schema||!s.usable||s.session_id!=task_.session_id||s.map_version_id!=task_.map_version_id||
        s.localization_epoch!=task_.localization_epoch||s.localization_seed_id!=task_.localization_seed_id||
        !canonical(s.source_stamp)||s.local_odometry.header.stamp!=s.source_stamp||

@@ -3,12 +3,20 @@
 #include <bspline_opt/reference_path.hpp>
 #include <algorithm>
 #include <cmath>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <vector>
 
 namespace scan_planner {
 
+struct FinalEndpointReseed {
+  Eigen::Vector3d goal{Eigen::Vector3d::Zero()};
+  double goal_xy_tolerance{.20},goal_z_tolerance{.15};
+  bool actual_and_endpoint_supported{false};
+  bool measured_connection_reseed{false};
+  double connector_bound_m{.15};
+};
 struct ReferenceTargetOptions {
   double forward_margin{1.0};
   double backward_margin{2.0};
@@ -16,6 +24,12 @@ struct ReferenceTargetOptions {
   double exit_margin{0.2};
   double sample_step{0.04};
   std::size_t max_queries{4096};
+  std::optional<FinalEndpointReseed> final_endpoint_reseed;
+  // Preserve the historical flat selector. A source-backed stair search can
+  // use exact native reference anchors with a checked incident edge instead
+  // of assuming its final body heading is the distant start-to-target chord.
+  // This only selects an endpoint; it cannot certify the connector or curve.
+  bool require_chord_heading{true};
 };
 
 struct ReferenceTargetResult {
@@ -88,6 +102,54 @@ ReferenceTargetResult selectReferenceTarget(
     return result;
   }
   progress = std::clamp(progress, 0.0, reference.length());
+  // At the true task endpoint, measured overshoot has no forward route arc.
+  // Reconnect from the real body to that SAME endpoint only. This selects a
+  // solve target; existing A*, optimization and full Native proof still decide
+  // whether a connector can be committed and followed.
+  if(options.final_endpoint_reseed&&progress>=reference.length()-1e-6) {
+    const auto& final=*options.final_endpoint_reseed;
+    const auto endpoint=reference.sample(reference.length());
+    if(!final.goal.allFinite()||!std::isfinite(final.goal_xy_tolerance)||
+       final.goal_xy_tolerance<.02||final.goal_xy_tolerance>.30||
+       !std::isfinite(final.goal_z_tolerance)||final.goal_z_tolerance<.01||final.goal_z_tolerance>.20) {
+      result.reason="failed_reference_geometry";return result;
+    }
+    if(!std::isfinite(final.connector_bound_m)||final.connector_bound_m<=0.||final.connector_bound_m>.15) {
+      result.reason="failed_reference_geometry";return result;
+    }
+    if((endpoint-final.goal).norm()<=1e-4&&
+       ((endpoint-actual_start).head<2>().norm()>final.goal_xy_tolerance||
+        std::abs(endpoint.z()-actual_start.z())>final.goal_z_tolerance||
+        (final.measured_connection_reseed&&(endpoint-actual_start).norm()>final.connector_bound_m+1e-9))) {
+      result.arc=reference.length();result.point=endpoint;
+      if(!final.actual_and_endpoint_supported)return result;
+      const auto tangent=(endpoint-reference.sample(std::max(0.,reference.length()-options.sample_step))).eval();
+      const double yaw=std::atan2(tangent.y(),tangent.x());
+      const int value=occupancy(endpoint,yaw);result.observe(endpoint,value,yaw);
+      if(value!=0)return result;
+      const auto approach=(endpoint-actual_start).head<2>().eval();
+      if(options.require_chord_heading&&approach.norm()>1e-6) {
+        const double approach_yaw=std::atan2(approach.y(),approach.x());
+        if(std::abs(std::remainder(approach_yaw-yaw,2.*M_PI))>1e-6) {
+          const int value=occupancy(endpoint,approach_yaw);result.observe(endpoint,value,approach_yaw);
+          if(value!=0)return result;
+        }
+      }
+      result.valid=true;result.reason="reference_target_final_endpoint_reseed";return result;
+    }
+  }
+  // Exhaustion is missing forward reference, not an occupied target. A side
+  // search cannot reconstruct the next semantic segment and must not hide
+  // this condition behind waiting_side_target. The true final-goal reconnect
+  // above remains available and still undergoes native collision checking.
+  if(progress>=reference.length()-1e-6) {
+    result.arc=reference.length();result.point=reference.sample(result.arc);
+    result.reason="waiting_reference_extension";
+    if(options.final_endpoint_reseed&&
+       (result.point-options.final_endpoint_reseed->goal).norm()<=1e-4)
+      result.reason="waiting_goal_reached";
+    return result;
+  }
   const double nominal = std::min(reference.length(), progress + horizon);
   const double upper = std::min(reference.length(), nominal + options.forward_margin);
   // A short genuine final leg is permitted; a return to the current body is not.
@@ -132,12 +194,14 @@ ReferenceTargetResult selectReferenceTarget(
     // 0.2 m matches the manager's existing no-hover-as-navigation boundary.
     if (!(free_approach && arc >= lower - 1e-9 && arc > progress + 1e-6 &&
           (point - actual_start).norm() > 0.2 + 1e-9)) continue;
-    // Native A* checks the endpoint body at the start->end heading, not the
-    // route tangent. An endpoint unobserved at that heading would be selected
-    // forever and rejected forever while the stopped body cannot observe it.
-    // Require both headings; this never turns unknown space into free.
+    // Legacy flat search requires both headings. Source-backed stair search
+    // uses the existing exact-anchor incident-edge contract: the robot can
+    // turn on the landing before entering a narrow flight, so a distant
+    // start-to-target chord need not be a physical endpoint orientation.
+    // Route tangent occupancy above is always checked; native A*, optimizer
+    // and complete curve/rotation checks still own the actual connection.
     const Eigen::Vector2d approach = (point - actual_start).head<2>();
-    if (approach.norm() > 1e-6) {
+    if (options.require_chord_heading && approach.norm() > 1e-6) {
       const double approach_yaw = std::atan2(approach.y(), approach.x());
       if (std::abs(std::remainder(approach_yaw - yaw, 2.0 * M_PI)) > 1e-6) {
         const int endpoint = occupancy(point, approach_yaw);

@@ -18,8 +18,8 @@ def pose_packet(node, *, valid=False, output=None, **changes):
 
 def finish(node):
     node.tick()
-    assert node.inflight is not None
-    node.inflight[0].result(timeout=2.)
+    assert any(node.inflight)
+    node.inflight[0][0].result(timeout=2.)
     node.tick()
 
 
@@ -30,7 +30,7 @@ def test_current_pose_gap_preserves_certified_historical_scan_not_control_lease(
     node.on_rays(raw_cloud())
     if phase == 'inflight':
         node.tick()
-        node.inflight[0].result(timeout=2.)
+        node.inflight[0][0].result(timeout=2.)
     generation = node.work_generation
     node._now = EPOCH+300000000  # The former 80 ms pose lease has expired.
     if phase != 'no_new_status':
@@ -64,7 +64,7 @@ def test_old_authorization_cannot_cover_new_scan_even_with_new_uncertified_pose_
     node.on_status('pose', message(pose_packet(node, output=(EPOCH+240000000)*1e-9)))
     node.on_rays(raw_cloud(start=EPOCH+80000000))  # Scan ends at .18; cert ends .16.
     node.tick()
-    assert node.inflight is None and not node.publisher.messages
+    assert node.inflight == [None, None] and not node.publisher.messages
     assert node.error == 'waiting_authorized_pose_history'
     assert node.authorized_pose_ns == EPOCH+160000000
     received = node.pending[0][3]
@@ -84,7 +84,7 @@ def test_invalid_fault_reset_or_identity_change_revokes_pending_and_completed_wo
     ready(node)
     node.on_rays(raw_cloud())
     node.tick()
-    node.inflight[0].result(timeout=2.)
+    node.inflight[0][0].result(timeout=2.)
     generation = node.work_generation
     node._now = EPOCH+300000000
     node.on_status('pose', message(pose_packet(node, **change)))
@@ -103,7 +103,7 @@ def test_current_pose_gap_does_not_extend_raw_measurement_age(node):
     node.on_status('pose', message(pose_packet(node)))
     node.tick()
     with pytest.raises(ProjectionError, match='stale'):
-        node.inflight[0].result(timeout=2.)
+        node.inflight[0][0].result(timeout=2.)
     node.tick()
     assert not node.publisher.messages
     assert node.last_published == [0, 0]
@@ -114,7 +114,7 @@ def test_new_context_cannot_reuse_an_expired_pose_certificate(node):
     ready(node)
     node.on_rays(raw_cloud())
     node.tick()
-    node.inflight[0].result(timeout=2.)
+    node.inflight[0][0].result(timeout=2.)
     node._now = EPOCH+300000000
     node.on_context(message(context(sequence=2)))
     node.on_ack(message(context(sequence=2)))

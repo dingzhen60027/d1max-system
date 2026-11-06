@@ -1,8 +1,9 @@
 # Per-sensor acquisition-time projection
 
 This optional module is a separate perception process. It does not change LIO,
-publish motion commands, acquire SDK control, remove ground/self returns, or
-make unknown space free. Startup remains owned by the live-session supervisor.
+publish motion commands, acquire SDK control, remove ground, or make unknown
+space free. The explicitly configured collision-model filter removes confirmed
+entity returns only. Startup remains owned by the live-session supervisor.
 
 ## Inputs and one coherent transform
 
@@ -47,6 +48,16 @@ The envelope contains:
   time as header stamp. All 64-byte metadata fields remain intact; only XYZ and
   origin XYZ change. `sensor_id=0` is front, `1` rear. Native integration must
   not transform the packet again or collapse its per-point origins.
+
+Raw acquisition remains version 1 (64 bytes per point). A projected batch with
+any model-matched self return uses version 2 (68 bytes): the original 64 bytes
+keep their meaning, `ray_kind` is `UINT8` at byte 64, and bytes 65–67 are zero.
+`ray_kind=0` is an actual occupied endpoint; `1` is a self-censored endpoint.
+The latter preserves only the measured free prefix: the original endpoint voxel
+is neither cleared nor occupied, and no ray is extended beyond that return.
+Native consumers accept legacy 64-byte batches as all measured hits and reject
+unknown kinds or malformed extensions. A source with only censored returns can
+publish its genuine measured prefixes; this does not certify any unobserved area.
 
 Source-age checks use the earliest point conservatively; `acquisition_end`,
 processing time and status heartbeat never renew that lease. PointCloud2
@@ -127,5 +138,84 @@ not modified and existing output files are refused.
 
 Correct origin/time metadata and motion projection do not by themselves solve
 ground-voxel/body-envelope overlap, near-body occlusion, physical calibration,
-or dynamic leg returns. Those require separately validated evidence policies;
-this module does not introduce an unverified self mask or unknown-space bypass.
+or dynamic leg returns. Those require separately validated evidence policies.
+
+## Collision-model entity suppression
+
+The mainline session now explicitly loads `config/entity_self_filter.yaml` and
+`config/d1max_entity_model.json`. The manifest is compiled from the official
+`max.urdf` **collision** assets; visual placeholders and navigation inflation
+volumes are not used. Source URDF/STL hashes are included in session inputs.
+
+Filtering occurs before native map integration. Endpoints and each sensor's
+actual origin are expressed in the body frame; a mesh return must agree with
+an actual triangle surface, not a filled concave AABB. A confirmed self return
+suppresses its occupied endpoint, but keeps the genuinely observed segment
+before it using the explicit censored-endpoint contract above. This fixes the
+previous whole-ray deletion, which also lost clearing observations. No max-range
+replacement, free endpoint, timed obstacle deletion or near-body clearing box is
+introduced. Source index, original endpoint, origin, source time and beam offset
+remain intact. Invalid returns still produce no clearing observation. The
+diagnostic-only preview exclusion continues to discard whole rays.
+
+The default is `pose_source: fixed_standing_cad`. The available SDK does not
+supply usable joints; the projector neither subscribes to fictitious joints
+nor waits for them. `robot_fixed_stance.py` constructs one explicit nominal
+wheel stance from the CAD chains and approximate measurements: LiDAR height
+0.50 m, wheelbase 0.75 m, wheel diameter 0.19 m, thickness 0.05 m. It records the
+selected IK branch and nominal root height (0.5377 m), not measured joint poses.
+All four wheel/leg CAD chains participate. It is applicable to the declared
+fixed standing approximation, not a calibrated articulated or prone model.
+
+The model and each projector report carry the same explicit `applicability`:
+nominal wheel standing, approximate LiDAR height, unmeasured outer stance
+width, and no live posture verification. Crouching, articulated motion and
+stairs are not certified by this fixed model. Diagnostics retain actual beam
+start/end times, near-point counts and unmatched near-point counts. Unmatched
+returns remain real input; the report neither guesses that they are legs nor
+introduces a posture-dependent navigation task gate.
+
+The operator's 0.30 m wide, 0.50 m high box is a **separate planning proxy**.
+It is not a solid volume for deleting point returns or clearing leg gaps.
+The optional `source_stamped_joints` model remains available for a future
+source with established units, timing and URDF correspondence. The default
+does not publish fake JointState, change sensor TF or grant motion authority.
+
+Collision meshes and triangle BVHs are immutable and prewarmed before scans.
+Frozen link transforms and batch ray/triangle queries avoid per-beam CAD work.
+The cache is bounded at 192 MiB. An incomplete query retains original rays. The classification
+deadline is cooperative, **not** a hard preemption guarantee for a single
+native spatial query. Detailed counts and missing model evidence appear in
+projector diagnostics, not as a new navigation task owner or motion gate.
+
+The 2026-10-09 diagnostic bag is evaluated without requiring joint samples. Its rear
+origin transformed to body is approximately `[-0.328, 0, -0.033] m`, whereas
+the CAD origin is `[-0.4043, 0, -0.0377] m`. Fixed-stance queries use the actual
+recorded origin and report the 7.6 cm discrepancy; they do not shift it to CAD.
+Two-scan comparison identified three rear knee surface returns and retained
+the unmatched front scan. This is not complete near-body or motion acceptance.
+Actual posture, optical origins and sensor calibration remain physical gaps.
+Reproduce the bounded,
+read-only two-scan comparison without ROS initialization or SDK connection:
+
+```bash
+source /opt/ros/humble/setup.bash
+python3 tools/diagnostics/inspect_entity_self_filter.py \
+  bags/nav_diagnostic_20261009_114244 \
+  --extrinsics-report experiments/scan_recorded_20261010/height_evidence_final.json
+```
+
+## Shared oriented-box collision proxy
+
+The default native `oriented_box` is 0.93 × 0.30 × 0.50 m, centred on BASE_LINK.
+Candidate search, optimizer, final curve check, motion sweep and footprint
+Marker consume the same shape and yaw. Source ground-to-body conversion is
+unchanged; the box height is not inferred from support height. Candidate
+occupied-only policy remains distinct from raw observed-free execution proof.
+Unknown/insufficient observations are not erased or promoted to free evidence.
+
+OBB visualization publishes the real occupied map. The historical inflated
+topic is a compatibility alias, disabled in the default RViz view; it must not
+draw an obsolete 0.58 m cylinder kernel. The oriented box is a separate Marker.
+The proxy is not a measured full wheel/leg swept envelope; all physical
+acceptance flags remain false.

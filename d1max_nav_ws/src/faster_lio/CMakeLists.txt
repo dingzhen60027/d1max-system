@@ -161,6 +161,8 @@ install(DIRECTORY
 
 if(BUILD_TESTING)
   find_package(ament_cmake_gtest REQUIRED)
+  ament_add_gtest(test_localization_pipeline_trace test/test_localization_pipeline_trace.cpp)
+  target_include_directories(test_localization_pipeline_trace PRIVATE include)
   ament_add_gtest(test_imu_continuity test/test_imu_continuity.cpp)
   ament_add_gtest(test_localization_imu_gap test/test_localization_imu_gap.cpp)
   target_include_directories(test_localization_imu_gap PRIVATE include)

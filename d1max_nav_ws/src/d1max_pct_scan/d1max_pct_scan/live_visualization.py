@@ -4,10 +4,10 @@ import math
 from pathlib import Path
 
 PREFIX = '/d1max/live_planning/'
-# Native occupancy snapshots publish at 3 Hz. A .25 s decay expired before the
-# next healthy .333 s update, visibly blinking even without sensor loss. Keep a
-# bounded .75 s display window (one dropped frame), not an immortal stale cloud.
-LOCAL_MAP_DISPLAY_TTL = .75
+# These are complete occupancy snapshots, not incremental LiDAR scans. RViz's
+# zero decay replaces the previous frame instead of stacking removed obstacles.
+# This display setting never changes a sensor/trajectory validity deadline.
+LOCAL_MAP_DISPLAY_DECAY = 0
 
 
 def topic(value, *, transient=False, sensor=False):
@@ -26,27 +26,27 @@ def group(name, children, *, enabled=True):
             'Displays': children}
 
 
-def rolling_occupancy_display(name, suffix, *, size):
+def rolling_occupancy_display(name, suffix, *, size, enabled=True):
     """SCAN ROS 2 default.rviz height-coloured occupancy presentation.
 
-    Squares (not opaque voxel cubes) let both the hit map and the smaller
-    inflated samples remain legible together, as in upstream. These colours
-    encode Z height only; they are not the global traversability classes.
-    The bounded snapshot TTL is the sole lifetime adaptation for our 3 Hz
-    publisher and never changes the underlying occupancy or collision query.
+    Squares retain upstream's lightweight billboard style, with glyph width
+    matching the current native voxel width. These colours encode Z height
+    only; they are not the global traversability classes or free-space proof.
+    Show only the latest complete snapshot, without multi-frame obstacle trails.
+    This never changes the underlying occupancy or collision query.
     """
-    return display('PointCloud2', name,
+    return display('PointCloud2', name, enabled=enabled,
         Topic=topic(PREFIX+'scan/grid_map/'+suffix, sensor=True),
         **{'Position Transformer': 'XYZ', 'Color Transformer': 'AxisColor',
            'Axis': 'Z', 'Autocompute Value Bounds': {'Value': True},
            'Use rainbow': True, 'Invert Rainbow': False,
            'Style': 'Squares', 'Size (Pixels)': 3, 'Size (m)': size,
-           'Alpha': 1., 'Decay Time': LOCAL_MAP_DISPLAY_TTL,
+           'Alpha': 1., 'Decay Time': LOCAL_MAP_DISPLAY_DECAY,
            'Use Fixed Frame': True, 'Selectable': True})
 
 
 def configure(base, *, session_id='', layout='global', session_directory=None,
-              terrain_resolution_m=.10):
+              terrain_resolution_m=.10,local_window_size_m=None):
     """Build one presentation profile over the same planning topics.
 
     The local view uses SCAN's published sliding occupancy, not a new map or
@@ -59,6 +59,11 @@ def configure(base, *, session_id='', layout='global', session_directory=None,
         raise ValueError(f'unsupported RViz layout: {layout!r}')
     if not math.isfinite(terrain_resolution_m) or terrain_resolution_m <= 0:
         raise ValueError('terrain display resolution must be finite and positive')
+    follow_distance=10.
+    if local_window_size_m is not None:
+        if len(local_window_size_m)!=3 or any(not math.isfinite(v) or v<=0 for v in local_window_size_m):
+            raise ValueError('local display requires the actual positive map extent')
+        follow_distance=max(follow_distance,1.5*max(local_window_size_m[:2]))
     local_layout = layout == 'local'
     cfg = deepcopy(base)
     vm = cfg['Visualization Manager']
@@ -110,11 +115,23 @@ def configure(base, *, session_id='', layout='global', session_directory=None,
                'Offset': {'X': 0., 'Y': 0., 'Z': .15}}),
             display('InteractiveMarkers', '3D 目标手柄', enabled=not local_layout, **{
                 'Interactive Markers Namespace': '/d1max_live_goal', 'Show Axes': False,
-                'Show Descriptions': True, 'Show Visual Aids': False})]),
+                'Show Descriptions': True, 'Show Visual Aids': False}),
+            display('MarkerArray', '目标支撑面', enabled=not local_layout,
+                Topic=topic(PREFIX+'goal_support', transient=True)),
+            # The committed curve is lightweight and must remain visible in
+            # BOTH views. Keep the rolling map exclusive to the local view;
+            # never substitute a solver candidate for this committed topic.
+            display('Marker', '局部轨迹（已提交）',
+                Topic={**topic(PREFIX+'scan_optimal', transient=True), 'Depth': 5})]),
         group('局部规划', [
             cloud,
-            rolling_occupancy_display('滑动占据地图（高度）', 'occupancy', size=.05),
-            rolling_occupancy_display('碰撞膨胀地图（高度）', 'occupancy_inflate', size=.04),
+            rolling_occupancy_display('原始占据地图（调试）', 'occupancy', size=.05, enabled=False),
+            # Native publishes read-only C-space occupancy for the CURRENT
+            # measured body yaw. It is not an all-heading collision envelope,
+            # and display selection never changes the native collision query.
+            rolling_occupancy_display('膨胀占据地图（当前朝向 · 高度）', 'occupancy_inflate', size=.05),
+            display('Marker', '规划箱体',
+                    Topic=topic(PREFIX+'scan/self_inflation', transient=True)),
             # This is the native rolling buffer's real map-frame boundary,
             # not a view-dependent crop or an assertion that it is all free.
             display('Marker', '滑动窗口边界',
@@ -122,11 +139,7 @@ def configure(base, *, session_id='', layout='global', session_directory=None,
             display('MarkerArray', '跟踪路段与局部目标',
                     Topic=topic(PREFIX+'local_debug', transient=True)),
             display('MarkerArray', '搜索尝试与受阻位置',
-                    Topic=topic(PREFIX+'local_attempt_debug', transient=True)),
-            display('Marker', '局部轨迹',
-                    # One update contains a line and a sphere list (plus an
-                    # optional DELETEALL); retain the upstream depth of five.
-                    Topic={**topic(PREFIX+'scan_optimal', transient=True), 'Depth': 5})],
+                    Topic=topic(PREFIX+'local_attempt_debug', transient=True))],
             enabled=local_layout),
         group('调试', [pose]),
     ]
@@ -157,7 +170,7 @@ def configure(base, *, session_id='', layout='global', session_directory=None,
                 'Target Frame': '<Fixed Frame>', 'X': -6., 'Y': 30., 'Scale': 13.,
                 'Angle': 0., 'Near Clip Distance': .01}
     follow = {'Class': 'rviz_default_plugins/Orbit', 'Name': '局部跟随',
-              'Target Frame': 'd1max_loc_base_link', 'Distance': 10., 'Yaw': .8, 'Pitch': .85,
+              'Target Frame': 'd1max_loc_base_link', 'Distance': follow_distance, 'Yaw': .8, 'Pitch': .85,
               'Focal Point': {'X': 1.5, 'Y': 0., 'Z': 0.}, 'Near Clip Distance': .02,
               'Field of View': .7853981634, 'Invert Z Axis': False}
     spatial = {'Class': 'rviz_default_plugins/Orbit', 'Name': '跨层 3D',

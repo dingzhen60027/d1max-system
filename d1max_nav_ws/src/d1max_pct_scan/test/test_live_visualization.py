@@ -5,7 +5,7 @@ from pathlib import Path
 import yaml
 import pytest
 
-from d1max_pct_scan.live_visualization import PREFIX, LOCAL_MAP_DISPLAY_TTL, configure
+from d1max_pct_scan.live_visualization import PREFIX, LOCAL_MAP_DISPLAY_DECAY, configure
 
 
 def configuration():
@@ -46,6 +46,14 @@ def test_crossfloor_default_is_3d_and_follow_has_local_scale():
     assert current == views['Saved'][2]
 
 
+def test_local_follow_camera_scales_with_the_real_planning_window():
+    cfg=configure(configuration(),layout='local',local_window_size_m=[12.,12.,3.])
+    views=cfg['Visualization Manager']['Views']
+    assert views['Current']['Distance']==18.
+    assert views['Current']==views['Saved'][1]
+    assert views['Current']['Target Frame']=='d1max_loc_base_link'
+
+
 def test_rolling_maps_use_official_ros2_height_style_not_traversability_colours():
     cfg = configure(configuration(), layout='local')
     local = next(g for g in cfg['Visualization Manager']['Displays'] if g['Name'] == '局部规划')
@@ -53,26 +61,30 @@ def test_rolling_maps_use_official_ros2_height_style_not_traversability_colours(
     assert any(d.get('Topic',{}).get('Value')=='/d1max/localization/lio/deskewed'
                and d['Enabled'] for d in local['Displays'])
     obstacle = next(d for d in local['Displays'] if d.get('Topic', {}).get('Value') == PREFIX+'scan/grid_map/occupancy')
-    assert obstacle['Enabled'] and obstacle['Value']
-    assert obstacle['Name'] == '滑动占据地图（高度）'
+    assert not obstacle['Enabled'] and not obstacle['Value']
+    assert obstacle['Name'] == '原始占据地图（调试）'
     assert obstacle['Topic']['Reliability Policy'] == 'Best Effort'
-    assert obstacle['Decay Time'] == LOCAL_MAP_DISPLAY_TTL
+    assert obstacle['Decay Time'] == LOCAL_MAP_DISPLAY_DECAY
     inflated = displays(cfg)[PREFIX+'scan/grid_map/occupancy_inflate']
     assert inflated['Enabled'] and inflated['Value']
-    assert inflated['Name'] == '碰撞膨胀地图（高度）'
-    assert inflated['Decay Time'] == LOCAL_MAP_DISPLAY_TTL
-    # This matches upstream's sparse squares, not opaque full voxel Boxes.
+    assert inflated['Name'] == '膨胀占据地图（当前朝向 · 高度）'
+    assert inflated['Decay Time'] == LOCAL_MAP_DISPLAY_DECAY
+    box = displays(cfg)[PREFIX+'scan/self_inflation']
+    assert box['Enabled'] and box['Class'] == 'rviz_default_plugins/Marker'
+    assert box['Topic']['Durability Policy'] == 'Transient Local'
+    # Keep upstream's lightweight squares, not opaque full voxel Boxes.
+    # Both glyphs cover the actual .05 m native voxel width, without padding.
     # Both maps are height-coloured; orange/red is not a terrain class here.
-    for layer, size in ((obstacle, .05), (inflated, .04)):
+    for layer, size in ((obstacle, .05), (inflated, .05)):
         assert layer['Color Transformer'] == 'AxisColor' and layer['Axis'] == 'Z'
         assert layer['Use rainbow'] and not layer['Invert Rainbow']
         assert layer['Autocompute Value Bounds'] == {'Value': True}
         assert layer['Alpha'] == 1.0 and layer['Style'] == 'Squares'
         assert layer['Size (Pixels)'] == 3 and layer['Size (m)'] == size
         assert layer['Use Fixed Frame'] and 'Color' not in layer
-    # Native snapshots are 3 Hz: no deterministic 83 ms hole each frame, with
-    # one lost frame tolerated visually only. The sensor/command lease is unchanged.
-    assert 2/3. < LOCAL_MAP_DISPLAY_TTL <= 1.
+    # Zero means latest complete snapshot, not a short timeout that expires
+    # between the native 3 Hz updates or a .75 s accumulation of old occupancy.
+    assert LOCAL_MAP_DISPLAY_DECAY == 0
     boundary = displays(cfg)[PREFIX+'scan/grid_map/sliding_map_bbox']
     assert boundary['Class'] == 'rviz_default_plugins/Marker'
     assert boundary['Name'] == '滑动窗口边界' and boundary['Enabled']
@@ -82,6 +94,20 @@ def test_rolling_maps_use_official_ros2_height_style_not_traversability_colours(
     assert spline_topic['Depth'] == 5  # DELETEALL + two markers may arrive as a burst
     assert spline_topic['Durability Policy'] == 'Transient Local'
     assert spline_topic['Reliability Policy'] == 'Reliable'
+
+
+@pytest.mark.parametrize('layout', ['global', 'local'])
+def test_full_occupancy_snapshots_do_not_accumulate_while_other_cloud_decays_stay_unchanged(layout):
+    base = configuration()
+    original = deepcopy(base)
+    layers = displays(configure(base, layout=layout))
+    for suffix in ('occupancy', 'occupancy_inflate'):
+        layer = layers[PREFIX+'scan/grid_map/'+suffix]
+        assert layer['Class'] == 'rviz_default_plugins/PointCloud2'
+        assert layer['Decay Time'] == 0
+    assert layers['/d1max/localization/lio/deskewed']['Decay Time'] == .25
+    assert layers['/d1max/localization/scan_initial_preview']['Decay Time'] == .5
+    assert base == original  # The caller's presentation configuration is unchanged.
 
 
 def test_building_context_visible_globally_but_local_map_group_hidden():
@@ -142,13 +168,21 @@ def test_profiles_separate_heavy_map_layers_and_keep_same_tree_and_coordinate_fr
     assert PREFIX+'blocked_surface' not in global_topics
     assert PREFIX+'blocked_surface' not in local_topics
     assert PREFIX+'blocked_surface' in displays(global_cfg)  # Optional, not removed.
-    for topic in ('/d1max/localization/lio/deskewed', PREFIX+'scan/grid_map/occupancy',
-                  PREFIX+'scan/grid_map/occupancy_inflate',
+    for topic in ('/d1max/localization/lio/deskewed', PREFIX+'scan/grid_map/occupancy_inflate',
+                  PREFIX+'scan/self_inflation',
                   PREFIX+'scan/grid_map/sliding_map_bbox', PREFIX+'local_debug',
-                  PREFIX+'local_attempt_debug', PREFIX+'scan_optimal'):
+                  PREFIX+'local_attempt_debug'):
         assert topic in local_topics and topic not in global_topics
-    for topic in (PREFIX+'body_marker', PREFIX+'global_path_visual'):
+    assert PREFIX+'scan/grid_map/occupancy' not in local_topics
+    assert PREFIX+'scan/grid_map/occupancy' not in global_topics
+    for topic in (PREFIX+'body_marker', PREFIX+'global_path_visual', PREFIX+'scan_optimal'):
         assert topic in global_topics and topic in local_topics
+    for cfg in (global_cfg, local_cfg):
+        committed = displays(cfg)[PREFIX+'scan_optimal']
+        assert committed['Name'] == '局部轨迹（已提交）'
+        assert committed['Topic']['Durability Policy'] == 'Transient Local'
+        assert len([d for g in groups(cfg).values() for d in g['Displays']
+                    if d.get('Topic', {}).get('Value') == PREFIX+'scan_optimal']) == 1
     assert '/d1max/localization/trajectory' not in local_topics
     assert '/d1max/localization/scan_initial_preview' not in local_topics
     for layout, cfg in (('global', global_cfg), ('local', local_cfg)):
@@ -169,6 +203,15 @@ def test_local_profile_hides_goal_editing_but_preserves_tools_and_goal_topic():
                   if d['Class'].endswith('/InteractiveMarkers'))
     assert not handle['Enabled'] and not handle['Value']
     assert handle['Interactive Markers Namespace'] == '/d1max_live_goal'
+
+
+def test_goal_support_is_one_latched_marker_array_in_the_global_layer():
+    for layout in ('global','local'):
+        cfg=configure(configuration(),layout=layout)
+        support=displays(cfg)[PREFIX+'goal_support']
+        assert support['Class']=='rviz_default_plugins/MarkerArray'
+        assert support['Topic']['Durability Policy']=='Transient Local'
+        assert support['Enabled']==(layout=='global')
 
 
 @pytest.mark.parametrize('resolution', [.05, .10, .15, .20])
@@ -200,10 +243,12 @@ def test_single_window_file_contract_is_bound_to_explicit_session_directory(tmp_
                 if d.get('Topic', {}).get('Value') == '/d1max/localization/map_cloud']) == 1
 
 
-def test_rolling_map_style_matches_pinned_ros2_reference():
+def test_rolling_map_style_matches_pinned_ros2_reference_with_actual_voxel_width():
     path = Path(__file__).resolve().parents[2] / 'scan_planner_vendor/plan_manage/launch/default.rviz'
     native = yaml.safe_load(path.read_text())['Visualization Manager']['Displays']
     native = {layer.get('Topic', {}).get('Value'): layer for layer in native}
+    config = Path(__file__).resolve().parents[2] / 'd1max_scan_planner/config/d1max_scan_planner.yaml'
+    resolution = yaml.safe_load(config.read_text())['/**/scan_planner_node']['ros__parameters']['grid_map.resolution']
     layers = displays(configure(configuration(), layout='local'))
     for suffix in ('occupancy', 'occupancy_inflate'):
         expected = native['/grid_map/'+suffix]
@@ -212,7 +257,9 @@ def test_rolling_map_style_matches_pinned_ros2_reference():
                       'Invert Rainbow', 'Alpha', 'Style', 'Size (Pixels)',
                       'Use Fixed Frame', 'Position Transformer'):
             assert actual[field] == expected[field], field
-        assert actual['Size (m)'] == pytest.approx(expected['Size (m)'])
+        # Official inflated glyphs are .04 m. Our .05 m squares cover one
+        # actual voxel exactly; they do not add another inflation margin.
+        assert actual['Size (m)'] == pytest.approx(resolution)
         assert actual['Autocompute Value Bounds']['Value'] == expected['Autocompute Value Bounds']['Value']
         assert actual['Topic']['Reliability Policy'] == expected['Topic']['Reliability Policy']
 

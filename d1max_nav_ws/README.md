@@ -42,7 +42,18 @@ The default entry now selects the complete mainline runtime at
 in `deploy/single_floor_release.json`. Localization, interfaces, BT, planners,
 tracker, SDK adapter and RViz load from that same bundle. Historical bundles are
 rollback artifacts, not additional workflows. Selecting these bytes does not
-grant SDK motion authority or replace physical calibration.
+grant SDK motion authority or claim physically measured performance.
+
+2026-10-14: the selected default map restores the **2026-10-02 multi-floor global
+planning result** (`global_20261002_170003_637005`). The same entry now exposes
+both floors and their staircase connection, with original-map 3D goals and
+floor-aware initial poses. Only deployment paths changed; the PCT geometry and
+cost arrays were preserved bit for bit. Map selection does not select or disable
+the task graph: the existing complete navigation BT, reference manager, SCAN,
+tracker and SDK configuration are retained. The conditioned map is still a
+planning input, not a control TF or a physical acceptance record. Route geometry
+and movement authorization remain separate from module startup; planning success
+is not navigation arrival. The original-coordinate floor map is retained unchanged.
 
 The 2026-10-04 performance round reduces native snapshot buffers, removes hot-loop
 heap allocation and isolates complete-frame worker IPC and periodic SDK publishing.
@@ -126,16 +137,17 @@ tools/navigation_entry.sh --check-release   # bytes/import/RMW loading only; no 
 The same graph has two purposes: `planning_only` (no safety/SDK motion pipeline)
 and `execution` (typed BT authorization, safety gate and existing SDK writer).
 For either, prepare a fresh session, seal it, then run it. A live execution
-session also requires the current SDK session identity and a verified physical
-record. Startup never connects/reconnects SDK, sets posture, or executes a goal.
-The 0.3 m/s limit and all existing acceptance checks remain unchanged.
+session binds the current SDK session and the shared runtime motion profile;
+it does not require a physical calibration report. Startup never
+connects/reconnects SDK, sets posture, or executes a goal. Task ownership,
+source freshness, emergency/control-loss stopping and software limits remain.
 
 `scripts/planning/start_live_planning_view.sh`, the old motion coordinator and
 the old Nav2 launcher are retained as legacy workflows, not official motion
 entry points. The Web navigation launcher uses `/api/navigation-session`; the
 old `/api/single-floor` URL is an alias of the same runtime/lock, not a second service. Its private
-activation must bind this release, the current SDK session and, for execution,
-the physical record. Selecting a release is not activating an unavailable record.
+activation binds the release and its runtime profile; the current SDK session
+is bound when starting. Selecting a release alone is not a task execution grant.
 
 The Web's `/#/planning` page now has one mainline lifecycle entry, not a
 preview/navigation selector. Its built static assets must be rebuilt alongside
@@ -146,9 +158,28 @@ restart localization, the BT or planning. A namespace-wide viewer lock also
 prevents separate CLI invocations from creating a second window. Closing RViz
 does not cancel the task. Historical two-view units are cleanup-only.
 The historical `/api/live-planning/start` endpoint is retired (410); it is not
-a fallback when release validation fails. For `planning_only`, explicit
-`bind_current_on_start` may capture the existing SDK data session at startup;
-`execution` retains its fixed session and physical-record requirements.
+a fallback when release validation fails. The navigation graph binds the
+existing SDK session at startup; it never opens a second SDK connection.
+
+The current Web configuration uses one `launch_policy: navigation`, not a fixed
+preview/execution mode. The sealed `runtime_motion_profile.json` supplies the
+same motion parameters to SCAN, the tracker, BT and the sole SDK writer. An
+offline physical calibration report is no longer a startup requirement.
+Runtime validity and physical acceptance are separate: vendor nominal speed
+scales and configured planning/stopping margins are not measured guarantees.
+The SDK's two published speed tables conflict; the default uses the larger
+nominal scale per axis (1/1/2 for forward/lateral/yaw) and 0.3 m/s / 0.5 rad/s
+software caps. Zero-command ACK and fresh stationary MC observations remain
+required for a measured-stop report. Emergency stop, control loss, source age,
+command expiry, route identity and collision behavior are not bypassed.
+Legacy physical-record overrides remain compatible, but are not the default.
+The formal tracking chain uses typed committed geometry and measured progress,
+not the historical Go2 freeze Bool. A freshly re-certified actual-state entry
+is ordered by task/generation/curve identity, not the old solve start clock.
+Startup does not issue a goal, take control, or automatically execute a route;
+the BT still owns the goal-bound execution confirmation in RViz. A running
+session retains its admitted capability until stopped, irrespective of changes
+to the next launch configuration.
 
 Package READMEs under `src/` describe each stage; `docs/status/` has the
 current state and open items.

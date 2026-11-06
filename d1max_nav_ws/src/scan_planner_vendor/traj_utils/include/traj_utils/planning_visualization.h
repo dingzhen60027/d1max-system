@@ -48,6 +48,7 @@ namespace scan_planner
     void displayInitPathList(vector<Eigen::Vector3d> init_pts, const double scale, int id);
     void displayOptimalList(Eigen::MatrixXd optimal_pts, int id);
     void displayOptimalTraj(UniformBspline position_traj, int id);
+    void clearOptimalTraj(int id);
     void displayAStarList(std::vector<std::vector<Eigen::Vector3d>> a_star_paths, int id);
     void displayArrowList(const MarkerArrayPublisher::SharedPtr &pub, const vector<Eigen::Vector3d> &list,
                           double scale, Eigen::Vector4d color, int id);

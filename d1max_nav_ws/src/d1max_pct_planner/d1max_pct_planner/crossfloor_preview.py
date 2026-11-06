@@ -10,9 +10,12 @@ import numpy as np
 import yaml
 
 from .crossfloor_route import (validate_config, plan_crossfloor, _masked_tomogram,
-                              _native_route, _check_stair_profile, _check_leg, LEGS)
+                              _native_route, _check_stair_profile, _check_leg,
+                              checked_landing_adjustment, STAIR_REFINEMENT_PROOF, LEGS,
+                              _stationary_floor_leg)
 from .path_quality import path_quality
 from .tomogram_map import TomogramMap
+from .crossfloor_partial import endpoint_region, plan_partial_stair
 
 
 def _signature(value):
@@ -21,8 +24,10 @@ def _signature(value):
 
 
 def _map_settings_signature(settings):
-    return _signature({key:settings[key] for key in
-        ('planning','limits','vendor_root','floor_z_ranges','stair_roi','unknown_ceiling_policy')})
+    keys = ('planning','limits','vendor_root','floor_z_ranges','stair_roi','unknown_ceiling_policy')
+    return _signature({**{key:settings[key] for key in keys},
+        **({'compiled_stair_connector':settings['compiled_stair_connector']}
+           if 'compiled_stair_connector' in settings else {})})
 
 
 def _immutable_map_snapshot(original):
@@ -56,6 +61,22 @@ class _FixedStairCache:
                                    for key in ('entry', 'landing', 'exit')})
         self._results = {}
         self.stats = dict(hits=0, misses=0, max_entries=2)
+        # Separate compiled-polyline proof path. Native put() below remains
+        # quintic-only; no old polynomial/map certificate is relabelled.
+        from .compiled_stair_connector import load_compiled_stair_connector
+        self._compiled = load_compiled_stair_connector(tomogram, settings)
+        self._compiled_results = {}
+        if self._compiled is not None:
+            for name, first, last in LEGS:
+                if name not in self._compiled['legs']:
+                    continue
+                key = self._key(tomogram, name, settings['anchors'][first],
+                                settings['anchors'][last], settings)
+                self._compiled_results[key] = deepcopy(self._compiled['legs'][name])
+            self._results = deepcopy(self._compiled_results)
+
+    def compiled_bundle(self):
+        return deepcopy(self._compiled)
 
     def _key(self, tomogram, name, begin, end, settings):
         if name not in ('stair_lower', 'stair_upper'):
@@ -76,6 +97,12 @@ class _FixedStairCache:
         if key is None:
             return None
         raw = self._results.get(key)
+        if raw is None and key in self._compiled_results:
+            # An unrelated failed goal clears transient native results, not
+            # this already-verified immutable map artifact. No disk reread or
+            # fallback to a different curve occurs on the next fixed query.
+            raw = deepcopy(self._compiled_results[key])
+            self._results[key] = raw
         self.stats['hits' if raw is not None else 'misses'] += 1
         return deepcopy(raw) if raw is not None else None
 
@@ -164,7 +191,8 @@ def _as_preview(result, tomogram, elapsed=0.):
             'start_xyz': points[0].tolist(), 'goal_xyz': points[-1].tolist(),
             'start_layer': int(layers[0]), 'goal_layer': int(layers[-1]),
             'source_tomogram_sha256': tomogram.sha256,
-            'elapsed_s': elapsed, 'algorithm': 'PCT floor/stair coordinator + checked native GPMP',
+            'elapsed_s': elapsed, 'algorithm': 'PCT floor/stair coordinator + checked native routes',
+            'segment_algorithms': [segment.get('native_algorithm') for segment in result.get('segments', [])],
             'height_semantics': 'planning_ground_support_not_body_or_timed_trajectory',
             'path_quality': path_quality(points), 'execution_authorized': False}
 
@@ -227,11 +255,7 @@ class CrossfloorPreviewRoute:
                 'memory_scope': 'unique_tomogram_numpy_buffers_excludes_native_allocations'}
 
     def _floor(self, point):
-        matches = [name for name, (low, high) in self.settings['floor_z_ranges'].items()
-                   if low <= point[2] <= high]
-        if len(matches) != 1:
-            raise ValueError('起终点请放在一楼或二楼地面；楼梯由连接通道自动规划')
-        return matches[0]
+        return endpoint_region(point, self.settings)
 
     def warmup_resources(self):
         """Build three native map resources without computing a user route."""
@@ -282,6 +306,10 @@ class CrossfloorPreviewRoute:
         self.tomogram.validate_endpoint(start, start_layer)
         self.tomogram.validate_endpoint(goal, goal_layer)
         first, last = self._floor(start), self._floor(goal)
+        if first not in ('lower', 'upper') or last not in ('lower', 'upper'):
+            result = plan_partial_stair(self.tomogram, self.settings, start, goal,
+                start_layer, goal_layer, resources=self._resources)
+            return _as_preview(result, self.tomogram, time.monotonic()-began)
         if first == last:
             name = first + '_floor'
             masked, route = self._resources(name, self.settings)
@@ -316,10 +344,34 @@ class CrossfloorPreviewRoute:
                 'from_layer': event['to_layer'], 'to_layer': event['from_layer']}
                 for event in result['layer_transitions'][::-1]]
             validation = validate_config(raw)
+            # The selected landing, not the originally requested corner, owns
+            # the shared boundary after a checked platform rounding.
+            validation['anchors']['landing'] = {
+                'xyz': np.asarray(result['anchors']['landing']['xyz'], dtype=float),
+                'layer_id': result['anchors']['landing']['layer_id']}
             validation['anchors']['entry'], validation['anchors']['exit'] = (
                 validation['anchors']['exit'], validation['anchors']['entry'])
             result['stair_profile'] = _check_stair_profile(
                 np.asarray(result['path_xyz']), result['edge_legs'], validation)
+            refinement = result.get('stair_refinement')
+            if refinement and refinement.get('compiled_stair_connector') is not None:
+                stair_records = [segment for segment in result['segments']
+                                 if segment['name'].startswith('stair_')]
+                stair_start, stair_end = stair_records[0]['first_index'], stair_records[-1]['last_index']
+                refinement['landing_index'] = stair_end-stair_start-refinement['landing_index']
+                refinement['output_direction'] = 'upper_to_lower'
+                refinement['stair_profile'] = deepcopy(result['stair_profile'])
+            if refinement and refinement.get('applied'):
+                stair_records = [segment for segment in result['segments']
+                                 if segment['name'].startswith('stair_')]
+                stair_start, stair_end = stair_records[0]['first_index'], stair_records[-1]['last_index']
+                refinement['landing_index'] = stair_end-stair_start-refinement['landing_index']
+                # Span records refer to the canonical low-to-high polynomial
+                # calculation, not to a second solve performed during reversal.
+                refinement['span_record_direction'] = 'lower_to_upper'
+                refinement['output_direction'] = 'upper_to_lower'
+                if 'stair_profile' in refinement:
+                    refinement['stair_profile'] = deepcopy(result['stair_profile'])
             result['direction'] = 'upper_to_lower'
         else:
             result['direction'] = 'lower_to_upper'
@@ -338,29 +390,73 @@ def restore_crossfloor(tomogram, config_path, audit_path):
         raise ValueError('Saved cross-floor route does not match this map/configuration')
     segments = record.get('segments', [])
     proofs = {'quintic_cell_boundary_roots_and_interval_interiors',
-              'polynomial_cell_boundary_roots_and_interval_interiors_plus_validate_path'}
-    if len(segments) != 4 or any(
+              'polynomial_cell_boundary_roots_and_interval_interiors_plus_validate_path',
+              STAIR_REFINEMENT_PROOF}
+    from .compiled_stair_connector import PROOF as COMPILED_PROOF, load_compiled_stair_connector
+    compiled = load_compiled_stair_connector(tomogram, settings)
+    if compiled is not None:
+        proofs.add(COMPILED_PROOF)
+    refined = record.get('stair_refinement', {})
+    if any(segment.get('curve_validation') == COMPILED_PROOF for segment in segments):
+        if (compiled is None or refined.get('curve_validation') != COMPILED_PROOF
+                or any(segment.get('curve_validation') != COMPILED_PROOF
+                       for segment in segments if segment.get('name', '').startswith('stair_'))):
+            raise ValueError('Saved compiled stairs require both exact current-map connector legs')
+    expected_legs = [leg for leg in LEGS if not _stationary_floor_leg(
+        leg[0], settings['anchors'][leg[1]], settings['anchors'][leg[2]])]
+    if len(segments) != len(expected_legs) or any(
             segment.get('curve_validation') not in proofs
             or segment.get('curve_partition_points', 0) < 2
-            or (segment['name'].startswith('stair_') and segment.get('quintic_segments', 0) <= 0)
+            or (segment['name'].startswith('stair_')
+                and segment.get('curve_validation') not in (STAIR_REFINEMENT_PROOF, COMPILED_PROOF)
+                and segment.get('quintic_segments', 0) <= 0)
+            or (segment.get('curve_validation') == COMPILED_PROOF
+                and not segment['name'].startswith('stair_'))
             for segment in segments):
         raise ValueError('Saved cross-floor route lacks complete native-curve validation evidence')
     points, layers = np.asarray(record['path_xyz']), np.asarray(record['layer_ids'])
+    stair_mask = _masked_tomogram(tomogram, 'stair_lower', settings)
+    selected_settings = settings
+    if refined.get('applied') is True:
+        landing = record['anchors']['landing']
+        if (landing.get('requested_xyz') != settings['anchors']['landing']['xyz'].tolist()
+                or landing.get('requested_layer_id') != settings['anchors']['landing']['layer_id']):
+            raise ValueError('Saved effective landing does not identify its configured portal')
+        adjustment = checked_landing_adjustment(tomogram, stair_mask, settings, landing)
+        if (refined.get('curve_validation') != STAIR_REFINEMENT_PROOF
+                or abs(float(landing.get('displacement_m', -1))-adjustment['displacement_m']) > 1e-8
+                or any(segment.get('curve_validation') != STAIR_REFINEMENT_PROOF
+                       for segment in segments if segment['name'].startswith('stair_'))):
+            raise ValueError('Saved refined stair proof does not match its selected geometry')
+        selected_settings = {**settings, 'anchors': {**settings['anchors'],
+            'landing': dict(xyz=np.asarray(landing['xyz']), layer_id=landing['layer_id'])}}
+    elif any(segment.get('curve_validation') == STAIR_REFINEMENT_PROOF for segment in segments):
+        raise ValueError('Saved stair refinement proof lacks its refinement provenance')
     cursor = 0
-    for segment, (name, begin, end) in zip(segments, LEGS):
+    for segment, (name, begin, end) in zip(segments, expected_legs):
         a, b = segment['first_index'], segment['last_index']
         if (segment['name'] != name or segment['from'] != begin or segment['to'] != end
                 or a != cursor or not a < b < len(points)):
             raise ValueError('Saved cross-floor segment order/coverage is invalid')
-        masked = _masked_tomogram(tomogram, name, settings)
+        masked = stair_mask if name.startswith('stair_') else _masked_tomogram(tomogram, name, settings)
+        if segment.get('curve_validation') == COMPILED_PROOF:
+            expected = compiled['legs'][name]
+            if (refined.get('applied') is not False
+                    or refined.get('curve_validation') != COMPILED_PROOF
+                    or segment.get('compiled_stair_connector') != expected['compiled_stair_connector']
+                    or refined.get('compiled_stair_connector') != expected['compiled_stair_connector']
+                    or not np.array_equal(points[a:b+1], expected['path'])
+                    or not np.array_equal(layers[a:b+1], expected['layer_ids'])):
+                raise ValueError('Saved compiled stair geometry does not match its current-map bundle')
         _check_leg({'path': points[a:b + 1], 'layer_ids': layers[a:b + 1]}, tomogram, masked,
-                   name, settings['anchors'][begin], settings['anchors'][end], settings)
+                   name, selected_settings['anchors'][begin], selected_settings['anchors'][end],
+                   selected_settings)
         if record['edge_legs'][a:b] != [name] * (b - a):
             raise ValueError('Saved cross-floor edge identities do not match the segments')
         cursor = b
     if cursor != len(points) - 1 or len(record['edge_legs']) != len(points) - 1:
         raise ValueError('Saved cross-floor route has uncovered edges')
-    _check_stair_profile(points, record['edge_legs'], settings)
+    _check_stair_profile(points, record['edge_legs'], selected_settings)
     result = _as_preview(record, tomogram)
     result['route_origin'] = 'saved_crossfloor_route_exact_map_revalidated'
     return result

@@ -1,8 +1,9 @@
-"""Bounded recovery for FollowRoute; never alters native collision decisions.
+"""FollowRoute wait policy; never alters native collision decisions.
 
 The action remains RUNNING through transient gaps. A healthy incumbent wins
 over a failed successor, but only the production bridge can prove it healthy.
-Budgets belong to an episode, not to each changing display/status string.
+Legacy budgets belong to an episode, not changing display/status strings.
+The mainline retains its committed task through recoverable local failures.
 """
 from dataclasses import dataclass
 import math
@@ -10,12 +11,17 @@ import math
 
 FOLLOW_DEFAULTS = dict(follow_pose_wait_s=30., follow_map_wait_s=15.,
     follow_reference_wait_s=5., follow_trajectory_wait_s=20.,
-    follow_recovery_episode_s=30., follow_stable_reset_s=.6)
+    follow_recovery_episode_s=30., follow_stable_reset_s=.6,
+    keep_committed_route_on_local_failure=False)
 
 
 def validate_follow_policy(params):
     for key, default in FOLLOW_DEFAULTS.items():
         value = params.get(key, default)
+        if key=='keep_committed_route_on_local_failure':
+            if type(value) is not bool:
+                raise ValueError('invalid_follow_policy:'+key)
+            continue
         upper = 3. if key == 'follow_stable_reset_s' else 120.
         lower = .4 if key == 'follow_stable_reset_s' else 1.
         if (type(value) not in (int, float) or not math.isfinite(value)
@@ -37,6 +43,11 @@ def classify_follow(*, pose_ready, map_ready, committed, subscriber_ready,
                     same_reference, scan, pending_native_phase=''):
     if not pose_ready:
         return FollowStage('waiting_localization', 'waiting_current_localization', 'pose')
+    # The bridge binds this native proof to the exact committed curve/context.
+    # Map relay freshness admits new references; it cannot override a healthy
+    # incumbent. Pose and committed-reference identity remain prerequisites.
+    if committed and same_reference and scan.get('spline_visual_valid') is True:
+        return FollowStage('following', 'following_validated_local_trajectory')
     if not map_ready:
         return FollowStage('waiting_local_map', 'waiting_fresh_local_map', 'map')
     if committed and not same_reference and pending_native_phase:
@@ -44,25 +55,22 @@ def classify_follow(*, pose_ready, map_ready, committed, subscriber_ready,
         # Expose the real current-generation wait while the candidate has no
         # validation/owner commit yet. It stays a bounded trajectory wait.
         if pending_native_phase in ('reference_rejected_frame','reference_rejected_geometry',
-                                    'failed_reference_geometry','emergency_stop'):
+                                    'failed_reference_geometry'):
             return FollowStage('local_contract_failed',pending_native_phase,terminal=True)
         return FollowStage('recovering_local_trajectory', pending_native_phase, 'trajectory')
     if not committed or not same_reference:
         return FollowStage('waiting_reference', 'waiting_reference_acceptance' if committed
                            else 'waiting_reference_subscriber' if not subscriber_ready
                            else 'delivering_committed_route', 'reference')
-    # Candidate failure must not erase an independently revalidated incumbent.
-    if scan.get('spline_visual_valid') is True:
-        return FollowStage('following', 'following_validated_local_trajectory')
     phase = str(scan.get('local_debug_phase') or 'waiting_native_trajectory')[:120]
     if phase in ('reference_rejected_frame', 'reference_rejected_geometry',
-                 'failed_reference_geometry', 'emergency_stop'):
+                 'failed_reference_geometry'):
         return FollowStage('local_contract_failed', phase, terminal=True)
     return FollowStage('recovering_local_trajectory', phase, 'trajectory')
 
 
 class FollowRecovery:
-    """Monotonic accumulated waits and a bounded episode; no deadline renewal.
+    """Monotonic waits; persistent tasks or legacy finite recovery episodes.
 
     Clearing an episode requires sustained following and three distinct bridge
     reports. A single valid packet or switching wait reason cannot reset it.
@@ -96,11 +104,12 @@ class FollowRecovery:
         # Deadline admission precedes stable recovery, as in the BT's native
         # PreparationBudget. A third good report received at/after the original
         # deadline cannot revive an already expired episode.
-        for kind, elapsed in self.waits.items():
-            if elapsed >= self.params['follow_'+kind+'_wait_s']:
-                return 'follow_'+kind+'_timeout:'+stage.reason
-        if self.since is not None and now-self.since >= self.params['follow_recovery_episode_s']:
-            return 'follow_recovery_episode_timeout:'+stage.reason
+        if not self.params['keep_committed_route_on_local_failure']:
+            for kind, elapsed in self.waits.items():
+                if elapsed >= self.params['follow_'+kind+'_wait_s']:
+                    return 'follow_'+kind+'_timeout:'+stage.reason
+            if self.since is not None and now-self.since >= self.params['follow_recovery_episode_s']:
+                return 'follow_recovery_episode_timeout:'+stage.reason
         if (self.good_since is not None
                 and now-self.good_since >= self.params['follow_stable_reset_s']
                 and self.good_samples >= 3):

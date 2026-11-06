@@ -23,6 +23,11 @@ if [ "$(readlink -f -- "${BASH_SOURCE[0]}")" != "$ENTRY_TOOLS/single_floor_entry
 fi
 ENTRY_PREFLIGHT="$ENTRY_TOOLS/release/single_floor_entry_preflight.py"
 export PYTHONPATH=
+# Rebuild package-share lookup in the same ordered setup as Python imports.
+# Colcon's DSV hooks skip an inherited prefix instead of moving it to the
+# front; pre-sourcing application/local_setup.bash otherwise leaves the
+# mutable workspace's package shares ahead of the sealed application.
+export AMENT_PREFIX_PATH=
 # rmw_zenoh_cpp is installed in the application's local ROS prefix, not /opt.
 # Do not source d1max_ros2_env.sh: that script overwrites the isolated domain
 # and router configuration. Load libraries only, then select transport below.

@@ -55,6 +55,36 @@ print(json.dumps({'path':str(Path(pcd_io.__file__).resolve())}))
     assert '/copy_install/d1max_pct_scan/pointcloud_helpers/pcd_io.py' in result['path']
 
 
+def test_copy_installed_stair_mapping_keeps_original_support_coordinates(packaged_helpers):
+    result = run_copy(packaged_helpers, '''
+import importlib.util,json
+from types import SimpleNamespace
+import numpy as np
+from d1max_pct_scan.pointcloud_helpers.ground_path_bridge import StairGroundMapping
+from d1max_pct_scan.source_route import SourceSupport
+from d1max_pct_scan.reference_support import ConditionedReferenceSupport
+assert importlib.util.find_spec('tools') is None
+source=np.array([[0.,0.,0.],[.1,0.,0.]],dtype=np.float64)
+planning=source+[0.,0.,.08]
+mapping=StairGroundMapping(dict(source_sha256='a'*64,mapping_sha256='b'*64,
+    surfaces=[dict(id=1,kind='landing_plane')],max_displacement_m=.08,
+    association_max_distance_m=.12),dict(source_indices=np.arange(2,dtype=np.int64),
+    source_xyz=source,planning_xyz=planning,surface_id=np.ones(2,dtype=np.int32)),source_xyz=source)
+grid=SimpleNamespace(resolution=.1,center=np.array([0.,0.]),offset=np.array([0,0]),nx=2,ny=1,
+    ground=np.full((1,2,1),.08),valid=np.ones((1,2,1),dtype=bool),
+    ground_known=np.ones((1,2,1),dtype=bool))
+support=SourceSupport({'stairs':source},'a'*64,stair_mapping=mapping)
+provider=ConditionedReferenceSupport({'source_sha256':'a'*64},support,grid)
+selected=provider.stair_surface(source,source_map_sha256='a'*64,floor_id='stairs',
+    segment_kind='landing',required_mode='stair')
+assert selected.verified and np.array_equal(selected.points,source)
+assert not np.array_equal(selected.points,planning)
+print(json.dumps({'source_points':selected.points.tolist(),'mapping_schema':mapping.SCHEMA}))
+''')
+    assert result['source_points'] == [[0.,0.,0.],[.1,0.,0.]]
+    assert result['mapping_schema'] == 'd1max.stair_regularization.v1'
+
+
 def test_real_source_identity_loads_original_binary_records_without_workspace_cwd(packaged_helpers):
     temporary, _, _ = packaged_helpers
     dtype = np.dtype([('x','<f4'),('y','<f4'),('z','<f4'),('intensity','<u2')])

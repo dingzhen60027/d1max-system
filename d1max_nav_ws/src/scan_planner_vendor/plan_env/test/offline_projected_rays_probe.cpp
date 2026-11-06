@@ -28,6 +28,67 @@ static Json witnessJson(const scan_planner::RayWitness &w) {
   return out;
 }
 struct GridMapTestAccess {
+  // Opt-in offline diagnostics only. Hash every collision-relevant native
+  // buffer, including vertical hit children and evidence source clocks. Raw
+  // occupancy alone cannot prove a raycasting optimization preserves stairs.
+  template<class T> static Json bufferDigest(const std::vector<T> &values) {
+    std::uint64_t hash=14695981039346656037ULL;
+    const auto *bytes=reinterpret_cast<const unsigned char*>(values.data());
+    for(std::size_t i=0;i<values.size()*sizeof(T);++i) {hash^=bytes[i];hash*=1099511628211ULL;}
+    std::ostringstream digest;digest<<std::hex<<hash;
+    return {{"elements",values.size()},{"element_bytes",sizeof(T)},{"fnv1a64",digest.str()}};
+  }
+  static Json collisionBuffers(const GridMap &map) {
+    return {{"raw_occupancy",bufferDigest(map.md_.occupancy_buffer_)},
+      {"occupied_hit_subvoxels",bufferDigest(map.md_.occupied_hit_subvoxels_)},
+      {"strict_inflate",bufferDigest(map.md_.occupancy_buffer_inflate_)},
+      {"planning_inflate",bufferDigest(map.md_.planning_occupancy_buffer_inflate_)},
+      {"free_observation_stamps",bufferDigest(map.free_observation_stamps_)}};
+  }
+  static Json collisionIdentity(const GridMap &map) {
+    return {{"source_stamp_ns",map.integrated_cloud_stamp_ns_},
+      {"ray_source_stamps_ns",map.ray_integrated_stamps_},
+      {"ray_receipts_ns",Json::array({map.ray_integrated_receipts_[0].time_since_epoch().count(),
+                                     map.ray_integrated_receipts_[1].time_since_epoch().count()})},
+      {"context_sequence",map.localization_context_sequence_},{"epoch",map.localization_epoch_},
+      {"seed",map.localization_seed_},{"context_barrier_ns",map.localization_context_barrier_ns_},
+      {"context_payload",map.localization_context_payload_},{"clock_fault",map.ray_clock_fault_},
+      {"raw_revision",map.occupancy_revision_},{"free_evidence_revision",map.free_evidence_revision_},
+      {"fusion_sequence",map.fusion_timing_.sequence},{"fusion_sources",map.fusion_timing_.source_stamps},
+      {"map_origin_idx",xyz(map.mp_.map_origin_idx_)},
+      {"map_bound_min_idx",xyz(map.mp_.map_bound_min_idx_)},
+      {"map_voxel_num",xyz(map.mp_.map_voxel_num_)}};
+  }
+  static Json fullStateAudit(const GridMap &map,std::int64_t now) {
+    if(now<=0)throw std::runtime_error("state audit requires the original explicit query clock");
+    const auto buffers=collisionBuffers(map),identity=collisionIdentity(map);
+    GridMap snapshot;map.copyCollisionSnapshotTo(snapshot,now,
+      std::chrono::steady_clock::time_point(std::chrono::nanoseconds(now)));
+    const auto snapshot_buffers=collisionBuffers(snapshot),snapshot_identity=collisionIdentity(snapshot);
+    // Deferred per-cell source updates must not leave a hidden difference in
+    // the writer's temporary vote state that can surface on the next batch.
+    // This is opt-in offline auditing, never part of production fusion work.
+    auto pending_cells=map.md_.cache_voxel_;
+    Json cached_cells=Json::array();
+    while(!pending_cells.empty()) {
+      cached_cells.push_back(xyz(pending_cells.front()));pending_cells.pop();
+    }
+    const Json writer_scratch={{"count_hit",bufferDigest(map.md_.count_hit_)},
+      {"count_hit_and_miss",bufferDigest(map.md_.count_hit_and_miss_)},
+      {"flag_rayend",bufferDigest(map.md_.flag_rayend_)},
+      {"flag_traverse",bufferDigest(map.md_.flag_traverse_)},
+      {"raycast_num",map.md_.raycast_num_},{"cached_cells",cached_cells},
+      {"free_evidence_recovered",map.free_evidence_recovered_}};
+    return {{"buffers",buffers},{"identity",identity},
+      {"writer_scratch",writer_scratch},
+      {"strict_inflate_counts",bufferDigest(map.md_.occupancy_buffer_inflate_cnt_)},
+      {"planning_inflate_counts",bufferDigest(map.md_.planning_occupancy_buffer_inflate_cnt_)},
+      {"snapshot_buffers",snapshot_buffers},{"snapshot_identity",snapshot_identity},
+      {"snapshot_matches_completed_writer",buffers==snapshot_buffers&&identity==snapshot_identity},
+      {"snapshot_clock_ns",snapshot.snapshot_clock_ns_},
+      {"snapshot_has_no_writer_counts",snapshot.md_.occupancy_buffer_inflate_cnt_.empty()&&
+                                        snapshot.md_.planning_occupancy_buffer_inflate_cnt_.empty()}};
+  }
   static void freshness(GridMap &map,bool enabled) {map.enforce_free_freshness_=enabled;}
   static void queryClock(GridMap &map,std::int64_t now) {
     if(now>0) map.ray_query_clock_ns_=now;
@@ -64,7 +125,19 @@ struct GridMapTestAccess {
     p.min_occupancy_log_=odds(number("p_occ"));p.unknown_flag_=.01;
     p.max_ray_length_=number("max_ray_length");p.double_cylinder_radius_=number("double_cylinder_radius");
     p.double_cylinder_offset_=number("double_cylinder_offset");
+    p.collision_model_=v.value("grid_map.collision_model",std::string("double_cylinder"));
+    p.box_length_=v.value("grid_map.box_length",-1.0);p.box_width_=v.value("grid_map.box_width",-1.0);
+    p.box_nominal_length_=v.value("grid_map.box_nominal_length",-1.0);
+    p.box_nominal_width_=v.value("grid_map.box_nominal_width",-1.0);
+    p.stair_planar_clearance_=v.value("grid_map.stair_planar_clearance",-1.0);
+    p.stair_subvoxel_collision_=v.value("grid_map.stair_subvoxel_collision",false);
+    p.stair_contact_body_below_=v.value("grid_map.stair_contact_body_below",-1.0);
+    p.body_below_=v.value("grid_map.body_below",-1.0);p.body_above_=v.value("grid_map.body_above",-1.0);
+    p.planning_body_below_=v.value("grid_map.planning_body_below",-1.0);
+    p.planning_body_above_=v.value("grid_map.planning_body_above",-1.0);
     p.obstacles_inflation_z_up=number("obstacles_inflation_z_up");p.obstacles_inflation_z_down=number("obstacles_inflation_z_down");
+    p.planning_obstacles_inflation_z_up=v.value("grid_map.planning_obstacles_inflation_z_up",-1.0);
+    p.planning_obstacles_inflation_z_down=v.value("grid_map.planning_obstacles_inflation_z_down",-1.0);
     p.cloud_pose_max_age_=v.value("grid_map.cloud_pose_max_age",.5);
     p.cloud_pose_pair_wait_=v.value("grid_map.cloud_pose_pair_wait",.25);p.vis_height_=number("vis_height");
     scan_planner::validateCloudPoseTiming(p.cloud_pose_pair_wait_,p.cloud_pose_max_age_,
@@ -133,6 +206,16 @@ struct GridMapTestAccess {
       out["require_observed_free"]=map.requiresObservedFree();
       out["query_policy"]=map.collisionQueryPolicy();
       out["planning_query_policy"]=map.planningCollisionQueryPolicy();
+      const auto strict_geometry=map.obstacleDilation();const auto planning_geometry=map.planningObstacleDilation();
+      out["strict_obstacle_dilation_m"]={{"up",strict_geometry.up},{"down",strict_geometry.down}};
+      out["planning_obstacle_dilation_m"]={{"up",planning_geometry.up},{"down",planning_geometry.down}};
+      const auto body=map.bodyEnvelope(),candidate=map.planningBodyEnvelope();
+      out["collision_model"]=map.mp_.collision_model_;
+      out["inflated_visualization_semantics"]=map.inflatedVisualizationSemantics();
+      out["body_envelope"]={{"length",body.length},{"width",body.width},
+          {"below",body.below},{"above",body.above}};
+      out["planning_body_envelope"]={{"length",candidate.length},{"width",candidate.width},
+          {"below",candidate.below},{"above",candidate.above}};
       out["enforce_free_freshness"]=map.enforce_free_freshness_;
       out["free_evidence_memory_bytes"]=map.free_observation_stamps_.capacity()*sizeof(std::int64_t);
       std::array<std::size_t,3> cells{{0,0,0}};
@@ -239,9 +322,10 @@ struct GridMapTestAccess {
   }
   static Json query(GridMap &map,const Json &v,std::int64_t now_ns,const std::string &config_hash) {
     const auto p=v.at("position").get<std::vector<double>>();const double yaw=v.at("yaw").get<double>();
+    const double pitch=v.value("pitch",0.),roll=v.value("roll",0.);
     if(p.size()!=3) throw std::runtime_error("query must have XYZ");
     const bool detailed=v.value("detailed",false);
-    const Eigen::Vector3d body(p[0],p[1],p[2]);const auto detail=map.inspectInflateOccupancy(body,yaw,detailed);
+    const Eigen::Vector3d body(p[0],p[1],p[2]);const auto detail=map.inspectInflateOccupancy(body,yaw,pitch,roll,detailed);
     Json first=Json::array();
     for(std::size_t i=0;i<detail.first.size();++i) {
       if(detail.counts[i+1]==0) {first.push_back(nullptr);continue;}
@@ -250,8 +334,9 @@ struct GridMapTestAccess {
       first.push_back({xyz.x(),xyz.y(),xyz.z()});
     }
     Json result={{"label",v.value("label","query")},{"position",p},{"yaw",yaw},
-      {"collision",map.getInflateOccupancy(body,yaw)},
-      {"planning_collision",map.getPlanningInflateOccupancy(body,yaw)},
+      {"pitch",pitch},{"roll",roll},{"attitude_convention","ROS_Rz_yaw_Ry_pitch_Rx_roll"},
+      {"collision",map.getInflateOccupancy(body,yaw,pitch,roll)},
+      {"planning_collision",map.getPlanningInflateOccupancy(body,yaw,pitch,roll)},
       {"planning_query_policy",map.planningCollisionQueryPolicy()},
       {"evidence_state",detail.state()},
       {"evidence_requires_observed_free",map.requiresObservedFree()},
@@ -286,6 +371,7 @@ struct GridMapTestAccess {
     }
     const Eigen::Vector3d heading(std::cos(yaw),std::sin(yaw),0.);
     const auto body_envelope=map.bodyEnvelope();const auto kernel=map.obstacleDilation();
+    const auto planning_kernel=map.planningObstacleDilation();
     result["collision_geometry"]={{"actual_query_yaw",yaw},{"radius",body_envelope.radius},
       {"rear_center",xyz(body-map.mp_.double_cylinder_offset_*heading)},
       {"front_center",xyz(body+map.mp_.double_cylinder_offset_*heading)},
@@ -294,7 +380,44 @@ struct GridMapTestAccess {
       {"obstacle_dilation_up_m",kernel.up},{"obstacle_dilation_down_m",kernel.down},
       {"vertical_contract","body_is_reflected_obstacle_dilation"},
       {"model","upright_double_cylinder_yaw_only"},{"physical_envelope_validated",false}};
-    Eigen::Quaterniond q(Eigen::AngleAxisd(yaw,Eigen::Vector3d::UnitZ()));
+    result["planning_collision_geometry"]={{"radius",planning_kernel.radius},
+      {"offset",planning_kernel.offset},{"obstacle_dilation_up_m",planning_kernel.up},
+      {"obstacle_dilation_down_m",planning_kernel.down},
+      {"candidate_body_z_min",body.z()-planning_kernel.up},
+      {"candidate_body_z_max",body.z()+planning_kernel.down},
+      {"model","official_candidate_double_cylinder"},
+      {"not_execution_envelope",true}};
+    if (body_envelope.model==scan_planner::CollisionModel::OrientedBox) {
+      result["collision_geometry"]={{"actual_query_yaw",yaw},{"center",xyz(body)},
+        {"length_m",body_envelope.length},{"width_m",body_envelope.width},
+        {"body_below_m",body_envelope.below},{"body_above_m",body_envelope.above},
+        {"z_min",body.z()-body_envelope.below},{"z_max",body.z()+body_envelope.above},
+        {"vertical_contract","explicit_body_reference_extent_not_support_height"},
+        {"model","upright_oriented_box_yaw_only"},{"physical_envelope_validated",false}};
+      result["planning_collision_geometry"]={{"actual_query_yaw",yaw},{"center",xyz(body)},
+        {"length_m",planning_kernel.length},{"width_m",planning_kernel.width},
+        {"body_below_m",planning_kernel.up},{"body_above_m",planning_kernel.down},
+        {"candidate_body_z_min",body.z()-planning_kernel.up},
+        {"candidate_body_z_max",body.z()+planning_kernel.down},
+        {"vertical_contract","explicit_body_reference_extent_not_support_height"},
+        {"model","official_candidate_oriented_box"},{"not_execution_evidence",true}};
+      if(pitch!=0.||roll!=0.) {
+        const scan_planner::OrientedBoxVoxel3DQuery actual(body,yaw,pitch,roll,map.mp_.resolution_,body_envelope);
+        const scan_planner::OrientedBoxVoxel3DQuery candidate(body,yaw,pitch,roll,map.mp_.resolution_,map.planningBodyEnvelope());
+        for(const auto name:{"collision_geometry","planning_collision_geometry"}) {
+          result[name]["actual_query_pitch"]=pitch;result[name]["actual_query_roll"]=roll;
+          result[name]["model"]="oriented_box_rpy";
+        }
+        result["collision_geometry"]["obb_center"]=xyz(actual.center);
+        result["collision_geometry"]["z_min"]=actual.center.z()-actual.extent.z();
+        result["collision_geometry"]["z_max"]=actual.center.z()+actual.extent.z();
+        result["planning_collision_geometry"]["obb_center"]=xyz(candidate.center);
+        result["planning_collision_geometry"]["candidate_body_z_min"]=candidate.center.z()-candidate.extent.z();
+        result["planning_collision_geometry"]["candidate_body_z_max"]=candidate.center.z()+candidate.extent.z();
+      }
+    }
+    Eigen::Quaterniond q(Eigen::AngleAxisd(yaw,Eigen::Vector3d::UnitZ())*
+        Eigen::AngleAxisd(pitch,Eigen::Vector3d::UnitY())*Eigen::AngleAxisd(roll,Eigen::Vector3d::UnitX()));
     const bool measured_orientation=v.contains("orientation_xyzw");
     if(measured_orientation) {
       const auto a=v.at("orientation_xyzw").get<std::vector<double>>();
@@ -304,7 +427,8 @@ struct GridMapTestAccess {
       q.normalize();
     }
     result["body_orientation_xyzw"]=measured_orientation?v.at("orientation_xyzw"):Json(nullptr);
-    result["body_coordinates_basis"]=measured_orientation?"full_recorded_orientation":"yaw_only_roll_pitch_missing";
+    result["body_coordinates_basis"]=measured_orientation?"full_recorded_orientation":
+        (v.contains("pitch")||v.contains("roll"))?"explicit_query_rpy":"yaw_only_roll_pitch_missing";
     result["measured_ground_z"]=v.value("measured_ground_z",Json(nullptr));
     result["verified_entity_self_geometry"]=nullptr;
     result["safety_margin_vs_entity_classification"]="unresolved_without_physical_measurement";
@@ -338,7 +462,8 @@ struct GridMapTestAccess {
       const int slot=cell.native_state<0?3:cell.native_state;
       auto &unique=in_roi?roi_inside_unique:roi_outside_unique;
       auto &raw=in_roi?roi_inside_raw:roi_outside_raw;
-      const unsigned overlap=(cell.cylinder_mask&1U?1U:0U)+(cell.cylinder_mask&2U?1U:0U);
+      const unsigned overlap=(cell.cylinder_mask&1U?1U:0U)+(cell.cylinder_mask&2U?1U:0U)+
+          (cell.cylinder_mask&4U?1U:0U);
       ++unique[slot];raw[slot]+=overlap;
       auto &classified=result["diagnostic_roi_classification_counts"][roi][name];
       classified=classified.get<std::size_t>()+1;
@@ -349,6 +474,7 @@ struct GridMapTestAccess {
       if(!v.value("export_voxels",true)) continue;
       if(result["voxels"].size()>=4096) continue;
       Json row=voxel(map,cell.index);row["cylinder_membership_mask"]=cell.cylinder_mask;
+      row["shape_membership_mask"]=cell.cylinder_mask;
       row["inside_diagnostic_roi"]=in_roi;
       const Eigen::Vector3d center=(cell.index.cast<double>().array()+.5)*map.mp_.resolution_;
       row["center_in_body_coordinates"]=xyz(q.conjugate()*(center-body));
@@ -417,12 +543,35 @@ int main(int argc,char **argv) {
         converter.deserialize_message(&serialized,&message);
         result={{"accepted",GridMapTestAccess::accept(map,message,request.at("now_ns").get<std::int64_t>())}};
       } else if(type=="tick" || type=="summary") {
-        if(type=="tick") GridMapTestAccess::integrate(map,request.at("now_ns").get<std::int64_t>());
+        double fusion_wall_ms=0.;
+        if(type=="tick") {
+          const auto fusion_started=std::chrono::steady_clock::now();
+          GridMapTestAccess::integrate(map,request.at("now_ns").get<std::int64_t>());
+          fusion_wall_ms=std::chrono::duration<double,std::milli>(
+              std::chrono::steady_clock::now()-fusion_started).count();
+        }
         GridMapTestAccess::queryClock(map,request.value("now_ns",std::int64_t(0)));
         result=GridMapTestAccess::state(map,type=="summary");
+        const auto queries_started=std::chrono::steady_clock::now();
         result["queries"]=Json::array();
         for(const auto &query:request.value("queries",Json::array())) result["queries"].push_back(
             GridMapTestAccess::query(map,query,request.value("now_ns",std::int64_t(0)),config_hash));
+        if(type=="tick" && request.value("profile_core",false)) {
+          const auto queries_ms=std::chrono::duration<double,std::milli>(
+              std::chrono::steady_clock::now()-queries_started).count();
+          const auto work=map.mapWorkTiming();
+          result["core_work"]={{"points",work.points},{"ray_steps",work.ray_steps}};
+          result["core_timing_ms"]={{"fusion_no_snapshot_publish",fusion_wall_ms},
+            {"initialize",work.initialize_ms},{"traverse",work.traverse_ms},
+            {"occupancy",work.occupancy_ms},{"post_raycast",work.post_raycast_ms},
+            {"existing_fixture_queries",queries_ms},{"writer_transaction",nullptr}};
+          // The production writer duration starts at the injected receipt
+          // clock, which deliberately differs from this process's wall clock.
+          // Do not report that nonsensical subtraction as offline latency.
+          result["core_timing_scope"]="production_fusion_wall_only; no ROS, snapshot publication callback, executor or middleware; injected-clock writer metric unavailable";
+        }
+      } else if(type=="audit_state") {
+        result=GridMapTestAccess::fullStateAudit(map,request.at("now_ns").get<std::int64_t>());
       } else if(type=="context") {
         result={{"accepted",map.applyLocalizationContext(request.at("context").dump())}};
       } else if(type=="slide") {

@@ -1,0 +1,16 @@
+<?xml version="1.0"?>
+<!-- Same task owner and localization transaction as navigation. This map
+     supports global-route preview only; SUCCESS is not measured arrival. -->
+<root main_tree_to_execute="PreviewGlobalRoute">
+  <BehaviorTree ID="PreviewGlobalRoute">
+    <ReactiveSequence name="GlobalRoutePreview">
+      <TaskContextValid name="CheckTaskIdentity"/>
+      <SequenceStar name="InitializedPlanningLifecycle">
+        <WaitForInitialLocalization name="InitialLocalization" timeout_s="60" warmup_timeout_s="120"/>
+        <PauseOnUnavailable name="WaitForPlanningInputs" timeout_s="30">
+          <ComputeGlobalRoute name="ComputeRouteOnce" timeout_s="10"/>
+        </PauseOnUnavailable>
+      </SequenceStar>
+    </ReactiveSequence>
+  </BehaviorTree>
+</root>

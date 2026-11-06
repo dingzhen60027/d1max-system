@@ -14,6 +14,7 @@ find_package(rclcpp REQUIRED)
 
 add_library(bspline_opt
   src/uniform_bspline.cpp
+  src/soft_clearance.cpp
   src/bspline_optimizer.cpp
   src/gradient_descent_optimizer.cpp)
 target_include_directories(bspline_opt PUBLIC
@@ -30,11 +31,26 @@ ament_export_dependencies(Eigen3 path_searching plan_env rclcpp)
 
 if(BUILD_TESTING)
   find_package(ament_cmake_gtest REQUIRED)
+  ament_add_gtest(test_soft_clearance test/test_soft_clearance.cpp)
+  target_link_libraries(test_soft_clearance bspline_opt Eigen3::Eigen)
+  ament_add_gtest(test_near_curve_direction test/test_near_curve_direction.cpp)
+  target_include_directories(test_near_curve_direction PRIVATE include)
+  target_link_libraries(test_near_curve_direction Eigen3::Eigen)
+  ament_add_gtest(test_forward_entry_heading test/test_forward_entry_heading.cpp)
+  target_link_libraries(test_forward_entry_heading bspline_opt Eigen3::Eigen)
   ament_add_gtest(test_optimizer_budget test/test_optimizer_budget.cpp)
   target_link_libraries(test_optimizer_budget bspline_opt Eigen3::Eigen)
+  ament_add_gtest(test_lbfgs_cubic_bound test/test_lbfgs_cubic_bound.cpp)
+  target_include_directories(test_lbfgs_cubic_bound PRIVATE include)
   ament_add_gtest(test_uniform_bspline test/test_uniform_bspline.cpp)
+  ament_add_gtest(test_initial_motion_limits test/test_initial_motion_limits.cpp)
+  target_link_libraries(test_initial_motion_limits bspline_opt Eigen3::Eigen)
   ament_add_gtest(test_reference_path test/test_reference_path.cpp)
   target_link_libraries(test_reference_path bspline_opt Eigen3::Eigen)
+  ament_add_gtest(test_planar_curvature_cost test/test_planar_curvature_cost.cpp)
+  target_link_libraries(test_planar_curvature_cost bspline_opt Eigen3::Eigen)
+  ament_add_gtest(test_support_height_coupling test/test_support_height_coupling.cpp)
+  target_link_libraries(test_support_height_coupling bspline_opt Eigen3::Eigen)
   ament_add_gtest(test_whole_spline_collision test/test_whole_spline_collision.cpp)
   target_link_libraries(test_whole_spline_collision bspline_opt Eigen3::Eigen)
   if(TARGET test_uniform_bspline)

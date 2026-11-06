@@ -1,4 +1,4 @@
-"""ROS boundary for identity-preserving independent command admission."""
+"""ROS boundary binding SCAN decisions to identity-preserving commands."""
 import json
 import os
 import time
@@ -7,12 +7,11 @@ import time
 def main(args=None):
     import rclpy
     from rclpy.node import Node
-    from rclpy.qos import qos_profile_sensor_data
     from std_msgs.msg import String
     from d1max_planning_interfaces.msg import (ExecutionPermit, MotionDemand, MotionValidation,
-        TrajectoryValidation, ProjectedRays, TrackingProgress, ExecutionHandoffGrant,
+        TrajectoryValidation, ExecutionHandoffGrant,
         PreparedMotionDemand, ExecutionCommitAck, SDKStationaryEvidence)
-    from .execution_safety import ExecutionSafety
+    from .execution_safety import ExecutionSafety, AdmissionDiagnostics
     from .command_admission import CommandAdmission
     from .execution_handoff import ExecutionHandoffAdmission
     from .braking_model import load_model
@@ -34,8 +33,10 @@ def main(args=None):
             bound_record=json.loads(Path(record).read_text())
             timing=validate_timing(bound_record)
             self.core=ExecutionSafety(sid,mode,braking_model_sha256=digest,
+                kinematic_profile=bound_record.get('kinematic_profile','forward_yaw'),
                 stationary_policy=validate_stationary(bound_record),
                 sensor_source_age_s=timing['sensor_source_age_bound_s'],
+                command_pipeline_bound_s=timing['command_pipeline_bound_s'],
                 max_speed=self.declare_parameter('max_speed',.30).value,
                 max_yaw=self.declare_parameter('max_yaw',.50).value)
             self.handoff=ExecutionHandoffAdmission(self.core,
@@ -45,6 +46,7 @@ def main(args=None):
             self.prepared_publisher=self.create_publisher(PreparedMotionDemand,'/d1max/live_planning/execution/safe_prepared_demand',1)
             self.status=self.create_publisher(String,'/d1max/live_planning/execution/safety_status',1)
             self.accepted=self.rejected=0
+            self.diagnostics=AdmissionDiagnostics()
             self.reason='waiting_evidence'
             self.create_subscription(ExecutionPermit,'/d1max/live_planning/execution/permit',self.handoff.on_permit,5)
             self.create_subscription(ExecutionHandoffGrant,'/d1max/live_planning/execution/handoff_grant',
@@ -56,25 +58,23 @@ def main(args=None):
             self.create_subscription(PreparedMotionDemand,'/d1max/live_planning/execution/prepared_demand',
                 lambda m:self.output(self.handoff.prepared_demand(m,self.get_clock().now().nanoseconds),prepared=True),2)
             self.create_subscription(TrajectoryValidation,'/d1max/live_planning/execution/validation',self.on_validation,5)
-            self.create_subscription(TrackingProgress,'/d1max/live_planning/tracking_progress',self.core.on_progress,2)
-            self.create_subscription(ProjectedRays,'/d1max/live_planning/rays_odom',
-                lambda m:self.core.on_rays(m,self.get_clock().now().nanoseconds),qos_profile_sensor_data)
             self.create_subscription(MotionDemand,'/d1max/live_planning/execution/demand',self.on_demand,1)
             self.create_subscription(MotionValidation,'/d1max/live_planning/execution/motion_validation',self.on_motion_proof,5)
             self.create_timer(.2,self.on_status)
         def on_demand(self,message):
             now=self.get_clock().now().nanoseconds
-            self.output(self.admission.demand(message,now))
+            self.output(self.admission.demand(message,now),message=message)
         def on_motion_proof(self,message):
             prepared,result=self.handoff.motion_proof(message,self.get_clock().now().nanoseconds)
-            self.output(result,prepared=prepared)
+            self.output(result,prepared=prepared,message=message)
         def on_validation(self,message):
             ordinary,prepared=self.handoff.validation(message,self.get_clock().now().nanoseconds)
             for result in ordinary:
                 self.output(result)
             for result in prepared:self.output(result,prepared=True)
-        def output(self,result,*,prepared=False):
+        def output(self,result,*,prepared=False,message=None):
             self.reason=result.reason
+            self.diagnostics.record(result,message)
             if result.allowed:
                 self.accepted+=1
             else:
@@ -83,11 +83,11 @@ def main(args=None):
                 (self.prepared_publisher if prepared else self.publisher).publish(result.output)
             # No periodic cached command publisher. A higher real native
             # proof may upgrade one unchanged command only inside its original
-            # source/lease limits; it cannot renew control or sensor time.
+            # source/lease limits; it cannot renew control or SCAN's decision.
         def on_status(self):
             self.status.publish(String(data=json.dumps(dict(schema=3,phase='command_admission',
                 session_id=self.core.session,transport_mode=self.core.mode,reason=self.reason,
-                accepted=self.accepted,rejected=self.rejected,callback_wall_time=time.time(),
+                accepted=self.accepted,rejected=self.rejected,**self.diagnostics.snapshot(),callback_wall_time=time.time(),
                 received_at_unix=self.get_clock().now().nanoseconds*1e-9))))
     rclpy.init(args=args)
     node=SafetyNode()

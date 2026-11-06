@@ -17,6 +17,9 @@ TEMPLATES = (
     'src/d1max_navigation_bt/trees/navigate_with_global_relocalization.xml',
     'src/d1max_navigation/rviz/localization_test.rviz',
     'src/d1max_pct_scan/config/navigation_runtime.yaml',
+    'src/d1max_pct_scan/config/motion_tracking.yaml',
+    'src/d1max_pct_scan/config/entity_self_filter.yaml',
+    'src/d1max_pct_scan/config/d1max_entity_model.json',
 )
 
 
@@ -83,6 +86,14 @@ def test_prepare_pins_all_actual_copied_templates_without_ros(tmp_path, monkeypa
     for relative in TEMPLATES:
         target=copied/relative;target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(source/relative, target)
+    # The synthetic source PCD has no recorded LIO/PGO gravity lineage. Do not
+    # attach the real laboratory map's calibration to this unrelated fixture.
+    import yaml
+    global_template=copied/'src/d1max_localization/config/global_relocalization.yaml'
+    fixture_config=yaml.safe_load(global_template.read_text())
+    fixture_config['lio_localizer']['ros__parameters']['global_relocalization.enabled']=False
+    fixture_config['lio_localizer']['ros__parameters']['global_relocalization.gravity.map_contract_json']=''
+    global_template.write_text(yaml.safe_dump(fixture_config))
     monkeypatch.setenv('D1MAX_RELEASE', str(release))
     monkeypatch.setattr(paths, 'nav_root', lambda:(_ for _ in ()).throw(AssertionError('prepare reads mutable checkout')))
     def forbidden(*args, **kwargs):raise AssertionError('prepare launched a process')

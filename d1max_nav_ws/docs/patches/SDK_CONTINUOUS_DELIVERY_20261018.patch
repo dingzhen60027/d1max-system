@@ -1,0 +1,442 @@
+--- a/src/execution_scheduler.hpp
++++ b/src/execution_scheduler.hpp
+@@ -2,11 +2,23 @@
+ #include <algorithm>
+ #include <cmath>
+ #include <cstdint>
++#include <atomic>
++#include <condition_variable>
++#include <mutex>
+ #include <optional>
++#include <limits>
+ #include <stdexcept>
+ #include <utility>
+ 
+ namespace d1monitor {
++// The notifier and the waiter must serialize revision publication with the
++// same wait mutex. Atomic+notify alone can lose a wake between the predicate
++// check and entering wait. The writer never holds this mutex while querying
++// state, calling a vendor or publishing telemetry.
++inline void notifyWriterRevision(std::mutex&mutex,std::condition_variable&wake,std::atomic<uint64_t>&revision){
++  {std::lock_guard<std::mutex>lock(mutex);revision.fetch_add(1,std::memory_order_release);}
++  wake.notify_one();
++}
+ // One pending sample: a blocked diagnostic consumer cannot accumulate control
+ // work. Externally locked; source timestamps stay on the copied sample.
+ template<class T> struct LatestMailbox {
+@@ -49,4 +61,40 @@
+   }
+  private:PeriodicDeadline phase_;double period_,normal_after_;
+ };
++
++// A latest-command writer has no useful fixed phase relative to its 20 Hz
++// producer. A fresh accepted command may use an available send opportunity at
++// once; ordinary NONZERO admissions still remain at least one period apart.
++// Empty/expired/HOLD polls do not spend the next ordinary opportunity. The
++// periodic health watchdog and original source deadline stay independent, so
++// an event-driven sender cannot retain stale velocity while waiting for input.
++// Only the unique writer thread owns this scheduler; callbacks publish a
++// monotonically increasing wake revision rather than a command queue.
++class CommandWriterDeadline {
++ public:
++  CommandWriterDeadline(double start,double period):watchdog_(start,period),period_(period),normal_after_(start){}
++  void observe(uint64_t revision){if(revision>observed_)observed_=revision;}
++  double next(std::optional<double> original_deadline={})const{
++    auto due=watchdog_.next();
++    if(observed_>consumed_)due=std::min(due,normal_after_);
++    if(original_deadline&&std::isfinite(*original_deadline))due=std::min(due,*original_deadline);
++    return due;
++  }
++  bool normalDue(double now)const{return std::isfinite(now)&&now>=normal_after_;}
++  bool pending()const{return observed_>consumed_;}
++  uint64_t observed()const{return observed_;}
++  uint64_t skipped()const{return watchdog_.skipped();}
++  void complete(double started,double completed,uint64_t selected_revision,bool normal_opportunity,
++      std::optional<double> nonzero_submitted_at={}){
++    if(!std::isfinite(started)||!std::isfinite(completed)||completed<started||
++       (nonzero_submitted_at&&(!std::isfinite(*nonzero_submitted_at)||!normal_opportunity||
++         *nonzero_submitted_at<normal_after_||*nonzero_submitted_at<started||*nonzero_submitted_at>completed)))
++      throw std::invalid_argument("writer_command_admission_clock_regressed");
++    if(normal_opportunity)consumed_=std::max(consumed_,selected_revision);
++    if(nonzero_submitted_at)normal_after_=*nonzero_submitted_at+period_;
++    if(completed>=watchdog_.next())watchdog_.complete(completed);
++  }
++ private:
++  PeriodicDeadline watchdog_;double period_,normal_after_;uint64_t observed_=0,consumed_=0;
++};
+ }
+--- a/src/execution_transport_core.hpp
++++ b/src/execution_transport_core.hpp
+@@ -133,6 +133,16 @@
+     task_follower_=enabled;
+   }
+   bool taskFollower()const{return task_follower_;}
++  int64_t taskCommandStopBarrier()const{return task_zero_source_barrier_ns_;}
++  // Read-only scheduling hint. It carries ORIGINAL deadlines only and grants
++  // no permission: tick() still rechecks every identity, health and time rule.
++  // Once expiry clears the latest command this hint disappears, preventing a
++  // busy expiration loop. The writer checks strictly after this boundary.
++  std::optional<double> taskCommandDeadline()const{
++    if(!task_follower_||!task_have_command_||!task_lease_.allowed)return {};
++    return std::min({secs(task_command_.valid_until),secs(task_command_.body_valid_until),
++      secs(task_lease_.valid_until),secs(task_command_.source_stamp)+commandPipeline()});
++  }
+   Grant::Response grantResponse(const Grant::Request&r)const {
+     Grant::Response out;out.sdk_session=session_;out.sdk_arm_generation=generation_;
+     out.version=r.version;out.execution_id=r.execution_id;out.control_epoch=r.control_epoch;
+--- a/src/sdk_monitor_bridge.cpp
++++ b/src/sdk_monitor_bridge.cpp
+@@ -144,12 +144,18 @@
+       if(task_writer_enabled) {
+         execution_task_lease_=create_subscription<d1monitor::execution3::TaskLease>(p+"task_lease",10,
+           [this](d1monitor::execution3::TaskLease::SharedPtr m){std::lock_guard<std::mutex>lock(mutex);
++            const auto before=execution3_->lastDemand().sequence;
+             const bool accepted=execution3_->taskLease(*m,wall());
+             if(execution3_->stopping())ownership_.enabled=false;
+-            if(accepted&&(!m->allowed||m->revoked||m->phase=="stopping"||m->phase=="terminal"))wake_execution_stop();},execution_options);
++            if(accepted&&(!m->allowed||m->revoked||m->phase=="stopping"||m->phase=="terminal"))wake_execution_stop();
++            else if(accepted&&execution3_->lastDemand().sequence!=before)wake_execution_command();},execution_options);
+         execution_local_command_=create_subscription<d1monitor::execution3::LocalCommand>(p+"local_command",1,
+           [this](d1monitor::execution3::LocalCommand::SharedPtr m){std::lock_guard<std::mutex>lock(mutex);
+-            execution3_->localCommand(*m,wall());},execution_options);
++            const auto barrier=execution3_->taskCommandStopBarrier();
++            const bool accepted=execution3_->localCommand(*m,wall());
++            if(execution3_->taskCommandStopBarrier()!=barrier||
++               (accepted&&(m->hold||!d1monitor::execution3::planarMotionNonzero(m->velocity))))wake_execution_stop();
++            else if(accepted)wake_execution_command();},execution_options);
+       } else {
+       execution_permit_=create_subscription<d1monitor::execution3::Permit>(p+"permit",10,
+         [this](d1monitor::execution3::Permit::SharedPtr m){std::lock_guard<std::mutex>lock(mutex);execution3_->permit(*m,wall());
+@@ -284,19 +290,41 @@
+         RCLCPP_ERROR(get_logger(),"Execution input worker stopped: %s",error.what());}
+     });
+     execution_writer_=std::thread([this]{
+-      d1monitor::WriterDeadline deadline(mono(),.05);uint64_t urgent_seen=0;
++      const bool task_writer=execution3_->taskFollower();
++      const auto start=mono();d1monitor::WriterDeadline deadline(start,.05);
++      d1monitor::CommandWriterDeadline command_deadline(start,.05);uint64_t urgent_seen=0,command_seen=0;
+       while(!execution_workers_stopping_.load()){
++        std::optional<double> original_deadline;
++        if(task_writer){std::lock_guard<std::mutex>lock(mutex);
++          if(const auto end=execution3_->taskCommandDeadline()){
++            // Original wall deadline translated to this wait's steady clock,
++            // not rewritten into the command. nextafter preserves inclusive
++            // source validity at the exact original boundary.
++            original_deadline=mono()+std::max(0.,std::nextafter(*end,std::numeric_limits<double>::infinity())-wall());}}
++        command_seen=execution_command_revision_.load(std::memory_order_acquire);
++        if(task_writer)command_deadline.observe(command_seen);
++        const auto next=task_writer?command_deadline.next(original_deadline):deadline.next();
+         {std::unique_lock<std::mutex>lock(execution_wait_mutex_);
+           const auto due=std::chrono::steady_clock::time_point(std::chrono::duration_cast<std::chrono::steady_clock::duration>(
+-            std::chrono::duration<double>(deadline.next())));
+-          execution_wake_.wait_until(lock,due,[this,urgent_seen]{return execution_workers_stopping_.load()||
+-            execution_urgent_revision_.load()!=urgent_seen;});}
++            std::chrono::duration<double>(next)));
++          execution_wake_.wait_until(lock,due,[this,urgent_seen,command_seen,task_writer]{return execution_workers_stopping_.load()||
++            execution_urgent_revision_.load()!=urgent_seen||
++            (task_writer&&execution_command_revision_.load(std::memory_order_acquire)!=command_seen);});}
+         if(execution_workers_stopping_.load())break;
+-        urgent_seen=execution_urgent_revision_.load();const auto started=mono();
++        const auto urgent=execution_urgent_revision_.load();const bool urgent_wake=urgent!=urgent_seen;
++        urgent_seen=urgent;const auto started=mono();
++        command_seen=execution_command_revision_.load(std::memory_order_acquire);
++        if(task_writer)command_deadline.observe(command_seen);
+         // An urgent revoke can submit zero before the next normal slot, but
+         // can never accelerate nonzero commands above the normal 20 Hz pace.
+-        const bool urgent_only=started<deadline.next();
+-        try{execution_tick(urgent_only);}
++        const bool urgent_only=task_writer?(urgent_wake||!command_deadline.normalDue(started)):started<deadline.next();
++        const bool no_fresh_command=task_writer&&!command_deadline.pending();
++        uint64_t selected_revision=command_seen;
++        std::optional<double> nonzero_submitted;
++        // Health/watchdog polls must not resend an unchanged nonzero and
++        // consume the opportunity just before the next producer sample.
++        // Initial TakeControl and all zero/stop work still progress normally.
++        try{nonzero_submitted=execution_tick(urgent_only,no_fresh_command,&selected_revision);}
+         catch(const std::exception&error){
+           // This writer is already awake. Do not wake itself recursively on
+           // a repeatedly throwing vendor: retry only at the next normal slot.
+@@ -304,8 +332,9 @@
+           RCLCPP_ERROR(get_logger(),"Execution writer tick failed, motion veto latched: %s",error.what());}
+         const auto completed=mono();execution_last_duration_s_.store(completed-started);
+         if(completed-started>.05)++execution_writer_overruns_;
+-        if(!urgent_only)deadline.complete(started,completed);
+-        execution_writer_skipped_.store(deadline.skipped());
++        if(task_writer){command_deadline.complete(started,completed,selected_revision,!urgent_only&&!no_fresh_command,nonzero_submitted);
++          execution_writer_skipped_.store(command_deadline.skipped());}
++        else {if(!urgent_only)deadline.complete(started,completed);execution_writer_skipped_.store(deadline.skipped());}
+       }
+     });
+   }
+@@ -572,13 +601,20 @@
+     if(execution3_)execution3_->setSDKTransactions(execution_writes_.pending()+(ownership_.pending?1u:0u),ownership_.uncertain);
+   }
+   void wake_execution_stop() noexcept {
+-    execution_urgent_revision_.fetch_add(1,std::memory_order_release);execution_wake_.notify_one();
++    d1monitor::notifyWriterRevision(execution_wait_mutex_,execution_wake_,execution_urgent_revision_);
++  }
++  void wake_execution_command() noexcept {
++    // ROS input callback only (never a vendor IDataCallback). Pair revision
++    // publication with the wait mutex so a fresh command cannot lose its wake
++    // between the writer's predicate check and condition-variable sleep.
++    d1monitor::notifyWriterRevision(execution_wait_mutex_,execution_wake_,execution_command_revision_);
+   }
+   void raise_navigation_event(d1monitor::NavigationEvents::Event event) noexcept {
+     navigation_events_.raise(event);wake_execution_stop();
+   }
+-  void execution_tick(bool urgent_only=false){
+-    if(shutting_down_.load())return;
++  std::optional<double> execution_tick(bool urgent_only=false,bool no_fresh_command=false,uint64_t*selected_revision=nullptr){
++    if(shutting_down_.load())return {};
++    std::optional<double> nonzero_submitted;
+     d1monitor::execution3::State state;d1monitor::execution3::Stop stop;
+     d1monitor::execution3::Retirement retirement;
+     d1monitor::execution3::Stationary stationary;std::optional<d1monitor::execution3::CommitAck>ack;
+@@ -619,9 +655,13 @@
+     // AFTER it returns, against the latest revoke, telemetry and source time.
+     const double selected_at=wall();
+     auto command=execution3_->tick(selected_at,execution_health());
++    // The same state lock protects command acceptance and its wake revision.
++    // Consume the revision actually selected, not an earlier pre-lock read;
++    // a newer command arriving during the vendor call remains pending.
++    if(selected_revision)*selected_revision=execution_command_revision_.load(std::memory_order_acquire);
+     if(execution3_->stopping())ownership_.enabled=false;
+     if(!command||execution3_->stopping())execution_fraction_slew_.reset();
+-    if(urgent_only&&command&&d1monitor::execution3::planarMotionNonzero(*command))command.reset();
++    if((urgent_only||no_fresh_command)&&command&&d1monitor::execution3::planarMotionNonzero(*command))command.reset();
+     if(command) {
+       auto fraction=d1monitor::execution3::SdkMoveFractions{};
+       if(execution3_->taskFollower()&&execution_acceptance_.sdk_input_mapping.enabled) {
+@@ -673,6 +713,7 @@
+         ++execution_mapped_yaw_reversals_;
+       if(yaw_sign)execution_last_nonzero_yaw_sign_=yaw_sign;
+       execution3_->moveAttempted(actual_nonzero);
++      if(actual_nonzero)nonzero_submitted=mono();
+       const auto captured_execution=execution3_->executionId();
+       const auto submit=[this,sdk_lateral,sdk_forward,sdk_yaw,stop_zero,actual_zero,epoch,generation,commit,write,transaction]{
+         return sdk_->Move(sdk_lateral,sdk_forward,sdk_yaw,0,
+@@ -717,6 +758,7 @@
+       if(ack&&execution_ack_out_.put(std::move(*ack))==d1monitor::execution3::CommitOutbox::Result::Overflow)
+         raise_navigation_event(d1monitor::NavigationEvents::WorkerStopped);}
+     telemetry_wake_.notify_one();
++    return nonzero_submitted;
+   }
+   void shutdown_execution(){
+     if(!execution3_)return;
+@@ -1340,6 +1382,7 @@
+   std::thread execution_input_worker_,execution_writer_;std::atomic<bool>execution_workers_stopping_{false};
+   std::mutex execution_wait_mutex_;std::condition_variable execution_wake_;
+   std::atomic<uint64_t>execution_urgent_revision_{0};
++  std::atomic<uint64_t>execution_command_revision_{0};
+   std::atomic<uint64_t>execution_writer_skipped_{0},execution_writer_overruns_{0};std::atomic<double>execution_last_duration_s_{0};
+   rclcpp::TimerBase::SharedPtr timer_,graph_;
+   std::shared_ptr<Data> data_;std::shared_ptr<Ack> ack_;std::unique_ptr<robot_sdk::SDKClient> sdk_;
+--- a/src/test_execution_scheduler.cpp
++++ b/src/test_execution_scheduler.cpp
+@@ -4,6 +4,7 @@
+ #include <atomic>
+ #include <chrono>
+ #include <condition_variable>
++#include <future>
+ #include <iostream>
+ #include <mutex>
+ #include <thread>
+@@ -18,6 +19,70 @@
+   writer.complete(writer.next(),10.111);assert(std::abs(writer.next()-10.16)<1e-9);
+   writer.complete(10.50,10.701);assert(writer.next()>10.701&&writer.skipped()>0);
+   invalid=false;try{writer.complete(10.6,10.8);}catch(const std::invalid_argument&){invalid=true;}assert(invalid);
++  // The watchdog can check an empty/HOLD input without spending the first
++  // real command's normal 50 ms opportunity.
++  d1monitor::CommandWriterDeadline commands(10.,.05);
++  commands.complete(10.,10.001,0,true);
++  commands.observe(1);assert(commands.next()<=10.001&&commands.normalDue(10.001));
++  commands.complete(10.001,10.003,1,true,10.002);
++  assert(!commands.pending()); // watchdog must not resend this old nonzero
++  commands.observe(2);assert(std::abs(commands.next()-10.05)<1e-9);
++  assert(!commands.normalDue(10.05)&&commands.normalDue(10.052001));
++  commands.complete(10.05,10.0501,2,false);
++  assert(std::abs(commands.next()-10.052)<1e-9);
++  // The original source watchdog can stop earlier than the next nonzero
++  // opportunity; it neither authorizes movement nor renews source evidence.
++  assert(std::abs(commands.next(10.051)-10.051)<1e-9);
++  commands.complete(10.051,10.0511,2,false);
++  commands.complete(10.052,10.060,2,true,10.058);
++  commands.observe(3);assert(!commands.normalDue(10.1079)&&commands.normalDue(10.108001));
++  // A new command arriving during a blocked vendor call is still pending;
++  // only the revision captured at selection is consumed.
++  commands.observe(4);commands.complete(10.108,10.201,3,true,10.109);
++  assert(commands.next()<=10.201&&commands.normalDue(10.201));
++  invalid=false;try{commands.complete(10.201,10.202,4,false,10.201);}
++    catch(const std::invalid_argument&){invalid=true;}assert(invalid);
++  // A burst coalesces to one newest opportunity rather than replaying 1000
++  // notifications. Early event wakes never permit another nonzero admission.
++  d1monitor::CommandWriterDeadline burst(20.,.05);burst.observe(1);
++  burst.complete(20.,20.001,1,true,20.0005);
++  for(uint64_t revision=2;revision<=1001;++revision)burst.observe(revision);
++  assert(burst.pending()&&!burst.normalDue(20.04)&&burst.observed()==1001);
++  burst.complete(20.051,20.052,1001,true,20.051);
++  assert(!burst.pending()&&!burst.normalDue(20.10));
++  // Force publication into the exact predicate-to-wait race window. The old
++  // atomic+notify form completes while the waiter still owns the wait mutex;
++  // the production helper must instead wait until condition_variable::wait
++  // atomically releases it and registers the waiter. No vendor/ROS is used.
++  for(bool paired:{false,true}){
++    std::mutex wait_mutex;std::condition_variable changed;std::atomic<uint64_t>revision{0};
++    std::promise<void>predicate_checked,release_predicate,notifier_entered,notifier_done,waiter_done;
++    auto release=release_predicate.get_future().share();auto entered=notifier_entered.get_future();
++    auto notified=notifier_done.get_future();auto finished=waiter_done.get_future();
++    bool first=true;
++    std::thread waiter([&]{std::unique_lock<std::mutex>lock(wait_mutex);
++      const bool received=changed.wait_for(lock,std::chrono::seconds(2),[&]{
++        const auto observed=revision.load(std::memory_order_acquire);
++        if(first){first=false;predicate_checked.set_value();release.wait();}
++        return observed!=0;});
++      assert(received);waiter_done.set_value();});
++    predicate_checked.get_future().wait();
++    std::thread notifier([&]{notifier_entered.set_value();
++      if(paired)d1monitor::notifyWriterRevision(wait_mutex,changed,revision);
++      else {revision.fetch_add(1,std::memory_order_release);changed.notify_one();}
++      notifier_done.set_value();});
++    entered.wait();
++    const auto publication=notified.wait_for(paired?std::chrono::milliseconds(20):std::chrono::milliseconds(1000));
++    if(paired)assert(publication==std::future_status::timeout);
++    else assert(publication==std::future_status::ready); // deterministic old race
++    release_predicate.set_value();notified.wait();
++    if(!paired){
++      // Cleanup wake only: the old notification already ran before entering
++      // wait. Repeated cleanup avoids relying on absence of spurious wakeups.
++      while(finished.wait_for(std::chrono::milliseconds(1))!=std::future_status::ready)changed.notify_one();
++    }else assert(finished.wait_for(std::chrono::seconds(1))==std::future_status::ready);
++    notifier.join();waiter.join();assert(revision.load()==1);
++  }
+   struct Sample{uint64_t seq;double original_source;};
+   d1monitor::LatestMailbox<Sample> mailbox;std::mutex mutex;std::condition_variable wake;
+   std::atomic<bool> consumer_blocked{false};bool release=false;
+--- a/src/test_task_writer.cpp
++++ b/src/test_task_writer.cpp
+@@ -2,6 +2,7 @@
+ #include "test_execution_fixture.hpp"
+ #include "sdk_input_mapping.hpp"
+ #include "sdk_write_transactions.hpp"
++#include "execution_scheduler.hpp"
+ #include <cassert>
+ #include <functional>
+ #include <iostream>
+@@ -42,6 +43,65 @@
+ 
+ int main(){unsigned cases=0;
+   const auto run=[&](const char*name,const std::function<void()>&test){test();++cases;std::cout<<"PASS "<<name<<'\n';};
++  run("same_original_input_fixed_poll_phase_expires_but_fresh_command_delivery_does_not",[]{
++    auto before=writer(),after=writer();
++    assert(before.taskLease(lease(),10.)&&after.taskLease(lease(),10.));
++    d1monitor::WriterDeadline old_schedule(10.,.05);
++    d1monitor::CommandWriterDeadline schedule(10.,.05);
++    // Both writers first perform the identical empty-input health check.
++    assert(!moving(before.tick(10.,healthy()))&&!moving(after.tick(10.,healthy())));
++    old_schedule.complete(10.,10.0001);schedule.complete(10.,10.0001,0,true);
++    // Production typed LocalCommand retains a 100 ms original body lease.
++    // A valid command arrives 1 ms AFTER the old writer's poll. Its paired
++    // actual body sample was acquired 60 ms before command generation.
++    auto c=command(10.001);c.body_source_stamp=afterNs(c.source_stamp,-60000000LL);
++    c.body_valid_until=c.valid_until=afterNs(c.body_source_stamp,100000000LL);
++    const auto receipt=10.002;
++    assert(before.localCommand(c,receipt)&&after.localCommand(c,receipt));
++    assert(std::abs(*after.taskCommandDeadline()-10.041)<1e-8);
++    schedule.observe(c.sequence);assert(schedule.next()<=receipt&&schedule.normalDue(receipt));
++    assert(moving(after.tick(receipt,healthy())));schedule.complete(receipt,receipt+.0001,c.sequence,true,receipt);
++    assert(after.selectedTaskCommandTiming().source==c.source_stamp&&
++      after.selectedTaskCommandTiming().body_source==c.body_source_stamp&&
++      after.selectedTaskCommandTiming().valid_until==c.valid_until);
++    assert(!moving(before.tick(old_schedule.next(),healthy())));
++    assert(before.taskCommandExpiry().count==1&&after.taskCommandExpiry().count==0);
++    // Removing producer input still expires at the exact ORIGINAL bound.
++    assert(!moving(after.tick(10.041001,healthy()))&&after.taskCommandExpiry().count==1);
++    assert(!after.taskCommandDeadline()&&!after.stopping());
++  });
++  run("command_driven_sender_preserves_20Hz_spacing_without_a_second_poll_phase",[]{
++    auto t=writer();d1monitor::CommandWriterDeadline schedule(10.,.05);
++    double last_attempt=-1.;unsigned sends=0;
++    for(uint64_t i=1;i<=40;++i){
++      const auto generated=10.001+static_cast<double>(i-1)*.05,receipt=generated+.001;
++      assert(t.taskLease(lease(generated-.0005,i),receipt));
++      auto c=command(generated,i,i);c.body_source_stamp=afterNs(c.source_stamp,-60000000LL);
++      c.body_valid_until=c.valid_until=afterNs(c.body_source_stamp,100000000LL);
++      assert(t.localCommand(c,receipt));schedule.observe(i);
++      auto attempted=std::max(receipt,last_attempt<0?receipt:last_attempt+.05);
++      assert(schedule.normalDue(attempted)&&moving(t.tick(attempted,healthy())));
++      const auto selected=t.selectedTaskCommandTiming();assert(selected.sequence==i&&selected.source==c.source_stamp&&
++        selected.body_source==c.body_source_stamp&&selected.valid_until==c.valid_until);
++      assert(last_attempt<0||attempted-last_attempt>=.05-1e-10);
++      schedule.complete(attempted,attempted+.0001,i,true,attempted);
++      t.writeCalled(attempted,true,true);last_attempt=attempted;++sends;
++    }
++    assert(sends==40&&t.taskCommandExpiry().count==0);
++    assert(!moving(t.tick(last_attempt+.041,healthy()))&&t.taskCommandExpiry().count==1);
++  });
++  run("new_event_does_not_bypass_expiry_revoke_estop_or_foreign_task",[]{
++    for(int kind=0;kind<4;++kind){auto t=writer();ready(t);assert(moving(t.tick(10.,healthy())));
++      auto c=command(10.02,2);
++      if(kind==0){assert(!t.localCommand(c,10.121));assert(!moving(t.tick(10.122,healthy())));}
++      if(kind==1){auto p=lease(10.01,2);p.revoked=true;assert(t.taskLease(p,10.01));
++        assert(!t.localCommand(c,10.02)&&!moving(t.tick(10.021,healthy())));}
++      if(kind==2){t.softwareEstopRequested(10.01);assert(!t.localCommand(c,10.02));
++        assert(!moving(t.tick(10.021,healthy())));}
++      if(kind==3){c.version.task_id="foreign";assert(!t.localCommand(c,10.02));
++        assert(t.lastDemand().sequence==1&&t.lastDemand().version.task_id=="task");}
++    }
++  });
+   run("wheel_stop_keeps_raw3d_but_checks_xy_and_vertical_separately",[]{
+     for(bool enabled:{false,true}){auto t=writer(enabled);ready(t);assert(moving(t.tick(10.,healthy())));
+       t.writeCalled(10.,true);auto p=lease(10.05,2);p.revoked=true;assert(t.taskLease(p,10.05));t.stopWritten(10.05);
+--- a/docs/navigation_transport.md
++++ b/docs/navigation_transport.md
+@@ -12,12 +12,44 @@
+ 原始状态和命令时间不续写，停止提交与实测停稳仍分别报告。
+ 此软件整改不代表现场运动、制动或跨楼层能力已验收。
+ 
+-### 当前发送调度与撤销顺序（2026-10-15）
++### 当前发送调度：新命令驱动、原始期限看门狗（2026-10-18）
+ 
+-正式 `task_follower_v1` 使用单个常驻 writer。普通发送按 steady clock
+-20 Hz 调度，实际普通提交间隔至少 50 ms；错过周期不补发旧指令。
+-撤许可、失权、急停等事件唤醒同一 writer，提前唤醒只能处理零指令，
+-不能提高非零发送频率。输入仍为一个最新命令槽，原始状态/命令期限不续写。
++正式 `task_follower_v1` 仍只有一个常驻 SDK writer，非零普通发送的实际软件受理
++间隔至少 50 ms（最多 20 Hz），但不再让新命令等待另一套固定 20 Hz 轮询相位。
++`LocalMotionCommand` 完成原有接收校验后仅递增固定大小的 wake revision 并唤醒
++writer；如果上次非零受理已满 50 ms，立即选择最新原始命令，否则只等剩余间隔。
++最新槽和 revision 不形成队列，迟到的旧命令仍由 Transport 的原规则拒绝。
++
++周期健康检查不再重复发送一个未变化的非零命令，也不以空闲、HOLD 或过期零消耗
++下一条新命令的普通发送机会。初始控制权事务仍能在健康检查中推进。原始命令、
++机身状态及任务 lease 的截止时间独立唤醒同一个 writer；真正过期、急停、撤销和
++失权仍立即选择零/停止，不等待普通非零额度。严格原始 100 ms body/command
++合同不变，不刷新源时、不延长 TTL、不新增曲线或碰撞门控。
++
++正式回调接收一个较新的有效零，即使它的正授权 lease 尚在传输，也保留既有单调
++停止屏障并立即唤醒零路径。延期的非零只有其真实因果 lease 到达并重新通过完整
++校验后才唤醒普通发送。writer 在状态锁内捕获实际选中 revision；厂商调用期间
++到达的新命令不会被旧调用误标为已消费。非零受理间隔以实际软件受理时刻而非
++tick 开始时刻计，厂商调用阻塞后仍不补发压缩的非零对。
++
++普通命令和急停/撤销 revision 使用同一个短临界区通知辅助函数，与 writer 的
++等待 mutex 配对；避免仅 atomic+notify 在“谓词已检查、尚未进入等待”之间丢失
++唤醒而多等一个 watchdog 周期。该 mutex 只保护等待/通知，不覆盖状态处理、
++厂商调用或遥测发布。纯并发回归强制制造这一窗口并验证旧/新通知顺序。
++
++生产 `Transport`、原始 typed 命令和生产调度器的同输入对照包含：有效命令在旧
++轮询后 1 ms 到达、原始 body 已有 60 ms 源龄时，旧轮询额外等待 50 ms 后过期，
++新调度在可用额度下直接处理；20 Hz 连续命令不新增源龄、不出现该相位过期；
++真正断流仍按原始截止时间归零。另覆盖突发合并、阻塞期间新 revision、旧身份、
++撤销及急停。该回归不创建 ROS 图、不初始化 SDK、不连接或调用真实 Move；它是
++软件调度反例验证，不是实机响应、制动或持续导航的验收结果。
++
++### 受理顺序与单 writer 撤销（2026-10-15 实现，2026-10-18 保留）
++
++正式 `task_follower_v1` 使用单个常驻 writer。普通非零发送仍按 steady clock
++限定至少 50 ms 间隔；错过周期不补发旧指令。撤许可、失权、急停等事件唤醒
++同一 writer，提前唤醒只能处理零指令，不能提高非零发送频率。输入仍为一个
++最新命令槽，原始状态/命令期限不续写；10月18日起改用上节的新命令驱动相位。
+ 
+ 一次 `TakeControl` 或 `Move` 在状态锁内完成最终核对、捕获不可变参数并登记
+ writer-wide transaction，这一时刻是**软件受理顺序点**；随后释放通用状态锁

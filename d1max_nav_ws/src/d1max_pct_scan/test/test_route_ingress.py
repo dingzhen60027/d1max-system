@@ -49,6 +49,20 @@ def test_cancel_requires_exact_active_owner_no_old_task_resurrection():
         accept(gate, delivery(4))
 
 
+def test_unadmitted_cancel_installs_tombstone_without_erasing_another_owner():
+    gate=ingress()
+    cancel=delivery(2,False)
+    assert gate.accept(cancel,now=10.1,context=None,retire_unadmitted=True)
+    assert gate.active_identity is None and ('t','r',cancel.route_hash) in gate.retired
+    with pytest.raises(ValueError,match='retired'):
+        accept(gate,delivery(3))
+    other=delivery(4);other.task_id=other.snapshot.task_id='new'
+    assert accept(gate,other)
+    late=delivery(5,False)
+    assert gate.accept(late,now=10.1,context=None,retire_unadmitted=True)
+    assert gate.active_identity[0]=='new'
+
+
 @pytest.mark.parametrize('field,value', [('schema_version',1), ('session_id','wrong'),
     ('route_hash','bad'), ('task_id','foreign')])
 def test_foreign_or_v1_envelope_cannot_feed_native_path(field,value):

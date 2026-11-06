@@ -6,6 +6,7 @@ import json
 from types import SimpleNamespace
 
 import pytest
+from builtin_interfaces.msg import Time
 
 from d1max_pct_scan.native_global_worker import serve_requests
 from d1max_pct_scan.live_global_planner import LiveGlobalPlanner
@@ -227,12 +228,45 @@ def test_new_goal_reuses_idle_worker_and_cancels_busy_worker():
     assert busy.current is None and busy.pending_goal is None
 
 
-@pytest.mark.parametrize('reason',['explicit_user_cancel','hard_fault','map_changed','shutdown'])
-def test_explicit_cancel_or_hard_change_destroys_even_idle_worker(reason):
+@pytest.mark.parametrize('reason',['hard_fault','map_changed','shutdown'])
+def test_hard_change_or_shutdown_destroys_even_idle_worker(reason):
     obj, actions = lifecycle_fake()
     LiveGlobalPlanner.revoke(obj,reason)
     assert actions == ['terminate_own_child','empty','clear_visual']
     assert obj.pause.intent is None
+
+
+@pytest.mark.parametrize('busy', [False, True])
+def test_cancel_callback_retires_intent_immediately_and_reuses_only_idle_resources(busy):
+    obj, actions = lifecycle_fake(busy=busy)
+    original_child, original_pipe = obj.child, obj.pipe
+    obj.revoke = lambda reason, **kw: LiveGlobalPlanner.revoke(obj, reason, **kw)
+    # Exercise the production publishers' ownership flags, not a fake cancel
+    # result. Publication itself stays local to this no-ROS harness.
+    obj.bridge = SimpleNamespace(source_frame='d1max_loc_map')
+    obj.get_clock = lambda: SimpleNamespace(now=lambda: SimpleNamespace(
+        to_msg=lambda: Time(sec=100)))
+    obj.path_pub = SimpleNamespace(publish=lambda _: actions.append('empty'))
+    obj.visual_path_pub = SimpleNamespace(publish=lambda _: actions.append('clear_visual'))
+    obj.publish_empty = lambda reason: LiveGlobalPlanner.publish_empty(obj, reason)
+    obj.clear_visual_path = lambda: LiveGlobalPlanner.clear_visual_path(obj)
+    statuses = []
+    obj.publish_status = lambda: statuses.append(dict(generation=obj.generation,
+        current=obj.current, pending=obj.pending_goal, intent=obj.pause.intent,
+        committed=obj.route_committed, active=obj.active_reference))
+    LiveGlobalPlanner.on_cancel(obj, None)
+    assert obj.generation == 6 and obj.current is None and obj.pause.intent is None
+    assert obj.cached_result is None and obj.waiting_goal is None
+    assert obj.pending_goal is None and not obj.route_committed
+    assert not obj.active_reference and not obj.visual_path_available
+    assert statuses == [dict(generation=6, current=None, pending=None, intent=None,
+                             committed=False, active=False)]
+    if busy:
+        assert actions == ['terminate_own_child', 'empty', 'clear_visual']
+    else:
+        assert actions == ['empty', 'clear_visual']
+        assert obj.child is original_child and obj.pipe is original_pipe
+        assert obj.idle_worker_available()
 
 
 def test_old_generation_or_non_owned_reply_cannot_commit():

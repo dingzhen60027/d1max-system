@@ -55,6 +55,15 @@ struct Ownership {
   }
   bool fresh(double now) const {return last_robot>=0&&now>=last_robot&&now-last_robot<=2.5;}
   bool owns(double now) const {return connected&&!replay&&confirmed&&control_source==2&&fresh(now);}
+  // Only the unique writer invokes this for a NEW explicitly authorized
+  // execution after its previous attempt has retired. Availability alone
+  // never resets the one-attempt guard; ambiguous ownership never retries.
+  bool beginAuthorizedAttempt(double now) {
+    if(!connected||replay||pending||uncertain)return false;
+    if(confirmed)return owns(now);
+    attempted=false;acknowledged=false;available_at=-1.;requested_at=ack_at=-1.;
+    confirmations=0;enabled=true;available(now);return true;
+  }
   void fail(const std::string& why,const std::string& detail,bool ambiguous) {
     pending=confirmed=false;uncertain=uncertain||ambiguous;result=why;error=detail;available_at=-1.;
   }

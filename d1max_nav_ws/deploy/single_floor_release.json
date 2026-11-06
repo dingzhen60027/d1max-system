@@ -3,13 +3,13 @@
   "entry_module": "d1max_pct_scan.single_floor_session",
   "entrypoint": "tools/navigation_entry.sh",
   "release_directory": "experiments/navigation_runtime",
-  "release_manifest_sha256": "791925f25f33e2c61826bc60142441fdb06db5cfe321a191dc362138386babd6",
+  "release_manifest_sha256": "5268861d5f8cc148ba1af6f2b8d9ce11145a3a5630affb6afd519c84e50a9cec",
   "motion_purpose": "execution",
   "preview_purpose": "planning_only",
   "transport": "rmw_zenoh_cpp",
   "interface_version": 3,
   "max_speed_mps": 0.3,
-  "scope": "single_floor",
+  "scope": "navigation",
   "physical_acceptance": false,
   "authorization_policy": "existing_sdk_session_and_runtime_motion_profile_then_goal_bound_bt_execution_intent"
 }

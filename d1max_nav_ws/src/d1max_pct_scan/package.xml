@@ -3,6 +3,7 @@
 <description>Isolated PCT + SCAN single-floor integration and offline acceptance.</description>
 <maintainer email="dndx@localhost.localdomain">D1 Max</maintainer><license>MIT</license>
 <buildtool_depend>ament_python</buildtool_depend><exec_depend>rclpy</exec_depend>
+<build_depend>pybind11-dev</build_depend><build_depend>python3-dev</build_depend>
 <exec_depend>d1max_pct_planner</exec_depend><exec_depend>d1max_scan_planner</exec_depend>
 <exec_depend>d1max_trajectory_tracker</exec_depend><exec_depend>d1max_navigation</exec_depend>
 <exec_depend>d1max_pct_rviz_tools</exec_depend>

@@ -285,7 +285,9 @@ TEST(NavigationDiagnostics, MotionCapableChangesLabelOnlyAndRoundTrips)
   config.mapSetValue("Session ID", "motion-session"); config.mapSetValue("Motion Capable", true);
   panel.load(config);
   EXPECT_EQ(panel.findChild<QLabel *>("mode")->text(), "定位与规划监视");
-  EXPECT_EQ(panel.findChildren<QPushButton *>().size(), 2);  // Two passive layout selectors.
+  EXPECT_NE(panel.findChild<QPushButton *>("layout_global"), nullptr);
+  EXPECT_NE(panel.findChild<QPushButton *>("layout_local"), nullptr);
+  EXPECT_EQ(panel.findChild<QPushButton *>("motion_execute"), nullptr);
   // Changing the presentation label never changes the passive wire contract.
   panel.acceptStatus(QString::fromUtf8(QJsonDocument(motionStatus()).toJson()));
   EXPECT_TRUE(panel.findChild<QLabel *>("local")->text().contains("等待"));

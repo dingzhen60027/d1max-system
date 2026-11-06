@@ -20,8 +20,13 @@ MAX_OUTPUT_POINTS = 30_000
 MAX_XY_LENGTH_M = 1000.0
 MAX_VISIBILITY_CHECKS = 2048
 MAX_POLYLINE_VERTICES = 512
+MAX_CORNER_ALTERNATIVES = 4
 OUTPUT_SPACING_M = 0.10
 VISIBILITY_ANCHOR_SPACING_M = 0.50
+# Geometric selection bound for this conditioned-map tradeoff (radius >= .8m),
+# not a robot steering/dynamic limit. Native heading-rate parameters are not
+# curvature bounds and must not be relabelled as one.
+MAX_CONDITIONED_CORNER_CURVATURE_PER_M = 1.25
 
 
 def _rejected(reason, before=None, **details):
@@ -84,6 +89,51 @@ def _rounded_segments(polyline, cut_m):
     return segments
 
 
+def _corner_intersection_candidates(polyline, cut_m):
+    """Recover the full corner hidden by two adjacent visibility cut points.
+
+    Farthest-visible anchors can clip the inside of a turn so tightly that no
+    sufficiently smooth rounded curve fits. Intersect only the forward incoming
+    and backward outgoing supporting rays; do not change the route endpoints or
+    turn direction. These are *hypotheses*, not checked shortcuts: the caller
+    still validates every complete polynomial against the unchanged tomogram.
+    """
+    alternatives = []
+    for index in range(1, len(polyline)-2):
+        a, b, c, d = polyline[index-1:index+3]
+        incoming, middle, outgoing = b-a, c-b, d-c
+        lengths = np.linalg.norm([incoming, middle, outgoing], axis=1)
+        if not np.isfinite(lengths).all() or min(lengths) <= 1e-10:
+            continue
+        incoming, middle, outgoing = (v/length for v, length in
+                                      zip((incoming, middle, outgoing), lengths))
+        cross = lambda u, v: float(u[0]*v[1]-u[1]*v[0])
+        first_turn, second_turn = cross(incoming, middle), cross(middle, outgoing)
+        determinant = cross(incoming, outgoing)
+        # No U/S turns, straight-line aliases or ill-conditioned intersections.
+        if (first_turn*second_turn <= 1e-12 or abs(determinant) <= 1e-8
+                or float(np.dot(incoming, outgoing)) <= -.999):
+            continue
+        distance = c-b
+        forward = cross(distance, outgoing)/determinant
+        backward = cross(distance, incoming)/determinant
+        if forward < -1e-9 or backward > 1e-9:
+            continue
+        corner = b + forward*incoming
+        if not np.isfinite(corner).all():
+            continue
+        along = np.clip(np.dot(corner-b, middle), 0., lengths[1])
+        displacement = float(np.linalg.norm(corner-(b+along*middle)))
+        # A local clipped-corner repair, never an arbitrarily remote ray join.
+        if displacement > cut_m or max(forward, -backward) > lengths[1] + cut_m:
+            continue
+        candidate = np.vstack((polyline[:index], corner, polyline[index+2:]))
+        turning = abs(np.arctan2(determinant, np.dot(incoming, outgoing)))
+        alternatives.append((turning, index, candidate))
+    alternatives.sort(key=lambda item: (-item[0], item[1]))
+    return [item[2] for item in alternatives[:MAX_CORNER_ALTERNATIVES]]
+
+
 def _expand_segment(tomogram, segment, layer, first_z=None, last_z=None):
     # Lazy import avoids TomogramRoute -> refinement -> TomogramRoute cycles.
     from .tomogram_route import curve_partition
@@ -143,6 +193,69 @@ def _quality_not_worse(before, after):
     return failures
 
 
+def _curve_peak_curvature(segments):
+    """Evaluate polynomial curvature extrema, not sparse chord samples."""
+    peak = 0.
+    for segment in segments:
+        c = segment['coefficients_xy']
+        dx, dy = (np.polynomial.polynomial.polyder(c[:, axis]) for axis in (0, 1))
+        ddx, ddy = (np.polynomial.polynomial.polyder(v) for v in (dx, dy))
+        mul, add, sub = (np.polynomial.polynomial.polymul,
+                         np.polynomial.polynomial.polyadd, np.polynomial.polynomial.polysub)
+        numerator = sub(mul(dx, ddy), mul(dy, ddx))
+        speed_sq = add(mul(dx, dx), mul(dy, dy))
+        # d(kappa^2)/dt=0 away from zero curvature iff 2*n'*s-3*n*s'=0.
+        critical = sub(2*mul(np.polynomial.polynomial.polyder(numerator), speed_sq),
+                       3*mul(numerator, np.polynomial.polynomial.polyder(speed_sq)))
+        roots = np.polynomial.polynomial.polyroots(critical)
+        times = [0., 1., *[float(v.real) for v in roots if abs(v.imag)<1e-8 and 0<v.real<1]]
+        speed = np.polynomial.polynomial.polyval(times, speed_sq)
+        if not np.isfinite(speed).all() or min(speed) <= 1e-12:
+            return float('inf')
+        values = np.abs(np.polynomial.polynomial.polyval(times, numerator)) / speed**1.5
+        if not np.isfinite(values).all():
+            return float('inf')
+        peak = max(peak, float(max(values)))
+    return peak
+
+
+def _conditioned_corridor_map(tomogram):
+    provenance = getattr(tomogram, 'provenance', {})
+    return (provenance.get('processing_schema') == 'd1max.crossfloor_planning/v1'
+            and provenance.get('geometry_operation') ==
+                'independent_floor_conditioning_visibility_filter_and_measured_return_restore'
+            and provenance.get('frame_id') == 'd1max_multifloor_planning')
+
+
+def _corridor_quality(before, after, *, conditioned=False, curve_peak=None):
+    """Compare already-validated geometry, never collision/dynamic authority.
+
+    Distributed native waviness can have a lower *local* curvature peak than
+    one regular C2 corner, despite being longer and turning much more overall.
+    Do not retain that waviness solely to win a peak statistic. The strict
+    comparator remains unchanged for its other callers (source-identity paths).
+    """
+    failures = _quality_not_worse(before, after)
+    tradeoff = None
+    if conditioned and failures == ['curvature_max_per_m']:
+        peak = [before['curvature_max_per_m'], after['curvature_max_per_m']]
+        progress = all(after[key] < before[key] - 1e-6 * max(1., abs(before[key]))
+                       for key in ('xy_length_m', 'total_abs_turn_rad', 'curvature_p95_per_m'))
+        bounded = (curve_peak is not None and np.isfinite(curve_peak)
+                   and 0 <= curve_peak <= MAX_CONDITIONED_CORNER_CURVATURE_PER_M)
+        if (progress and bounded and all(value is not None and np.isfinite(value) for value in peak)):
+            # All other metrics, including XYZ length and p95 curvature, have
+            # already passed the same non-worsening comparison above. The
+            # caller has checked the entire C2 curve against the original map.
+            failures = []
+            tradeoff = dict(metric='curvature_max_per_m', before=peak[0], after=peak[1],
+                            reason='shorter_route_and_less_total_turn_with_nonworsening_p95',
+                            polynomial_peak_per_m=curve_peak,
+                            maximum_polynomial_peak_per_m=MAX_CONDITIONED_CORNER_CURVATURE_PER_M,
+                            dynamic_feasibility_certified=False)
+    return failures, tradeoff
+
+
 def _cost_audit(tomogram, path, layer):
     touched = set()
     for a, b in zip(path[:-1], path[1:]):
@@ -157,7 +270,7 @@ def _cost_audit(tomogram, path, layer):
             'hard_cost_threshold': float(tomogram.COST_THRESHOLD)}
 
 
-def refine_corridor(tomogram, path_xyz, layer_ids, corner_cut_m=1.5):
+def refine_corridor(tomogram, path_xyz, layer_ids, corner_cut_m=1.5, *, quality_policy='floor'):
     """Return a validated explicit candidate, or ``applied=False`` with reason.
 
     Original route validity is a precondition verified here, never assumed.
@@ -167,6 +280,8 @@ def refine_corridor(tomogram, path_xyz, layer_ids, corner_cut_m=1.5):
     checks. Up to three cut scales (1, .7, .4) are tested; no sharp-polyline
     fallback is silently published if rounded candidates fail.
     """
+    if quality_policy not in ('floor', 'stair_xy'):
+        raise ValueError('Unsupported explicit refinement quality policy')
     try:
         path = np.asarray(path_xyz, dtype=float)
         layers = np.asarray(layer_ids)
@@ -255,21 +370,38 @@ def refine_corridor(tomogram, path_xyz, layer_ids, corner_cut_m=1.5):
     except TomogramError as error:
         return _rejected(error.code, before, visibility_checks=visibility_checks)
     failures = []
-    for scale in ([1.] if direct else [1., .7, .4]):
+
+    def evaluate(polyline_candidate, scale, candidate_index):
         try:
-            segments = ([_line(polyline[0], polyline[-1])] if direct
-                        else _rounded_segments(polyline, float(corner_cut_m)*scale))
+            segments = ([_line(polyline_candidate[0], polyline_candidate[-1])] if direct
+                        else _rounded_segments(polyline_candidate, float(corner_cut_m)*scale))
             if direct:
                 candidate, partition_points = direct_geometry
+                # Horner's a+(b-a) at t=1 can differ from b by one ULP.
+                # Keep exact selected endpoints, as _expanded_candidate does
+                # for multi-segment curves, then recheck both connectors.
+                candidate = candidate.copy()
+                candidate[0], candidate[-1] = path[0], path[-1]
                 checks = tomogram.validate_path(candidate, np.full(len(candidate), layer))
             else:
                 candidate, partition_points, checks = _expanded_candidate(tomogram, segments, layer, path[0], path[-1])
             after = path_quality(candidate)
-            worse = _quality_not_worse(before, after)
+            conditioned = _conditioned_corridor_map(tomogram)
+            if quality_policy == 'stair_xy':
+                # Stair Z is sampled from the original measured treads. A
+                # denser, straighter XY curve can accumulate more stair-height
+                # variation; that is not a reason to retain lateral waviness.
+                # All ground/step/headroom/polynomial checks above are unchanged.
+                worse = [key for key in _quality_not_worse(before, after) if key != 'xyz_length_m']
+                peak_tradeoff = None
+            else:
+                worse, peak_tradeoff = _corridor_quality(before, after, conditioned=conditioned,
+                    curve_peak=_curve_peak_curvature(segments) if conditioned else None)
             if worse:
-                failures.append({'cut_scale': scale, 'reason': 'quality_not_improved', 'worse_metrics': worse,
+                failures.append({'candidate_index': candidate_index, 'cut_scale': scale,
+                                 'reason': 'quality_not_improved', 'worse_metrics': worse,
                                  'after_quality': after})
-                continue
+                return None
             audit = [{key: value.tolist() if isinstance(value, np.ndarray) else value
                       for key, value in segment.items()} for segment in segments]
             return {'applied': True, 'reason': 'checked_straight_line' if direct else 'checked_c2_corners',
@@ -280,15 +412,55 @@ def refine_corridor(tomogram, path_xyz, layer_ids, corner_cut_m=1.5):
                     'after_cost_audit': _cost_audit(tomogram, candidate, layer),
                     'soft_cost_policy': 'prefer_geometric_simplicity_within_unchanged_hard_pct_mask',
                     'physical_safety_certified': False,
+                    'quality_acceptance': {
+                        'policy': ('nonworsening_xy_geometry_with_original_measured_stair_z'
+                                   if quality_policy == 'stair_xy' else
+                                   'nonworsening_primary_geometry_with_explicit_local_peak_tradeoff'),
+                        'local_curvature_peak_tradeoff': peak_tradeoff},
+                    'visibility_candidate_index': candidate_index,
+                    'visibility_candidate_policy': ('original_greedy' if candidate_index == 0 else
+                        'bounded_adjacent_corner_intersections_ranked_by_checked_map_cost'),
                     'segments': audit, 'visibility_checks': visibility_checks,
-                    'visibility_polyline_xy': polyline.tolist(), 'corner_cut_scale': scale,
+                    'visibility_polyline_xy': polyline_candidate.tolist(), 'corner_cut_scale': scale,
                     'curve_partition_points': partition_points,
                     'curve_validation': 'polynomial_cell_boundary_roots_and_interval_interiors_plus_validate_path',
                     'continuity': 'XY geometric C2 under arc-length parameterization; measured-ground Z, no 3D or dynamic C2 guarantee',
                     'height_semantics': 'measured_ground_with_exact_selected_endpoints',
-                    'prior_candidate_failures': failures, **checks}
+                    'prior_candidate_failures': list(failures), **checks}
         except TomogramError as error:
-            failures.append({'cut_scale': scale, 'reason': error.code, 'details': error.details})
+            failures.append({'candidate_index': candidate_index, 'cut_scale': scale,
+                             'reason': error.code, 'details': error.details})
+            return None
+
+    for scale in ([1.] if direct else [1., .7, .4]):
+        result = evaluate(polyline, scale, 0)
+        if result is not None:
+            return result
+    # Ordinary successful requests keep their exact output and work budget.
+    # Only a failed greedy corner gets up to four local alternatives / twelve
+    # additional full-curve checks. No new visibility graph, map or inflation.
+    accepted = []
+    alternatives = [] if direct else _corner_intersection_candidates(polyline, float(corner_cut_m))
+    for index, alternative in enumerate(alternatives, 1):
+        for scale in (1., .7, .4):
+            result = evaluate(alternative, scale, index)
+            if result is not None:
+                accepted.append(result)
+                break
+    if accepted:
+        # Do not pick the shortest corner at the expense of all map cost. All
+        # choices passed full map geometry and the original quality policy;
+        # only a peak-curvature tradeoff imposes the analytic bound above.
+        # Cost units are not physical wall clearance.
+        result = min(accepted, key=lambda item: (
+            item['after_cost_audit']['max_cost'],
+            item['after_cost_audit']['mean_touched_cell_cost'],
+            item['after_quality']['xy_length_m'],
+            item['after_quality']['total_abs_turn_rad']))
+        result['alternative_polylines_checked'] = len(alternatives)
+        result['prior_candidate_failures'] = failures
+        return result
     return _rejected('no_valid_nonworsening_smooth_candidate', before,
                      visibility_checks=visibility_checks, candidate_failures=failures,
-                     visibility_polyline_xy=polyline.tolist())
+                     visibility_polyline_xy=polyline.tolist(),
+                     alternative_polylines_checked=len(alternatives))

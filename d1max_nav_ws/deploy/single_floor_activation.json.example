@@ -1,14 +1,13 @@
 {
   "schema_version": 3,
   "profile": "single_floor_live",
-  "purpose": "execution",
+  "launch_policy": "navigation",
+  "runtime_motion_profile": "/home/dndx/d1max_nav_ws/experiments/navigation_runtime/source_snapshot/nav_ws/src/d1max_pct_scan/config/runtime_motion_profile.json",
+  "runtime_motion_profile_sha256": "c08d3804403fcdef6cc42e95560b30a6fe60dc328ee113676816cb102f3eb07d",
   "release_root": "/home/dndx/d1max_nav_ws/experiments/navigation_runtime",
   "entrypoint": "/home/dndx/d1max_nav_ws/tools/navigation_entry.sh",
   "entrypoint_sha256": "77ef8668a8802d2e06c66906cd0ea410765ae14c0d854d182d61c32cb4e884df",
   "compatibility_entrypoint_sha256": "5cbec4cc679eeaa25c6bba009bb478b5bb087766ca598cc8d6fff84f3a912285",
   "release_manifest": "/home/dndx/d1max_nav_ws/experiments/navigation_runtime/release_manifest.json",
-  "release_manifest_sha256": "b9dcbc407b9bd6592fa0a1f0a6c3d4ee165d0ebb63f7f8e03d27400dacce296c",
-  "physical_acceptance_record": "REPLACE_WITH_ACTUAL_RECORD_ABSOLUTE_PATH",
-  "physical_acceptance_record_sha256": "REPLACE_WITH_ACTUAL_RECORD_SHA256",
-  "expected_sdk_session": "REPLACE_WITH_CURRENT_EXISTING_SDK_SESSION"
+  "release_manifest_sha256": "REPLACE_WITH_SELECTED_MANIFEST_SHA256"
 }

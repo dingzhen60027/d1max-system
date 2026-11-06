@@ -7,6 +7,7 @@ an estimator, collision rule, timestamp, or physical acceptance flag.
 import hashlib
 import importlib.util
 import json
+import math
 from pathlib import Path
 
 import yaml
@@ -89,6 +90,136 @@ def validate_perception_branch(session, localization):
         raise ValueError('per_sensor_rays native map requires dual lidar acquisition')
 
 
+def mainline_coordinate_contract(localization, session, parameters, planning_manifest):
+    """Audit generated v3 wiring once, before launch; no live-state admission.
+
+    The old preview's ``localization_contract`` return contains map-curve roles.
+    Reuse its producer checks, not those legacy roles, for the odom mainline.
+    Physical CAD/calibration discrepancies are reported, never silently repaired
+    or promoted to startup failures. All arguments remain unchanged.
+    """
+    from d1max_localization.initial_pose import body_to_tracking_transform
+    from d1max_localization.math_utils import Pose3, compose, normalize_quaternion
+
+    if session.get('pipeline_contract') != 'single_floor_v3':
+        raise ValueError('coordinate audit requires the mainline v3 contract')
+    frames = localization_contract(localization, session['frame_id'])['frames']
+    validate_perception_branch(session, localization)
+
+    def equal(actual, expected, edge):
+        if actual != expected:
+            raise ValueError('coordinate wiring mismatch: ' + edge)
+
+    equal(session.get('local_planning_frame'), frames['odom_frame'], 'session.local_planning_frame')
+    for key in ('map_frame', 'odom_frame', 'body_frame', 'tracking_frame'):
+        equal(session['navigation_contract']['frames'].get(key), frames[key], 'session.' + key)
+    bt, adapter, global_, reference, scan = (parameters[key] for key in
+                                             ('bt', 'bt_adapter', 'global', 'reference', 'scan'))
+    equal(bt.get('planning_scope','navigation'),session.get('planning_scope','navigation'),'bt.planning_scope')
+    for key in ('frame_id', 'planning_frame'):
+        equal(bt.get(key), frames['map_frame'], 'bt.' + key)
+    for key in ('map_frame', 'body_frame', 'tracking_frame'):
+        equal(adapter.get(key), frames[key], 'bt_adapter.' + key)
+    equal(adapter.get('body_height'), session['body_height'], 'bt_adapter.body_height')
+    equal(reference.get('body_height_m'), session['body_height'], 'reference.body_height_m')
+    equal(reference.get('local_state_enabled'), True, 'reference.local_state_enabled')
+    equal(reference.get('planning_manifest'), session['planning_manifest'], 'reference.planning_manifest')
+    for key in ('planning_manifest', 'tomogram_npz', 'crossfloor_route_config'):
+        equal(global_.get(key), session[key], 'global.' + key)
+    for key, value in {
+        'grid_map.frame_id': frames['odom_frame'],
+        'grid_map.cloud_is_world': True, 'grid_map.need_extrinsic': False,
+        'grid_map.use_projected_rays': True, 'fsm.odom_twist_in_body_frame': True,
+        'fsm.reference_path_z_offset': 0.,
+    }.items():
+        equal(scan.get(key), value, 'scan.' + key)
+    if session.get('purpose') == 'execution':
+        for key, value in {'map_frame': frames['map_frame'], 'planning_frame': frames['odom_frame'],
+                           'base_frame': frames['body_frame']}.items():
+            equal(parameters['tracker'].get(key), value, 'tracker.' + key)
+
+    manifest = planning_manifest
+    conditioned=session.get('map_capabilities',{}).get('geometry_kind')=='conditioned_multifloor_ground'
+    global_scope=session.get('planning_scope','navigation')=='global_route'
+    if conditioned:
+        from .navigation_map_package import CONDITIONED_GEOMETRY
+        capabilities=session.get('map_capabilities',{})
+        if (session.get('physical_acceptance') is not False
+                or capabilities!=dict(geometry_kind='conditioned_multifloor_ground',
+                    floor_ids=['floor1','floor2'],stairs_planning_enabled=True,
+                    execution_geometry_eligible=False,planning_frame='d1max_multifloor_planning')
+                or manifest.get('planning_only') is not True
+                or manifest.get('processing_schema')!='d1max.crossfloor_planning/v1'):
+            raise ValueError('conditioned_map_geometry_is_not_motion_authority')
+        map_expected={'geometry_operation':CONDITIONED_GEOMETRY,
+                      'frame_id':capabilities['planning_frame'],'source_path':session['map_pcd']}
+    else:
+        map_expected={'geometry_operation':'source_identity','xyz_modified':False,
+                      'frame_id':frames['map_frame'],'source_path':session['map_pcd']}
+    for key, value in map_expected.items():
+        equal(manifest.get(key), value, 'planning_manifest.' + key)
+    source_sha = session['input_hashes'][session['map_pcd']]
+    equal(manifest.get('source_sha256'), source_sha, 'planning_manifest.source_sha256')
+    equal(reference.get('expected_source_map_sha256'), source_sha, 'reference.source_map')
+    equal(bt.get('initial_localization_map_sha256'), source_sha, 'bt.source_map')
+    equal(adapter.get('expected_source_map_sha256'), source_sha, 'bt_adapter.source_map')
+
+    front = localization['lio_localizer']['ros__parameters']
+    lio = localization['/d1max/localization/lio/laserMapping']['ros__parameters']
+    # lio_localizer publishes tracking<-lidar as identity. Its LIO inputs must
+    # already be in that normalized basis, not calibrated a second time.
+    equal(lio.get('mapping.extrinsic_R'), [1., 0., 0., 0., 1., 0., 0., 0., 1.], 'lio.tracking_from_lidar_R')
+    equal(lio.get('mapping.extrinsic_T'), [0., 0., 0.], 'lio.tracking_from_lidar_T')
+    equal(lio.get('mapping.extrinsic_est_en'), False, 'lio.identity_extrinsic_is_fixed')
+    body_from_tracking = body_to_tracking_transform(front['tracking_offset_body'], front['sdk_to_tracking_yaw'])
+    acquisition = localization['dual_lidar_adapter']['ros__parameters']
+
+    def sensor_transform(prefix):
+        xyz = tuple(acquisition[prefix + '_translation'])
+        q = tuple(acquisition[prefix + '_rotation'])
+        if len(xyz) != 3 or not all(math.isfinite(v) for v in xyz):
+            raise ValueError('invalid sensor translation: ' + prefix)
+        # Match native adapter load_transform(), including quaternion order.
+        if len(q) != 4 or not all(math.isfinite(v) for v in q) or abs(math.sqrt(sum(v*v for v in q))-1.) > .001:
+            raise ValueError('invalid sensor rotation: ' + prefix)
+        return Pose3(xyz, normalize_quaternion(q))
+
+    lidar_from_front = sensor_transform('front')
+    lidar_from_rear = compose(lidar_from_front, sensor_transform('rear_to_front'))
+    model = session.get('entity_self_filter', {})
+    cad_origins = model.get('sensor_origins_body_m', {})
+    origins = {}
+    for sensor, pose in ((0, lidar_from_front), (1, lidar_from_rear)):
+        body_pose = compose(body_from_tracking, pose)
+        cad = cad_origins.get(str(sensor), cad_origins.get(sensor))
+        origins[str(sensor)] = dict(lidar_xyz_m=list(pose.position), body_xyz_m=list(body_pose.position),
+            cad_body_xyz_m=cad, cad_residual_m=None if cad is None else math.dist(body_pose.position, cad))
+
+    return dict(schema=1, evidence_scope='configured_chain_only_not_live_tf_or_physical_acceptance',
+        frames=frames, public_tf_edges=[
+            dict(parent=frames['map_frame'], child=frames['odom_frame'], owner='realtime_navigation_output', static=False),
+            dict(parent=frames['odom_frame'], child=frames['body_frame'], owner='realtime_navigation_output', static=False),
+            dict(parent=frames['body_frame'], child=frames['tracking_frame'], owner='realtime_navigation_output', static=True,
+                 xyz_m=list(body_from_tracking.position), quaternion_xyzw=list(body_from_tracking.orientation)),
+            dict(parent=frames['tracking_frame'], child=frames['lidar_frame'], owner='lio_localizer', static=True,
+                 xyz_m=[0., 0., 0.], quaternion_xyzw=[0., 0., 0., 1.]),
+        ],
+        roles=dict(global_route=frames['map_frame'], local_map=frames['odom_frame'],
+                   local_curve=frames['odom_frame'], velocity_command=frames['body_frame']),
+        map_source_sha256=source_sha, imu_topic=acquisition['input_imu_topic'],
+        planning_map_geometry=dict(frame=manifest['frame_id'],
+            ground_only_bridge=conditioned,control_tf=False,
+            motion_authorized=False,planning_scope=session.get('planning_scope','navigation')),
+        ground_to_body=dict(height_m=session['body_height'],applications=0 if global_scope else 1,
+            owner='none_global_route_only' if global_scope else 'continuous_reference'),
+        sensor_origins=origins,
+        physical_open_items=[
+            'Verify measured lidar origins against both configured extrinsics and CAD; residual is not a physical calibration.',
+            'Measure base_link height above support; approximate lidar ground height is not the base_link height.',
+            'Verify fixed-standing wheel/leg pose applicability and SDK forward/yaw response on the robot.',
+        ])
+
+
 def artifact_identity(session):
     fingerprints = {key: file_sha256(session[key]) for key in ARTIFACT_KEYS}
     return 'navigation-map-' + identity(fingerprints), fingerprints
@@ -129,7 +260,8 @@ def validate_effective_wiring(directory, session):
     for name in ('planning_manifest', 'tomogram_npz', 'crossfloor_route_config'):
         if global_.get(name) != session[name]:
             raise ValueError('global planner map artifact mismatch: '+name)
-    for name, value in scan_robot_parameters(session['robot_profile_snapshot']).items():
+    for name, value in scan_robot_parameters(session['robot_profile_snapshot'],
+            strict_layer_available=scan['grid_map.require_observed_free']).items():
         if scan.get(name) != value:
             raise ValueError('effective robot collision geometry mismatch: '+name)
     if session.get('task_orchestrator'):

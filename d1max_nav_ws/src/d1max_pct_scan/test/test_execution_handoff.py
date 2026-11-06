@@ -5,6 +5,7 @@ import pytest
 
 from test_execution_safety import fixture, motion_proof, NOW, stamp
 from d1max_pct_scan.execution_handoff import ExecutionHandoffAdmission
+from d1max_pct_scan.execution_safety import ExecutionSafety
 
 
 def vec(x=0.,y=0.,z=0.):return N(x=x,y=y,z=z)
@@ -23,11 +24,16 @@ def ack(p,*,g=None,sequence=1,applied=True,when=NOW):
         control_epoch=p.control_epoch,sdk_arm_generation=p.sdk_arm_generation,
         transport_mode=p.transport_mode,applied_at=stamp(when),body_source_stamp=stamp(when),
         measured_pose=N(header=N(frame_id='d1max_loc_odom',stamp=stamp(when)),pose=pose()),
-        write_submitted=True,write_acknowledged=False,applied=applied)
+        write_submitted=applied,write_acknowledged=False,applied=applied)
 
 
-def ready():
+def ready(transport_mode='isolated_mock'):
     c,p,d,curve,*_=fixture();p.phase='tracking'
+    if transport_mode!='isolated_mock':
+        c=ExecutionSafety(c.session,transport_mode,braking_model_sha256=c.braking_model_sha256,
+            stationary_policy=c.stationary_policy,kinematic_profile=c.kinematic_profile)
+        p.transport_mode=d.transport_mode=curve.transport_mode=transport_mode
+        assert c.on_validation(curve) and c.on_motion_validation(motion_proof(d))
     c.permits.clear();c.last_permit_sequence=0;assert c.on_permit(p)
     h=ExecutionHandoffAdmission(c,enabled=True)
     assert h.on_ack(ack(p),NOW)
@@ -76,9 +82,10 @@ def test_conditional_admission_never_changes_active_geometry_and_ack_promotes_or
     assert not h.on_permit(delayed) and h.applied==committed
 
 
-@pytest.mark.parametrize('change',['id','expected','source','pose','velocity','entry_id','native_entry','no_raw','negative','expired'])
-def test_prepared_dangerous_or_foreign_evidence_never_clears_incumbent(change):
-    h,p,d,g,m,proof=ready();now=NOW+20_000_000
+@pytest.mark.parametrize('transport_mode',['isolated_mock','live'])
+@pytest.mark.parametrize('change',['id','expected','source','pose','velocity','entry_id','native_entry','negative','expired','model_hash'])
+def test_prepared_dangerous_or_foreign_evidence_never_clears_incumbent(change,transport_mode):
+    h,p,d,g,m,proof=ready(transport_mode);now=NOW+20_000_000
     if change=='id':m.handoff_id='foreign'
     elif change=='expected':m.expected_commit_sequence=0
     elif change=='source':m.entry_source_stamp=stamp(NOW+1)
@@ -86,12 +93,26 @@ def test_prepared_dangerous_or_foreign_evidence_never_clears_incumbent(change):
     elif change=='velocity':m.measured_twist.linear.x=.250001
     elif change=='entry_id':m.entry_admission.sequence+=1
     elif change=='native_entry':proof.entry_curve_time=.1
-    elif change=='no_raw':h.core.raw[1].clear()
     elif change=='negative':proof.valid=False
+    elif change=='model_hash':proof.braking_model_sha256='d'*64
     else:now=NOW+201_000_000
+    # Delivery may cache a foreign-model decision, but admission must not
+    # authorize it against this execution's independently bound runtime SHA.
     assert h.core.on_motion_validation(proof)
     out=h.prepared_demand(m,now)
     assert not out.allowed and out.output is None
+    assert h.applied==p and h.core.permits[-1]==p and h.commit_sequence==1
+
+
+def test_prepared_scan_decision_needs_no_separate_ray_observer_and_preserves_incumbent():
+    h,p,d,g,m,proof=ready()
+    proof.front_ray_source_stamp=stamp(NOW-1)
+    proof.rear_ray_source_stamp=stamp(NOW-2)
+    assert h.core.on_motion_validation(proof)
+    out=h.prepared_demand(m,NOW+20_000_000)
+    assert out.allowed and out.output.demand.safety_checked
+    assert out.output.demand.source_stamp==m.demand.source_stamp
+    assert out.output.demand.valid_until==m.demand.valid_until
     assert h.applied==p and h.core.permits[-1]==p and h.commit_sequence==1
 
 
@@ -125,8 +146,96 @@ def test_repeat_grant_does_not_extend_budget_and_expired_negative_ack_allows_ret
     assert not h.on_grant(g,NOW+250_000_000)
 
 
+def test_delayed_exact_no_write_fact_releases_pending_slot_without_authority():
+    h,p,d,g,m,proof=ready()
+    negative=ack(g.candidate,g=g,sequence=2,applied=False,when=NOW+250_000_000)
+    original=deepcopy(negative);permission=deepcopy(h.core.permits[-1])
+    assert h.on_ack(negative,NOW+850_000_000)
+    assert h.commit_sequence==1 and h.applied==p and h.core.permits[-1]==permission
+    assert h.candidate is None and h.grant.handoff_id==g.handoff_id
+    assert negative==original
+    assert not h.ordinary.demand(d,NOW+850_000_000).allowed
+    assert not h.on_ack(deepcopy(negative),NOW+900_000_000)
+    # A new actual owner heartbeat and grant can now prepare another curve;
+    # accepting the historical rejection did not freshen the old authority.
+    heartbeat=deepcopy(p);heartbeat.sequence=20;heartbeat.source_stamp=stamp(NOW+850_000_000)
+    heartbeat.valid_until=stamp(NOW+1_050_000_000)
+    assert h.on_permit(heartbeat)
+    retry=deepcopy(g);retry.handoff_id='retry-after-no-write';retry.sequence=2
+    retry.incumbent=deepcopy(heartbeat);retry.candidate.sequence=21
+    retry.source_stamp=retry.candidate.source_stamp=deepcopy(heartbeat.source_stamp)
+    retry.valid_until=retry.transition_deadline=retry.retain_incumbent_until=deepcopy(heartbeat.valid_until)
+    retry.candidate.valid_until=deepcopy(heartbeat.valid_until)
+    assert h.on_grant(retry,NOW+850_000_000)
+    late=deepcopy(negative);late.sequence=99
+    assert not h.on_ack(late,NOW+900_000_000)
+    assert h.last_ack_sequence==2
+    assert h.grant.handoff_id==retry.handoff_id and h.candidate is not None
+    assert h.commit_sequence==1 and h.applied==p and h.core.permits[-1]==heartbeat
+    # Cross-topic delivery of an obsolete higher sequence must not hide the
+    # genuine irreversible writer fact of the current pending transaction.
+    applied=ack(retry.candidate,g=retry,sequence=3,when=NOW+900_000_000)
+    assert h.on_ack(applied,NOW+910_000_000)
+    assert h.commit_sequence==2 and h.applied.trajectory_id==retry.candidate.trajectory_id
+
+
+@pytest.mark.parametrize('change',['submitted','acknowledged','before_grant','future_fact',
+    'execution_id','sdk_session','sdk_arm_generation','control_epoch','handoff_id','grant_sequence',
+    'previous_commit_sequence','advanced_commit','candidate_curve','incumbent_curve',
+    'candidate_version','incumbent_version','permit_sequence'])
+@pytest.mark.parametrize('delivery_ns',[NOW+250_000_000,NOW+850_000_000])
+def test_delayed_no_write_fact_requires_exact_unwritten_current_transaction(change,delivery_ns):
+    h,p,d,g,m,proof=ready()
+    negative=ack(g.candidate,g=g,sequence=2,applied=False,when=NOW+250_000_000)
+    if change=='submitted':negative.write_submitted=True
+    elif change=='acknowledged':negative.write_acknowledged=True
+    elif change=='before_grant':negative.applied_at=stamp(NOW-1)
+    elif change=='future_fact':negative.applied_at=stamp(delivery_ns+1)
+    elif change=='execution_id':negative.execution_id='foreign-execution'
+    elif change=='sdk_session':negative.sdk_session='foreign-sdk'
+    elif change=='sdk_arm_generation':negative.sdk_arm_generation+=1
+    elif change=='control_epoch':negative.control_epoch+=1
+    elif change=='handoff_id':negative.handoff_id='another-handoff'
+    elif change=='grant_sequence':negative.grant_sequence+=1
+    elif change=='previous_commit_sequence':negative.previous_commit_sequence+=1
+    elif change=='advanced_commit':negative.commit_sequence+=1
+    elif change=='candidate_curve':negative.candidate_trajectory_id+=1
+    elif change=='incumbent_curve':negative.incumbent_trajectory_id+=1
+    elif change=='candidate_version':negative.candidate_version.anchor_revision+=1
+    elif change=='incumbent_version':negative.incumbent_version.anchor_revision+=1
+    elif change=='permit_sequence':negative.permit_sequence+=1
+    assert not h.on_ack(negative,delivery_ns)
+    assert h.candidate is not None and h.grant.handoff_id==g.handoff_id
+    assert h.commit_sequence==1 and h.applied==p
+
+
+def test_old_no_write_fact_cannot_retire_new_owner_execution():
+    h,p,d,g,m,proof=ready()
+    negative=ack(g.candidate,g=g,sequence=2,applied=False,when=NOW+250_000_000)
+    owner=deepcopy(p);owner.sequence=20;owner.allowed=False;owner.phase='arming'
+    owner.execution_id='new-execution';owner.control_epoch+=1;owner.sdk_arm_generation+=1
+    assert h.on_permit(owner)
+    assert not h.on_ack(negative,NOW+850_000_000)
+    assert h.commit_sequence==0 and h.core.permits[-1]==owner and h.candidate is None
+
+
+def test_cancelled_no_write_fact_cannot_consume_current_ack_order_or_restore_authority():
+    h,p,d,g,m,proof=ready()
+    negative=ack(g.candidate,g=g,sequence=99,applied=False,when=NOW+250_000_000)
+    owner=deepcopy(p);owner.sequence=20;owner.revoked=True
+    assert h.on_permit(owner)
+    assert h.candidate is None and h.last_ack_sequence==1
+    original_permit=deepcopy(h.core.permits[-1])
+    assert not h.on_ack(negative,NOW+850_000_000)
+    assert h.last_ack_sequence==1 and h.commit_sequence==1 and h.candidate is None
+    assert h.core.permits[-1]==original_permit and h.core.permits[-1].revoked
+
+
 def test_revoked_late_write_fact_advances_identity_but_never_restores_authority():
     h,p,d,g,m,proof=ready();revoked=deepcopy(p);revoked.sequence=4;revoked.revoked=True
+    # The delayed ACK describes a submission before the revocation's original
+    # source time; a submission made after revocation remains forbidden.
+    revoked.source_stamp=stamp(NOW+20_000_000)
     assert h.on_permit(revoked)
     a=ack(g.candidate,g=g,sequence=2,when=NOW+10_000_000)
     assert h.on_ack(a,NOW+100_000_000)
@@ -163,8 +272,8 @@ def test_ack_cannot_invent_a_write_or_revive_another_identity(change):
     assert not h.on_ack(a,now) and h.commit_sequence==1 and h.applied==p
 
 
-def stationary_ready():
-    h,p,d,g,m,proof=ready()
+def stationary_ready(transport_mode='isolated_mock'):
+    h,p,d,g,m,proof=ready(transport_mode)
     assert h.on_ack(ack(g.candidate,g=g,sequence=2,applied=False),NOW)
     hold=deepcopy(p);hold.sequence=10;hold.allowed=False;hold.phase='holding'
     assert h.on_permit(hold)
@@ -175,7 +284,9 @@ def stationary_ready():
         execution_id=p.execution_id,control_epoch=p.control_epoch,sdk_session=p.sdk_session,
         sdk_arm_generation=p.sdk_arm_generation,transport_mode=p.transport_mode,
         applied_trajectory_id=p.trajectory_id,zero_write_sequence=1,zero_ack_at=stamp(NOW-800_000_000),
-        mc_raw_stamp_ns=123000,mc_clock_epoch='mock-clock',time_basis='isolated_simulated_source_clock',
+        mc_raw_stamp_ns=123000,mc_clock_epoch='mock-clock',
+        time_basis=('source_delta_host_anchor_approximate' if transport_mode=='live'
+                    else 'isolated_simulated_source_clock'),
         source_stamp=stamp(NOW),received_stamp=stamp(NOW),capture_lower_bound=stamp(NOW-10_000_000),
         capture_upper_bound=stamp(NOW),mc_capture_delay_bound_sec=.01,
         valid_until=stamp(NOW+250_000_000),stationary_samples=35,stationary_duration_sec=.7,
@@ -187,12 +298,12 @@ def stationary_ready():
 
 def test_stationary_reentry_uses_shared_noise_policy_without_weakening_source_evidence():
     h,p,g,e=stationary_ready()
-    h.core.stationary_policy=dict(linear_threshold_mps=.04,angular_threshold_radps=.05,
+    h.core.stationary_policy.update(linear_threshold_mps=.04,angular_threshold_radps=.05,
         reentry_duration_s=.6,minimum_new_samples=3)
     e.measured_linear_mps=.038;g.stationary_evidence=deepcopy(e)
     assert h.on_stationary(e) and h.on_grant(g,NOW)
     h,p,g,e=stationary_ready()
-    h.core.stationary_policy=dict(linear_threshold_mps=.04,angular_threshold_radps=.05,
+    h.core.stationary_policy.update(linear_threshold_mps=.04,angular_threshold_radps=.05,
         reentry_duration_s=.6,minimum_new_samples=3)
     e.measured_linear_mps=.041;g.stationary_evidence=deepcopy(e)
     assert h.on_stationary(e) and not h.on_grant(g,NOW)
@@ -211,10 +322,118 @@ def test_stationary_reentry_requires_independent_original_sdk_evidence_and_no_ol
     assert h.core.permits[-1].valid_until==g.candidate.valid_until
 
 
+@pytest.mark.parametrize('reported',[False,True])
+def test_live_runtime_stationary_witness_is_not_vetoed_or_faked_by_report_flag(reported):
+    h,p,g,e=stationary_ready('live');e.physical_acceptance_verified=reported
+    g.stationary_evidence=deepcopy(e);original=deepcopy(e)
+    assert h.on_stationary(e) and h.on_grant(g,NOW)
+    assert e==original and h.grant.stationary_evidence==original
+    assert h.candidate.braking_model_sha256==h.core.braking_model_sha256=='c'*64
+    assert not h.core.permits[-1].allowed and h.applied.trajectory_id==p.trajectory_id
+    assert h.grant.transition_deadline==g.transition_deadline
+    assert h.grant.stationary_evidence.valid_until==original.valid_until
+
+
+def mapped_stationary_ready(transport_mode='live',lead_ns=60_000_000):
+    h,p,g,e=stationary_ready(transport_mode)
+    e.source_stamp=stamp(NOW+lead_ns)
+    e.mc_capture_delay_bound_sec=.10
+    e.capture_lower_bound=stamp(NOW-100_000_000)
+    # The live mapping is approximate; the original SDK lease is receipt
+    # based when mapped source leads receipt. No consumer may extend it.
+    e.valid_until=stamp(NOW+250_000_000)
+    g.stationary_evidence=deepcopy(e)
+    return h,p,g,e
+
+
+@pytest.mark.parametrize('lead_ns',[26_000_000,60_000_000])
+def test_live_mapped_stationary_reentry_completes_exact_prepared_join(lead_ns):
+    h,p,g,e=mapped_stationary_ready(lead_ns=lead_ns)
+    original=deepcopy(e)
+    assert h.on_stationary(e)
+    assert h.on_grant(g,NOW)
+    assert e==original and h.grant.stationary_evidence==original
+    assert not h.core.permits[-1].allowed and h.commit_sequence==1
+    # Exercise the real safety join after the grant, not just a timestamp
+    # predicate: unchanged candidate, exact native sweep, then writer fact.
+    _,_,_,_,m,proof=ready('live')
+    m.handoff_id=proof.handoff_id=g.handoff_id
+    m.grant_sequence=g.sequence
+    m.demand.permit_sequence=proof.permit_sequence=g.candidate.sequence
+    assert h.prepared_demand(m,NOW).reason=='waiting_command_sweep'
+    prepared,result=h.motion_proof(proof,NOW+20_000_000)
+    assert prepared and result.allowed and result.output.demand.velocity.linear.x==.2
+    assert result.output.demand.source_stamp==m.demand.source_stamp
+    assert h.on_ack(ack(g.candidate,g=g,sequence=3,when=NOW+30_000_000),NOW+40_000_000)
+    assert h.commit_sequence==2 and h.core.permits[-1].allowed
+    assert h.core.permits[-1].valid_until==g.candidate.valid_until
+    assert h.grant.stationary_evidence==original
+
+
+@pytest.mark.parametrize('lead_ns',[26_000_000,60_000_000])
+def test_exact_mock_clock_never_borrows_live_mapping_allowance(lead_ns):
+    h,_,g,e=mapped_stationary_ready('isolated_mock',lead_ns)
+    assert h.on_stationary(e) and not h.on_grant(g,NOW)
+
+
+@pytest.mark.parametrize('transport_mode',['isolated_mock','live'])
+@pytest.mark.parametrize('change',['source_exceeds_bound','future_receipt','stale_source','stale_receipt',
+    'deadline_from_future_mapping','upper_not_receipt','lower_after_anchor','before_zero_ack',
+    'zero_bound','unbounded_delay','nonfinite_delay','wrong_time_basis','new_raw_clock',
+    'foreign_sdk','foreign_arm','foreign_control_epoch','grant_before_receipt',
+    'candidate_extends_witness','grant_extends_witness','expired_witness'])
+def test_stationary_capture_contract_rejects_dangerous_or_foreign_join(change,transport_mode):
+    h,p,g,e=mapped_stationary_ready(transport_mode,0)
+    if change=='source_exceeds_bound':e.source_stamp=stamp(NOW+100_000_001)
+    elif change=='future_receipt':e.received_stamp=e.capture_upper_bound=stamp(NOW+1)
+    elif change=='stale_source':e.source_stamp=stamp(NOW-250_000_001)
+    elif change=='stale_receipt':e.received_stamp=e.capture_upper_bound=stamp(NOW-250_000_001)
+    elif change=='deadline_from_future_mapping':
+        e.source_stamp=stamp(NOW+60_000_000);e.valid_until=stamp(NOW+310_000_000)
+    elif change=='upper_not_receipt':e.capture_upper_bound=stamp(NOW-1)
+    elif change=='lower_after_anchor':e.capture_lower_bound=stamp(NOW+1)
+    elif change=='before_zero_ack':e.zero_ack_at=deepcopy(e.capture_lower_bound)
+    elif change=='zero_bound':e.mc_capture_delay_bound_sec=0.
+    elif change=='unbounded_delay':e.mc_capture_delay_bound_sec=.250001
+    elif change=='nonfinite_delay':e.mc_capture_delay_bound_sec=float('nan')
+    elif change=='wrong_time_basis':e.time_basis='unbound_clock'
+    elif change=='foreign_sdk':e.sdk_session='another-sdk'
+    elif change=='foreign_arm':e.sdk_arm_generation+=1
+    elif change=='foreign_control_epoch':e.control_epoch+=1
+    elif change=='grant_before_receipt':g.source_stamp=g.retain_incumbent_until=stamp(NOW-1)
+    elif change=='candidate_extends_witness':g.candidate.valid_until=stamp(NOW+250_000_001)
+    elif change=='grant_extends_witness':g.valid_until=stamp(NOW+250_000_001)
+    elif change=='expired_witness':e.valid_until=stamp(NOW)
+    g.stationary_evidence=deepcopy(e)
+    accepted=h.on_stationary(e)
+    assert accepted==(change not in ('foreign_sdk','foreign_arm','foreign_control_epoch'))
+    if change=='new_raw_clock':
+        later=deepcopy(e);later.sequence+=1;later.mc_clock_epoch='different-clock'
+        assert h.on_stationary(later)
+    assert not h.on_grant(g,NOW)
+    assert h.commit_sequence==1 and h.applied==p and not h.core.permits[-1].allowed
+
+
+def test_live_mapped_stationary_reentry_cannot_cross_owner_revoke_or_new_execution():
+    for change in ('revoked','new_execution'):
+        h,p,g,e=mapped_stationary_ready()
+        assert h.on_stationary(e)
+        owner=deepcopy(g.incumbent);owner.sequence+=100
+        if change=='revoked':owner.revoked=True
+        else:
+            owner.execution_id='new-execution';owner.control_epoch+=1
+            owner.sdk_arm_generation+=1
+        assert h.on_permit(owner)
+        assert not h.on_grant(g,NOW)
+        assert h.candidate is None and not h.core.permits[-1].allowed
+
+
+@pytest.mark.parametrize('transport_mode',['isolated_mock','live'])
 @pytest.mark.parametrize('change',['unusable','mc_moving','yaw_moving','two_samples','short_window',
-    'before_zero_ack','different_raw_clock','foreign_sdk','wrong_commit','old_can_move','retained_motion','expiry'])
-def test_stationary_reentry_dangerous_or_unbound_witness_is_rejected(change):
-    h,p,g,e=stationary_ready()
+    'before_zero_ack','different_raw_clock','foreign_sdk','wrong_commit','old_can_move','retained_motion','expiry',
+    'stale_source','stale_received','wrong_time_basis'])
+def test_stationary_reentry_dangerous_or_unbound_witness_is_rejected(change,transport_mode):
+    h,p,g,e=stationary_ready(transport_mode)
     if change=='unusable':e.usable=False
     elif change=='mc_moving':e.measured_linear_mps=.031
     elif change=='yaw_moving':e.measured_angular_radps=.051
@@ -226,14 +445,18 @@ def test_stationary_reentry_dangerous_or_unbound_witness_is_rejected(change):
     elif change=='wrong_commit':e.writer_commit_sequence+=1
     elif change=='old_can_move':g.incumbent.allowed=True
     elif change=='retained_motion':g.retain_incumbent_until=stamp(NOW+1)
+    elif change=='stale_source':e.source_stamp=stamp(NOW-250_000_001)
+    elif change=='stale_received':e.received_stamp=stamp(NOW-250_000_001)
+    elif change=='wrong_time_basis':e.time_basis='foreign_clock_basis'
     else:e.valid_until=stamp(NOW-1)
     g.stationary_evidence=deepcopy(e)
-    assert h.on_stationary(e)
+    assert h.on_stationary(e)==(change!='foreign_sdk')
     assert not h.on_grant(g,NOW) and h.commit_sequence==1
 
 
-def test_negative_stationary_evidence_is_not_overridden_by_an_older_cached_witness():
-    h,p,g,e=stationary_ready();assert h.on_stationary(e)
+@pytest.mark.parametrize('transport_mode',['isolated_mock','live'])
+def test_negative_stationary_evidence_is_not_overridden_by_an_older_cached_witness(transport_mode):
+    h,p,g,e=stationary_ready(transport_mode);assert h.on_stationary(e)
     lost=deepcopy(e);lost.sequence+=1;lost.usable=False
     assert h.on_stationary(lost) and not h.on_grant(g,NOW)
 

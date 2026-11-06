@@ -16,9 +16,17 @@ def monitor_identity(report, wall):
                 or not re.fullmatch(r'[A-Za-z0-9_.-]{1,128}', report.get('session', ''))):
             return {}
         execution=report.get('execution_v3', {})
+        protocol=execution.get('protocol', '')
+        enabled=execution.get('enabled') is True
         return dict(sdk_session=report['session'],sdk_session_source_stamp=report['wall_time'],
-            execution_v3_enabled=execution.get('enabled') is True,
-            execution_record_valid=execution.get('acceptance_record_valid') is True)
+            execution_protocol=protocol if isinstance(protocol,str) else '',
+            # These are mutually exclusive capabilities, not aliases. Old
+            # enabled=True/status without a protocol is never task authority.
+            execution_task_writer_enabled=enabled and protocol=='task_follower_v1',
+            execution_v3_enabled=enabled and protocol!='task_follower_v1',
+            execution_record_valid=execution.get('runtime_parameters_valid',execution.get('acceptance_record_valid')) is True,
+            execution_profile_sha256=execution.get('runtime_profile_sha256',''),
+            physical_acceptance_verified=execution.get('physical_acceptance_verified') is True)
     except (ValueError,TypeError,AttributeError):return {}
 
 

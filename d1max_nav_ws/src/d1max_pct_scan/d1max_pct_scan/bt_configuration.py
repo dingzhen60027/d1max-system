@@ -93,6 +93,8 @@ def prepare_tree(directory, session, workspace):
             raise ValueError('navigation_runtime_policy_planning_mismatch')
         for node in root.iter('PauseOnUnavailable'):
             node.set('timeout_s',str(runtime_policy.recovery_timeout_s))
+            node.set('keep_committed_route_on_local_failure',
+                     'true' if runtime_policy.keep_committed_route_on_local_failure else 'false')
     (directory/'navigation.xml').write_text(ET.tostring(root, encoding='unicode'))
     params = dict(session_id=session['id'], frame_id=session['frame_id'],
         planning_frame='d1max_multifloor_planning',

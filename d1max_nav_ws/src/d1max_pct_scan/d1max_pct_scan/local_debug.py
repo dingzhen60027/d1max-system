@@ -28,7 +28,8 @@ INVALID_PHASES = frozenset(('reference_replaced', 'cancelled', 'failed', 'comple
                             'failed_reference_start_occupied', 'failed_reference_lattice_occupied',
                             'failed_reference_outside_map',
                             'waiting_goal_reached', 'waiting_sensor_map', 'waiting_recheck',
-                            'waiting_observed_space')) | REFERENCE_REJECTION_PHASES
+                            'waiting_observed_space', 'waiting_reference_extension',
+                            'waiting_reference_support', 'waiting_side_target')) | REFERENCE_REJECTION_PHASES
 
 
 def attempt_marker_contract(markers, *, session_id, generation, frame_id, issued_at, now):

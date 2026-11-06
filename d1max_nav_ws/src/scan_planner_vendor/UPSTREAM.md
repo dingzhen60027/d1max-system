@@ -5,7 +5,7 @@ Imported: 2026-08-23
 Scope: ROS 2 planner packages only. Go2 simulation, descriptions, gait publishers,
 and robot controllers are not launched by the D1 Max integration.
 
-## Pinned audit references (verified 2026-09-24)
+## Pinned audit references (rechecked 2026-10-16)
 
 - Official ROS 1 `main`: [`348e8a590a50a5a6bbab8d8c6dcfd171f009be26`](https://github.com/wuyi2121/SCAN-Planner/tree/348e8a590a50a5a6bbab8d8c6dcfd171f009be26)
   (`add: sensor layout`, 2026-07-29).
@@ -17,9 +17,87 @@ These are reproducible audit references, not a claim that the original import
 was bit-for-bit either commit: the earlier import recorded its branch/date only.
 The public branches are not algorithmically identical. In particular, current
 main preserves the mode-3 global reference in `planFromCurrentTraj`; the ROS 2
-community version recreates a start-to-goal polynomial there.
+community version recreates a start-to-goal polynomial there. The community
+README identifies it as a derived community port, not an author-certified
+controller release. Neither branch promises 100 Hz optimization: the 100 Hz
+timer polls the FSM, and ordinary replanning is distance-triggered. Collision
+checking is 20 Hz; planning in both pinned branches is synchronous.
+
+The author's closed-loop controller uses a future chord for heading and
+time-indexed velocity plus XY position feedback, allows lateral velocity, and
+pauses translation for large heading errors. Its trajectory clock starts again
+on reception. `legbot_3D_Nav` instead launches its own `a1_cmd_adapter`; despite
+its FSM's actual-state input, the first manager initialization branch can still
+sample the incumbent's time-indexed P/V/A. These are useful implementation
+references, not evidence that a D1 forward-only percent-SDK controller can be
+replaced verbatim. The D1 controller's actual-state projection, no-lateral
+contract and source timestamps remain explicit.
 
 ## D1 integration and deliberate deviations
+
+### Current D1 execution (2026-10-16)
+
+The formal follower plans from the latest paired acquired P/V, not a future
+point on an incumbent. The incumbent remains usable during candidate solving,
+validation and preparation; a rejected candidate does not erase it. Formal
+ordinary solve spacing is currently 0.1 s, on one bounded worker with a shared
+400 ms solve budget. These are scheduling limits, not measured end-to-end
+commit frequency. The owner harvests a ready result after a complete map write
+transaction and refreshes acquired state again at adoption. See
+[`ROLLING_REFERENCE_RECOVERY_20261016.md`](../../docs/reports/ROLLING_REFERENCE_RECOVERY_20261016.md)
+for actual-source ages, rejected alternatives and limitations.
+
+The forward-only D1 controller currently uses actual curve progress, soft
+heading/cross-track feedback, measured yaw-rate damping and a spatial curvature
+preview on the accepted curve. A single per-axis conditioner jointly bounds
+command acceleration/jerk and mapped SDK rate/acceleration; the SDK writer does
+not apply a second smoother. No lateral command is emitted. This is a deliberate
+D1 adaptation, not the author's future-chord controller or a physical smoothness
+acceptance claim. The older descriptions below retain their date-specific
+historical scope.
+
+### Author-aligned continuous execution (2026-10-15; historical)
+
+The pinned author `main` above is the planning/control reference; the community
+port is not assumed identical. FSM polling is 100 Hz and collision checking
+remains 20 Hz. Bounded asynchronous solves retain the configured 0.2 s ordinary
+refresh / 0.1 s submission spacing; these are not a claim of 100 Hz solving.
+The non-upstream hard 0.5 s blocked/collision replan delay is removed. Numerical
+failures can retry after the existing cooldown when both actual scanner source
+times advance, even if a stationary saturated map has no new voxel changes.
+Occupied/invalid/unknown input is not reclassified as free by that retry.
+
+An accepted future splice cannot be repeatedly overwritten by either a
+periodic or distance-progress ordinary trigger before its measured entry;
+collision, cancellation, reference identity and measured reseed still take
+priority. Global route order and non-final target velocity are preserved.
+Visualization is separate from FSM rate: stable immutable committed curves
+are updated by identity, diagnostics are bounded and phase changes immediate.
+
+The existing D1 follower uses the author's velocity-feedforward plus full XY
+position feedback in continuous odom. Heading follows our **current certified
+tangent**, with geometric tangent-rate feedforward; it is not the author's
+future-chord heading copied into an incompatible footprint certificate.
+Unmeasured inertia prediction, default velocity damping, extra jerk shaping
+and the SDK's one-second startup/PD input stage are not part of this mainline.
+Original task/cancel/source-time contracts, actual occupancy and D1 geometry
+remain; no extra collision owner or Go2 driver is introduced.
+
+### Current local display (2026-10-14)
+
+`grid_map/occupancy_inflate` now publishes the occupied-influence cells for the
+configured D1 oriented box at the latest measured body yaw. It is a read-only
+lattice configuration-space view, not the former raw compatibility alias or
+the Go2 circular dilation. The native occupied-only box query remains unchanged.
+XY uses its existing voxel-contact rule; inverse Z dilation uses the configured
+body-above/below extents. Missing body heading yields no inflated display rather
+than a fabricated zero yaw. The display mask is separate from collision buffers,
+proofs and snapshots; an undrawn cell does not prove observed free space.
+
+RViz enables this height-coloured layer by default with one 5 cm square per
+published voxel. Raw occupancy is optional debug data and disabled on layout
+selection. Cached Z-run dilation avoids a full robot collision query at every
+map cell; the display rate remains bounded independently of map fusion.
 
 - Mode 3 consumes the ordered PCT polyline in the localization map frame, with
   an explicit ground-to-body Z offset. Bounded arc projection and slicing retain
@@ -34,10 +112,11 @@ community version recreates a start-to-goal polynomial there.
   flying 3-D A*. The optimizer still suppresses Z gradients. This is **not** a
   ground-support, edge/drop-off, or cross-floor locomotion safety proof.
 - `optimization.lambda_reference` is an optional **local D1 extension** attracting
-  the checked detour seed, not a blocked global centerline. The current module
-  configuration now uses 0 (2026-09-27 ROS 2 integration), selecting the upstream
-  rebound objective (smoothness, collision, feasibility). The earlier value 20
-  was not an official recommended value. Guidance itself does not require it.
+  the checked detour seed, not a blocked global centerline. The D1 template uses
+  1 from 2026-10-16 to retain the collision-repaired gentle entry guide; the
+  generic optimizer default remains 0. The 2026-09-27 configuration used 0;
+  neither this D1 value nor the earlier value 20 is an official recommendation.
+  Guidance itself does not require the added cost.
 - Added bounded failures/environment-change retry, explicit A* initialization
   failures, complete-curve endpoint/yaw sampling and truthful attempt diagnostics.
   A hover or failed optimizer is not accepted as a navigable trajectory.
@@ -208,3 +287,179 @@ raw-ray recording still contains real occupied classifications; the separately
 approved offline-only three-voxel withdrawal is not a live collision repair.
 Source changes and repository copies are not an update of the active sealed
 runtime. No services were restarted and no robot commands were issued.
+
+## 10-10 planning-only candidate contract
+
+The author repository links the `ros2-community` migration; that branch is a
+community ROS 2 port, not an author-certified D1 integration. Its `navi_mode=3`
+receives `initial_path`. Its native solver publishes successful B-splines
+without this project's motion-writer handoff transaction. The community port
+also mixes measured odometry position with clock-sampled previous-curve
+velocity/acceleration on replans; this is not evidence that a moving D1 has
+those predicted derivatives. See the pinned upstream references at the top of
+this file and the [community implementation](https://github.com/wuyi2121/SCAN-Planner/tree/ros2-community/src/planner/plan_manage).
+
+The D1 `planning_only` lane now separates **new-candidate preview geometry**
+from motion candidate admission, not just committed-preview progress:
+
+- Keep the original measured solve state and immutable curve. Project the
+  latest measured body onto a bounded initial arc; collision-check the real
+  connector and full curve against the production GridMap and support.
+- The manager, whole-curve validator and candidate ledger use the same typed
+  geometry policy. A positive preview proof cannot populate motion join
+  evidence or authorize the SDK writer.
+- An out-of-range body requests a new measured solve on the same route.
+  Cancellation, source expiry, map/context identity and stale-result checks
+  remain mandatory. Positive evidence uses candidate/seed compare-and-swap;
+  an older proof cannot overwrite a newer candidate or committed curve.
+- Solve adoption retains the original 400 ms solve-to-body bound. Subsequent
+  candidate revalidation is an explicit separate phase: the immutable solve
+  source remains provenance, while acquired current body/map sources determine
+  freshness. It cannot restamp the solve, extend an old proof without new evidence, accept
+  a regressed body source, or certify an out-of-range connector. Validator
+  scheduling delay alone therefore does not force an otherwise valid new solve.
+- The only added tuning knobs are a 0.15 m preview connector and 0.50 m initial
+  projection window. They are neither obstacle clearances nor actuation join
+  tolerances. The execution lane's motion boundary checks are unchanged.
+
+This is a planning repair. Native synthetic quality cases, recorded input
+checks and physical navigation acceptance must be reported separately; neither
+unknown planning flags nor a nominal CAD self model prove free space or a
+verified robot posture. No tracker/SDK integration is claimed by this change.
+
+## 10-10 native dynamics and separate tangent-rate diagnostics
+
+Production SCAN timing constrains velocity and acceleration, as in the pinned
+ROS2 community implementation. It does **not** equate XY velocity-tangent
+turning with physical body yaw or use it as a new candidate-admission gate.
+Continuous tangent-rate analysis is an offline saved-curve diagnostic, not a
+new production parameter, motion limit or permission switch.
+
+- A stationary start preserves optimized XYZ through speed/acceleration time
+  allocation. A moving start retains its original position, velocity and declared
+  acceleration boundary in the native interior refit. An assumed zero
+  acceleration is not labelled as an acceleration measurement.
+- Saved-curve tangent diagnostics use the final curve's physical
+  direction-confidence threshold, matching the OBB held-heading policy.
+  They run outside the production solver; their cost, absence, excess or
+  analysis failure cannot consume the collision-check budget or reject a valid
+  planning candidate. They do not certify body-yaw feasibility or steering.
+- Search, optimization, timing and whole-curve OBB validation share the original
+  400 ms deadline and cancellation token; diagnostic work does not renew it.
+- An attempted extra tangent-rate retiming was **not deployed**: the same
+  recorded moving boundary produced a 119.55 s, then 100.87 s, two-metre curve.
+  Global knot dilation enlarges the fixed-velocity endpoint controls and their
+  reversal while a normalized confidence threshold incorrectly promotes a
+  near-zero velocity direction into a body-yaw constraint. The failure evidence
+  and bounded mathematical helpers remain available, not wired into production
+  timing. Steering/hold-yaw behavior belongs to the later controller work, not
+  an unproved SCAN-only restriction.
+
+Reference replacement reads its committed predecessor version and trajectory
+ID together under one lock. Previously a concurrent commit could occur between
+two getters and manufacture a predecessor pair that never actually existed.
+The corrected transaction does not relax task/route identity or clear the
+active trajectory when a different candidate is rejected.
+
+Evidence is recorded in `experiments/scan_turning_dynamics_20261010` and the
+same-input quality report's `after_turning` and `after_turning_tightened`
+directories (failed experiments), plus its final planning-only diagnostic
+comparison. These are passive checks
+of production components, not another runtime entry or robot motion acceptance.
+
+## 10-11 one native SCAN collision policy and incomplete-proof semantics
+
+The formal lane now selects the upstream-style `official` occupied-only policy
+for search, candidate geometry, incumbent revalidation and the actual
+reaction/braking sweep. The sweep reads the same production raw GridMap
+snapshot: definite occupied and map exterior reject it; in-map never-observed
+and insufficient odds remain unchanged and counted in raw diagnostics, but are
+not separately vetoed as observed-free requirements. Nonfinite map contents
+remain invalid. Explicit `observed_free` comparison mode still requires fresh
+per-voxel FREE evidence. No near-body clearing or unknown-to-free rewriting is
+introduced.
+
+SCAN remains the collision owner. Its current-curve and actual-command checks
+retain the original acquired front/rear source ages, body state, task/context,
+curve, permit and exact demand identity. A positive native certificate expires
+at the minimum of these original leases; an official result does not pretend
+to be an observed-free certificate, extend a sensor stamp, bypass SDK limits
+or establish physical acceptance. The downstream consumer checks that native
+certificate and its expiry instead of independently reclassifying unknown
+space. The full existing current-curve collision scope is unchanged here;
+this is not a new validated-prefix or distant-obstacle continuation protocol.
+
+Bounded projection, whole-curve query and command-sweep exhaustion are typed
+as **incomplete**, not a witnessed collision. They cannot issue a new positive
+or false negative proof. Existing exact-identity evidence may be used only
+until its original expiry; an expired source, observed occupied cell, outside
+cell, canceled/replaced task or invalid connector is not a scheduling miss.
+This change is exercised by passive production-map tests and does not assert
+that the D1 sensor calibration, braking or physical navigation has passed.
+
+## 10-18 map writer / planning owner separation and measured remaining display
+
+The formal `task_follower_v1` lane now separates the GridMap writer callback
+group from the reference/FSM owner. A third executor thread allows the existing
+independent control inbox to run alongside them. This is a D1 integration
+change, not an upstream SCAN algorithm or frequency claim.
+
+- The writer always uses its fixed production GridMap. Reference geometry,
+  result adoption and FSM queries borrow an exclusive, completed validation
+  snapshot. The original three-slot pool is retained: two owner/validator slots
+  and one solver/admission slot. A busy slot is not overwritten or replaced
+  with an unbounded allocation. Query caches are never shared concurrently.
+- A pending owner input is coalesced to one latest original message per input
+  type. Source times, generations and deadlines are not renewed. Body/progress
+  inputs drain before reference geometry. A busy pool does not consume a ready
+  solve result or clear the incumbent. Cancellation and exact commit identity
+  remain checked by the existing execution ledger.
+- Snapshot-to-snapshot copies carry the already aged query clock. Map context
+  reset is published before its ACK, even before the next ray; a context/fault
+  watermark prevents new borrows of the previous identity when a copy misses.
+- A verified rolling extension may name a predecessor curve that naturally
+  advanced within the same exact execution version. This input recovery does
+  not relax prepare/commit compare-and-swap or accept a future curve, another
+  route, anchor, map context, localization epoch or canceled task.
+- The D1 extra 100 ms submission throttle is removed. The default moving
+  refresh request interval is 50 ms; one worker, the original shared solve
+  deadline and adoption backpressure still bound actual throughput. A request
+  interval is neither guaranteed commit frequency nor a new official ceiling.
+- RViz renders only the remaining domain of the exact committed spline, using
+  fresh, identity-matched measured progress. It does not move the spline's
+  start, predict progress by wall clock, alter control or display a candidate
+  as execution. A temporary progress gap freezes the last observed trim.
+
+The 10-11 command-sweep description above is historical: since 10-12 the formal
+task follower has SCAN as its sole collision owner, without a second downstream
+voxel/swept-volume veto. This round does not add one. Controls, SDK response,
+raw evidence classification, self-filtering and the current 5 cm per-side
+planning clearance are unchanged. See report E9 and its isolated evidence;
+software timing counterexamples are not physical smooth-navigation acceptance.
+
+## 10-18 E10: complete-snapshot and command delivery, not faster clocks
+
+The E9 robot run reduced worker-to-owner delay but exposed independent renewal
+and command-phase losses. The fixed three-slot production pool now reserves the
+newest completed validation head for the fast current-curve reader; the FSM
+borrows the other completed same-context view. Solver acquisition must not
+overwrite an already newer third-slot publication with that older owner view.
+If publication meets borrowed slots, the map writer coalesces one pending copy
+and retries on its own 10 ms callback group; this copies already integrated data
+with original ray sources, not another integration or a renewed observation.
+
+An expired strictly older ray pair that did not complete a geometry query cannot
+replace a still-unexpired positive for the exact current job solely because its
+occupancy revision is larger. Actual occupied/unknown/invalid geometry, mixed or
+new sources, identity changes and original expiry retain their existing fences.
+Passive diagnostics distinguish fast borrow misses, fallback borrows, owner
+misses, publication misses and the actual selected source pair.
+
+Follower geometry prepare/ACK/commit is event-driven, with a 10 ms preparation
+completion poll and unchanged bounded 50 ms identical-message retries. Velocity
+control remains 20 Hz. Ordinary small anchor corrections remain accumulated
+without turning every rolling window into a full reanchor. SDK receipt wakes
+the sole writer rather than awaiting an independent periodic phase; actual
+nonzero submissions remain at least 50 ms apart, with original deadline-driven
+zero and no source renewal. See E10 report and the recorded external SDK patch.
+These are D1 transport contracts, not new upstream SCAN algorithm claims.

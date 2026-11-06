@@ -37,7 +37,14 @@ class TomogramMap:
                            ('source_pcd', 'source_sha256', 'frame_id', 'upstream_commit',
                             'source_processing_manifest', 'source_processing_manifest_sha256',
                             'processing_schema', 'geometry_operation', 'original_source_pcd',
-                            'original_source_sha256', 'ground_semantics', 'ceiling_semantics')
+                            'original_source_sha256', 'ground_semantics', 'ceiling_semantics',
+                            'stair_regularization_schema', 'stair_mapping_sha256',
+                            'stair_structured_cost_schema', 'stair_structured_model_sha256',
+                            'stair_structured_evidence_sha256', 'stair_structured_base_sha256',
+                            'stair_structured_cost_evidence_sha256', 'stair_structured_data_sha256',
+                            'parametric_stair_geometry_schema', 'parametric_stair_model_sha256',
+                            'parametric_stair_base_sha256', 'parametric_stair_evidence_sha256',
+                            'parametric_stair_data_sha256')
                            if name in payload}
         if 'planning_only' in payload:
             planning_only = np.asarray(payload['planning_only'])

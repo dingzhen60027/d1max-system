@@ -12,7 +12,8 @@ import yaml
 from d1max_pct_planner import crossfloor_preview as preview
 from d1max_pct_planner.crossfloor_route import plan_crossfloor, validate_config
 from d1max_pct_planner.tomogram_map import TomogramMap
-from test_crossfloor_route import config, paths, route_factory, scene, xyz
+from test_crossfloor_route import (config, install_joint_refinement, paths, route_factory,
+                                  scene, xyz)
 
 
 @pytest.fixture
@@ -93,10 +94,13 @@ def test_reverse_route_preserves_every_edge_and_reverses_transitions(prepared):
     assert reverse['execution_authorized'] is False
 
 
-def test_stair_surface_cannot_be_requested_as_a_building_floor(prepared):
+def test_stair_endpoint_uses_native_partial_route_not_a_building_floor(prepared, monkeypatch):
+    calls = fixed_stair_native(prepared, monkeypatch)
     route = preview.CrossfloorPreviewRoute(prepared.tomo, prepared.path)
-    with pytest.raises(ValueError, match='起终点'):
-        route.plan(xyz(15), xyz(39), 0, 1)
+    result = route.plan(xyz(15), xyz(39), 0, 1)
+    assert result['route_type'] == 'partial_stair'
+    assert result['start_region'] == 'stair_lower' and result['goal_region'] == 'upper'
+    assert calls == [(15, 21), (21, 35), (35, 39)]
 
 
 def test_fixed_map_cache_reuses_native_not_old_goal_results(prepared):
@@ -194,6 +198,102 @@ def test_fixed_stair_cache_skips_only_two_native_calls_not_new_floor_goals(prepa
     assert reverse['path'] == next_['path'][::-1]
     assert len(calls) == 8
     assert reverse['fixed_stair_cache']['hits'] == 4
+
+
+@pytest.mark.parametrize('begin,end', [(5, 35), (5, 39), (1, 35)])
+def test_exact_portal_crossfloor_forward_reverse_has_only_real_edges(prepared, monkeypatch, begin, end):
+    calls = fixed_stair_native(prepared, monkeypatch)
+    route = preview.CrossfloorPreviewRoute(prepared.tomo, prepared.path)
+    forward = route.plan(xyz(begin), xyz(end), 0, 1)
+    reverse = route.plan(xyz(end), xyz(begin), 1, 0)
+    assert all(first != last for first, last in calls)
+    assert reverse['path'] == forward['path'][::-1]
+    assert reverse['layer_ids'] == forward['layer_ids'][::-1]
+    assert reverse['edge_legs'] == forward['edge_legs'][::-1]
+    assert len(forward['edge_legs']) == len(forward['path'])-1
+    assert all(a != b for a, b in zip(forward['path'], forward['path'][1:]))
+    assert all(s['first_index'] < s['last_index'] for s in forward['segments'])
+    for segment in reverse['segments']:
+        assert reverse['path'][segment['first_index']] == reverse['anchors'][segment['from']]['xyz']
+        assert reverse['path'][segment['last_index']] == reverse['anchors'][segment['to']]['xyz']
+
+
+def test_joint_refinement_is_rechecked_per_request_without_polluting_native_cache(prepared, monkeypatch):
+    calls = fixed_stair_native(prepared, monkeypatch)
+    refinements = install_joint_refinement(monkeypatch)
+    route = preview.CrossfloorPreviewRoute(prepared.tomo, prepared.path)
+    result = route.plan(xyz(1), xyz(39), 0, 1)
+    assert result['stair_refinement']['applied']
+    cached = list(route._fixed_stairs._results.values())
+    assert cached[0]['path'][-1] == xyz(21) and cached[1]['path'][0] == xyz(21)
+    assert all(item['curve_validation'] == 'quintic_cell_boundary_roots_and_interval_interiors'
+               for item in cached)
+    result['anchors']['landing']['xyz'][0] = 999.
+    second = route.plan(xyz(2), xyz(38), 0, 1)
+    assert len(refinements) == 2 and len(calls) == 6
+    assert second['stair_refinement']['applied']
+    assert second['anchors']['landing']['xyz'][0] == pytest.approx(xyz(21)[0]+.02)
+    assert second['anchors']['landing']['requested_xyz'] == xyz(21)
+    # Every optimizer invocation starts from the unchanged native pair.
+    np.testing.assert_array_equal(refinements[0][0], refinements[1][0])
+    reverse = route.plan(xyz(38), xyz(2), 1, 0)
+    assert len(refinements) == 3
+    assert reverse['path'] == second['path'][::-1]
+    assert reverse['source_layer_ids'] == second['source_layer_ids'][::-1]
+    stairs = [item for item in reverse['segments'] if item['name'].startswith('stair_')]
+    assert reverse['stair_refinement']['landing_index'] == (
+        stairs[0]['last_index']-stairs[0]['first_index'])
+    assert reverse['stair_refinement']['span_record_direction'] == 'lower_to_upper'
+    assert reverse['stair_refinement']['geometry_evidence_direction'] == 'lower_to_upper'
+    assert reverse['stair_refinement']['output_direction'] == 'upper_to_lower'
+    assert reverse['stair_refinement']['stair_profile'] == reverse['stair_profile']
+    assert reverse['stair_profile']['height_change_m'] == -3.
+    for segment in reverse['segments']:
+        assert reverse['path'][segment['first_index']] == reverse['anchors'][segment['from']]['xyz']
+        assert reverse['path'][segment['last_index']] == reverse['anchors'][segment['to']]['xyz']
+
+
+def test_refinement_failure_after_cache_hit_keeps_original_portal_not_previous_refinement(prepared, monkeypatch):
+    fixed_stair_native(prepared, monkeypatch)
+    install_joint_refinement(monkeypatch)
+    route = preview.CrossfloorPreviewRoute(prepared.tomo, prepared.path)
+    assert route.plan(xyz(1), xyz(39), 0, 1)['stair_refinement']['applied']
+    def reject(result):
+        result['path'][3][1] = 99.
+        return result
+    install_joint_refinement(monkeypatch, reject)
+    second = route.plan(xyz(2), xyz(38), 0, 1)
+    assert not second['stair_refinement']['applied']
+    assert second['fixed_stair_cache']['hits'] == 2
+    assert second['anchors']['landing'] == prepared.raw['anchors']['landing']
+    assert second['path'] == list(map(xyz, range(2, 39)))
+
+
+def test_saved_joint_refinement_restores_effective_portal_but_rejects_changed_provenance(prepared, monkeypatch):
+    from d1max_pct_planner.crossfloor_route import run_from_config
+    from test_crossfloor_route import proven_route_factory
+    install_joint_refinement(monkeypatch)
+    raw = deepcopy(prepared.raw)
+    raw['vendor_root'] = str(prepared.path.parent)
+    raw['output_directory'] = str(prepared.path.parent/'saved')
+    prepared.path.write_text(yaml.safe_dump(raw))
+    output, result = run_from_config(prepared.path, proven_route_factory(paths()))
+    audit_path = output/'audit.json'
+    assert result['stair_refinement']['applied']
+    restored = preview.restore_crossfloor(prepared.tomo, prepared.path, audit_path)
+    assert restored['path'] == result['path_xyz']
+    assert restored['anchors']['landing'] == result['anchors']['landing']
+    value = json.loads(audit_path.read_text())
+    value['anchors']['landing']['requested_xyz'][0] += .01
+    audit_path.write_text(json.dumps(value))
+    with pytest.raises(ValueError, match='configured portal'):
+        preview.restore_crossfloor(prepared.tomo, prepared.path, audit_path)
+    value = dict(result)
+    value['config_sha256'] = hashlib.sha256(prepared.path.read_bytes()).hexdigest()
+    value['stair_refinement'] = {'applied': False}
+    audit_path.write_text(json.dumps(value))
+    with pytest.raises(ValueError, match='lacks its refinement provenance'):
+        preview.restore_crossfloor(prepared.tomo, prepared.path, audit_path)
 
 
 def test_stair_cache_refuses_other_map_parameters_or_portals(prepared, monkeypatch):
@@ -385,6 +485,27 @@ def test_saved_exact_map_accepts_both_complete_curve_proofs(prepared):
     assert result['route_origin'] == 'saved_crossfloor_route_exact_map_revalidated'
     assert result['execution_authorized'] is False
     record['segments'][1]['curve_validation'] = 'sampled_points_only'
+    audit.write_text(json.dumps(record))
+    with pytest.raises(ValueError, match='validation evidence'):
+        preview.restore_crossfloor(prepared.tomo, prepared.path, audit)
+
+
+@pytest.mark.parametrize('at_entry,at_exit', [(True, False), (False, True), (True, True)])
+def test_saved_exact_portal_route_restores_only_real_segments(prepared, at_entry, at_exit):
+    if at_entry:
+        prepared.raw['anchors']['start'] = deepcopy(prepared.raw['anchors']['entry'])
+    if at_exit:
+        prepared.raw['anchors']['goal'] = deepcopy(prepared.raw['anchors']['exit'])
+    prepared.path.write_text(yaml.safe_dump(prepared.raw))
+    record = saved_record(prepared)
+    audit = prepared.path.parent/'portal_audit.json'
+    audit.write_text(json.dumps(record))
+    result = preview.restore_crossfloor(prepared.tomo, prepared.path, audit)
+    assert result['path'] == record['path_xyz']
+    assert len(result['segments']) == 4-int(at_entry)-int(at_exit)
+    assert all(s['first_index'] < s['last_index'] for s in result['segments'])
+    # An omitted moving segment cannot pass as another coincident portal.
+    record['segments'].pop(0)
     audit.write_text(json.dumps(record))
     with pytest.raises(ValueError, match='validation evidence'):
         preview.restore_crossfloor(prepared.tomo, prepared.path, audit)

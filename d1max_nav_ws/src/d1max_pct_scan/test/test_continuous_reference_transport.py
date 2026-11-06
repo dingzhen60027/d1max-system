@@ -146,6 +146,53 @@ def test_map_corrections_and_motion_update_progress_not_reference_or_anchor():
     assert value.accepted.route_hash == value.snapshot.route_hash
 
 
+def test_ordinary_rolling_window_batches_small_anchor_correction_without_losing_it():
+    """A spatial refresh is not an anchor transaction on every global pair.
+
+    Native may legitimately advance its curve while this window is in flight.
+    Keep the same anchor so that reference scheduling can recognize literal
+    overlap; preserve the staged correction for the next due transaction.
+    """
+    value, _ = transport()
+    on_route(value)
+    initial = on_state(value)
+    assert acknowledge(value, initial)
+    on_state(value, t=.1, x=.1, correction=.01)
+    candidate = value.core.candidate_anchor
+    assert candidate is not None and not value.correction_due()
+    rolling = value.propose_window(current_source_ns=BASE_NS+100_000_000, now_monotonic=100.1)
+    assert (rolling.anchor_id, rolling.anchor_revision, rolling.map_geometry_revision) == (
+        initial.anchor_id, initial.anchor_revision, initial.map_geometry_revision)
+    assert rolling.path.poses[0].pose.position.x == pytest.approx(.1)
+    assert nanoseconds(rolling.path.header.stamp) == BASE_NS+100_000_000
+    assert value.pending_core.candidate_anchor == candidate
+    assert acknowledge(value, rolling, t=.1)
+    assert value.core.candidate_anchor == candidate
+    on_state(value, t=.2, x=.2, correction=.06)
+    assert value.correction_due()
+    corrected = value.propose_window(current_source_ns=BASE_NS+200_000_000, now_monotonic=100.2)
+    assert corrected.anchor_id != rolling.anchor_id
+    assert corrected.anchor_revision > rolling.anchor_revision
+    assert value.accepted == rolling  # prepare is not a geometry commit
+    assert acknowledge(value, corrected, t=.2)
+    assert value.core.candidate_anchor is None
+    assert value.core.anchor.anchor_id == corrected.anchor_id
+
+
+def test_rejected_ordinary_window_keeps_original_anchor_and_accumulated_correction():
+    value, _ = transport()
+    on_route(value)
+    initial = on_state(value)
+    assert acknowledge(value, initial)
+    on_state(value, t=.1, x=.1, correction=.01)
+    candidate = value.core.candidate_anchor
+    rolling = value.propose_window(current_source_ns=BASE_NS+100_000_000, now_monotonic=100.1)
+    assert acknowledge(value, rolling, t=.1, accepted=False)
+    assert value.accepted == initial
+    assert value.core.anchor.anchor_id == initial.anchor_id
+    assert value.core.candidate_anchor == candidate
+
+
 def test_pending_candidate_never_overwrites_accepted_without_matching_receipt():
     value, output = transport()
     on_route(value)
@@ -182,7 +229,12 @@ def test_duplicate_navigation_does_not_renew_old_measurement_receipt():
     value, _ = transport()
     on_route(value)
     candidate = on_state(value)
-    value.on_navigation(state(), received_monotonic=100.4, current_source_ns=BASE_NS+400_000_000, now_monotonic=100.4)
+    assert value.on_navigation(state(), received_monotonic=100.05,
+        current_source_ns=BASE_NS+50_000_000, now_monotonic=100.05) is None
+    assert value.latest_pair[0].received_monotonic == 100.
+    with pytest.raises(ValueError):
+        value.on_navigation(state(), received_monotonic=100.100000001,
+            current_source_ns=BASE_NS+100_000_001, now_monotonic=100.100000001)
     assert value.latest_pair[0].received_monotonic == 100.
     on_state(value, t=.6)  # current body is fresh, but candidate source remains old
     assert not acknowledge(value, candidate, t=.6)
@@ -203,6 +255,160 @@ def test_epoch_reset_requires_retirement_not_inplace_reanchor():
     cancel = on_route(value, t=.2, sequence=2, active=False)
     assert not cancel.path.poses and value.core is None
     assert value.quarantined  # cancellation does not authorize the new epoch
+
+
+def empty_reset_pair(value, *, t=.1, epoch=1, message=None):
+    """A fresh hard event was consumed by the node before any task existed."""
+    value.quarantined=True
+    with pytest.raises(ValueError,match='staging_context_quarantined'):
+        value.on_navigation(message or state(t=t,epoch=epoch),received_monotonic=100.+t,
+            current_source_ns=BASE_NS+int(t*1e9),now_monotonic=100.+t)
+
+
+def recover_empty(value, *, t=.1, now=None, **changes):
+    args=dict(context_sequence=value.context_sequence,context=('session',1,'seed'),
+        native_reference_unretired=False,current_source_ns=BASE_NS+int(t*1e9),
+        now_monotonic=100.+t if now is None else now)
+    args.update(changes)
+    return value.recover_empty_context(**args)
+
+
+@pytest.mark.parametrize('had_pair',[False,True])
+def test_no_task_hard_reset_recovers_only_after_exact_new_context_ack(had_pair):
+    value,output=transport()
+    if had_pair:on_state(value)
+    empty_reset_pair(value)
+    assert value.quarantined and value.empty_ownership and value.generation==0
+    assert recover_empty(value)
+    assert not value.quarantined and value.route is None and value.core is None
+    assert value.latest_pair[0].body.source_ns==BASE_NS+100_000_000
+    assert value.latest_pair[0].received_monotonic==100.1
+    assert value.latest_local is value.latest_pair[1]
+    assert not output and not value.status['execution_eligible']
+    # Only a separately submitted route can initialize geometry after recovery.
+    candidate=on_route(value,t=.1)
+    assert candidate is not None and len(output)==1 and value.accepted is None
+
+
+def test_empty_context_recovery_preserves_generation_and_retired_task_tombstones():
+    value,output=transport();on_state(value)
+    retired=('retired-task','retired-route','retired-hash')
+    value.ingress.retired.add(retired)
+    value.ingress.last_sequence=7
+    value.ingress.last_stamp_ns=BASE_NS
+    value.ingress.last_stamp=BASE_NS*1e-9
+    value.generation=13  # A historical counter is not current native ownership.
+    empty_reset_pair(value)
+    assert recover_empty(value)
+    assert value.generation==13 and value.ingress.retired=={retired}
+    assert value.ingress.last_sequence==7 and value.ingress.last_stamp_ns==BASE_NS
+    assert not output
+
+
+def test_empty_recovery_after_completed_retirement_cannot_revive_old_route():
+    value,output=transport();on_route(value);on_state(value)
+    on_route(value,t=.1,sequence=2,active=False)
+    tombstones=set(value.ingress.retired)
+    delivery=value.ingress.last_sequence;generation=value.generation
+    published=len(output)
+    # The node's actual-native ledger has confirmed the completed cancellation;
+    # the old reference counter is nonzero, but there is no remaining owner.
+    empty_reset_pair(value,t=.2)
+    assert recover_empty(value,t=.2,native_reference_unretired=False)
+    assert value.ingress.retired==tombstones and value.generation==generation
+    assert value.ingress.last_sequence==delivery and len(output)==published
+    with pytest.raises(ValueError,match='retired_committed_route_cannot_resume'):
+        on_route(value,t=.2,sequence=3)
+    assert value.route is None and value.ingress.active_identity is None
+
+
+@pytest.mark.parametrize('field',['route','snapshot','core','pending','pending_core','accepted','ingress'])
+def test_empty_recovery_cannot_replace_any_active_or_prepared_owner(field):
+    value,_=transport();on_state(value);empty_reset_pair(value)
+    if field=='ingress':value.ingress.active_identity=('task','route','hash')
+    else:setattr(value,field,object())
+    with pytest.raises(ValueError,match='empty_owner_and_new_context_ack_required'):
+        recover_empty(value)
+    assert value.quarantined and value._reset_pair is not None
+
+
+@pytest.mark.parametrize('unretired',[True,None,0])
+def test_empty_recovery_requires_explicit_no_unretired_native_publication(unretired):
+    value,_=transport();empty_reset_pair(value)
+    with pytest.raises(ValueError,match='empty_owner_and_new_context_ack_required'):
+        recover_empty(value,native_reference_unretired=unretired)
+    assert value.quarantined
+
+
+@pytest.mark.parametrize('changes',[
+    dict(context_sequence=2),dict(context_sequence=True),dict(context=('session',2,'seed')),
+    dict(context=('session',1,'other-seed')),dict(context=('other-session',1,'seed')),
+])
+def test_empty_recovery_requires_ack_for_exact_reset_context(changes):
+    value,_=transport();empty_reset_pair(value)
+    with pytest.raises(ValueError):recover_empty(value,**changes)
+    assert value.quarantined
+
+
+@pytest.mark.parametrize('changes',[dict(t=.61),dict(now=100.61),dict(t=.09)])
+def test_empty_recovery_never_refreshes_expired_or_future_saved_pair(changes):
+    value,_=transport();empty_reset_pair(value)
+    with pytest.raises(ValueError,match='source_or_receipt_stale'):recover_empty(value,**changes)
+    assert value.quarantined and value.latest_pair is None
+
+
+@pytest.mark.parametrize('measurement',['posterior_stamp','imu_stamp'])
+def test_empty_recovery_cannot_extend_saved_output_lease(measurement):
+    value,_=transport();message=state(t=.4)
+    set_stamp(getattr(message,measurement),BASE_NS+350_000_000)
+    if measurement=='imu_stamp':message.extrapolation_sec=.05
+    empty_reset_pair(value,t=.4,message=message)
+    # The at-output provenance was accepted once. Recovery still must finish
+    # before the original 100 ms output deadline, even with a fresh receipt.
+    with pytest.raises(ValueError,match='output_lease_expired'):
+        recover_empty(value,t=.500000001)
+    assert value.quarantined
+
+
+def test_empty_recovery_preserves_original_coast_and_output_deadline():
+    value,output=transport();message=state(t=.4)
+    set_stamp(message.posterior_stamp,BASE_NS+10_000_000)
+    set_stamp(message.imu_stamp,BASE_NS+305_400_000);message.extrapolation_sec=.0946
+    empty_reset_pair(value,t=.4,message=message)
+    assert recover_empty(value,t=.4259)
+    assert value.latest_pair[0].body.source_ns==BASE_NS+400_000_000
+    assert value.latest_pair[0].received_monotonic==100.4
+    assert value._latest_pair_measurement_ns==(BASE_NS+10_000_000,BASE_NS+305_400_000)
+    assert not output and value.route is None and value.core is None
+
+
+def test_expired_saved_pair_cannot_initialize_first_route_with_fresh_delivery():
+    value,output=transport();on_state(value)
+    with pytest.raises(ValueError,match='output_lease_expired'):
+        on_route(value,t=.100000001)
+    assert not output and value.core is None and value.pending is None
+
+
+def test_empty_recovery_cannot_bypass_active_task_native_retirement_barrier():
+    value,_=transport();on_route(value);on_state(value)
+    with pytest.raises(ValueError,match='context_reset'):on_state(value,t=.1,epoch=2)
+    on_route(value,t=.1,sequence=2,active=False)
+    assert value.ingress.active_identity is None and value.route is None
+    assert value._retired_generation>0
+    with pytest.raises(ValueError,match='empty_owner_and_new_context_ack_required'):
+        recover_empty(value,context=('session',2,'seed'))
+    assert value.quarantined  # A real native ACK remains necessary.
+
+
+def test_empty_reset_ignores_duplicate_and_epoch_regressed_pairs():
+    value,_=transport();on_state(value,t=.1,epoch=2)
+    value.quarantined=True
+    assert on_state(value,t=.1,epoch=2) is None
+    assert value._reset_pair is None
+    with pytest.raises(ValueError,match='epoch_regressed'):on_state(value,t=.2,epoch=1)
+    assert value._reset_pair is None and value.quarantined
+    empty_reset_pair(value,t=.2,epoch=2)
+    assert recover_empty(value,t=.2,context=('session',2,'seed'))
 
 
 def test_cancel_stages_empty_reference_with_same_route_identity_never_stop_confirmation():
@@ -238,7 +444,8 @@ def test_staging_profile_cannot_apply_body_height_twice():
             native_reference_path_z_offset=.55)
 
 
-def test_adjacent_stair_transition_stages_new_mode_only_after_measured_stop_and_new_sample():
+def test_adjacent_stair_transition_requires_bound_mode_and_stages_without_moving_current_core():
+    from d1max_pct_scan.continuous_reference import ModeObservation
     value, output = transport()
     on_route(value, crossfloor=True)
     first = on_state(value)
@@ -246,14 +453,17 @@ def test_adjacent_stair_transition_stages_new_mode_only_after_measured_stop_and_
     on_state(value, t=.8, x=.95)
     on_state(value, t=.9, x=.95)
     on_state(value, t=1., x=.95)
-    assert value.request_segment_transition(current_source_ns=BASE_NS+1_000_000_000,
-        now_monotonic=101.) == 'stair_lower'
-    assert len(output) == 1 and value.accepted == first
-    stair = on_state(value, t=1.1, x=1.)
+    with pytest.raises(ValueError,match='bound_mode'):
+        value.request_segment_transition(current_source_ns=BASE_NS+1_000_000_000,now_monotonic=101.)
+    mode=ModeObservation(value.core.context,'task',first.route_hash,'stair_lower','stair',
+        BASE_NS+1_000_000_000,101.)
+    assert value.request_segment_transition(current_source_ns=mode.source_ns,now_monotonic=101.,mode=mode)=='stair_lower'
+    stair=value.pending
     assert len(output) == 2
     assert stair.required_mode == 'stair' and stair.segment_id == 'stair_lower'
     assert set(stair.point_segment_ids) == {'stair_lower'}
     assert stair.route_hash == first.route_hash and stair.anchor_id == first.anchor_id
     assert value.accepted == first and value.pending == stair
-    assert acknowledge(value, stair, t=1.1)
+    assert value.core._segment==0 and value.pending_core._segment==1
+    assert acknowledge(value, stair, t=1.)
     assert value.accepted == stair

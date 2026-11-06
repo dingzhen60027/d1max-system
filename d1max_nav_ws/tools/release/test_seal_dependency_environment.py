@@ -76,3 +76,20 @@ def test_navigation_and_sdk_dispatchers_remain_integrity_bound(tmp_path):
         'd1max_ros2_env.sh',
     ):
         assert bindings[relative] == tmp_path/relative
+
+
+def test_frozen_source_import_caches_are_not_release_inputs(tmp_path):
+    snapshot = tmp_path/'source_snapshot'
+    snapshot.mkdir()
+    names = ('module.py', 'libnative.so', 'model.cache', 'module.pyc', 'old.pyo',
+             '__pycache__/module.cpython-310.pyc', '__pycache__/nested/data',
+             'nested/source.py', 'nested/__pycache__/source.cpython-310.pyc',
+             'navigation.launch.py', '__pycache__/navigation.launch.cpython-310.pyc',
+             'test_native.py', '__pycache__/test_native.cpython-310-pytest-6.2.5.pyc')
+    for name in names:
+        path = snapshot/name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(name)
+    assert {str(p.relative_to(snapshot)) for p in seal.snapshot_source_files(snapshot)} == {
+        'module.py', 'libnative.so', 'model.cache', 'nested/source.py',
+        'old.pyo', '__pycache__/nested/data', 'navigation.launch.py', 'test_native.py'}

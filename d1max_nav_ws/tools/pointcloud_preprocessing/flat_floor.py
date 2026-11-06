@@ -386,3 +386,76 @@ def condition_flat_floor(xyz, trajectory_xyz, config=None):
             'removed_fragment_mask': fragment_removed,
             'excluded_below_floor_mask': below_floor,
             'anchors': anchors, 'statistics': statistics, 'config': cfg}
+
+
+def _metric_support_gaps(result, original_xyz, protected):
+    """Resolve grid-phase misses using nearby *already classified* support.
+
+    Keep the original domain, vertical band, count and two-axis spread gates.
+    The disk radius is the existing support-cell circumradius; no trajectory
+    clearing, iterative flood fill or new disconnected support component.
+    """
+    points = _points(original_xyz, 'original_xyz')
+    if points.shape != result['xyz'].shape:
+        raise ValueError('Original records must match the conditioning result')
+    cfg = result['config']
+    existing = (result['floor_support_mask'] & result['conditioning_mask']
+                & result['keep_mask'] & ~protected)
+    eligible = (result['conditioning_mask'] & result['keep_mask'] & ~protected
+                & ~result['floor_support_mask'] & np.isfinite(result['floor_z'])
+                & (np.abs(points[:, 2] - result['floor_z']) <= cfg['support_halfwidth_m']))
+    added = np.zeros(len(points), dtype=bool)
+    if not existing.any() or not eligible.any():
+        return added
+    seed_xy = points[existing, :2]
+    tree = cKDTree(seed_xy)
+    radius = cfg['support_cell_m'] / np.sqrt(2.)
+    targets = np.flatnonzero(eligible)
+    for start in range(0, len(targets), 4096):
+        batch = targets[start:start + 4096]
+        counts = tree.query_ball_point(points[batch, :2], radius,
+                                      return_length=True, workers=cfg['workers'])
+        if int(counts.sum()) > 4_000_000:
+            raise ValueError('Metric floor support exceeds four million neighbor links')
+        batch = batch[counts >= cfg['support_min_points']]
+        neighborhoods = tree.query_ball_point(points[batch, :2], radius, workers=cfg['workers'])
+        for index, neighbors in zip(batch, neighborhoods):
+            xy = seed_xy[neighbors]
+            # Population covariance matches the existing grid-cell moments.
+            smaller = np.linalg.eigvalsh(np.cov(xy, rowvar=False, bias=True))[0]
+            added[index] = smaller >= cfg['support_min_xy_spread_m'] ** 2
+    return added
+
+
+def unify_classified_floor_support(result, *, structure_protected=None, original_xyz=None):
+    """Finish floor snapping *after* the existing obstacle classifiers.
+
+    The 35 mm seed band must not leave a discontinuous skirt inside the same
+    measured 55 mm support class. Obstacle classification still sees the old
+    residual geometry first: retained low objects/wall roots take precedence
+    over the floor prior. This changes Z only, never retention or free space.
+    """
+    protected = np.asarray(result['near_ground_protected_mask'], dtype=bool).copy()
+    if structure_protected is not None:
+        structure_protected = np.asarray(structure_protected)
+        if structure_protected.dtype.kind != 'b' or structure_protected.shape != protected.shape:
+            raise ValueError('Structure protection must match every source record')
+        protected |= structure_protected
+    metric_added = np.zeros(len(protected), dtype=bool)
+    if original_xyz is not None:
+        metric_added = _metric_support_gaps(result, original_xyz, protected)
+        result['floor_support_mask'] |= metric_added
+    result['metric_support_added_mask'] = metric_added
+    snapped = (result['floor_support_mask'] & result['conditioning_mask']
+               & result['keep_mask'] & ~protected)
+    result['xyz'][snapped, 2] = result['config']['reference_z_m']
+    additional = snapped & ~result['floor_snap_mask']
+    result['floor_snap_mask'] |= snapped
+    result['statistics'].update(
+        snapped_floor_points=int(result['floor_snap_mask'].sum()),
+        unified_support_additional_points=int(additional.sum()),
+        unified_support_protected_points=int((result['floor_support_mask'] & protected).sum()),
+        metric_support_added_points=int(metric_added.sum()),
+        floor_support_points=int(result['floor_support_mask'].sum()),
+        floor_snap_policy='classified_observed_support_after_obstacle_protection_with_metric_gaps')
+    return additional

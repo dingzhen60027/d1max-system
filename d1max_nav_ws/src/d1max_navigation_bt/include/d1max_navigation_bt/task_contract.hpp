@@ -26,27 +26,49 @@ public:
   explicit GoalAdmission(std::int64_t max_age_ns=5000000000LL) : max_age_(max_age_ns) {
     if (max_age_ns<=0 || max_age_ns>30000000000LL) throw std::invalid_argument("invalid_goal_source_timeout");
   }
-  std::string reserve(std::int64_t source, std::int64_t now) {
+  // Action callers pass the UUID assigned/uniquely admitted by rclcpp_action.
+  // Two genuine requests can share a ROS timestamp (paused simulated clock or
+  // coarse /clock), so source freshness is not their request identity. Legacy
+  // topic goals still use the timestamp-only ordering contract.
+  std::string reserve(std::int64_t source, std::int64_t now, const std::string& request={}) {
     const auto reason=check(source,now);
     if (!reason.empty()) return reason;
-    if (source<=reserved_) return "goal_source_replayed_or_reordered";
-    reserved_=source;
+    if (source<reserved_ || (request.empty()&&source==reserved_)) return "goal_source_replayed_or_reordered";
+    if(!request.empty()&&(request==reserved_request_||request==committed_request_))
+      return "goal_request_replayed";
+    reserved_=source;reserved_request_=request;reserved_received_=now;reservation_retired_=false;
     return {};
   }
-  std::string commit(std::int64_t source, std::int64_t now) {
+  std::string commit(std::int64_t source, std::int64_t now, const std::string& request={}) {
     const auto reason=check(source,now);
     if (!reason.empty()) return reason;
-    if (source!=reserved_ || source<=committed_) return "goal_request_superseded_before_submission";
-    committed_=source;
+    if (reservation_retired_ || source!=reserved_ || request!=reserved_request_ ||
+        (request.empty()?source<=committed_:request==committed_request_))
+      return "goal_request_superseded_before_submission";
+    committed_=source;committed_request_=request;
     return {};
   }
   void fenceAll(std::int64_t now) {
     clock_high_water_=std::max(clock_high_water_,now);
     barrier_=std::max({barrier_,now,reserved_,committed_});
+    reserved_request_.clear();
   }
   // A targeted action cancel is not a cancel-all. A newer accepted request
   // retains its own admission while the older task drains by task identity.
   void fenceThrough(std::int64_t source) { barrier_=std::max(barrier_,source); }
+  // A delayed operator takeover fences pre-event admissions as well as goal
+  // source stamps. The accepted 50 ms source-clock tolerance must not let an
+  // older reserved action survive merely because its header was in the future.
+  // A reservation received after this event remains available for dispatch.
+  void fenceAcceptedBefore(std::int64_t source) {
+    fenceThrough(source);
+    if(reserved_received_>0&&reserved_received_<=source)reservation_retired_=true;
+  }
+  // Targeted cancellation cannot fence a distinct request merely because it
+  // was sampled at the same ROS time. The UUID is already bound to the handle.
+  void fenceRequest(const std::string& request) {
+    if(!request.empty()&&reserved_request_==request)reserved_request_.clear();
+  }
   std::int64_t barrier() const { return barrier_; }
 private:
   std::string check(std::int64_t source, std::int64_t now) {
@@ -59,6 +81,9 @@ private:
     return {};
   }
   std::int64_t max_age_, clock_high_water_{0}, barrier_{0}, reserved_{0}, committed_{0};
+  std::int64_t reserved_received_{0};
+  bool reservation_retired_{false};
+  std::string reserved_request_,committed_request_;
 };
 
 struct RouteBinding {

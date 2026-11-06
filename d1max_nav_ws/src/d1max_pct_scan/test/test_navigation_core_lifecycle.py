@@ -35,6 +35,10 @@ def graph_fixture(tmp_path,monkeypatch):
     monkeypatch.setattr(entry.signal,'signal',lambda sig,handler:events.append(('signal',sig)))
     def popen(cmd,**kwargs):
         assert kwargs['start_new_session'] is True
+        assert kwargs['env']['RMW_IMPLEMENTATION']=='rmw_zenoh_cpp'
+        trace_directory=Path(kwargs['env']['D1MAX_TRACE_DIRECTORY'])
+        assert trace_directory.is_relative_to(tmp_path/'diagnostics')
+        assert json.loads((trace_directory/'session-index.json').read_text())['session_id']==session['id']
         child=Child(42 if not children else None)
         children.append(child)
         return child
@@ -252,7 +256,7 @@ def view_fixture(tmp_path,monkeypatch):
     from d1max_pct_scan import view_layout_requests
     children=[];streams=[];events=[]
     monkeypatch.setenv('RMW_IMPLEMENTATION','rmw_zenoh_cpp')
-    monkeypatch.setattr(entry,'verify',lambda _: (dict(id='view-fixture',transport_mode='live'),{}))
+    monkeypatch.setattr(entry,'verify_view',lambda _: dict(id='view-fixture',transport_mode='live'))
     monkeypatch.setattr(entry.signal,'signal',lambda sig,handler:events.append(('signal',sig)))
     monkeypatch.setattr(view_layout_requests,'viewer_environment',lambda *args:dict(VIEW_FIXTURE='1'))
     @contextmanager

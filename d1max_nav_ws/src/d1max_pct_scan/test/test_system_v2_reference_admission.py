@@ -15,11 +15,13 @@ from test_continuous_reference_transport import BASE_NS, envelope, state
 
 
 def local_message(pair):
-    result = LocalNavigationState(schema_version=1)
+    from d1max_localization.estimation_ros import stamp_time
+    result = LocalNavigationState(schema_version=2)
     for key in ('session_id', 'map_version_id', 'localization_epoch',
                 'localization_seed_id', 'source_stamp', 'posterior_stamp',
                 'imu_stamp', 'extrapolation_sec', 'local_odometry', 'usable', 'reason'):
         setattr(result, key, deepcopy(getattr(pair, key)))
+    result.valid_until = stamp_time(pair.source_stamp.sec+pair.source_stamp.nanosec*1e-9+.1)
     return result
 
 
@@ -89,7 +91,7 @@ def test_global_pair_behind_local_cannot_regress_actual_progress():
 
 
 @pytest.mark.parametrize('has_incumbent', [False, True])
-def test_consumed_pending_rebuilds_same_route_new_generation_and_fences_late_commit(has_incumbent):
+def test_consumed_pending_rebuilds_same_route_and_reconciles_literal_owner_commit(has_incumbent):
     callback, clock, _ = local_harness()
     route = long_route(); callback.on_route(route)
     old = None
@@ -117,8 +119,18 @@ def test_consumed_pending_rebuilds_same_route_new_generation_and_fences_late_com
     assert callback.transport.accepted == old
     assert successor.reference.path.poses[0].pose.position.x == pytest.approx(x)
     assert callback.transport.pending_window_remaining() > 1.9
-    assert not fresh_commit(callback, clock, proposal, sequence=2)
-    assert callback.proposal == successor and callback.transport.accepted == old
+    # The planning slot may expire; a fresh owner-confirmed commit is an
+    # irreversible fact, not a late candidate result. Reconcile its literal
+    # reference rather than silently disagreeing with the only task owner.
+    # This HOLD permit grants no movement and cannot renew collision proof.
+    assert fresh_commit(callback, clock, proposal, sequence=2)
+    assert callback.transport.accepted == proposal.reference
+    assert callback.transport.route == frozen_route
+    assert not callback.permit.allowed
+    # A late owner fact must not erase an already-published successor.
+    assert callback.transport.pending==successor.reference
+    assert callback.proposal==successor
+    assert not fresh_commit(callback, clock, proposal, sequence=2)  # old owner sequence
 
 
 def test_global_correction_only_prepares_anchor_candidate_incumbent_geometry_unchanged():
@@ -127,17 +139,37 @@ def test_global_correction_only_prepares_anchor_candidate_incumbent_geometry_unc
     old = deepcopy(callback.transport.accepted)
     core = callback.transport.core
     local_update(callback, clock, .6, .3)
+    rolling=deepcopy(callback.proposal)
+    assert rolling is not None and rolling.version.anchor_id==old.anchor_id
     assert callback.on_navigation(state(t=.6, x=.3, correction=.12))
+    correction=callback.transport.core.candidate_anchor
+    # The rolling candidate owns its original anchor; a global correction is
+    # not permission to cancel it mid-solve or move the incumbent geometry.
+    assert callback.proposal==rolling
+    assert callback.transport.accepted==old and callback.transport.core is core
+    native_received(callback)
+    assert fresh_commit(callback,clock,rolling,sequence=2)
+    committed=deepcopy(callback.transport.accepted)
+    committed_core=callback.transport.core
+    assert committed.anchor_id==old.anchor_id
+    assert callback.transport.core.candidate_anchor==correction
+    # Keep source freshness with real local callbacks, not receipt-time reuse.
+    for i in range(1,7):local_update(callback,clock,.6+.1*i,.3)
+    # The original correction has aged out. Supply a genuine new global/local
+    # pair with the same rigid geometry; local-only updates cannot renew it.
+    assert callback.on_navigation(state(t=1.2,x=.3,correction=.12))
+    correction=callback.transport.core.candidate_anchor
     candidate = callback.proposal
     assert candidate is not None and candidate.version.anchor_id != old.anchor_id
-    assert candidate.expected_version == old_permit.version
-    assert candidate.expected_trajectory_id == old_permit.trajectory_id
+    assert candidate.expected_version == rolling.version
+    assert candidate.expected_trajectory_id == callback.permit.trajectory_id
     assert candidate.version.route_hash == old.route_hash
-    assert callback.transport.accepted == old and callback.transport.core is core
-    assert callback.transport.pending_core is not core
+    assert callback.transport.accepted == committed and callback.transport.core is committed_core
+    assert callback.transport.pending_core is not committed_core
+    assert callback.transport.pending_core.anchor==correction
     # Native delivery receipt still cannot replace the old executable geometry.
     native_received(callback)
-    assert callback.transport.accepted == old and callback.transport.core is core
+    assert callback.transport.accepted == committed and callback.transport.core is committed_core
 
 
 def test_expired_local_does_not_fabricate_progress_or_rebuild_pending_from_receipt_time():

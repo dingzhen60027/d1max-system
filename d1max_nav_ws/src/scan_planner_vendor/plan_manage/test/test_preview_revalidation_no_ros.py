@@ -52,6 +52,7 @@ public:
   struct Candidate {int curve,heading;ClockValue solved_at;std::uint64_t context_sequence;};
   std::optional<Candidate> pending_preview_candidate_=Candidate{18,2,{499990000000LL},2};
   bool measured_body_pose_=true;
+  bool planning_only_geometry_=false;
   std::string measured_body_frame_="map";
   double measured_body_maximum_age_=.5;
   int accepted_heading_contract_=1,committed_curve=17,commits=0;
@@ -169,6 +170,14 @@ int main() {
     scan_planner::SCANPlannerManager manager;manager.pending_preview_candidate_.reset();
     expect(manager.commitPreviewCandidate() && manager.commits==0 && manager.committed_curve==17,
       "default_nontransactional_path_unchanged");
+  }
+  for(bool pending:{false,true}) {
+    scan_planner::SCANPlannerManager manager;manager.planning_only_geometry_=true;
+    if(!pending)manager.pending_preview_candidate_.reset();
+    expect(!manager.commitPreviewCandidate()&&bool(manager.pending_preview_candidate_)==pending&&
+      manager.commits==0&&manager.committed_curve==17&&manager.accepted_heading_contract_==1&&
+      manager.committed_time.ns==499000000000LL,
+      "explicit_planning_only_cannot_bypass_bounded_geometry_transaction_using_legacy_commit_overload");
   }
   std::cout<<"checks="<<checks<<" failures="<<failures<<"\n";
   return failures ? 1 : 0;

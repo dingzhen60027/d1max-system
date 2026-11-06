@@ -35,12 +35,40 @@ def test_delivered_but_unvalidated_reference_reports_native_wait_not_delivery_fa
     assert stage.budget and stage.phase!='following'
 
 
-def test_proved_curve_never_overrides_wrong_reference_or_stale_map():
-    for field in ('pose_ready', 'map_ready', 'same_reference'):
-        args = dict(pose_ready=True, map_ready=True, committed=True,
-                    subscriber_ready=True, same_reference=True, scan={'spline_visual_valid': True})
-        args[field] = False
-        assert classify_follow(**args).budget
+@pytest.mark.parametrize('map_ready', [False, True])
+@pytest.mark.parametrize('field', ['pose_ready', 'committed', 'same_reference'])
+def test_proved_curve_never_overrides_missing_pose_or_committed_reference_identity(field, map_ready):
+    args = dict(pose_ready=True, map_ready=map_ready, committed=True,
+                subscriber_ready=True, same_reference=True, scan={'spline_visual_valid': True})
+    args[field] = False
+    stage = classify_follow(**args)
+    assert stage.budget and stage.phase != 'following'
+    if field == 'pose_ready':
+        assert stage == FollowStage('waiting_localization', 'waiting_current_localization', 'pose')
+    elif not map_ready:
+        assert stage == FollowStage('waiting_local_map', 'waiting_fresh_local_map', 'map')
+    else:
+        assert stage.phase == 'waiting_reference'
+
+
+@pytest.mark.parametrize('scan', [{}, {'spline_visual_valid': False},
+                                {'spline_visual_valid': None}, {'spline_visual_valid': 1}])
+def test_map_wait_remains_without_a_current_positive_native_proof(scan):
+    stage = classify_follow(pose_ready=True, map_ready=False, committed=True,
+        subscriber_ready=True, same_reference=True, scan=scan)
+    assert stage == FollowStage('waiting_local_map', 'waiting_fresh_local_map', 'map')
+
+
+def test_current_proved_curve_keeps_following_when_new_reference_map_relay_is_late():
+    policy = FollowRecovery({})
+    for tick in range(100):
+        stage = classify_follow(pose_ready=True, map_ready=False, committed=True,
+            subscriber_ready=False, same_reference=True,
+            scan={'spline_visual_valid': True, 'local_debug_phase': 'failed_optimization'},
+            pending_native_phase='waiting_observed_space')
+        assert stage == FollowStage('following', 'following_validated_local_trajectory')
+        assert not policy.observe(stage, tick, evidence_stamp=tick+1)
+    assert policy.since is None and not policy.waits
 
 
 def test_stationary_healthy_preview_has_no_progress_timeout():
@@ -48,6 +76,31 @@ def test_stationary_healthy_preview_has_no_progress_timeout():
     for tick in range(1000):
         assert policy.observe(GOOD, tick, evidence_stamp=tick+1) == ''
     assert policy.since is None and not policy.waits
+
+def test_persistent_task_waits_beyond_local_deadlines_then_recovers_without_new_episode_identity():
+    policy=FollowRecovery({'keep_committed_route_on_local_failure':True})
+    for stamp in (0.,20.,30.,60.,120.,600.):
+        assert policy.observe(BLOCKED,stamp)==''
+    assert policy.since==0.
+    assert len(policy.waits)<=4
+    for stamp in (600.1,600.4,600.8):
+        assert policy.observe(GOOD,stamp,evidence_stamp=stamp+100.)==''
+    assert policy.since is None and not policy.waits
+
+@pytest.mark.parametrize('same_reference',[False,True])
+def test_native_emergency_stop_is_local_braking_and_retry_not_task_cancellation(same_reference):
+    stage=classify_follow(pose_ready=True,map_ready=True,committed=True,
+        subscriber_ready=True,same_reference=same_reference,
+        scan={'spline_visual_valid':False,'local_debug_phase':'emergency_stop'},
+        pending_native_phase='emergency_stop' if not same_reference else '')
+    assert not stage.terminal and stage.budget=='trajectory'
+    policy=FollowRecovery({'keep_committed_route_on_local_failure':True})
+    assert policy.observe(stage,0.)==policy.observe(stage,120.)==''
+
+def test_persistent_wait_does_not_hide_wrong_coordinate_contract():
+    policy=FollowRecovery({'keep_committed_route_on_local_failure':True})
+    stage=FollowStage('local_contract_failed','reference_rejected_frame',terminal=True)
+    assert policy.observe(stage,0.)=='follow_contract_failure:reference_rejected_frame'
 
 
 def test_persistent_blockage_has_bounded_recovery_without_global_retry():
@@ -96,7 +149,7 @@ def test_repeated_good_report_is_not_sustained_recovery():
 
 
 @pytest.mark.parametrize('phase', ['reference_rejected_frame', 'reference_rejected_geometry',
-                                 'failed_reference_geometry', 'emergency_stop'])
+                                 'failed_reference_geometry'])
 def test_contract_failure_has_no_retry_loop(phase):
     stage = classify_follow(pose_ready=True, map_ready=True, committed=True,
         subscriber_ready=True, same_reference=True,
@@ -104,11 +157,20 @@ def test_contract_failure_has_no_retry_loop(phase):
     assert FollowRecovery({}).observe(stage, 0.) == 'follow_contract_failure:'+phase
 
 
+@pytest.mark.parametrize('phase', ['reference_rejected_frame', 'reference_rejected_geometry',
+                                 'failed_reference_geometry'])
+def test_other_reference_proof_cannot_hide_pending_reference_contract_failure(phase):
+    stage = classify_follow(pose_ready=True, map_ready=True, committed=True,
+        subscriber_ready=True, same_reference=False,
+        scan={'spline_visual_valid': True}, pending_native_phase=phase)
+    assert stage == FollowStage('local_contract_failed', phase, terminal=True)
+
+
 def test_live_preview_failed_optimization_is_local_wait_not_global_or_identity_failure():
     # Session 5920af...: the fixed route was delivered at 1791516719.001476;
     # native solve 0 failed at .075630, solve 48 at 1791516748.777450.
     # It never published a proved local curve. A reference receipt is not one.
-    params = {key: 30. for key in FOLLOW_DEFAULTS if key != 'follow_stable_reset_s'}
+    params = {key: 30. for key in FOLLOW_DEFAULTS if key.endswith('_wait_s') or key=='follow_recovery_episode_s'}
     params['follow_stable_reset_s'] = .6
     policy = FollowRecovery(params)
     for elapsed, reason in ((0., 'failed_optimization'),
@@ -125,7 +187,7 @@ def test_live_preview_failed_optimization_is_local_wait_not_global_or_identity_f
 
 
 def test_fresh_proved_curve_before_original_deadline_recovers_same_preview_episode():
-    params = {key: 30. for key in FOLLOW_DEFAULTS if key != 'follow_stable_reset_s'}
+    params = {key: 30. for key in FOLLOW_DEFAULTS if key.endswith('_wait_s') or key=='follow_recovery_episode_s'}
     params['follow_stable_reset_s'] = .6
     policy = FollowRecovery(params)
     stage = classify_follow(pose_ready=True, map_ready=True, committed=True,
@@ -143,7 +205,7 @@ def test_fresh_proved_curve_before_original_deadline_recovers_same_preview_episo
 
 @pytest.mark.parametrize('third_at', [30., 30.2])
 def test_stable_recovery_cannot_renew_already_expired_common_episode(third_at):
-    params = {key: 30. for key in FOLLOW_DEFAULTS if key != 'follow_stable_reset_s'}
+    params = {key: 30. for key in FOLLOW_DEFAULTS if key.endswith('_wait_s') or key=='follow_recovery_episode_s'}
     params['follow_stable_reset_s'] = .6
     policy = FollowRecovery(params)
     waiting = FollowStage('recovering_local_trajectory', 'waiting_observed_space', 'trajectory')
@@ -157,7 +219,7 @@ def test_stable_recovery_cannot_renew_already_expired_common_episode(third_at):
 
 
 def test_stable_recovery_third_report_before_deadline_still_clears_episode():
-    params = {key: 30. for key in FOLLOW_DEFAULTS if key != 'follow_stable_reset_s'}
+    params = {key: 30. for key in FOLLOW_DEFAULTS if key.endswith('_wait_s') or key=='follow_recovery_episode_s'}
     params['follow_stable_reset_s'] = .6
     policy = FollowRecovery(params)
     assert not policy.observe(BLOCKED, 0.)

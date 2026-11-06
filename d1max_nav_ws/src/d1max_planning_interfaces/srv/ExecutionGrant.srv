@@ -21,6 +21,7 @@ string execution_id
 uint64 control_epoch
 string request_id
 string transport_mode
-# SDK-owned fact only: this request was never installed and no prior execution
-# binding exists. This is NOT a measured-stop report or motion authorization.
+# SDK-owned fact only: this exact request was never installed. Any prior
+# execution retains its own binding and stop obligation. This is NOT a
+# measured-stop report or motion authorization.
 bool definitely_not_admitted

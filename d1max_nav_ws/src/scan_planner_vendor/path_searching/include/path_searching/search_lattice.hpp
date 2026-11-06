@@ -1,8 +1,22 @@
 #pragma once
 #include <Eigen/Core>
 #include <cmath>
+#include <stdexcept>
 
 namespace scan_planner {
+
+// Do not re-create exact endpoints by subtracting and adding floats. The
+// collision cache intentionally distinguishes exact poses; a few ULPs here
+// cause needless misses and can change a touching contact at the endpoint.
+// Interior samples retain the existing complete half-voxel edge sampling.
+inline Eigen::Vector3d searchEdgeSample(const Eigen::Vector3d &from,
+    const Eigen::Vector3d &to,int sample,int samples) {
+  if(samples<1 || sample<0 || sample>samples)
+    throw std::invalid_argument("invalid search edge sample");
+  if(sample==0)return from;
+  if(sample==samples)return to;
+  return from+(to-from)*(static_cast<double>(sample)/samples);
+}
 
 // The search lattice is centred BETWEEN the endpoints. Signed truncation after
 // adding .5 shifts the negative half by a whole cell; round both halves alike.

@@ -1,8 +1,104 @@
-# Nav2 速度出口：单 SDK 会话，可选启用
+# 导航速度出口：单 SDK 会话
 
-## 当前主线 schema-3 执行出口（2026-10-04）
+## 当前主线 task_follower_v1（2026-10-12）
 
-当前 BT 导航主线使用 `execution_v3_enabled` 和类型化的 `/d1max/live_planning/execution/` 合同；下文 JSON/Nav2 arm 协议是历史兼容入口，不能与 schema-3 同时启用。启动不会授权运动，未验收记录仍拒绝 live grant。
+正式入口使用 `task_writer_enabled=true`、`execution_v3_enabled=false`。
+BT 维护任务授权，SCAN 维护当前已接受轨迹的碰撞结论，跟踪器输出运动需求；
+Native 将需求绑定到当前轨迹和原始状态后发布 `LocalMotionCommand`，SDK 是唯一速度发送者。
+
+SDK 消费 `TaskExecutionLease` 与 `LocalMotionCommand`，不再要求历史
+`MotionValidation`、逐曲线 CAS 或第二套反应/制动扫掠查询。
+当前 SCAN 轨迹碰撞、取消、过期命令、急停和失权仍阻止非零输出。
+原始状态和命令时间不续写，停止提交与实测停稳仍分别报告。
+此软件整改不代表现场运动、制动或跨楼层能力已验收。
+
+### 当前发送调度：新命令驱动、原始期限看门狗（2026-10-18）
+
+正式 `task_follower_v1` 仍只有一个常驻 SDK writer，非零普通发送的实际软件受理
+间隔至少 50 ms（最多 20 Hz），但不再让新命令等待另一套固定 20 Hz 轮询相位。
+`LocalMotionCommand` 完成原有接收校验后仅递增固定大小的 wake revision 并唤醒
+writer；如果上次非零受理已满 50 ms，立即选择最新原始命令，否则只等剩余间隔。
+最新槽和 revision 不形成队列，迟到的旧命令仍由 Transport 的原规则拒绝。
+
+周期健康检查不再重复发送一个未变化的非零命令，也不以空闲、HOLD 或过期零消耗
+下一条新命令的普通发送机会。初始控制权事务仍能在健康检查中推进。原始命令、
+机身状态及任务 lease 的截止时间独立唤醒同一个 writer；真正过期、急停、撤销和
+失权仍立即选择零/停止，不等待普通非零额度。严格原始 100 ms body/command
+合同不变，不刷新源时、不延长 TTL、不新增曲线或碰撞门控。
+
+正式回调接收一个较新的有效零，即使它的正授权 lease 尚在传输，也保留既有单调
+停止屏障并立即唤醒零路径。延期的非零只有其真实因果 lease 到达并重新通过完整
+校验后才唤醒普通发送。writer 在状态锁内捕获实际选中 revision；厂商调用期间
+到达的新命令不会被旧调用误标为已消费。非零受理间隔以实际软件受理时刻而非
+tick 开始时刻计，厂商调用阻塞后仍不补发压缩的非零对。
+
+普通命令和急停/撤销 revision 使用同一个短临界区通知辅助函数，与 writer 的
+等待 mutex 配对；避免仅 atomic+notify 在“谓词已检查、尚未进入等待”之间丢失
+唤醒而多等一个 watchdog 周期。该 mutex 只保护等待/通知，不覆盖状态处理、
+厂商调用或遥测发布。纯并发回归强制制造这一窗口并验证旧/新通知顺序。
+
+生产 `Transport`、原始 typed 命令和生产调度器的同输入对照包含：有效命令在旧
+轮询后 1 ms 到达、原始 body 已有 60 ms 源龄时，旧轮询额外等待 50 ms 后过期，
+新调度在可用额度下直接处理；20 Hz 连续命令不新增源龄、不出现该相位过期；
+真正断流仍按原始截止时间归零。另覆盖突发合并、阻塞期间新 revision、旧身份、
+撤销及急停。该回归不创建 ROS 图、不初始化 SDK、不连接或调用真实 Move；它是
+软件调度反例验证，不是实机响应、制动或持续导航的验收结果。
+
+### 受理顺序与单 writer 撤销（2026-10-15 实现，2026-10-18 保留）
+
+正式 `task_follower_v1` 使用单个常驻 writer。普通非零发送仍按 steady clock
+限定至少 50 ms 间隔；错过周期不补发旧指令。撤许可、失权、急停等事件唤醒
+同一 writer，提前唤醒只能处理零指令，不能提高非零发送频率。输入仍为一个
+最新命令槽，原始状态/命令期限不续写；10月18日起改用上节的新命令驱动相位。
+
+一次 `TakeControl` 或 `Move` 在状态锁内完成最终核对、捕获不可变参数并登记
+writer-wide transaction，这一时刻是**软件受理顺序点**；随后释放通用状态锁
+调用厂商 SDK。因此厂商调用阻塞时，MC、新命令和取消仍可处理，不再一起堵塞。
+`TakeControl` 返回后重新按最新状态与源时间选取速度，不能发送接管前缓存的速度。
+立即返回结果只归属于捕获的 execution/epoch/arm identity，不恢复已撤销的命令。
+
+transaction 必须等**厂商调用栈返回及回调效果完成**两者都发生才退役；
+内联 ACK 不得将仍阻塞的调用冒充已结束，也不能让新任务提前获准。
+已受理、正在进入厂商 SDK 的操作无法撤回；撤销后的下一次选择不会再发送旧非零。
+这不是厂商物理入口、网络写入或停车的有限时保证。唯一 writer 若卡在厂商内部，
+也不能及时调用下一条零速度；不能另起竞争 writer 假装解决这个限制。
+
+纯 fake-vendor 回归覆盖阻塞期间撤销仍返回、内联/延迟 ACK、旧身份不复活、
+调用栈未退役时新 grant 被拒、返回后重新检查源期限及固定容量。
+测试不创建 ROS 图、不初始化 SDK、不连接实机。历史 curve-CAS/JSON 分支保留原提交方式。
+
+既有 SDKCommandTrace 和诊断 JSON 的 `sdk_input_mapping.last_attempt_timing`
+记录同一次受理尝试的 command sequence、原始 command/body/deadline 纳秒时间，
+以及 source→attempt、body→attempt 和剩余原始期限（毫秒）。这些量绑定已捕获的
+execution/epoch/arm identity，不会随新消息或诊断心跳变化；无选定正式命令的
+停止/等待零指令明确 `present=false`，时间为 null，而不是伪造零延迟。
+这是软件 attempt admission，**不是厂商写入、网络到达或机器人响应时间**。
+
+### 跨话题先后顺序
+
+BT 的任务 lease 与 Native 的 `LocalMotionCommand` 通过不同发布者传输，不能假定
+SDK 一定先收到 lease。SDK 为**只差原始正授权 lease 到达**的有效命令保留一个
+latest 槽；相同 lease 实际到达后重新执行完整接收校验，原始命令、机身状态和
+截止时间保持不变。未知 lease 不提前获得权限，也不推进已接受 sequence/source
+下限；已知但过期或非因果 lease 不作为“重排”放行。
+
+新的有效零/HOLD 清除旧待处理非零和旧当前命令；显式 owner HOLD、撤销、MC/状态
+断流和任务更换都清除待处理槽。异常、外来或过期零包不能覆盖有效工作。
+队列容量固定为一，lease 历史仍固定最多八条。现有诊断
+`command_lease_reorder` 提供 deferred/completed/discarded/pending，不增加等待门控。
+这修复跨话题顺序造成的无意义零脉冲，不延长真实断流的任何运动期限。
+
+即使零命令自己的 lease 还未到达，已校验的零源时间也建立独立的单调停止屏障：
+延迟到达、源时间不晚于该零的非零命令不能借旧 lease 恢复运动。屏障不使用未知
+sequence 作为授权下限，不阻止真正较新的有效命令；只有新任务重置屏障。
+未来、过期、外来或格式错误的零在建立屏障前即拒绝。较新的待处理正命令保留，
+仍必须等自己的真实 lease 到达后完整校验，不能被较早零误清或提前执行。
+
+下文保留旧协议及当时的约束供查阅，不是正式 task_follower 运行图的启用条件。
+
+## 历史 schema-3 执行出口（2026-10-04）
+
+当时的 BT 导航实现使用 `execution_v3_enabled` 和类型化的 `/d1max/live_planning/execution/` 合同；下文 JSON/Nav2 arm 协议为更早的历史兼容入口，不能与 schema-3 同时启用。该版本启动不授权运动，未验收记录拒绝 live grant。
 
 SDK 数据回调只向有界邮箱复制。MC/RobotState 状态处理、typed 输入/撤许可、20 Hz 唯一速度 writer、普通 ROS 服务/图发现、遥测 JSON 发布分别运行：
 

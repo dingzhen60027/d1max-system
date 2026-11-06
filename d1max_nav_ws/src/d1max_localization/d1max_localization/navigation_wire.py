@@ -6,6 +6,7 @@ def local_body_message(*, local, session_id, map_version_id, epoch, seed_id,
                        posterior_stamp, imu_stamp, extrapolation_sec):
     from d1max_planning_interfaces.msg import LocalNavigationState
     from .estimation_ros import stamp_time
+    from builtin_interfaces.msg import Time
     source_ns = local.header.stamp.sec*10**9+local.header.stamp.nanosec
     if (not session_id or not map_version_id or type(epoch) is not int or epoch < 1
             or not seed_id or local.header.frame_id != 'd1max_loc_odom'
@@ -13,6 +14,8 @@ def local_body_message(*, local, session_id, map_version_id, epoch, seed_id,
             or any(not math.isfinite(v) for v in (posterior_stamp,imu_stamp,extrapolation_sec))
             or not 0 < round(posterior_stamp*1e9) <= source_ns
             or not 0 < round(imu_stamp*1e9) <= source_ns
+            or source_ns-round(posterior_stamp*1e9) > 400_000_000
+            or source_ns-round(imu_stamp*1e9) > 100_000_000
             or not 0 <= extrapolation_sec <= .1
             or abs((source_ns-round(imu_stamp*1e9))*1e-9-extrapolation_sec)>1e-5):
         raise ValueError('invalid_local_navigation_state_provenance')
@@ -21,15 +24,22 @@ def local_body_message(*, local, session_id, map_version_id, epoch, seed_id,
             or not all(math.isfinite(v) for v in (q.x,q.y,q.z,q.w))
             or abs(math.hypot(q.x,q.y,q.z,q.w)-1.)>.01):
         raise ValueError('invalid_local_navigation_state_geometry')
-    return LocalNavigationState(schema_version=1,session_id=session_id,map_version_id=map_version_id,
+    deadline_sec, deadline_ns = divmod(source_ns+100_000_000, 1_000_000_000)
+    return LocalNavigationState(schema_version=2,session_id=session_id,map_version_id=map_version_id,
         localization_epoch=epoch,localization_seed_id=seed_id,local_odometry=local,
         source_stamp=local.header.stamp,posterior_stamp=stamp_time(posterior_stamp),
         imu_stamp=stamp_time(imu_stamp),extrapolation_sec=extrapolation_sec,
+        valid_until=Time(sec=deadline_sec, nanosec=deadline_ns),
         usable=True,reason='continuous_local_measurement')
 
 
 def body_pair_message(*, local, global_, session_id, map_version_id, epoch, seed_id,
                       posterior_stamp, imu_stamp, extrapolation_sec):
+    """Schema-2 pair: original source + 100 ms implicit consumption deadline.
+
+    Match local_body_message's at-output provenance bounds. Consumers do not
+    restamp the pair or subtract transport age from its raw IMU propagation.
+    """
     from d1max_planning_interfaces.msg import NavigationState
     from .estimation_ros import seconds, stamp_time
     source = seconds(local)
@@ -46,6 +56,8 @@ def body_pair_message(*, local, global_, session_id, map_version_id, epoch, seed
             or local.child_frame_id != 'd1max_loc_base_link'
             or any(not math.isfinite(v) for v in (source, posterior_stamp, imu_stamp, extrapolation_sec))
             or not 0 < posterior_ns <= source_ns or not 0 < imu_ns <= source_ns
+            or source_ns-posterior_ns > 400_000_000
+            or source_ns-imu_ns > 100_000_000
             or not 0 <= extrapolation_sec <= .1
             or abs(max(0.,source-imu_stamp)-extrapolation_sec) > 1e-5):
         raise ValueError('invalid_atomic_navigation_state_provenance')

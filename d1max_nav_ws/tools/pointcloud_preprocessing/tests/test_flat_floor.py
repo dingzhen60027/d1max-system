@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from pointcloud_preprocessing.flat_floor import condition_flat_floor, DEFAULTS
+from pointcloud_preprocessing.flat_floor import condition_flat_floor, DEFAULTS, unify_classified_floor_support
 
 
 def scene():
@@ -165,6 +165,87 @@ def test_cleanup_and_floor_snap_masks_never_overlap():
     assert result['floor_snap_mask'][-1]
     assert result['keep_mask'][-1]
     assert not result['near_ground_candidate_mask'][-1]
+
+
+def test_classified_support_finisher_removes_split_band_without_clearing_obstacles():
+    # Exact classification fixture isolates the finishing policy from anchor
+    # fitting. Positive/negative skirt points share the observed support class;
+    # a coherent low object, a structural root and an excluded return do not.
+    z = np.array([-.5, -.464, -.554, -.449, -.458, -.448, -.3])
+    result = dict(xyz=np.c_[np.arange(7.), np.zeros(7), z],
+                  near_ground_protected_mask=np.array([0, 0, 0, 1, 0, 0, 0], bool),
+                  floor_support_mask=np.array([1, 1, 1, 1, 1, 1, 0], bool),
+                  conditioning_mask=np.ones(7, bool),
+                  keep_mask=np.array([1, 1, 1, 1, 1, 0, 1], bool),
+                  floor_snap_mask=np.array([1, 0, 0, 0, 0, 0, 0], bool),
+                  config={'reference_z_m': -.5}, statistics={})
+    before = result['xyz'].copy()
+    keep = result['keep_mask'].copy()
+    added = unify_classified_floor_support(
+        result, structure_protected=np.array([0, 0, 0, 0, 1, 0, 0], bool))
+    np.testing.assert_array_equal(np.flatnonzero(added), [1, 2])
+    np.testing.assert_array_equal(result['xyz'][:3, 2], [-.5] * 3)
+    np.testing.assert_array_equal(result['xyz'][3:], before[3:])
+    np.testing.assert_array_equal(result['xyz'][:, :2], before[:, :2])
+    np.testing.assert_array_equal(result['keep_mask'], keep)
+    assert result['statistics']['unified_support_protected_points'] == 2
+
+
+def test_real_coherent_five_centimetre_box_is_not_flattened_by_support_finisher():
+    floor, trajectory = scene()
+    x, y = np.meshgrid(np.arange(.8, 1.121, .04), np.arange(-.12, .121, .04))
+    box = np.c_[x.ravel(), y.ravel(), -.5 + .006 * x.ravel() ** 2 + .051]
+    result = condition_flat_floor(np.vstack((floor, box)), trajectory)
+    before = result['xyz'][-len(box):].copy()
+    assert result['near_ground_protected_mask'][-len(box):].all()
+    unify_classified_floor_support(result, original_xyz=np.vstack((floor, box)))
+    np.testing.assert_array_equal(result['xyz'][-len(box):], before)
+    assert result['keep_mask'][-len(box):].all()
+
+
+def metric_fixture(seed_xy, targets):
+    seeds = np.c_[seed_xy, np.full(len(seed_xy), -.5)]
+    points = np.vstack((seeds, targets))
+    seed_mask = np.arange(len(points)) < len(seeds)
+    return points, dict(xyz=points.copy(), near_ground_protected_mask=np.zeros(len(points), bool),
+                        floor_support_mask=seed_mask.copy(), conditioning_mask=np.ones(len(points), bool),
+                        keep_mask=np.ones(len(points), bool), floor_snap_mask=seed_mask.copy(),
+                        floor_z=np.full(len(points), -.5), config=dict(DEFAULTS), statistics={})
+
+
+def test_metric_floor_gap_is_grid_phase_independent_and_never_expands_domain_or_band():
+    seed_xy = np.array([[-.08, -.06], [-.08, .06], [0, -.08], [0, .08], [.08, -.06], [.08, .06]])
+    targets = [[0, 0, -.526], [0, 0, -.58], [0, 0, -.47], [.3, 0, -.51],
+               [0, 0, -.52], [0, 0, -.53], [0, 0, 3.15]]
+    for translation in (np.array([0., 0.]), np.array([.101, -.099])):
+        points, result = metric_fixture(seed_xy, targets)
+        points[:, :2] += translation
+        result['xyz'][:, :2] += translation
+        result['near_ground_protected_mask'][8] = True
+        result['conditioning_mask'][10] = False
+        result['keep_mask'][11] = False
+        before, keep = result['xyz'].copy(), result['keep_mask'].copy()
+        unify_classified_floor_support(result, original_xyz=points)
+        np.testing.assert_array_equal(np.flatnonzero(result['metric_support_added_mask']), [6])
+        assert result['xyz'][6, 2] == -.5
+        np.testing.assert_array_equal(result['xyz'][7:], before[7:])
+        np.testing.assert_array_equal(result['xyz'][:, :2], before[:, :2])
+        np.testing.assert_array_equal(result['keep_mask'], keep)
+
+
+def test_metric_floor_gap_does_not_propagate_or_use_one_dimensional_support():
+    line = np.c_[np.linspace(-.1, .1, 8), np.zeros(8)]
+    points, result = metric_fixture(line, [[0, 0, -.52]])
+    unify_classified_floor_support(result, original_xyz=points)
+    assert not result['metric_support_added_mask'].any()
+    seed_xy = np.array([[-.08, -.06], [-.08, .06], [0, -.08], [0, .08], [.08, -.06], [.08, .06]])
+    # A chain of candidate returns must not invent an extension beyond the
+    # original seed neighborhood, even if newly classified targets are dense.
+    targets = [[x, y, -.52] for x in [.02, .08, .14, .20, .26] for y in [-.04, 0, .04]]
+    points, result = metric_fixture(seed_xy, targets)
+    unify_classified_floor_support(result, original_xyz=points)
+    assert result['metric_support_added_mask'][6:9].all()
+    assert not result['metric_support_added_mask'][points[:, 0] >= .14].any()
 
 
 def test_separated_height_returns_do_not_get_false_xy_only_density_support():

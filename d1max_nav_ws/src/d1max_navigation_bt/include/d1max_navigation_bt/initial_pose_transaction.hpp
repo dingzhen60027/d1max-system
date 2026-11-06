@@ -13,6 +13,9 @@ namespace d1max_navigation_bt {
 // Admission/retirement handshake inside the existing task owner. This owns no
 // goal, estimator, SDK connection or motion grant. An authorized application is
 // kept closed until the exact localization-owner outcome AND new ready identity.
+// A newer valid manual intent can supersede an unfinished seed, not restore any
+// old motion grant. The localization owner independently fences mailbox source
+// order so an already-authorized old application cannot overtake the new one.
 class InitialPoseTransaction {
 public:
   using Service=d1max_navigation_bt_interfaces::srv::PrepareInitialPose;
@@ -26,6 +29,14 @@ public:
   explicit InitialPoseTransaction(std::string session,std::string frame,std::string map_sha)
     :session_(std::move(session)),frame_(std::move(frame)),map_sha_(std::move(map_sha)) {}
 
+  static std::string admissionBlocker(bool active,const std::string&retirement_fault,
+      bool dependency_fatal,const std::string&dependency_reason) {
+    if(!active)return "navigation_lifecycle_not_active";
+    if(!retirement_fault.empty())return retirement_fault;
+    if(dependency_fatal)return dependency_reason.empty()?"dependency_fatal":dependency_reason;
+    return {};
+  }
+
   Decision request(const Request&r,int64_t now_ns,double monotonic,bool active,
       bool retired,bool physical_required,bool physical_stopped,bool live,
       uint64_t epoch,const std::string&seed) {
@@ -38,15 +49,19 @@ public:
       return denied("initial_pose_operation_invalid");
     if(!std::isfinite(monotonic)||!std::isfinite(now_ns*1e-9)||now_ns<=0)
       return denied("initial_pose_clock_invalid");
-    if(pending_) {
-      if(r.request_id!=pending_->request.request_id)return denied("initial_pose_transaction_busy");
+    if(!active)return denied("navigation_lifecycle_not_active");
+    if(pending_&&r.request_id==pending_->request.request_id) {
       if(!sameIntent(r,pending_->request))return denied("initial_pose_request_binding_conflict");
       if(r.operation==Request::ABORT) {
-        if(pending_->authorized)return denied("initial_pose_application_outcome_unknown");
+        if(pending_->authorized)return denied(pending_->applied?
+          "initial_pose_already_applied_requires_new_intent":"initial_pose_application_outcome_unknown");
         remember(r.request_id,"initial_pose_request_aborted");pending_.reset();
         return {true,false,false,false,false,"initial_pose_request_aborted"};
       }
       if(pending_->failed)return denied(pending_->reason);
+      // A late old SDK admission can create a stop obligation after PREPARE.
+      // Neither polling nor replacing the draft may forget that obligation.
+      pending_->physical_required|=physical_required;
       pending_->ready=retired&&(!pending_->physical_required||physical_stopped);
       if(r.operation==Request::COMMIT) {
         if(!pending_->ready)return denied("initial_pose_retirement_pending");
@@ -62,26 +77,32 @@ public:
     }
     for(const auto&old:history_)if(old.first==r.request_id)return denied(old.second);
     if(r.operation!=Request::PREPARE)return denied("initial_pose_request_not_prepared");
-    if(!active)return denied("navigation_lifecycle_not_active");
-    if(history_.size()>=128)return denied("initial_pose_request_capacity_requires_new_session");
     const auto problem=validatePose(r.body_pose,now_ns,frame_);
     if(!problem.empty())return denied(problem);
-    Pending p;p.request=r;p.started=monotonic;p.physical_required=physical_required;
+    const auto source=ns(r.body_pose.header.stamp);
+    if(source<=intent_highwater_ns_)return denied("initial_pose_intent_source_not_new");
+    // Validate the complete draft BEFORE changing the prior transaction. Its
+    // authorized/applied/unknown fact survives in the bounded tombstone; only
+    // this new immutable ID/source can subsequently COMMIT or confirm ready.
+    const bool inherited_stop=pending_&&pending_->physical_required;
+    if(pending_)remember(pending_->request.request_id,supersededReason(*pending_));
+    Pending p;p.request=r;p.started=monotonic;p.physical_required=physical_required||inherited_stop;
     p.baseline_epoch=epoch;p.baseline_seed=seed;
-    p.ready=retired&&(!physical_required||physical_stopped);
+    p.ready=retired&&(!p.physical_required||physical_stopped);
     pending_=std::move(p);
-    return {true,pending_->ready,false,physical_required&&physical_stopped&&live,true,
+    intent_highwater_ns_=source;
+    return {true,pending_->ready,false,pending_->physical_required&&physical_stopped&&live,true,
       pending_->ready?"initial_pose_retired_ready_to_apply":"initial_pose_retirement_pending"};
   }
 
   bool outcome(const Outcome&o,int64_t now_ns,double monotonic) {
     expire(monotonic);
-    if(!pending_||pending_->failed||!pending_->authorized||o.schema_version!=1||
+    if(!pending_||!pending_->authorized||o.schema_version!=1||
         o.session_id!=session_||o.request_id!=pending_->request.request_id||
         o.intent_source_stamp!=pending_->request.body_pose.header.stamp||
         o.source_stamp.sec<0||o.source_stamp.nanosec>=1000000000u||
         ns(o.source_stamp)<pending_->authorized_ns||
-        !fresh(ns(o.source_stamp),now_ns,.6)||o.map_version_id.empty())return false;
+        now_ns<=0||ns(o.source_stamp)>now_ns+50000000LL||o.map_version_id.empty())return false;
     if(pending_->applied) {
       return o.accepted&&o.applied&&o.localization_epoch==pending_->applied_epoch&&
         o.localization_seed_id==pending_->applied_seed&&o.map_version_id==pending_->map_version;
@@ -104,7 +125,8 @@ public:
   bool readyIdentity(uint64_t epoch,const std::string&seed,const std::string&map_version,
       int64_t source_ns,int64_t now_ns,double monotonic,bool ready) {
     expire(monotonic);
-    if(!pending_||!pending_->applied||pending_->failed)return false;
+    if(!pending_||!pending_->applied||
+       (pending_->failed&&pending_->reason!="initial_pose_matching_outcome_or_readiness_timeout_requires_review"))return false;
     if(!ready||
         epoch!=pending_->applied_epoch||seed!=pending_->applied_seed||map_version!=pending_->map_version||
         source_ns<pending_->applied_ns||!fresh(source_ns,now_ns,.4)) {
@@ -179,9 +201,17 @@ private:
     return a.session_id==b.session_id&&a.request_id==b.request_id&&a.source_map_sha256==b.source_map_sha256&&a.body_pose==b.body_pose;
   }
   static Decision denied(const std::string&reason){Decision d;d.reason=reason;return d;}
-  void remember(const std::string&id,const std::string&reason){history_.emplace_back(id,reason);}
+  static std::string supersededReason(const Pending&p) {
+    const auto fact=p.applied?"applied_waiting_readiness":p.authorized?"authorized_application_unknown":"prepared_unapplied";
+    return std::string("initial_pose_superseded:")+fact+(p.reason.empty()?"":":"+p.reason);
+  }
+  void remember(const std::string&id,const std::string&reason){
+    if(history_.size()==128)history_.erase(history_.begin());
+    history_.emplace_back(id,reason);
+  }
   std::string session_,frame_,map_sha_;
   std::optional<Pending>pending_;
+  int64_t intent_highwater_ns_=0;
   std::vector<std::pair<std::string,std::string>>history_;
 };
 } // namespace d1max_navigation_bt

@@ -81,6 +81,81 @@ def test_change_during_build_is_rejected(tmp_path, target):
         pipeline.verify_processing_unchanged(provenance)
 
 
+def stair_processing_fixture(tmp_path):
+    config, record, manifest = processing_fixture(tmp_path)
+    record.update(processing_schema='d1max.crossfloor_planning/v1',
+                  geometry_operation='independent_floor_conditioning_visibility_filter_and_measured_return_restore',
+                  frame_id='d1max_multifloor_planning')
+    config['frame_id'] = record['frame_id']
+    baseline, mapping = tmp_path/'original_planning.pcd', tmp_path/'stair_mapping.npz'
+    baseline.write_bytes(b'previous planning map, not the localization cloud')
+    mapping.write_bytes(b'hash-only provenance fixture, geometry validated by the bridge')
+    record['stair_regularization'] = dict(schema='d1max.stair_regularization.v1',
+        source_sha256=record['source_sha256'], output_map_file=record['output_file'],
+        output_map_sha256=record['output_sha256'], input_map_file=baseline.name,
+        input_map_sha256=pipeline.sha256(baseline), mapping_file=mapping.name,
+        mapping_sha256=pipeline.sha256(mapping))
+    manifest.write_text(json.dumps(record))
+    return config, record, manifest, baseline, mapping
+
+
+def test_stair_processing_is_bound_to_original_and_both_planning_maps(tmp_path):
+    config, record, _, baseline, mapping = stair_processing_fixture(tmp_path)
+    result = pipeline.source_processing_provenance(config)
+    assert result['stair_regularization_schema'] == 'd1max.stair_regularization.v1'
+    assert result['stair_mapping_sha256'] == pipeline.sha256(mapping)
+    assert result['processing_dependency_hashes'] == {
+        str(baseline): pipeline.sha256(baseline), str(mapping): pipeline.sha256(mapping),
+        config['source_pcd']: record['output_sha256']}
+    pipeline.verify_processing_unchanged(result)
+    mapping.write_bytes(b'changed during tomography')
+    with pytest.raises(RuntimeError, match='Stair processing evidence changed'):
+        pipeline.verify_processing_unchanged(result)
+
+
+def test_structured_cost_is_explicit_and_hash_bound(tmp_path):
+    config, record, manifest, _, _ = stair_processing_fixture(tmp_path)
+    model, evidence = tmp_path/'structure.json', tmp_path/'evidence.npz'
+    model.write_text('{}')
+    evidence.write_bytes(b'provenance-only fixture; geometry checked by the model loader')
+    record['stair_structured_support'] = dict(model_file=model.name, evidence_file=evidence.name,
+        model_sha256=pipeline.sha256(model), evidence_sha256=pipeline.sha256(evidence))
+    record['stair_structured_cost'] = dict(schema='d1max.stair_structured_cost/v1',
+        policy='source_supported_terrain_seeds_with_retained_entities',
+        model_sha256=pipeline.sha256(model), evidence_sha256=pipeline.sha256(evidence))
+    manifest.write_text(json.dumps(record))
+    provenance = pipeline.source_processing_provenance(config)
+    assert provenance['stair_structured_cost'] == record['stair_structured_cost']
+    assert provenance['processing_dependency_hashes'][str(model)] == pipeline.sha256(model)
+    evidence.write_bytes(b'changed')
+    with pytest.raises(RuntimeError, match='Stair processing evidence changed'):
+        pipeline.verify_processing_unchanged(provenance)
+    with pytest.raises(ValueError, match='Structured stair artifact hash mismatch'):
+        pipeline.source_processing_provenance(config)
+
+
+def test_no_explicit_structured_prior_returns_identical_payload(tmp_path):
+    payload = {'data': np.ones((5, 1, 3, 3), dtype=np.float32)}
+    for processing in (None, {'stair_regularization_schema': 'd1max.stair_regularization.v1'}):
+        actual, diagnostics = pipeline.apply_structured_prior(payload, {}, processing, tmp_path, None)
+        assert actual is payload and diagnostics is None
+    assert not list(tmp_path.iterdir())
+
+
+@pytest.mark.parametrize('field,value', [
+    ('schema', 'unrelated'), ('source_sha256', '0'*64),
+    ('output_map_sha256', '0'*64), ('mapping_sha256', '0'*64),
+    ('input_map_sha256', '0'*64), ('mapping_file', None),
+    ('output_map_file', 'original_planning.pcd'),
+])
+def test_stair_provenance_mismatch_is_not_ignored(tmp_path, field, value):
+    config, record, manifest, _, _ = stair_processing_fixture(tmp_path)
+    record['stair_regularization'][field] = value
+    manifest.write_text(json.dumps(record))
+    with pytest.raises(ValueError):
+        pipeline.source_processing_provenance(config)
+
+
 def test_conditioned_build_labels_derived_surfaces_without_object_payload(tmp_path):
     import open3d as o3d
     config, record, processing_manifest = processing_fixture(tmp_path)

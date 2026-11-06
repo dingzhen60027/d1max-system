@@ -28,7 +28,7 @@ for package in ('d1max_pct_scan', 'd1max_localization'):
     sys.path.insert(0, str(WS/'src'/package))
 from d1max_localization.math_utils import Pose3, compose, normalize_quaternion, yaw_from_quaternion
 from d1max_pct_scan.ray_projection import (MapContext, RayProjectorCore, checked_pose,
-    decode_rays, AwaitingCoverage, ProjectionError, FIELDS)
+    decode_rays, AwaitingCoverage, ProjectionError)
 from d1max_pct_scan.live_scan_contract import localization_context
 
 
@@ -230,9 +230,11 @@ def run(args):
                                (message.rays.header.stamp, projected.start_ns)):
                 target.sec, target.nanosec = divmod(int(ns), 1000000000)
             cloud = message.rays; cloud.header.frame_id = map_frame
-            cloud.width, cloud.height, cloud.point_step = len(projected.points), 1, 64
-            cloud.row_step = cloud.width*64; cloud.is_dense = True
-            cloud.fields = [PointField(name=n, offset=o, datatype=t, count=c) for n,o,t,c in FIELDS]
+            cloud.width, cloud.height = len(projected.points), 1
+            cloud.point_step = projected.points.dtype.itemsize
+            cloud.row_step = cloud.width*cloud.point_step; cloud.is_dense = True
+            cloud.fields = [PointField(name=n, offset=o, datatype=t, count=c)
+                            for n,o,t,c in projected.wire_fields]
             payload = array('B'); payload.frombytes(memoryview(projected.points).cast('B')); cloud.data = payload
             output.write_bytes(serialize_message(message))
 

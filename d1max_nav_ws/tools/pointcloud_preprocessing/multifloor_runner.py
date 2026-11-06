@@ -12,10 +12,11 @@ import numpy as np
 import yaml
 
 from . import load_config
-from .flat_floor import condition_flat_floor
+from .flat_floor import condition_flat_floor, unify_classified_floor_support
 from .flat_floor_runner import structural_cleanup
 from .pcd_io import read_pcd, write_derived_z, write_subset
 from .runner import sha256
+from . import reviewed_flat_corridor
 
 SCHEMA = 'd1max.multifloor_planning/v1'
 FRAME = 'd1max_multifloor_planning'
@@ -32,7 +33,20 @@ def protected_mask(xyz, regions):
     return mask
 
 
-def condition_levels(xyz, poses, config, defaults):
+def condition_levels(xyz, poses, config, defaults, *, source_sha256=None):
+    review = config.get('reviewed_flat_corridors')
+    if review is not None:
+        reviewed_flat_corridor.validate(review, source_sha256)
+        floor_ids = {floor['id'] for floor in config['floors']}
+        if any(region['floor_id'] not in floor_ids for region in review['regions']):
+            raise ValueError('Reviewed region references an unknown floor')
+        for volume in config['protected_regions']:
+            low, high = volume['min'], volume['max']
+            corners = np.array([[low[0], low[1]], [low[0], high[1]],
+                                [high[0], low[1]], [high[0], high[1]]])
+            if not any(reviewed_flat_corridor.polygon_mask(corners, polygon).all()
+                       for polygon in review['stair_exclusion_xy']):
+                raise ValueError('Reviewed stair exclusions must cover protected volumes')
     original = np.asarray(xyz, dtype=float)
     result = original.copy()
     keep = np.ones(len(original), dtype=bool)
@@ -58,7 +72,17 @@ def condition_levels(xyz, poses, config, defaults):
         local = condition_flat_floor(original[ids], selected_poses, parameters)
         structural = {**defaults['obstacle_cleanup'], **config.get('obstacle_cleanup_overrides', {}),
                       'floor_reference_z_m': float(floor['reference_z_m'])}
-        structural_cleanup(local, structural)
+        structural_indices, structural_stage = structural_cleanup(local, structural)
+        structure_protected = np.zeros(len(ids), dtype=bool)
+        structure_protected[structural_indices] = (structural_stage['wall_protected_mask']
+                                                 | structural_stage['low_object_protected_mask'])
+        unify_classified_floor_support(local, structure_protected=structure_protected,
+                                       original_xyz=original[ids])
+        if review is not None:
+            wall_protected = np.zeros(len(ids), dtype=bool)
+            wall_protected[structural_indices] = structural_stage['wall_protected_mask']
+            reviewed_flat_corridor.apply(local, original[ids], floor_id=floor['id'],
+                                         review=review, wall_protected=wall_protected)
         shift = local['xyz'][:, 2] - original[ids, 2]
         if abs(shift).max(initial=0) > config['maximum_z_shift_m']:
             raise ValueError(f"{floor['id']}: Z correction exceeds configured bound")
@@ -70,6 +94,11 @@ def condition_levels(xyz, poses, config, defaults):
         evidence[f'{floor["id"]}_source_indices'] = ids
         evidence[f'{floor["id"]}_floor_z'] = local['floor_z']
         evidence[f'{floor["id"]}_support'] = local['floor_support_mask']
+        evidence[f'{floor["id"]}_snapped_support'] = local['floor_snap_mask']
+        evidence[f'{floor["id"]}_structure_protected'] = structure_protected
+        evidence[f'{floor["id"]}_metric_support_added'] = local['metric_support_added_mask']
+        if review is not None:
+            evidence[f'{floor["id"]}_reviewed_floor_prior'] = local['reviewed_floor_prior_mask']
         evidence[f'{floor["id"]}_anchors_xy'] = local['anchors']['xy']
         evidence[f'{floor["id"]}_anchors_z'] = local['anchors']['z']
     if not np.array_equal(result[protected], original[protected]) or not keep[protected].all():
@@ -97,7 +126,7 @@ def run(config_path):
         raise ValueError('Expected KITTI 3x4 poses')
     print(json.dumps({'stage': 'independent_floor_conditioning', 'points': len(cloud.xyz)}), flush=True)
     xyz, keep, owner, protected, stats, evidence = condition_levels(
-        cloud.xyz, matrices[:, [3, 7, 11]], cfg, defaults)
+        cloud.xyz, matrices[:, [3, 7, 11]], cfg, defaults, source_sha256=hashes[str(source)])
     if (~keep).mean() > cfg['maximum_removed_fraction']:
         raise ValueError('Removal fraction exceeds bound')
     out = Path(cfg['output_directory'])

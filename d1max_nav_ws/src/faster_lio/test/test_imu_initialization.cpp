@@ -142,3 +142,35 @@ TEST(BoundedImuIntegration, UnixEpochPrecisionUsesSameClockAsRobustSync) {
 TEST(BoundedImuIntegration, OrdinaryMappingDoesNotEnableNewBranch) {
   faster_lio::ImuProcess p;EXPECT_FALSE(p.bounded_scan_endpoints);
 }
+
+TEST(BoundedImuIntegration, MissingIntervalCVThenFreshScanDoesNotResetOrReintegrateOldImu) {
+  faster_lio::ImuProcess p;Filter f;initialize_bounded(p,f);
+  auto initial=f.get_x();initial.vel=Eigen::Vector3d(.3,0.,0.);f.change_x(initial);
+  auto restart=endpoint(10.359994,.1);const auto stamp=restart->header.stamp;
+  ASSERT_TRUE(p.ResumeAfterMissingImu(restart,f,{}));
+  EXPECT_TRUE(p.Initialized());EXPECT_EQ(restart->header.stamp,stamp);
+  EXPECT_NEAR(f.get_x().pos.x(),.1079982,1e-10);
+  EXPECT_NEAR(yaw(f),0.,1e-12); // New endpoint gyro not integrated over old gap.
+  PointCloudType::Ptr output(new PointCloudType);
+  p.Process(scan(10.36,10.38,{{10.359994,.1},{10.385,.1}}),f,output);
+  EXPECT_EQ(output->size(),5u);EXPECT_NEAR(yaw(f),.1*(10.38-10.359994),1e-8);
+  EXPECT_NEAR(f.get_x().pos.x(),.3*.38,1e-7);
+  const auto before=f.get_x();
+  EXPECT_FALSE(p.ResumeAfterMissingImu(endpoint(11.1,.1),f,{}));
+  EXPECT_EQ(f.get_x().pos,before.pos);
+}
+
+TEST(BoundedImuIntegration, MissingIntervalUnixEpochUsesRealRestartNotClockRestamping) {
+  const double t=1791970115.;
+  faster_lio::ImuProcess p;Filter f;initialize_bounded(p,f,t);
+  auto initial=f.get_x();initial.vel=Eigen::Vector3d(.3,0.,0.);f.change_x(initial);
+  auto restart=endpoint(t+.359994,.1);const auto original_stamp=restart->header.stamp;
+  ASSERT_TRUE(p.ResumeAfterMissingImu(restart,f,{}));
+  EXPECT_EQ(restart->header.stamp,original_stamp);
+  EXPECT_NEAR(f.get_x().pos.x(),.3*((t+.359994)-t),2e-7);
+  EXPECT_NEAR(yaw(f),0.,1e-12);
+  PointCloudType::Ptr output(new PointCloudType);
+  p.Process(scan(t+.36,t+.38,{{t+.359994,.1},{t+.385,.1}}),f,output);
+  EXPECT_EQ(output->size(),5u);
+  EXPECT_NEAR(yaw(f),.1*((t+.38)-(t+.359994)),2e-7);
+}

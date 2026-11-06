@@ -6,7 +6,8 @@ import pytest
 import yaml
 
 from d1max_pct_planner.crossfloor_route import (
-    CrossfloorError, _masked_tomogram, main, plan_crossfloor, run_from_config, validate_config,
+    CrossfloorError, STAIR_REFINEMENT_PROOF, _masked_tomogram, _native_route,
+    main, plan_crossfloor, run_from_config, validate_config, _stationary_floor_leg,
 )
 from d1max_pct_planner.tomogram_map import TomogramMap
 
@@ -77,6 +78,48 @@ def route_factory(route_paths):
     return make
 
 
+def install_joint_refinement(monkeypatch, transform=None):
+    """Replace only the optional optimizer; production map checks still run."""
+    from types import SimpleNamespace
+    import sys
+    calls = []
+
+    def refine(grid, values, layers, *, landing_index, **options):
+        calls.append((np.array(values), np.array(layers), landing_index))
+        points = np.asarray(values).copy()
+        requested = points[landing_index].copy()
+        points[landing_index, 0] += .02  # same observed cell on fixture platform
+        # An inserted sample changes all later global indices.
+        points = np.insert(points, landing_index+1,
+                           (points[landing_index]+points[landing_index+1])/2., axis=0)
+        ids = np.insert(np.asarray(layers), landing_index+1, layers[landing_index])
+        result = dict(applied=True, reason='fixture_joint_rounding', path=points.tolist(),
+            layer_ids=ids.tolist(), landing_index=landing_index,
+            requested_landing_xyz=requested.tolist(),
+            effective_landing_xyz=points[landing_index].tolist(), landing_displacement_m=.02,
+            curve_validation=STAIR_REFINEMENT_PROOF, curve_partition_points=len(points),
+            physical_safety_certified=False, span_records=[],
+            stair_profile=dict(direction='up', height_change_m=3.))
+        return transform(result) if transform is not None else result
+
+    monkeypatch.setitem(sys.modules, 'd1max_pct_planner.stair_refinement',
+                        SimpleNamespace(refine_stair_route=refine))
+    return calls
+
+
+def proven_route_factory(route_paths):
+    factory = route_factory(route_paths)
+    def make(*args):
+        wrapped = factory(*args)
+        class Proven:
+            def plan(self, *values):
+                return {**wrapped.plan(*values),
+                    'curve_validation': 'quintic_cell_boundary_roots_and_interval_interiors',
+                    'quintic_segments': 2, 'curve_partition_points': 20}
+        return Proven()
+    return make
+
+
 def test_stair_route_is_segmented_masked_and_checked_against_original_map():
     original = TomogramMap(scene())
     result = plan_crossfloor(config(), original, route_factory(paths()))
@@ -90,6 +133,131 @@ def test_stair_route_is_segmented_masked_and_checked_against_original_map():
     assert all(item['leg'].startswith('stair_') for item in result['layer_transitions'])
     assert result['whole_route_check']['checked_cells'] > 0
     assert len(result['edge_legs']) == len(result['path_xyz']) - 1
+
+
+@pytest.mark.parametrize('at_entry,at_exit', [(True, False), (False, True), (True, True)])
+def test_exact_floor_portals_do_not_query_native_or_manufacture_edges(at_entry, at_exit):
+    raw = config()
+    raw['planning']['path_refinement'] = 'none'
+    if at_entry:
+        raw['anchors']['start'] = raw['anchors']['entry'].copy()
+    if at_exit:
+        raw['anchors']['goal'] = raw['anchors']['exit'].copy()
+    calls = []
+    factory = route_factory(paths())
+    def native(grid, leg, settings):
+        delegate = factory(grid, leg, settings)
+        class Native:
+            def plan(self, start, goal, first, last):
+                assert not (first == last and np.array_equal(start, goal)), 'zero native query'
+                calls.append(leg)
+                return delegate.plan(start, goal, first, last)
+        return Native()
+    result = plan_crossfloor(raw, TomogramMap(scene()), native)
+    expected = (['lower_floor'] if not at_entry else []) + ['stair_lower', 'stair_upper']
+    expected += ['upper_floor'] if not at_exit else []
+    assert calls == expected
+    assert [segment['name'] for segment in result['segments']] == expected
+    assert result['path_xyz'][0] == raw['anchors']['start']['xyz']
+    assert result['path_xyz'][-1] == raw['anchors']['goal']['xyz']
+    points = np.asarray(result['path_xyz'])
+    assert np.all(np.linalg.norm(np.diff(points, axis=0), axis=1) > 0)
+    assert len(result['edge_legs']) == len(points)-1
+    assert result['length_m'] == pytest.approx(np.linalg.norm(np.diff(points, axis=0), axis=1).sum())
+    cursor = 0
+    for segment in result['segments']:
+        assert segment['first_index'] == cursor < segment['last_index']
+        cursor = segment['last_index']
+    assert cursor == len(points)-1
+
+
+def test_coincident_floor_portal_still_requires_observed_original_support():
+    raw = config()
+    raw['anchors']['start'] = raw['anchors']['entry'].copy()
+    payload = scene()
+    payload['data'][0, 0, 5, 1] = 50.
+    def forbidden(*args):
+        raise AssertionError('invalid portal must be rejected before native queries')
+    with pytest.raises(CrossfloorError, match='entry|start') as caught:
+        plan_crossfloor(raw, TomogramMap(payload), forbidden)
+    assert caught.value.code == 'invalid_anchor'
+
+
+@pytest.mark.parametrize('name,layer,delta', [
+    ('stair_lower', 0, 0.), ('lower_floor', 1, 0.), ('lower_floor', 0, 1e-8),
+])
+def test_stationary_floor_exception_is_exact_not_a_new_nearby_tolerance(name, layer, delta):
+    begin = dict(xyz=np.array([1., 2., 0.]), layer_id=0)
+    end = dict(xyz=np.array([1.+delta, 2., 0.]), layer_id=layer)
+    assert not _stationary_floor_leg(name, begin, end)
+
+
+def test_joint_stair_refinement_rebuilds_all_indices_and_retains_requested_portal(monkeypatch):
+    calls = install_joint_refinement(monkeypatch)
+    result = plan_crossfloor(config(), TomogramMap(scene()), proven_route_factory(paths()))
+    assert len(calls) == 1 and len(calls[0][0]) == 31
+    assert result['stair_refinement']['applied'] is True
+    portal = result['anchors']['landing']
+    assert portal['requested_xyz'] == xyz(21)
+    assert portal['xyz'] != xyz(21)
+    assert portal['displacement_m'] == pytest.approx(.02)
+    n = len(result['path_xyz'])
+    assert n == 40 and len(result['edge_legs']) == n-1
+    cursor = 0
+    for segment in result['segments']:
+        a, b = segment['first_index'], segment['last_index']
+        assert a == cursor
+        assert result['path_xyz'][a] == result['anchors'][segment['from']]['xyz']
+        assert result['path_xyz'][b] == result['anchors'][segment['to']]['xyz']
+        assert result['edge_legs'][a:b] == [segment['name']]*(b-a)
+        if segment['name'].startswith('stair_'):
+            assert segment['curve_validation'] == STAIR_REFINEMENT_PROOF
+            assert segment['quintic_segments'] == 0  # never relabel native proof
+            assert segment['native_curve_evidence']['quintic_segments'] == 2
+            assert segment['checks']['original']['checked_cells'] > 0
+        cursor = b
+    assert cursor == n-1
+    for transition in result['layer_transitions']:
+        i = transition['edge']
+        assert result['layer_ids'][i:i+2] == [transition['from_layer'], transition['to_layer']]
+        assert result['edge_legs'][i] == transition['leg']
+    assert result['source_layer_ids'] == [0 if value == 0 else 6 for value in result['layer_ids']]
+
+
+@pytest.mark.parametrize('corruption', ['wall', 'wrong_landing_layer', 'old_native_proof', 'moved_entry',
+                                       'wrong_landing_metadata', 'wrong_partition_count'])
+def test_rejected_joint_candidate_preserves_validated_native_route(monkeypatch, corruption):
+    def corrupt(result):
+        if corruption == 'wall':
+            result['path'][3][1] = 2.
+        elif corruption == 'wrong_landing_layer':
+            result['layer_ids'][result['landing_index']] = 0
+        elif corruption == 'old_native_proof':
+            result['curve_validation'] = 'quintic_cell_boundary_roots_and_interval_interiors'
+        elif corruption == 'moved_entry':
+            result['path'][0][0] += .01
+        elif corruption == 'wrong_landing_metadata':
+            result['effective_landing_xyz'][0] += 1.
+        else:
+            result['curve_partition_points'] = 0
+        return result
+    install_joint_refinement(monkeypatch, corrupt)
+    result = plan_crossfloor(config(), TomogramMap(scene()), proven_route_factory(paths()))
+    assert result['stair_refinement']['applied'] is False
+    assert result['stair_refinement']['reason'] == 'refinement_rejected_keep_native'
+    assert result['path_xyz'] == list(map(xyz, range(1, 40)))
+    assert result['anchors']['landing'] == config()['anchors']['landing']
+    assert all(segment['curve_validation'] == 'quintic_cell_boundary_roots_and_interval_interiors'
+               for segment in result['segments'])
+
+
+def test_disabled_refinement_never_calls_optional_optimizer(monkeypatch):
+    calls = install_joint_refinement(monkeypatch)
+    raw = config()
+    raw['planning']['path_refinement'] = 'none'
+    result = plan_crossfloor(raw, TomogramMap(scene()), route_factory(paths()))
+    assert calls == []
+    assert result['stair_refinement'] == dict(applied=False, reason='path_refinement_disabled')
 
 
 @pytest.mark.parametrize('leg', ['lower_floor', 'stair_lower', 'stair_upper', 'upper_floor'])
@@ -120,6 +288,17 @@ def test_owned_mask_buffer_matches_previous_geometry_and_leaves_source_untouched
     assert actual.valid is actual.allowed and actual.allowed is actual.traversable
     np.testing.assert_array_equal(actual.source_layers, original.source_layers)
     np.testing.assert_array_equal(actual.center, original.center)
+    assert actual.provenance == original.provenance
+    assert actual.provenance is not original.provenance
+
+
+@pytest.mark.parametrize('leg', ['stair_lower', 'stair_upper'])
+def test_stair_resources_do_not_enable_corridor_quality_tradeoff(monkeypatch, leg):
+    from d1max_pct_planner import tomogram_route
+    calls = []
+    monkeypatch.setattr(tomogram_route, 'TomogramRoute', lambda *args, **kwargs: calls.append(kwargs))
+    _native_route(TomogramMap(scene()), leg, validate_config(config()))
+    assert calls[0]['path_refinement'] == 'none'
 
 
 def test_mask_rejects_unknown_resource_instead_of_treating_it_as_stairs():

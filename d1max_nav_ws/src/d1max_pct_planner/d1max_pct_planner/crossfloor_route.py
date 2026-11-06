@@ -22,6 +22,7 @@ import yaml
 from .tomogram_map import TomogramMap
 
 
+STAIR_REFINEMENT_PROOF = 'slice_polynomial_cell_boundaries_and_original_layer_connectors'
 ANCHORS = ('start', 'entry', 'landing', 'exit', 'goal')
 LEGS = (
     ('lower_floor', 'start', 'entry'),
@@ -63,7 +64,7 @@ def validate_config(config):
         raise CrossfloorError('invalid_config', 'Configuration must be a YAML mapping')
     required = {'schema_version', 'tomogram_path', 'source_pcd', 'vendor_root',
                 'output_directory', 'frame_id', 'anchors', 'stair_roi', 'floor_z_ranges'}
-    allowed = required | {'planning', 'limits', 'unknown_ceiling_policy'}
+    allowed = required | {'planning', 'limits', 'unknown_ceiling_policy', 'compiled_stair_connector'}
     if required - set(config) or set(config) - allowed:
         raise CrossfloorError('invalid_config', 'Missing or unknown configuration keys',
                               missing=sorted(required - set(config)), unknown=sorted(set(config) - allowed))
@@ -134,6 +135,9 @@ def validate_config(config):
     policy = config.get('unknown_ceiling_policy', 'allow_unobserved')
     if policy not in ('allow_unobserved', 'reject'):
         raise CrossfloorError('invalid_config', 'unknown_ceiling_policy must be explicit')
+    if 'compiled_stair_connector' in config:
+        from .compiled_stair_connector import validate_reference_config
+        validate_reference_config(config['compiled_stair_connector'])
     return {**config, 'anchors': normalized_anchors,
             'stair_roi': (roi_min, roi_max), 'floor_z_ranges': floor_ranges,
             'planning': planning, 'limits': limits, 'unknown_ceiling_policy': policy}
@@ -150,7 +154,9 @@ def _masked_tomogram(original, leg, config):
         raise ValueError('Unknown fixed map resource')
     # TomogramMap takes its own data copy. Mutate that owned buffer below,
     # instead of making a second, full-size temporary copy before construction.
-    payload = {'data': original.data, 'resolution': original.resolution,
+    # Keep the source geometry kind while restricting admissible cells. This
+    # is still a masked view of that map, not a new/source-identity geometry.
+    payload = {**original.provenance, 'data': original.data, 'resolution': original.resolution,
                'center': original.center.copy(), 'slice_h0': original.slice_h0,
                'slice_dh': original.slice_dh,
                'selected_source_layers': original.source_layers.copy(),
@@ -266,10 +272,196 @@ def _check_stair_profile(points, edge_legs, config):
             'max_edge_grade': float(np.max(np.abs(diff[:, 2]) / np.maximum(horizontal, 1e-6)))}
 
 
+def _stationary_floor_leg(name, begin, end):
+    """A selected portal is not a native motion request or an extra edge."""
+    return (name in ('lower_floor', 'upper_floor')
+            and begin['layer_id'] == end['layer_id']
+            and np.array_equal(begin['xyz'], end['xyz']))
+
+
+def _assemble_legs(legs):
+    """Build all indices from the selected geometry, never reuse native indices."""
+    whole_points, whole_layers, edge_legs, records = [], [], [], []
+    for name, first, last in LEGS:
+        points, layers, metadata = legs[name]
+        if whole_points:
+            if not np.array_equal(points[0], whole_points[-1]) or int(layers[0]) != whole_layers[-1]:
+                raise CrossfloorError('portal_mismatch', f'{name} does not connect to previous leg')
+            first_index = len(whole_points) - 1
+            whole_points.extend(points[1:])
+            whole_layers.extend(layers[1:].tolist())
+        else:
+            first_index = 0
+            whole_points.extend(points)
+            whole_layers.extend(layers.tolist())
+        if metadata.get('stationary_portal') is True:
+            if name not in ('lower_floor', 'upper_floor') or len(points) != 1:
+                raise CrossfloorError('invalid_stationary_portal', name)
+            # Keep the shared endpoint, but no duplicate point, zero-length
+            # execution segment or invented displacement for the consumer.
+            continue
+        edge_legs.extend([name] * (len(points) - 1))
+        records.append({**metadata, 'name': name, 'from': first, 'to': last,
+            'first_index': first_index, 'last_index': len(whole_points) - 1,
+            'length_m': float(np.linalg.norm(np.diff(points, axis=0), axis=1).sum()),
+            'layer_ids': sorted(set(layers.tolist()))})
+    return np.asarray(whole_points), np.asarray(whole_layers, dtype=int), edge_legs, records
+
+
+def _check_joined(points, layers, edge_legs, tomogram, settings):
+    """The same original-map and height ownership checks before/after refinement."""
+    try:
+        whole_check = tomogram.validate_path(points, layers,
+            max_ground_step_m=settings['limits']['max_ground_step_m'])
+    except ValueError as exc:
+        raise CrossfloorError('joined_geometry_rejected', 'Joined PCT path failed original-map validation',
+                              cause_code=getattr(exc, 'code', type(exc).__name__), cause=str(exc)) from exc
+    transitions = []
+    for index in np.flatnonzero(np.diff(layers)):
+        leg = edge_legs[index]
+        if not leg.startswith('stair_'):
+            if abs(points[index + 1, 2] - points[index, 2]) > 0.05:
+                raise CrossfloorError('transition_outside_stair', 'A height-changing layer transition is outside the stair',
+                                      edge=int(index), leg=leg)
+        elif not np.all(_inside_roi(points[index:index + 2], settings['stair_roi'])):
+            raise CrossfloorError('transition_outside_stair', 'A stair layer transition is outside its ROI',
+                                  edge=int(index))
+        transitions.append({'edge': int(index), 'leg': leg,
+                            'from_layer': int(layers[index]), 'to_layer': int(layers[index + 1]),
+                            'xyz': points[index:index + 2].mean(axis=0).tolist()})
+    if not any(event['leg'].startswith('stair_') for event in transitions):
+        raise CrossfloorError('no_stair_gateway', 'Route contains no native PCT layer transition in the stair ROI')
+    return whole_check, transitions, _check_stair_profile(points, edge_legs, settings)
+
+
+def checked_landing_adjustment(tomogram, masked, settings, effective):
+    """A moved semantic portal remains on the same measured platform.
+
+    This changes neither a user goal nor the map. The configured landing remains
+    recorded separately. A short same-layer connector proves the new portal did
+    not jump across a slab, a wall or an unobserved gap during XY corner rounding.
+    The helper is also used when restoring a saved refined route.
+    """
+    requested = settings['anchors']['landing']
+    point = _finite_vector(effective['xyz'], 3, 'effective_landing.xyz')
+    layer = effective['layer_id']
+    if isinstance(layer, bool) or not isinstance(layer, (int, np.integer)):
+        raise ValueError('effective_landing_layer_invalid')
+    displacement = float(np.linalg.norm(point - requested['xyz']))
+    if (int(layer) != requested['layer_id']
+            or abs(float(point[2] - requested['xyz'][2])) > settings['limits']['max_selection_height_error_m']
+            or displacement > settings['planning']['refinement_corner_cut_m'] + 1e-6
+            or not _inside_roi(point, settings['stair_roi'])):
+        raise ValueError('effective_landing_left_requested_platform')
+    connector = np.asarray([requested['xyz'], point])
+    connector_layers = [int(layer), int(layer)]
+    checks = {}
+    for name, grid in (('masked', masked), ('original', tomogram)):
+        grid.validate_endpoint(point, int(layer), settings['limits']['max_selection_height_error_m'])
+        checks[name] = grid.validate_path(connector, connector_layers,
+            max_ground_step_m=settings['limits']['max_ground_step_m'])
+    return dict(requested_xyz=requested['xyz'].tolist(),
+        requested_layer_id=requested['layer_id'], effective_xyz=point.tolist(),
+        effective_layer_id=int(layer), displacement_m=displacement,
+        policy='same_observed_layer_platform_connector', checks=checks)
+
+
+def _refine_joined_stairs(legs, tomogram, masked, settings, compiled_connector=None):
+    """Optional geometry refinement after validating and caching native results.
+
+    The original two curves stay immutable in the fixed-leg cache. Any rejected
+    refinement keeps their independently validated route and literal portal.
+    """
+    if compiled_connector is not None:
+        # Both prepared legs must literally be this current-map verified
+        # offline connector. A copied proof string never skips optimization or
+        # geometry checks for a different native/consumer-supplied polyline.
+        from copy import deepcopy
+        from .compiled_stair_connector import PROOF
+        for name in ('stair_lower', 'stair_upper'):
+            expected = compiled_connector['legs'][name]
+            points, layers, metadata = legs[name]
+            if (metadata.get('curve_validation') != PROOF
+                    or metadata.get('compiled_stair_connector') != expected['compiled_stair_connector']
+                    or not np.array_equal(points, expected['path'])
+                    or not np.array_equal(layers, expected['layer_ids'])):
+                raise CrossfloorError('compiled_stair_connector_geometry_mismatch', name)
+        return legs, settings, deepcopy(compiled_connector['diagnostics']), None
+    if settings['planning']['path_refinement'] == 'none':
+        return legs, settings, dict(applied=False, reason='path_refinement_disabled'), None
+    lower, upper = legs['stair_lower'], legs['stair_upper']
+    points = np.concatenate((lower[0], upper[0][1:]))
+    layers = np.concatenate((lower[1], upper[1][1:]))
+    landing_index = len(lower[0]) - 1
+    try:
+        from .stair_refinement import refine_stair_route
+        refined = refine_stair_route(masked, points, layers, landing_index=landing_index,
+            stair_roi=settings['stair_roi'], limits=settings['limits'],
+            corner_cut_m=settings['planning']['refinement_corner_cut_m'])
+        if not isinstance(refined, dict) or type(refined.get('applied')) is not bool:
+            raise ValueError('stair_refinement_result_invalid')
+        # Geometry stays only once in the final result. Diagnostics describe
+        # the selected candidate, never an alternative execution trajectory.
+        diagnostics = {key: value for key, value in refined.items()
+                       if key not in ('path', 'layer_ids')}
+        if not refined['applied']:
+            return legs, settings, diagnostics, None
+        candidate = np.asarray(refined['path'], dtype=float)
+        ids = np.asarray(refined['layer_ids'])
+        split = refined['landing_index']
+        if (candidate.ndim != 2 or candidate.shape[1] != 3 or not np.isfinite(candidate).all()
+                or ids.shape != (len(candidate),) or not np.issubdtype(ids.dtype, np.integer)
+                or type(split) is not int or not 0 < split < len(candidate)-1
+                or refined.get('curve_validation') != STAIR_REFINEMENT_PROOF
+                or refined.get('curve_partition_points', 0) < 2):
+            raise ValueError('stair_refinement_geometry_or_proof_invalid')
+        effective = dict(xyz=candidate[split].copy(), layer_id=int(ids[split]))
+        adjustment = checked_landing_adjustment(tomogram, masked, settings, effective)
+        if (not np.array_equal(refined['requested_landing_xyz'], points[landing_index])
+                or not np.array_equal(refined['effective_landing_xyz'], candidate[split])
+                or abs(float(refined['landing_displacement_m'])-adjustment['displacement_m']) > 1e-8):
+            raise ValueError('stair_refinement_landing_metadata_disagrees')
+        adjusted = {**settings, 'anchors': {**settings['anchors'], 'landing': effective}}
+        selected = dict(legs)
+        for name, first, last, selection in (
+                ('stair_lower', 'entry', 'landing', slice(None, split+1)),
+                ('stair_upper', 'landing', 'exit', slice(split, None))):
+            xyz, layer_ids = candidate[selection], ids[selection]
+            xyz, layer_ids, checks = _check_leg(dict(path=xyz, layer_ids=layer_ids),
+                tomogram, masked, name, adjusted['anchors'][first], adjusted['anchors'][last], adjusted)
+            metadata = dict(legs[name][2])
+            metadata['native_curve_evidence'] = {key: metadata.get(key) for key in
+                ('curve_validation', 'quintic_segments', 'curve_partition_points')}
+            metadata.update(checks=checks, curve_validation=STAIR_REFINEMENT_PROOF,
+                quintic_segments=0, curve_partition_points=int(refined['curve_partition_points']),
+                curve_partition_scope='joint_stair_refinement_not_native_quintic',
+                geometry_refinement='joint_layer_owned_stair_refinement',
+                landing_adjustment=adjustment)
+            selected[name] = (xyz, layer_ids, metadata)
+        joined_points, joined_layers, edges, _ = _assemble_legs(selected)
+        joined_check = _check_joined(joined_points, joined_layers, edges, tomogram, adjusted)
+        diagnostics['landing_adjustment'] = adjustment
+        diagnostics['geometry_evidence_direction'] = 'lower_to_upper'
+        diagnostics['output_direction'] = 'lower_to_upper'
+        return selected, adjusted, diagnostics, joined_check
+    except Exception as exc:
+        # An optional optimizer failure must not discard the valid native route.
+        # No unvalidated result or changed portal escapes this boundary.
+        return legs, settings, dict(applied=False, reason='refinement_rejected_keep_native',
+            rejection_type=type(exc).__name__, rejection_code=getattr(exc, 'code', None),
+            rejection_message=str(exc)[:500]), None
+
+
 def plan_crossfloor(config, tomogram, route_factory=None, *, resources=None,
                     fixed_leg_cache=None):
-    """Plan and verify four ordered legs. route_factory is an injectable test seam."""
+    """Plan ordered nonzero legs; route_factory is an injectable test seam."""
     settings = validate_config(config)
+    compiled_connector = (fixed_leg_cache.compiled_bundle()
+                          if fixed_leg_cache is not None and hasattr(fixed_leg_cache, 'compiled_bundle')
+                          else None)
+    if settings.get('compiled_stair_connector') is not None and compiled_connector is None:
+        from .compiled_stair_connector import load_compiled_stair_connector
+        compiled_connector = load_compiled_stair_connector(tomogram, settings)
     anchors, limits = settings['anchors'], settings['limits']
     for name, anchor in anchors.items():
         try:
@@ -293,18 +485,32 @@ def plan_crossfloor(config, tomogram, route_factory=None, *, resources=None,
     if resources is not None and route_factory is not None:
         raise ValueError('Use either owned native resources or an injected route factory')
     route_factory = route_factory or _native_route
-    whole_points, whole_layers, edge_legs, records = [], [], [], []
+    native_legs = {}
+    stair_mask = None
     for name, start_name, end_name in LEGS:
         begin, end = anchors[start_name], anchors[end_name]
         try:
             if resources is None:
                 masked = _masked_tomogram(tomogram, name, settings)
-                route = route_factory(masked, name, settings)
             else:
                 masked, route = resources(name, settings)
+            if _stationary_floor_leg(name, begin, end):
+                # Original support and floor ownership were checked above.
+                # A coincident portal must also be valid in this leg's mask;
+                # it does not need A*'s distinct-cell motion query.
+                masked.validate_endpoint(begin['xyz'], begin['layer_id'],
+                    limits['max_selection_height_error_m'])
+                native_legs[name] = (np.asarray([begin['xyz']]),
+                    np.asarray([begin['layer_id']], dtype=int), dict(stationary_portal=True))
+                continue
+            if resources is None:
+                route = route_factory(masked, name, settings)
             raw = (fixed_leg_cache.get(tomogram, name, begin, end, settings)
                    if fixed_leg_cache is not None else None)
             cached = raw is not None
+            if raw is None and compiled_connector is not None and name.startswith('stair_'):
+                from copy import deepcopy
+                raw = deepcopy(compiled_connector['legs'][name])
             if raw is None:
                 raw = route.plan(begin['xyz'], end['xyz'], begin['layer_id'], end['layer_id'])
         except Exception as exc:
@@ -318,58 +524,36 @@ def plan_crossfloor(config, tomogram, route_factory=None, *, resources=None,
         # Never cache an unvalidated native result or arbitrary floor route.
         if fixed_leg_cache is not None and not cached:
             fixed_leg_cache.put(tomogram, name, begin, end, settings, raw)
-        if whole_points:
-            if not np.array_equal(points[0], whole_points[-1]) or int(layers[0]) != whole_layers[-1]:
-                raise CrossfloorError('portal_mismatch', f'{name} does not connect to previous leg')
-            first_index = len(whole_points) - 1
-            whole_points.extend(points[1:])
-            whole_layers.extend(layers[1:].tolist())
-        else:
-            first_index = 0
-            whole_points.extend(points)
-            whole_layers.extend(layers.tolist())
-        edge_legs.extend([name] * (len(points) - 1))
-        records.append({'name': name, 'from': start_name, 'to': end_name,
-                        'first_index': first_index, 'last_index': len(whole_points) - 1,
-                        'length_m': float(np.linalg.norm(np.diff(points, axis=0), axis=1).sum()),
-                        'layer_ids': sorted(set(layers.tolist())), 'checks': checks,
-                        'native_algorithm': raw.get('algorithm', 'PCT route (test seam)')})
-        records[-1].update(curve_validation=raw.get('curve_validation'),
-                           quintic_segments=raw.get('quintic_segments', 0),
-                           curve_partition_points=raw.get('curve_partition_points', 0))
-        records[-1]['fixed_leg_cache_hit'] = cached
-    points = np.asarray(whole_points)
-    layers = np.asarray(whole_layers, dtype=int)
-    try:
-        whole_check = tomogram.validate_path(points, layers,
-                                             max_ground_step_m=limits['max_ground_step_m'])
-    except ValueError as exc:
-        raise CrossfloorError('joined_geometry_rejected', 'Joined PCT path failed original-map validation',
-                              cause_code=getattr(exc, 'code', type(exc).__name__), cause=str(exc)) from exc
-    transitions = []
-    for index in np.flatnonzero(np.diff(layers)):
-        leg = edge_legs[index]
-        if not leg.startswith('stair_'):
-            if abs(points[index + 1, 2] - points[index, 2]) > 0.05:
-                raise CrossfloorError('transition_outside_stair', 'A height-changing layer transition is outside the stair',
-                                      edge=int(index), leg=leg)
-        elif not np.all(_inside_roi(points[index:index + 2], settings['stair_roi'])):
-            raise CrossfloorError('transition_outside_stair', 'A stair layer transition is outside its ROI',
-                                  edge=int(index))
-        transitions.append({'edge': int(index), 'leg': leg,
-                            'from_layer': int(layers[index]), 'to_layer': int(layers[index + 1]),
-                            'xyz': points[index:index + 2].mean(axis=0).tolist()})
-    if not any(event['leg'].startswith('stair_') for event in transitions):
-        raise CrossfloorError('no_stair_gateway', 'Route contains no native PCT layer transition in the stair ROI')
-    stair_profile = _check_stair_profile(points, edge_legs, settings)
+        native_legs[name] = (points, layers, dict(checks=checks,
+            native_algorithm=raw.get('algorithm', 'PCT route (test seam)'),
+            curve_validation=raw.get('curve_validation'), quintic_segments=raw.get('quintic_segments', 0),
+            curve_partition_points=raw.get('curve_partition_points', 0), fixed_leg_cache_hit=cached))
+        if raw.get('compiled_stair_connector') is not None:
+            native_legs[name][2]['compiled_stair_connector'] = raw['compiled_stair_connector']
+        if name.startswith('stair_'):
+            stair_mask = masked
+    points, layers, edge_legs, records = _assemble_legs(native_legs)
+    joined_check = _check_joined(points, layers, edge_legs, tomogram, settings)
+    selected, selected_settings, refinement, refined_check = _refine_joined_stairs(
+        native_legs, tomogram, stair_mask, settings, compiled_connector=compiled_connector)
+    if refinement['applied']:
+        points, layers, edge_legs, records = _assemble_legs(selected)
+        joined_check = refined_check
+    whole_check, transitions, stair_profile = joined_check
+    selected_anchors = {name: {'xyz': item['xyz'].tolist(), 'layer_id': item['layer_id']}
+                        for name, item in selected_settings['anchors'].items()}
+    if refinement['applied']:
+        selected_anchors['landing'].update(
+            requested_xyz=anchors['landing']['xyz'].tolist(),
+            requested_layer_id=anchors['landing']['layer_id'],
+            displacement_m=refinement['landing_adjustment']['displacement_m'])
     return {'status': 'validated_offline_route', 'frame_id': settings['frame_id'],
             'tomogram_path': str(tomogram.source), 'tomogram_sha256': tomogram.sha256,
             'source_pcd': settings['source_pcd'],
             'source_pcd_sha256': tomogram.provenance.get('source_sha256'),
             'source_layer_ids': tomogram.source_layers[layers].astype(int).tolist(),
             'path_xyz': points.tolist(), 'layer_ids': layers.tolist(), 'edge_legs': edge_legs,
-            'anchors': {name: {'xyz': item['xyz'].tolist(), 'layer_id': item['layer_id']}
-                        for name, item in anchors.items()},
+            'anchors': selected_anchors, 'stair_refinement': refinement,
             'segments': records, 'layer_transitions': transitions,
             'stair_profile': stair_profile, 'whole_route_check': whole_check,
             'length_m': float(np.linalg.norm(np.diff(points, axis=0), axis=1).sum()),

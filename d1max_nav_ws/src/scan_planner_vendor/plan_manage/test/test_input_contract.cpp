@@ -5,6 +5,22 @@
 using Eigen::Vector3d;
 using scan_planner::prepareReferenceWaypoints;
 
+TEST(InputContract, SchedulingDeferIsNotAnAttemptOrGeometryFailure) {
+  using scan_planner::nativePlanningAttemptDeferred;
+  EXPECT_TRUE(nativePlanningAttemptDeferred(false,false,"waiting_solve_budget"));
+  EXPECT_TRUE(nativePlanningAttemptDeferred(true,false,"failed_optimization"));
+  EXPECT_TRUE(nativePlanningAttemptDeferred(false,true,"waiting_snapshot_slot"));
+  for(const auto* reason:{"failed_optimization","solve_deadline_exceeded","occupied", "unknown_or_unobserved"})
+    EXPECT_FALSE(nativePlanningAttemptDeferred(false,false,reason));
+}
+
+TEST(InputContract, StaticReferenceSupportDeliveryRetriesWithoutOccupancyOrBodyChange) {
+  EXPECT_TRUE(scan_planner::nativeResourceWait("waiting_reference_support"));
+  EXPECT_FALSE(scan_planner::nativeResourceWait("failed_reference_target_occupied"));
+  EXPECT_FALSE(scan_planner::nativeResourceWait("occupied"));
+  EXPECT_FALSE(scan_planner::nativeResourceWait("unknown_or_unobserved"));
+}
+
 TEST(InputContract, ReverseMeasuredVelocityMustNotBecomeStationaryBoundary) {
   const Eigen::Vector2d goal(3., 0.);
   for (double speed : {.004, .025, .20}) {
@@ -67,14 +83,39 @@ TEST(InputContract, PeriodicReplanUsesIndependentTimeAndDefaultsDisabled) {
   EXPECT_FALSE(periodicReplanDue(std::numeric_limits<double>::quiet_NaN(), 1, 1));
 }
 
-TEST(InputContract, FormalEntryEventSharesOneWorkerAndHalfSecondMonotonicSubmissionGuard) {
+TEST(InputContract, FormalEntryEventSharesOneWorkerAndConfiguredMonotonicSubmissionGuard) {
   using C=std::chrono::steady_clock;using scan_planner::formalReseedSubmissionDue;
   const auto last=C::time_point{}+std::chrono::seconds(10);
   EXPECT_TRUE(formalReseedSubmissionDue(last,{},false));
-  EXPECT_FALSE(formalReseedSubmissionDue(last+std::chrono::milliseconds(499),last,false));
-  EXPECT_TRUE(formalReseedSubmissionDue(last+std::chrono::milliseconds(500),last,false));
+  EXPECT_FALSE(formalReseedSubmissionDue(last+std::chrono::milliseconds(99),last,false));
+  EXPECT_TRUE(formalReseedSubmissionDue(last+std::chrono::milliseconds(100),last,false));
+  EXPECT_FALSE(formalReseedSubmissionDue(last+std::chrono::milliseconds(499),last,false,.5));
+  EXPECT_TRUE(formalReseedSubmissionDue(last+std::chrono::milliseconds(500),last,false,.5));
   EXPECT_FALSE(formalReseedSubmissionDue(last+std::chrono::seconds(20),last,true));
   EXPECT_FALSE(formalReseedSubmissionDue(last-std::chrono::seconds(1),last,false));
+  EXPECT_TRUE(formalReseedSubmissionDue(last,{},false,0.));
+  EXPECT_TRUE(formalReseedSubmissionDue(last+std::chrono::milliseconds(20),last,false,0.));
+  EXPECT_FALSE(formalReseedSubmissionDue(last+std::chrono::milliseconds(20),last,true,0.));
+  EXPECT_FALSE(formalReseedSubmissionDue(last-std::chrono::milliseconds(1),last,false,0.));
+  EXPECT_FALSE(formalReseedSubmissionDue(last,{},false,-.01));
+  EXPECT_FALSE(formalReseedSubmissionDue(last,{},false,std::numeric_limits<double>::quiet_NaN()));
+}
+
+TEST(InputContract, ConnectionRetryIsNotAnObstacleChangeRequirement) {
+  EXPECT_TRUE(scan_planner::nativeConnectionWait("failed_curve_validation"));
+  EXPECT_TRUE(scan_planner::nativeConnectionWait("waiting_splice_validation"));
+  EXPECT_TRUE(scan_planner::nativeConnectionWait("waiting_splice_incumbent"));
+  EXPECT_TRUE(scan_planner::nativeConnectionWait("waiting_measured_target_heading"));
+  EXPECT_FALSE(scan_planner::nativeConnectionWait("failed_final_collision"));
+  EXPECT_FALSE(scan_planner::nativeConnectionWait("waiting_observed_space"));
+}
+
+TEST(InputContract, NumericalRetryClassificationDoesNotAuthorizeGeometryOrUnknownSpace) {
+  for(const auto* reason:{"failed_optimization","failed_rebound_search","failed_dynamics"})
+    EXPECT_TRUE(scan_planner::nativeNumericalReplanFailure(reason));
+  for(const auto* reason:{"waiting_observed_space","failed_final_collision","failed_reference_geometry",
+      "solve_cancelled","solve_exception","candidate_source_expired","failed_reference_target_occupied"})
+    EXPECT_FALSE(scan_planner::nativeNumericalReplanFailure(reason));
 }
 
 TEST(InputContract, ReferenceTargetDiagnosticsDoNotCallUnobservedQueriesOccupied) {

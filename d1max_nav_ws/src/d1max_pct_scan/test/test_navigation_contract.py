@@ -137,6 +137,8 @@ def test_saved_session_requires_verified_bundle_before_any_process(tmp_path, mon
     ('scan', 'grid_map.use_projected_rays', False),
     ('scan', 'grid_map.require_localization_context', False),
     ('scan', 'grid_map.double_cylinder_radius', .01),
+    ('scan', 'grid_map.planning_obstacles_inflation_z_up', .12),
+    ('scan', 'grid_map.planning_obstacles_inflation_z_down', .40),
     ('global', 'planning_manifest', '/other-map/manifest.json'),
 ])
 def test_generated_handoff_cannot_silently_drift(tmp_path, node, key, value):

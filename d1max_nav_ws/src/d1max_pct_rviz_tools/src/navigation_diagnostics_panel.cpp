@@ -7,6 +7,7 @@
 #include <QButtonGroup>
 #include <QDateTime>
 #include <QDir>
+#include <QDoubleSpinBox>
 #include <QFile>
 #include <QFileInfo>
 #include <QFormLayout>
@@ -29,6 +30,7 @@
 #include "rviz_common/properties/property.hpp"
 #include "rviz_common/ros_integration/ros_node_abstraction_iface.hpp"
 #include "rviz_common/tool_manager.hpp"
+#include "rviz_common/tool.hpp"
 #include "rviz_common/view_manager.hpp"
 #include "rviz_common/view_controller.hpp"
 
@@ -119,7 +121,7 @@ bool writeLayoutState(const QString & path, const QString & request_path, const 
 }
 
 NavigationDiagnosticsPanel::NavigationDiagnosticsPanel(QWidget * parent)
-: Panel(parent), inbox_(std::make_shared<Inbox>())
+: Panel(parent), inbox_(std::make_shared<Inbox>()), goal_inbox_(std::make_shared<Inbox>())
 {
   setMinimumWidth(275);
   auto * outer = new QVBoxLayout(this);
@@ -179,6 +181,57 @@ NavigationDiagnosticsPanel::NavigationDiagnosticsPanel(QWidget * parent)
   views->addWidget(spatial);
   views->addStretch();
   layout->addLayout(views);
+  auto * goal_heading = new QHBoxLayout;
+  auto * goal_title = label(content, "目标", "goal_editor_title");
+  auto goal_font = goal_title->font(); goal_font.setBold(true); goal_title->setFont(goal_font);
+  auto * goal_select = new QPushButton("选择目标", content);
+  goal_select->setObjectName("goal_select");
+  connect(goal_select, &QPushButton::clicked, this, [this] {selectGoalTool();});
+  goal_heading->addWidget(goal_title); goal_heading->addStretch();
+  goal_heading->addWidget(goal_select);
+  layout->addLayout(goal_heading);
+  auto * goal_modes = new QHBoxLayout;
+  auto * goal_exclusive = new QButtonGroup(this);
+  goal_exclusive->setExclusive(true);
+  for (int i = 0; i < 2; ++i) {
+    const QString key = i == 0 ? "ground" : "free";
+    auto * button = new QPushButton(i == 0 ? "贴地" : "XYZ", content);
+    button->setObjectName("goal_mode_" + key);
+    button->setCheckable(true);
+    goal_exclusive->addButton(button); goal_modes_[i] = button;
+    connect(button, &QPushButton::clicked, this, [this, key] {chooseGoalMode(key);});
+    goal_modes->addWidget(button);
+  }
+  layout->addLayout(goal_modes);
+  auto * coordinates = new QHBoxLayout;
+  coordinates->setSpacing(4);
+  for (int i = 0; i < 3; ++i) {
+    const QString axis = QString("xyz").mid(i, 1);
+    auto * column = new QVBoxLayout;
+    column->setSpacing(2);
+    column->addWidget(label(content, axis.toUpper() + " (m)", "goal_axis"));
+    auto * value = new QDoubleSpinBox(content);
+    value->setObjectName("live_goal_" + axis);
+    value->setRange(-9999., 9999.);
+    value->setDecimals(3); value->setSingleStep(.01);
+    value->setKeyboardTracking(false); value->setMinimumWidth(65);
+    goal_xyz_[i] = value;
+    connect(value, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
+      [this](double) {goal_dirty_ = true; goal_pending_ = false;
+        goal_validation_->setText("目标已修改"); updateGoalWidgets();});
+    column->addWidget(value); coordinates->addLayout(column);
+  }
+  layout->addLayout(coordinates);
+  auto * goal_actions = new QHBoxLayout;
+  goal_apply_ = new QPushButton("应用", content); goal_apply_->setObjectName("goal_apply");
+  goal_snap_ = new QPushButton("贴地", content); goal_snap_->setObjectName("goal_snap_ground");
+  connect(goal_apply_, &QPushButton::clicked, this, [this] {applyGoalEdit(false);});
+  connect(goal_snap_, &QPushButton::clicked, this, [this] {applyGoalEdit(true);});
+  goal_actions->addWidget(goal_apply_); goal_actions->addWidget(goal_snap_);
+  layout->addLayout(goal_actions);
+  goal_validation_ = label(content, "请选择 3D 目标", "goal_validation");
+  layout->addWidget(goal_validation_);
+  updateGoalWidgets();
   const QString legends[][2] = {
     {"#00d2e1", "●  实时点云"}, {"#d7dce4", "╋  机身坐标系 · XYZ / 红绿蓝"},
     {"#4191ff", "━  全局路径"}, {"#ff8c14", "━  当前参考段"},
@@ -244,6 +297,7 @@ void NavigationDiagnosticsPanel::load(const rviz_common::Config & config)
   QTimer::singleShot(0, this, [this] {applyLayoutPresentation(layout_);});
   mode_->setText(motion_capable_ ? "定位与规划监视" : "仅预览 · 运动关闭");
   source_stamp_ = 0; valid_ = false; unavailable();
+  resetGoalEditor();
 }
 
 void NavigationDiagnosticsPanel::save(rviz_common::Config config) const
@@ -266,6 +320,169 @@ void NavigationDiagnosticsPanel::onInitialize()
       std::lock_guard<std::mutex> lock(inbox->mutex);
       inbox->value = QString::fromStdString(message->data); ++inbox->sequence;
     });
+  auto goal_inbox = goal_inbox_;
+  goal_subscription_ = node->create_subscription<std_msgs::msg::String>(
+    "/d1max/live_planning/goal_editor_status", rclcpp::QoS(1).reliable().transient_local(),
+    [goal_inbox](std_msgs::msg::String::ConstSharedPtr message) {
+      if (message->data.size() > 8192) {return;}
+      std::lock_guard<std::mutex> lock(goal_inbox->mutex);
+      goal_inbox->value = QString::fromStdString(message->data); ++goal_inbox->sequence;
+    });
+  goal_edit_publisher_ = node->create_publisher<std_msgs::msg::String>(
+    "/d1max/live_planning/edit_goal3d", rclcpp::QoS(1).reliable());
+}
+
+void NavigationDiagnosticsPanel::resetGoalEditor()
+{
+  goal_available_ = goal_dirty_ = goal_pending_ = false;
+  goal_source_stamp_ = goal_edit_stamp_ = 0.; goal_mode_ = "ground";
+  goal_frame_.clear();
+  goal_validation_->setText("请选择 3D 目标"); goal_validation_->setToolTip("");
+  updateGoalWidgets();
+}
+
+void NavigationDiagnosticsPanel::updateGoalWidgets()
+{
+  for (int i = 0; i < 2; ++i) {
+    const QSignalBlocker block(goal_modes_[i]);
+    goal_modes_[i]->setChecked(i == (goal_mode_ == "ground" ? 0 : 1));
+    goal_modes_[i]->setEnabled(goal_available_);
+  }
+  for (int i = 0; i < 3; ++i) {
+    goal_xyz_[i]->setEnabled(goal_available_ && (i != 2 || goal_mode_ == "free"));
+  }
+  goal_apply_->setEnabled(goal_available_ && goal_dirty_ && !goal_pending_);
+  goal_snap_->setEnabled(goal_available_ && !goal_pending_);
+}
+
+bool NavigationDiagnosticsPanel::publishGoalEdit(const QJsonObject & command)
+{
+  if (!goal_edit_publisher_) {return false;}
+  std_msgs::msg::String message;
+  message.data = QJsonDocument(command).toJson(QJsonDocument::Compact).toStdString();
+  goal_edit_publisher_->publish(message);
+  return true;
+}
+
+void NavigationDiagnosticsPanel::applyGoalEdit(bool snap_ground)
+{
+  if (!goal_available_ || session_.isEmpty() || goal_frame_.isEmpty()) {return;}
+  QJsonObject command{{"schema", 1}, {"session_id", session_},
+    {"frame_id", goal_frame_}, {"selection_mode", snap_ground ? "ground" : goal_mode_}};
+  QJsonArray xyz;
+  for (auto * value : goal_xyz_) {xyz.append(value->value());}
+  // Include the current draft even for snapping: never snap an older handle
+  // while the exact XY fields are waiting to be applied.
+  command["goal_xyz"] = xyz;
+  if (snap_ground) {command["operation"] = "snap_ground";}
+  if (publishGoalEdit(command)) {
+    if (snap_ground) {goal_mode_ = "ground";}
+    goal_pending_ = true; goal_edit_stamp_ = wallNow();
+    goal_validation_->setText("目标更新中"); updateGoalWidgets();
+  }
+}
+
+void NavigationDiagnosticsPanel::chooseGoalMode(const QString & mode)
+{
+  if (!goal_available_ || (mode != "ground" && mode != "free")) {return;}
+  if (goal_mode_ == mode) {return;}
+  goal_mode_ = mode; goal_dirty_ = true; goal_pending_ = false;
+  applyGoalEdit(mode == "ground");
+  updateGoalWidgets();
+}
+
+void NavigationDiagnosticsPanel::selectGoalTool()
+{
+  // The global presentation owns the goal handles. Switching the layout first
+  // avoids focusing an InteractiveMarker hidden by the local presentation.
+  chooseLayout("global", true);
+  QTimer::singleShot(0, this, [this] {
+      if (!getDisplayContext()) {return;}
+      auto * tools = getDisplayContext()->getToolManager();
+      if (!tools) {return;}
+      for (int i = 0; i < tools->numTools(); ++i) {
+        auto * tool = tools->getTool(i);
+        if (tool && (tool->getClassId() == "d1max_pct_rviz_tools/LiveGoal3D" ||
+          tool->getName() == "3D 目标")) {
+          tools->setCurrentTool(tool); return;
+        }
+      }
+    });
+}
+
+void NavigationDiagnosticsPanel::showGoalEditor(const QString & session_id)
+{
+  // Tools may focus the same draft from the toolbar, not just this panel.
+  // A stale viewer/tool session must not alter another session's presentation.
+  if (session_.isEmpty() || session_id != session_) {return;}
+  chooseLayout("global", true);
+}
+
+void NavigationDiagnosticsPanel::acceptGoalEditorStatus(const QString & json)
+{
+  if (json.toUtf8().size() > 8192 || session_.isEmpty()) {return;}
+  const auto document = QJsonDocument::fromJson(json.toUtf8());
+  const auto data = document.object();
+  const auto stamp = data["received_at_unix"];
+  const auto mode = data["selection_mode"].toString();
+  const auto frame = data["frame_id"].toString();
+  const auto xyz = data["goal_xyz"].toArray();
+  const auto validation = data["goal_validation"].toObject();
+  if (!document.isObject() || data["schema"] != QJsonValue(1) ||
+    data["mode"].toString() != "LIVE_GOAL_EDITOR_NO_MOTION" ||
+    data["motion_enabled"] != QJsonValue(false) || data["session_id"].toString() != session_ ||
+    frame.isEmpty() || frame.size() > 128 ||
+    (mode != "ground" && mode != "free") || !finite(stamp) ||
+    stamp.toDouble() <= goal_source_stamp_ || wallNow()-stamp.toDouble() > 1. ||
+    wallNow()-stamp.toDouble() < -.1) {return;}
+  if (xyz.isEmpty() && data["goal_xyz"].isNull()) {
+    goal_source_stamp_ = stamp.toDouble(); goal_receipt_ = std::chrono::steady_clock::now();
+    goal_available_ = false; goal_dirty_ = goal_pending_ = false;
+    goal_mode_ = mode; goal_frame_ = frame; goal_validation_->setText("请选择 3D 目标");
+    updateGoalWidgets(); return;
+  }
+  if (xyz.size() != 3 || !validation["valid"].isBool() ||
+    !validation["reason"].isString()) {return;}
+  for (const auto & value : xyz) {
+    if (!finite(value) || std::abs(value.toDouble()) >= 10000.) {return;}
+  }
+  goal_source_stamp_ = stamp.toDouble(); goal_receipt_ = std::chrono::steady_clock::now();
+  goal_available_ = true;
+  if (goal_frame_ != frame) {goal_dirty_ = goal_pending_ = false;}
+  goal_frame_ = frame;
+  // A heartbeat cannot overwrite unsubmitted exact coordinates. An applied
+  // draft is reconciled only with a newer matching backend selection.
+  bool matches = mode == goal_mode_;
+  for (int i = 0; i < 3; ++i) {
+    if (mode == "ground" && i == 2) {continue;}
+    matches = matches && std::abs(xyz[i].toDouble()-goal_xyz_[i]->value()) <= .001;
+  }
+  if (goal_pending_ && stamp.toDouble() >= goal_edit_stamp_ && matches) {
+    goal_pending_ = false; goal_dirty_ = false;
+  }
+  if (!goal_dirty_ && !goal_pending_) {
+    goal_mode_ = mode;
+    for (int i = 0; i < 3; ++i) {
+      const QSignalBlocker block(goal_xyz_[i]); goal_xyz_[i]->setValue(xyz[i].toDouble());
+    }
+    const bool valid = validation["valid"].toBool();
+    QString text = valid ? "有效" : "无效";
+    const auto floor = validation["floor_id"].toString().left(80);
+    if (!floor.isEmpty()) {text += " · " + floor;}
+    if (finite(validation["layer_id"])) {
+      text += QString(" · slice %1").arg(validation["layer_id"].toInt());
+    }
+    if (finite(validation["height_error_m"])) {
+      text += QString(" · ΔZ %1 m").arg(validation["height_error_m"].toDouble(), 0, 'f', 3);
+    }
+    goal_validation_->setText(text);
+    QString detail = validation["reason"].toString().left(300);
+    if (finite(validation["ground_z"])) {
+      detail += QString(" · 地面 Z %1 m").arg(validation["ground_z"].toDouble(), 0, 'f', 3);
+    }
+    goal_validation_->setToolTip(detail);
+  }
+  updateGoalWidgets();
 }
 
 void NavigationDiagnosticsPanel::acceptStatus(const QString & json)
@@ -370,6 +587,24 @@ void NavigationDiagnosticsPanel::refresh()
     if (inbox_->sequence != consumed_) {consumed_ = inbox_->sequence; value = inbox_->value;}
   }
   if (!value.isEmpty()) {acceptStatus(value);}
+  QString goal_value;
+  {
+    std::lock_guard<std::mutex> lock(goal_inbox_->mutex);
+    if (goal_inbox_->sequence != goal_consumed_) {
+      goal_consumed_ = goal_inbox_->sequence; goal_value = goal_inbox_->value;
+    }
+  }
+  if (!goal_value.isEmpty()) {acceptGoalEditorStatus(goal_value);}
+  if (goal_pending_ && wallNow()-goal_edit_stamp_ > 3.) {
+    goal_pending_ = false; goal_dirty_ = true;
+    goal_validation_->setText("目标未更新"); updateGoalWidgets();
+  }
+  if (goal_available_ && (wallNow()-goal_source_stamp_ > 1. ||
+    wallNow()-goal_source_stamp_ < -.1 ||
+    std::chrono::steady_clock::now()-goal_receipt_ > std::chrono::seconds(1))) {
+    goal_available_ = false; goal_pending_ = false;
+    goal_validation_->setText("目标状态未连接"); updateGoalWidgets();
+  }
   if (valid_ && (wallNow()-source_stamp_ > 1.0 || wallNow()-source_stamp_ < -.1 ||
     std::chrono::steady_clock::now()-receipt_ > std::chrono::seconds(1)))
   {valid_ = false; unavailable();}
@@ -455,16 +690,8 @@ void NavigationDiagnosticsPanel::applyLayoutPresentation(const QString & layout)
   auto * tools = getDisplayContext()->getToolManager();
   if (tools && tools->getDefaultTool()) {tools->setCurrentTool(tools->getDefaultTool());}
   chooseView(layout == "local" ? 1 : 2);
-  if (layout == "local") {
-    auto * manager = getDisplayContext()->getViewManager();
-    if (manager && manager->getCurrent()) {
-      auto * view = manager->getCurrent();
-      for (int i = 0; i < view->numChildren(); ++i) {
-        auto * property = view->childAt(i);
-        if (property->getName() == "Distance") {property->setValue(10.);}
-      }
-    }
-  }
+  // The saved local camera is sized from the actual rolling map. Do not
+  // silently overwrite it with a fixed 10 m distance when switching layouts.
 }
 
 void NavigationDiagnosticsPanel::applyLayoutVisibility(
@@ -479,11 +706,16 @@ void NavigationDiagnosticsPanel::applyLayoutVisibility(
   enabled(root, "地图", !local);
   enabled(root, "全局规划", true);
   enabled(root, "局部规划", local);
+  // DisplayGroup toggles propagate to children. Each preset explicitly
+  // restores raw occupancy to optional/debug-only, after toggling its parent.
+  enabled(group("局部规划"), "原始占据地图（调试）", false);
+  enabled(group("局部规划"), "滑动占据地图（高度）", false);
   enabled(group("定位"), "机器狗坐标系", true);
   enabled(group("定位"), "定位轨迹", !local);
   enabled(group("定位"), "初值预览 · 未确认", !local);
   enabled(group("全局规划"), "全局路径", true);
   enabled(group("全局规划"), "3D 目标手柄", !local);
+  enabled(group("全局规划"), "目标支撑面", !local);
   if (auto * path = childDisplay(group("全局规划"), "全局路径")) {
     for (int i = 0; i < path->numChildren(); ++i) {
       auto * property = path->childAt(i);
@@ -491,7 +723,8 @@ void NavigationDiagnosticsPanel::applyLayoutVisibility(
       if (property->getName() == "Alpha") {property->setValue(local ? .35 : 1.);}
     }
   }
-  for (const auto & name : {"实时点云", "滑动占据地图（高度）", "碰撞膨胀地图（高度）", "滑动窗口边界", "跟踪路段与局部目标",
+  // Restore the current-heading C-space display in either preset's tree.
+  for (const auto & name : {"实时点云", "膨胀占据地图（当前朝向 · 高度）", "碰撞膨胀地图（高度）", "滑动窗口边界", "跟踪路段与局部目标",
       "搜索尝试与受阻位置", "局部轨迹", "已提交局部轨迹"})
   {enabled(group("局部规划"), name, true);}
 }

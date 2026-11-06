@@ -29,3 +29,13 @@ geometry_msgs/Twist join_twist
 geometry_msgs/Accel join_acceleration
 # False when no trustworthy acceleration source exists; never claims C2 proof.
 bool join_acceleration_valid
+TrajectorySplice splice
+# Immutable yaw seed used by Native's path-tangent collision sampling. This is
+# the solve/splice boundary heading, NOT the later measured join orientation.
+# Explicit presence preserves historical recordings; the current formal
+# follower requires it for new path-tangent curves.
+bool body_heading_seed_valid
+float64 body_heading_seed_yaw
+# Original full-curve heading-memory sampling lattice used by Native. The
+# tracker must not substitute its independently sampled XYZ projection table.
+uint32 body_heading_sampling_intervals

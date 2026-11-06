@@ -1,0 +1,124 @@
+--- a/src/test_task_writer.cpp
++++ b/src/test_task_writer.cpp
+@@ -10,6 +10,7 @@
+ #include <future>
+ #include <chrono>
+ #include <thread>
++#include <vector>
+ 
+ using namespace d1monitor::execution3;
+ static Version taskVersion(){Version v;v.schema_version=3;v.session_id="nav";v.task_id="task";
+@@ -41,6 +42,72 @@
+ static bool sdkMoving(const SdkMoveFractions&v){return static_cast<float>(v.forward_back)!=0.f||
+   static_cast<float>(v.left_right)!=0.f||static_cast<float>(v.yaw)!=0.f;}
+ 
++struct DeliverySweep {
++  unsigned nonzero=0,zero_edges=0,expired=0,accepted=0;
++  double minimum_spacing=std::numeric_limits<double>::infinity(),maximum_spacing=0.,maximum_body_age=0.;
++};
++// Drive the PRODUCTION scheduler and Transport at every input, watchdog and
++// ORIGINAL command deadline, not only at producer receipts. The environment
++// below supplies clock/callback events; it does not replace admission or copy
++// any task, freshness, SDK mapping or scheduler decision into a toy transport.
++static DeliverySweep sweepDelivery(double phase,double body_age,const std::vector<double>&delays,
++    double lease_delay=0.,bool callbacks_first=true,unsigned samples=160){
++  struct Event{double at;bool owner;uint64_t seq;};
++  std::vector<Event> events;events.reserve(samples+samples/2+2);
++  const auto end=10.+phase+samples*.05-.001;
++  for(uint64_t i=0;i<=samples/2+1;++i)events.push_back({10.+i*.1+lease_delay,true,i+1});
++  for(uint64_t i=0;i<samples;++i)events.push_back({10.+phase+.001+i*.05+delays[i%delays.size()],false,i+1});
++  std::stable_sort(events.begin(),events.end(),[callbacks_first](const Event&a,const Event&b){
++    if(a.at!=b.at)return a.at<b.at;
++    return callbacks_first?a.owner>b.owner:a.owner<b.owner;});
++  auto t=writer();d1monitor::CommandWriterDeadline schedule(10.,.05);
++  DeliverySweep result;uint64_t revision=0;size_t next_event=0;double now=10.,last_nonzero=-1.;
++  bool moving_before=false,primed=false;unsigned iterations=0;
++  while(now<=end){
++    assert(++iterations<100000); // a repeated expired hint must not spin forever
++    schedule.observe(revision);
++    auto deadline=t.taskCommandDeadline();
++    if(deadline)*deadline=std::nextafter(*deadline,std::numeric_limits<double>::infinity());
++    const double wake=schedule.next(deadline);
++    const double input=next_event<events.size()?events[next_event].at:std::numeric_limits<double>::infinity();
++    now=std::max(now,std::min(wake,input));if(now>end)break;
++    // Both orderings matter when a deadline and callback share a clock value.
++    const bool consume_inputs=callbacks_first||input<wake;
++    const auto deliver=[&]{while(next_event<events.size()&&events[next_event].at<=now){
++      const auto event=events[next_event++];
++      if(event.owner){const auto before=t.lastDemand().sequence;
++        assert(t.taskLease(lease(10.+(event.seq-1)*.1,event.seq),event.at));
++        if(t.lastDemand().sequence!=before)++revision;
++      }else{const auto generated=10.+phase+.001+(event.seq-1)*.05;
++        auto c=command(generated,event.seq,(event.seq-1)/2+1);
++        c.body_source_stamp=afterNs(c.source_stamp,-static_cast<int64_t>(std::llround(body_age*1e9)));
++        c.body_valid_until=c.valid_until=afterNs(c.body_source_stamp,100000000LL);
++        if(t.localCommand(c,event.at)){++revision;++result.accepted;}
++      }
++    }};
++    if(consume_inputs)deliver();
++    schedule.observe(revision);
++    const bool urgent_only=!schedule.normalDue(now),no_fresh_command=!schedule.pending();
++    const auto selected_revision=revision;
++    auto output=t.tick(now,healthy());
++    if((urgent_only||no_fresh_command)&&moving(output))output.reset();
++    std::optional<double> submitted;
++    if(output){const bool positive=moving(output);
++      if(positive){
++        const auto timing=t.selectedTaskCommandTiming();assert(timing.present);
++        result.maximum_body_age=std::max(result.maximum_body_age,now-secs(timing.body_source));
++        if(last_nonzero>=0){result.minimum_spacing=std::min(result.minimum_spacing,now-last_nonzero);
++          result.maximum_spacing=std::max(result.maximum_spacing,now-last_nonzero);}
++        last_nonzero=now;submitted=now;++result.nonzero;primed=true;
++      }else if(primed&&moving_before)++result.zero_edges;
++      moving_before=positive;t.moveAttempted(positive);t.writeCalled(now,true,positive);
++    }
++    schedule.complete(now,now,selected_revision,!urgent_only&&!no_fresh_command,submitted);
++    if(!consume_inputs)deliver();
++  }
++  result.expired=t.taskCommandExpiry().count;assert(!t.stopping());return result;
++}
++
+ int main(){unsigned cases=0;
+   const auto run=[&](const char*name,const std::function<void()>&test){test();++cases;std::cout<<"PASS "<<name<<'\n';};
+   run("same_original_input_fixed_poll_phase_expires_but_fresh_command_delivery_does_not",[]{
+@@ -90,6 +157,40 @@
+     assert(sends==40&&t.taskCommandExpiry().count==0);
+     assert(!moving(t.tick(last_attempt+.041,healthy()))&&t.taskCommandExpiry().count==1);
+   });
++  run("complete_writer_event_watchdog_deadline_sweep_has_no_avoidable_zero",[]{
++    unsigned streams=0,minimum_sends=160;double maximum_spacing=0.,maximum_body_age=0.;
++    for(double phase:{0.,.001,.009,.024,.039,.049})for(bool callbacks_first:{false,true})
++      for(const auto& scenario:std::vector<std::pair<double,std::vector<double>>>{
++          {.004,{.001,.005,.013,.035,.045}}, {.020,{.001,.005,.013,.022}},
++          {.040,{.001,.003,.005}}}){
++        const auto result=sweepDelivery(phase,scenario.first,scenario.second,0.,callbacks_first);
++        assert(result.accepted==160&&result.nonzero>100&&result.zero_edges==0&&result.expired==0);
++        assert(result.minimum_spacing>=.05-1e-10&&result.maximum_body_age<=.100);
++        minimum_sends=std::min(minimum_sends,result.nonzero);
++        maximum_spacing=std::max(maximum_spacing,result.maximum_spacing);
++        maximum_body_age=std::max(maximum_body_age,result.maximum_body_age);
++        ++streams;
++      }
++    // Native may receive an owner lease before SDK receives that independent
++    // publication. The actual one-slot defer + lease callback admission wakes
++    // the same latest writer; it must not add an extra 50 ms send phase.
++    for(bool order:{false,true}){const auto result=sweepDelivery(.001,.004,{.001},.030,order);
++      assert(result.accepted<160&&result.nonzero>100&&result.zero_edges==0&&result.expired==0);++streams;}
++    std::cout<<"complete writer scheduling sweep: "<<streams<<" feasible streams, no zero edges; minimum_nonzero_sends="
++      <<minimum_sends<<"/160, maximum_send_interval_ms="<<maximum_spacing*1000.
++      <<", maximum_original_body_age_ms="<<maximum_body_age*1000.<<'\n';
++  });
++  run("complete_writer_deadline_sweep_exposes_infeasible_source_budget",[]{
++    // E10's receipt-only positive test omitted these real deadline wakes.
++    // With 60 ms body age + a 50 ms producer period, every previous ORIGINAL
++    // 100 ms deadline ends before the next source arrives. Event delivery can
++    // remove avoidable polling latency, but cannot honestly erase that gap.
++    const auto result=sweepDelivery(0.,.060,{.001},0.,true,40);
++    assert(result.accepted==40&&result.nonzero==40&&result.zero_edges>=39&&result.expired>=39);
++    assert(result.minimum_spacing>=.05-1e-10&&result.maximum_body_age<=.100);
++    std::cout<<"infeasible source budget: "<<result.zero_edges<<" true deadline zero edges / "
++      <<result.expired<<" original expiries; TTL unchanged\n";
++  });
+   run("new_event_does_not_bypass_expiry_revoke_estop_or_foreign_task",[]{
+     for(int kind=0;kind<4;++kind){auto t=writer();ready(t);assert(moving(t.tick(10.,healthy())));
+       auto c=command(10.02,2);

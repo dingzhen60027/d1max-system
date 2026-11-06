@@ -3,7 +3,6 @@
 #include <d1max_planning_interfaces/msg/navigation_state.hpp>
 #include <d1max_planning_interfaces/msg/local_navigation_state.hpp>
 #include "d1max_trajectory_tracker/tracker_core.hpp"
-#include <type_traits>
 
 namespace d1max_trajectory_tracker {
 
@@ -13,8 +12,7 @@ namespace d1max_trajectory_tracker {
 class NavigationStateIngress {
 public:
   template<class State> bool inspect(const State& state,const Config& config,double now,std::uint64_t epoch_floor=0) {
-    constexpr std::uint32_t expected_schema=std::is_same_v<State,
-      d1max_planning_interfaces::msg::LocalNavigationState>?1:2;
+    constexpr std::uint32_t expected_schema=2;
     // Foreign sessions/maps/interface versions are not this estimator's
     // events. They neither revoke its task nor refresh its source watermarks.
     if(state.schema_version!=expected_schema||state.session_id!=config.session_id||
@@ -45,8 +43,7 @@ private:
 // trustworthy reset event. Use this only AFTER ingress ordering.
 template<class State> bool navigationContextReset(const State& state,const Config& config,
     const ControlIdentity& expected,double now) {
-  constexpr std::uint32_t schema=std::is_same_v<State,
-    d1max_planning_interfaces::msg::LocalNavigationState>?1:2;
+  constexpr std::uint32_t schema=2;
   const auto& t=state.source_stamp;
   if(state.schema_version!=schema||state.session_id!=config.session_id||state.map_version_id!=config.map_version_id||
      state.localization_epoch==0||state.localization_seed_id.empty()||t.sec<0||t.nanosec>=1000000000U||
@@ -54,7 +51,8 @@ template<class State> bool navigationContextReset(const State& state,const Confi
   return state.localization_epoch!=expected.localization_epoch||state.localization_seed_id!=expected.localization_seed_id;
 }
 
-// Local schema 1 is a separate transport, not a fabricated global/local pair.
+// Local schema 2 is a separate provider-authorized transport, not a fabricated
+// global/local pair. Its source-bound lease is copied, never renewed here.
 // Internally Odom schema 2 denotes the same source-bound estimator identity
 // contract already enforced by TrackerCore; source times are copied unchanged.
 inline bool decodeLocalNavigationState(const d1max_planning_interfaces::msg::LocalNavigationState& state,
@@ -66,9 +64,10 @@ inline bool decodeLocalNavigationState(const d1max_planning_interfaces::msg::Loc
     return double(stamp.sec)+double(stamp.nanosec)*1e-9;
   };
   const auto& local=state.local_odometry;
-  if(state.schema_version!=1||!state.usable||state.session_id!=config.session_id||
+  if(state.schema_version!=2||!state.usable||state.session_id!=config.session_id||
       state.map_version_id!=config.map_version_id||state.localization_epoch==0||state.localization_seed_id.empty()||
-      !valid_stamp(state.source_stamp)||!valid_stamp(state.posterior_stamp)||!valid_stamp(state.imu_stamp)||
+      !valid_stamp(state.source_stamp)||!valid_stamp(state.valid_until)||
+      !valid_stamp(state.posterior_stamp)||!valid_stamp(state.imu_stamp)||
       local.header.stamp!=state.source_stamp||local.header.frame_id!=config.planning_frame||
       local.child_frame_id!=config.base_frame) {
     reason="local_navigation_state_identity_or_source_invalid";return false;
@@ -85,8 +84,13 @@ inline bool decodeLocalNavigationState(const d1max_planning_interfaces::msg::Loc
   out.frame_id=local.header.frame_id;out.child_frame_id=local.child_frame_id;
   out.stamp=seconds(state.source_stamp);
   out.source_stamp_ns=std::int64_t(state.source_stamp.sec)*1000000000LL+state.source_stamp.nanosec;
+  out.provider_contract=true;out.provider_usable=state.usable;
+  out.provider_valid_until_ns=std::int64_t(state.valid_until.sec)*1000000000LL+state.valid_until.nanosec;
   out.posterior_stamp=seconds(state.posterior_stamp);
   out.imu_stamp=seconds(state.imu_stamp);out.extrapolation_sec=state.extrapolation_sec;
+  out.provider_posterior_stamp_ns=std::int64_t(state.posterior_stamp.sec)*1000000000LL+state.posterior_stamp.nanosec;
+  out.provider_imu_stamp_ns=std::int64_t(state.imu_stamp.sec)*1000000000LL+state.imu_stamp.nanosec;
+  if(const auto why=sourceEvidenceFailure(out,out.stamp,config)) {reason=why;return false;}
   out.position={p.x,p.y,p.z};out.orientation={q.w,q.x,q.y,q.z};
   out.yaw=std::atan2(2.*(q.w*q.z+q.x*q.y),1.-2.*(q.y*q.y+q.z*q.z));
   out.planar_speed=std::hypot(v.x,v.y);
@@ -133,6 +137,9 @@ inline bool decodeNavigationState(const d1max_planning_interfaces::msg::Navigati
   out.frame_id=local.header.frame_id; out.child_frame_id=local.child_frame_id;
   out.stamp=seconds(state.source_stamp);
   out.source_stamp_ns=std::int64_t(state.source_stamp.sec)*1000000000LL+state.source_stamp.nanosec;
+  // A legacy pair cannot inherit provider authority from a reused output.
+  out.provider_contract=false;out.provider_usable=false;out.provider_valid_until_ns=0;
+  out.provider_posterior_stamp_ns=out.provider_imu_stamp_ns=0;
   out.posterior_stamp=seconds(state.posterior_stamp);
   out.imu_stamp=seconds(state.imu_stamp); out.extrapolation_sec=state.extrapolation_sec;
   out.position={p.x,p.y,p.z}; out.orientation={q.w,q.x,q.y,q.z};

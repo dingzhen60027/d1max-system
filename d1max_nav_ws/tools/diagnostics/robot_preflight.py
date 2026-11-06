@@ -30,6 +30,7 @@ class Report:
         self.rows = []
         self.motion_ready = False
         self.physical_record_valid = False
+        self.runtime_profile_valid = False
         self.purpose = None
 
     def add(self, name, ok, detail, action=''):
@@ -153,6 +154,9 @@ def check_launch_configuration(report, release, nav_root, app_root):
         if activation_path.is_symlink() or info.st_uid != os.getuid() or info.st_mode & 0o077:
             raise ValueError('private_owned_activation_required')
         activation = json.loads(activation_path.read_text())
+        launcher = load_helper('d1max_preflight_web_launch_policy',
+            app_root / 'map_manager/backend/mainline_release.py')
+        activation = launcher.activation_launch_config(activation)
         if activation.get('schema_version') != 3 or activation.get('profile') != 'single_floor_live':
             raise ValueError('activation_schema')
         report.purpose = activation['purpose']
@@ -175,7 +179,7 @@ def check_launch_configuration(report, release, nav_root, app_root):
             raise ValueError('web_compatibility_entry_binding_changed')
         policy = activation.get('sdk_session_policy', 'fixed')
         if (policy not in ('fixed', 'bind_current_on_start') or
-                policy == 'bind_current_on_start' and report.purpose != 'planning_only' or
+                policy == 'bind_current_on_start' and report.purpose != 'planning_only' and not activation.get('runtime_motion_profile') or
                 policy == 'fixed' and not activation.get('expected_sdk_session')):
             raise ValueError('sdk_session_binding_invalid')
         report.add('web_activation_matches_mainline', True,
@@ -220,17 +224,17 @@ def check_network(report, app_root):
 
 
 def check_acceptance(report, release, activation, *, files_only=False):
-    # Never treat the historical draft or four booleans as accepted physics.
-    # Reuse the actual writer's offline record validator and profile binding.
-    record = Path(activation['physical_acceptance_record']) if activation and activation.get('physical_acceptance_record') else None
+    # Runtime validity is not physical acceptance. Reuse the sole writer's
+    # parser for both normal configuration and legacy measured records.
+    record = Path(activation['motion_profile_record']) if activation and activation.get('motion_profile_record') else None
     if record is None and files_only and report.purpose == 'planning_only':
         report.add('configured_mode', True, 'planning_only; motion is NOT accepted or enabled')
         return
     try:
         if record is None or release is None:
-            raise ValueError('no_bound_physical_record')
-        if sha256(record) != activation['physical_acceptance_record_sha256']:
-            raise ValueError('physical_record_binding_changed')
+            raise ValueError('no_bound_motion_profile')
+        if sha256(record) != activation['motion_profile_sha256']:
+            raise ValueError('motion_profile_binding_changed')
         value = json.loads(record.read_text())
         checker = release/'sdk/install/d1max_sdk_bridge/lib/d1max_sdk_bridge/execution_acceptance_check'
         result = subprocess.run([str(checker), str(record), value['robot_id'], value['sdk_version'],
@@ -238,17 +242,18 @@ def check_acceptance(report, release, activation, *, files_only=False):
             text=True, timeout=10, check=False)
         accepted = json.loads(result.stdout)
         if result.returncode or accepted.get('valid') is not True:
-            raise ValueError('writer_rejected_physical_record:' + result.stdout.strip()[:512])
+            raise ValueError('writer_rejected_motion_profile:' + result.stdout.strip()[:512])
         descriptor = json.loads((release/'release.json').read_text())
         profile = release/descriptor['template_source_root']/'src/d1max_scan_planner/config/d1max_robot.yaml'
         if sha256(profile) != value['robot_profile_sha256']:
             raise ValueError('accepted_profile_differs_from_actual_navigation_profile')
     except (OSError, ValueError, KeyError, TypeError, subprocess.TimeoutExpired) as error:
-        report.add('physical_acceptance', False, str(error),
-                   '先完成实际物理测量，再绑定 Web 与 SDK writer 的同一验收记录；不得置真 draft')
+        report.add('motion_profile', False, str(error),
+                   '核对 Web、导航和 SDK 的同一运行配置，不要求标定报告')
         return
-    report.physical_record_valid = True
-    report.add('physical_acceptance', True, f'writer-validated bound record={record}')
+    report.runtime_profile_valid = True
+    report.physical_record_valid = accepted.get('physical_acceptance_verified') is True
+    report.add('motion_profile', True, f'writer-validated runtime parameters={record}; physical_acceptance={report.physical_record_valid}')
 
 
 def main():
@@ -276,6 +281,7 @@ def main():
         print(json.dumps({'ok': report.ok, 'scope': 'files_only' if args.files_only else 'readiness',
                           'purpose': report.purpose, 'motion_ready': report.motion_ready,
                           'physical_record_valid': report.physical_record_valid,
+                          'runtime_profile_valid': report.runtime_profile_valid,
                           'sdk_connected_by_check': False, 'checks': report.rows}, ensure_ascii=False, indent=1))
     else:
         for row in report.rows:

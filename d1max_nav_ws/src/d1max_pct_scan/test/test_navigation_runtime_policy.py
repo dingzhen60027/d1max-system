@@ -18,12 +18,16 @@ ROOT = Path(__file__).resolve().parents[3]
 def test_checked_in_policy_has_one_common_episode_not_short_stage_abort():
     policy = load(ROOT/'src/d1max_pct_scan/config/navigation_runtime.yaml')
     assert policy == NavigationRuntimePolicy()
+    assert policy.execution_mode_policy=='fixed_stair'
+    assert policy.execution_stair_runtime_parameter_source=='general_runtime_reuse'
     params = policy.follow_parameters()
     assert {params[key] for key in params if key.endswith('_wait_s')} == {30.}
     assert params['follow_recovery_episode_s'] == 30.
     assert policy.bt_parameters()['execution_blocked_timeout_s'] == 30.
     assert policy.bt_parameters()['execution_recovery_time_s'] == params['follow_stable_reset_s'] == .6
     assert policy.health_parameters()['minimum_new_samples'] == 3
+    assert policy.keep_committed_route_on_local_failure is True
+    assert params['keep_committed_route_on_local_failure'] is True
 
 
 @pytest.mark.parametrize('key,value', [
@@ -102,6 +106,8 @@ def test_same_policy_drives_real_tree_owner_and_adapter_generation(tmp_path):
     assert owner['compute_readiness_timeout_s']==adapter['readiness_timeout_s']==45.
     assert owner['health_timeout_s'] == .6  # source/control proof was not relaxed
     assert owner['preview_only'] is True
+    assert owner['keep_committed_route_on_local_failure'] is True
+    assert tree.find('.//PauseOnUnavailable').get('keep_committed_route_on_local_failure')=='true'
 
 
 @pytest.mark.parametrize('name,key,value', [
@@ -117,6 +123,9 @@ def test_same_policy_drives_real_tree_owner_and_adapter_generation(tmp_path):
     ('global.yaml', 'commit_wait_timeout_s', 10.),
     ('bt.yaml', 'compute_readiness_timeout_s', 10.),
     ('bt_adapter.yaml', 'readiness_timeout_s', 10.),
+    ('bt.yaml', 'keep_committed_route_on_local_failure', False),
+    ('bt_adapter.yaml', 'keep_committed_route_on_local_failure', False),
+    ('bt_adapter.yaml', 'keep_committed_route_on_local_failure', 1),
 ])
 def test_one_component_cannot_silently_fork_its_budget(tmp_path, name, key, value):
     session = prepared_tree(tmp_path, NavigationRuntimePolicy())
@@ -142,6 +151,25 @@ def test_competing_override_and_tree_fork_are_rejected(tmp_path):
         validate_session_policy(tmp_path, session)
 
 
+@pytest.mark.parametrize('value', [None, True, .6, 2., float('nan')])
+def test_native_pipeline_watchdog_cannot_fork_runtime_policy(tmp_path,value):
+    session=prepared_tree(tmp_path,NavigationRuntimePolicy())
+    path=tmp_path/'scan.yaml'
+    path.write_text(yaml.safe_dump({'/**': {'ros__parameters': {
+        'fsm.component_callback_timeout_s':value}}}))
+    with pytest.raises(ValueError,match='component_mismatch:scan.yaml'):
+        validate_session_policy(tmp_path,session)
+
+
+def test_native_pipeline_watchdog_uses_same_policy_and_archived_missing_is_compatible(tmp_path):
+    policy=NavigationRuntimePolicy(component_callback_timeout_s=2.)
+    session=prepared_tree(tmp_path,policy)
+    path=tmp_path/'scan.yaml'
+    for params in ({},{'fsm.component_callback_timeout_s':policy.component_callback_timeout_s}):
+        path.write_text(yaml.safe_dump({'/**': {'ros__parameters': params}}))
+        validate_session_policy(tmp_path,session)
+
+
 @pytest.mark.parametrize('arrival', [None, 0., 3., True])
 def test_completed_session_cannot_fork_arrival_evidence_from_bt(tmp_path,arrival):
     session=prepared_tree(tmp_path,NavigationRuntimePolicy())
@@ -158,6 +186,50 @@ def test_session_mapping_cannot_fork_from_the_pinned_policy_file(tmp_path):
     altered=dict(session['runtime_policy'],recovery_timeout_s=45.)
     Path(session['runtime_policy_source']).write_text(yaml.safe_dump(altered))
     with pytest.raises(ValueError,match='source_mismatch'):
+        validate_session_policy(tmp_path,session)
+
+def test_legacy_policy_without_persistence_field_keeps_its_finite_behavior():
+    fields=asdict(NavigationRuntimePolicy())
+    del fields['keep_committed_route_on_local_failure']
+    old=NavigationRuntimePolicy.from_mapping(fields)
+    assert old.keep_committed_route_on_local_failure is False
+    assert old.recovery_timeout_s==30.
+
+
+def test_legacy_policy_does_not_reinterpret_existing_mode_strategy():
+    fields=asdict(NavigationRuntimePolicy())
+    del fields['execution_mode_policy']
+    del fields['execution_stair_runtime_parameter_source']
+    assert NavigationRuntimePolicy.from_mapping(fields).execution_mode_policy=='segment_modes'
+    with pytest.raises(ValueError,match='execution_mode_policy'):
+        NavigationRuntimePolicy(execution_mode_policy='auto_stand')
+
+
+def test_legacy_policy_does_not_silently_enable_stair_runtime_reuse():
+    fields=asdict(NavigationRuntimePolicy())
+    del fields['execution_stair_runtime_parameter_source']
+    old=NavigationRuntimePolicy.from_mapping(fields)
+    assert old.execution_mode_policy=='fixed_stair'
+    assert old.execution_stair_runtime_parameter_source=='evidence_record'
+    with pytest.raises(ValueError,match='execution_stair_runtime_parameter_source'):
+        NavigationRuntimePolicy(execution_stair_runtime_parameter_source='verified_by_configuration')
+    with pytest.raises(ValueError,match='requires_fixed_stair'):
+        NavigationRuntimePolicy(execution_mode_policy='segment_modes',
+            execution_stair_runtime_parameter_source='general_runtime_reuse')
+    assert NavigationRuntimePolicy(execution_mode_policy='segment_modes',
+        execution_stair_runtime_parameter_source='evidence_record').execution_mode_policy=='segment_modes'
+
+@pytest.mark.parametrize('value',[0,1,'true',None])
+def test_persistence_policy_has_a_typed_boolean_not_a_changed_sensor_timeout(value):
+    with pytest.raises(ValueError):
+        NavigationRuntimePolicy(keep_committed_route_on_local_failure=value)
+
+def test_generated_tree_cannot_drop_committed_task_persistence(tmp_path):
+    session=prepared_tree(tmp_path,NavigationRuntimePolicy())
+    tree=ET.parse(tmp_path/'navigation.xml')
+    tree.find('.//PauseOnUnavailable').set('keep_committed_route_on_local_failure','false')
+    tree.write(tmp_path/'navigation.xml')
+    with pytest.raises(ValueError,match='tree_persistence_mismatch'):
         validate_session_policy(tmp_path,session)
 
 

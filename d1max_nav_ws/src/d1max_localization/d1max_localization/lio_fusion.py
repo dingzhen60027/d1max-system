@@ -109,6 +109,18 @@ class LioMapState:
         self.recovery=False;self.recovery_count=0;self.last_recovery=-math.inf
         return map_pose
 
+    def revoke_unconfirmed_seed(self):
+        """Withdraw a failed map application, retaining real local history/epoch.
+
+        This creates no pose or replacement anchor. Late matcher output cannot
+        be admitted until the existing seed owner applies a new exact seed.
+        """
+        self.anchor = self.seed_time = self.last_correction = None
+        self.last_raw = 0.
+        self.recovery = False
+        self.recovery_count = 0
+        self.last_recovery = -math.inf
+
     def prediction(self,t):
         local=self.local_at(t)
         return compose(self.anchor,local) if self.anchor is not None and local is not None else None

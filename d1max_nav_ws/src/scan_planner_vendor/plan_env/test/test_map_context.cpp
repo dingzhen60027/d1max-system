@@ -1,12 +1,17 @@
 #include <gtest/gtest.h>
 #include <nlohmann/json.hpp>
 #include <sensor_msgs/point_cloud2_iterator.hpp>
+#include <atomic>
+#include <future>
+#include <set>
+#include <thread>
 #include "plan_env/grid_map.h"
 #include "plan_env/collision_snapshot_pool.hpp"
 
 TEST(CollisionSnapshotPool, EmptyPoolHasNoInventedMap) {
   scan_planner::CollisionSnapshotPool pool;
   EXPECT_FALSE(pool.borrowLatest());
+  EXPECT_FALSE(pool.borrowOwnerValidation());
 }
 
 // No ROS init, node, executor, discovery or transport. Exercise the actual
@@ -47,6 +52,12 @@ struct GridMapTestAccess {
     map.fusion_timing_={sequence,101000000000,101090000000,1000000000,1090000000,
       {{100900000000,100800000000}}};
   }
+  static void sourceEvidence(GridMap& map,std::int64_t source) {
+    map.integrated_cloud_stamp_ns_=source;
+    map.ray_integrated_stamps_={{source-1000,source}};
+  }
+  static void clockFault(GridMap& map,bool fault=true) {map.ray_clock_fault_=fault;}
+  static void renderOnly(GridMap& map,bool enabled) {map.visualization_only_=enabled;}
   static void expectCleared(GridMap &map) {
     const auto &d=map.md_;
     EXPECT_TRUE(std::all_of(d.occupancy_buffer_.begin(),d.occupancy_buffer_.end(),
@@ -223,6 +234,63 @@ TEST(CollisionSnapshotPool, ThirdSlotSeparatesOfficialCandidateFromStrictUnknown
   }
 }
 
+TEST(CollisionSnapshotPool, OwnerSnapshotCanSeedSolverWithoutZeroClockOrRenewedEvidence) {
+  GridMap writer;GridMapTestAccess::configure(writer,true);
+  ASSERT_TRUE(writer.applyLocalizationContext(context(1,1)));
+  GridMapTestAccess::candidateAndProofEvidence(writer);
+  GridMap owner,solver,repeated;
+  writer.copyCollisionSnapshotTo(owner,102000000000LL,std::chrono::steady_clock::now());
+  ASSERT_TRUE(owner.collisionSnapshotSourceFresh());
+  owner.copyCollisionSnapshotTo(solver,102000000000LL,std::chrono::steady_clock::now());
+  ASSERT_TRUE(solver.collisionSnapshotSourceFresh());
+  EXPECT_EQ(solver.localizationContextSequence(),owner.localizationContextSequence());
+  EXPECT_EQ(solver.occupancyRevision(),owner.occupancyRevision());
+  EXPECT_EQ(GridMapTestAccess::raw(solver),GridMapTestAccess::raw(owner));
+  EXPECT_EQ(solver.integratedRaySourceStamp(0),101900000000LL);
+  EXPECT_EQ(solver.integratedRaySourceStamp(1),101900000000LL);
+  EXPECT_EQ(solver.latestCloudStampNs(),101900000000LL);
+  solver.requireObservedSnapshot();solver.beginObservedProof();
+  EXPECT_EQ(solver.getInflateOccupancy({-.25,-.15,-.15},0.),0);
+  EXPECT_EQ(solver.getInflateOccupancy({.25,.25,.25},0.),1);
+  const auto original_deadline=solver.observedProofDeadlineNs();
+  EXPECT_EQ(original_deadline,102400000000LL);
+  GridMapTestAccess::elapseSnapshot(owner,std::chrono::milliseconds(600));
+  // A paused source clock and a new copy/lease cannot make these same rays
+  // young again. The old native occupied evidence must nevertheless remain.
+  owner.copyCollisionSnapshotTo(solver,102000000000LL,std::chrono::steady_clock::now());
+  EXPECT_FALSE(solver.collisionSnapshotSourceFresh());
+  solver.requireObservedSnapshot();solver.beginObservedProof();
+  EXPECT_EQ(solver.getInflateOccupancy({-.25,-.15,-.15},0.),2);
+  EXPECT_EQ(solver.getInflateOccupancy({.25,.25,.25},0.),1);
+  solver.copyCollisionSnapshotTo(repeated,102000000000LL,std::chrono::steady_clock::now());
+  EXPECT_FALSE(repeated.collisionSnapshotSourceFresh());
+  EXPECT_EQ(repeated.latestCloudStampNs(),101900000000LL);
+  EXPECT_EQ(repeated.integratedRaySourceStamp(0),101900000000LL);
+  repeated.requireObservedSnapshot();repeated.beginObservedProof();
+  EXPECT_EQ(repeated.getInflateOccupancy({-.25,-.15,-.15},0.),2);
+  EXPECT_EQ(repeated.getInflateOccupancy({.25,.25,.25},0.),1);
+}
+
+TEST(CollisionSnapshotPool, OwnerSnapshotCloneKeepsClockFaultAndContextReset) {
+  GridMap writer;GridMapTestAccess::configure(writer,true);
+  ASSERT_TRUE(writer.applyLocalizationContext(context(1,1)));
+  GridMapTestAccess::candidateAndProofEvidence(writer);
+  GridMapTestAccess::clockFault(writer);
+  GridMap owner,solver;
+  writer.copyCollisionSnapshotTo(owner,102000000000LL,std::chrono::steady_clock::now());
+  owner.copyCollisionSnapshotTo(solver,102000000000LL,std::chrono::steady_clock::now());
+  EXPECT_FALSE(solver.collisionSnapshotSourceFresh());
+  ASSERT_TRUE(writer.applyLocalizationContext(context(2,2,"reset-seed")));
+  writer.copyCollisionSnapshotTo(owner,102000000000LL,std::chrono::steady_clock::now());
+  owner.copyCollisionSnapshotTo(solver,102000000000LL,std::chrono::steady_clock::now());
+  EXPECT_EQ(solver.localizationContextSequence(),2U);
+  EXPECT_EQ(solver.latestCloudStampNs(),0);
+  EXPECT_EQ(solver.integratedRaySourceStamp(0),0);
+  EXPECT_EQ(solver.integratedRaySourceStamp(1),0);
+  EXPECT_FALSE(solver.collisionSnapshotSourceFresh());
+  EXPECT_EQ(GridMapTestAccess::raw(solver),GridMapTestAccess::raw(writer));
+}
+
 TEST(CollisionSnapshotPool, EachObservedProofUsesOnlyItsOwnQueriedSourceDeadline) {
   GridMap writer;GridMapTestAccess::configure(writer);
   ASSERT_TRUE(writer.applyLocalizationContext(context(1,1)));
@@ -295,6 +363,529 @@ TEST(CollisionSnapshotPool, SlowAdmissionAndSolverCannotShareMutableQueryCache) 
   // No copied querying pointer or fourth allocation is permitted by this API.
 }
 
+TEST(CollisionSnapshotPool, OwnerNeverBorrowsUnpublishedValidationOrSolverQuota) {
+  GridMap writer;GridMapTestAccess::configure(writer);GridMapTestAccess::seedEvidence(writer);
+  scan_planner::CollisionSnapshotPool pool;const auto now=std::chrono::steady_clock::now();
+  ASSERT_TRUE(pool.publishSolver(writer,101000000000LL,now));
+  EXPECT_FALSE(pool.borrowOwnerValidation()); // A populated solver is not a validation publication.
+  ASSERT_TRUE(pool.publishValidation(writer,101000000000LL,now));
+  auto validator=pool.borrowValidation();ASSERT_TRUE(validator);
+  EXPECT_FALSE(pool.borrowOwnerValidation()); // The other validation slot has never been published.
+  auto solver=pool.borrowSolver();ASSERT_TRUE(solver);
+  EXPECT_NE(solver.get(),validator.get());
+  validator.reset();
+  EXPECT_FALSE(pool.borrowOwnerValidation()); // First publication remains the fast head even between checks.
+  ASSERT_TRUE(pool.publishValidation(writer,101000000000LL,now));
+  auto owner=pool.borrowOwnerValidation();ASSERT_TRUE(owner);
+  EXPECT_NE(owner.get(),solver.get());
+  auto fast=pool.borrowValidation();ASSERT_TRUE(fast);
+  EXPECT_NE(fast.get(),owner.get()); // Separate query caches and a protected fast head.
+}
+
+TEST(CollisionSnapshotPool, OwnerCannotTakeFastHeadEvenWhenValidatorIsBetweenChecks) {
+  GridMap writer;GridMapTestAccess::configure(writer);GridMapTestAccess::seedEvidence(writer);
+  scan_planner::CollisionSnapshotPool pool;const auto now=std::chrono::steady_clock::now();
+  GridMapTestAccess::sourceEvidence(writer,101000000000LL);
+  ASSERT_TRUE(pool.publishValidation(writer,101090000000LL,now));
+  GridMapTestAccess::sourceEvidence(writer,101100000000LL);
+  ASSERT_TRUE(pool.publishValidation(writer,101190000000LL,now));
+  scan_planner::CollisionSnapshotPool::PublicationTiming latest_timing,older_timing;
+  auto validator=pool.borrowValidation(&latest_timing);ASSERT_TRUE(validator);
+  auto owner=pool.borrowOwnerValidation(&older_timing);ASSERT_TRUE(owner);
+  EXPECT_NE(owner.get(),validator.get());
+  EXPECT_LT(older_timing.publication_sequence,latest_timing.publication_sequence);
+  EXPECT_EQ(owner->latestCloudStampNs(),101000000000LL);
+  EXPECT_EQ(owner->integratedRaySourceStamp(0),100999999000LL);
+  EXPECT_EQ(validator->latestCloudStampNs(),101100000000LL);
+  const auto old_source=owner->latestCloudStampNs();
+  EXPECT_FALSE(pool.publishValidation(writer,101290000000LL,now));
+  EXPECT_EQ(owner->latestCloudStampNs(),old_source); // A publication miss cannot relabel a borrowed map.
+  owner.reset();validator.reset();
+  auto backup_owner=pool.borrowOwnerValidation();ASSERT_TRUE(backup_owner);
+  EXPECT_EQ(backup_owner->latestCloudStampNs(),101000000000LL);
+  auto fast=pool.borrowValidation();ASSERT_TRUE(fast);
+  EXPECT_EQ(fast->latestCloudStampNs(),101100000000LL);
+  EXPECT_NE(fast.get(),backup_owner.get());
+  const auto diagnostics=pool.readerDiagnostics();
+  EXPECT_EQ(diagnostics.owner_borrows,2U);
+  EXPECT_EQ(diagnostics.validation_borrows,2U);
+  EXPECT_EQ(diagnostics.validation_misses,0U);
+  EXPECT_EQ(diagnostics.publication_misses,1U);
+}
+
+TEST(CollisionSnapshotPool, OwnerTransactionCannotHideNewerRayEvidenceFromCurrentRenewal) {
+  GridMap writer;GridMapTestAccess::configure(writer);GridMapTestAccess::seedEvidence(writer);
+  scan_planner::CollisionSnapshotPool pool;const auto now=std::chrono::steady_clock::now();
+  // Old-source backup has expired at query time; a genuinely newer complete
+  // map is available. Reproduce the owner winning a borrow before renewal.
+  GridMapTestAccess::sourceEvidence(writer,100500000000LL);
+  ASSERT_TRUE(pool.publishValidation(writer,101090000000LL,now));
+  GridMapTestAccess::sourceEvidence(writer,101000000000LL);
+  ASSERT_TRUE(pool.publishValidation(writer,101090000000LL,now));
+  auto owner=pool.borrowOwnerValidation();ASSERT_TRUE(owner);
+  auto fast=pool.borrowValidation();ASSERT_TRUE(fast);
+  EXPECT_EQ(owner->latestCloudStampNs(),100500000000LL);
+  EXPECT_EQ(fast->latestCloudStampNs(),101000000000LL);
+  EXPECT_FALSE(owner->integratedCloudFreshAt(101100000000LL));
+  EXPECT_TRUE(fast->integratedCloudFreshAt(101100000000LL));
+  const auto original_source=fast->integratedRaySourceStamp(0);
+  fast.reset();
+  for(unsigned i=0;i<10;++i) {
+    auto renewal=pool.borrowValidation();ASSERT_TRUE(renewal);
+    EXPECT_EQ(renewal->integratedRaySourceStamp(0),original_source);
+  }
+  // No arrival means no lease renewal: the protected head also expires at
+  // its actual original ray deadline, rather than being kept alive by reads.
+  auto expired=pool.borrowValidation();ASSERT_TRUE(expired);
+  EXPECT_FALSE(expired->integratedCloudFreshAt(102000000000LL));
+  EXPECT_EQ(pool.readerDiagnostics().validation_misses,0U);
+}
+
+TEST(CollisionSnapshotPool, PendingCompleteWriterGetsReleasedBackupWithoutStoppingFastReader) {
+  GridMap writer;GridMapTestAccess::configure(writer);GridMapTestAccess::seedEvidence(writer);
+  scan_planner::CollisionSnapshotPool pool;const auto now=std::chrono::steady_clock::now();
+  GridMapTestAccess::sourceEvidence(writer,101000000000LL);
+  ASSERT_TRUE(pool.publishValidation(writer,101090000000LL,now));
+  ASSERT_TRUE(pool.publishValidation(writer,101090000000LL,now));
+  ASSERT_TRUE(pool.publishSolver(writer,101090000000LL,now));
+  auto head=pool.borrowValidation(),owner=pool.borrowOwnerValidation(),solver=pool.borrowSolver();
+  ASSERT_TRUE(head&&owner&&solver);
+  const auto head_address=head.get(),backup_address=owner.get(),solver_address=solver.get();
+  const auto old_raw=GridMapTestAccess::raw(*head);
+  GridMapTestAccess::sourceEvidence(writer,101100000000LL);
+  std::promise<void> missed,retry;auto missed_future=missed.get_future();auto retry_future=retry.get_future();
+  bool initial=false,retried=false;
+  std::thread writing([&]{
+    initial=pool.publishValidation(writer,101190000000LL,now);
+    missed.set_value();retry_future.wait();
+    retried=pool.publishValidation(writer,101190000000LL,now);
+  });
+  missed_future.wait();
+  EXPECT_FALSE(initial); // Both actual validation slots were borrowed at fusion completion.
+  owner.reset();
+  EXPECT_FALSE(pool.borrowValidation()); // A fast fallback cannot steal the pending writer's backup either.
+  auto overtaking_owner=pool.borrowOwnerValidation();
+  EXPECT_FALSE(overtaking_owner); // The owner must not repeatedly win before the 10 ms writer retry.
+  // Current-curve checks remain available on their already-complete head.
+  head.reset();
+  head=pool.borrowValidation();
+  EXPECT_TRUE(head);
+  if(head) {EXPECT_EQ(head.get(),head_address);EXPECT_EQ(head->latestCloudStampNs(),101000000000LL);}
+  retry.set_value();writing.join();
+  EXPECT_TRUE(retried);
+  if(head) {EXPECT_EQ(head->latestCloudStampNs(),101000000000LL);EXPECT_EQ(GridMapTestAccess::raw(*head),old_raw);}
+  EXPECT_EQ(solver.get(),solver_address);EXPECT_EQ(solver->latestCloudStampNs(),101000000000LL);
+  if(retried) {
+    auto fresh=pool.borrowValidation();ASSERT_TRUE(fresh);
+    EXPECT_EQ(fresh.get(),backup_address);EXPECT_EQ(fresh->latestCloudStampNs(),101100000000LL);
+    EXPECT_EQ(fresh->integratedRaySourceStamp(0),101099999000LL);
+    head.reset();auto resumed_owner=pool.borrowOwnerValidation();ASSERT_TRUE(resumed_owner);
+    EXPECT_EQ(resumed_owner.get(),head_address); // Writer intent retired, with no fourth slot.
+  }
+}
+
+TEST(CollisionSnapshotPool, PendingWriterDoesNotReserveFallbackForAnIdenticalPublishedMap) {
+  GridMap writer;GridMapTestAccess::configure(writer);GridMapTestAccess::seedEvidence(writer);
+  scan_planner::CollisionSnapshotPool pool;const auto now=std::chrono::steady_clock::now();
+  ASSERT_TRUE(pool.publishValidation(writer,101000000000LL,now));
+  ASSERT_TRUE(pool.publishValidation(writer,101000000000LL,now));
+  auto head=pool.borrowValidation(),owner=pool.borrowOwnerValidation();ASSERT_TRUE(head&&owner);
+  EXPECT_FALSE(pool.publishValidation(writer,101000000000LL,now));
+  owner.reset();
+  EXPECT_TRUE(pool.borrowOwnerValidation()); // No new completed state is awaiting delivery.
+}
+
+TEST(CollisionSnapshotPool, PendingWriterCanUseFastHeadWhenOwnerIsLastReaderToFinish) {
+  GridMap writer;GridMapTestAccess::configure(writer);GridMapTestAccess::seedEvidence(writer);
+  scan_planner::CollisionSnapshotPool pool;const auto now=std::chrono::steady_clock::now();
+  GridMapTestAccess::sourceEvidence(writer,101000000000LL);
+  ASSERT_TRUE(pool.publishValidation(writer,101300000000LL,now));
+  ASSERT_TRUE(pool.refreshOwnerReplica(writer,101300000000LL,now));
+  ASSERT_TRUE(pool.publishSolver(writer,101300000000LL,now));
+  auto fast=pool.borrowValidation(),owner=pool.borrowOwnerValidation(),solver=pool.borrowSolver();
+  ASSERT_TRUE(fast&&owner&&solver);
+  const auto fast_address=fast.get(),owner_address=owner.get(),solver_address=solver.get();
+  GridMapTestAccess::sourceEvidence(writer,101100000000LL);
+  ASSERT_FALSE(pool.publishValidation(writer,101400000000LL,now));
+
+  // Both readers overlapped fusion completion, but current-curve validation
+  // finishes first. A second 100 ms check of its old head would consume the
+  // only free destination and postpone delivery of the COMPLETE newer map.
+  // Give that slot to the pending writer while the owner still holds backup.
+  fast.reset();
+  auto repeated_old_head=pool.borrowValidation();
+  EXPECT_FALSE(repeated_old_head);
+  EXPECT_FALSE(pool.borrowOwnerValidation());
+  EXPECT_TRUE(pool.publishValidation(writer,101410000000LL,now));
+  if(!repeated_old_head) {
+    auto current=pool.borrowValidation();ASSERT_TRUE(current);
+    EXPECT_EQ(current.get(),fast_address);
+    EXPECT_EQ(current->latestCloudStampNs(),101100000000LL);
+    EXPECT_EQ(current->integratedRaySourceStamp(0),101099999000LL);
+    EXPECT_TRUE(current->integratedCloudFreshAt(101599000000LL));
+    EXPECT_FALSE(current->integratedCloudFreshAt(101600000001LL));
+    EXPECT_EQ(GridMapTestAccess::raw(*current),GridMapTestAccess::raw(writer));
+    EXPECT_EQ(current->getInflateOccupancy(Eigen::Vector3d(.25,.25,.25),0.),1);
+    EXPECT_EQ(owner.get(),owner_address);
+    EXPECT_EQ(owner->latestCloudStampNs(),101000000000LL);
+    EXPECT_EQ(solver.get(),solver_address);
+    EXPECT_EQ(solver->latestCloudStampNs(),101000000000LL);
+  }
+}
+
+TEST(CollisionSnapshotPool, PendingFastHeadReservationRetiresWhenAllReadersGoIdle) {
+  GridMap writer;GridMapTestAccess::configure(writer);GridMapTestAccess::seedEvidence(writer);
+  scan_planner::CollisionSnapshotPool pool;const auto now=std::chrono::steady_clock::now();
+  ASSERT_TRUE(pool.publishValidation(writer,101300000000LL,now));
+  ASSERT_TRUE(pool.refreshOwnerReplica(writer,101300000000LL,now));
+  auto fast=pool.borrowValidation(),owner=pool.borrowOwnerValidation();ASSERT_TRUE(fast&&owner);
+  GridMapTestAccess::sourceEvidence(writer,101100000000LL);
+  ASSERT_FALSE(pool.publishValidation(writer,101400000000LL,now));
+  fast.reset();EXPECT_FALSE(pool.borrowValidation());
+  owner.reset();
+  // With both slots free, backup alone is enough for writer delivery. Do not
+  // turn the fast-reader yield into a global latch or wait for a reader wake.
+  fast=pool.borrowValidation();ASSERT_TRUE(fast);
+  ASSERT_TRUE(pool.publishValidation(writer,101410000000LL,now));
+  auto newest=pool.borrowValidation();ASSERT_TRUE(newest);
+  EXPECT_NE(newest.get(),fast.get());
+  EXPECT_EQ(newest->latestCloudStampNs(),101100000000LL);
+  fast.reset();newest.reset();
+  ASSERT_TRUE(pool.refreshOwnerReplica(writer,101420000000LL,now));
+  auto idle_fast=pool.borrowValidation(),idle_owner=pool.borrowOwnerValidation();
+  ASSERT_TRUE(idle_fast&&idle_owner);EXPECT_NE(idle_fast.get(),idle_owner.get());
+}
+
+TEST(CollisionSnapshotPool, PendingWriterCopyExceptionReleasesFillFlagAndAllowsExactRetry) {
+  GridMap writer;GridMapTestAccess::configure(writer);GridMapTestAccess::seedEvidence(writer);
+  scan_planner::CollisionSnapshotPool pool;const auto now=std::chrono::steady_clock::now();
+  ASSERT_TRUE(pool.publishValidation(writer,101000000000LL,now));
+  ASSERT_TRUE(pool.publishValidation(writer,101000000000LL,now));
+  auto head=pool.borrowValidation(),owner=pool.borrowOwnerValidation();ASSERT_TRUE(head&&owner);
+  GridMapTestAccess::sourceEvidence(writer,101100000000LL);
+  EXPECT_FALSE(pool.publishValidation(writer,101100000000LL,now));
+  owner.reset();GridMapTestAccess::renderOnly(writer,true);
+  EXPECT_THROW(pool.publishValidation(writer,101100000000LL,now),std::logic_error);
+  EXPECT_FALSE(pool.borrowOwnerValidation());
+  GridMapTestAccess::renderOnly(writer,false);
+  ASSERT_TRUE(pool.publishValidation(writer,101100000000LL,now));
+  auto fresh=pool.borrowValidation();ASSERT_TRUE(fresh);
+  EXPECT_EQ(fresh->latestCloudStampNs(),101100000000LL);
+  EXPECT_EQ(head->latestCloudStampNs(),101000000000LL);
+  head.reset();EXPECT_TRUE(pool.borrowOwnerValidation());
+}
+
+TEST(CollisionSnapshotPool, PendingWriterCannotRenewAStaleHeadOrChangeResetIdentity) {
+  for(bool clock_fault:{false,true}) {
+    GridMap writer;GridMapTestAccess::configure(writer);GridMapTestAccess::seedEvidence(writer);
+    scan_planner::CollisionSnapshotPool pool;const auto now=std::chrono::steady_clock::now();
+    ASSERT_TRUE(pool.publishValidation(writer,101000000000LL,now));
+    ASSERT_TRUE(pool.publishValidation(writer,101000000000LL,now));
+    auto head=pool.borrowValidation(),owner=pool.borrowOwnerValidation();ASSERT_TRUE(head&&owner);
+    GridMapTestAccess::sourceEvidence(writer,101100000000LL);
+    EXPECT_FALSE(pool.publishValidation(writer,101100000000LL,now));
+    owner.reset();head.reset();
+    auto old_head=pool.borrowValidation();ASSERT_TRUE(old_head);
+    GridMapTestAccess::elapseSnapshot(*old_head,std::chrono::seconds(2));
+    EXPECT_EQ(old_head->latestCloudStampNs(),101000000000LL);
+    EXPECT_FALSE(old_head->integratedCloudFreshAt(103000000000LL));
+    // A context or clock fault is visible even before a new copy can finish.
+    if(clock_fault)GridMapTestAccess::clockFault(writer);
+    else ASSERT_TRUE(writer.applyLocalizationContext(context(2,2)));
+    owner=pool.borrowOwnerValidation();EXPECT_FALSE(owner);
+    ASSERT_TRUE(pool.publishValidation(writer,103000000000LL,now));
+    old_head.reset();
+    EXPECT_FALSE(pool.borrowOwnerValidation()); // No reacquisition of the old identity.
+    auto current=pool.borrowValidation();ASSERT_TRUE(current);
+    EXPECT_EQ(current->rayEvidenceClockFault(),clock_fault);
+    EXPECT_EQ(current->localizationContextSequence(),writer.localizationContextSequence());
+  }
+}
+
+TEST(CollisionSnapshotPool, OlderOwnerCannotReplaceAlreadyPublishedFreshSolverSources) {
+  GridMap writer;GridMapTestAccess::configure(writer);GridMapTestAccess::seedEvidence(writer);
+  scan_planner::CollisionSnapshotPool pool;const auto now=std::chrono::steady_clock::now();
+  GridMapTestAccess::sourceEvidence(writer,100500000000LL);
+  ASSERT_TRUE(pool.publishValidation(writer,101090000000LL,now));
+  GridMapTestAccess::sourceEvidence(writer,101000000000LL);
+  ASSERT_TRUE(pool.publishValidation(writer,101090000000LL,now));
+  ASSERT_TRUE(pool.publishSolver(writer,101090000000LL,now));
+  auto owner=pool.borrowOwnerValidation();ASSERT_TRUE(owner);
+  ASSERT_EQ(owner->latestCloudStampNs(),100500000000LL);
+  auto solver=pool.acquireSolver(*owner,101100000000LL,
+    now+std::chrono::milliseconds(400));ASSERT_TRUE(solver);
+  EXPECT_EQ(solver->latestCloudStampNs(),101000000000LL);
+  EXPECT_EQ(solver->integratedRaySourceStamp(0),100999999000LL);
+  EXPECT_TRUE(solver->integratedCloudFreshAt(101100000000LL));
+  EXPECT_FALSE(solver->integratedCloudFreshAt(102000000000LL)); // Original deadline still expires.
+  EXPECT_EQ(pool.readerDiagnostics().solver_newer_publication_reuses,1U);
+}
+
+TEST(CollisionSnapshotPool, ReleasedOwnerReplicaCatchesUpWithoutWaitingForAnotherFusion) {
+  GridMap writer;GridMapTestAccess::configure(writer);GridMapTestAccess::seedEvidence(writer);
+  scan_planner::CollisionSnapshotPool pool;const auto now=std::chrono::steady_clock::now();
+  GridMapTestAccess::sourceEvidence(writer,100500000000LL);
+  ASSERT_TRUE(pool.publishValidation(writer,101000000000LL,now));
+  ASSERT_TRUE(pool.publishValidation(writer,101000000000LL,now));
+  auto old_owner=pool.borrowOwnerValidation();ASSERT_TRUE(old_owner);
+  GridMapTestAccess::sourceEvidence(writer,100700000000LL);
+  ASSERT_TRUE(pool.publishValidation(writer,101090000000LL,now));
+  auto fast=pool.borrowValidation();ASSERT_TRUE(fast);
+  EXPECT_TRUE(fast->integratedCloudFreshAt(101120000000LL));
+  EXPECT_FALSE(old_owner->integratedCloudFreshAt(101120000000LL));
+  EXPECT_FALSE(pool.refreshOwnerReplica(writer,101120000000LL,now));
+  EXPECT_EQ(old_owner->latestCloudStampNs(),100500000000LL); // Pinned readers stay immutable.
+  old_owner.reset();
+  // Before this retry existed the next owner immediately reacquired the
+  // same 620 ms backup although the protected fast head was only 420 ms old.
+  auto stranded=pool.borrowOwnerValidation();ASSERT_TRUE(stranded);
+  EXPECT_FALSE(stranded->integratedCloudFreshAt(101120000000LL));stranded.reset();
+  ASSERT_TRUE(pool.refreshOwnerReplica(writer,101120000000LL,now));
+  // The former fast head may still be borrowed. It is never stolen/overwritten.
+  EXPECT_EQ(fast->latestCloudStampNs(),100700000000LL);fast.reset();
+  auto repaired=pool.borrowOwnerValidation();ASSERT_TRUE(repaired);
+  auto current=pool.borrowValidation();ASSERT_TRUE(current);
+  EXPECT_NE(repaired.get(),current.get());
+  EXPECT_EQ(repaired->latestCloudStampNs(),100700000000LL);
+  EXPECT_EQ(repaired->integratedRaySourceStamp(0),100699999000LL);
+  EXPECT_TRUE(repaired->integratedCloudFreshAt(101120000000LL));
+  EXPECT_EQ(GridMapTestAccess::raw(*repaired),GridMapTestAccess::raw(*current));
+  EXPECT_EQ(repaired->getInflateOccupancy({-.15,-.15,-.15},0.),
+            current->getInflateOccupancy({-.15,-.15,-.15},0.));
+  const auto sequence=pool.readerDiagnostics().latest_publication_sequence;
+  for(int i=0;i<100;++i)EXPECT_FALSE(pool.refreshOwnerReplica(writer,101120000000LL+i,now));
+  EXPECT_EQ(pool.readerDiagnostics().latest_publication_sequence,sequence);
+  // Delivery/copy does not create new sensing evidence or renew ray leases.
+  EXPECT_FALSE(repaired->integratedCloudFreshAt(102000000000LL));
+  EXPECT_EQ(repaired->latestCloudStampNs(),100700000000LL);
+}
+
+TEST(CollisionSnapshotPool, ReplicaRetryDoesNotPublishAheadOfHeadOrAcrossReset) {
+  for(bool reset:{false,true}) {
+    GridMap writer;GridMapTestAccess::configure(writer);
+    ASSERT_TRUE(writer.applyLocalizationContext(context(1,1)));
+    GridMapTestAccess::seedEvidence(writer);
+    scan_planner::CollisionSnapshotPool pool;const auto now=std::chrono::steady_clock::now();
+    EXPECT_FALSE(pool.refreshOwnerReplica(writer,101000000000LL,now));
+    ASSERT_TRUE(pool.publishValidation(writer,101000000000LL,now));
+    ASSERT_TRUE(pool.refreshOwnerReplica(writer,101000000000LL,now));
+    auto old=pool.borrowOwnerValidation();ASSERT_TRUE(old);
+    if(reset)ASSERT_TRUE(writer.applyLocalizationContext(context(2,2,"replica-reset")));
+    else GridMapTestAccess::clockFault(writer);
+    EXPECT_FALSE(pool.refreshOwnerReplica(writer,101100000000LL,now));
+    ASSERT_TRUE(pool.publishValidation(writer,101100000000LL,now));
+    EXPECT_FALSE(pool.refreshOwnerReplica(writer,101100000000LL,now));
+    EXPECT_EQ(old->localizationContextSequence(),1U);
+    EXPECT_FALSE(old->rayEvidenceClockFault());
+    old.reset();
+    EXPECT_FALSE(pool.borrowOwnerValidation()); // Old-source identity cannot be reacquired.
+    ASSERT_TRUE(pool.refreshOwnerReplica(writer,101100000000LL,now));
+    auto owner=pool.borrowOwnerValidation();ASSERT_TRUE(owner);
+    EXPECT_EQ(owner->localizationContextSequence(),reset?2U:1U);
+    EXPECT_EQ(owner->rayEvidenceClockFault(),!reset);
+    EXPECT_FALSE(pool.refreshOwnerReplica(writer,101100000001LL,now));
+  }
+}
+
+TEST(CollisionSnapshotPool, SameSourceOwnerReplicaDoesNotPromoteOrStealFastHead) {
+  GridMap writer;GridMapTestAccess::configure(writer);GridMapTestAccess::seedEvidence(writer);
+  scan_planner::CollisionSnapshotPool pool;const auto now=std::chrono::steady_clock::now();
+  GridMapTestAccess::sourceEvidence(writer,101000000000LL);
+  ASSERT_TRUE(pool.publishValidation(writer,101090000000LL,now));
+  scan_planner::CollisionSnapshotPool::PublicationTiming head_timing;
+  auto fast=pool.borrowValidation(&head_timing);ASSERT_TRUE(fast);
+  const auto* head=fast.get();
+  ASSERT_TRUE(pool.refreshOwnerReplica(writer,101100000000LL,now));
+  // Completing another reader's copy is not a newer map observation. It must
+  // not swap the protected head's role or make the owner wait for this reader.
+  EXPECT_EQ(pool.readerDiagnostics().latest_publication_sequence,head_timing.publication_sequence);
+  auto owner=pool.borrowOwnerValidation();ASSERT_TRUE(owner);
+  EXPECT_NE(owner.get(),head);
+  EXPECT_EQ(owner->latestCloudStampNs(),fast->latestCloudStampNs());
+  owner.reset();fast.reset();
+  for(unsigned i=0;i<10;++i) {
+    // Even when both slots are free, renewal should not chase the replica's
+    // later copy sequence. Reader roles stay stable until a real publication.
+    auto renewal=pool.borrowValidation();ASSERT_TRUE(renewal);
+    EXPECT_EQ(renewal.get(),head);
+    auto admission=pool.borrowOwnerValidation();ASSERT_TRUE(admission);
+    EXPECT_NE(admission.get(),head);
+    EXPECT_FALSE(pool.refreshOwnerReplica(writer,101100000000LL+i,now));
+  }
+}
+
+TEST(CollisionSnapshotPool, StableHeadAllowsSameSourceFallbackWithoutOverwritingReaders) {
+  GridMap writer;GridMapTestAccess::configure(writer);GridMapTestAccess::seedEvidence(writer);
+  scan_planner::CollisionSnapshotPool pool;const auto now=std::chrono::steady_clock::now();
+  GridMapTestAccess::sourceEvidence(writer,101000000000LL);
+  ASSERT_TRUE(pool.publishValidation(writer,101090000000LL,now));
+  auto head=pool.borrowValidation();ASSERT_TRUE(head);
+  ASSERT_TRUE(pool.refreshOwnerReplica(writer,101100000000LL,now));
+  auto fallback=pool.borrowValidation();ASSERT_TRUE(fallback);
+  EXPECT_NE(head.get(),fallback.get());
+  EXPECT_FALSE(pool.borrowOwnerValidation());
+  GridMapTestAccess::sourceEvidence(writer,101100000000LL);
+  EXPECT_FALSE(pool.publishValidation(writer,101190000000LL,now));
+  EXPECT_FALSE(pool.refreshOwnerReplica(writer,101190000000LL,now));
+  EXPECT_EQ(head->latestCloudStampNs(),101000000000LL);
+  EXPECT_EQ(fallback->latestCloudStampNs(),101000000000LL);
+  fallback.reset();
+  ASSERT_TRUE(pool.publishValidation(writer,101190000000LL,now));
+  auto next=pool.borrowValidation();ASSERT_TRUE(next);
+  EXPECT_EQ(next->latestCloudStampNs(),101100000000LL);
+  EXPECT_NE(next.get(),head.get());
+  head.reset();
+  ASSERT_TRUE(pool.refreshOwnerReplica(writer,101200000000LL,now));
+  auto owner=pool.borrowOwnerValidation();ASSERT_TRUE(owner);
+  EXPECT_EQ(owner->latestCloudStampNs(),101100000000LL);
+  EXPECT_NE(owner.get(),next.get());
+}
+
+TEST(CollisionSnapshotPool, ReplicaCatchupKeepsThirdSlotAndIgnoresReceiptOnlyUpdates) {
+  GridMap writer;GridMapTestAccess::configure(writer);GridMapTestAccess::seedEvidence(writer);
+  scan_planner::CollisionSnapshotPool pool;const auto now=std::chrono::steady_clock::now();
+  ASSERT_TRUE(pool.publishSolver(writer,101000000000LL,now));
+  auto solver=pool.borrowSolver();ASSERT_TRUE(solver);
+  ASSERT_TRUE(pool.publishValidation(writer,101000000000LL,now));
+  ASSERT_TRUE(pool.refreshOwnerReplica(writer,101000000000LL,now));
+  const auto sequence=pool.readerDiagnostics().latest_publication_sequence;
+  for(int i=0;i<100;++i)EXPECT_FALSE(pool.refreshOwnerReplica(writer,101000000000LL+i,now));
+  EXPECT_EQ(pool.readerDiagnostics().latest_publication_sequence,sequence);
+  GridMapTestAccess::sourceEvidence(writer,101100000000LL);
+  // Replica retry is a continuation of a real completed head publication.
+  EXPECT_FALSE(pool.refreshOwnerReplica(writer,101190000000LL,now));
+  ASSERT_TRUE(pool.publishValidation(writer,101190000000LL,now));
+  ASSERT_TRUE(pool.refreshOwnerReplica(writer,101190000000LL,now));
+  auto owner=pool.borrowOwnerValidation();auto fast=pool.borrowValidation();
+  ASSERT_TRUE(owner);ASSERT_TRUE(fast);
+  EXPECT_NE(owner.get(),fast.get());EXPECT_NE(owner.get(),solver.get());
+  EXPECT_NE(fast.get(),solver.get());
+  EXPECT_EQ(owner->latestCloudStampNs(),101100000000LL);
+  EXPECT_EQ(fast->latestCloudStampNs(),101100000000LL);
+  EXPECT_EQ(solver->latestCloudStampNs(),101000000000LL);
+}
+
+TEST(CollisionSnapshotPool, OwnerCannotFallBackAcrossPublishedContextOrClockFault) {
+  for(bool context_reset:{false,true}) {
+    GridMap writer;GridMapTestAccess::configure(writer);GridMapTestAccess::seedEvidence(writer);
+    ASSERT_TRUE(writer.applyLocalizationContext(context(1,1)));
+    GridMapTestAccess::seedEvidence(writer);
+    scan_planner::CollisionSnapshotPool pool;const auto now=std::chrono::steady_clock::now();
+    ASSERT_TRUE(pool.publishValidation(writer,101000000000LL,now));
+    ASSERT_TRUE(pool.publishValidation(writer,101000000000LL,now));
+    if(context_reset)ASSERT_TRUE(writer.applyLocalizationContext(context(2,2,"new-seed")));
+    else GridMapTestAccess::clockFault(writer);
+    ASSERT_TRUE(pool.publishValidation(writer,101100000000LL,now));
+    scan_planner::CollisionSnapshotPool::PublicationTiming timing;
+    auto current=pool.borrowValidation(&timing);ASSERT_TRUE(current);
+    EXPECT_EQ(timing.context_sequence,context_reset?2U:1U);
+    EXPECT_EQ(timing.clock_fault,!context_reset);
+    EXPECT_FALSE(pool.borrowOwnerValidation()); // Old valid-looking backup is not current context/fault evidence.
+    current.reset();
+    EXPECT_FALSE(pool.borrowOwnerValidation()); // Current fast head remains reserved.
+    ASSERT_TRUE(pool.publishValidation(writer,101100000000LL,now));
+    auto owner=pool.borrowOwnerValidation();ASSERT_TRUE(owner);
+    EXPECT_EQ(owner->localizationContextSequence(),timing.context_sequence);
+    EXPECT_EQ(owner->rayEvidenceClockFault(),timing.clock_fault);
+    if(context_reset)EXPECT_EQ(owner->latestCloudStampNs(),0);
+  }
+}
+
+TEST(CollisionSnapshotPool, MissedResetOrFaultPublicationBlocksNewOldIdentityLeases) {
+  for(bool context_reset:{false,true}) {
+    GridMap writer;GridMapTestAccess::configure(writer);
+    ASSERT_TRUE(writer.applyLocalizationContext(context(1,1)));
+    GridMapTestAccess::seedEvidence(writer);
+    scan_planner::CollisionSnapshotPool pool;const auto now=std::chrono::steady_clock::now();
+    ASSERT_TRUE(pool.publishValidation(writer,101000000000LL,now));
+    auto first=pool.borrowValidation();ASSERT_TRUE(first);
+    ASSERT_TRUE(pool.publishValidation(writer,101000000000LL,now));
+    auto second=pool.borrowValidation();ASSERT_TRUE(second);
+    ASSERT_TRUE(pool.publishSolver(writer,101000000000LL,now));
+    auto third=pool.borrowSolver();ASSERT_TRUE(third);
+    const auto old_source=first->latestCloudStampNs();
+    if(context_reset)ASSERT_TRUE(writer.applyLocalizationContext(context(2,2,"reset-while-pinned")));
+    else GridMapTestAccess::clockFault(writer);
+    EXPECT_FALSE(pool.publishValidation(writer,101100000000LL,now));
+    EXPECT_EQ(first->localizationContextSequence(),1U); // Never overwrite an outstanding reader.
+    EXPECT_EQ(first->latestCloudStampNs(),old_source);
+    EXPECT_EQ(second->latestCloudStampNs(),old_source);
+    first.reset();second.reset();third.reset();
+    // No ray arrived and no invalid-map copy could be stored. The writer
+    // identity watermark nevertheless prevents all readers reacquiring old
+    // evidence as the newest context after their previous leases retire.
+    EXPECT_FALSE(pool.borrowValidation());
+    EXPECT_FALSE(pool.borrowOwnerValidation());
+    EXPECT_FALSE(pool.borrowSolver());
+    EXPECT_FALSE(pool.borrowAdmission());
+    pool.cancelSolverRequest();pool.cancelAdmissionRequest();
+    ASSERT_TRUE(pool.publishValidation(writer,101100000000LL,now));
+    ASSERT_TRUE(pool.publishValidation(writer,101100000000LL,now));
+    scan_planner::CollisionSnapshotPool::PublicationTiming timing;
+    auto owner=pool.borrowOwnerValidation(&timing);ASSERT_TRUE(owner);
+    EXPECT_EQ(owner->localizationContextSequence(),context_reset?2U:1U);
+    EXPECT_EQ(owner->rayEvidenceClockFault(),!context_reset);
+    if(context_reset)EXPECT_EQ(owner->latestCloudStampNs(),0);
+    else EXPECT_EQ(owner->latestCloudStampNs(),old_source);
+    EXPECT_EQ(timing.publication_misses,1U);
+    ASSERT_TRUE(pool.publishSolver(writer,101100000000LL,now));
+    auto current_solver=pool.borrowSolver();ASSERT_TRUE(current_solver);
+    EXPECT_EQ(current_solver->localizationContextSequence(),owner->localizationContextSequence());
+    EXPECT_EQ(current_solver->rayEvidenceClockFault(),owner->rayEvidenceClockFault());
+    EXPECT_EQ(current_solver->latestCloudStampNs(),owner->latestCloudStampNs());
+  }
+}
+
+TEST(CollisionSnapshotPool, WriterValidatorAndOwnerHaveOnlyThreeExclusiveSnapshotAddresses) {
+  GridMap writer;GridMapTestAccess::configure(writer);GridMapTestAccess::seedEvidence(writer);
+  scan_planner::CollisionSnapshotPool pool;const auto now=std::chrono::steady_clock::now();
+  ASSERT_TRUE(pool.publishSolver(writer,101000000000LL,now));
+  auto solver=pool.borrowSolver();ASSERT_TRUE(solver);
+  ASSERT_TRUE(pool.publishValidation(writer,101000000000LL,now));
+  ASSERT_TRUE(pool.publishValidation(writer,101000000000LL,now));
+  auto validator=pool.borrowValidation();ASSERT_TRUE(validator);
+  const auto validator_source=validator->latestCloudStampNs();
+  const auto validator_raw=GridMapTestAccess::raw(*validator);
+  std::set<const GridMap*> slots{solver.get(),validator.get()};
+  std::atomic<bool> go{false},owner_has_read{false};
+  std::atomic<unsigned> owner_reads{0},publications{0};
+  std::promise<void> writer_done;auto done=writer_done.get_future();
+  std::thread publishing([&] {
+    while(!go.load())std::this_thread::yield();
+    // Keep the writer active until at least one concurrent owner lease exists;
+    // this is a synchronization seam, not a simulated ROS callback or actuator.
+    for(unsigned i=0;i<1000 || !owner_has_read.load();++i) {
+      GridMapTestAccess::sourceEvidence(writer,101000000000LL+static_cast<std::int64_t>(i)*1000);
+      if(pool.publishValidation(writer,101200000000LL,std::chrono::steady_clock::now()))++publications;
+      if(i>100000)break; // Failure remains finite even if a broken borrow API never succeeds.
+    }
+    writer_done.set_value();
+  });
+  go.store(true);
+  for(unsigned i=0;i<1000 || done.wait_for(std::chrono::seconds(0))!=std::future_status::ready;++i) {
+    auto owner=pool.borrowOwnerValidation();
+    if(!owner){std::this_thread::yield();continue;}
+    slots.insert(owner.get());
+    EXPECT_NE(owner.get(),validator.get());EXPECT_NE(owner.get(),solver.get());
+    const auto source=owner->latestCloudStampNs();
+    owner->getPlanningInflateOccupancy({-.15,-.15,-.15},0.); // Mutates only this reader's query cache.
+    EXPECT_EQ(owner->latestCloudStampNs(),source);
+    EXPECT_GE(source,101000000000LL);
+    owner_has_read.store(true);++owner_reads;
+  }
+  publishing.join();
+  EXPECT_GT(owner_reads.load(),0U);EXPECT_GT(publications.load(),0U);
+  EXPECT_EQ(slots.size(),3U); // No fourth map may be allocated under contention.
+  EXPECT_EQ(validator->latestCloudStampNs(),validator_source);
+  EXPECT_EQ(GridMapTestAccess::raw(*validator),validator_raw);
+  EXPECT_FALSE(pool.publishSolver(writer,101200000000LL,now));
+  solver.reset();validator.reset();
+  ASSERT_TRUE(pool.publishValidation(writer,101200000000LL,now));
+  auto released_owner=pool.borrowOwnerValidation();ASSERT_TRUE(released_owner);
+  EXPECT_TRUE(slots.count(released_owner.get()));
+  EXPECT_EQ(released_owner->latestCloudStampNs(),writer.latestCloudStampNs());
+}
+
 TEST(CollisionSnapshotPool, ContendingNativeReadersAlternateWithoutStealingFastSlots) {
   GridMap writer;GridMapTestAccess::configure(writer);GridMapTestAccess::seedEvidence(writer);
   scan_planner::CollisionSnapshotPool pool;const auto captured=std::chrono::steady_clock::now();
@@ -315,6 +906,113 @@ TEST(CollisionSnapshotPool, ContendingNativeReadersAlternateWithoutStealingFastS
     EXPECT_FALSE(pool.borrowAdmission()); // Cannot starve queued solver either.
     solver=pool.borrowSolver();ASSERT_TRUE(solver);EXPECT_EQ(solver.get(),third);
   }
+}
+
+TEST(CollisionSnapshotPool, AdmissionDoesNotBorrowReleasedSolverInputBehindCompletedHead) {
+  GridMap writer;GridMapTestAccess::configure(writer);GridMapTestAccess::seedEvidence(writer);
+  scan_planner::CollisionSnapshotPool pool;const auto captured=std::chrono::steady_clock::now();
+  GridMapTestAccess::sourceEvidence(writer,101417300000LL);
+  ASSERT_TRUE(pool.publishSolver(writer,101900000000LL,captured));
+  auto solver=pool.borrowSolver();ASSERT_TRUE(solver);const auto third=solver.get();
+  // Field ordering: new active proof at 102.020 uses a completed map while
+  // candidate admission at 102.077 still sees the solver's released old input.
+  GridMapTestAccess::sourceEvidence(writer,101617300000LL);
+  ASSERT_TRUE(pool.publishValidation(writer,102020000000LL,captured));
+  auto active=pool.borrowValidation();ASSERT_TRUE(active);
+  solver.reset();
+  EXPECT_FALSE(pool.borrowAdmission()); // Old code incorrectly returns the old third slot.
+  EXPECT_EQ(active->integratedRaySourceStamp(1),101617300000LL);
+  EXPECT_EQ(pool.refreshSolverPublication(writer,102078000000LL,captured),
+      scan_planner::CollisionSnapshotPool::SolverPublication::Published);
+  auto admission=pool.borrowAdmission();ASSERT_TRUE(admission);
+  EXPECT_EQ(admission.get(),third);EXPECT_NE(admission.get(),active.get());
+  EXPECT_EQ(admission->integratedRaySourceStamp(1),101617300000LL);
+  EXPECT_EQ(admission->latestCloudStampNs(),101617300000LL); // Not re-stamped to 102.078.
+}
+
+TEST(CollisionSnapshotPool, AdmissionRefreshDeduplicatesEvenWhenCurrentReaderPinsSlot) {
+  GridMap writer;GridMapTestAccess::configure(writer);GridMapTestAccess::seedEvidence(writer);
+  scan_planner::CollisionSnapshotPool pool;const auto captured=std::chrono::steady_clock::now();
+  using Publication=scan_planner::CollisionSnapshotPool::SolverPublication;
+  ASSERT_EQ(pool.refreshSolverPublication(writer,101000000000LL,captured),Publication::Published);
+  auto admission=pool.borrowAdmission();ASSERT_TRUE(admission);
+  const auto source=admission->latestCloudStampNs();const auto raw=GridMapTestAccess::raw(*admission);
+  for(unsigned i=0;i<100;++i)
+    EXPECT_EQ(pool.refreshSolverPublication(writer,101100000000LL,captured),Publication::Unchanged);
+  GridMapTestAccess::sourceEvidence(writer,101200000000LL);
+  EXPECT_EQ(pool.refreshSolverPublication(writer,101300000000LL,captured),Publication::Deferred);
+  EXPECT_EQ(admission->latestCloudStampNs(),source);EXPECT_EQ(GridMapTestAccess::raw(*admission),raw);
+  admission.reset();
+  EXPECT_EQ(pool.refreshSolverPublication(writer,101300000000LL,captured),Publication::Published);
+}
+
+TEST(CollisionSnapshotPool, PendingAdmissionHasFiniteVersionFloorUnderContinuouslyAdvancingHead) {
+  GridMap writer;GridMapTestAccess::configure(writer);GridMapTestAccess::seedEvidence(writer);
+  scan_planner::CollisionSnapshotPool pool;const auto captured=std::chrono::steady_clock::now();
+  const auto deadline=captured+std::chrono::seconds(5);
+  ASSERT_TRUE(pool.publishSolver(writer,101000000000LL,captured));
+  auto solver=pool.borrowSolver(deadline);ASSERT_TRUE(solver);
+  GridMapTestAccess::sourceEvidence(writer,101200000000LL);
+  ASSERT_TRUE(pool.publishValidation(writer,101250000000LL,captured));
+  EXPECT_FALSE(pool.borrowAdmission()); // Pin the required, already complete 101.2 version.
+  solver.reset();
+  EXPECT_FALSE(pool.borrowSolver(deadline)); // Pending admission owns the next turn.
+  ASSERT_EQ(pool.refreshSolverPublication(writer,101260000000LL,captured),
+      scan_planner::CollisionSnapshotPool::SolverPublication::Published);
+  GridMapTestAccess::sourceEvidence(writer,101300000000LL);
+  ASSERT_TRUE(pool.publishValidation(writer,101350000000LL,captured));
+  auto admission=pool.borrowAdmission();ASSERT_TRUE(admission);
+  EXPECT_EQ(admission->latestCloudStampNs(),101200000000LL); // Required floor does not chase 101.3.
+  admission.reset();
+  EXPECT_FALSE(pool.borrowAdmission()); // New turn must capture the newer head.
+  solver=pool.borrowSolver(deadline);ASSERT_TRUE(solver); // Solver still gets its fair turn.
+  solver.reset();pool.cancelSolverRequest();pool.cancelAdmissionRequest();
+  EXPECT_TRUE(pool.borrowSolver(deadline)); // Cancel withdraws an unfulfilled admission turn.
+}
+
+TEST(CollisionSnapshotPool, ContextChangeClearsPendingAdmissionFloorWithoutRevivingOldMap) {
+  GridMap writer;GridMapTestAccess::configure(writer);GridMapTestAccess::seedEvidence(writer);
+  ASSERT_TRUE(writer.applyLocalizationContext(context(1,1)));
+  scan_planner::CollisionSnapshotPool pool;const auto captured=std::chrono::steady_clock::now();
+  ASSERT_TRUE(pool.publishSolver(writer,101000000000LL,captured));
+  auto solver=pool.borrowSolver();ASSERT_TRUE(solver);
+  GridMapTestAccess::sourceEvidence(writer,101200000000LL);
+  ASSERT_TRUE(pool.publishValidation(writer,101250000000LL,captured));
+  EXPECT_FALSE(pool.borrowAdmission());
+  ASSERT_TRUE(writer.applyLocalizationContext(context(2,2,"reset-during-admission-wait")));
+  ASSERT_TRUE(pool.publishValidation(writer,101300000000LL,captured));
+  solver.reset();EXPECT_FALSE(pool.borrowAdmission());
+  ASSERT_EQ(pool.refreshSolverPublication(writer,101300000000LL,captured),
+      scan_planner::CollisionSnapshotPool::SolverPublication::Published);
+  auto admission=pool.borrowAdmission();ASSERT_TRUE(admission);
+  EXPECT_EQ(admission->localizationContextSequence(),2U);
+  EXPECT_EQ(admission->latestCloudStampNs(),0); // Reset remains invalid/no evidence; never restored.
+}
+
+TEST(CollisionSnapshotPool, MissedResetPublicationCannotRecreateAnOldContextAdmissionFloor) {
+  GridMap writer;GridMapTestAccess::configure(writer);
+  ASSERT_TRUE(writer.applyLocalizationContext(context(1,1)));
+  GridMapTestAccess::seedEvidence(writer);
+  scan_planner::CollisionSnapshotPool pool;const auto captured=std::chrono::steady_clock::now();
+  ASSERT_TRUE(pool.publishValidation(writer,101000000000LL,captured));
+  auto first=pool.borrowValidation();ASSERT_TRUE(first);
+  ASSERT_TRUE(pool.publishValidation(writer,101000000000LL,captured));
+  auto second=pool.borrowValidation();ASSERT_TRUE(second);
+  ASSERT_TRUE(pool.publishSolver(writer,101000000000LL,captured));
+  auto solver=pool.borrowSolver();ASSERT_TRUE(solver);
+  EXPECT_FALSE(pool.borrowAdmission());
+  ASSERT_TRUE(writer.applyLocalizationContext(context(2,2,"missed-admission-reset")));
+  EXPECT_FALSE(pool.publishValidation(writer,101100000000LL,captured));
+  // The identity fence changed, but both physical head buffers are still old.
+  // Do not capture that old physical head as the next pending source floor.
+  EXPECT_FALSE(pool.borrowAdmission());
+  first.reset();second.reset();solver.reset();
+  ASSERT_TRUE(pool.publishValidation(writer,101100000000LL,captured));
+  ASSERT_EQ(pool.refreshSolverPublication(writer,101100000000LL,captured),
+      scan_planner::CollisionSnapshotPool::SolverPublication::Published);
+  auto admission=pool.borrowAdmission();ASSERT_TRUE(admission);
+  EXPECT_EQ(admission->localizationContextSequence(),2U);
+  EXPECT_EQ(admission->latestCloudStampNs(),0);
 }
 
 TEST(CollisionSnapshotPool, AcquisitionRetriesAfterReleaseWithoutCopyingOverBusyReaderOrRenewingSource) {
@@ -430,6 +1128,39 @@ TEST(MapContext, EpochAndSeedResetActualOccupiedFreeInflatedAndPendingEvidence) 
     EXPECT_GT(map.occupancyRevision(),revision);
     GridMapTestAccess::expectCleared(map);
   }
+}
+
+TEST(MapContext, RealResetPublishesInvalidContextBeforeAckWithoutWaitingForAnotherRay) {
+  GridMap writer;GridMapTestAccess::configure(writer);
+  scan_planner::CollisionSnapshotPool pool;unsigned publications=0;
+  writer.setCollisionUpdateCallback([&] {
+    ++publications;
+    EXPECT_GT(writer.localizationContextSequence(),0U);
+    EXPECT_EQ(writer.latestCloudStampNs(),0);
+    EXPECT_EQ(writer.integratedRaySourceStamp(0),0);
+    EXPECT_EQ(writer.integratedRaySourceStamp(1),0);
+    ASSERT_TRUE(pool.publishValidation(writer,102000000000LL,std::chrono::steady_clock::now()));
+  });
+  const auto first=context(1,1);
+  ASSERT_TRUE(writer.applyLocalizationContext(first));
+  EXPECT_EQ(publications,1U);
+  auto first_view=pool.borrowValidation();ASSERT_TRUE(first_view);
+  EXPECT_EQ(first_view->localizationContextSequence(),1U);
+  first_view.reset();
+  GridMapTestAccess::seedEvidence(writer);
+  ASSERT_TRUE(writer.applyLocalizationContext(first));
+  EXPECT_EQ(publications,1U); // Identical reliable retry is not a second reset/publication.
+  EXPECT_EQ(writer.latestCloudStampNs(),101000000000LL);
+  EXPECT_FALSE(writer.applyLocalizationContext("not valid json"));
+  EXPECT_FALSE(writer.applyLocalizationContext(context(1,0)));
+  EXPECT_EQ(publications,1U);
+  ASSERT_TRUE(writer.applyLocalizationContext(context(2,2,"new-seed")));
+  EXPECT_EQ(publications,2U);
+  auto reset_view=pool.borrowValidation();ASSERT_TRUE(reset_view);
+  EXPECT_EQ(reset_view->localizationContextSequence(),2U);
+  EXPECT_EQ(reset_view->latestCloudStampNs(),0);
+  EXPECT_EQ(reset_view->integratedRaySourceStamp(0),0);
+  EXPECT_EQ(reset_view->integratedRaySourceStamp(1),0);
 }
 
 TEST(MapContext, OrdinaryLossAndRepeatedAcknowledgementRetainHistoricalContent) {

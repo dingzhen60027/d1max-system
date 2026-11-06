@@ -1,0 +1,26 @@
+# Physical collision surfaces only; never a robot-centred clearing volume.
+schema: 1
+mode: filter
+pose_source: fixed_standing_cad
+model_manifest: d1max_entity_model.json
+body_frame: d1max_loc_base_link
+joint_source: not_available_not_required
+fixed_stance:
+  lidar_ground_height_m: 0.50
+  wheelbase_m: 0.75
+  wheel_diameter_m: 0.19
+  wheel_thickness_m: 0.05
+  body_box_width_m: 0.30
+  body_box_height_m: 0.50
+# Small measurement uncertainty, NOT footprint/safety inflation.
+measurement_padding_m: 0.005
+max_sensor_origin_error_m: 0.02
+sensor_origins_body_m:
+  0: [0.4043, 0.0, -0.0377]
+  1: [-0.4043, 0.0, -0.0377]
+# Broad phase only. Outside this ROI remains ordinary environment evidence;
+# points inside it are not removed unless an actual model surface matches.
+body_roi_half_extent_m: [0.7, 0.5, 0.85]
+# Actual model-surface broad-phase candidates, NOT all visible ROI/ground points.
+max_near_points: 4096
+classification_budget_ms: 50.0

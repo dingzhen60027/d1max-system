@@ -169,3 +169,49 @@ def test_unavailable_health_keeps_identity_but_never_ready(monkeypatch,reason,ha
     health=node.health_pub.messages[-1]
     assert (health.map_version_id,health.localization_epoch,health.localization_seed_id)==('map',1,'seed')
     assert not health.ready and health.hard_fault is hard
+
+
+@pytest.mark.parametrize('kind', ['adapter','global'])
+def test_real_atomic_consumers_keep_original_output_deadline_after_coast(monkeypatch,kind):
+    from d1max_localization.estimation_ros import stamp_time
+    node,clock,ready,_=fixture(monkeypatch,kind)
+    start_mono=clock.mono
+    message=state(t=clock.wall-10.)
+    source=clock.wall
+    message.posterior_stamp=stamp_time(source-.39)
+    message.imu_stamp=stamp_time(source-.0946)
+    message.extrapolation_sec=.0946
+    clock.wall+=.0259;clock.mono+=.0259
+    node.on_atomic_state(message)
+    event=node.atomic_inbox.latest
+    identity=ready()
+    assert identity is not None
+    assert event.state.imu_ns==round((source-.0946)*1e9)
+    assert event.state.valid_until_ns==round(source*1e9)+100_000_000
+    # Duplicate delivery cannot acquire another original source lease.
+    clock.wall=source+.05;clock.mono=start_mono+.05
+    node.on_atomic_state(message)
+    assert node.atomic_inbox.latest is event
+    assert ready()==identity
+    clock.wall=source+.100000001;clock.mono=start_mono+.100000001
+    with pytest.raises(ValueError):ready()
+
+
+def test_coast_lease_preserves_epoch_fence_and_same_clock_hard_loss():
+    inbox=AtomicNavigationInbox();old=state()
+    old.imu_stamp.sec-=1;old.imu_stamp.nanosec=905_400_000;old.extrapolation_sec=.0946
+    # Keep original packet times even when a newer epoch has an older source.
+    first=inbox.accept(old,session_id='session',map_version_id='map',
+        now_ns=10_025_900_000,monotonic=100.0259)
+    assert first is not None
+    reset=state(t=-.01,epoch=2,usable=False);reset.reason='lio_reset'
+    revoked=inbox.accept(reset,session_id='session',map_version_id='map',
+        now_ns=10_025_900_000,monotonic=100.0259)
+    assert revoked and revoked.hard_failure
+    assert inbox.accept(old,session_id='session',map_version_id='map',
+        now_ns=10_025_900_000,monotonic=100.0259) is None
+    duplicate=deepcopy(reset)
+    assert inbox.accept(duplicate,session_id='session',map_version_id='map',
+        now_ns=10_025_900_000,monotonic=100.03) is None
+    assert inbox.latest is revoked
+    assert not inbox.usable(now_ns=10_025_900_000,monotonic=100.03,receipt_timeout_s=.4)

@@ -81,12 +81,13 @@ class AtomicNavigationInbox:
         if event is None or event.state is None:
             return False
         state = event.state
-        # Match the production atomic input contract at every use, not only
-        # when received. Repeated packets cannot extend any of these leases.
+        # Schema-2 pair consumption uses the same original output deadline as
+        # LocalNavigationState. Raw measurements were checked at state.source;
+        # charging their age again here shortens a valid coasting output by
+        # its delivery time. Repeated packets never renew source or receipt.
         return (0 <= monotonic-event.received <= receipt_timeout_s
-                and 0 <= now_ns-state.source_ns <= min(400_000_000, round(receipt_timeout_s*1e9))
-                and 0 <= now_ns-state.posterior_ns <= 400_000_000
-                and 0 <= now_ns-state.imu_ns <= 100_000_000)
+                and state.source_ns <= now_ns <= state.valid_until_ns
+                and now_ns-state.source_ns <= round(receipt_timeout_s*1e9))
 
 
 def navigation_event_is_new(identity,source_ns,previous):

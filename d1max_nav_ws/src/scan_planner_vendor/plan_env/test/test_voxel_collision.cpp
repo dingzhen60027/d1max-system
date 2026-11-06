@@ -469,3 +469,31 @@ TEST(VoxelCollision, LiveSnapshotGroundVoxelStillBlocksRatherThanBeingSilentlyCl
   EXPECT_EQ(scan_planner::observedCylinderStatusAtPosition(center,cell,span,kernel,.08,.29,
       [&](const Cell &c){return c==ground ? 1:0;}),1);
 }
+
+TEST(VoxelCollision, VerticalHalfSatEqualsUnionOfFourFineCubesAtEveryAttitude) {
+  const scan_planner::BodyEnvelope body{0.,0.,.14,.21,
+      scan_planner::CollisionModel::OrientedBox,.41,.28};
+  for(const double yaw:{0.,.7,1.5})for(const double pitch:{0.,.2})for(const double roll:{0.,-.15}) {
+    const Point position(.013,-.027,.011);
+    const scan_planner::OrientedBoxVoxel3DQuery coarse(position,yaw,pitch,roll,.1,body);
+    const scan_planner::OrientedBoxVoxel3DQuery fine(position,yaw,pitch,roll,.05,body);
+    for(int x=-4;x<=4;++x)for(int y=-4;y<=4;++y)for(int z=-4;z<=4;++z)
+      for(int half=0;half<2;++half) {
+        const Cell cell(x,y,z);bool children=false;
+        for(int dx=0;dx<2;++dx)for(int dy=0;dy<2;++dy)
+          children=children||fine.intersects(2*cell+Cell(dx,dy,half));
+        EXPECT_EQ(coarse.intersectsVerticalHalf(cell,half!=0),children);
+      }
+  }
+}
+
+TEST(VoxelCollision, VerticalHalfSatKeepsTouchingContactAndFullHorizontalWidth) {
+  const scan_planner::BodyEnvelope body{0.,0.,.25,.25,
+      scan_planner::CollisionModel::OrientedBox,.93,.30};
+  const scan_planner::OrientedBoxVoxel3DQuery touching({0.,0.,.275},0.,0.,0.,.05,body);
+  EXPECT_TRUE(touching.intersectsVerticalHalf({0,0,0},false));
+  const scan_planner::OrientedBoxVoxel3DQuery clear({0.,0.,.2751},0.,0.,0.,.05,body);
+  EXPECT_FALSE(clear.intersectsVerticalHalf({0,0,0},false));
+  const scan_planner::OrientedBoxVoxel3DQuery side({0.,0.,.5},0.,0.,0.,.05,body);
+  EXPECT_TRUE(side.intersectsVerticalHalf({9,0,6},false));
+}

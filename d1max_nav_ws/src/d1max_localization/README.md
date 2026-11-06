@@ -32,7 +32,7 @@ Web 启停、RViz 手动初值的职责不变。此功能不连接 SDK、不申�
 - `lio_localizer` 仍是唯一种子接收者；候选经原有 `fused_icp/initialpose` 进入匹配器，至少三次新扫描确认，且融合输出有效后才显示 ready。候选不直接发布机器人 TF。
 - 手动 RViz 初值优先，立即退役 worker 和旧请求。已有种子/任务失锁后不自动进行全图跳转；LIO 重置后需重新给手动初值，不复活原运动授权。
 - BT 的 `InitialLocalization` 节点有 60 秒任务等待期限；失败不计算路线。成功后记忆推进，普通地图校正不会重回此节点。
-- 诊断 `/d1max/localization/global_relocalization/status` 和会话 `status.json.global_relocalization`。初次搜索失败可显式调用 `global_relocalization/retry` (`std_srvs/srv/Trigger`)，最多两次搜索；已有种子后只能手动给初值。
+- 诊断 `/d1max/localization/global_relocalization/status` 和会话 `status.json.global_relocalization`。`global_relocalization.startup.automatic_epoch_recovery=true` 时，真实 LIO epoch 重置后由同一个种子所有者等待静止及新鲜扫描，重新全局匹配并连续确认；不复用旧地图锚，也不恢复旧任务授权。每个 epoch 最多两次自动搜索（含未确认自动种子的重试），重复 epoch 不续预算；手动初值始终优先，歧义或耗尽预算仍如实等待人工处理。可显式调用 `global_relocalization/retry` (`std_srvs/srv/Trigger`) 使用当前 epoch 尚未耗尽的预算。
 
 ### 离线复现与已验证边界
 
@@ -113,6 +113,7 @@ robot_localization 保留全局融合职责。参考 [robot_localization 官方�
 
 - 新入口 `realtime_navigation_output` 取代开发 launch 内独立的 predictor/output 两节点；禁止同时运行两套预测器或公共 TF 写者。旧封存节点与传播核心不改。
 - `config/realtime_navigation.yaml` 记录 50 Hz 调度和 350 ms 后验预测上限，复制进入新会话并记录哈希；350 ms 不是延长 IMU 有效期。仍保留 100 ms IMU/coast 上限、真实积分缺口、旋转、不确定度、epoch 和故障限制；现有消费者后验源龄上限仍为 400 ms。
+- 2026-10-14：初始化已完成后，最长 500 ms 的缺 IMU 区间使用有界恒速/角速率模型及协方差增长，丢弃跨缺口扫描；只在真实 IMU 完整覆盖的新扫描完成激光更新后恢复后验，不清 epoch、局部地图或 seed。模型位移 ≤0.25 m、转角 ≤0.30 rad，原后验总期限 ≤750 ms；超期、时钟故障或非有限状态仍走真实重置。`navigation/pose_continuity` 仅给 RViz/TF 显示有界估计及原始后验/IMU 水印，不进入 EKF、类型化导航状态、目标准入或运动许可；100 ms 运动 IMU 合同不变。缺口控制仍可能暂停，不能据此声称实机连续导航已验收。
 - 原生 LIO 的非故障 `valid=false/reason=tracking` 扫描过期通知，只在同 epoch、`last_admitted_scan` 且扫描末端身份与保留后验一致时保留原后验。不能更新源时间、接收时间或续期。过期仍停止预测；退化、重置、传感器故障和未知状态立即失效。
 - 仅使用不晚于目标时刻的真实 IMU，稍晚样本留到下一拍。没有填造 IMU、发布零运动观测、重复旧姿态刷新租约或修改未验收标志。
 - 输出目标先选为不晚于 ROS 整数时钟、经浮点核心编解码仍不向前漂移的可表示时刻，再进行积分。当前 epoch 最多相差 1791 ns；不是给旧姿态重新盖接收时间。该措施消除浮点往返造成的几百纳秒“未来样本”误拒收，未放宽任何未来时间判断。

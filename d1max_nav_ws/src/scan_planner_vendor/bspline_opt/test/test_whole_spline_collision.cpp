@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 #include <bspline_opt/whole_spline_collision.hpp>
+#include <bspline_opt/bspline_optimizer.h>
 #include <plan_env/grid_map.h>
 #include <limits>
 
@@ -7,6 +8,51 @@ using scan_planner::UniformBspline;
 using scan_planner::SplineCollisionState;
 using scan_planner::checkWholeSplineCollision;
 using Point=Eigen::Vector3d;
+
+TEST(FrozenBodyHeadingSampling, PreservesProductionSpatialAndTimeLatticeAndRejectsUnboundedInputs) {
+  using scan_planner::bodyHeadingSamplingIntervals;
+  EXPECT_EQ(bodyHeadingSamplingIntervals(1.,.1,.05),50U);
+  EXPECT_EQ(bodyHeadingSamplingIntervals(1.,1.,.05),80U);
+  EXPECT_FALSE(bodyHeadingSamplingIntervals(0.,1.,.05));
+  EXPECT_FALSE(bodyHeadingSamplingIntervals(1.,-1.,.05));
+  EXPECT_FALSE(bodyHeadingSamplingIntervals(1.,1.,0.));
+  EXPECT_FALSE(bodyHeadingSamplingIntervals(1000.,1000.,.05));
+  EXPECT_FALSE(bodyHeadingSamplingIntervals(1.,std::numeric_limits<double>::quiet_NaN(),.05));
+}
+TEST(FrozenBodyHeadingSampling, SameOriginalSeedAndLatticeReproduceLateEntryAndBacktracking) {
+  scan_planner::SplineHeadingContract c;c.measured_heading_enabled=true;c.measured_yaw=.7;
+  const auto velocity=[](double t)->Point {
+    if(t>=.2&&t<.3)return {0.,.1,0.};
+    if(t>=.4&&t<.5)return {.1,0.,0.};
+    return {.001,-.001,0.};
+  };
+  const auto at=[&](double time,unsigned n=10){return scan_planner::sampledBodyHeadingAt(time,1.,n,c,velocity,[]{return true;});};
+  ASSERT_TRUE(at(.35));EXPECT_DOUBLE_EQ(*at(.35),std::atan2(.1,0.));
+  ASSERT_TRUE(at(.75));EXPECT_DOUBLE_EQ(*at(.75),0.);
+  EXPECT_DOUBLE_EQ(*at(.19),.7); // Earlier actual progress replays the original seed, not latest yaw.
+  EXPECT_DOUBLE_EQ(*at(.22),std::atan2(.1,0.)); // Exact entry derivative remains part of the contract.
+  EXPECT_DOUBLE_EQ(*at(.75,1),.7); // A different consumer lattice really changes low-speed memory.
+}
+TEST(FrozenBodyHeadingSampling, HeldHeadingUsesOriginalSeedNotLateralVelocity) {
+  scan_planner::SplineHeadingContract c;c.measured_heading_enabled=true;
+  c.policy=scan_planner::BodyHeadingPolicy::HoldHeading;c.measured_yaw=-1.1;
+  unsigned reads=0;
+  const auto yaw=scan_planner::sampledBodyHeadingAt(.75,1.,10,c,[&](double)->Point{++reads;return {0.,1.,0.};},[]{return true;});
+  ASSERT_TRUE(yaw);EXPECT_DOUBLE_EQ(*yaw,-1.1);EXPECT_EQ(reads,0U);
+}
+TEST(FrozenBodyHeadingSampling, CancelInvalidTimeAndNonFiniteDerivativeDoNotProduceHeading) {
+  scan_planner::SplineHeadingContract c;c.measured_heading_enabled=true;
+  const auto finite=[](double)->Point{return {.1,0.,0.};};
+  EXPECT_FALSE(scan_planner::sampledBodyHeadingAt(.2,1.,10,c,finite,[]{return false;}));
+  EXPECT_FALSE(scan_planner::sampledBodyHeadingAt(-.01,1.,10,c,finite,[]{return true;}));
+  EXPECT_FALSE(scan_planner::sampledBodyHeadingAt(1.01,1.,10,c,finite,[]{return true;}));
+  EXPECT_FALSE(scan_planner::sampledBodyHeadingAt(.2,1.,0,c,finite,[]{return true;}));
+  EXPECT_FALSE(scan_planner::sampledBodyHeadingAt(.2,1.,50000,c,finite,[]{return true;}));
+  EXPECT_FALSE(scan_planner::sampledBodyHeadingAt(.2,1.,10,c,[](double)->Point{
+    return {std::numeric_limits<double>::quiet_NaN(),0.,0.};},[]{return true;}));
+  unsigned reads=0;
+  EXPECT_FALSE(scan_planner::sampledBodyHeadingAt(.8,1.,10,c,finite,[&]{return ++reads<4;}));
+}
 
 // Production GridMap/inflation and UniformBspline, without ROS initialization.
 struct GridMapTestAccess {
@@ -25,6 +71,11 @@ struct GridMapTestAccess {
     Eigen::Vector3i cell;map.posToIndex(point,cell);
     map.md_.occupancy_buffer_[map.toAddress(cell)]=-1.01;
     map.observed_cylinder_cache_.clear();++map.occupancy_revision_;
+  }
+  static void box(GridMap& map) {
+    auto& p=map.mp_;p.collision_model_="oriented_box";p.box_length_=.94;p.box_width_=.30;
+    p.body_below_=p.body_above_=p.planning_body_below_=p.planning_body_above_=.25;
+    map.rebuildInflationOffsets();
   }
 };
 
@@ -46,6 +97,13 @@ UniformBspline slowCurve(const Point &velocity) {
 scan_planner::SplineHeadingContract previewContract(double yaw=0.) {
   scan_planner::SplineHeadingContract contract;
   contract.preview_only_enabled=true;contract.measured_yaw=yaw;return contract;
+}
+scan_planner::SplineHeadingContract formalContract(bool writer_enabled,double yaw=0.) {
+  scan_planner::SplineHeadingContract contract;
+  contract.measured_heading_enabled=scan_planner::measuredHeadingGeometryContract(
+      false,false,true,writer_enabled,true,false);
+  contract.measured_yaw=yaw;
+  return contract;
 }
 } // namespace
 
@@ -109,6 +167,53 @@ TEST(WholeSplineCollision, StationaryCurveHasFiniteFallbackAndStillChecksOccupan
   EXPECT_EQ(clear.state,SplineCollisionState::Clear);EXPECT_EQ(clear.queries,2U);
   map->setOccupied({.1,.2,.55});
   EXPECT_EQ(checkWholeSplineCollision(curve,.05,query(*map)).state,SplineCollisionState::Collision);
+}
+TEST(WholeSplineCollision,HoldHeadingDoesNotInferBodyYawFromLateralTranslation) {
+  auto curve=slowCurve({0.,.2,0.});
+  auto heading=formalContract(true,.0);heading.policy=scan_planner::BodyHeadingPolicy::HoldHeading;
+  ASSERT_TRUE(scan_planner::validMeasuredHeadingContract(heading));
+  const auto held=checkWholeSplineCollision(curve,.05,[&](const Point& p,double yaw) {
+    EXPECT_DOUBLE_EQ(yaw,0.);
+    return p.y()>.1&&yaw>1.3?1:0;
+  },50000,heading);
+  EXPECT_EQ(held.state,SplineCollisionState::Clear);
+  heading.policy=scan_planner::BodyHeadingPolicy::PathTangent;
+  const auto tangent=checkWholeSplineCollision(curve,.05,[](const Point& p,double yaw) {
+    return p.y()>.1&&yaw>1.3?1:0;
+  },50000,heading);
+  EXPECT_EQ(tangent.state,SplineCollisionState::Collision);
+  // Fixed yaw is not a smaller footprint or obstacle suppression: an obstacle
+  // intersecting that very orientation is still rejected by the same checker.
+  heading.policy=scan_planner::BodyHeadingPolicy::HoldHeading;
+  const auto occupied=checkWholeSplineCollision(curve,.05,[](const Point& p,double yaw) {
+    return p.y()>.1&&std::abs(yaw)<.01?1:0;
+  },50000,heading);
+  EXPECT_EQ(occupied.state,SplineCollisionState::Collision);
+}
+TEST(WholeSplineCollision,InvalidOrUnmeasuredHeldHeadingCannotBeCertified) {
+  auto curve=slowCurve({0.,.2,0.});
+  auto heading=formalContract(true);heading.policy=scan_planner::BodyHeadingPolicy::HoldHeading;
+  heading.measured_yaw=std::numeric_limits<double>::quiet_NaN();
+  EXPECT_FALSE(scan_planner::validMeasuredHeadingContract(heading));
+  EXPECT_NE(checkWholeSplineCollision(curve,.05,[](const Point&,double){return 0;},50000,heading).state,
+      SplineCollisionState::Clear);
+  heading.measured_yaw=.2;heading.measured_heading_enabled=false;
+  EXPECT_FALSE(scan_planner::validMeasuredHeadingContract(heading));
+  EXPECT_NE(checkWholeSplineCollision(curve,.05,[](const Point&,double){return 0;},50000,heading).state,
+      SplineCollisionState::Clear);
+  EXPECT_THROW(scan_planner::parseBodyHeadingPolicy("lateral_velocity_is_yaw"),std::invalid_argument);
+}
+TEST(WholeSplineCollision,OptimizerResetsNativeSearchHeadingFromEachFrozenSolveContract) {
+  auto map=GridMapTestAccess::make(true);GridMapTestAccess::box(*map);
+  map->setOccupied({.025,.325,.55});
+  scan_planner::BsplineOptimizer optimizer;optimizer.a_star_=std::make_shared<AStar>();
+  optimizer.a_star_->initGridMap(map,{64,64,32});
+  auto heading=formalContract(true,0.);heading.policy=scan_planner::BodyHeadingPolicy::HoldHeading;
+  optimizer.setPreviewHeadingContract(heading);
+  EXPECT_EQ(optimizer.a_star_->AstarSearch(.05,{0.,0.,.55},{0.,-.8,.55},false),ASTAR_RET::SUCCESS);
+  heading.policy=scan_planner::BodyHeadingPolicy::PathTangent;
+  optimizer.setPreviewHeadingContract(heading);
+  EXPECT_EQ(optimizer.a_star_->AstarSearch(.05,{0.,0.,.55},{0.,-.8,.55},false),ASTAR_RET::INIT_START_OCCUPIED);
 }
 
 TEST(WholeSplineCollision, BudgetExhaustionRejectsBeforeAnyPartialCertificate) {
@@ -266,12 +371,151 @@ TEST(PreviewSplineHeading, ClearCourseAboveThresholdAndShortArcRemainBounded) {
   EXPECT_LE(arc_queries,6U);
 }
 
+TEST(PreviewSplineHeading, RearBodyEntryCoversOppositeRetainedTurnWithRealRectangularVoxelQuery) {
+  const double pi=std::acos(-1.),extent=std::hypot(1.03,.40)*.5;
+  const Point body(0.,0.,.55);const Eigen::Vector3i obstacle(-8,-7,11);
+  const auto free=[&](const Point& p,double yaw) {
+    return !scan_planner::orientedBoxIntersectsVoxelXY(p,yaw,obstacle,.05,1.03,.40);
+  };
+  // The -100 deg shortest arc is clear, but a previously selected positive
+  // turn to the SAME orientation passes through this real occupied cell.
+  ASSERT_TRUE(scan_planner::headingTransitionFree(body,body,0.,-100.*pi/180.,.05,extent,free));
+  EXPECT_FALSE(scan_planner::bodyEntryHeadingTransitionFree(body,body,0.,-100.*pi/180.,.05,extent,free));
+  EXPECT_FALSE(scan_planner::headingSweepFree(body,body,0.,260.*pi/180.,.05,extent,free));
+}
+
+TEST(PreviewSplineHeading, RearBodyEntryCoversBothPiBranchesButForwardKeepsShortestSweep) {
+  const double pi=std::acos(-1.);const Point body(0.,0.,.55);
+  for(double degrees:{-180.,-179.,179.,180.}) {
+    double highest=0.;std::size_t count=0;bool exact_target=false;
+    EXPECT_TRUE(scan_planner::bodyEntryHeadingTransitionFree(body,body,0.,degrees*pi/180.,.05,.55,
+      [&](const Point&,double yaw){highest=std::max(highest,yaw);exact_target|=yaw==degrees*pi/180.;++count;return true;}));
+    EXPECT_NEAR(highest,2.*pi,1e-12);EXPECT_GT(count,500U);EXPECT_LT(count,600U);
+    EXPECT_TRUE(exact_target);
+  }
+  for(double degrees:{-90.,-30.,0.,30.,90.}) {
+    std::vector<double> entry,ordinary;
+    EXPECT_TRUE(scan_planner::bodyEntryHeadingTransitionFree(body,body,0.,degrees*pi/180.,.05,.55,
+      [&](const Point&,double yaw){entry.push_back(yaw);return true;}));
+    EXPECT_TRUE(scan_planner::headingTransitionFree(body,body,0.,degrees*pi/180.,.05,.55,
+      [&](const Point&,double yaw){ordinary.push_back(yaw);return true;}));
+    EXPECT_EQ(entry,ordinary);
+  }
+  EXPECT_FALSE(scan_planner::rearBodyHeadingTransition(0.,pi/2.));
+  EXPECT_TRUE(scan_planner::rearBodyHeadingTransition(0.,pi/2.+1e-6));
+}
+
+TEST(PreviewSplineHeading, RearBodyEntryCannotCertifyAnIncompleteOrInvalidSweep) {
+  const Point body(0.,0.,.55);const double pi=std::acos(-1.);std::size_t count=0;
+  EXPECT_FALSE(scan_planner::bodyEntryHeadingTransitionFree(body,body,0.,pi,.05,.55,
+    [&](const Point&,double){return ++count<=50;}));
+  EXPECT_EQ(count,51U);
+  EXPECT_FALSE(scan_planner::bodyEntryHeadingTransitionFree(body,body,0.,pi,.05,.55,
+    [](const Point&,double){return false;})); // Same caller deadline/cancel rejection.
+  EXPECT_FALSE(scan_planner::bodyEntryHeadingTransitionFree(body,body,NAN,pi,.05,.55,
+    [](const Point&,double){return true;}));
+}
+
 TEST(PreviewSplineHeading, InvalidContractAndExhaustedSweepNeverReturnClear) {
   auto map=GridMapTestAccess::make();auto curve=slowCurve({0.,.021,0.});
   auto invalid=previewContract();invalid.measured_yaw=std::numeric_limits<double>::quiet_NaN();
   EXPECT_EQ(checkWholeSplineCollision(curve,.05,query(*map),50000,invalid).state,
             SplineCollisionState::InvalidInput);
   const auto result=checkWholeSplineCollision(curve,.05,query(*map),60,previewContract());
+  EXPECT_EQ(result.state,SplineCollisionState::SampleBudgetExceeded);
+  EXPECT_LE(result.queries,60U);
+}
+
+TEST(MeasuredSplineHeading, MillimetersPerSecondEntryJitterDoesNotInventOppositeRotation) {
+  // Same immutable cubic and its real derivative, not a substituted heading
+  // trace. This entry initially drifts backwards 1.225 mm before +X motion.
+  Eigen::MatrixXd points(3,9);
+  for(int i=0;i<9;++i) {
+    const double t=i-1.;points.col(i)=Point(-.007*t+.01*t*t,0.,.55);
+  }
+  UniformBspline curve(points,3,1.);auto heading=formalContract(true);
+  heading.align_then_forward=true;
+  const auto yaw_sensitive=[](const Point&,double yaw){return std::abs(yaw)>.2?1:0;};
+  EXPECT_EQ(checkWholeSplineCollision(curve,.05,yaw_sensitive,50000,heading).state,
+    SplineCollisionState::Clear);
+  // Choosing a reliable near direction does NOT skip the actual-body yaw or
+  // its swept connector. An occupied measured orientation still rejects.
+  heading.measured_yaw=.5;
+  EXPECT_EQ(checkWholeSplineCollision(curve,.05,yaw_sensitive,50000,heading).state,
+    SplineCollisionState::Collision);
+}
+
+TEST(MeasuredSplineHeading, FormalGeometryDoesNotDependOnWriterAuthorization) {
+  using scan_planner::measuredHeadingGeometryContract;
+  for(bool writer:{false,true}) {
+    EXPECT_TRUE(measuredHeadingGeometryContract(false,false,true,writer,true,false));
+    EXPECT_TRUE(measuredHeadingGeometryContract(false,false,true,writer,true,true));
+    EXPECT_THROW(measuredHeadingGeometryContract(false,false,true,writer,false,false),
+                 std::invalid_argument);
+  }
+  EXPECT_FALSE(measuredHeadingGeometryContract(false,false,false,true,true,false));
+  EXPECT_TRUE(measuredHeadingGeometryContract(true,true,false,false,true,false));
+  EXPECT_THROW(measuredHeadingGeometryContract(true,false,false,true,true,false),
+               std::invalid_argument);
+}
+
+TEST(MeasuredSplineHeading, WriterAndPreviewPreserveActualLowSpeedBoundaryAndMap) {
+  auto map=GridMapTestAccess::make();
+  const Point obstruction(.325,-.225,.225);
+  map->setOccupied(obstruction);
+  const Point velocity(.005,-.015,0.);const double measured_yaw=1.567123;
+  auto curve=slowCurve(velocity);const auto controls=curve.getControlPoint();
+  ASSERT_EQ(map->getInflateOccupancy(curve.evaluateDeBoorT(0.),measured_yaw),0);
+  ASSERT_EQ(map->getInflateOccupancy(curve.evaluateDeBoorT(0.),
+      std::atan2(velocity.y(),velocity.x())),1);
+  for(bool writer:{false,true}) {
+    auto contract=formalContract(writer,measured_yaw);
+    ASSERT_FALSE(contract.preview_only_enabled);
+    EXPECT_EQ(checkWholeSplineCollision(curve,.05,query(*map),50000,contract).state,
+              SplineCollisionState::Clear);
+    EXPECT_TRUE(curve.getControlPoint().isApprox(controls,0.));
+    EXPECT_TRUE(curve.getDerivative().evaluateDeBoorT(0.).isApprox(velocity,1e-10));
+    EXPECT_EQ(map->getOccupancy(obstruction),1);
+  }
+  map->setOccupied(curve.evaluateDeBoorT(0.));
+  for(bool writer:{false,true})
+    EXPECT_EQ(checkWholeSplineCollision(curve,.05,query(*map),50000,
+        formalContract(writer,measured_yaw)).state,SplineCollisionState::Collision);
+}
+
+TEST(MeasuredSplineHeading, WriterAndPreviewCheckWholeInitialRotationNotJustEndpoints) {
+  auto map=GridMapTestAccess::make();map->setOccupied({.325,.325,.225});
+  const Point origin(.025,.025,.55);const double pi=std::acos(-1.);
+  ASSERT_EQ(map->getInflateOccupancy(origin,0.),0);
+  ASSERT_EQ(map->getInflateOccupancy(origin,pi/2.),0);
+  ASSERT_EQ(map->getInflateOccupancy(origin,pi/4.),1);
+  auto curve=slowCurve({0.,.021,0.});
+  for(bool writer:{false,true}) {
+    auto result=checkWholeSplineCollision(curve,.05,query(*map),50000,formalContract(writer));
+    EXPECT_EQ(result.state,SplineCollisionState::Collision);
+    EXPECT_DOUBLE_EQ(result.time,0.);
+    EXPECT_GT(result.yaw,0.);EXPECT_LT(result.yaw,pi/2.);
+    EXPECT_EQ(map->getOccupancy(Point(.325,.325,.225)),1);
+  }
+}
+
+TEST(MeasuredSplineHeading, WriterEnabledGeometryDoesNotChangeUnknownEvidence) {
+  auto map=GridMapTestAccess::make(true);auto curve=slowCurve({.005,-.015,0.});
+  auto contract=formalContract(true,1.567123);
+  EXPECT_EQ(checkWholeSplineCollision(curve,.05,query(*map),50000,contract).state,
+            SplineCollisionState::Clear);
+  GridMapTestAccess::unknown(*map,curve.evaluateDeBoorT(0.));
+  const auto result=checkWholeSplineCollision(curve,.05,query(*map),50000,contract);
+  EXPECT_EQ(result.state,SplineCollisionState::Collision);EXPECT_EQ(result.occupancy,2);
+}
+
+TEST(MeasuredSplineHeading, InvalidMeasuredContractCannotProducePartialCertificate) {
+  auto map=GridMapTestAccess::make();auto curve=slowCurve({0.,.021,0.});
+  auto invalid=formalContract(true);
+  invalid.measured_yaw=std::numeric_limits<double>::quiet_NaN();
+  EXPECT_EQ(checkWholeSplineCollision(curve,.05,query(*map),50000,invalid).state,
+            SplineCollisionState::InvalidInput);
+  const auto result=checkWholeSplineCollision(curve,.05,query(*map),60,formalContract(true));
   EXPECT_EQ(result.state,SplineCollisionState::SampleBudgetExceeded);
   EXPECT_LE(result.queries,60U);
 }

@@ -8,6 +8,11 @@ localization_pipeline:
   ros__parameters:
     localization.enabled: true
     localization.max_imu_gap_sec: 0.10  # bounded short-gap propagation; real dt, increased uncertainty
+    # Missing-IMU model, not endpoint interpolation. Crossing scans are dropped;
+    # map/epoch survive only within this bound until a fully covered laser scan.
+    localization.max_coast_gap_sec: 0.50
+    localization.max_coast_distance_m: 0.25
+    localization.max_coast_rotation_rad: 0.30
     localization.reinitialize_on_imu_gap: true  # only hard gap/dynamic bound failures start a new epoch
     localization.max_imu_reinitializations: 3  # at most three resets per rolling minute
     localization.imu_recovery_window_sec: 60.0

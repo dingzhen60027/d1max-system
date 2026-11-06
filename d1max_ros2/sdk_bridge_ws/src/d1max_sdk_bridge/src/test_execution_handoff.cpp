@@ -8,7 +8,7 @@ using namespace d1monitor::execution3;
 static Version version1(){Version v;v.schema_version=3;v.session_id="nav";v.task_id="task";v.route_id="route";
  v.route_hash=std::string(64,'a');v.map_version_id="map";v.localization_epoch=1;v.localization_seed_id="seed";
  v.reference_generation=v.anchor_revision=v.context_sequence=v.map_geometry_revision=1;v.segment_id="floor";v.anchor_id="anchor";return v;}
-static Health health(){return {true,true,true,true,false};}
+static Health health(){return {true,true,true,true,false,true};}
 static Permit permit1(){Permit p;p.version=version1();p.execution_id="execution";p.control_epoch=1;p.sdk_session="sdk";p.sdk_arm_generation=1;
  p.sequence=p.validation_sequence=1;p.trajectory_id=1;p.source_stamp=stamp(10.);p.valid_until=stamp(10.25);
  p.allowed=p.geometry_committed=true;p.phase="tracking";p.frame_id="d1max_loc_odom";p.transport_mode="isolated_mock";return p;}
@@ -16,8 +16,8 @@ static Demand command(const Permit&p,double time,uint64_t seq){Demand d;d.versio
  d.sdk_session=p.sdk_session;d.sdk_arm_generation=p.sdk_arm_generation;d.sequence=seq;d.permit_sequence=p.sequence;d.validation_sequence=p.validation_sequence;
  d.trajectory_id=p.trajectory_id;d.source_stamp=d.body_source_stamp=d.safety_source_stamp=stamp(time);d.valid_until=stamp(time+.1);
  d.velocity.linear.x=.2;d.safety_checked=true;d.transport_mode=p.transport_mode;d.motion_validation_sequence=seq;d.braking_model_sha256=std::string(64,'c');return d;}
-static Local body(double time,double x=0.,double speed=.2){Local m;m.schema_version=1;m.session_id="nav";m.map_version_id="map";m.localization_epoch=1;m.localization_seed_id="seed";
- m.source_stamp=m.posterior_stamp=m.imu_stamp=stamp(time);m.usable=true;m.local_odometry.header.stamp=m.source_stamp;
+static Local body(double time,double x=0.,double speed=.2){Local m;m.schema_version=2;m.session_id="nav";m.map_version_id="map";m.localization_epoch=1;m.localization_seed_id="seed";
+ m.source_stamp=m.posterior_stamp=m.imu_stamp=stamp(time);m.valid_until=stamp(time+.1);m.usable=true;m.local_odometry.header.stamp=m.source_stamp;
  m.local_odometry.header.frame_id="d1max_loc_odom";m.local_odometry.child_frame_id="d1max_loc_base_link";
  m.local_odometry.pose.pose.position.x=x;m.local_odometry.pose.pose.orientation.w=1.;m.local_odometry.twist.twist.linear.x=speed;return m;}
 static CurveProof curve(const Permit&p,double time){CurveProof v;v.version=p.version;v.trajectory_id=p.trajectory_id;v.sequence=p.validation_sequence;
@@ -30,13 +30,13 @@ static MotionProof sweep(const Demand&d,double time){MotionProof p;p.version=d.v
  p.demand_valid_until=d.valid_until;p.demand_body_source_stamp=d.body_source_stamp;p.body_source_stamp=stamp(time);p.sequence=d.motion_validation_sequence;
  p.front_ray_source_stamp=p.rear_ray_source_stamp=p.check_begin=p.check_end=stamp(time);p.map_snapshot_revision=1;p.valid_until=d.valid_until;
  p.velocity=d.velocity;p.frame_id="d1max_loc_odom";p.valid=true;p.transport_mode=d.transport_mode;p.braking_model_sha256=d.braking_model_sha256;return p;}
-static Transport armed(){Transport t("sdk","isolated_mock");t.configureMcCaptureBound(.02,"isolated_simulated_source_clock");t.configureBrakingModel(std::string(64,'c'));
- t.configureExecutionPolicy(testExecutionPolicy(),.8);
+static Transport armed(const std::string&profile="forward_yaw",const ExecutionPolicy&policy=testExecutionPolicy()){Transport t("sdk","isolated_mock");t.configureMcCaptureBound(.02,"isolated_simulated_source_clock");t.configureBrakingModel(std::string(64,'c'),.3,.5,profile);
+ t.configureExecutionPolicy(policy,std::max(.8,policy.reactionBudget()));
  Grant::Request r;r.version=version1();r.sdk_session="sdk";r.execution_id="execution";r.control_epoch=1;r.request_id="grant";
  r.source_stamp=stamp(10.);r.activate=true;r.transport_mode="isolated_mock";assert(t.grant(r,10.,health()).accepted);t.tick(10.,health());
  assert(t.localState(body(10.),10.));assert(t.permit(permit1(),10.));assert(t.trajectoryValidation(curve(permit1(),10.),10.));
  const auto d=command(permit1(),10.,1);assert(t.motionValidation(sweep(d,10.),10.));assert(t.demand(d,10.));return t;}
-static Transport active(){auto t=armed();assert(t.localState(body(10.005),10.005));assert(t.tick(10.005,health())->linear.x==.2);
+static Transport active(const std::string&profile="forward_yaw",const ExecutionPolicy&policy=testExecutionPolicy()){auto t=armed(profile,policy);assert(t.localState(body(10.005),10.005));assert(t.tick(10.005,health())->linear.x==.2);
  t.writeCalled(10.005,true);const auto a=t.takeCommitAck();assert(a&&a->applied&&a->commit_sequence==1&&a->previous_commit_sequence==0);
  assert(a->body_source_stamp==stamp(10.005)&&a->measured_pose.header.stamp==a->body_source_stamp);
  assert(a->demand_body_source_stamp==stamp(10.)&&a->demand_source_stamp==stamp(10.)&&!a->write_acknowledged);
@@ -60,7 +60,25 @@ static Prepared prepared(const Handoff&g,double time=10.03){Prepared p;p.schema_
 static MotionProof sweep(const Prepared&p,double time){auto v=sweep(p.demand,time);v.handoff_id=p.handoff_id;v.entry_admission_sequence=p.entry_admission.sequence;
  v.entry_curve_pose=p.curve_entry_pose;v.entry_curve_twist=p.curve_entry_twist;v.entry_curve_time=p.curve_time;
  v.entry_position_error_m=p.position_error_m;v.entry_velocity_error_mps=p.velocity_error_mps;return v;}
+static Tagged geometry(const Prepared&p){Tagged m;const auto&v=p.demand.version;m.schema_version=2;
+ m.session_id=v.session_id;m.task_id=v.task_id;m.route_id=v.route_id;m.route_hash=v.route_hash;
+ m.map_version_id=v.map_version_id;m.localization_epoch=v.localization_epoch;m.localization_seed_id=v.localization_seed_id;
+ m.generation=v.reference_generation;m.segment_id=v.segment_id;m.anchor_id=v.anchor_id;m.anchor_revision=v.anchor_revision;
+ m.context_sequence=v.context_sequence;m.map_geometry_revision=v.map_geometry_revision;m.frame_id="d1max_loc_odom";
+ m.point_reference="body_center";m.segment_kind="floor";m.required_mode="general";
+ m.trajectory.order=3;m.trajectory.traj_id=p.demand.trajectory_id;
+ // Uniform, strictly increasing vendor knots: 8 controls span exactly 1 s.
+ // At original time .1 the true De Boor position/velocity equal the entry.
+ const auto&speed=p.curve_entry_twist.linear;const bool rest=std::hypot(speed.x,speed.y,speed.z)<1e-9;
+ for(int i=0;i<8;++i){auto point=p.curve_entry_pose.position;
+  const double dt=(i-1)*.2-p.curve_time;
+  if(rest){if(i>=4)point.x+=(i-3)*.04;}
+  else {point.x+=speed.x*dt;point.y+=speed.y*dt;point.z+=speed.z*dt;}
+  m.trajectory.pos_pts.push_back(point);}
+ for(int i=0;i<12;++i)m.trajectory.knots.push_back((i-3)*.2);
+ return m;}
 static void evidence(Transport&t,const Handoff&g,const Prepared&p,double now){assert(t.localState(body(now),now));
+ assert(t.trajectoryGeometry(geometry(p),now));
  assert(t.trajectoryValidation(curve(g.candidate,now),now));assert(t.motionValidation(sweep(p,now),now));}
 static Transport stationary(bool acknowledge=true){auto t=active();
  for(unsigned i=0;i<=37;++i){const double now=10.06+i*.02;auto hold=permit1();hold.sequence=i+2;hold.allowed=false;hold.phase="holding";
@@ -71,17 +89,91 @@ static Transport stationary(bool acknowledge=true){auto t=active();
  }
  return t;
 }
+// Pure transport test of a live runtime profile, never an SDK or ROS launch.
+static Transport runtimeStationary(bool acknowledge=true,double mapped_lead=0.){
+ Transport t("sdk","live",true,.3,.5,std::string(64,'c'),"forward_yaw",false);
+ t.configureMcCaptureBound(.02,"source_delta_host_anchor_approximate");t.configureExecutionPolicy(testExecutionPolicy(),.8);
+ Grant::Request r;r.version=version1();r.sdk_session="sdk";r.execution_id="execution";r.control_epoch=1;r.request_id="grant";
+ r.source_stamp=stamp(10.);r.activate=true;r.transport_mode="live";assert(t.grant(r,10.,health()).accepted);t.tick(10.,health());
+ auto p=permit1();p.transport_mode="live";assert(t.localState(body(10.),10.));assert(t.permit(p,10.));
+ assert(t.trajectoryValidation(curve(p,10.),10.));const auto d=command(p,10.,1);
+ assert(t.motionValidation(sweep(d,10.),10.)&&t.demand(d,10.));
+ assert(t.tick(10.005,health())->linear.x==.2);t.writeCalled(10.005,true);assert(t.takeCommitAck()->applied);
+ for(unsigned i=0;i<=37;++i){const double now=10.06+i*.02;auto hold=p;hold.sequence=i+2;hold.allowed=false;hold.phase="holding";
+  hold.source_stamp=stamp(now);hold.valid_until=stamp(now+.25);assert(t.permit(hold,now));
+  t.mc(1000000000ULL+i*20000000ULL,now+mapped_lead,now,0.,0.,now,"runtime-clock");
+  assert(t.tick(now,health())->linear.x==0.);const auto write=t.nextWriteSequence();t.writeCalled(now,true);
+  if(acknowledge)t.zeroAcknowledged(write,now,now);
+ }
+ return t;
+}
 static Handoff reentry(const Stationary&s){auto g=grant();g.transition_mode=Handoff::STATIONARY_REENTRY;g.stationary_evidence=s;
  g.incumbent=permit1();g.incumbent.sequence=39;g.incumbent.allowed=false;g.incumbent.phase="holding";
  g.incumbent.source_stamp=g.source_stamp=stamp(10.80);g.incumbent.valid_until=g.valid_until=g.transition_deadline=stamp(11.04);
  g.retain_incumbent_until=g.source_stamp;g.candidate.sequence=40;g.candidate.source_stamp=g.source_stamp;g.candidate.valid_until=g.valid_until;
+ g.incumbent.transport_mode=g.candidate.transport_mode=s.transport_mode;
  return g;}
 int main(){
+ // The immutable live stationary witness retains its original mapped point
+ // even when that point is slightly ahead. Its receipt/capture interval and
+ // deadline, not a fake replacement timestamp, authorize re-entry.
+ {auto t=runtimeStationary(true,.01);const auto s=t.stationaryEvidence(10.80);
+  assert(s.usable&&secs(s.source_stamp)>10.80&&s.received_stamp==stamp(10.80));
+  assert(s.valid_until==stamp(11.05)&&secs(s.capture_lower_bound)<secs(s.received_stamp));
+  const auto next=reentry(s);assert(t.handoff(next,10.80));
+ }
+ // Unverified runtime provenance neither fabricates evidence nor blocks a
+ // genuine post-ACK stationary transaction with all existing identity/TTL gates.
+ {auto t=runtimeStationary();const auto s=t.stationaryEvidence(10.80);
+  assert(s.usable&&!s.physical_acceptance_verified&&s.time_basis=="source_delta_host_anchor_approximate");
+  const auto g=reentry(s);assert(t.handoff(g,10.80));auto p=prepared(g,10.82);
+  p.measured_twist.linear.x=p.curve_entry_twist.linear.x=0.;assert(t.localState(body(10.82,0.,0.),10.82));
+  assert(t.trajectoryGeometry(geometry(p),10.82));
+  assert(t.trajectoryValidation(curve(g.candidate,10.82),10.82));assert(t.motionValidation(sweep(p,10.82),10.82));
+  assert(t.preparedDemand(p,10.82));assert(t.tick(10.83,health())->linear.x==.2);t.writeCalled(10.83,true);
+  const auto ack=t.takeCommitAck();assert(ack&&ack->applied&&ack->commit_sequence==2);
+ }
+ {auto t=runtimeStationary(false);assert(!t.stationaryEvidence(10.80).usable);}
+ for(int kind=0;kind<5;++kind){auto t=runtimeStationary();auto s=t.stationaryEvidence(10.80);
+  if(kind==0)s.physical_acceptance_verified=true; // cannot relabel remembered proof
+  if(kind==1)s.sdk_session="foreign";
+  if(kind==2)s.mc_raw_stamp_ns++;
+  if(kind==3)s.zero_ack_at=stamp(10.07);
+  const double now=kind==4?11.06:10.80;assert(!t.handoff(reentry(s),now));
+ }
+ for(int kind=0;kind<5;++kind){auto t=runtimeStationary();auto h=health();
+  if(kind==0)h.estop=true;if(kind==1)h.owned=false;if(kind==2)h.connected=false;
+  if(kind==3)h.general=false;if(kind==4)h.mc_fresh=false;
+  const auto output=t.tick(10.81,h);assert(!output||!planarMotionNonzero(*output));
+  assert(!t.stationaryEvidence(10.81).usable);
+ }
+ // Candidate CAS and its ACK retain signed lateral velocity; the prepared
+ // admission path applies the same record-bound planar norm as active demand.
+ for(const auto profile:{"forward_yaw","holonomic_xyyaw"}) {
+  auto t=active(profile);const auto g=grant();auto p=prepared(g);
+  p.demand.velocity.linear.x=-.1;p.demand.velocity.linear.y=.2;
+  assert(t.handoff(g,10.02));evidence(t,g,p,10.03);
+  const bool omni=std::string(profile)=="holonomic_xyyaw";
+  assert(t.preparedDemand(p,10.03)==omni);
+  const auto output=t.tick(10.04,health());assert(output);
+  if(omni){assert(output->linear.x==-.1&&output->linear.y==.2);t.writeCalled(10.04,true);
+   const auto ack=t.takeCommitAck();assert(ack&&ack->commit_sequence==2&&ack->applied_velocity==p.demand.velocity);
+   assert(!planarMotionNonzero(*t.tick(10.131,health())));}
+  else assert(output->linear.x==.2&&output->linear.y==0.);
+ }
+ {auto t=active("holonomic_xyyaw");const auto g=grant();auto p=prepared(g);
+  p.demand.velocity.linear.x=.25;p.demand.velocity.linear.y=.25;
+  assert(t.handoff(g,10.02));evidence(t,g,p,10.03);assert(!t.preparedDemand(p,10.03));
+  assert(t.tick(10.04,health())->linear.x==.2);}
+ for(bool checked:{false,true}) {auto t=active("holonomic_xyyaw");const auto g=grant();auto p=prepared(g);
+  p.demand.velocity.linear.x=0.;p.demand.velocity.linear.y=.2;p.demand.hold=checked;p.demand.safety_checked=checked;
+  assert(t.handoff(g,10.02));evidence(t,g,p,10.03);assert(!t.preparedDemand(p,10.03));}
  // The conditional new-geometry writer also consumes SCAN's original
  // geometry/sweep deadline, not a second front/rear/body sensor-age ceiling.
  for(bool expired:{false,true}) {auto t=active();const auto g=grant();auto p=prepared(g);
   p.demand.safety_source_stamp=stamp(9.);assert(t.handoff(g,10.02));
   assert(t.localState(body(10.03),10.03));auto c=curve(g.candidate,10.03);
+  assert(t.trajectoryGeometry(geometry(p),10.03));
   c.body_source_stamp=c.front_ray_source_stamp=c.rear_ray_source_stamp=stamp(9.);
   c.valid_until=stamp(expired?10.029:10.05);assert(t.trajectoryValidation(c,10.03));
   auto m=sweep(p,10.03);m.body_source_stamp=m.front_ray_source_stamp=m.rear_ray_source_stamp=stamp(9.);
@@ -123,6 +215,7 @@ int main(){
  // The same precise sweep cap applies to a conditional new-geometry call.
  {auto t=active();const auto g=grant();const auto p=prepared(g);assert(t.handoff(g,10.02));
   assert(t.localState(body(10.03),10.03));assert(t.trajectoryValidation(curve(g.candidate,10.03),10.03));
+  assert(t.trajectoryGeometry(geometry(p),10.03));
   auto m=sweep(p,10.03);m.valid_until.sec=10;m.valid_until.nanosec=75261729;
   assert(t.motionValidation(m,10.03));assert(t.preparedDemand(p,10.03));
   assert(t.tick(10.04,health())->linear.x==.2);t.writeCalled(10.04,true);const auto ack=t.takeCommitAck();
@@ -170,6 +263,7 @@ int main(){
  for(int kind=0;kind<3;++kind) {auto t=active();const auto g=grant();auto p=prepared(g);
   p.demand.velocity.linear.x=0.;p.demand.hold=true;assert(t.handoff(g,10.02));
   assert(t.localState(body(10.03),10.03));auto c=curve(g.candidate,10.03);c.valid_until=stamp(10.045);
+  assert(t.trajectoryGeometry(geometry(p),10.03));
   if(kind==1){c.whole_curve=false;c.remaining_curve=true;c.checked_from_time=.1;c.valid_start_time=.2;c.reverse_margin_m=.15;}
   assert(t.trajectoryValidation(c,10.03));assert(t.motionValidation(sweep(p,10.03),10.03));
   t.preparedDemand(p,10.03);const double at=kind==2?10.046:10.04;
@@ -197,6 +291,7 @@ int main(){
   assert(t.permit(heartbeat,10.81));assert(t.tick(10.81,health())->linear.x==0.); // repeated HOLD does not retire prepared
   auto p=prepared(g,10.82);p.measured_twist.linear.x=p.curve_entry_twist.linear.x=0.;
   assert(t.localState(body(10.82,0.,0.),10.82));assert(t.trajectoryValidation(curve(g.candidate,10.82),10.82));
+  assert(t.trajectoryGeometry(geometry(p),10.82));
   assert(t.motionValidation(sweep(p,10.82),10.82));assert(t.preparedDemand(p,10.82));
   assert(t.tick(10.83,health())->linear.x==.2);t.writeCalled(10.83,true);const auto ack=t.takeCommitAck();
   assert(ack&&ack->applied&&ack->commit_sequence==2&&ack->previous_commit_sequence==1);
@@ -232,10 +327,10 @@ int main(){
   t.mcSourceRegressed(10.84,"mc-clock"); // live worker forwards this event BEFORE sample rejects it
   assert(!reporter.sample(1.04,10.84,s.mc_raw_stamp_ns-20000000ULL,zero,zero,1.04));
   assert(!t.stationaryEvidence(10.84).usable&&!t.handoff(g,10.84)&&!t.mcSourceFresh(10.84,"mc-clock"));
-  assert(t.report(10.84).mc_raw_stamp_ns==s.mc_raw_stamp_ns&&t.report(10.84).source_stamp==s.source_stamp);
+  assert(t.report(10.84).mc_raw_stamp_ns==s.mc_raw_stamp_ns&&t.report(10.84).source_stamp==s.received_stamp);
   // Receipt is genuinely later than acquisition. Do not let round-off in
   // independently calculated equal doubles accidentally turn this recovery
-  // fixture into a future-source test (future sources must remain rejected).
+  // fixture into a future-source test (the mock source clock is exact).
   for(unsigned i=0;i<=32;++i){const double now=10.861+i*.02;const uint64_t raw=s.mc_raw_stamp_ns+(i+3)*20000000ULL;
    assert(reporter.sample(1.06+i*.02,now,raw,zero,zero,1.06+i*.02));
    t.mc(raw,reporter.stamp_unix,now,0.,0.,now,"mc-clock");
@@ -313,7 +408,7 @@ int main(){
  // Latest actual entry, not the old preparation's zero-error declaration,
  // decides whether the candidate can replace the still-safe incumbent.
  for(int kind=0;kind<3;++kind){auto t=active();const auto g=grant();const auto p=prepared(g);assert(t.handoff(g,10.02));evidence(t,g,p,10.03);
-  assert(t.preparedDemand(p,10.03));auto latest=body(10.04);if(kind==0)latest.local_odometry.pose.pose.position.x=.02;
+  assert(t.preparedDemand(p,10.03));auto latest=body(10.04);if(kind==0)latest.local_odometry.pose.pose.position.y=.02;
   if(kind==1)latest.local_odometry.pose.pose.position.z=.02;if(kind==2)latest.local_odometry.twist.twist.linear.x=.26;
   assert(t.localState(latest,10.04));assert(t.tick(10.05,health())->linear.x==.2);t.writeCalled(10.05,true);
   assert(t.state(10.05).writer_commit_sequence==1&&!t.takeCommitAck());
@@ -367,18 +462,23 @@ int main(){
   assert(t.handoff(g,10.02));evidence(t,g,p,10.03);assert(t.preparedDemand(p,10.03));
   assert(t.tick(10.04,health())->linear.x==0.);t.writeCalled(10.04,true);assert(t.takeCommitAck()->commit_sequence==2);
  }
- // A remaining-curve first commit needs exact fresh measured XYZ progress;
- // it cannot borrow the zero-demand fast path or an unrelated floor/branch.
+ // A nonzero remaining-curve first commit uses the exact native command
+ // verdict and its named curve evidence, not a second progress subscription.
+ // Missing/foreign/negative/expired native evidence cannot authorize motion.
  for(int invalid=0;invalid<5;++invalid){auto t=armed();auto c=curve(permit1(),10.01);c.sequence=2;
   c.whole_curve=false;c.remaining_curve=true;c.checked_from_time=.1;c.valid_start_time=.2;c.reverse_margin_m=.15;
   assert(t.trajectoryValidation(c,10.01));assert(t.localState(body(10.02),10.02));
-  Progress p;p.schema_version=2;p.header=body(10.02).local_odometry.header;p.session_id="nav";p.task_id="task";p.route_id="route";
-  p.route_hash=version1().route_hash;p.map_version_id="map";p.localization_epoch=1;p.localization_seed_id="seed";
-  p.generation=p.anchor_revision=p.context_sequence=1;p.trajectory_id=1;p.segment_id="floor";p.anchor_id="anchor";
-  p.curve_time=p.arc_length=.3;p.pose.orientation.w=1.;p.twist.linear.x=.2;p.valid=true;
-  if(invalid==1)p.trajectory_id=2;if(invalid==2)p.pose.position.z=.02;if(invalid==3)p.curve_time=.01;
-  if(invalid==4)p.header.stamp=stamp(9.9);
-  const bool received=t.trackingProgress(p,10.02);if(invalid==4)assert(!received);else assert(received);
+  // Retire the fixture's old safe command without granting a new first
+  // commit; otherwise it may legitimately remain valid inside its own lease.
+  auto zero=command(permit1(),10.015,2);zero.velocity=geometry_msgs::msg::Twist{};
+  zero.hold=true;zero.motion_validation_sequence=0;assert(t.demand(zero,10.02));
+  auto demand=command(permit1(),10.02,3);demand.validation_sequence=2;
+  auto native=sweep(demand,10.02);native.trajectory_validation_sequence=2;
+  if(invalid==1)native.trajectory_id=2;
+  if(invalid==2)native.valid=false;
+  if(invalid==3)native.valid_until=stamp(10.025);
+  if(invalid==4)native.trajectory_validation_sequence=3;
+  assert(t.motionValidation(native,10.02));t.demand(demand,10.02);
   const auto out=t.tick(10.03,health());t.writeCalled(10.03,true);
   if(invalid==0){assert(out->linear.x==.2);assert(t.takeCommitAck()->commit_sequence==1);}
   else {assert(out->linear.x==0.);assert(!t.takeCommitAck()&&t.state(10.03).writer_commit_sequence==0);}
@@ -388,9 +488,99 @@ int main(){
  {auto t=active();const auto g=grant();auto p=prepared(g);p.measured_twist.linear.x=p.curve_entry_twist.linear.x=0.;
   p.measured_twist.linear.y=p.curve_entry_twist.linear.y=.2;assert(t.handoff(g,10.02));
   auto b=body(10.03);b.local_odometry.pose.pose.orientation.w=b.local_odometry.pose.pose.orientation.z=std::sqrt(.5);
+  assert(t.trajectoryGeometry(geometry(p),10.03));
   assert(t.localState(b,10.03));assert(t.trajectoryValidation(curve(g.candidate,10.03),10.03));
   assert(t.motionValidation(sweep(p,10.03),10.03));assert(t.preparedDemand(p,10.03));
   assert(t.tick(10.04,health())->linear.x==.2);t.writeCalled(10.04,true);assert(t.takeCommitAck()->commit_sequence==2);
+ }
+ // Same source bytes through two 20 Hz phases: actual position can have
+ // advanced more than 1.25 cm ALONG this immutable curve. The residual and
+ // measured velocity limits remain unchanged, and native proof expires on
+ // its own original actual-body/command deadlines.
+ for(double delay:{.125,.175})for(int fault=0;fault<9;++fault){auto policy=testExecutionPolicy();policy.command_pipeline_bound_s=.2;
+  auto t=active("forward_yaw",policy);const auto g=grant();auto p=prepared(g);
+  p.demand.valid_until=stamp(10.23);p.entry_admission.valid_until=p.demand.valid_until;
+  assert(t.handoff(g,10.02));assert(t.trajectoryGeometry(geometry(p),10.03));
+  if(fault!=7)assert(t.localState(body(10.03,fault==8?.02:0.),10.03));
+  const double now=10.03+delay;auto latest=body(now,.2*delay,.2);
+  if(fault==1)latest.local_odometry.pose.pose.position.y=.0125001;
+  if(fault==2)latest.local_odometry.twist.twist.linear.x=.250001;
+  if(fault==3){latest.imu_stamp=stamp(10.03);latest.extrapolation_sec=.125;}
+  if(fault==3)assert(!t.localState(latest,now));else assert(t.localState(latest,now));
+  auto c=curve(g.candidate,now-.005);if(fault==4)c.valid_until=stamp(now-.001);
+  assert(t.trajectoryValidation(c,now));auto native=sweep(p,now-.005);
+  if(fault==5)native.valid=false;
+  if(fault==6)native.valid_until=stamp(now-.001);
+  assert(t.motionValidation(native,now));const auto original=p;
+  // preparedDemand stores the conditional offer; only tick consumes the
+  // exact motion proof. A negative/expired sweep must prevent actual CAS.
+  assert(t.preparedDemand(p,now)==(fault==0||fault==5||fault==6));const auto output=t.tick(now,health());
+  if(fault==0){assert(output->linear.x==.2);t.writeCalled(now,true);const auto ack=t.takeCommitAck();
+   assert(ack&&ack->commit_sequence==2&&ack->entry_source_stamp==original.entry_source_stamp);
+   assert(ack->curve_time==original.curve_time&&ack->demand_source_stamp==original.demand.source_stamp);
+   assert(ack->body_source_stamp==latest.source_stamp&&secs(ack->valid_until)<=secs(g.valid_until));
+   assert(!planarMotionNonzero(*t.tick(10.231,health())));}
+  else {assert(!planarMotionNonzero(*output));assert(t.state(now).writer_commit_sequence==1);}
+ }
+ // Exact geometry is not inferred from an entry tangent or a curve ID.
+ for(int fault=0;fault<3;++fault){auto t=active();const auto g=grant();const auto p=prepared(g);
+  assert(t.handoff(g,10.02));assert(t.localState(body(10.03),10.03));
+  auto c=curve(g.candidate,10.03);if(fault==2)c.curve_duration=c.checked_to_time=1.1;
+  assert(t.trajectoryValidation(c,10.03));assert(t.motionValidation(sweep(p,10.03),10.03));
+  if(fault!=0){auto frozen=geometry(p);if(fault==1)frozen.context_sequence++;
+   assert(t.trajectoryGeometry(frozen,10.03));}
+  assert(!t.preparedDemand(p,10.03)&&t.state(10.03).writer_commit_sequence==1);
+ }
+ {auto t=active();const auto p=prepared(grant());auto immutable=geometry(p);
+  assert(t.trajectoryGeometry(immutable,10.02));
+  for(unsigned i=0;i<1000;++i)assert(t.trajectoryGeometry(immutable,10.02));
+  immutable.trajectory.pos_pts[2].y=.01;
+  assert(!t.trajectoryGeometry(immutable,10.03));}
+ // A second task previews before requesting control. Retaining the prior
+ // execution binding while stopping must not discard immutable future
+ // content, nor does that content itself authorize a foreign command.
+ {auto t=active();t.stop("first_task_complete",10.02);t.stopWritten(10.03);
+  for(unsigned i=0;i<=24;++i){const double now=10.08+i*.05;
+   t.mc(10080000000ULL+i*50000000ULL,now,now,0.,0.,now,"mc-clock");}
+  assert(t.report(11.281).measured_stop_confirmed);
+  auto next=version1();next.task_id="task-B";next.route_id="route-B";next.route_hash=std::string(64,'b');
+  auto g=grant();g.incumbent.version=g.candidate.version=next;
+  g.candidate.version.reference_generation=2;g.candidate.version.anchor_revision=2;
+  auto preview=prepared(g,11.33);const auto frozen=geometry(preview);
+  assert(t.trajectoryGeometry(frozen,11.29));
+  auto foreign=frozen;foreign.task_id="task-C";foreign.route_id="route-C";
+  assert(t.trajectoryGeometry(foreign,11.29));
+  assert(!t.preparedDemand(preview,11.29)); // Cache is not an execution grant.
+  Grant::Request request;request.version=next;request.sdk_session="sdk";request.execution_id="execution-B";
+  request.control_epoch=2;request.request_id="grant-B";request.source_stamp=stamp(11.30);
+  request.activate=true;request.transport_mode="isolated_mock";assert(t.grant(request,11.30,health()).accepted);
+  // A cached exact B cannot mutate after grant. C was pruned by the grant;
+  // re-caching valid C content cannot give it a B permit or proof.
+  auto changed=frozen;changed.trajectory.pos_pts[2].y=.01;
+  assert(!t.trajectoryGeometry(changed,11.30));
+  foreign.trajectory.pos_pts[2].y=.01;assert(t.trajectoryGeometry(foreign,11.30));
+  auto initial=permit1();initial.version=next;initial.execution_id="execution-B";
+  initial.control_epoch=2;initial.sdk_arm_generation=t.armGeneration();
+  initial.source_stamp=stamp(11.31);initial.valid_until=stamp(11.56);
+  assert(t.localState(body(11.31),11.31));assert(t.permit(initial,11.31));
+  assert(t.trajectoryValidation(curve(initial,11.31),11.31));auto d=command(initial,11.31,1);
+  assert(t.motionValidation(sweep(d,11.31),11.31)&&t.demand(d,11.31));
+  assert(t.localState(body(11.315),11.315));assert(t.tick(11.315,health())->linear.x==.2);
+  t.writeCalled(11.315,true);assert(t.takeCommitAck()->commit_sequence==1);
+  g.incumbent=initial;g.candidate.execution_id=initial.execution_id;g.candidate.control_epoch=initial.control_epoch;
+  g.candidate.sdk_arm_generation=initial.sdk_arm_generation;
+  g.source_stamp=g.candidate.source_stamp=stamp(11.32);
+  g.valid_until=g.transition_deadline=g.candidate.valid_until=stamp(11.52);g.retain_incumbent_until=stamp(11.50);
+  auto p=prepared(g,11.33);assert(geometry(p)==frozen);assert(t.handoff(g,11.32));
+  // Do not publish Tagged again here: success must use the pre-grant cache.
+  assert(t.localState(body(11.33),11.33));assert(t.trajectoryValidation(curve(g.candidate,11.33),11.33));
+  assert(t.motionValidation(sweep(p,11.33),11.33)&&t.preparedDemand(p,11.33));
+  assert(t.tick(11.34,health())->linear.x==.2);t.writeCalled(11.34,true);
+  const auto applied=t.takeCommitAck();assert(applied&&applied->applied&&applied->commit_sequence==2&&
+    applied->candidate_version.task_id=="task-B");
+  auto wrong=p;wrong.demand.version.task_id="task-C";wrong.entry_admission.version=wrong.demand.version;
+  assert(!t.preparedDemand(wrong,11.34));
+  assert(t.beginShutdown(11.35));assert(!t.trajectoryGeometry(frozen,11.35));
  }
  std::cout<<"bounded writer handoff positive/negative assertions passed\n";
 }

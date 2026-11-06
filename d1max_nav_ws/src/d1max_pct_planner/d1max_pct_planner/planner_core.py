@@ -135,13 +135,18 @@ class TomogramPlanner:
                 raise ValueError('Native A-star endpoint blocked, unsupported or outside map')
         if not self.planner.plan(start, goal, False):
             return None
+        return self._search_route()
+
+    def _search_route(self):
+        """Copy the actual last native search before another query mutates it."""
         grid = np.asarray(self.planner.get_path_finder().get_result_matrix())
         if grid.ndim != 2 or grid.shape[1] != 3 or not len(grid):
             return None
         layers = grid[:,0].astype(int)
         indices = grid[:,1:3].astype(int)
         xy = self.center + (indices-self.offset)*self.resolution
-        return {'path': np.c_[xy,self.ground[layers,indices[:,0],indices[:,1]]], 'layer_ids':layers}
+        return {'path': np.c_[xy,self.ground[layers,indices[:,0],indices[:,1]]].copy(),
+                'layer_ids': layers.copy()}
 
     def plan(self, start_xy, goal_xy, start_layer=0, goal_layer=0, return_details=False):
         start = np.zeros(3, dtype=np.int32)
@@ -174,6 +179,10 @@ class TomogramPlanner:
         search_size = self.planner.get_search_result_size()
         if search_size == 0:
             return None
+        # GPMP is a refinement of this SAME successful search. Retain the
+        # original polyline independently; an invalid optimized curve must not
+        # erase a route which the outer geometry validator can still check.
+        search = self._search_route() if return_details else None
         optimizer = (self.planner.get_trajectory_optimizer_wnoj() if self.use_quintic
                      else self.planner.get_trajectory_optimizer())
         trajectory = optimizer.get_result_matrix()
@@ -209,6 +218,8 @@ class TomogramPlanner:
             # T_tmp=(input_path.size()-1)/3 and uniform interpolated samples.
             duration = (search_size - 1) / 3.0
             return {'path': result, 'layer_ids': layers.astype(int),
+                    'astar_path': search['path'] if search else None,
+                    'astar_layer_ids': search['layer_ids'] if search else None,
                     'native_states': np.asarray(trajectory, dtype=float).copy(),
                     'native_sample_dt': duration / (len(result) - 1) if len(result) > 1 else None}
         return result

@@ -1,4 +1,5 @@
 #include "d1max_pct_rviz_tools/point_tools.hpp"
+#include "d1max_pct_rviz_tools/navigation_diagnostics_panel.hpp"
 
 #include <cmath>
 #include <QJsonArray>
@@ -7,6 +8,7 @@
 #include <QKeyEvent>
 #include <QTimer>
 #include <QDateTime>
+#include <QApplication>
 #include "pluginlib/class_list_macros.hpp"
 #include "rviz_common/display_context.hpp"
 #include "rviz_common/load_resource.hpp"
@@ -130,6 +132,15 @@ void PreviewPointTool::focusAndReturn(const std::array<double, 3> & xyz)
 {
   if (context_) {
     if (session_property_) {
+      // Both toolbar activation and the panel button must expose the handle.
+      // The local layout intentionally hides global editing. Coordinate the
+      // existing session-bound panel, rather than silently enabling a display
+      // while leaving its layout state/button inconsistent.
+      for (auto * widget : QApplication::allWidgets()) {
+        if (auto * panel = qobject_cast<NavigationDiagnosticsPanel *>(widget)) {
+          panel->showGoalEditor(session_property_->getString());
+        }
+      }
       context_->getViewManager()->setCurrentViewControllerType("rviz_default_plugins/Orbit");
     }
     auto * view = context_->getViewManager()->getCurrent();

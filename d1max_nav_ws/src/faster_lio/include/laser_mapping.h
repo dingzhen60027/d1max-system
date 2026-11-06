@@ -32,6 +32,7 @@
 #include "options.h"
 #include "pointcloud_preprocess.h"
 #include "registration_quality.hpp"
+#include "localization_pipeline_trace.hpp"
 
 //ROS2
 #include <tf2_ros/transform_broadcaster.h>
@@ -53,6 +54,8 @@ class LaserMapping : public rclcpp::Node {
     // LaserMapping();
     LaserMapping(const std::string &name);
     ~LaserMapping() {
+        robust_trace_.stop();
+        if(robust_trace_thread_.joinable())robust_trace_thread_.join();
         scan_down_body_ = nullptr;
         scan_undistort_ = nullptr;
         scan_down_world_ = nullptr;
@@ -135,6 +138,14 @@ class LaserMapping : public rclcpp::Node {
     void RobustRecovery();
     void PublishRobustSample(bool valid);
     void RequestImuRecovery(const std::string& reason);
+    void StartRobustTraceReporter();
+    void RecordRobustTrace(LocalizationPipelineTrace::Stage stage,int64_t source_ns,
+                           int64_t auxiliary_ns=0,uint32_t value=0,bool anomaly=false);
+    int64_t BeginRobustPhase(LocalizationPipelineTrace::Stage stage,double source);
+    void EndRobustPhase(LocalizationPipelineTrace::Stage stage,double source,int64_t began);
+    LocalizationPipelineTrace robust_trace_;
+    std::atomic<uint64_t> robust_trace_epoch_{1};
+    std::thread robust_trace_thread_;
     bool robust_mode_{false},publish_tf_{true};
     std::atomic<bool> robust_fault_{false};
     std::atomic<bool> robust_imu_clock_reset_{false};
@@ -149,6 +160,9 @@ class LaserMapping : public rclcpp::Node {
     bool robust_reset_pending_{false},robust_recovering_{false};
     uint64_t robust_epoch_{1},robust_resets_{0};
     double robust_epoch_start_{0},robust_last_gap_{0};
+    double robust_coast_gap_{.5},robust_coast_distance_{.25},robust_coast_rotation_{.30};
+    bool robust_coast_pending_{false};
+    uint64_t robust_coast_recoveries_{0},robust_coast_scans_discarded_{0};
     std::string robust_last_reset_reason_;
     int robust_min_features_{40};
     std::string robust_reason_{"initializing"};

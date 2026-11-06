@@ -11,6 +11,13 @@ from d1max_localization.relocalization_cloud import pointcloud_xyz
 P = Pose3((0., 0., 0.), (0., 0., 0., 1.))
 
 
+def gravity():
+    return dict(schema=1, query=dict(direction=[0.,0.,-1.], epoch=1,
+        source_stamp_ns=10**9, query_stamp_ns=10**9, frame_id='tracking', source='lio_inertial_posterior'),
+        map=dict(direction=[0.,0.,-1.], frame_id='map', map_sha256='a'*64,
+                 evidence_id='b'*64, source='explicit_synthetic_fixture'))
+
+
 def controller():
     c = StartupRelocalization('session')
     c.map_sha256 = 'a' * 64
@@ -44,14 +51,57 @@ def test_coarse_search_never_becomes_ready_without_matching_and_fused_output():
     assert c.state == 'ready'
 
 
-def test_manual_seed_overrides_late_worker_and_local_reset_never_resumes_auto():
+def test_manual_seed_wins_current_epoch_but_real_reset_requires_new_verified_match():
     c = controller(); c.capture(10.75, 10.8)
     old = result(c)
     c.mark_seed('manual', 10.8, 'manual')
     assert c.accept(old, 10.8) is None
     c.observe(2, 11., P, (0, 0, 0), (0, 0, 0))
+    assert c.state == 'waiting_lio' and c.seed_id is None
+    assert c.capture(11., 11.) is None  # Old stationary evidence was retired.
+    for t in np.arange(11.1, 11.81, .1):
+        c.observe(2, float(t), P, (0, 0, 0), (0, 0, 0))
+    assert c.capture(11.75, 11.8)
+    assert c.accept(old, 11.8) is None and c.request is not None
+    assert c.accept(result(c), 11.8) is not None
+    c.mark_seed('epoch2-global', 11.8, 'global_epoch_recovery')
+    c.verification('manual', 'manual', True, 11.9)
+    assert c.state == 'confirming'
+    c.verification('epoch2-global', 'epoch2-global', True, 11.9)
+    assert c.state == 'ready' and c.localized_epoch == 2
+
+
+def test_epoch_recovery_may_be_explicitly_disabled_without_losing_manual_priority():
+    c = controller()
+    c.config = replace(c.config, automatic_epoch_recovery=False)
+    c.mark_seed('manual', 10.8, 'manual')
+    c.observe(2, 11., P, (0, 0, 0), (0, 0, 0))
     assert c.state == 'manual_required_after_local_reset'
-    assert not c.retry() and c.capture(11., 11.) is None
+    assert c.capture(11., 11.) is None
+    c.mark_seed('new-manual', 11.1, 'manual')
+    assert c.state == 'confirming'
+
+
+def test_real_new_epoch_resets_only_its_attempt_budget_duplicate_or_old_epoch_cannot():
+    c = controller()
+    for _ in range(2):
+        assert c.capture(10.75, 10.8)
+        c.fail('no_match')
+        c.retry(automatic=True)
+    assert c.state == 'failed' and c.attempts == 2
+    for epoch in (1, 0, 1):
+        assert not c.reset_epoch(epoch)
+        assert c.attempts == 2 and c.state == 'failed'
+    assert c.reset_epoch(2)
+    assert c.attempts == 0 and c.state == 'waiting_lio' and not c.history
+
+
+def test_configuration_map_failure_is_not_cleared_by_epoch_or_retry():
+    c = controller()
+    c.fail('localization_map_differs_from_session_snapshot', persistent=True)
+    assert c.reset_epoch(2)
+    assert c.state == 'failed' and c.reason == 'localization_map_differs_from_session_snapshot'
+    assert not c.retry() and not c.retry(automatic=True)
 
 
 def test_request_epoch_map_and_scan_time_are_not_replaceable():
@@ -92,10 +142,32 @@ def test_stationary_requires_distinct_fresh_samples_and_no_history_gap():
     assert not d.stationary(10.8)
 
 
-def test_confirmation_timeout_stays_manual_and_no_retry_after_seed():
-    c = controller();c.mark_seed('s', 10.8, 'global')
+def test_automatic_confirmation_timeout_retries_bounded_but_manual_never_overridden():
+    c = controller();assert c.capture(10.75, 10.8)
+    assert c.accept(result(c), 10.8)
+    c.mark_seed('s', 10.8, 'global')
     c.verification('s', None, False, 26.)
-    assert c.state == 'failed' and not c.retry()
+    assert c.state == 'failed' and c.retry(automatic=True)
+    assert c.seed_id is None and c.attempts == 1
+    for t in np.arange(26., 26.81, .1):
+        c.observe(1, round(float(t), 2), P, (0, 0, 0), (0, 0, 0))
+    assert c.capture(26.75, 26.8)
+    assert c.accept(result(c), 26.8)
+    c.mark_seed('s2', 26.8, 'global')
+    c.verification('s2', None, False, 42.)
+    assert c.state == 'failed' and not c.retry(automatic=True)
+    c.mark_seed('manual', 42., 'manual')
+    c.verification('manual', None, False, 58.)
+    assert not c.retry(automatic=True) and c.manual_seed_epoch == 1
+
+
+def test_verified_current_epoch_and_manual_local_recovery_cannot_restart_auto():
+    c = controller();c.mark_seed('manual', 10.8, 'manual')
+    c.verification('manual', 'manual', True, 11.)
+    c.mark_seed('local-recovery', 11.1, 'recovery')
+    c.verification('local-recovery', None, False, 27.)
+    assert c.ever_localized and c.localized_epoch == 1
+    assert not c.retry(automatic=True) and c.manual_seed_epoch == 1
 
 
 def test_initial_search_retry_bounded_and_explicit():
@@ -110,18 +182,18 @@ def test_initial_search_retry_bounded_and_explicit():
 def test_repeated_corridor_or_floor_is_rejected_but_duplicate_tile_is_not():
     config = RegistrationConfig()
     a = candidate(); b = candidate(x=3.05)
-    assert select_candidate([a, b], config)['accepted']
+    assert select_candidate([a, b], config, gravity())['accepted']
     for other in (candidate(z=3.5), candidate(x=20.)):
-        decision = select_candidate([a, other], config)
+        decision = select_candidate([a, other], config, gravity())
         assert not decision['accepted'] and decision['reason'] == 'ambiguous_place_or_floor'
     rotated = candidate(); rotated['transform'][:2] = [[-1, 0, 0, 3], [0, -1, 0, 2]]
-    assert not select_candidate([a, rotated], config)['accepted']
+    assert not select_candidate([a, rotated], config, gravity())['accepted']
 
 
 def test_one_plane_low_overlap_and_large_residual_are_not_initial_localization():
     for field, value in [('information_ratio', 0), ('inlier_ratio', .3), ('rmse_m', .4)]:
         a = candidate();a[field] = value
-        assert not select_candidate([a], RegistrationConfig())['accepted']
+        assert not select_candidate([a], RegistrationConfig(), gravity())['accepted']
 
 
 def test_nonrigid_transform_rejected():
@@ -146,3 +218,4 @@ def test_unbounded_configuration_rejected():
     with pytest.raises(ValueError):replace(RegistrationConfig(),threads=20)
     with pytest.raises(ValueError):replace(StartupConfig(),max_source_age_s=3.)
     with pytest.raises(ValueError):replace(RegistrationConfig(),candidates=True)
+    with pytest.raises(ValueError):replace(StartupConfig(),automatic_epoch_recovery=1)

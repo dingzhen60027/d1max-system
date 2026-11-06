@@ -40,5 +40,5 @@ done
 # localization selected with the other components of this bundle.
 export PYTHONPATH="$(dirname -- "$REPLAY_TOOLS"):$PYTHONPATH"
 /usr/bin/python3 "$REPLAY_PREFLIGHT" verify --release "$D1MAX_RELEASE"
-/usr/bin/python3 -c 'import json,os; from pathlib import Path; p=Path(os.environ["D1MAX_RELEASE"]); d=json.loads((p/"release.json").read_text()); assert d.get("local_state_contract")=="continuous_odom_v1", "replay_requires_the_continuous_local_state_bundle"'
+/usr/bin/python3 -c 'import json,os; from pathlib import Path; p=Path(os.environ["D1MAX_RELEASE"]); d=json.loads((p/"release.json").read_text()); assert d.get("local_state_contract")=="continuous_odom_v2", "replay_requires_the_continuous_local_state_bundle"'
 exec /usr/bin/python3 "$REPLAY_TOOLS/validation/run_bt_localization_replay.py" "$@"

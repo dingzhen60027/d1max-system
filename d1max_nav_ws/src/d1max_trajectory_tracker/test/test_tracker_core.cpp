@@ -45,6 +45,22 @@ TEST(Tracker, DoesNotStartWithoutExplicitTask) {
   EXPECT_FALSE(core.active());
   EXPECT_EQ(core.reason(), "idle");
 }
+TEST(Tracker,PreparedGeometryAcceptsOnlyFiniteInitialRecoveryNotSteadyOverspeed) {
+  auto c=config();auto t=trajectory();t.points.clear();t.knots.clear();
+  const double speeds[]={.41698,.41698,.3,.3,.3,.3,.15,0.,0.};
+  t.points.emplace_back(0.,0.,.55);
+  for(int i=0;i<9;++i)t.points.push_back(t.points.back()+Eigen::Vector3d(.5*speeds[i],0,0));
+  for(int i=0;i<14;++i)t.knots.push_back((i-3)*.5);
+  auto geometry=PreparedGeometry::build(c,t,{});
+  ASSERT_TRUE(geometry);EXPECT_TRUE(geometry->derivatives_valid)<<geometry->failure;
+  EXPECT_NEAR(geometry->entry.velocity_sampler->evaluateDeBoorT(0.).x(),.41698,1e-12);
+  // All commands remain capped by unchanged config.max_speed=.3; accepting a
+  // measured boundary is not authority to command its above-cruise speed.
+  EXPECT_DOUBLE_EQ(c.max_speed,.3);
+  for(int i=1;i<10;++i)t.points[i]=t.points[i-1]+Eigen::Vector3d(.5*.41698,0,0);
+  geometry=PreparedGeometry::build(c,t,{});
+  ASSERT_TRUE(geometry);EXPECT_FALSE(geometry->derivatives_valid);
+}
 
 TEST(Tracker, RuntimeRequiresVersionedControlContractEvenIfStandalone) {
   EXPECT_THROW(requireIntegratedControlContract(), std::invalid_argument);

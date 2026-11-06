@@ -5,6 +5,9 @@ uint64 control_epoch
 string sdk_session
 uint64 sdk_arm_generation
 uint64 sequence
+# Last actual writer forced-zero discontinuity reconciled by the controller.
+# Zero preserves uninterrupted execution. This is not collision authority.
+uint64 acknowledged_discontinuity_write
 uint64 permit_sequence
 # Minimum same-version/same-curve evidence sequence, not a pin to an old
 # snapshot. MotionValidation records its actual sequence >= this floor.
@@ -19,7 +22,7 @@ builtin_interfaces/Time body_source_stamp
 builtin_interfaces/Time valid_until
 geometry_msgs/Twist velocity
 bool hold
-# Filled only by the independent raw-ray safety filter, never by Tracker.
+# Filled only by admission of SCAN's exact motion decision, never by Tracker.
 bool safety_checked
 builtin_interfaces/Time safety_source_stamp
 string transport_mode

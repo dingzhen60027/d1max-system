@@ -18,7 +18,20 @@ INSTANCE = "a" * 32
 INVOCATION = "b" * 32
 
 
-def test_joint_telemetry_audit_disables_takeover_without_changing_normal_preference(monkeypatch):
+@pytest.fixture(autouse=True)
+def isolated_selected_release(tmp_path, monkeypatch):
+    """Formal arguments never inspect the operator's real default or SDK."""
+    selected_root = tmp_path / "selected-default"
+    selected_root.mkdir()
+    selected, _ = sealed_release(selected_root)
+    monkeypatch.delenv(startup.RELEASE_ENV, raising=False)
+    for variable in IDENTITY:
+        monkeypatch.delenv(variable, raising=False)
+    monkeypatch.setattr(startup, "resolve_monitor_release",
+                        lambda: Path(os.environ.get(startup.RELEASE_ENV, str(selected))))
+
+
+def test_joint_telemetry_audit_never_takes_ownership_in_formal_task_writer(monkeypatch):
     monkeypatch.setenv('D1MAX_JOINT_TELEMETRY_AUDIT', 'true')
     arguments = startup.sdk_arguments(False)
     assert 'joint_state_enabled:=true' in arguments
@@ -28,7 +41,7 @@ def test_joint_telemetry_audit_disables_takeover_without_changing_normal_prefere
         startup.sdk_arguments(True)
     monkeypatch.delenv('D1MAX_JOINT_TELEMETRY_AUDIT')
     assert 'joint_state_enabled:=true' not in startup.sdk_arguments(False)
-    assert 'auto_take_control_on_available:=false' not in startup.sdk_arguments(False)
+    assert 'auto_take_control_on_available:=false' in startup.sdk_arguments(False)
 
 
 def test_joint_telemetry_audit_rejects_ambiguous_option(monkeypatch):
@@ -70,6 +83,15 @@ class FakeManager:
 
 @pytest.fixture
 def isolated(tmp_path, monkeypatch):
+    # These legacy ticket/locking unit tests explicitly exercise the retained
+    # private helper, not the unique formal entry. Binary argument selection is
+    # separately tested below with a fully sealed, file-only release.
+    monkeypatch.setattr(startup, "resolve_monitor_release", lambda: "")
+    monkeypatch.setattr(startup, "sdk_arguments", lambda enabled: [
+        "/fixture/sdk_monitor_bridge", "--ros-args", "-p",
+        "navigation_control_enabled:=" + ("true" if enabled else "false"),
+        *[item for name, value in startup.LIMITS.items()
+          for item in ("-p", f"{name}:={value}")]])
     runtime = tmp_path / "runtime"
     runtime.mkdir(mode=0o700)
     session = runtime / "d1max-session"
@@ -447,9 +469,14 @@ def sealed_release(tmp_path, *, seal_binary=True):
     binary = release / startup.RELEASE_MONITOR
     binary.parent.mkdir(parents=True)
     binary.write_bytes(b"schema3-monitor")
+    config = release / "sdk/install/d1max_sdk_bridge/share/d1max_sdk_bridge/config/monitor.yaml"
+    config.parent.mkdir(parents=True)
+    # Existing sealed configs may have the historical channel enabled. The
+    # formal launch explicitly overrides it rather than creating a writer pair.
+    config.write_text("sdk_monitor_bridge:\n  ros__parameters:\n    execution_v3_enabled: true\n")
     descriptor = release / "release.json"
     descriptor.write_text(json.dumps({"schema": 1, "sealed_manifest": "manifest.json"}))
-    sealed = [descriptor] + ([binary] if seal_binary else [])
+    sealed = [descriptor, config] + ([binary] if seal_binary else [])
     files = {str(path): hashlib.sha256(path.read_bytes()).hexdigest() for path in sealed}
     (release / "manifest.json").write_text(json.dumps({"files": files}))
     return release, binary
@@ -460,11 +487,248 @@ IDENTITY = {"D1MAX_EXECUTION_ACCEPTANCE_RECORD": "/data/acceptance/record.json",
             "D1MAX_EXECUTION_CALIBRATION_SHA256": "c" * 64, "D1MAX_EXECUTION_ROBOT_PROFILE_SHA256": "d" * 64}
 
 
-def test_release_monitor_is_opt_in_and_default_is_unchanged(monkeypatch):
+@pytest.fixture
+def sealed_runtime_profile(tmp_path, monkeypatch):
+    """A file-only release: never resolves a real selector or invokes SDK/ROS."""
+    import hashlib
+    for variable in IDENTITY:
+        monkeypatch.delenv(variable, raising=False)
+    release, _binary = sealed_release(tmp_path)
+    descriptor = release / "release.json"
+    descriptor.write_text(json.dumps({"schema": 1, "sealed_manifest": "manifest.json",
+                                      "template_source_root": "source_snapshot/nav_ws"}))
+    profile = release / "source_snapshot/nav_ws/src/d1max_pct_scan/config/runtime_motion_profile.json"
+    profile.parent.mkdir(parents=True)
+    profile.write_text(json.dumps({
+        "schema_version": 3, "record_kind": "runtime_motion_profile",
+        "parameter_basis": "vendor_nominal_and_engineering", "profile": "general_low_speed",
+        "fixture_only": False, "physical_acceptance_verified": False,
+        "robot_id": "0123", "sdk_version": "0.1.0-charging_v2",
+        "calibration_sha256": "c" * 64, "robot_profile_sha256": "d" * 64,
+    }))
+    manifest_path = release / "manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    for path in (descriptor, profile):
+        manifest["files"][str(path)] = hashlib.sha256(path.read_bytes()).hexdigest()
+    manifest_path.write_text(json.dumps(manifest))
+    return release, profile
+
+
+def test_default_runtime_profile_binds_complete_identity_without_env_or_physical_claim(sealed_runtime_profile):
+    release, profile = sealed_runtime_profile
+    before = profile.read_bytes()
+    expected = {
+        "execution_acceptance_record": str(profile), "execution_robot_id": "0123",
+        "execution_sdk_version": "0.1.0-charging_v2", "execution_calibration_sha256": "c" * 64,
+        "execution_robot_profile_sha256": "d" * 64,
+    }
+    args = startup.execution_identity(release)
+    assert args == [item for name, value in expected.items()
+                    for item in ("-p", f"{name}:={json.dumps(value, ensure_ascii=False)}")]
+    assert profile.read_bytes() == before
+    config = json.loads(before)
+    assert config["physical_acceptance_verified"] is False
+    assert config["fixture_only"] is False
+    assert not any("verified:=true" in arg for arg in args)
+
+
+@pytest.mark.parametrize("change", ["changed", "unsealed"])
+def test_default_runtime_profile_rejects_changed_or_unsealed_file(sealed_runtime_profile, change):
+    release, profile = sealed_runtime_profile
+    if change == "changed":
+        profile.write_bytes(profile.read_bytes() + b"\n")
+    else:
+        manifest_path = release / "manifest.json"
+        manifest = json.loads(manifest_path.read_text())
+        del manifest["files"][str(profile)]
+        manifest_path.write_text(json.dumps(manifest))
+    with pytest.raises(RuntimeError, match="未封存或已变化"):
+        startup.execution_identity(release)
+
+
+@pytest.mark.parametrize("field,value", [
+    ("record_kind", "physical_acceptance"), ("parameter_basis", "measured"),
+    ("fixture_only", True), ("physical_acceptance_verified", True),
+])
+def test_default_runtime_profile_rejects_wrong_provenance_even_when_sealed(sealed_runtime_profile, field, value):
+    import hashlib
+    release, profile = sealed_runtime_profile
+    config = json.loads(profile.read_text())
+    config[field] = value
+    profile.write_text(json.dumps(config))
+    manifest_path = release / "manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    manifest["files"][str(profile)] = hashlib.sha256(profile.read_bytes()).hexdigest()
+    manifest_path.write_text(json.dumps(manifest))
+    with pytest.raises(RuntimeError, match="默认运动配置类型错误"):
+        startup.execution_identity(release)
+
+
+def test_default_runtime_profile_legacy_release_without_template_keeps_empty_identity(tmp_path, monkeypatch):
+    for variable in IDENTITY:
+        monkeypatch.delenv(variable, raising=False)
+    release, _binary = sealed_release(tmp_path)
+    assert startup.execution_identity(release) == []
+    assert startup.execution_identity() == []
+
+
+def reseal_fixture_profile(release, profile, config):
+    """Only a temporary file fixture; never changes the real release."""
+    import hashlib
+    profile.write_text(json.dumps(config))
+    manifest_path=release/'manifest.json'
+    manifest=json.loads(manifest_path.read_text())
+    manifest['files'][str(profile)]=hashlib.sha256(profile.read_bytes()).hexdigest()
+    manifest_path.write_text(json.dumps(manifest))
+
+
+@pytest.mark.parametrize('version,kind,normalization',[
+    (1,'smooth_deadzone_ratio_v1','dominant_axis_direction_preserving_norm_cap'),
+    (2,'smooth_deadzone_ratio_v2','dominant_axis_direction_preserving_component_cap'),
+    (3,'direct_breakaway_ratio_v3','dominant_axis_direction_preserving_component_cap'),
+    (4,'continuous_amplitude_ratio_v4',
+     'rounded_dominant_pnorm16_direction_preserving_component_cap')])
+def test_operator_observed_mapping_uses_same_sdk_session_identity(sealed_runtime_profile,version,kind,normalization):
+    release,profile=sealed_runtime_profile
+    config=json.loads(profile.read_text())
+    config['parameter_basis']='vendor_nominal_engineering_and_operator_observation'
+    config['sdk_input_mapping']={
+        'schema_version':version,'kind':kind,'normalization':normalization}
+    reseal_fixture_profile(release,profile,config)
+    arguments=startup.execution_identity(release)
+    assert f'execution_acceptance_record:={json.dumps(str(profile))}' in arguments
+    assert config['physical_acceptance_verified'] is False
+    assert not any('TakeControl' in value or 'Move' in value for value in arguments)
+
+
+@pytest.mark.parametrize('mapping',[
+    None,{}, {'schema_version':True,'kind':'smooth_deadzone_ratio_v1'},
+    {'schema_version':1,'kind':'other',
+     'normalization':'dominant_axis_direction_preserving_norm_cap'},
+    {'schema_version':1,'kind':'smooth_deadzone_ratio_v1','normalization':'per_axis_floor'},
+    {'schema_version':1,'kind':'smooth_deadzone_ratio_v2',
+     'normalization':'dominant_axis_direction_preserving_component_cap'},
+    {'schema_version':3,'kind':'continuous_amplitude_ratio_v4',
+     'normalization':'rounded_dominant_pnorm16_direction_preserving_component_cap'},
+    {'schema_version':4,'kind':'direct_breakaway_ratio_v3',
+     'normalization':'rounded_dominant_pnorm16_direction_preserving_component_cap'},
+    {'schema_version':4,'kind':'continuous_amplitude_ratio_v4',
+     'normalization':'dominant_axis_direction_preserving_component_cap'},
+    {'schema_version':5,'kind':'continuous_amplitude_ratio_v4',
+     'normalization':'rounded_dominant_pnorm16_direction_preserving_component_cap'}])
+def test_operator_mapping_metadata_cannot_be_silently_ignored(sealed_runtime_profile,mapping):
+    release,profile=sealed_runtime_profile
+    config=json.loads(profile.read_text())
+    config['parameter_basis']='vendor_nominal_engineering_and_operator_observation'
+    if mapping is not None:config['sdk_input_mapping']=mapping
+    reseal_fixture_profile(release,profile,config)
+    with pytest.raises(RuntimeError,match='输入换算版本错误'):
+        startup.execution_identity(release)
+
+
+def test_formal_v4_monitor_arguments_bind_profile_without_motion_or_sdk_launch(
+        sealed_runtime_profile, monkeypatch):
+    release, profile = sealed_runtime_profile
+    config = json.loads(profile.read_text())
+    config['parameter_basis'] = 'vendor_nominal_engineering_and_operator_observation'
+    config['sdk_input_mapping'] = {
+        'schema_version': 4,
+        'kind': 'continuous_amplitude_ratio_v4',
+        'normalization': 'rounded_dominant_pnorm16_direction_preserving_component_cap',
+    }
+    reseal_fixture_profile(release, profile, config)
+    monkeypatch.setattr(startup, 'resolve_monitor_release', lambda: release)
+    monkeypatch.delenv('D1MAX_JOINT_TELEMETRY_AUDIT', raising=False)
+
+    def forbidden(*_args, **_kwargs):
+        pytest.fail('Argument preparation must not launch processes or connect sockets')
+
+    monkeypatch.setattr(startup.os, 'execv', forbidden)
+    monkeypatch.setattr(startup.subprocess, 'run', forbidden)
+    monkeypatch.setattr(startup.socket, 'socket', forbidden)
+    before = profile.read_bytes()
+    arguments = startup.sdk_arguments(False)
+    assert arguments[0] == str(release / startup.RELEASE_MONITOR)
+    assert f'execution_acceptance_record:={json.dumps(str(profile))}' in arguments
+    assert 'execution_task_writer_enabled:=true' in arguments
+    assert 'navigation_control_enabled:=false' in arguments
+    assert 'execution_v3_enabled:=false' in arguments
+    assert 'auto_take_control_on_available:=false' in arguments
+    assert profile.read_bytes() == before
+
+
+@pytest.mark.parametrize('selected_location', ['installed', 'snapshot'])
+def test_fixed_stair_runtime_reuse_reaches_the_single_writer_from_sealed_config(
+        sealed_runtime_profile, monkeypatch, selected_location):
+    """Real argument builder, file-only release; no monitor/ROS/SDK process."""
+    import hashlib
+    import yaml
+    release, profile = sealed_runtime_profile
+    installed = release / 'sdk/install/d1max_sdk_bridge/share/d1max_sdk_bridge/config/monitor.yaml'
+    snapshot = release / 'source_snapshot/sdk_bridge_ws/src/d1max_sdk_bridge/config/monitor.yaml'
+    snapshot.parent.mkdir(parents=True)
+    selected = installed if selected_location == 'installed' else snapshot
+    fixed = dict(execution_mode_policy='fixed_stair',
+        execution_stair_runtime_parameter_source='general_runtime_reuse',
+        execution_mode_capability_record='', execution_mode_capability_sha256='')
+    old = dict(execution_mode_policy='segment_modes',
+        execution_stair_runtime_parameter_source='measured_mode_record')
+    for path in (installed, snapshot):
+        path.write_text(yaml.safe_dump({'d1max_sdk_monitor': {
+            'ros__parameters': fixed if path == selected else old}}))
+    manifest_path = release / 'manifest.json'
+    manifest = json.loads(manifest_path.read_text())
+    for path in (installed, snapshot):
+        manifest['files'][str(path)] = hashlib.sha256(path.read_bytes()).hexdigest()
+    if selected_location == 'snapshot':
+        # An installed but unsealed workspace-style copy must not win over
+        # the release's actually sealed source configuration.
+        manifest['files'].pop(str(installed))
+    manifest_path.write_text(json.dumps(manifest))
+    monkeypatch.setattr(startup, 'resolve_monitor_release', lambda: release)
+    monkeypatch.delenv('D1MAX_JOINT_TELEMETRY_AUDIT', raising=False)
+
+    def forbidden(*_args, **_kwargs):
+        pytest.fail('Configuration selection must not invoke ROS, processes, or sockets')
+
+    monkeypatch.setattr(startup.os, 'execv', forbidden)
+    monkeypatch.setattr(startup.subprocess, 'run', forbidden)
+    monkeypatch.setattr(startup.socket, 'socket', forbidden)
+    original = {path: path.read_bytes() for path in (installed, snapshot, profile)}
+    args = startup.sdk_arguments(False)
+    assert args[0] == str(release / startup.RELEASE_MONITOR)
+    assert args.count('--params-file') == 1
+    assert args[args.index('--params-file')+1] == str(selected)
+    parameters = yaml.safe_load(selected.read_text())['d1max_sdk_monitor']['ros__parameters']
+    assert parameters == fixed
+    cli = dict(args[index+1].split(':=', 1) for index, item in enumerate(args) if item == '-p')
+    assert not (fixed.keys() & cli.keys())  # No late CLI override discards STAIR/reuse policy.
+    assert cli['execution_task_writer_enabled'] == 'true'
+    assert cli['execution_v3_enabled'] == 'false'
+    assert cli['navigation_control_enabled'] == 'false'
+    assert cli['auto_take_control_on_available'] == 'false'
+    assert cli['execution_acceptance_record'] == json.dumps(str(profile))
+    assert json.loads(profile.read_text())['physical_acceptance_verified'] is False
+    assert all(path.read_bytes() == data for path, data in original.items())
+
+
+def test_old_basis_cannot_silently_add_new_actuator_mapping(sealed_runtime_profile):
+    release,profile=sealed_runtime_profile
+    config=json.loads(profile.read_text());config['sdk_input_mapping']={}
+    reseal_fixture_profile(release,profile,config)
+    with pytest.raises(RuntimeError,match='配置类型不一致'):
+        startup.execution_identity(release)
+
+
+def test_formal_default_is_one_task_writer_without_motion_or_legacy_channel(monkeypatch):
     monkeypatch.delenv(startup.RELEASE_ENV, raising=False)
     args = startup.sdk_arguments(False)
-    assert args[0].endswith("sdk_bridge_ws/install/d1max_sdk_bridge/lib/d1max_sdk_bridge/sdk_monitor_bridge")
-    assert not any(arg.startswith("execution_") for arg in args)
+    assert args[0] == str(startup.resolve_monitor_release() / startup.RELEASE_MONITOR)
+    assert 'execution_task_writer_enabled:=true' in args
+    assert 'execution_v3_enabled:=false' in args
+    assert 'navigation_control_enabled:=false' in args
+    assert 'auto_take_control_on_available:=false' in args
+    assert args[args.index('--params-file') + 1].endswith('/config/monitor.yaml')
 
 
 def test_release_monitor_uses_sealed_schema3_binary_without_acceptance(tmp_path, monkeypatch):
@@ -474,7 +738,11 @@ def test_release_monitor_uses_sealed_schema3_binary_without_acceptance(tmp_path,
         monkeypatch.delenv(variable, raising=False)
     args = startup.sdk_arguments(False)
     assert args[0] == str(binary)
-    assert "execution_v3_enabled:=true" in args
+    assert "execution_task_writer_enabled:=true" in args
+    assert "execution_v3_enabled:=false" in args
+    assert "navigation_control_enabled:=false" in args
+    assert "auto_take_control_on_available:=false" in args
+    assert "execution_v3_enabled:=true" not in args
     assert "navigation_control_enabled:=false" in args
     # No identity means an unaccepted channel; no record is invented here.
     assert not any(arg.startswith(("execution_acceptance_record", "execution_robot_id")) for arg in args)

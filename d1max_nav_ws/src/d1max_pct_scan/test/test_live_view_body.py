@@ -10,7 +10,9 @@ from nav_msgs.msg import Odometry
 from std_msgs.msg import String
 from visualization_msgs.msg import Marker
 from d1max_pct_scan.live_view import (LiveView, BODY_AXIS_LENGTH_M, BODY_AXIS_WIDTH_M,
-                                    body_axes_marker)
+                                    body_axes_marker, body_outline_bounds)
+from d1max_pct_scan.pose_continuity_view import PoseContinuityView
+from d1max_pct_scan.typed_view_state import TypedViewState
 
 
 def fixture():
@@ -28,6 +30,7 @@ def fixture():
     published = []
     node = SimpleNamespace(session={'id': 's'}, frame='d1max_loc_map',
         goal_request_pending=False, execute_pending=False,
+        physical_motion_capable=False,
         last_state=state, state_at=19.95, body=odom, body_received=19.8,
         body_sample_context=('s', 2, 'seed'), body_context=('s', 2, 'seed', 'seed'),
         body_barrier=99., retired_body_caption=False,
@@ -154,6 +157,31 @@ def test_fresh_same_identity_pose_has_fixed_colors_despite_soft_quality(quality)
         (0., 0., 1., 1.), (0., 0., 1., 1.)]
 
 
+def test_wireframe_uses_robot_dimensions_and_shares_pose_axes_and_expiry():
+    node, output = fixture()
+    profile = {'engineering': dict(box_length_m=.93, box_width_m=.30,
+                                   box_body_below_m=.20, box_body_above_m=.30)}
+    node.body_outline = body_outline_bounds({'robot_profile_snapshot': profile})
+    node.body.pose.pose.orientation.y = .6
+    node.body.pose.pose.orientation.w = .8
+    original = deepcopy(node.body)
+    render(node)
+    marker = axes(output)
+    assert marker.type == Marker.LINE_LIST and len(marker.points) == 30
+    assert marker.header == original.header and marker.pose == original.pose.pose
+    points = [(p.x, p.y, p.z) for p in marker.points[6:]]
+    edges = {frozenset(points[i:i+2]) for i in range(0, len(points), 2)}
+    assert len(edges) == 12 and len(set(points)) == 8
+    assert all(sum(a != b for a, b in zip(points[i], points[i+1])) == 1
+               for i in range(0, len(points), 2))
+    assert [min(p[i] for p in points) for i in range(3)] == pytest.approx([-.465, -.15, -.20])
+    assert [max(p[i] for p in points) for i in range(3)] == pytest.approx([.465, .15, .30])
+    assert [(c.r, c.g, c.b, c.a) for c in marker.colors[6:]] == [(1., 1., 1., 1.)]*24
+    assert node.body == original
+    render(node, wall=100.31, mono=20.31)
+    assert axes(output).action == Marker.DELETE  # Both parts share one identity/lease.
+
+
 def test_caption_retired_once_before_axes_and_never_recreated():
     node, output = fixture()
     render(node)
@@ -162,6 +190,83 @@ def test_caption_retired_once_before_axes_and_never_recreated():
     assert output[1].ns == 'measured_body' and output[1].action == Marker.ADD
     render(node)
     assert len(output) == 3 and output[-1].ns == 'measured_body'
+
+
+def typed_fixture():
+    node, output = fixture()
+    source = [100_000_000_000]
+    node.single_floor = True
+    node.typed_view = TypedViewState('s', 'map')
+    node.pose_continuity_view = PoseContinuityView('s', 'map')
+    node.get_clock = lambda: SimpleNamespace(now=lambda: SimpleNamespace(
+        nanoseconds=source[0], to_msg=lambda: Time(sec=source[0]//10**9,
+                                                  nanosec=source[0]%10**9)))
+    return node, output, source
+
+
+def actual_message(node, source_ns):
+    local, global_ = deepcopy(node.body), deepcopy(node.body)
+    local.header.frame_id = 'd1max_loc_odom'
+    stamp = Time(sec=source_ns//10**9, nanosec=source_ns%10**9)
+    local.header.stamp = global_.header.stamp = stamp
+    return SimpleNamespace(schema_version=2, usable=True, session_id='s', map_version_id='map',
+        localization_epoch=2, localization_seed_id='seed', source_stamp=stamp,
+        posterior_stamp=stamp, imu_stamp=stamp, extrapolation_sec=0.,
+        local_odometry=local, global_odometry=global_)
+
+
+def model_packet(sequence=1, target=100_360_000_000):
+    return String(data=json.dumps(dict(schema=1, sequence=sequence, session_id='s', map_version_id='map',
+        localization_epoch=2, localization_seed_id='seed', frame_id='d1max_loc_map',
+        body_frame='d1max_loc_base_link', available=True, motion_usable=False,
+        quality='imu_gap_coasting_pose_only', estimate_stamp_ns=target,
+        posterior_stamp_ns=100_000_000_000, imu_stamp_ns=100_000_000_000,
+        valid_until_ns=100_500_000_000, position=[.108, 0., .55], orientation=[0., 0., 0., 1.],
+        pose_covariance=[.1 if i%7==0 else 0. for i in range(36)])))
+
+
+def test_real_display_callback_uses_bounded_model_but_never_upgrades_ready_or_body():
+    node, output, source = typed_fixture()
+    with patch('d1max_pct_scan.live_view.time.monotonic', return_value=20.):
+        LiveView.on_atomic_state(node, actual_message(node, source[0]))
+    original = deepcopy(node.body)
+    source[0] = 100_360_000_000
+    with patch('d1max_pct_scan.live_view.time.monotonic', return_value=20.36):
+        LiveView.on_pose_continuity(node, model_packet())
+        assert not LiveView.localization_ready(node)
+    render(node, mono=20.36)
+    assert axes(output).action == Marker.ADD
+    assert axes(output).pose.position.x == pytest.approx(.108)
+    assert axes(output).header.stamp == Time(sec=100, nanosec=360000000)
+    assert node.body == original and node.body_received == 20.
+    assert not node.goal_request_pending and not node.execute_pending
+    source[0] = 100_460_000_000
+    render(node, mono=20.46)
+    assert axes(output).action == Marker.DELETE  # No heartbeat renews the estimate.
+
+
+def test_real_typed_callback_wins_over_model_and_hard_status_blocks_late_model():
+    node, output, source = typed_fixture()
+    with patch('d1max_pct_scan.live_view.time.monotonic', return_value=20.):
+        LiveView.on_atomic_state(node, actual_message(node, source[0]))
+    source[0] = 100_360_000_000
+    with patch('d1max_pct_scan.live_view.time.monotonic', return_value=20.36):
+        LiveView.on_pose_continuity(node, model_packet())
+        LiveView.on_atomic_state(node, actual_message(node, source[0]))
+        assert LiveView.localization_ready(node)
+    render(node, mono=20.36)
+    assert axes(output).pose == node.body.pose.pose
+    assert axes(output).pose.position.x == pytest.approx(1.25)
+    assert node.pose_continuity_view.sample is None
+    hard = deepcopy(node.last_state)
+    hard.update(wall_time=100.37, local_fault='imu_clock_reset')
+    source[0] = 100_370_000_000
+    status(node, hard, wall=100.37, mono=20.37)
+    with patch('d1max_pct_scan.live_view.time.monotonic', return_value=20.37):
+        LiveView.on_pose_continuity(node, model_packet(2, source[0]))
+    render(node, mono=20.37)
+    assert axes(output).action == Marker.DELETE
+    assert node.pose_continuity_view.sample is None and node.pose_continuity_view.identity_blocked
 
 
 def test_tick_clears_world_caption_but_keeps_panel_diagnostics():

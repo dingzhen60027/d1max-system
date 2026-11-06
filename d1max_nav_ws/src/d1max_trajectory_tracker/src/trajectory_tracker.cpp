@@ -5,7 +5,6 @@
 #include <nlohmann/json.hpp>
 #include <geometry_msgs/msg/twist.hpp>
 #include <nav_msgs/msg/odometry.hpp>
-#include <std_msgs/msg/bool.hpp>
 #include <std_msgs/msg/string.hpp>
 #include <std_srvs/srv/trigger.hpp>
 #include <rclcpp/rclcpp.hpp>
@@ -46,14 +45,26 @@ public:
     c.odom_timeout = declare_parameter<double>("odom_timeout", c.odom_timeout);
     c.trajectory_timeout = declare_parameter<double>("trajectory_timeout", c.trajectory_timeout);
     c.lookahead = declare_parameter<double>("lookahead", c.lookahead);
+    c.min_lookahead_distance_m=declare_parameter<double>("min_lookahead_distance_m",c.min_lookahead_distance_m);
+    c.max_lookahead_distance_m=declare_parameter<double>("max_lookahead_distance_m",c.max_lookahead_distance_m);
     c.kp_position = declare_parameter<double>("kp_position", c.kp_position);
     c.kp_yaw = declare_parameter<double>("kp_yaw", c.kp_yaw);
+    c.velocity_damping_gain=declare_parameter<double>("velocity_damping_gain",c.velocity_damping_gain);
+    c.yaw_damping_gain=declare_parameter<double>("yaw_damping_gain",c.yaw_damping_gain);
+    c.max_jerk=declare_parameter<double>("max_jerk",c.max_jerk);
+    c.max_yaw_jerk=declare_parameter<double>("max_yaw_jerk",c.max_yaw_jerk);
     c.heading_threshold = declare_parameter<double>("heading_threshold", c.heading_threshold);
+    c.steering_enter_angle_rad=declare_parameter<double>("steering_enter_angle_rad",c.steering_enter_angle_rad);
+    c.steering_exit_angle_rad=declare_parameter<double>("steering_exit_angle_rad",c.steering_exit_angle_rad);
+    c.steering_error_scale_rad=declare_parameter<double>("steering_error_scale_rad",c.steering_error_scale_rad);
+    c.motion_model = declare_parameter<std::string>("motion_model", c.motion_model);
+    c.holonomic_yaw_policy = declare_parameter<std::string>("holonomic_yaw_policy", c.holonomic_yaw_policy);
     c.goal_tolerance = declare_parameter<double>("goal_tolerance", c.goal_tolerance);
     c.goal_height_tolerance = declare_parameter<double>("goal_height_tolerance", c.goal_height_tolerance);
     c.single_floor_max_height_change = declare_parameter<double>(
         "single_floor_max_height_change", c.single_floor_max_height_change);
     c.position_freeze_distance = declare_parameter<double>("position_freeze_distance", c.position_freeze_distance);
+    c.stationary_velocity_metric=declare_parameter<std::string>("stationary_velocity_metric",c.stationary_velocity_metric);
     c.stationary_linear_threshold_mps=declare_parameter<double>(
         "stationary_linear_threshold_mps",c.stationary_linear_threshold_mps);
     c.stationary_angular_threshold_radps=declare_parameter<double>(
@@ -66,17 +77,23 @@ public:
     c.stationary_minimum_samples=static_cast<unsigned>(stationary_samples);
     c.require_support_reference=true;
     c.external_goal_completion=true;
+    control_frequency_=declare_parameter<double>("controller_frequency_hz",20.);
+    const double diagnostics_frequency=declare_parameter<double>("diagnostics_frequency_hz",5.);
+    if(!std::isfinite(control_frequency_)||control_frequency_<10.||control_frequency_>50.||
+       !std::isfinite(diagnostics_frequency)||diagnostics_frequency<1.||
+       diagnostics_frequency>std::min(10.,control_frequency_))
+      throw std::invalid_argument("invalid_control_or_diagnostics_frequency");
+    diagnostics_period_=1./diagnostics_frequency;
     config_ = c;
     execution_=std::make_unique<ExecutionContract>(c,declare_parameter<std::string>("transport_mode","live"),
-      declare_parameter<std::string>("execution_braking_model_sha256",""),declare_parameter<bool>("writer_handoff_enabled",false),true);
+      declare_parameter<std::string>("execution_braking_model_sha256",""),declare_parameter<bool>("writer_handoff_enabled",false),true,
+      declare_parameter<double>("command_pipeline_bound_s",.1));
     core_=&execution_->core();
     const auto topic = [this](const char *key, const char *value) {
       return declare_parameter<std::string>(key, value);
     };
     command_pub_ = create_publisher<geometry_msgs::msg::Twist>(
         topic("command_topic", "/d1max/live_planning/execution/command_debug"), rclcpp::QoS(1));
-    frozen_pub_ = create_publisher<std_msgs::msg::Bool>(
-        topic("frozen_topic", "/d1max/pct_scan/execution_frozen"), rclcpp::QoS(1));
     status_pub_ = create_publisher<std_msgs::msg::String>(
         topic("status_topic", "/d1max/pct_scan/tracker_status"), rclcpp::QoS(1));
     progress_pub_ = create_publisher<d1max_planning_interfaces::msg::TrackingProgress>(
@@ -95,9 +112,9 @@ public:
     validation_sub_=create_subscription<wire::TrajectoryValidation>(topic("validation_topic","/d1max/live_planning/execution/validation"),rclcpp::QoS(2),
       [this](wire::TrajectoryValidation::ConstSharedPtr m){
         execution_->validation(*m,now().seconds());
-        // Prepare on the fresh proof itself: the join evidence has a 0.4 s
-        // lease from its body sample, and waiting for the timer phase (up to
-        // 0.2 s) plus the owner tick routinely expired it before commit.
+        // Prepare on the fresh proof itself. Actual entry consumes the
+        // provider's original LocalState lease; waiting for another timer
+        // phase cannot refresh that body sample or its expiry.
         prepareAndPublish(now().seconds(),monotonicNow());
       });
     motion_validation_sub_=create_subscription<wire::MotionValidation>(
@@ -109,6 +126,16 @@ public:
     permit_sub_=create_subscription<wire::ExecutionPermit>(topic("permit_topic","/d1max/live_planning/execution/permit"),rclcpp::QoS(1),
       [this](wire::ExecutionPermit::ConstSharedPtr m){
         if(execution_->permit(*m,now().seconds(),monotonicNow()))
+          if(const auto installed=execution_->geometryReceipt())geometry_receipt_pub_->publish(*installed);
+      });
+    route_retirement_sub_=create_subscription<wire::RouteDeliveryReceipt>(
+      topic("route_retirement_topic","/d1max/live_planning/execution/route_delivery_receipt"),
+      rclcpp::QoS(8).reliable().transient_local(),
+      [this](wire::RouteDeliveryReceipt::ConstSharedPtr m) {
+        // The route writer's exact retirement closes preview/never-motion
+        // domains even if a depth-one permit inbox missed the old revoke.
+        // It does not confirm physical stop or authorize the successor.
+        if(execution_->retireRoute(*m,now().seconds()))
           if(const auto installed=execution_->geometryReceipt())geometry_receipt_pub_->publish(*installed);
       });
     handoff_sub_=create_subscription<wire::ExecutionHandoffGrant>(topic("handoff_grant_topic","/d1max/live_planning/execution/handoff_grant"),rclcpp::QoS(2),
@@ -152,6 +179,9 @@ public:
           input.join_velocity={v.x,v.y,v.z}; input.join_acceleration={a.x,a.y,a.z};
           input.join_acceleration_valid=msg->join_acceleration_valid;
           input.knots = spline.knots;
+          // A held body heading is a frozen part of the admitted geometry,
+          // never a fresh yaw guessed independently by the controller.
+          if(!decodeFrozenHeading(spline,input.frozen_yaw))return;
           input.points.reserve(spline.pos_pts.size());
           for (const auto &point : spline.pos_pts) input.points.emplace_back(point.x, point.y, point.z);
           execution_->candidate(std::move(input));
@@ -201,21 +231,28 @@ public:
           response->success = true;
           response->message = "Stopped. A new task generation is required.";
         });
-    timer_ = create_wall_timer(std::chrono::milliseconds(20), [this]() {
+    timer_ = create_wall_timer(std::chrono::duration_cast<std::chrono::nanoseconds>(
+        std::chrono::duration<double>(1./control_frequency_)), [this]() {
       const double ros_now=now().seconds(),receipt=monotonicNow();
+      if(last_control_receipt_>0.) {
+        const double interval=receipt-last_control_receipt_;
+        control_interval_sum_+=interval;control_interval_max_=std::max(control_interval_max_,interval);
+        ++control_intervals_;
+      }
+      last_control_receipt_=receipt;
       const bool preparation_ready=execution_->pollPreparation();
       // Fallback refresh only; a new validation prepares immediately.
       if(preparation_ready||receipt-last_prepare_>=.2) prepareAndPublish(ros_now,receipt);
       // Both controllers see the prior applied limiter history. Computing the
       // incumbent first would advance its clock to this tick and give the
-      // prepared controller a zero dt, manufacturing a HOLD every 50 Hz tick.
+      // prepared controller a zero dt, manufacturing a HOLD every control tick.
       if(const auto prepared=execution_->preparedStep(ros_now,receipt))prepared_pub_->publish(*prepared);
       const auto demand=execution_->step(ros_now,receipt);
       demand_pub_->publish(demand);
-      Output out;out.forward=demand.velocity.linear.x;out.yaw_rate=demand.velocity.angular.z;
+      Output out;out.forward=demand.velocity.linear.x;out.lateral=demand.velocity.linear.y;out.yaw_rate=demand.velocity.angular.z;
       out.frozen=demand.hold;out.reason=demand.reason;publish(out);
     });
-    RCLCPP_INFO(get_logger(), "Guarded SCAN tracker ready; idle until an explicit session task. Max %.2f m/s.", c.max_speed);
+    RCLCPP_INFO(get_logger(), "SCAN spatial tracker ready at %.1f Hz. Max %.2f m/s.", control_frequency_,c.max_speed);
   }
 
 private:
@@ -281,11 +318,9 @@ private:
   {
     geometry_msgs::msg::Twist command;
     command.linear.x = output.forward;
+    command.linear.y = output.lateral;
     command.angular.z = output.yaw_rate;
     command_pub_->publish(command);
-    std_msgs::msg::Bool frozen;
-    frozen.data = output.frozen;
-    frozen_pub_->publish(frozen);
     const auto measured = core_->progress(now().seconds());
     d1max_planning_interfaces::msg::TrackingProgress progress;
     progress.header.stamp = odom_source_stamp_;
@@ -323,6 +358,12 @@ private:
     progress_pub_->publish(progress);
     const auto installed=execution_->geometryReceipt();
     if(installed)geometry_receipt_pub_->publish(*installed);
+    // Typed control/progress stay at the controller rate. Large diagnostic JSON
+    // is bounded to its own rate, with immediate phase changes; it cannot be a
+    // periodic source lease or a second command scheduler.
+    const double diagnostic_now=monotonicNow();
+    if(diagnostic_now-last_diagnostics_<diagnostics_period_&&output.reason==last_diagnostic_reason_)return;
+    last_diagnostics_=diagnostic_now;last_diagnostic_reason_=output.reason;
     const auto& join=core_->joinDiagnostic();
     Json status = {
       // Process heartbeat for lifecycle supervision, not sensor provenance.
@@ -340,6 +381,10 @@ private:
       {"permit_reject_reason", execution_->lastPermitReject()},
       {"initial_writer_ack_reason",execution_->initialAckReason()},
       {"installation_sequence",installed?installed->installation_sequence:0},
+      {"local_state_authority",{{"provider_contract",core_->odometry().provider_contract},
+        {"provider_usable",core_->odometry().provider_usable},
+        {"source_stamp_ns",core_->odometry().source_stamp_ns},
+        {"valid_until_ns",core_->odometry().provider_valid_until_ns}}},
       {"join_diagnostic",{{"reason",join.reason},{"trajectory_id",join.trajectory_id},
         {"body_present",join.body_present},{"checked_now",join.now},
         {"body_source_stamp_ns",join.body_source_stamp_ns},{"join_source_stamp_ns",join.join_source_stamp_ns},
@@ -348,7 +393,11 @@ private:
         {"posterior_source_age_sec",join.now-join.posterior_stamp},{"imu_source_age_sec",join.now-join.imu_stamp},
         {"extrapolation_sec",join.extrapolation_sec},{"join_minus_body_sec",join.join_stamp-join.body_stamp},
         {"curve_time",join.curve_time},{"curve_duration",join.curve_duration},{"arc",join.arc}}},
-      {"command", {{"x", output.forward}, {"y", 0.0}, {"yaw", output.yaw_rate}}},
+      {"command", {{"x", output.forward}, {"y", output.lateral}, {"yaw", output.yaw_rate}}},
+      {"motion_model", config_.motion_model}, {"heading_policy", config_.holonomic_yaw_policy},
+      {"controller_frequency_hz",control_frequency_},
+      {"control_interval_mean_s",control_intervals_?control_interval_sum_/control_intervals_:0.},
+      {"control_interval_max_s",control_interval_max_},
       {"execution_frozen", output.frozen}, {"max_speed", config_.max_speed},
       {"maneuver_phase", core_->maneuverPhase()},
       {"hard_planar_limit", HARD_PLANAR_SPEED}, {"stamp", now().seconds()}
@@ -356,6 +405,7 @@ private:
     std_msgs::msg::String message;
     message.data = status.dump();
     status_pub_->publish(message);
+    control_interval_sum_=control_interval_max_=0.;control_intervals_=0;
   }
   Config config_;
   NavigationStateIngress state_ingress_;
@@ -363,6 +413,10 @@ private:
   std::unique_ptr<ExecutionContract> execution_;
   TrackerCore* core_{nullptr};
   double last_prepare_{0.};
+  double control_frequency_{20.},diagnostics_period_{.2},last_diagnostics_{0.};
+  double last_control_receipt_{0.},control_interval_sum_{0.},control_interval_max_{0.};
+  std::uint64_t control_intervals_{0};
+  std::string last_diagnostic_reason_;
   rclcpp::Publisher<wire::MotionDemand>::SharedPtr demand_pub_;
   rclcpp::Publisher<wire::PreparedMotionDemand>::SharedPtr prepared_pub_;
   rclcpp::Publisher<wire::TrajectoryAdmission>::SharedPtr admission_pub_;
@@ -373,11 +427,11 @@ private:
   rclcpp::Subscription<wire::TrajectoryValidation>::SharedPtr validation_sub_;
   rclcpp::Subscription<wire::MotionValidation>::SharedPtr motion_validation_sub_;
   rclcpp::Subscription<wire::ExecutionPermit>::SharedPtr permit_sub_;
+  rclcpp::Subscription<wire::RouteDeliveryReceipt>::SharedPtr route_retirement_sub_;
   rclcpp::Subscription<wire::ExecutionHandoffGrant>::SharedPtr handoff_sub_;
   rclcpp::Subscription<wire::ExecutionCommitAck>::SharedPtr commit_ack_sub_;
   std::uint64_t accepted_{0}, rejected_{0};
   rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr command_pub_;
-  rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr frozen_pub_;
   rclcpp::Publisher<std_msgs::msg::String>::SharedPtr status_pub_;
   rclcpp::Publisher<d1max_planning_interfaces::msg::TrackingProgress>::SharedPtr progress_pub_;
   rclcpp::Subscription<std_msgs::msg::String>::SharedPtr task_sub_;

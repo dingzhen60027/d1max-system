@@ -7,3 +7,8 @@ navigation_estimation:
     output_rate_hz: 50.0
     prediction.max_horizon: 0.35
     limits.max_prediction_horizon: 0.35
+    # Position model only: never used by LocalNavigationState/motion admission.
+    prediction.pose_only_horizon: 0.75
+    prediction.pose_only_imu_gap: 0.50
+    prediction.pose_only_distance: 0.25
+    prediction.pose_only_rotation: 0.30

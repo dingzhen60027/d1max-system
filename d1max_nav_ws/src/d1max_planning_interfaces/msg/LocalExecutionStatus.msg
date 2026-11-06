@@ -1,0 +1,19 @@
+# Coarse local execution feedback. Not a permission or collision certificate.
+uint32 schema_version
+ExecutionVersion version
+string execution_id
+uint64 control_epoch
+uint64 sequence
+builtin_interfaces/Time source_stamp
+builtin_interfaces/Time body_source_stamp
+builtin_interfaces/Time body_valid_until
+int64 trajectory_id
+uint64 commit_sequence
+string phase
+bool ready
+bool holding
+bool at_goal
+bool request_stop
+bool software_retired
+string reason
+string transport_mode

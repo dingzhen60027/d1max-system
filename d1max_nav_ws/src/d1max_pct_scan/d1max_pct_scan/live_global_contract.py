@@ -13,7 +13,8 @@ class GlobalPlanError(ValueError):
 
 FLOOR_NAMES = {'floor1': 'lower', 'floor2': 'upper'}
 LEG_FLOORS = {'lower_floor': 'floor1', 'upper_floor': 'floor2',
-              'stair_lower': 'stair_lower', 'stair_upper': 'stair_upper'}
+              'stair_lower': 'stair_lower', 'stair_upper': 'stair_upper',
+              'stair_landing': 'stairs'}
 
 
 def finite_xyz(value, name='xyz'):

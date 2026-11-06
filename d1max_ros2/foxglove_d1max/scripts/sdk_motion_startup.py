@@ -35,11 +35,11 @@ LIMITS = {"navigation_max_forward_mps": 0.30, "navigation_max_lateral_mps": 0.0,
           "navigation_max_yaw_radps": 0.50}
 STOP_FIRST = "已有 monitor 或启动/停止尚未完成；请通过现有 manager 停止并确认 stopped 后再执行。不会旁起 SDK 或自动重启。"
 # The unique sealed navigation release replaces the workspace build. Explicit
-# overrides remain possible; motion still needs a physically accepted grant.
+# overrides remain possible; motion still needs a task-bound BT grant.
 RELEASE_ENV = "D1MAX_MONITOR_RELEASE"
 RELEASE_MONITOR = "sdk/install/d1max_sdk_bridge/lib/d1max_sdk_bridge/sdk_monitor_bridge"
-# Physical acceptance binding, validated by the monitor itself. Absent means
-# the v3 channel stays unaccepted and rejects every activation grant.
+# Runtime binding, validated by the monitor itself. Environment overrides keep
+# legacy records compatible; otherwise use the unique sealed runtime profile.
 EXECUTION_IDENTITY = {
     "execution_acceptance_record": ("D1MAX_EXECUTION_ACCEPTANCE_RECORD", r"/[^\"\\\x00-\x1f]+"),
     "execution_robot_id": ("D1MAX_EXECUTION_ROBOT_ID", r"[A-Za-z0-9_.:-]{1,128}"),
@@ -336,6 +336,32 @@ def resolve_monitor_release():
     return Path(value).resolve(strict=True)
 
 
+def source_backed_python_cache(path, files):
+    """Legacy cache bytes may change; their separately sealed .py may not.
+
+    This stdlib-only boundary rule is cross-tested with Web/CLI. It does not
+    import a release helper before verifying its source, nor ignore native or
+    configuration files merely because they live under __pycache__.
+    """
+    path = Path(path)
+    if not path.is_absolute() or path.suffix not in ('.pyc', '.pyo') or path.is_symlink():
+        return False
+    try:
+        source = (Path(importlib.util.source_from_cache(str(path.with_suffix('.pyc'))))
+                  if path.parent.name == '__pycache__' else path.with_suffix('.py'))
+    except ValueError:
+        # source_from_cache assumes no dots in the source stem and cannot
+        # decode pytest's versioned rewrite tag. Both are real Python caches.
+        # Match only those known tags, then retain the same sealed-source test.
+        match = re.fullmatch(
+            r'(.+)\.cpython-[0-9]+(?:-pytest-[0-9][A-Za-z0-9_.+-]*)?'
+            r'(?:\.opt-[A-Za-z0-9]+)?\.py[co]', path.name)
+        if path.parent.name != '__pycache__' or match is None:
+            return False
+        source = path.parent.parent/(match.group(1)+'.py')
+    return (str(source) in files and source.is_file() and not source.is_symlink())
+
+
 def sealed_release_monitor(value):
     """Schema-3 monitor of a sealed release; every sealed file must be unchanged."""
     if not value.startswith("/"):
@@ -353,6 +379,8 @@ def sealed_release_monitor(value):
         if str(required) not in files:
             raise RuntimeError(f"未封存：{required}")
     for path, expected in files.items():
+        if source_backed_python_cache(path, files):
+            continue
         digest = hashlib.sha256()
         with Path(path).open("rb") as stream:
             for chunk in iter(lambda: stream.read(1024 * 1024), b""):
@@ -393,15 +421,47 @@ def sealed_release_monitor_config(value):
     raise RuntimeError("所选 release 缺少实际封存的 SDK monitor.yaml；不会加载可变工作区配置")
 
 
-def execution_identity():
-    """All five acceptance bindings or none; the monitor validates the record."""
+def execution_identity(release=None):
+    """Bind the exact runtime configuration, never pretend it is calibrated."""
     given = {name: os.environ.get(variable, "") for name, (variable, _) in EXECUTION_IDENTITY.items()}
     if not any(given.values()):
-        return []
+        if release is None:return []
+        root=Path(release).resolve(strict=True)
+        descriptor=json.loads((root/'release.json').read_text())
+        relative=descriptor.get('template_source_root')
+        if not relative:return []  # Legacy sealed releases stay unchanged.
+        record=root/relative/'src/d1max_pct_scan/config/runtime_motion_profile.json'
+        if not record.is_file():return []
+        manifest=json.loads((root/descriptor['sealed_manifest']).read_text())
+        if (record.is_symlink() or not record.resolve().is_relative_to(root)
+                or manifest.get('files',{}).get(str(record.resolve()))!=hashlib.sha256(record.read_bytes()).hexdigest()):
+            raise RuntimeError('默认运动配置未封存或已变化')
+        config=json.loads(record.read_text())
+        if (config.get('record_kind')!='runtime_motion_profile'
+                or config.get('parameter_basis') not in ('vendor_nominal_and_engineering',
+                    'vendor_nominal_engineering_and_operator_observation')
+                or config.get('physical_acceptance_verified') is not False
+                or config.get('fixture_only') is not False):
+            raise RuntimeError('默认运动配置类型错误')
+        if config['parameter_basis']=='vendor_nominal_engineering_and_operator_observation':
+            mapping=config.get('sdk_input_mapping',{})
+            if (not isinstance(mapping,dict) or type(mapping.get('schema_version')) is not int
+                    or (mapping['schema_version'],mapping.get('kind'),mapping.get('normalization')) not in (
+                        (1,'smooth_deadzone_ratio_v1','dominant_axis_direction_preserving_norm_cap'),
+                        (2,'smooth_deadzone_ratio_v2','dominant_axis_direction_preserving_component_cap'),
+                        (3,'direct_breakaway_ratio_v3','dominant_axis_direction_preserving_component_cap'),
+                        (4,'continuous_amplitude_ratio_v4',
+                         'rounded_dominant_pnorm16_direction_preserving_component_cap'))):
+                raise RuntimeError('默认 SDK 输入换算版本错误')
+        elif 'sdk_input_mapping' in config:
+            raise RuntimeError('SDK 输入换算与默认运动配置类型不一致')
+        given=dict(execution_acceptance_record=str(record),execution_robot_id=config['robot_id'],
+            execution_sdk_version=config['sdk_version'],execution_calibration_sha256=config['calibration_sha256'],
+            execution_robot_profile_sha256=config['robot_profile_sha256'])
     args = []
     for name, (variable, pattern) in EXECUTION_IDENTITY.items():
         if not re.fullmatch(pattern, given[name]):
-            raise RuntimeError(f"物理验收绑定不完整或格式错误：{variable}")
+            raise RuntimeError(f"运动配置绑定不完整或格式错误：{variable}")
         # Quoted so ROS keeps digit-only ids and versions as strings.
         args.extend(["-p", f"{name}:={json.dumps(given[name], ensure_ascii=False)}"])
     return args
@@ -415,7 +475,7 @@ def sdk_arguments(enabled):
         raise RuntimeError('Joint telemetry audit cannot consume a motion startup request')
     release = str(resolve_monitor_release())
     if release and enabled:
-        raise RuntimeError("release schema-3 执行通道与旧运动能力互斥；v3 仅接受绑定验收的 grant")
+        raise RuntimeError("主线执行通道与旧运动能力互斥")
     binary = sealed_release_monitor(release)
     config = sealed_release_monitor_config(release)
     args = [str(binary),
@@ -424,7 +484,12 @@ def sdk_arguments(enabled):
     for name, value in LIMITS.items():
         args.extend(["-p", f"{name}:={value}"])
     if release:
-        args.extend(["-p", "execution_v3_enabled:=true", *execution_identity()])
+        # One task-level writer in the SAME monitor connection. The former
+        # per-curve CAS channel and the legacy navigation socket are disabled;
+        # merely connecting never requests ownership or resurrects a task.
+        args.extend(["-p", "execution_task_writer_enabled:=true",
+                     "-p", "execution_v3_enabled:=false",
+                     "-p", "auto_take_control_on_available:=false", *execution_identity(release)])
     if audit == 'true':
         # A scoped read-only audit overrides, but never rewrites, the operator's
         # normal APP handoff preference. No ownership acquisition is authorized.
@@ -459,7 +524,7 @@ def launch_sdk():
                     json.dump({"nonce": ticket["nonce"], "invocation": ticket["invocation"],
                                "limits": LIMITS, "startup_disarmed": True}, stream)
             print("SDK monitor: motion-capable, startup DISARMED" if ticket else
-                  "SDK monitor: schema-3 channel, motion only after a bound grant" if os.environ.get(RELEASE_ENV) else
+                  "SDK monitor: task_follower_v1, motion only after a bound task grant" if os.environ.get(RELEASE_ENV) else
                   "SDK monitor: motion DISABLED", flush=True)
             # This is the only process launch: the current existing monitor child is
             # replaced, never a second SDK client beside it. No SDK command is sent here.

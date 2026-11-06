@@ -6,7 +6,8 @@ from nav_msgs.msg import Odometry
 from d1max_planning_interfaces.msg import LocalNavigationState
 from d1max_localization.estimation_ros import stamp_time
 from d1max_localization.navigation_wire import local_body_message
-from d1max_pct_scan.local_navigation_state import LocalNavigationInbox, history_identity
+from d1max_pct_scan.local_navigation_state import (
+    LocalNavigationInbox, LocalNavigationHistoryInbox, history_identity)
 from d1max_pct_scan.ray_projection import RayProjectorCore, AwaitingCoverage
 from test_ray_projection import CTX, EPOCH, IDENTITY, decode, feed, raw_points
 
@@ -176,8 +177,36 @@ def test_task_continuity_never_renews_expired_motion_evidence():
     assert inbox.task_usable(now_ns=now, monotonic=100.101, receipt_timeout_s=.4)
     assert not inbox.usable(now_ns=now, monotonic=100.101, receipt_timeout_s=.4)
     assert accept(inbox, packet(), now_ns=now, mono=100.101) is None
-    # The original posterior expires even though the source is only 370 ms old.
-    assert not inbox.task_usable(now_ns=10_370_000_000, monotonic=100.37, receipt_timeout_s=.4)
+    # Task observation does not subtract delivery from the raw posterior again;
+    # the original source/receipt 400 ms bounds remain, with no control renewal.
+    assert inbox.task_usable(now_ns=10_370_000_000, monotonic=100.37, receipt_timeout_s=.4)
+    assert not inbox.usable(now_ns=10_370_000_000, monotonic=100.37, receipt_timeout_s=.4)
+    assert inbox.task_usable(now_ns=10_400_000_000, monotonic=100.39, receipt_timeout_s=.4)
+    assert not inbox.task_usable(now_ns=10_400_000_001, monotonic=100.39, receipt_timeout_s=.4)
+    assert not inbox.task_usable(now_ns=10_390_000_000, monotonic=100.400001, receipt_timeout_s=.4)
+
+
+def test_provider_coast_and_delivery_are_not_two_raw_imu_age_checks():
+    # Actual failure: 94.6 ms valid coast + 25.9 ms delivery was rejected as
+    # a 120.5 ms old raw IMU, although the provider accepted this estimate.
+    m=packet();m.imu_stamp=stamp_time(9.9054);m.extrapolation_sec=.0946
+    inbox=LocalNavigationInbox()
+    assert accept(inbox,m,now_ns=10_025_900_000)
+    assert inbox.usable(now_ns=10_050_000_000,monotonic=100.05,receipt_timeout_s=.4)
+    assert not inbox.usable(now_ns=10_100_000_001,monotonic=100.1,receipt_timeout_s=.4)
+    assert inbox.latest.state.imu_ns==9_905_400_000
+    assert inbox.latest.state.valid_until_ns==10_100_000_000
+    assert accept(inbox,m,now_ns=10_050_000_000) is None
+
+
+@pytest.mark.parametrize('bad',['schema','expiry','oversized_lease','raw_coast'])
+def test_original_provider_lease_is_not_a_blanket_freshness_bypass(bad):
+    m=packet()
+    if bad=='schema':m.schema_version=1
+    elif bad=='expiry':m.valid_until=stamp_time(10.)
+    elif bad=='oversized_lease':m.valid_until=stamp_time(10.100000001)
+    else:m.imu_stamp=stamp_time(9.899);m.extrapolation_sec=.101
+    assert accept(LocalNavigationInbox(),m,now_ns=10_001_000_000) is None
 
 
 @pytest.mark.parametrize('reason', ['imu_temporarily_unavailable', 'lio_reset'])
@@ -186,3 +215,52 @@ def test_explicit_producer_loss_pauses_task_without_consuming_old_geometry(reaso
     assert accept(inbox, packet())
     assert accept(inbox, packet(10_020_000_000, usable=False, reason=reason), mono=100.02)
     assert not inbox.task_usable(now_ns=10_020_000_000, monotonic=100.02, receipt_timeout_s=.4)
+
+
+@pytest.mark.parametrize('delay_ns', [100_000_001, 120_000_000, 250_000_000, 400_000_000])
+def test_history_admits_original_late_measurement_without_current_control_permission(delay_ns):
+    message = packet()
+    history, control = LocalNavigationHistoryInbox(), LocalNavigationInbox()
+    original = deepcopy(message)
+    now = 10_000_000_000+delay_ns
+    event = accept(history, message, now_ns=now)
+    assert event and event.state.source_ns == 10_000_000_000
+    assert event.state.valid_until_ns == 10_100_000_000
+    assert event.state.imu_ns == 9_980_000_000
+    assert message == original
+    assert accept(control, message, now_ns=now) is None
+    assert not hasattr(history, 'usable') and not hasattr(history, 'task_usable')
+    assert accept(history, message, now_ns=now, mono=101.) is None
+    assert history.latest is event and history.latest.received == 100.
+
+
+@pytest.mark.parametrize('delay_ns', [-1, 400_000_001, 500_000_000])
+def test_history_does_not_admit_future_or_unbounded_late_measurements(delay_ns):
+    assert accept(LocalNavigationHistoryInbox(), packet(),
+        now_ns=10_000_000_000+delay_ns) is None
+
+
+@pytest.mark.parametrize('bad', ['lease', 'coast', 'posterior', 'frame', 'pose', 'twist'])
+def test_late_history_still_requires_original_producer_geometry_and_source_bounds(bad):
+    message = packet()
+    if bad == 'lease': message.valid_until = stamp_time(10.100000001)
+    elif bad == 'coast': message.imu_stamp = stamp_time(9.899); message.extrapolation_sec = .101
+    elif bad == 'posterior': message.posterior_stamp = stamp_time(9.599)
+    elif bad == 'frame': message.local_odometry.header.frame_id = 'map'
+    elif bad == 'pose': message.local_odometry.pose.pose.position.x = float('nan')
+    else: message.local_odometry.twist.twist.angular.z = float('nan')
+    assert accept(LocalNavigationHistoryInbox(), message, now_ns=10_120_000_000) is None
+
+
+def test_history_hard_reset_prevents_queued_geometry_from_reviving_old_context():
+    inbox = LocalNavigationHistoryInbox()
+    assert accept(inbox, packet(), now_ns=10_120_000_000)
+    reset = packet(10_100_000_000, usable=False, reason='lio_reset')
+    event = accept(inbox, reset, now_ns=10_200_000_000)
+    assert event.hard_failure and history_identity(inbox) is None
+    assert accept(inbox, packet(10_080_000_000), now_ns=10_200_000_000) is None
+    assert inbox.latest is event
+    newer = packet(10_100_000_001, epoch=2, seed='new')
+    assert accept(inbox, newer, now_ns=10_200_000_002)
+    assert accept(inbox, packet(10_120_000_000), now_ns=10_220_000_002) is None
+    assert history_identity(inbox) == ('session', 2, 'new')

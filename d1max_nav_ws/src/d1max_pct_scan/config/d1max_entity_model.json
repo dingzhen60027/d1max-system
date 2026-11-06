@@ -1,0 +1,1591 @@
+{
+  "schema": "d1max_collision_self_model/v1",
+  "root_link": "BASE_LINK",
+  "links": [
+    "BASE_LINK",
+    "IMU_ICM42688_LINK",
+    "IMU_LUA300C_LINK",
+    "F_AIRY_LINK",
+    "F_IMX415_LINK",
+    "FAR_LIHGT_LINK",
+    "FBL_LIHGT_LINK",
+    "R_AIRY_LINK",
+    "R_IMX415_LINK",
+    "RAR_LIHGT_LINK",
+    "RBL_LIHGT_LINK",
+    "FAR_RADARA22_LINK",
+    "FBL_RADARA22_LINK",
+    "FAR_ABAD_LINK",
+    "FAR_HIP_LINK",
+    "FAR_KNEE_LINK",
+    "FAR_FOOT_LINK",
+    "FBL_ABAD_LINK",
+    "FBL_HIP_LINK",
+    "FBL_KNEE_LINK",
+    "FBL_FOOT_LINK",
+    "RAR_ABAD_LINK",
+    "RAR_HIP_LINK",
+    "RAR_KNEE_LINK",
+    "RAR_FOOT_LINK",
+    "RBL_ABAD_LINK",
+    "RBL_HIP_LINK",
+    "RBL_KNEE_LINK",
+    "RBL_FOOT_LINK"
+  ],
+  "joints": [
+    {
+      "name": "IMU_ICM42688_JOINT",
+      "parent": "BASE_LINK",
+      "child": "IMU_ICM42688_LINK",
+      "kind": "fixed",
+      "xyz": [
+        0.0,
+        0.0,
+        0.0362
+      ],
+      "rpy": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "axis": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "name": "IMU_LUA300C_JOINT",
+      "parent": "BASE_LINK",
+      "child": "IMU_LUA300C_LINK",
+      "kind": "fixed",
+      "xyz": [
+        0.0,
+        0.0,
+        0.00569
+      ],
+      "rpy": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "axis": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "name": "F_AIRY_JOINT",
+      "parent": "BASE_LINK",
+      "child": "F_AIRY_LINK",
+      "kind": "fixed",
+      "xyz": [
+        0.4043,
+        0.0,
+        -0.0377
+      ],
+      "rpy": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "axis": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "name": "F_IMX415_JOINT",
+      "parent": "BASE_LINK",
+      "child": "F_IMX415_LINK",
+      "kind": "fixed",
+      "xyz": [
+        0.4123,
+        0.0,
+        0.0378
+      ],
+      "rpy": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "axis": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "name": "FAR_LIHGT_JOINT",
+      "parent": "BASE_LINK",
+      "child": "FAR_LIHGT_LINK",
+      "kind": "fixed",
+      "xyz": [
+        0.4203,
+        -0.0309,
+        0.0283
+      ],
+      "rpy": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "axis": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "name": "FBL_LIHGT_JOINT",
+      "parent": "BASE_LINK",
+      "child": "FBL_LIHGT_LINK",
+      "kind": "fixed",
+      "xyz": [
+        0.4203,
+        0.0309,
+        0.0283
+      ],
+      "rpy": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "axis": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "name": "R_AIRY_JOINT",
+      "parent": "BASE_LINK",
+      "child": "R_AIRY_LINK",
+      "kind": "fixed",
+      "xyz": [
+        -0.4043,
+        0.0,
+        -0.0377
+      ],
+      "rpy": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "axis": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "name": "R_IMX415_JOINT",
+      "parent": "BASE_LINK",
+      "child": "R_IMX415_LINK",
+      "kind": "fixed",
+      "xyz": [
+        -0.4123,
+        0.0,
+        0.0378
+      ],
+      "rpy": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "axis": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "name": "RAR_LIHGT_JOINT",
+      "parent": "BASE_LINK",
+      "child": "RAR_LIHGT_LINK",
+      "kind": "fixed",
+      "xyz": [
+        -0.4203,
+        -0.0309,
+        0.0283
+      ],
+      "rpy": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "axis": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "name": "RBL_LIHGT_JOINT",
+      "parent": "BASE_LINK",
+      "child": "RBL_LIHGT_LINK",
+      "kind": "fixed",
+      "xyz": [
+        -0.4203,
+        0.0309,
+        0.0283
+      ],
+      "rpy": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "axis": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "name": "FAR_RADARA22_JOINT",
+      "parent": "BASE_LINK",
+      "child": "FAR_RADARA22_LINK",
+      "kind": "fixed",
+      "xyz": [
+        0.1792,
+        -0.1002,
+        0.05
+      ],
+      "rpy": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "axis": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "name": "FBL_RADARA22_JOINT",
+      "parent": "BASE_LINK",
+      "child": "FBL_RADARA22_LINK",
+      "kind": "fixed",
+      "xyz": [
+        0.1792,
+        0.1002,
+        0.05
+      ],
+      "rpy": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "axis": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "name": "FAR_ABAD_JOINT",
+      "parent": "BASE_LINK",
+      "child": "FAR_ABAD_LINK",
+      "kind": "revolute",
+      "xyz": [
+        0.272,
+        -0.065,
+        0.0002
+      ],
+      "rpy": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "axis": [
+        1.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "name": "FBL_ABAD_JOINT",
+      "parent": "BASE_LINK",
+      "child": "FBL_ABAD_LINK",
+      "kind": "revolute",
+      "xyz": [
+        0.272,
+        0.065,
+        0.0002
+      ],
+      "rpy": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "axis": [
+        1.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "name": "RAR_ABAD_JOINT",
+      "parent": "BASE_LINK",
+      "child": "RAR_ABAD_LINK",
+      "kind": "revolute",
+      "xyz": [
+        -0.272,
+        -0.065,
+        0.0002
+      ],
+      "rpy": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "axis": [
+        1.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "name": "RBL_ABAD_JOINT",
+      "parent": "BASE_LINK",
+      "child": "RBL_ABAD_LINK",
+      "kind": "revolute",
+      "xyz": [
+        -0.272,
+        0.065,
+        0.0002
+      ],
+      "rpy": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "axis": [
+        1.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "name": "FAR_HIP_JOINT",
+      "parent": "FAR_ABAD_LINK",
+      "child": "FAR_HIP_LINK",
+      "kind": "revolute",
+      "xyz": [
+        0.0575,
+        -0.039,
+        0.0
+      ],
+      "rpy": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "axis": [
+        0.0,
+        1.0,
+        0.0
+      ]
+    },
+    {
+      "name": "FBL_HIP_JOINT",
+      "parent": "FBL_ABAD_LINK",
+      "child": "FBL_HIP_LINK",
+      "kind": "revolute",
+      "xyz": [
+        0.0575,
+        0.039,
+        0.0
+      ],
+      "rpy": [
+        0.00017453,
+        0.0,
+        0.0
+      ],
+      "axis": [
+        0.0,
+        1.0,
+        0.0
+      ]
+    },
+    {
+      "name": "RAR_HIP_JOINT",
+      "parent": "RAR_ABAD_LINK",
+      "child": "RAR_HIP_LINK",
+      "kind": "revolute",
+      "xyz": [
+        -0.0575,
+        -0.039,
+        0.0
+      ],
+      "rpy": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "axis": [
+        0.0,
+        1.0,
+        0.0
+      ]
+    },
+    {
+      "name": "RBL_HIP_JOINT",
+      "parent": "RBL_ABAD_LINK",
+      "child": "RBL_HIP_LINK",
+      "kind": "revolute",
+      "xyz": [
+        -0.0575,
+        0.039,
+        0.0
+      ],
+      "rpy": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "axis": [
+        0.0,
+        1.0,
+        0.0
+      ]
+    },
+    {
+      "name": "FAR_KNEE_JOINT",
+      "parent": "FAR_HIP_LINK",
+      "child": "FAR_KNEE_LINK",
+      "kind": "revolute",
+      "xyz": [
+        0.0,
+        -0.0442,
+        -0.26
+      ],
+      "rpy": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "axis": [
+        0.0,
+        1.0,
+        0.0
+      ]
+    },
+    {
+      "name": "FBL_KNEE_JOINT",
+      "parent": "FBL_HIP_LINK",
+      "child": "FBL_KNEE_LINK",
+      "kind": "revolute",
+      "xyz": [
+        0.0,
+        0.0442,
+        -0.26
+      ],
+      "rpy": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "axis": [
+        0.0,
+        1.0,
+        0.0
+      ]
+    },
+    {
+      "name": "RAR_KNEE_JOINT",
+      "parent": "RAR_HIP_LINK",
+      "child": "RAR_KNEE_LINK",
+      "kind": "revolute",
+      "xyz": [
+        0.0,
+        -0.0442,
+        -0.26
+      ],
+      "rpy": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "axis": [
+        0.0,
+        1.0,
+        0.0
+      ]
+    },
+    {
+      "name": "RBL_KNEE_JOINT",
+      "parent": "RBL_HIP_LINK",
+      "child": "RBL_KNEE_LINK",
+      "kind": "revolute",
+      "xyz": [
+        0.0,
+        0.0442,
+        -0.26
+      ],
+      "rpy": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "axis": [
+        0.0,
+        1.0,
+        0.0
+      ]
+    },
+    {
+      "name": "FAR_FOOT_JOINT",
+      "parent": "FAR_KNEE_LINK",
+      "child": "FAR_FOOT_LINK",
+      "kind": "continuous",
+      "xyz": [
+        0.0,
+        -0.0592,
+        -0.28
+      ],
+      "rpy": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "axis": [
+        0.0,
+        1.0,
+        0.0
+      ]
+    },
+    {
+      "name": "FBL_FOOT_JOINT",
+      "parent": "FBL_KNEE_LINK",
+      "child": "FBL_FOOT_LINK",
+      "kind": "continuous",
+      "xyz": [
+        0.0,
+        0.0592,
+        -0.28
+      ],
+      "rpy": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "axis": [
+        0.0,
+        1.0,
+        0.0
+      ]
+    },
+    {
+      "name": "RAR_FOOT_JOINT",
+      "parent": "RAR_KNEE_LINK",
+      "child": "RAR_FOOT_LINK",
+      "kind": "continuous",
+      "xyz": [
+        0.0,
+        -0.0592,
+        -0.28
+      ],
+      "rpy": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "axis": [
+        0.0,
+        1.0,
+        0.0
+      ]
+    },
+    {
+      "name": "RBL_FOOT_JOINT",
+      "parent": "RBL_KNEE_LINK",
+      "child": "RBL_FOOT_LINK",
+      "kind": "continuous",
+      "xyz": [
+        0.0,
+        0.0592,
+        -0.28
+      ],
+      "rpy": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "axis": [
+        0.0,
+        1.0,
+        0.0
+      ]
+    }
+  ],
+  "collisions": [
+    {
+      "link": "BASE_LINK",
+      "index": 0,
+      "kind": "mesh",
+      "xyz": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "rpy": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "lower": [
+        -0.461078017950058,
+        -0.11855611205101013,
+        -0.0892999991774559
+      ],
+      "upper": [
+        0.461078017950058,
+        0.11855611205101013,
+        0.08741095662117004
+      ],
+      "dimensions": [],
+      "mesh_path": "/home/dndx/智元四足机器人D1 Max二次开发文档资料包v0.1.0/d1max_ros2/urdf_ws/src/max_description/meshes/BASE_LINK.STL",
+      "mesh_sha256": "9ab81ddedd0bd423fb1292f652162842bee3c80a7138e630516aa4a05917ebd3",
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "link": "IMU_ICM42688_LINK",
+      "index": 0,
+      "kind": "mesh",
+      "xyz": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "rpy": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "lower": [
+        -0.011093450710177422,
+        -0.03706519678235054,
+        -0.0018315199995413423
+      ],
+      "upper": [
+        0.00890650786459446,
+        0.013934697024524212,
+        0.004199889954179525
+      ],
+      "dimensions": [],
+      "mesh_path": "/home/dndx/智元四足机器人D1 Max二次开发文档资料包v0.1.0/d1max_ros2/urdf_ws/src/max_description/meshes/IMU_ICM42688_LINK.STL",
+      "mesh_sha256": "33997657c66f01a51e08ce8bb8d8f4abcceaf9435c918822905f5ad8abf3116b",
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "link": "IMU_LUA300C_LINK",
+      "index": 0,
+      "kind": "mesh",
+      "xyz": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "rpy": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "lower": [
+        -0.030552897602319717,
+        -0.010552812367677689,
+        -0.005793232005089521
+      ],
+      "upper": [
+        0.017552925273776054,
+        0.010552809573709965,
+        0.008199881762266159
+      ],
+      "dimensions": [],
+      "mesh_path": "/home/dndx/智元四足机器人D1 Max二次开发文档资料包v0.1.0/d1max_ros2/urdf_ws/src/max_description/meshes/IMU_LUA300C_LINK.STL",
+      "mesh_sha256": "0e41e7e40ea340928fd0f7cbf8b3bb082c91ae820a1ed904284f1aa46905ef97",
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "link": "F_AIRY_LINK",
+      "index": 0,
+      "kind": "mesh",
+      "xyz": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "rpy": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "lower": [
+        -0.1220526322722435,
+        -0.029999999329447746,
+        -0.029999999329447746
+      ],
+      "upper": [
+        0.024864472448825836,
+        0.029999999329447746,
+        0.06265506148338318
+      ],
+      "dimensions": [],
+      "mesh_path": "/home/dndx/智元四足机器人D1 Max二次开发文档资料包v0.1.0/d1max_ros2/urdf_ws/src/max_description/meshes/F_AIRY_LINK.STL",
+      "mesh_sha256": "e5e6ed05836be7b01b187ddce82bcb3242ba81a6f579d46cc0e0bc49f74e38af",
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "link": "F_IMX415_LINK",
+      "index": 0,
+      "kind": "mesh",
+      "xyz": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "rpy": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "lower": [
+        -0.02024313621222973,
+        -0.017999999225139618,
+        -0.011995314620435238
+      ],
+      "upper": [
+        0.006428261753171682,
+        0.017999999225139618,
+        0.009014037437736988
+      ],
+      "dimensions": [],
+      "mesh_path": "/home/dndx/智元四足机器人D1 Max二次开发文档资料包v0.1.0/d1max_ros2/urdf_ws/src/max_description/meshes/F_IMX415_LINK.STL",
+      "mesh_sha256": "91b70883ec1d470a2f8757afa524bab1fb8651333e740debae6312168e3ad94a",
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "link": "FAR_LIHGT_LINK",
+      "index": 0,
+      "kind": "mesh",
+      "xyz": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "rpy": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "lower": [
+        -0.012674964964389801,
+        -0.010811655782163143,
+        -0.016750212758779526
+      ],
+      "upper": [
+        0.00699215941131115,
+        0.013546407222747803,
+        0.01674978993833065
+      ],
+      "dimensions": [],
+      "mesh_path": "/home/dndx/智元四足机器人D1 Max二次开发文档资料包v0.1.0/d1max_ros2/urdf_ws/src/max_description/meshes/FAR_LIHGT_LINK.STL",
+      "mesh_sha256": "ebe5fa6dc310ee3042b1c318b35d15f0d293e7fbf092d710a0bf81ef418a1ecf",
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "link": "FBL_LIHGT_LINK",
+      "index": 0,
+      "kind": "mesh",
+      "xyz": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "rpy": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "lower": [
+        -0.012674959376454353,
+        -0.013546423986554146,
+        -0.016749782487750053
+      ],
+      "upper": [
+        0.0069921487011015415,
+        0.010811655782163143,
+        0.016750220209360123
+      ],
+      "dimensions": [],
+      "mesh_path": "/home/dndx/智元四足机器人D1 Max二次开发文档资料包v0.1.0/d1max_ros2/urdf_ws/src/max_description/meshes/FBL_LIHGT_LINK.STL",
+      "mesh_sha256": "659bb67f54974e5db1dc06c671e591ab667f7a35a305e54310d3733615920c78",
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "link": "R_AIRY_LINK",
+      "index": 0,
+      "kind": "mesh",
+      "xyz": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "rpy": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "lower": [
+        -0.024864472448825836,
+        -0.029999999329447746,
+        -0.029999999329447746
+      ],
+      "upper": [
+        0.1220526322722435,
+        0.029999999329447746,
+        0.06265506148338318
+      ],
+      "dimensions": [],
+      "mesh_path": "/home/dndx/智元四足机器人D1 Max二次开发文档资料包v0.1.0/d1max_ros2/urdf_ws/src/max_description/meshes/R_AIRY_LINK.STL",
+      "mesh_sha256": "8d5663cf1872edbea4b0f9bbceb00f75545fd339e986f41461e691836a024a2f",
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "link": "R_IMX415_LINK",
+      "index": 0,
+      "kind": "mesh",
+      "xyz": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "rpy": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "lower": [
+        -0.005419347435235977,
+        -0.017999999225139618,
+        -0.011995323933660984
+      ],
+      "upper": [
+        0.021252045407891273,
+        0.017999999225139618,
+        0.009014028124511242
+      ],
+      "dimensions": [],
+      "mesh_path": "/home/dndx/智元四足机器人D1 Max二次开发文档资料包v0.1.0/d1max_ros2/urdf_ws/src/max_description/meshes/R_IMX415_LINK.STL",
+      "mesh_sha256": "30a3095efed21ab2ba90bb38d63f251ef6c636a65ad6e6db0f165b60db017838",
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "link": "RAR_LIHGT_LINK",
+      "index": 0,
+      "kind": "mesh",
+      "xyz": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "rpy": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "lower": [
+        -0.006992148235440254,
+        -0.010811655782163143,
+        -0.016749786213040352
+      ],
+      "upper": [
+        0.012674959376454353,
+        0.013546423986554146,
+        0.016750216484069824
+      ],
+      "dimensions": [],
+      "mesh_path": "/home/dndx/智元四足机器人D1 Max二次开发文档资料包v0.1.0/d1max_ros2/urdf_ws/src/max_description/meshes/RAR_LIHGT_LINK.STL",
+      "mesh_sha256": "de0e54cb8107d5512be44cc2e76231bf828a592136055f7b33c4860a00e19215",
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "link": "RBL_LIHGT_LINK",
+      "index": 0,
+      "kind": "mesh",
+      "xyz": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "rpy": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "lower": [
+        -0.00699215941131115,
+        -0.013546407222747803,
+        -0.016750216484069824
+      ],
+      "upper": [
+        0.012674964964389801,
+        0.010811655782163143,
+        0.016749786213040352
+      ],
+      "dimensions": [],
+      "mesh_path": "/home/dndx/智元四足机器人D1 Max二次开发文档资料包v0.1.0/d1max_ros2/urdf_ws/src/max_description/meshes/RBL_LIHGT_LINK.STL",
+      "mesh_sha256": "0d3f0d415b25368af74297e0cd1f365ac1a716e0a6f65101d336f3ad9484ab00",
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "link": "FAR_RADARA22_LINK",
+      "index": 0,
+      "kind": "mesh",
+      "xyz": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "rpy": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "lower": [
+        -0.023499999195337296,
+        0.0,
+        -0.008999999612569809
+      ],
+      "upper": [
+        0.023499999195337296,
+        0.05220000073313713,
+        0.008999999612569809
+      ],
+      "dimensions": [],
+      "mesh_path": "/home/dndx/智元四足机器人D1 Max二次开发文档资料包v0.1.0/d1max_ros2/urdf_ws/src/max_description/meshes/FAR_RADARA22_LINK.STL",
+      "mesh_sha256": "570f5b43cc5422e42facd639333cf46262c7c4def7bfb9e54be2651ec3a369d0",
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "link": "FBL_RADARA22_LINK",
+      "index": 0,
+      "kind": "mesh",
+      "xyz": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "rpy": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "lower": [
+        -0.023499999195337296,
+        -0.05220000073313713,
+        -0.008999999612569809
+      ],
+      "upper": [
+        0.023499999195337296,
+        0.0,
+        0.008999999612569809
+      ],
+      "dimensions": [],
+      "mesh_path": "/home/dndx/智元四足机器人D1 Max二次开发文档资料包v0.1.0/d1max_ros2/urdf_ws/src/max_description/meshes/FBL_RADARA22_LINK.STL",
+      "mesh_sha256": "853df3ddd6187f5a724e029a6fa7b5f734159742508cc1205b500aaec891babc",
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "link": "FAR_ABAD_LINK",
+      "index": 0,
+      "kind": "mesh",
+      "xyz": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "rpy": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "lower": [
+        1.6763801458097305e-10,
+        -0.039000000804662704,
+        -0.042093586176633835
+      ],
+      "upper": [
+        0.08974999934434891,
+        0.032249998301267624,
+        0.042093586176633835
+      ],
+      "dimensions": [],
+      "mesh_path": "/home/dndx/智元四足机器人D1 Max二次开发文档资料包v0.1.0/d1max_ros2/urdf_ws/src/max_description/meshes/FAR_ABAD_LINK.STL",
+      "mesh_sha256": "4070ad0055318d678c986adf3128065e0ba8e8062ac92512162605cc46c86dde",
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "link": "FAR_HIP_LINK",
+      "index": 0,
+      "kind": "mesh",
+      "xyz": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "rpy": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "lower": [
+        -0.048493627458810806,
+        -0.11829999834299088,
+        -0.3059999942779541
+      ],
+      "upper": [
+        0.048493627458810806,
+        0.006300000008195639,
+        0.048500001430511475
+      ],
+      "dimensions": [],
+      "mesh_path": "/home/dndx/智元四足机器人D1 Max二次开发文档资料包v0.1.0/d1max_ros2/urdf_ws/src/max_description/meshes/FAR_HIP_LINK.STL",
+      "mesh_sha256": "3a62da454115da40c627874f22557b12c07d7fe0b703248bae2be13273aecf81",
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "link": "FAR_KNEE_LINK",
+      "index": 0,
+      "kind": "mesh",
+      "xyz": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "rpy": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "lower": [
+        -0.04999499395489693,
+        -0.08060000091791153,
+        -0.32499998807907104
+      ],
+      "upper": [
+        0.04999499395489693,
+        0.01600000075995922,
+        0.05000000074505806
+      ],
+      "dimensions": [],
+      "mesh_path": "/home/dndx/智元四足机器人D1 Max二次开发文档资料包v0.1.0/d1max_ros2/urdf_ws/src/max_description/meshes/FAR_KNEE_LINK.STL",
+      "mesh_sha256": "47708f09c0ee217c8082bf732ce6a88e9f816dcb4aa787f92e1e832415959a60",
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "link": "FAR_FOOT_LINK",
+      "index": 0,
+      "kind": "mesh",
+      "xyz": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "rpy": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "lower": [
+        -0.09590133279561996,
+        -0.03054940514266491,
+        -0.09595812857151031
+      ],
+      "upper": [
+        0.09590133279561996,
+        0.01594940572977066,
+        0.09595812857151031
+      ],
+      "dimensions": [],
+      "mesh_path": "/home/dndx/智元四足机器人D1 Max二次开发文档资料包v0.1.0/d1max_ros2/urdf_ws/src/max_description/meshes/FAR_FOOT_LINK.STL",
+      "mesh_sha256": "243fb67e514f88a832cc79d3c66d003cd6f6f7a91ca8702e164bd9baa1e5819d",
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "link": "FBL_ABAD_LINK",
+      "index": 0,
+      "kind": "mesh",
+      "xyz": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "rpy": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "lower": [
+        1.6763801458097305e-10,
+        -0.032249998301267624,
+        -0.04209461063146591
+      ],
+      "upper": [
+        0.08974999934434891,
+        0.03900561109185219,
+        0.04209256172180176
+      ],
+      "dimensions": [],
+      "mesh_path": "/home/dndx/智元四足机器人D1 Max二次开发文档资料包v0.1.0/d1max_ros2/urdf_ws/src/max_description/meshes/FBL_ABAD_LINK.STL",
+      "mesh_sha256": "fc680650f3d3190ba0631428b221921dab9570411a5fa67bc39cedefae661bda",
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "link": "FBL_HIP_LINK",
+      "index": 0,
+      "kind": "mesh",
+      "xyz": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "rpy": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "lower": [
+        -0.048493627458810806,
+        -0.006300000008195639,
+        -0.3059999942779541
+      ],
+      "upper": [
+        0.048493627458810806,
+        0.11829999834299088,
+        0.048500001430511475
+      ],
+      "dimensions": [],
+      "mesh_path": "/home/dndx/智元四足机器人D1 Max二次开发文档资料包v0.1.0/d1max_ros2/urdf_ws/src/max_description/meshes/FBL_HIP_LINK.STL",
+      "mesh_sha256": "c71f433239987927f4f9bc554a9b8841fb9af014023a3d646ac743a790677019",
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "link": "FBL_KNEE_LINK",
+      "index": 0,
+      "kind": "mesh",
+      "xyz": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "rpy": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "lower": [
+        -0.04999499395489693,
+        -0.01600000075995922,
+        -0.32499998807907104
+      ],
+      "upper": [
+        0.04999499395489693,
+        0.08060000091791153,
+        0.05000000074505806
+      ],
+      "dimensions": [],
+      "mesh_path": "/home/dndx/智元四足机器人D1 Max二次开发文档资料包v0.1.0/d1max_ros2/urdf_ws/src/max_description/meshes/FBL_KNEE_LINK.STL",
+      "mesh_sha256": "4fc15f27981b2c12a88af3d77cc70f878049009114164131341dd245c24ff8ea",
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "link": "FBL_FOOT_LINK",
+      "index": 0,
+      "kind": "mesh",
+      "xyz": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "rpy": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "lower": [
+        -0.09590133279561996,
+        -0.01594940572977066,
+        -0.09595812857151031
+      ],
+      "upper": [
+        0.09590133279561996,
+        0.03054940514266491,
+        0.09595812857151031
+      ],
+      "dimensions": [],
+      "mesh_path": "/home/dndx/智元四足机器人D1 Max二次开发文档资料包v0.1.0/d1max_ros2/urdf_ws/src/max_description/meshes/FBL_FOOT_LINK.STL",
+      "mesh_sha256": "a594bf630cb57e228140eb3a20fd712f7c65791fdbdee84855453efb0b5cce1d",
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "link": "RAR_ABAD_LINK",
+      "index": 0,
+      "kind": "mesh",
+      "xyz": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "rpy": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "lower": [
+        -0.08974999934434891,
+        -0.039000000804662704,
+        -0.042093586176633835
+      ],
+      "upper": [
+        -1.6763801458097305e-10,
+        0.032249998301267624,
+        0.042093586176633835
+      ],
+      "dimensions": [],
+      "mesh_path": "/home/dndx/智元四足机器人D1 Max二次开发文档资料包v0.1.0/d1max_ros2/urdf_ws/src/max_description/meshes/RAR_ABAD_LINK.STL",
+      "mesh_sha256": "cef591feb0b1468f1e75152f8b55bca5352e6a8270a27b49517019a20d121d47",
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "link": "RAR_HIP_LINK",
+      "index": 0,
+      "kind": "mesh",
+      "xyz": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "rpy": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "lower": [
+        -0.048493627458810806,
+        -0.11829999834299088,
+        -0.3059999942779541
+      ],
+      "upper": [
+        0.048493627458810806,
+        0.006300000008195639,
+        0.048500001430511475
+      ],
+      "dimensions": [],
+      "mesh_path": "/home/dndx/智元四足机器人D1 Max二次开发文档资料包v0.1.0/d1max_ros2/urdf_ws/src/max_description/meshes/RAR_HIP_LINK.STL",
+      "mesh_sha256": "5246ad50e70f560b21749e573ce24a0e5535899e6bf6be0444168c7b3712d8e3",
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "link": "RAR_KNEE_LINK",
+      "index": 0,
+      "kind": "mesh",
+      "xyz": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "rpy": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "lower": [
+        -0.04999499395489693,
+        -0.08060000091791153,
+        -0.32499998807907104
+      ],
+      "upper": [
+        0.04999499395489693,
+        0.01600000075995922,
+        0.05000000074505806
+      ],
+      "dimensions": [],
+      "mesh_path": "/home/dndx/智元四足机器人D1 Max二次开发文档资料包v0.1.0/d1max_ros2/urdf_ws/src/max_description/meshes/RAR_KNEE_LINK.STL",
+      "mesh_sha256": "27a70b31613160edcc5f1b94a70c9084b03cffd0115a46d5e7f54d9232827b46",
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "link": "RAR_FOOT_LINK",
+      "index": 0,
+      "kind": "mesh",
+      "xyz": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "rpy": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "lower": [
+        -0.09590133279561996,
+        -0.03054940514266491,
+        -0.09595812857151031
+      ],
+      "upper": [
+        0.09590133279561996,
+        0.01594940572977066,
+        0.09595812857151031
+      ],
+      "dimensions": [],
+      "mesh_path": "/home/dndx/智元四足机器人D1 Max二次开发文档资料包v0.1.0/d1max_ros2/urdf_ws/src/max_description/meshes/RAR_FOOT_LINK.STL",
+      "mesh_sha256": "243fb67e514f88a832cc79d3c66d003cd6f6f7a91ca8702e164bd9baa1e5819d",
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "link": "RBL_ABAD_LINK",
+      "index": 0,
+      "kind": "mesh",
+      "xyz": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "rpy": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "lower": [
+        -0.08974999934434891,
+        -0.032249998301267624,
+        -0.042093586176633835
+      ],
+      "upper": [
+        -1.6763801458097305e-10,
+        0.039000000804662704,
+        0.042093586176633835
+      ],
+      "dimensions": [],
+      "mesh_path": "/home/dndx/智元四足机器人D1 Max二次开发文档资料包v0.1.0/d1max_ros2/urdf_ws/src/max_description/meshes/RBL_ABAD_LINK.STL",
+      "mesh_sha256": "c745d9c025ff80054112f5f589c339855af0ac2184974a32f28f67afbf8f93d4",
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "link": "RBL_HIP_LINK",
+      "index": 0,
+      "kind": "mesh",
+      "xyz": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "rpy": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "lower": [
+        -0.048493627458810806,
+        -0.006300000008195639,
+        -0.3059999942779541
+      ],
+      "upper": [
+        0.048493627458810806,
+        0.11829999834299088,
+        0.048500001430511475
+      ],
+      "dimensions": [],
+      "mesh_path": "/home/dndx/智元四足机器人D1 Max二次开发文档资料包v0.1.0/d1max_ros2/urdf_ws/src/max_description/meshes/RBL_HIP_LINK.STL",
+      "mesh_sha256": "1b30ab1e9c92338fd15b856bd5d69382549e0b5ae69bab95b3c8ed0f68bb9aff",
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "link": "RBL_KNEE_LINK",
+      "index": 0,
+      "kind": "mesh",
+      "xyz": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "rpy": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "lower": [
+        -0.04999499395489693,
+        -0.01600000075995922,
+        -0.32499998807907104
+      ],
+      "upper": [
+        0.04999499395489693,
+        0.08060000091791153,
+        0.05000000074505806
+      ],
+      "dimensions": [],
+      "mesh_path": "/home/dndx/智元四足机器人D1 Max二次开发文档资料包v0.1.0/d1max_ros2/urdf_ws/src/max_description/meshes/RBL_KNEE_LINK.STL",
+      "mesh_sha256": "8572dc3ebbfda5a925be6babfe158e7a5e2aa56412288d1c30342ac8c70f0447",
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "link": "RBL_FOOT_LINK",
+      "index": 0,
+      "kind": "mesh",
+      "xyz": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "rpy": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "lower": [
+        -0.09590133279561996,
+        -0.01594940572977066,
+        -0.09595812857151031
+      ],
+      "upper": [
+        0.09590133279561996,
+        0.03054940514266491,
+        0.09595812857151031
+      ],
+      "dimensions": [],
+      "mesh_path": "/home/dndx/智元四足机器人D1 Max二次开发文档资料包v0.1.0/d1max_ros2/urdf_ws/src/max_description/meshes/RBL_FOOT_LINK.STL",
+      "mesh_sha256": "24d5bb07345ba0b6401c95328c764940a2ad767f7d11e40dfb7a4f8afaffe273",
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    }
+  ],
+  "urdf_path": "/home/dndx/智元四足机器人D1 Max二次开发文档资料包v0.1.0/d1max_ros2/urdf_ws/src/max_description/urdf/max.urdf",
+  "urdf_sha256": "d53b63b6026c97296a5dd42d0bf98c4781034c2871ed531b24218595017b20fe",
+  "mesh_policy": "actual_triangle_first_surface_only",
+  "uses_visual_geometry": false,
+  "grants_motion_authority": false,
+  "extrinsics_calibrated": false,
+  "posture_calibrated": false
+}

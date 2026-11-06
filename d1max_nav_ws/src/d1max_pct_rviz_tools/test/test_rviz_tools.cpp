@@ -754,8 +754,186 @@ TEST(NavigationDiagnostics, LoadsAsPassiveRvizPlugin)
   pluginlib::ClassLoader<rviz_common::Panel> panels("rviz_common", "rviz_common::Panel");
   auto panel = panels.createSharedInstance("d1max_pct_rviz_tools/NavigationDiagnosticsPanel");
   ASSERT_NE(panel, nullptr);
-  EXPECT_EQ(panel->findChildren<QPushButton *>().size(), 2);  // Presentation layouts only.
+  EXPECT_EQ(panel->findChildren<QPushButton *>().size(), 7);  // Layouts + goal draft tools, no execution button.
   EXPECT_NE(panel->findChild<QToolButton *>("spatial_view"), nullptr);
+}
+
+QJsonObject liveGoalEditor(double stamp, const QString & mode = "ground", bool valid = true)
+{
+  return QJsonObject{{"schema", 1}, {"mode", "LIVE_GOAL_EDITOR_NO_MOTION"},
+    {"session_id", "test-session"}, {"frame_id", "d1max_loc_map"},
+    {"motion_enabled", false}, {"received_at_unix", stamp}, {"selection_mode", mode},
+    {"goal_xyz", QJsonArray{1.25, 2.5, .1}},
+    {"goal_validation", QJsonObject{{"valid", valid}, {"reason", valid ? "ok" : "blocked_surface"},
+      {"reason_code", valid ? "ok" : "blocked_surface"}, {"ground_z", .1}, {"layer_id", 3},
+      {"height_error_m", 0.}, {"floor_id", "F1"}}}};
+}
+
+void acceptGoal(NavigationDiagnosticsPanel & panel, const QJsonObject & value)
+{
+  panel.acceptGoalEditorStatus(QString::fromUtf8(QJsonDocument(value).toJson()));
+}
+
+class GoalEditorPanelProbe : public NavigationDiagnosticsPanel
+{
+public:
+  std::vector<QJsonObject> edits;
+  QStringList layouts;
+protected:
+  void applyLayoutPresentation(const QString & value) override {layouts.append(value);}
+  bool publishGoalEdit(const QJsonObject & command) override
+  {edits.push_back(command); return true;}
+};
+
+TEST(NavigationGoalEditor, SelectingGoalReturnsToGlobalWithoutRequiringDraftStatus)
+{
+  GoalEditorPanelProbe panel;
+  configureDiagnostics(panel);
+  panel.findChild<QPushButton *>("layout_local")->click();
+  EXPECT_TRUE(panel.findChild<QPushButton *>("layout_local")->isChecked());
+  auto * select = panel.findChild<QPushButton *>("goal_select");
+  ASSERT_NE(select, nullptr); EXPECT_TRUE(select->isEnabled());
+  select->click(); QApplication::processEvents();
+  EXPECT_TRUE(panel.findChild<QPushButton *>("layout_global")->isChecked());
+  ASSERT_FALSE(panel.layouts.isEmpty()); EXPECT_EQ(panel.layouts.last(), "global");
+  EXPECT_TRUE(panel.edits.empty());
+}
+
+TEST(NavigationGoalEditor, ToolbarGoalFocusIsBoundToPanelSession)
+{
+  GoalEditorPanelProbe panel;
+  configureDiagnostics(panel);
+  panel.findChild<QPushButton *>("layout_local")->click();
+  panel.showGoalEditor("foreign-session");
+  EXPECT_TRUE(panel.findChild<QPushButton *>("layout_local")->isChecked());
+  panel.showGoalEditor("");
+  EXPECT_TRUE(panel.findChild<QPushButton *>("layout_local")->isChecked());
+  panel.showGoalEditor("test-session");
+  EXPECT_TRUE(panel.findChild<QPushButton *>("layout_global")->isChecked());
+  EXPECT_TRUE(panel.edits.empty());
+}
+
+TEST(NavigationGoalEditor, GroundCoordinatesAndFeedbackUseConfirmedBackendState)
+{
+  GoalEditorPanelProbe panel;
+  configureDiagnostics(panel);
+  auto * x = panel.findChild<QDoubleSpinBox *>("live_goal_x");
+  auto * z = panel.findChild<QDoubleSpinBox *>("live_goal_z");
+  ASSERT_NE(x, nullptr); ASSERT_NE(z, nullptr);
+  EXPECT_FALSE(x->isEnabled());
+  EXPECT_TRUE(panel.findChild<QPushButton *>("goal_mode_ground")->isChecked());
+  acceptGoal(panel, liveGoalEditor(QDateTime::currentMSecsSinceEpoch() * .001));
+  EXPECT_TRUE(x->isEnabled()); EXPECT_FALSE(z->isEnabled());
+  EXPECT_DOUBLE_EQ(x->value(), 1.25); EXPECT_DOUBLE_EQ(z->value(), .1);
+  const auto feedback = panel.findChild<QLabel *>("goal_validation");
+  EXPECT_TRUE(feedback->text().contains("有效"));
+  EXPECT_TRUE(feedback->text().contains("F1"));
+  EXPECT_TRUE(feedback->text().contains("slice 3"));
+  EXPECT_TRUE(feedback->text().contains("ΔZ 0.000 m"));
+  EXPECT_TRUE(panel.edits.empty());
+}
+
+TEST(NavigationGoalEditor, DirtyExactDraftSurvivesHeartbeatAndAppliesOnlyDraftCommand)
+{
+  GoalEditorPanelProbe panel;
+  configureDiagnostics(panel);
+  const auto now = QDateTime::currentMSecsSinceEpoch() * .001;
+  acceptGoal(panel, liveGoalEditor(now));
+  auto * x = panel.findChild<QDoubleSpinBox *>("live_goal_x");
+  x->setValue(4.321);
+  acceptGoal(panel, liveGoalEditor(now + .001));
+  EXPECT_DOUBLE_EQ(x->value(), 4.321);
+  EXPECT_TRUE(panel.findChild<QLabel *>("goal_validation")->text().contains("已修改"));
+  EXPECT_TRUE(panel.edits.empty());
+  panel.findChild<QPushButton *>("goal_apply")->click();
+  ASSERT_EQ(panel.edits.size(), 1U);
+  const auto command = panel.edits.back();
+  EXPECT_EQ(command["schema"], QJsonValue(1));
+  EXPECT_EQ(command["session_id"].toString(), "test-session");
+  EXPECT_EQ(command["frame_id"].toString(), "d1max_loc_map");
+  EXPECT_EQ(command["selection_mode"].toString(), "ground");
+  EXPECT_DOUBLE_EQ(command["goal_xyz"].toArray()[0].toDouble(), 4.321);
+  EXPECT_FALSE(command.contains("execute")); EXPECT_FALSE(command.contains("task_id"));
+  EXPECT_FALSE(command.contains("request_execution"));
+  EXPECT_FALSE(panel.findChild<QPushButton *>("goal_apply")->isEnabled());
+  auto confirmed = liveGoalEditor(now + .01);
+  confirmed["goal_xyz"] = QJsonArray{4.321, 2.5, .12};
+  acceptGoal(panel, confirmed);
+  EXPECT_DOUBLE_EQ(panel.findChild<QDoubleSpinBox *>("live_goal_z")->value(), .12);
+  EXPECT_TRUE(panel.findChild<QLabel *>("goal_validation")->text().contains("有效"));
+}
+
+TEST(NavigationGoalEditor, FreeXYZAndSnapUseCurrentDraftWithoutTaskAuthorization)
+{
+  GoalEditorPanelProbe panel;
+  configureDiagnostics(panel);
+  const auto now = QDateTime::currentMSecsSinceEpoch() * .001;
+  acceptGoal(panel, liveGoalEditor(now));
+  panel.findChild<QPushButton *>("goal_mode_free")->click();
+  ASSERT_EQ(panel.edits.size(), 1U);
+  EXPECT_EQ(panel.edits.back()["selection_mode"].toString(), "free");
+  acceptGoal(panel, liveGoalEditor(now + .01, "free"));
+  auto * z = panel.findChild<QDoubleSpinBox *>("live_goal_z");
+  EXPECT_TRUE(z->isEnabled()); z->setValue(.5);
+  panel.findChild<QDoubleSpinBox *>("live_goal_x")->setValue(3.2);
+  panel.findChild<QPushButton *>("goal_snap_ground")->click();
+  ASSERT_EQ(panel.edits.size(), 2U);
+  const auto snapped = panel.edits.back();
+  EXPECT_EQ(snapped["operation"].toString(), "snap_ground");
+  EXPECT_EQ(snapped["selection_mode"].toString(), "ground");
+  EXPECT_DOUBLE_EQ(snapped["goal_xyz"].toArray()[0].toDouble(), 3.2);
+  EXPECT_DOUBLE_EQ(snapped["goal_xyz"].toArray()[2].toDouble(), .5);
+  EXPECT_FALSE(z->isEnabled());
+}
+
+TEST(NavigationGoalEditor, InvalidSurfaceIsEditableButNeverShownAsValidOrExecuted)
+{
+  GoalEditorPanelProbe panel;
+  configureDiagnostics(panel);
+  const auto now = QDateTime::currentMSecsSinceEpoch() * .001;
+  acceptGoal(panel, liveGoalEditor(now, "ground", false));
+  EXPECT_TRUE(panel.findChild<QLabel *>("goal_validation")->text().startsWith("无效"));
+  EXPECT_TRUE(panel.findChild<QLabel *>("goal_validation")->toolTip().contains("blocked_surface"));
+  EXPECT_TRUE(panel.findChild<QDoubleSpinBox *>("live_goal_x")->isEnabled());
+  EXPECT_TRUE(panel.edits.empty());
+  acceptGoal(panel, liveGoalEditor(now + .01));
+  EXPECT_TRUE(panel.findChild<QLabel *>("goal_validation")->text().startsWith("有效"));
+}
+
+TEST(NavigationGoalEditor, RejectsForeignMalformedReplayAndUsesFutureMapFrame)
+{
+  GoalEditorPanelProbe panel;
+  configureDiagnostics(panel);
+  const auto now = QDateTime::currentMSecsSinceEpoch() * .001;
+  auto value = liveGoalEditor(now);
+  value["session_id"] = "foreign"; acceptGoal(panel, value);
+  EXPECT_FALSE(panel.findChild<QDoubleSpinBox *>("live_goal_x")->isEnabled());
+  value["session_id"] = "test-session"; value["motion_enabled"] = true; acceptGoal(panel, value);
+  EXPECT_FALSE(panel.findChild<QDoubleSpinBox *>("live_goal_x")->isEnabled());
+  value["motion_enabled"] = false; value["received_at_unix"] = now-4.; acceptGoal(panel, value);
+  EXPECT_FALSE(panel.findChild<QDoubleSpinBox *>("live_goal_x")->isEnabled());
+  value["received_at_unix"] = now; value["frame_id"] = "site/map_v2"; acceptGoal(panel, value);
+  EXPECT_TRUE(panel.findChild<QDoubleSpinBox *>("live_goal_x")->isEnabled());
+  auto malformed = value; malformed["goal_xyz"] = QJsonArray{1., 2.};
+  malformed["received_at_unix"] = now + .01; acceptGoal(panel, malformed);
+  EXPECT_DOUBLE_EQ(panel.findChild<QDoubleSpinBox *>("live_goal_x")->value(), 1.25);
+  panel.findChild<QDoubleSpinBox *>("live_goal_x")->setValue(2.);
+  panel.findChild<QPushButton *>("goal_apply")->click();
+  ASSERT_EQ(panel.edits.size(), 1U);
+  EXPECT_EQ(panel.edits.back()["frame_id"].toString(), "site/map_v2");
+}
+
+TEST(NavigationGoalEditor, RendersCompactDraftControlsWithoutRvizOrRosGraph)
+{
+  GoalEditorPanelProbe panel;
+  configureDiagnostics(panel);
+  acceptGoal(panel, liveGoalEditor(QDateTime::currentMSecsSinceEpoch() * .001));
+  panel.resize(310, 710); panel.show(); QApplication::processEvents();
+  auto * scroll = panel.findChild<QScrollArea *>();
+  ASSERT_NE(scroll, nullptr);
+  EXPECT_EQ(scroll->horizontalScrollBar()->maximum(), 0);
+  EXPECT_TRUE(panel.grab().save("/tmp/d1max-navigation-goal-editor.png"));
+  EXPECT_TRUE(panel.edits.empty());
 }
 
 TEST(NavigationDiagnostics, DisplaysActualTargetAndMinimalLegend)
@@ -1129,10 +1307,12 @@ TEST(NavigationLayouts, VisibilityTreeAndRouteEmphasisAreReversible)
   auto * initial = add(localization, "初值预览 · 未确认");
   auto * route = add(global, "全局路径");
   auto * handle = add(global, "3D 目标手柄");
+  auto * support = add(global, "目标支撑面");
   auto * width = new rviz_common::properties::Property("Line Width", .065, "", route);
   auto * alpha = new rviz_common::properties::Property("Alpha", 1., "", route);
-  auto * occupancy = add(local, "滑动占据地图（高度）");
-  auto * inflated = add(local, "碰撞膨胀地图（高度）");
+  auto * occupancy = add(local, "原始占据地图（调试）");
+  occupancy->setEnabled(false);
+  auto * inflated = add(local, "膨胀占据地图（当前朝向 · 高度）");
   auto * legacy_trajectory = add(local, "局部轨迹");
   auto * committed_trajectory = add(local, "已提交局部轨迹");
   auto * boundary = add(local, "滑动窗口边界");
@@ -1141,13 +1321,15 @@ TEST(NavigationLayouts, VisibilityTreeAndRouteEmphasisAreReversible)
   EXPECT_TRUE(maps->isEnabled()); EXPECT_FALSE(local->isEnabled());
   EXPECT_TRUE(history->isEnabled()); EXPECT_TRUE(initial->isEnabled());
   EXPECT_TRUE(axes->isEnabled()); EXPECT_TRUE(handle->isEnabled());
+  EXPECT_TRUE(support->isEnabled());
   EXPECT_DOUBLE_EQ(width->getValue().toDouble(), .065);
   EXPECT_DOUBLE_EQ(alpha->getValue().toDouble(), 1.);
   NavigationDiagnosticsPanel::applyLayoutVisibility(&root, "local");
   EXPECT_FALSE(maps->isEnabled()); EXPECT_TRUE(local->isEnabled());
   EXPECT_FALSE(history->isEnabled()); EXPECT_FALSE(initial->isEnabled());
   EXPECT_TRUE(axes->isEnabled()); EXPECT_FALSE(handle->isEnabled());
-  EXPECT_TRUE(occupancy->isEnabled()); EXPECT_TRUE(inflated->isEnabled());
+  EXPECT_FALSE(support->isEnabled());
+  EXPECT_FALSE(occupancy->isEnabled()); EXPECT_TRUE(inflated->isEnabled());
   EXPECT_TRUE(legacy_trajectory->isEnabled()); EXPECT_TRUE(committed_trajectory->isEnabled());
   EXPECT_TRUE(boundary->isEnabled());
   EXPECT_TRUE(route->isEnabled());
@@ -1156,14 +1338,27 @@ TEST(NavigationLayouts, VisibilityTreeAndRouteEmphasisAreReversible)
   occupancy->setEnabled(false); inflated->setEnabled(false);
   legacy_trajectory->setEnabled(false); committed_trajectory->setEnabled(false);
   NavigationDiagnosticsPanel::applyLayoutVisibility(&root, "local");
-  EXPECT_TRUE(occupancy->isEnabled()); EXPECT_TRUE(inflated->isEnabled());
+  EXPECT_FALSE(occupancy->isEnabled()); EXPECT_TRUE(inflated->isEnabled());
   EXPECT_TRUE(legacy_trajectory->isEnabled()); EXPECT_TRUE(committed_trajectory->isEnabled());
   NavigationDiagnosticsPanel::applyLayoutVisibility(&root, "invalid");
   EXPECT_TRUE(local->isEnabled());
   NavigationDiagnosticsPanel::applyLayoutVisibility(&root, "global");
   EXPECT_TRUE(maps->isEnabled()); EXPECT_FALSE(local->isEnabled());
   EXPECT_TRUE(axes->isEnabled()); EXPECT_TRUE(handle->isEnabled());
+  EXPECT_TRUE(support->isEnabled());
   EXPECT_DOUBLE_EQ(width->getValue().toDouble(), .065);
+  EXPECT_FALSE(occupancy->isEnabled());
+  // Raw hits can be enabled manually in the current view. Choosing a preset
+  // restores its defaults; no extra selection cache is maintained.
+  NavigationDiagnosticsPanel::applyLayoutVisibility(&root, "local");
+  occupancy->setEnabled(true);
+  EXPECT_TRUE(occupancy->isEnabled());
+  NavigationDiagnosticsPanel::applyLayoutVisibility(&root, "local");
+  EXPECT_FALSE(occupancy->isEnabled()); EXPECT_TRUE(inflated->isEnabled());
+  occupancy->setEnabled(true);
+  NavigationDiagnosticsPanel::applyLayoutVisibility(&root, "global");
+  EXPECT_FALSE(occupancy->isEnabled()); EXPECT_FALSE(local->isEnabled());
+  EXPECT_TRUE(axes->isEnabled()); EXPECT_TRUE(maps->isEnabled());
   NavigationDiagnosticsPanel::applyLayoutVisibility(nullptr, "local");
 }
 

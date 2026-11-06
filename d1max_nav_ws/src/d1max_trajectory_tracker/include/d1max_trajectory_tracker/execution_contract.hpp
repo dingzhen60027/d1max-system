@@ -1,5 +1,8 @@
 #pragma once
 #include "d1max_trajectory_tracker/tracker_core.hpp"
+#include <d1max_planning_interfaces/stationary_velocity.hpp>
+#include <d1max_planning_interfaces/support_regions.hpp>
+#include <d1max_planning_interfaces/support_geometry.hpp>
 #include "d1max_trajectory_tracker/bounded_preparation_worker.hpp"
 #include <d1max_planning_interfaces/msg/execution_permit.hpp>
 #include <d1max_planning_interfaces/msg/reference_proposal.hpp>
@@ -12,6 +15,7 @@
 #include <d1max_planning_interfaces/msg/prepared_motion_demand.hpp>
 #include <d1max_planning_interfaces/msg/execution_commit_ack.hpp>
 #include <d1max_planning_interfaces/msg/tracker_geometry_receipt.hpp>
+#include <d1max_planning_interfaces/msg/route_delivery_receipt.hpp>
 #include <optional>
 #include <deque>
 #include <initializer_list>
@@ -19,6 +23,19 @@
 
 namespace d1max_trajectory_tracker {
 namespace wire=d1max_planning_interfaces::msg;
+template<class Spline> inline bool decodeFrozenHeading(const Spline& spline,std::optional<double>& yaw) {
+  yaw.reset();
+  if(spline.yaw_pts.empty())return true;  // legacy/path-tangent encoding
+  if(spline.yaw_pts.size()!=spline.pos_pts.size()||spline.knots.size()<2||
+      !std::isfinite(spline.knots[0])||!std::isfinite(spline.knots[1])||
+      !std::isfinite(spline.yaw_dt)||spline.yaw_dt<=0.||
+      std::abs(spline.yaw_dt-(spline.knots[1]-spline.knots[0]))>1e-9||
+      !std::isfinite(spline.yaw_pts.front()))return false;
+  const double frozen=spline.yaw_pts.front();
+  for(double value:spline.yaw_pts)
+    if(!std::isfinite(value)||std::abs(angle(value-frozen))>1e-9)return false;
+  yaw=frozen;return true;
+}
 inline double seconds(const builtin_interfaces::msg::Time& s) { return double(s.sec)+double(s.nanosec)*1e-9; }
 inline builtin_interfaces::msg::Time stamp(double t) {
   builtin_interfaces::msg::Time s;
@@ -69,6 +86,20 @@ inline SupportEvidence supportEvidence(const wire::SupportReference& s) {
   out.source_stamp=seconds(s.source_stamp);out.xy_radius=s.support_xy_radius_m;
   out.body_height=s.body_reference_height_m;out.max_slope=s.max_support_slope_rad;
   out.max_step=s.max_support_step_m;out.verified=s.verified;
+  out.model_geometry_valid=d1max_planning_interfaces::hasParametricStairGeometry(s);
+  out.model_hash=s.stair_model_hash;
+  out.transition_regions_present=!s.regions.empty()||s.reason=="original_transition_surface_returns_associated";
+  out.transition_regions_valid=d1max_planning_interfaces::validStairTransitionRegions(s);
+  if(out.model_geometry_valid)for(const auto& surface:s.stair_model_surfaces) {
+    StairSteeringSurface decoded;decoded.id=surface.surface_id;decoded.segment=surface.segment_id;
+    decoded.kind=surface.kind;decoded.origin={surface.pose.position.x,surface.pose.position.y,surface.pose.position.z};
+    decoded.rotation=Eigen::Quaterniond(surface.pose.orientation.w,surface.pose.orientation.x,
+      surface.pose.orientation.y,surface.pose.orientation.z).normalized().toRotationMatrix();
+    decoded.grade=surface.support_grade;decoded.intercept=surface.support_intercept_m;
+    decoded.height_association=surface.height_association_m;
+    for(const auto& p:surface.polygon)decoded.polygon.emplace_back(p.x,p.y);
+    out.steering_surfaces.push_back(std::move(decoded));
+  }
   for(const auto& p:s.support_ground_xyz) out.ground.emplace_back(p.x,p.y,p.z);
   return out;
 }
@@ -79,9 +110,11 @@ inline SupportEvidence supportEvidence(const wire::SupportReference& s) {
 class ExecutionContract {
 public:
   ExecutionContract(Config c,std::string mode,std::string braking_model_sha256={},bool writer_handoff=false,
-      bool asynchronous_preparation=false):
-    config_(std::move(c)),mode_(std::move(mode)),braking_model_sha256_(std::move(braking_model_sha256)),core_(config_),writer_handoff_(writer_handoff) {
+      bool asynchronous_preparation=false,double command_pipeline_bound_s=.1):
+    config_(std::move(c)),mode_(std::move(mode)),braking_model_sha256_(std::move(braking_model_sha256)),core_(config_),writer_handoff_(writer_handoff),command_pipeline_bound_s_(command_pipeline_bound_s) {
     if(mode_!="live"&&mode_!="isolated_mock") throw std::invalid_argument("explicit execution transport required");
+    if(!finite(command_pipeline_bound_s_)||command_pipeline_bound_s_<.1||command_pipeline_bound_s_>.5)
+      throw std::invalid_argument("bounded_record_command_pipeline_required");
     if(asynchronous_preparation)worker_=std::make_unique<PreparationWorker>(
       [](const PreparationRequest& r,const PreparationWorker::Allowed& allowed) {
         // Capture only request-owned immutable input. No core/lease state is
@@ -102,6 +135,50 @@ public:
     preparation_request_.reset();
     if(handoff_)handoff_->retired=true;
     task_closed_=true;
+  }
+  bool retireRoute(const wire::RouteDeliveryReceipt& r,double now) {
+    // Consume the sole reference writer's durable terminal fact, not a new
+    // goal or a motion permission. Map/localization are already bound by the
+    // validated current task domain; this receipt may close ONLY that exact
+    // session/task/route/hash. It cannot replace an open domain or prove stop.
+    const auto valid_stamp=[](const builtin_interfaces::msg::Time& t) {
+      return t.sec>=0&&t.nanosec<1000000000u&&timeNs(t)>0;
+    };
+    if(!finite(now)||r.schema_version!=1||r.active||r.status!=wire::RouteDeliveryReceipt::RETIRED||
+       r.session_id!=config_.session_id||r.delivery_sequence==0||r.task_id.empty()||r.route_id.empty()||
+       r.route_hash.size()!=64||!std::all_of(r.route_hash.begin(),r.route_hash.end(),[](char c) {
+         return (c>='0'&&c<='9')||(c>='a'&&c<='f');
+       })||!valid_stamp(r.source_stamp)||!valid_stamp(r.receipt_stamp)||
+       seconds(r.source_stamp)>now+.02||seconds(r.receipt_stamp)>now+.02||
+       timeNs(r.receipt_stamp)+100000000LL<timeNs(r.source_stamp)||
+       (r.native_retirement_required?(!r.native_retirement_confirmed||r.native_generation==0):
+        (r.native_retirement_confirmed||r.native_generation!=0)))return false;
+    const bool exact=task_domain_&&r.task_id==task_domain_->task_id&&
+      r.route_id==task_domain_->route_id&&r.route_hash==task_domain_->route_hash;
+    if(task_domain_&&!exact)return false;
+    if(r.native_retirement_required) {
+      std::uint64_t known=0;
+      if(task_domain_) {
+        const auto current=[&](const wire::ExecutionVersion& v) {return identity(v).sameTask(*task_domain_);};
+        if(proposal_&&current(proposal_->version))known=std::max(known,proposal_->version.reference_generation);
+        if(permit_&&current(permit_->version))known=std::max(known,permit_->version.reference_generation);
+        if(candidate_&&candidate_->identity.sameTask(*task_domain_))known=std::max(known,candidate_->generation);
+        if(core_.task().identity.sameTask(*task_domain_))known=std::max(known,core_.generation());
+      }
+      if(r.native_generation<=known)return false;
+      // ContinuousReferenceTransport::_metadata advances one publisher-wide
+      // generation across tasks; the confirmed empty-reference barrier is
+      // higher than every proposal it retired. One scalar also fences a
+      // queued proposal when this terminal fact arrives before first ingress.
+      native_retirement_generation_=std::max(native_retirement_generation_,r.native_generation);
+    } else if(!exact)return false; // No native work: close only an observed domain.
+    if(!task_domain_)return true;
+    // Terminal facts do not expire like source/control leases. Re-delivery is
+    // idempotent, including when a retired preview never obtained SDK control.
+    if(task_closed_)return true;
+    cancel("reference_route_retired");
+    retired_task_=r.task_id;
+    return true;
   }
   bool receiveOdom(const Odom& state,double now,double receipt) {
     const bool was_active=core_.active();
@@ -128,13 +205,15 @@ public:
     proposals_.push_back(p);if(proposals_.size()>8)proposals_.pop_front();
   }
   void support(const wire::SupportReference& s) {
-    if(!versionValid(s.version,config_)||s.support_ground_xyz.size()>20000||!mayStageTask(identity(s.version))) return;
+    if(!versionValid(s.version,config_)||s.version.reference_generation<=native_retirement_generation_||
+       s.support_ground_xyz.size()>20000||!mayStageTask(identity(s.version))) return;
     if(active_support_&&s.version==active_support_->version) active_support_=s;
     else pending_support_=s;
     schedulePreparation();
   }
   void candidate(Trajectory t) {
-    if(t.session_id!=config_.session_id || !t.identity.valid() || t.points.size()>10000||!mayStageTask(t.identity)) return;
+    if(t.session_id!=config_.session_id || !t.identity.valid() ||t.generation<=native_retirement_generation_||
+       t.points.size()>10000||!mayStageTask(t.identity)) return;
     if(retired_task_&&t.identity.task_id==*retired_task_)return;
     if(candidate_ && t.identity.sameTask(candidate_->identity)&&t.generation<candidate_->generation) return;
     if(candidate_&&t.generation==candidate_->generation&&t.id<=candidate_->id)return;
@@ -164,7 +243,8 @@ public:
   bool preparationPending()const{return candidate_&&!candidate_->prepared&&preparation_failure_.empty();}
   double preparationWorkerSeconds()const{return last_preparation_seconds_;}
   void validation(const wire::TrajectoryValidation& v,double now) {
-    if(!versionValid(v.version,config_)||v.transport_mode!=mode_||!mayStageTask(identity(v.version))) return;
+    if(!versionValid(v.version,config_)||v.version.reference_generation<=native_retirement_generation_||
+       v.transport_mode!=mode_||!mayStageTask(identity(v.version))) return;
     const auto duplicate=std::find_if(proofs_.begin(),proofs_.end(),[&](const auto& old){
       return old.version==v.version&&old.trajectory_id==v.trajectory_id&&old.sequence==v.sequence;
     });
@@ -199,8 +279,8 @@ public:
     });
     if(it==demands_.rend())return false;
     const auto& d=*it;
-    if(d.hold||d.velocity.linear.x<0.||
-       (d.velocity.linear.x<=0.&&std::abs(d.velocity.angular.z)<=1e-9)||
+    if(d.hold||(config_.motion_model=="forward_yaw"&&d.velocity.linear.x<0.)||
+       (std::hypot(d.velocity.linear.x,d.velocity.linear.y)<=1e-9&&std::abs(d.velocity.angular.z)<=1e-9)||
        d.execution_id!=v.execution_id||d.control_epoch!=v.control_epoch||d.sdk_session!=v.sdk_session||
        d.sdk_arm_generation!=v.sdk_arm_generation||d.trajectory_id!=v.trajectory_id||
        d.permit_sequence!=v.permit_sequence||v.trajectory_validation_sequence<d.validation_sequence||
@@ -208,22 +288,21 @@ public:
        d.valid_until!=v.demand_valid_until||d.velocity!=v.velocity||
        d.execution_id!=permit_->execution_id||d.control_epoch!=permit_->control_epoch||
        d.sdk_session!=permit_->sdk_session||d.sdk_arm_generation!=permit_->sdk_arm_generation||
-       !timed(now,seconds(d.source_stamp),seconds(d.valid_until),.100001))return false;
+       !timed(now,seconds(d.source_stamp),seconds(d.valid_until),command_pipeline_bound_s_+.000001))return false;
     const double begin=seconds(v.check_begin),end=seconds(v.check_end),until=seconds(v.valid_until);
     const auto fresh=[&](const auto& t,double maximum){
       const double source=seconds(t);return source>0.&&source<=now+.02&&now-source<=maximum;
     };
     if(begin<seconds(d.source_stamp)||end<begin||end>now+.02||now-end>.1||until<=now||
-       until>seconds(d.valid_until)||!fresh(d.body_source_stamp,.1)||!fresh(v.body_source_stamp,.1)||
-       !fresh(v.front_ray_source_stamp,.5)||!fresh(v.rear_ray_source_stamp,.5))return false;
+       until>seconds(d.valid_until)||!fresh(d.body_source_stamp,command_pipeline_bound_s_))return false;
     const auto* current=proofFor(*permit_,now);
     if(!current||current->sequence<v.trajectory_validation_sequence)return false;
     const auto exact=std::find_if(proofs_.rbegin(),proofs_.rend(),[&](const auto& p){
       return p.version==v.version&&p.trajectory_id==v.trajectory_id&&p.sequence==v.trajectory_validation_sequence;
     });
     if(exact==proofs_.rend()||!proofFresh(*exact,now))return false;
-    if(!core_.notifyBlockedForwardTurn(d.trajectory_id,seconds(d.source_stamp),now,
-       d.velocity.linear.x,d.velocity.angular.z))return false;
+    if(!core_.notifyBlockedMotion(d.trajectory_id,seconds(d.source_stamp),now,
+       d.velocity.linear.x,d.velocity.linear.y,d.velocity.angular.z,command_pipeline_bound_s_))return false;
     last_motion_sequence_=v.sequence;
     if(std::string(core_.maneuverPhase())=="waiting_executable_entry")blocked_entry_=v;
     return true;
@@ -303,8 +382,10 @@ public:
   bool permit(const wire::ExecutionPermit& p,double now,double receipt) {
     if(!versionValid(p.version,config_)||p.transport_mode!=mode_||p.frame_id!=config_.planning_frame||
        p.sequence<=last_permit_sequence_||!timed(now,seconds(p.source_stamp),seconds(p.valid_until),.75)) return false;
+    if(p.allowed&&(p.execution_id.empty()||p.confirmation_id.empty()||p.control_epoch==0||p.sdk_session.empty()||p.sdk_arm_generation==0))
+      return false;
     if(!enterTaskDomain(p.version))return false;
-    if(!enterWriterDomain(p))return false;
+    if(!enterWriterDomain(p)) {last_permit_reject_="writer_domain_mismatch";return false;}
     if(permit_ && p.control_epoch<permit_->control_epoch) return false;
     permit_history_.push_back(p);while(permit_history_.size()>32)permit_history_.pop_front();
     if(retired_task_&&p.version.task_id==*retired_task_&&!p.revoked)return false;
@@ -315,8 +396,6 @@ public:
        p.version.reference_generation<=committed_version_->reference_generation&&!p.revoked)return false;
     if(p.revoked) { cancel("execution_revoked");retired_task_=p.version.task_id;permit_=owner_permit_=p;last_permit_sequence_=p.sequence;return true; }
     if(!p.geometry_committed) {permit_=owner_permit_=p;last_permit_sequence_=p.sequence;return true;}
-    if(p.allowed&&(p.execution_id.empty()||p.confirmation_id.empty()||p.control_epoch==0||p.sdk_session.empty()||p.sdk_arm_generation==0))
-      return false;
     if(writer_handoff_&&writer_commit_sequence_&&committed_version_&&
        (p.version!=*committed_version_||p.trajectory_id!=core_.trajectoryId())) {
       last_permit_reject_="candidate_requires_writer_applied_ack";return false;
@@ -377,7 +456,7 @@ public:
   wire::MotionDemand step(double now,double receipt) {
     wire::MotionDemand d;
     d.source_stamp=stamp(now);d.body_source_stamp=bodySourceStamp(core_.odometry());
-    d.valid_until=stampNs(timeNs(d.source_stamp)+100000000LL);d.sequence=++demand_sequence_;d.transport_mode=mode_;
+    d.valid_until=stampNs(timeNs(d.source_stamp)+commandPipelineNs());d.sequence=++demand_sequence_;d.transport_mode=mode_;
     d.hold=true;d.reason="waiting_execution_permission";
     if(!permit_) return d;
     const auto& p=*permit_;
@@ -427,9 +506,10 @@ public:
     d.valid_until=originalTimeCap(d.valid_until,{p.valid_until});
     const auto out=p.phase=="aligning" && p.has_goal_yaw?
       core_.align(p.goal_yaw,p.goal_yaw_tolerance_rad,now,receipt,true):core_.step(now,receipt,true);
-    d.velocity.linear.x=out.forward;d.velocity.angular.z=out.yaw_rate;
-    d.hold=out.forward==0.&&out.yaw_rate==0.;d.reason=out.reason;
-    // Deliberately left false: a separate raw-ray guard must sign the demand.
+    d.velocity.linear.x=out.forward;d.velocity.linear.y=out.lateral;d.velocity.angular.z=out.yaw_rate;
+    d.hold=out.forward==0.&&out.lateral==0.&&out.yaw_rate==0.;d.reason=out.reason;
+    // Deliberately left false: SCAN must validate this exact demand, then the
+    // execution binding gate attaches that original verdict for the writer.
     d.safety_checked=false;
     pinInitialIntent(p);
     if(!d.hold) {
@@ -504,12 +584,12 @@ public:
     d.sdk_session=p.sdk_session;d.sdk_arm_generation=p.sdk_arm_generation;d.permit_sequence=p.sequence;
     d.validation_sequence=proof->sequence;d.trajectory_id=p.trajectory_id;d.sequence=++demand_sequence_;
     d.source_stamp=stamp(now);d.body_source_stamp=bodySourceStamp(core_.odometry());
-    d.valid_until=originalTimeCap(stampNs(timeNs(d.source_stamp)+100000000LL),
+    d.valid_until=originalTimeCap(stampNs(timeNs(d.source_stamp)+commandPipelineNs()),
       {g.valid_until,g.transition_deadline,p.valid_until});
     d.transport_mode=mode_;d.braking_model_sha256=braking_model_sha256_;
     const auto command=h.controller.step(now,receipt,true);
-    d.velocity.linear.x=command.forward;d.velocity.angular.z=command.yaw_rate;
-    d.hold=command.forward==0.&&command.yaw_rate==0.;d.reason=command.reason;
+    d.velocity.linear.x=command.forward;d.velocity.linear.y=command.lateral;d.velocity.angular.z=command.yaw_rate;
+    d.hold=command.forward==0.&&command.lateral==0.&&command.yaw_rate==0.;d.reason=command.reason;
     out.entry_source_stamp=d.body_source_stamp;out.measured_pose.header.stamp=d.body_source_stamp;
     out.measured_pose.header.frame_id=config_.planning_frame;
     const auto& measured=core_.odometry();out.measured_pose.pose.position.x=measured.position.x();
@@ -629,7 +709,8 @@ public:
       core_.recordAppliedHold(h.task,p.trajectory_id,receipt,handoff_reason_);
       restoreAppliedPreparation(h.trajectory,h.support);return true;
     }
-    h.controller.recordAppliedOutput(a.applied_velocity.linear.x,a.applied_velocity.angular.z,now,receipt);
+    h.controller.recordAppliedOutput(a.applied_velocity.linear.x,a.applied_velocity.linear.y,
+      a.applied_velocity.angular.z,now,receipt);
     core_=std::move(h.controller);
     const auto admitted_proof=std::find_if(proofs_.rbegin(),proofs_.rend(),[&](const auto& v){
       return v.version==p.version&&v.trajectory_id==p.trajectory_id&&v.sequence==found->entry_admission.validation_sequence;
@@ -639,8 +720,34 @@ public:
   }
 private:
   bool enterWriterDomain(const wire::ExecutionPermit& p) {
-    if(p.revoked||p.execution_id.empty())return true;
-    if(!writer_domain_) {writer_domain_=p;return true;}
+    if(p.revoked)return true;
+    if(p.execution_id.empty())return !writer_domain_&&
+      !(owner_permit_&&!owner_permit_->execution_id.empty());
+    const bool unbound=p.sdk_session.empty()&&p.sdk_arm_generation==0;
+    if(!unbound&&(p.sdk_session.empty()||p.sdk_arm_generation==0))return false;
+    if(!writer_domain_) {
+      // Preview/arming already has the Owner's execution identity, but no
+      // SDK writer incarnation yet. The exact accepted Owner lease below
+      // retains that pending epoch; an empty SDK is not a pinned writer.
+      const auto* pending=owner_permit_?&*owner_permit_:(permit_?&*permit_:nullptr);
+      if(pending&&!pending->execution_id.empty()&&pending->sdk_session.empty()&&pending->sdk_arm_generation==0) {
+        // A normal anchor/reference advance is not another task or another
+        // execution epoch. Bind the current installed geometry, not the
+        // older execution version captured while the SDK grant was pending.
+        const bool same_geometry=(pending->version==p.version&&pending->trajectory_id==p.trajectory_id)||
+          (p.geometry_committed&&committed_version_&&*committed_version_==p.version&&
+           core_.hasInstalledGeometry()&&core_.trajectoryId()==p.trajectory_id&&
+           core_.task().identity==identity(p.version));
+        const bool same_owner=pending->execution_id==p.execution_id&&pending->control_epoch==p.control_epoch;
+        const bool newer_hold=!p.allowed&&p.control_epoch>pending->control_epoch&&
+          (p.phase=="arming"||p.phase=="holding");
+        if(pending->allowed||(!same_owner&&!newer_hold)||
+           !identity(pending->version).sameTask(identity(p.version))||
+           (!unbound&&!same_geometry&&!newer_hold)||writer_commit_sequence_)return false;
+      }
+      if(unbound)return !p.allowed;
+      writer_domain_=p;return true;
+    }
     const auto& old=*writer_domain_;
     if(p.execution_id==old.execution_id&&p.control_epoch==old.control_epoch&&
        p.sdk_session==old.sdk_session&&p.sdk_arm_generation==old.sdk_arm_generation)return true;
@@ -648,7 +755,11 @@ private:
     // incarnation within the same retained task. A proposal/heartbeat from
     // the old binding cannot reset CAS or authorize automatic continuation.
     if(p.allowed||p.control_epoch<=old.control_epoch||(p.phase!="arming"&&p.phase!="holding"))return false;
-    writer_domain_=p;writer_commit_sequence_=ack_sequence_=0;initial_writer_ack_.reset();initial_intents_.clear();
+    // A fresh higher Owner epoch retires the old CAS even before the new
+    // grant has returned. Its unbound arming lease remains in owner_permit_
+    // and fences late old grants; the first exact SDK reply may bind it.
+    writer_domain_.reset();if(!unbound)writer_domain_=p;
+    writer_commit_sequence_=ack_sequence_=0;initial_writer_ack_.reset();initial_intents_.clear();
     handoff_.reset();tombstone_.reset();demands_.clear();return true;
   }
   bool isAppliedRecovery(const wire::ExecutionVersion& version,std::int64_t id)const {
@@ -677,6 +788,7 @@ private:
     return !task_domain_||task_domain_->sameTask(value)||task_closed_;
   }
   bool enterTaskDomain(const wire::ExecutionVersion& version) {
+    if(version.reference_generation<=native_retirement_generation_)return false;
     const auto value=identity(version);
     if(retired_task_&&value.task_id==*retired_task_)return false;
     if(task_domain_&&task_domain_->sameTask(value))return !task_closed_;
@@ -743,22 +855,39 @@ private:
        !owner_permit_||owner_permit_->allowed||owner_permit_->revoked||owner_permit_->phase!="holding"||
        owner_permit_->version!=g.incumbent.version||owner_permit_->trajectory_id!=g.incumbent.trajectory_id)return false;
     const auto& e=g.stationary_evidence;const auto& p=g.incumbent;
+    const auto timestamp_valid=[](const builtin_interfaces::msg::Time& t) {
+      return t.sec>=0&&t.nanosec<1000000000u&&timeNs(t)>0;
+    };
+    if(!finite(now)||now<=0.||!timestamp_valid(e.source_stamp)||!timestamp_valid(e.received_stamp)||
+       !timestamp_valid(e.zero_ack_at)||!timestamp_valid(e.capture_lower_bound)||
+       !timestamp_valid(e.capture_upper_bound)||!timestamp_valid(e.valid_until)||
+       !std::isfinite(e.mc_capture_delay_bound_sec)||e.mc_capture_delay_bound_sec<=0.||
+       e.mc_capture_delay_bound_sec>.25)return false;
+    const auto mapped=timeNs(e.source_stamp),received=timeNs(e.received_stamp),anchor=std::min(mapped,received);
+    const auto current=timeNs(stamp(now));
+    const auto capture_bound=static_cast<std::int64_t>(std::llround(e.mc_capture_delay_bound_sec*1e9));
+    // An explicitly approximate live MC mapping may lead host receipt within
+    // its recorded capture bound. Keep both original times: freshness and the
+    // fixed lease use the conservative minimum, never the future mapping.
+    // A simulated exact source clock cannot borrow that live allowance.
+    if((mode_=="live"?(e.time_basis!="source_delta_host_anchor_approximate"||mapped-received>capture_bound):
+        (e.time_basis!="isolated_simulated_source_clock"||mapped>received))||
+       received>current||current-received>250000000LL||current-anchor>250000000LL||
+       timeNs(e.capture_lower_bound)>anchor||timeNs(e.capture_upper_bound)!=received||
+       timeNs(e.capture_lower_bound)<=timeNs(e.zero_ack_at)||timeNs(e.valid_until)<=current||
+       timeNs(e.valid_until)<=anchor||timeNs(e.valid_until)-anchor>250000000LL)return false;
     return e.schema_version==1&&e.usable&&e.nonzero_blocked&&e.sequence>0&&e.zero_write_sequence>0&&
       e.version==p.version&&e.execution_id==p.execution_id&&e.control_epoch==p.control_epoch&&
       e.sdk_session==p.sdk_session&&e.sdk_arm_generation==p.sdk_arm_generation&&e.transport_mode==mode_&&
       e.writer_commit_sequence==g.expected_commit_sequence&&e.applied_trajectory_id==p.trajectory_id&&
-      e.mc_raw_stamp_ns>0&&!e.mc_clock_epoch.empty()&&!e.time_basis.empty()&&
+      e.mc_raw_stamp_ns>0&&!e.mc_clock_epoch.empty()&&
       e.stationary_samples>=config_.stationary_minimum_samples&&std::isfinite(e.stationary_duration_sec)&&
       e.stationary_duration_sec>=config_.stationary_reentry_duration_s&&
-      std::isfinite(e.measured_linear_mps)&&std::isfinite(e.measured_angular_radps)&&
-      std::abs(e.measured_linear_mps)<=config_.stationary_linear_threshold_mps&&
-      std::abs(e.measured_angular_radps)<=config_.stationary_angular_threshold_radps&&
-      seconds(e.zero_ack_at)>0.&&seconds(e.capture_lower_bound)>seconds(e.zero_ack_at)&&
-      seconds(e.capture_upper_bound)>=seconds(e.capture_lower_bound)&&
-      timed(now,seconds(e.source_stamp),seconds(e.valid_until),.250001)&&
-      seconds(g.source_stamp)>=seconds(e.source_stamp)&&g.retain_incumbent_until==g.source_stamp&&
-      seconds(g.valid_until)<=seconds(e.valid_until)&&seconds(g.candidate.valid_until)<=seconds(e.valid_until)&&
-      seconds(g.valid_until)-seconds(g.source_stamp)<=.250001;
+      d1max_planning_interfaces::stationaryVelocityWithin(e,config_.stationary_velocity_metric,
+        config_.stationary_linear_threshold_mps,config_.stationary_angular_threshold_radps)&&
+      timeNs(g.source_stamp)>=received&&g.retain_incumbent_until==g.source_stamp&&
+      timeNs(g.valid_until)<=timeNs(e.valid_until)&&timeNs(g.candidate.valid_until)<=timeNs(e.valid_until)&&
+      timeNs(g.valid_until)-timeNs(g.source_stamp)<=250000000LL;
   }
   struct PendingHandoff {wire::ExecutionHandoffGrant grant;Trajectory trajectory;wire::SupportReference support;
     Task task;TrackerCore controller;bool retired,applied;std::deque<wire::PreparedMotionDemand> demands;};
@@ -823,13 +952,13 @@ private:
       // One microsecond only covers seconds/nanoseconds conversion rounding;
       // the original absolute expiry above remains strict, never extended.
       seconds(v.valid_until)-end<=.250001&&seconds(v.source_stamp)<=now+.02&&
-      seconds(v.source_stamp)>=end&&now-seconds(v.source_stamp)<=.25&&
-      now-seconds(v.body_source_stamp)>=-.02&&now-seconds(v.body_source_stamp)<=.4&&
-      now-seconds(v.front_ray_source_stamp)>=-.02&&now-seconds(v.front_ray_source_stamp)<=.5&&
-      now-seconds(v.rear_ray_source_stamp)>=-.02&&now-seconds(v.rear_ray_source_stamp)<=.5;
+      // SCAN owns perception freshness and caps its original valid_until by
+      // every source lease. Tracking must not apply another sensor-age policy.
+      seconds(v.source_stamp)>=end&&now-seconds(v.source_stamp)<=.25;
   }
   bool supportMatches(const wire::TrajectoryValidation& v,const wire::SupportReference& s)const {
-    return s.version==v.version&&s.verified&&s.support_reference_id==v.support_reference_id&&s.support_hash==v.support_hash;
+    return s.version==v.version&&d1max_planning_interfaces::supportGeometryAvailable(s)&&
+      s.support_reference_id==v.support_reference_id&&s.support_hash==v.support_hash;
   }
   std::optional<Trajectory> observeCandidateEntry(const wire::TrajectoryValidation& proof,
       double now,std::string& reason) {
@@ -867,7 +996,10 @@ private:
       a.required_mode==b.required_mode&&a.frame_id==b.frame_id&&a.verified==b.verified&&
       a.support_ground_xyz==b.support_ground_xyz&&a.support_xy_radius_m==b.support_xy_radius_m&&
       a.body_reference_height_m==b.body_reference_height_m&&a.max_support_slope_rad==b.max_support_slope_rad&&
-      a.max_support_step_m==b.max_support_step_m;
+      a.max_support_step_m==b.max_support_step_m&&a.regions==b.regions&&
+      a.stair_contact_indices==b.stair_contact_indices&&a.stair_riser_xyz==b.stair_riser_xyz&&
+      a.stair_riser_owner==b.stair_riser_owner&&a.stair_model_hash==b.stair_model_hash&&
+      a.stair_model_surfaces==b.stair_model_surfaces&&a.stair_model_obstacles==b.stair_model_obstacles;
   }
   void installPreparation(std::shared_ptr<const PreparedGeometry> p) {
     candidate_->prepared=std::move(p);
@@ -902,6 +1034,7 @@ private:
     return *candidate_->prepared->support;
   }
   std::optional<wire::ReferenceProposal> proposal_;
+  std::int64_t commandPipelineNs()const {return static_cast<std::int64_t>(std::llround(command_pipeline_bound_s_*1e9));}
   std::optional<wire::ExecutionPermit> permit_,owner_permit_;
   std::deque<wire::ExecutionPermit> permit_history_;
   std::deque<wire::ReferenceProposal> proposals_;
@@ -921,9 +1054,11 @@ private:
   std::optional<wire::MotionValidation> blocked_entry_;
   std::optional<std::string> retired_task_;
   std::optional<ControlIdentity> task_domain_;bool task_closed_{false};
+  std::uint64_t native_retirement_generation_{0};
   std::string last_prepare_reason_,last_permit_reject_;
   std::uint64_t last_permit_sequence_{0},demand_sequence_{0},last_motion_sequence_{0},admission_sequence_{0};
   bool writer_handoff_{false};std::optional<PendingHandoff> handoff_,tombstone_;
+  double command_pipeline_bound_s_{.1};
   std::uint64_t writer_commit_sequence_{0},ack_sequence_{0};std::string handoff_reason_;
   std::optional<wire::ExecutionPermit> writer_domain_;
   std::optional<Installation> installation_;

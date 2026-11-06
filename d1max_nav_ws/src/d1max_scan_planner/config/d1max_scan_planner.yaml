@@ -4,14 +4,23 @@
 
     # 1: RViz PoseStamped goal, 2: preset keypoints, 3: external 3D path.
     fsm.navi_mode: 1
+    # Explicit planner-only capability; the formal session sets this by purpose.
+    # No tracker, SDK installation receipt or velocity sender is needed in it.
+    fsm.planning_only: false
     fsm.thresh_replan: 1.0
+    # Refresh moving-state candidates without the former extra 100 ms
+    # submission throttle. 50 ms is a periodic refresh request, not a promise
+    # of 20 successful commits/s; source events, one worker and bounded
+    # snapshot/commit backpressure govern actual work. Control is independent.
+    fsm.max_replan_interval: 0.05
+    fsm.min_replan_interval: 0.0
     fsm.thresh_no_replan: 0.15
-    fsm.planning_horizon: 6.0
+    fsm.planning_horizon: 4.0
     fsm.emergency_time: 1.2
     fsm.fail_safe: true
     fsm.max_replan_fail_count: 1000
     # Guided mode waits for actual occupancy/body changes after a failed solve.
-    fsm.failed_replan_cooldown: 0.5
+    fsm.failed_replan_cooldown: 0.2
     fsm.failed_replan_body_distance: 0.15
     # Search only the existing route and stop at the rolling-map boundary.
     fsm.reference_target_forward_margin: 1.0
@@ -19,34 +28,64 @@
     fsm.reference_target_min_advance: 0.30
     fsm.reference_target_exit_margin: 0.20
 
-    # Official ROS 2 rolling-grid resolution/window. With the unchanged .45 m
-    # vertical envelope, .08 m ceil inflation aliases floor z=0 into body z=.55.
-    # .05 m resolves that quantization; no ground/self returns are erased and
-    # the robot envelope is NOT reduced. Window bounds cap the 3D memory cost.
+    # D1 rolling evidence window. The formal session consumes these values,
+    # rather than silently replacing them with a smaller hard-coded window.
+    # 12 m XY leaves room around the 4 m reference and .93 m rigid body;
+    # 3 m Z already covers six proxy heights, without extra vertical allocation.
+    # Keep 5 cm sampling (approximately 19 x 6 x 10 cells across the body).
     grid_map.resolution: 0.05
-    grid_map.sliding_map_size_x: 10.0
-    grid_map.sliding_map_size_y: 10.0
-    grid_map.sliding_map_size_z: 5.0
-    grid_map.local_update_range_x: 5.0
-    grid_map.local_update_range_y: 5.0
-    grid_map.local_update_range_z: 2.5
+    grid_map.sliding_map_size_x: 12.0
+    grid_map.sliding_map_size_y: 12.0
+    grid_map.sliding_map_size_z: 3.0
+    grid_map.local_update_range_x: 6.0
+    grid_map.local_update_range_y: 6.0
+    grid_map.local_update_range_z: 1.5
+    # Source time remains the scan BEGIN, with a 0.5 s freshness deadline.
+    # At 5 Hz the wait for fusion consumed most of that budget before a
+    # 10 Hz owner could use the result. Fuse latest paired rays at most 10 Hz;
+    # no catch-up queue and no renewal of either scanner's source timestamp.
+    grid_map.integration_rate_hz: 10.0
+    grid_map.visualization_rate_hz: 3.0
     grid_map.map_sliding_en: true
     grid_map.map_sliding_thresh: 0.20
-    # Upstream twin-cylinder occupancy for target/search/optimization only.
-    # The formal session keeps independent raw observed-free motion sweeps.
+    # SCAN owns candidate and current-trajectory obstacle decisions.
     grid_map.planning_collision_policy: official
 
-    # Unvalidated engineering proxy, not an official calibrated safety footprint.
-    # Its 0.98 x 0.58 m bounding box does not prove rectangular-corner coverage.
+    # Shared D1 rigid proxy, not a physically calibrated wheel/leg envelope.
+    # Session-only, per-side XY planning clearance. prepare consumes this key
+    # and projects .93 x .30 into the common 1.03 x .40 native query kernel.
+    # Keep nominal/self-filter dimensions and all vertical extents unchanged.
+    planar_clearance_m: 0.05
+    # Source-associated stair/landing points only: reduce EXTRA inflation,
+    # never the nominal robot or body Z. Mixed-window floor points stay at .05.
+    # Session emits explicit nominal dimensions and native reader policy.
+    stair_planar_clearance_m: 0.025
+    # Stair-only narrow phase: retain measured hit evidence and split occupied
+    # voxels only vertically (5 x 5 x 2.5 cm), preserving coarse XY clearance.
+    # Missing provenance keeps the full voxel; no tread/body/flat-floor change.
+    grid_map.stair_subvoxel_collision: true
+    # CAD BASE_LINK fixed-part lower bound -0.0893 m + 0.0307 m margin.
+    # Only qualified, ALL-hit matched stair support may contact below this.
+    # Raw occupancy, all unclassified obstacles and the flat envelope persist.
+    grid_map.stair_contact_body_below: 0.12
+    grid_map.collision_model: oriented_box
+    grid_map.box_length: 0.93
+    grid_map.box_width: 0.30
+    grid_map.body_below: 0.25
+    grid_map.body_above: 0.25
+    grid_map.planning_body_below: 0.25
+    grid_map.planning_body_above: 0.25
+    # Legacy optional cylinder dimensions; unused by oriented_box queries.
     grid_map.double_cylinder_radius: 0.29
     grid_map.double_cylinder_offset: 0.20
     grid_map.body_height: 0.50
-    # Match d1max_robot.yaml: the 0.50 m body reference minus the
-    # provisional 0.10 m ground exclusion gives 0.40 m BELOW the body. This is
-    # obstacle-UP dilation, not upper-body clearance. Neither value is calibrated.
-    # This legacy entry retains its own unknown-space policy; no motion approval.
-    grid_map.obstacles_inflation_z_up: 0.40
-    grid_map.obstacles_inflation_z_down: 0.45
+    # Upright box aliases. Support/reference height is not body thickness;
+    # neither these values nor the stair margin remove classified obstacles.
+    grid_map.obstacles_inflation_z_up: 0.25
+    grid_map.obstacles_inflation_z_down: 0.25
+    # Candidate and current-trajectory queries share the same vertical kernel.
+    grid_map.planning_obstacles_inflation_z_up: 0.25
+    grid_map.planning_obstacles_inflation_z_down: 0.25
 
     grid_map.frame_id: map
     grid_map.sliding_map_frame_id: d1max_scan_local
@@ -82,8 +121,14 @@
     manager.max_jerk: 2.0
     manager.control_points_distance: 0.20
     manager.feasibility_tolerance: 0.35
-    manager.planning_horizon: 6.0
+    manager.planning_horizon: 4.0
     manager.reference_detour_anchor_margin: 0.5
+    # Geometry-only preview: connect the latest measured body to a bounded
+    # initial arc of the unchanged candidate. These are NOT motion join limits,
+    # localization accuracy requirements or obstacle clearance distances.
+    # A larger displacement requests a fresh solve on the SAME route.
+    manager.preview_candidate_connector_m: 0.15
+    manager.preview_candidate_projection_window_m: 0.5
 
     optimization.lambda_smooth: 1.0
     # Official ros2-community d0b921c9 optimizer weights. D1 motion limits and
@@ -91,10 +136,24 @@
     optimization.lambda_collision: 1.0
     optimization.lambda_feasibility: 0.1
     optimization.lambda_fitness: 1.0
-    # Disable the D1-only extra attraction term: use upstream rebound objective.
-    # The ordered PCT reference is still the input seed/height guide, not a cost.
-    optimization.lambda_reference: 0.0
+    # Actual-state rolling solves retain the collision-aware smooth forward
+    # approach as a SOFT objective. Without this term, repeated zero initial
+    # lateral acceleration can spread the join over the whole horizon and
+    # indefinitely postpone steering. Not a route lock or collision override;
+    # the generic upstream-compatible optimizer default remains zero.
+    optimization.lambda_reference: 1.0
+    # D1 forward-only comfort preference, not a minimum turn radius or gate.
+    # Native collision, fixed initial state and the common solve budget remain
+    # authoritative. Upstream/default optimizer weight stays zero.
+    optimization.lambda_planar_curvature: 0.2
+    optimization.preferred_turn_radius: 1.0
     optimization.dist0: 0.28
+    # Comfortable lateral room beyond the existing hard body envelope. This
+    # optional quality pass improves an already valid curve; narrow passages
+    # may use less room, and unsuccessful refinement retains that valid curve.
+    # No added obstacle inflation, ground clearance or execution gate.
+    optimization.soft_clearance_distance: 0.15
+    optimization.soft_clearance_budget_ms: 30.0
     optimization.max_vel: 0.45
     optimization.max_acc: 0.35
     optimization.order: 3

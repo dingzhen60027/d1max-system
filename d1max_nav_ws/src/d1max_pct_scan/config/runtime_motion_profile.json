@@ -1,0 +1,105 @@
+{
+  "schema_version": 3,
+  "record_kind": "runtime_motion_profile",
+  "parameter_basis": "vendor_nominal_engineering_and_operator_observation",
+  "physical_acceptance_verified": false,
+  "fixture_only": false,
+  "transport_mode": "live",
+  "robot_id": "D1-Max",
+  "sdk_version": "0.1.0-charging_v2",
+  "profile": "general_low_speed",
+  "kinematic_profile": "holonomic_xyyaw",
+  "calibration_sha256": "ebfa58684ec810e73cc1c118f56096498c35adebde1e42f98efe02e3c42b7469",
+  "robot_profile_sha256": "39cf5fc44fafff0a15f3e3c474bc0aa5879f66e74bb281ed3d4196a2adc617dc",
+  "provenance": {
+    "calibration_sha256_semantics": "Compatibility field: SDK API document identity, NOT a physical calibration",
+    "sdk_client_api_sha256": "ebfa58684ec810e73cc1c118f56096498c35adebde1e42f98efe02e3c42b7469",
+    "sdk_type_sha256": "ec8c157f6c928e5f3ee3995b8d635e26538b6a2b07905d6aa07a99e51a19e97a",
+    "speed_mapping": "The sole writer applies the existing continuous V4 static map, with no second time filter. The planar input ceiling is 50 percent per the operator's 2026-10-16 request; the response shape and near-zero blend remain, and the nominal SI command limit remains 0.30 m/s. SDK percentage is not a measured physical speed. Yaw retains its continuous operating range from the observed 20 percent response knee toward 30 percent at full demand; it is not the former fixed 20 percent relay. The wider near-zero blend reduces amplification of tiny heading noise. One tracker conditioner jointly shapes SI demands and their SDK image; no correction/settling state, forced canonical yaw, or assumed physical inertia. These values are engineering response parameters, not a measured speed or angular-rate calibration. Original cancellation, source expiry and control-loss semantics remain.",
+    "operator_observation": {
+      "reported_date": "2026-10-14",
+      "axes": ["forward_reverse", "lateral", "yaw"],
+      "slow_fraction": 0.20,
+      "normal_fraction": 0.30,
+      "responsive_fraction_range": [0.30, 0.40],
+      "below_slow_fraction": "little_response",
+      "quantitative_velocity_measurement": false,
+      "yaw_update": {
+        "reported_date": "2026-10-15",
+        "working_fraction": 0.20,
+        "maximum_navigation_fraction": 0.20,
+        "below_working_fraction": "little_or_no_turning_response",
+        "quantitative_angular_rate_measurement": false
+      },
+      "planar_speed_estimate_update": {
+        "reported_date": "2026-10-15",
+        "fraction": 0.30,
+        "estimated_speed_mps": 0.30,
+        "basis": "operator_tentative_estimate_not_time_distance_calibration"
+      },
+      "planar_input_ceiling_update": {
+        "reported_date": "2026-10-16",
+        "maximum_fraction": 0.50,
+        "basis": "operator_requested_sdk_fraction_not_metres_per_second",
+        "yaw_ceiling_unchanged": true
+      }
+    },
+    "geometry": "Existing D1 Max standing CAD and operator rigid-body approximation; ground-to-body reference approximately 0.50 m",
+    "bounds": "Configured low-speed planning margins and stopping/source-age budgets; NOT measured upper bounds or verified braking guarantees",
+    "stationary_velocity": "Fresh confirmed GENERAL low-speed operation, and fresh confirmed fixed STAIR only when general_runtime_reuse explicitly selects this same runtime profile, check the original XY norm and absolute body-Z independently at the existing 0.03 m/s threshold; angular motion keeps the original 3D 0.05 rad/s norm. The selected standing state, low-speed gear and head direction must match. Other, transitioning, unknown or stale modes use the original spatial norm. The raw 3D norm is always reported. The 1 s source-time stop window, real zero acknowledgement and drained SDK writes remain required. MC static bias and capture-delay bounds remain physically uncalibrated; this is a metric contract, not acceptance evidence.",
+    "measurements_field_semantics": "Legacy wire-compatible numerical parameter slots; record_kind and parameter_basis distinguish configured values from physical measurements"
+  },
+  "sdk_input_mapping": {
+    "schema_version": 4,
+    "kind": "continuous_amplitude_ratio_v4",
+    "normalization": "rounded_dominant_pnorm16_direction_preserving_component_cap",
+    "planar": {
+      "effective_fraction": 0.31328213472822414,
+      "maximum_fraction": 0.50,
+      "blend_demand_ratio": 0.10
+    },
+    "yaw": {
+      "effective_fraction": 0.20,
+      "maximum_fraction": 0.30,
+      "blend_demand_ratio": 0.20
+    }
+  },
+  "execution_timing": {
+    "sensor_source_age_bound_s": 0.60,
+    "command_pipeline_bound_s": 0.10,
+    "writer_period_s": 0.05,
+    "source_time_uncertainty_s": 0.25
+  },
+  "stationary_evidence": {
+    "profile": "general_low_speed",
+    "velocity_metric": "planar_xy_with_vertical_guard_v1",
+    "linear_threshold_mps": 0.03,
+    "angular_threshold_radps": 0.05,
+    "stationary_duration_s": 1.0,
+    "reentry_duration_s": 0.6,
+    "minimum_new_samples": 3,
+    "mc_expected_hz": 100.0,
+    "mc_min_hz": 10.0,
+    "mc_max_hz": 250.0,
+    "configured_static_linear_bound_mps": 0.01,
+    "configured_static_angular_bound_radps": 0.02
+  },
+  "measurements": {
+    "model": "reaction_braking_reachable_v1",
+    "forward_scale_mps": 1.0,
+    "lateral_metres_per_fraction": 1.0,
+    "yaw_scale_radps": 2.0,
+    "max_speed_mps": 0.30,
+    "max_yaw_radps": 0.50,
+    "reaction_bound_s": 1.0,
+    "stopping_distance_m": 0.30,
+    "stopping_lateral_distance_m": 0.30,
+    "stopping_yaw_rad": 0.50,
+    "stop_latency_bound_s": 2.0,
+    "tracking_error_bound_m": 0.05,
+    "heading_error_bound_rad": 0.10,
+    "body_height_m": 0.50,
+    "mc_delay_bound_s": 0.25,
+    "mc_clock_basis": "source_delta_host_anchor_approximate"
+  }
+}

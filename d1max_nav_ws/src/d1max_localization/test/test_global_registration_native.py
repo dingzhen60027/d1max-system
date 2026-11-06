@@ -6,6 +6,13 @@ from scipy.spatial.transform import Rotation
 from d1max_localization.global_registration import GlobalMapIndex, RegistrationConfig
 
 
+def gravity(index, rotation):
+    return dict(schema=1, query=dict(direction=(rotation.T @ [0.,0.,-1.]).tolist(), epoch=1,
+        source_stamp_ns=10**9, query_stamp_ns=10**9, frame_id='tracking', source='lio_inertial_posterior'),
+        map=dict(direction=[0.,0.,-1.], frame_id='map', map_sha256=index.map_sha256,
+                 evidence_id='b'*64, source='explicit_synthetic_fixture'))
+
+
 def room():
     rng=np.random.default_rng(18)
     xy=rng.uniform(0,5,(2400,2));floor=np.column_stack([xy,np.zeros(len(xy))])
@@ -28,7 +35,7 @@ def test_real_native_global_search_finds_unknown_pose_and_cache_is_source_bound(
     rotation=Rotation.from_euler('z',.9).as_matrix();origin=np.array([2.,2.,.7])
     query=(points-origin)@rotation
     index=GlobalMapIndex(path,tmp_path/'cache',config())
-    result=index.search(query)
+    result=index.search(query, gravity=gravity(index,rotation))
     assert result['accepted'],result
     transform=np.asarray(result['candidate']['transform'])
     assert np.linalg.norm(transform[:3,3]-origin)<.12
@@ -41,6 +48,7 @@ def test_real_native_repeated_floors_do_not_get_a_startup_seed(tmp_path):
     both=np.concatenate([points,points+[0,0,4.]])
     o3d.io.write_point_cloud(str(path),o3d.geometry.PointCloud(o3d.utility.Vector3dVector(both)))
     query=(points-[2.,2.,.7])@Rotation.from_euler('z',.9).as_matrix()
-    result=GlobalMapIndex(path,tmp_path/'cache',config()).search(query)
+    index=GlobalMapIndex(path,tmp_path/'cache',config())
+    result=index.search(query,gravity=gravity(index,Rotation.from_euler('z',.9).as_matrix()))
     assert not result['accepted'],result
     assert result['reason']=='ambiguous_place_or_floor',result

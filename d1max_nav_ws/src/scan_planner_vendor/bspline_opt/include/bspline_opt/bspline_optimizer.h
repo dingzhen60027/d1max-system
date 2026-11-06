@@ -5,6 +5,8 @@
 #include <path_searching/dyn_a_star.h>
 #include <bspline_opt/uniform_bspline.h>
 #include <bspline_opt/spline_heading_contract.hpp>
+#include <bspline_opt/support_height_coupling.hpp>
+#include <bspline_opt/soft_clearance.hpp>
 #include <plan_env/grid_map.h>
 #include <rclcpp/rclcpp.hpp>
 #include "bspline_opt/lbfgs.hpp"
@@ -63,7 +65,20 @@ namespace scan_planner
     // required inputs
     void setControlPoints(const Eigen::MatrixXd &points);
     void setBsplineInterval(const double &ts);
-    void setPreviewHeadingContract(const SplineHeadingContract &contract) { heading_contract_=contract; }
+    // Set (or clear) once per planning attempt. The callback owns immutable
+    // support for that reference; it is sampled once per optimization, never
+    // from an LBFGS iteration or a mutable live map.
+    void setSupportHeightSampler(SupportHeightSampler sampler) {
+      support_height_sampler_ = std::move(sampler);
+      support_height_coupling_.reset();
+    }
+    void setPreviewHeadingContract(const SplineHeadingContract &contract) {
+      if(contract.policy!=BodyHeadingPolicy::PathTangent&&!validMeasuredHeadingContract(contract))
+        throw std::invalid_argument("invalid frozen optimizer heading");
+      heading_contract_=contract;
+      if(a_star_)a_star_->setFrozenBodyYaw(contract.policy==BodyHeadingPolicy::HoldHeading?
+          std::optional<double>(contract.measured_yaw):std::nullopt);
+    }
     void setSolveBudget(const SolveBudget::Ptr &budget) {
       solve_budget_=budget;
       if (a_star_) a_star_->setSolveBudget(budget);
@@ -87,12 +102,20 @@ namespace scan_planner
     std::vector<Eigen::Vector3d> reference_path_samples_;
 
     std::vector<std::vector<Eigen::Vector3d>> initControlPoints(Eigen::MatrixXd &init_points, bool flag_first_init = true);
+    // Explicit cubic interval is required to distinguish the actual trajectory
+    // from its control-polygon proxy on a stair support surface. Flat callers
+    // and the original two-argument entry retain their existing behavior.
+    std::vector<std::vector<Eigen::Vector3d>> initControlPointsWithSpline(
+        Eigen::MatrixXd &init_points, double interval, bool flag_first_init = true);
     bool controlPointsInitialized() const { return control_points_initialized_; }
     // A rejected curve has no authority. Keep its actual terminal evidence
     // separate from unknown cells visited during an earlier A-star search.
     const std::string &lastFailurePhase() const { return last_failure_phase_; }
     bool BsplineOptimizeTrajRebound(Eigen::MatrixXd &optimal_points, double ts); // must be called after initControlPoints()
     bool BsplineOptimizeTrajRefine(const Eigen::MatrixXd &init_points, const double ts, Eigen::MatrixXd &optimal_points);
+    SoftClearanceReport improveTrajectoryClearance(UniformBspline& accepted,
+        const SoftClearanceAdmission& admission,
+        const SoftClearanceWorkContext& context = {});
 
     inline int getOrder(void) { return order_; }
 
@@ -100,13 +123,26 @@ namespace scan_planner
     friend struct BsplineOptimizerTestAccess;
     GridMap::Ptr grid_map_;
     SolveBudget::Ptr solve_budget_;
+    SupportHeightSampler support_height_sampler_;
+    SupportHeightCoupling support_height_coupling_;
+    bool coupledCurveWithinSupport(UniformBspline& curve,
+        const SupportHeightCoupling& coupling, const SolveBudget::Ptr& budget) const;
+    void restoreOptimizationVariables(const double* variables, int count) {
+      memcpy(cps_.points.data() + 3 * order_, variables, count * sizeof(double));
+      support_height_coupling_.apply(cps_.points);
+    }
     int queryOccupancy(const Eigen::Vector3d &p,double yaw) {
       // The caller separately reports cancellation/deadline, never an invented
       // obstacle witness. Fail-closed here also stops LBFGS line searches.
       if (!solveAllowed(solve_budget_)) { force_stop_type_=STOP_FOR_ERROR; return 1; }
-      return grid_map_->getPlanningInflateOccupancy(p,yaw);
+      return grid_map_->getPlanningInflateOccupancy(p,
+          heading_contract_.policy==BodyHeadingPolicy::HoldHeading?heading_contract_.measured_yaw:yaw);
     }
     bool control_points_initialized_{false};
+    bool use_actual_stair_curve_{false};
+    bool actualStairCurveClear(const Eigen::MatrixXd &points);
+    std::vector<std::vector<Eigen::Vector3d>> initControlPointsImpl(
+        Eigen::MatrixXd &init_points, bool flag_first_init);
     std::string last_failure_phase_;
     SplineHeadingContract heading_contract_;
 
@@ -138,6 +174,9 @@ namespace scan_planner
     double lambda3_;               // feasibility weight
     double lambda4_;               // curve fitting
     double lambda_reference_{0.0};
+    double lambda_planar_curvature_{0.0};
+    double preferred_turn_radius_{1.0};
+    SoftClearanceOptions soft_clearance_;
     int a;
     //
     double dist0_;             // safe distance

@@ -31,6 +31,45 @@ def sample(**local_changes):
     return diagnostics(loc, glob, local, session_id='s', now=100.)
 
 
+@pytest.mark.parametrize('phase,label,tone',[
+    ('waiting_retirement','初值待退役','warning'),
+    ('waiting_service','初值待准入服务','warning'),
+    ('committing','初值提交中','warning'),
+    ('awaiting_localization','初值已提交 · 等待定位','warning'),
+    ('rejected','初值被拒绝','error'),
+    ('timeout','初值请求超时','error'),
+    ('uncertain','初值结果待核对','warning')])
+def test_initial_pose_feedback_overlays_only_the_existing_localization_row(phase,label,tone):
+    loc,glob,local=states()
+    baseline=diagnostics(loc,glob,local,session_id='s',now=100.)
+    result=diagnostics(loc,glob,local,session_id='s',now=100.,
+        initial_pose_status=dict(session_id='s',phase=phase,reason='exact_input_reason'))
+    assert result['stages']['localization']==dict(label=label,tone=tone,detail='exact_input_reason')
+    result['stages']['localization']=baseline['stages']['localization']
+    assert result==baseline  # All readiness, admission and local evidence unchanged.
+
+
+@pytest.mark.parametrize('status',[None,{},
+    dict(session_id='other',phase='rejected',reason='foreign'),
+    dict(session_id='s',phase='complete',reason=''),
+    dict(session_id='s',phase='goal_pending',reason='generic_goal_reason'),
+    dict(session_id='s',phase='rejected',reason=None)])
+def test_unrelated_or_completed_input_feedback_cannot_obscure_localization(status):
+    assert diagnostics(*states(),session_id='s',now=100.,initial_pose_status=status)==sample()
+
+
+def test_formal_typed_feedback_is_visible_without_changing_typed_readiness():
+    from d1max_pct_scan.typed_view_state import TypedDisplayContext
+    context=TypedDisplayContext(('s',2,'seed'),True)
+    baseline=diagnostics({}, {}, {},session_id='s',now=100.,navigation_context=context)
+    result=diagnostics({}, {}, {},session_id='s',now=100.,navigation_context=context,
+        initial_pose_status=dict(session_id='s',phase='rejected',reason='initial_pose_transaction_busy'))
+    assert result['stages']['localization']['label']=='初值被拒绝'
+    assert result['stages']['localization']['detail']=='initial_pose_transaction_busy'
+    result['stages']['localization']=baseline['stages']['localization']
+    assert result==baseline
+
+
 def test_cached_coast_metadata_cannot_hide_new_output_pause():
     loc, glob, local = states()
     loc.update(localized=False, state='output_waiting')
@@ -309,6 +348,155 @@ def test_native_failure_is_distinct_from_waiting_for_reference():
     assert value['stages']['local']['label'] == '局部规划失败'
     assert value['stages']['local']['tone'] == 'warning'
     assert value['local_target'] is None
+
+
+def test_native_reference_exhaustion_and_support_wait_are_not_generic_trajectory_wait():
+    for phase, label in [('waiting_reference_extension', '等待参考窗口延伸'),
+                         ('waiting_reference_support', '等待楼梯参考几何'),
+                         ('waiting_side_target', '等待可用绕行目标')]:
+        value = sample(local_debug_valid=False, local_debug_phase=phase)
+        assert value['stages']['local']['label'] == label
+        assert value['stages']['local']['tone'] == 'warning'
+        assert value['local_target'] is None
+
+
+def test_formal_reference_projection_reason_is_visible_without_overriding_valid_curve():
+    reason = 'measured_body_outside_current_semantic_segment'
+    value = sample(local_debug_valid=False, reason=reason)
+    assert value['stages']['local']['label'] == '参考段跟进受阻'
+    assert value['local_target'] is None
+    assert sample(reason=reason)['stages']['local']['label'] == '轨迹有效'
+    assert sample(local_debug_valid=False, reason=reason, session_id='foreign')['stages']['local']['label'] != '参考段跟进受阻'
+
+
+def formal_display_fixture():
+    """Actual typed route cache and display context, without a ROS graph."""
+    from d1max_pct_scan.committed_route_view import CommittedRouteView
+    from d1max_pct_scan.typed_view_state import TypedDisplayContext
+    from test_route_ingress import delivery
+    route = delivery()
+    view = CommittedRouteView(route.session_id, route.snapshot.map_version_id)
+    assert view.receive(route) is not None
+    snapshot = route.snapshot
+    context = TypedDisplayContext((route.session_id, snapshot.localization_epoch,
+                                   snapshot.localization_seed_id), True)
+    owner = dict(schema=2, owner='BehaviorTree.CPP', session_id=route.session_id,
+                 task_id=route.task_id, route_id=route.route_id, route_hash=route.route_hash,
+                 phase='following', root_status='RUNNING', active=True,
+                 localization_epoch=snapshot.localization_epoch,
+                 localization_seed_id=snapshot.localization_seed_id)
+    loc, glob, local = states()
+    local.update(session_id=route.session_id, localization_epoch=snapshot.localization_epoch,
+                 localization_seed_id=snapshot.localization_seed_id,
+                 owner_task_id=route.task_id, owner_route_id=route.route_id,
+                 owner_route_hash=route.route_hash, geometry_owner='local_executor',
+                 local_validation_sequence=10, local_validation_valid_until_ns=0,
+                 local_debug_phase='ready')
+    return loc, glob, local, dict(session_id=route.session_id, now=100.,
+        navigation_context=context, committed_route_view=view, owner_state=owner)
+
+
+def test_formal_persistent_positive_is_visible_and_next_window_failure_cannot_hide_it():
+    loc, glob, local, args = formal_display_fixture()
+    assert diagnostics(loc, glob, local, **args)['stages']['local']['label'] == '轨迹有效'
+    local.update(reason='measured_body_outside_current_semantic_segment',
+                 pending_reference_generation=30, prepared_reference_count=1,
+                 native_reference_received=True, native_pending_debug_generation=30,
+                 native_pending_phase='waiting_reference_extension')
+    before = deepcopy(local)
+    report = diagnostics(loc, glob, local, **args)
+    assert report['stages']['local']['label'] == '轨迹有效'
+    assert report['plan_id'] == local['last_spline_id']
+    assert local == before  # Display never writes a verdict or control state.
+
+
+@pytest.mark.parametrize('changes', [
+    dict(spline_visual_valid=False), dict(local_validation_sequence=0),
+    dict(last_spline_id=-1), dict(active_reference=False),
+    dict(owner_task_id='other'), dict(owner_route_id='other'), dict(owner_route_hash='f'*64),
+    dict(localization_epoch=999), dict(localization_seed_id='other'),
+])
+def test_formal_persistent_display_preserves_negative_and_identity_fences(changes):
+    loc, glob, local, args = formal_display_fixture()
+    local.update(changes)
+    report = diagnostics(loc, glob, local, **args)
+    assert report['stages']['local']['label'] != '轨迹有效'
+    assert report['plan_id'] is None
+
+
+def test_formal_reference_failure_is_visible_only_without_a_valid_committed_curve():
+    loc, glob, local, args = formal_display_fixture()
+    local.update(spline_visual_valid=False, local_debug_phase='occupied',
+                 reason='measured_body_outside_current_semantic_segment')
+    report = diagnostics(loc, glob, local, **args)
+    assert report['stages']['local']['label'] == '参考段跟进受阻'
+    assert report['plan_id'] is None
+    local['owner_task_id'] = 'retired-task'
+    assert diagnostics(loc, glob, local, **args)['stages']['local']['label'] != '参考段跟进受阻'
+
+
+@pytest.mark.parametrize('identity_ready', [(None, False), (('session', 1, 'seed'), False)])
+def test_formal_persistent_display_does_not_manufacture_localization(identity_ready):
+    from d1max_pct_scan.typed_view_state import TypedDisplayContext
+    loc, glob, local, args = formal_display_fixture()
+    args['navigation_context'] = TypedDisplayContext(*identity_ready)
+    report = diagnostics(loc, glob, local, **args)
+    assert report['stages']['local']['label'] != '轨迹有效'
+    assert report['plan_id'] is None
+
+
+@pytest.mark.parametrize('geometry_owner,until,valid', [
+    ('local_executor', 0, True), ('local_executor', 100_100_000_000, False),
+    ('local_executor', -1, False), ('local_executor', None, False),
+    ('local_executor', False, False),
+    ('bt_writer', 100_100_000_000, True), ('bt_writer', 0, False),
+    ('bt_writer', 100_000_000_000, False),
+])
+def test_formal_display_keeps_persistent_and_legacy_verdict_contracts_separate(geometry_owner, until, valid):
+    loc, glob, local, args = formal_display_fixture()
+    local.update(geometry_owner=geometry_owner, local_validation_valid_until_ns=until)
+    report = diagnostics(loc, glob, local, **args)
+    assert (report['stages']['local']['label'] == '轨迹有效') is valid
+
+
+def test_received_reference_search_failure_is_visible_before_first_curve_commit():
+    value = sample(active_reference=False, spline_visual_valid=False, local_debug_valid=False,
+        native_reference_received=True, pending_reference_generation=30, prepared_reference_count=1,
+        native_pending_debug_generation=30, native_pending_phase='failed_reference_search_collision',
+        native_pending_debug_fresh=False, local_debug_phase='waiting_native_trajectory')
+    assert value['stages']['local']['label'] == '绕行连接段碰撞'
+    assert value['stages']['local']['tone'] == 'warning'
+    assert value['local_target'] is None and value['plan_id'] is None
+
+
+def test_delivered_reference_without_candidate_is_waiting_for_trajectory_not_reference():
+    value = sample(active_reference=False, spline_visual_valid=False, local_debug_valid=False,
+        native_reference_received=True, pending_reference_generation=30, prepared_reference_count=1,
+        local_debug_phase='waiting_native_trajectory')
+    assert value['stages']['local']['label'] == '等待轨迹'
+
+
+@pytest.mark.parametrize('changes', [
+    dict(native_reference_received=False), dict(pending_reference_generation=0),
+    dict(prepared_reference_count=0), dict(localization_epoch=1),
+])
+def test_unreceived_or_foreign_reference_cannot_display_old_search_failure(changes):
+    local = dict(active_reference=False, spline_visual_valid=False, local_debug_valid=False,
+        native_reference_received=True, pending_reference_generation=30, prepared_reference_count=1,
+        native_pending_debug_generation=30, native_pending_phase='failed_reference_search_collision',
+        local_debug_phase='waiting_native_trajectory')
+    local.update(changes)
+    value = sample(**local)
+    assert value['stages']['local']['label'] != '绕行连接段碰撞'
+    assert value['stages']['local']['tone'] != 'ready'
+
+
+def test_old_generation_search_failure_cannot_cover_new_received_reference():
+    value = sample(active_reference=False, spline_visual_valid=False, local_debug_valid=False,
+        native_reference_received=True, pending_reference_generation=31, prepared_reference_count=1,
+        native_pending_debug_generation=30, native_pending_phase='failed_reference_search_collision',
+        local_debug_phase='failed_reference_search_collision', local_debug_generation=30)
+    assert value['stages']['local']['label'] == '等待轨迹'
 
 
 @pytest.mark.parametrize('phase,label', [

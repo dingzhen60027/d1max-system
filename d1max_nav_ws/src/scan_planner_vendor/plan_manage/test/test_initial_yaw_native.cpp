@@ -27,6 +27,13 @@ struct GridMapTestAccess {
     map.md_.occupancy_buffer_[map.toAddress(cell)]=-1.01;
     map.observed_cylinder_cache_.clear();++map.occupancy_revision_;
   }
+  static void standingBox(GridMap &map) {
+    auto &p=map.mp_;
+    p.collision_model_="oriented_box";p.box_length_=.93;p.box_width_=.30;
+    p.body_below_=p.body_above_=.25;
+    p.planning_body_below_=p.planning_body_above_=.25;
+    map.rebuildInflationOffsets();
+  }
   static GridMap::Ptr officialPreview() {
     auto map=observedFree();auto &p=map->mp_;auto &d=map->md_;
     p.resolution_=.05;p.resolution_inv_=20.;map->updateMapBoundaryFromIndex();
@@ -46,13 +53,46 @@ static bool validate(GridMap &map) {
 #else
   scan_planner::MeasuredBodyPose measured{Eigen::Vector3d(0.,0.,.55),
     Eigen::Quaterniond(Eigen::AngleAxisd(std::acos(-1.)/2.,Eigen::Vector3d::UnitZ())),10.,"map"};
-  return scan_planner::wholeCurveCollisionFree(curve,.08,.49,query,measured,"map",10.,.5);
+  return scan_planner::wholeCurveCollisionFree(curve,.08,
+      scan_planner::bodyExtent(map.bodyEnvelope()),query,measured,"map",10.,.5);
 #endif
 }
 
 TEST(InitialYawNative, FullyObservedTurnWithoutObstaclesRemainsAdmissible) {
   auto map=GridMapTestAccess::observedFree();const bool accepted=validate(*map);
   RecordProperty("accepted",accepted ? "true":"false");EXPECT_TRUE(accepted);
+}
+
+TEST(InitialYawNative, StandingBoxFinalCurveChecksIntermediateTurnWithUnifiedExtent) {
+  auto map=GridMapTestAccess::observedFree();GridMapTestAccess::standingBox(*map);
+  const auto strict=map->bodyEnvelope(),planning=map->planningBodyEnvelope();
+  ASSERT_EQ(strict.model,scan_planner::CollisionModel::OrientedBox);
+  EXPECT_DOUBLE_EQ(strict.length,.93);EXPECT_DOUBLE_EQ(strict.width,.30);
+  EXPECT_DOUBLE_EQ(strict.below,.25);EXPECT_DOUBLE_EQ(strict.above,.25);
+  EXPECT_DOUBLE_EQ(planning.length,strict.length);EXPECT_DOUBLE_EQ(planning.width,strict.width);
+  EXPECT_DOUBLE_EQ(planning.below,strict.below);EXPECT_DOUBLE_EQ(planning.above,strict.above);
+  EXPECT_NEAR(scan_planner::bodyExtent(strict),std::hypot(.465,.15),1e-12);
+  const auto optimizer_check=[&]() {
+    Eigen::MatrixXd points(3,23);
+    for(int i=0;i<23;++i)points.col(i)=Eigen::Vector3d((i-1)*.05,0.,.55);
+    scan_planner::UniformBspline curve(points,3,.2);
+    scan_planner::SplineHeadingContract heading;
+    heading.measured_heading_enabled=true;heading.measured_yaw=std::acos(-1.)*.5;
+    heading.body_extent=scan_planner::bodyExtent(planning);
+    return scan_planner::checkWholeSplineCollision(curve,map->getResolution(),
+      [&](const Eigen::Vector3d &p,double yaw){return map->getPlanningInflateOccupancy(p,yaw);},
+      50000,heading).state;
+  };
+  ASSERT_EQ(optimizer_check(),scan_planner::SplineCollisionState::Clear);
+  ASSERT_TRUE(validate(*map));
+  map->setOccupied({.28,.28,.55});
+  const Eigen::Vector3d body(0.,0.,.55);
+  const double pi=std::acos(-1.);
+  ASSERT_EQ(map->getPlanningInflateOccupancy(body,0.),0);
+  ASSERT_EQ(map->getPlanningInflateOccupancy(body,pi*.5),0);
+  ASSERT_EQ(map->getPlanningInflateOccupancy(body,pi*.25),1);
+  EXPECT_EQ(optimizer_check(),scan_planner::SplineCollisionState::Collision);
+  EXPECT_FALSE(validate(*map));
 }
 
 TEST(InitialYawNative, FreeEndpointsCannotHideOccupiedIntermediateFootprint) {
@@ -184,4 +224,55 @@ TEST(InitialYawNative, UnknownEvidenceIsNotAnOccupiedWitness) {
   };
   EXPECT_EQ(inspect(),scan_planner::CurveCheckEvidence::Uncertified);
   EXPECT_TRUE(map->isUnknown(Eigen::Vector3d(.025,.025,.55)));
+}
+
+TEST(InitialYawNative,AlignPolicyChecksZeroDerivativeEntryTurnAtActualBodyBeforeTranslation) {
+  auto map=GridMapTestAccess::observedFree();GridMapTestAccess::standingBox(*map);
+  Eigen::MatrixXd points(3,23);
+  for(int i=0;i<23;++i){const double t=(i-1)*.2;
+    points.col(i)=Eigen::Vector3d(0.,.05*(t*t-.04/3.),.55);}
+  scan_planner::UniformBspline curve(points,3,.2);
+  ASSERT_LT(curve.getDerivative().evaluateDeBoorT(0.).head<2>().norm(),1e-12);
+  const auto origin=curve.evaluateDeBoorT(0.);
+  scan_planner::MeasuredBodyPose body{origin,Eigen::Quaterniond::Identity(),10.,"map"};
+  scan_planner::SplineHeadingContract heading;heading.measured_heading_enabled=true;
+  heading.body_extent=scan_planner::bodyExtent(map->planningBodyEnvelope());
+  heading.align_then_forward=true;
+  const auto free_query=[&](const Eigen::Vector3d&p,double yaw){return map->getPlanningInflateOccupancy(p,yaw);};
+  ASSERT_EQ(scan_planner::checkWholeSplineCollision(curve,.05,free_query,50000,heading).state,
+    scan_planner::SplineCollisionState::Clear);
+  ASSERT_TRUE(scan_planner::wholeCurveCollisionFree(curve,.05,heading.body_extent,free_query,
+    body,"map",10.,.4,50000,.050,0.,heading));
+  map->setOccupied({.28,.28,.55});
+  ASSERT_EQ(map->getPlanningInflateOccupancy(origin,0.),0);
+  ASSERT_EQ(map->getPlanningInflateOccupancy(origin,std::acos(-1.)*.5),0);
+  ASSERT_EQ(map->getPlanningInflateOccupancy(origin,std::acos(-1.)*.25),1);
+  unsigned actual_entry_corner_queries=0;
+  const auto corner=[&](const Eigen::Vector3d&p,double yaw){
+    const int state=map->getPlanningInflateOccupancy(p,yaw);
+    if((p-origin).norm()<1e-10&&state==1)++actual_entry_corner_queries;
+    return state;
+  };
+  const auto inner=scan_planner::checkWholeSplineCollision(curve,.05,corner,50000,heading);
+  EXPECT_EQ(inner.state,scan_planner::SplineCollisionState::Collision);
+  EXPECT_DOUBLE_EQ(inner.time,0.);EXPECT_GT(actual_entry_corner_queries,0U);
+  actual_entry_corner_queries=0;
+  scan_planner::CurveCheckCompletion completion;
+  EXPECT_FALSE(scan_planner::wholeCurveCollisionFree(curve,.05,heading.body_extent,corner,
+    body,"map",10.,.4,50000,.050,0.,heading,0.,scan_planner::MeasuredConnectionPolicy::CandidateAdmission,
+    .15,&completion));
+  EXPECT_EQ(completion,scan_planner::CurveCheckCompletion::Blocked);
+  EXPECT_GT(actual_entry_corner_queries,0U);
+}
+TEST(InitialYawNative,ExplicitAlignStrategyDoesNotRotateHoldHeadingOrLegacyLowSpeedPreview) {
+  auto curve=previewCurve(.009);
+  auto heading=previewHeading();heading.align_then_forward=true;
+  heading.policy=scan_planner::BodyHeadingPolicy::HoldHeading;
+  const auto held=scan_planner::checkWholeSplineCollision(curve,.05,
+    [](const Eigen::Vector3d&,double yaw){EXPECT_NEAR(yaw,0.,1e-12);return 0;},50000,heading);
+  EXPECT_EQ(held.state,scan_planner::SplineCollisionState::Clear);
+  heading.policy=scan_planner::BodyHeadingPolicy::PathTangent;heading.align_then_forward=false;
+  const auto legacy=scan_planner::checkWholeSplineCollision(curve,.05,
+    [](const Eigen::Vector3d&,double yaw){EXPECT_NEAR(yaw,0.,1e-12);return 0;},50000,heading);
+  EXPECT_EQ(legacy.state,scan_planner::SplineCollisionState::Clear);
 }

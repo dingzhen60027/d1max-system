@@ -5,6 +5,7 @@ inputs are read on the request thread; large sealed-file checks run in one
 bounded worker. Starting the graph must independently revalidate its activation.
 """
 import hashlib
+import importlib.util
 import json
 import os
 from pathlib import Path
@@ -20,6 +21,32 @@ _MANIFEST_LIMIT = 33554432
 _ENTRY_MODULE = 'd1max_pct_scan.single_floor_session'
 _DESCRIPTOR_MODULES = {'d1max_pct_scan.navigation_session', _ENTRY_MODULE}
 _CHECK_TIMEOUT_S = 60.
+
+
+def source_backed_python_cache(path, files):
+    """Exclude only source-backed import bytecode, not a __pycache__ subtree.
+
+    Stdlib-only copy of the CLI/SDK boundary rule; cross-entry tests bind its
+    behavior without importing unverified runtime code during integrity checks.
+    The .py remains a separately checked member of the same manifest.
+    """
+    path = Path(path)
+    if not path.is_absolute() or path.suffix not in ('.pyc', '.pyo') or path.is_symlink():
+        return False
+    try:
+        source = (Path(importlib.util.source_from_cache(str(path.with_suffix('.pyc'))))
+                  if path.parent.name == '__pycache__' else path.with_suffix('.py'))
+    except ValueError:
+        # source_from_cache assumes no dots in the source stem and cannot
+        # decode pytest's versioned rewrite tag. Both are real Python caches.
+        # Match only those known tags, then retain the same sealed-source test.
+        match = re.fullmatch(
+            r'(.+)\.cpython-[0-9]+(?:-pytest-[0-9][A-Za-z0-9_.+-]*)?'
+            r'(?:\.opt-[A-Za-z0-9]+)?\.py[co]', path.name)
+        if path.parent.name != '__pycache__' or match is None:
+            return False
+        source = path.parent.parent/(match.group(1)+'.py')
+    return (str(source) in files and source.is_file() and not source.is_symlink())
 
 
 def root_dispatchers(nav):
@@ -243,10 +270,14 @@ def verify_release_files(nav, release, seal, *, expected_manifest_sha256=None,
     if manifest.get('schema') != 3 or not isinstance(files, dict) or not files:
         raise ReleaseDiagnosticError('release_invalid', 'manifest_schema')
     deadline = time.monotonic()+_CHECK_TIMEOUT_S
+    ignored_caches = 0
     for name, expected in files.items():
         path = Path(name)
         if not path.is_absolute() or not re.fullmatch(r'[0-9a-f]{64}', str(expected)):
             raise ReleaseDiagnosticError('release_invalid', 'file_identity')
+        if source_backed_python_cache(path, files):
+            ignored_caches += 1
+            continue
         if _digest(path, deadline=deadline, check_cancelled=check_cancelled) != expected:
             raise ReleaseDiagnosticError('release_file_changed', path)
     if files.get(str(release/'release.json')) != _digest(release/'release.json', deadline=deadline,check_cancelled=check_cancelled):
@@ -278,7 +309,8 @@ def verify_release_files(nav, release, seal, *, expected_manifest_sha256=None,
             raise ReleaseDiagnosticError('release_check_timeout') from error
         if result.returncode:
             raise ReleaseDiagnosticError('startup_closure_invalid', result.stderr.strip()[:512])
-    return dict(manifest_sha256=manifest_hash, verified_files=len(files),
+    return dict(manifest_sha256=manifest_hash, verified_files=len(files)-ignored_caches,
+                ignored_runtime_caches=ignored_caches,
                 release_contract='frozen_startup_schema3' if new_candidate else 'legacy_schema3',
                 startup_closure_verified='startup_closure' in manifest,
                 motion_authorized=False, sdk_connected=False)

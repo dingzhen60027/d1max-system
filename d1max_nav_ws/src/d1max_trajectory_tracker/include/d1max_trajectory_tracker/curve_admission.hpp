@@ -2,6 +2,7 @@
 
 #include <Eigen/Geometry>
 #include <bspline_opt/uniform_bspline.h>
+#include <bspline_opt/rolling_curve_connection.hpp>
 #include <algorithm>
 #include <cmath>
 #include <optional>
@@ -14,6 +15,11 @@ struct CurveProjection {
   Eigen::Vector3d position{Eigen::Vector3d::Zero()};
 };
 
+// NativeRolling is selected by the formal component, not a user parameter.
+// It describes a connector checked by Native, not matching spline and measured
+// motion state. Legacy callers retain strict state admission by default.
+enum class CurveAdmissionPolicy { StrictState, NativeRolling };
+
 // Bounded same-curve XYZ projection. Source time only limits how far the
 // measured body could have moved; elapsed time never chooses the curve time.
 template<class CurveEvaluator>
@@ -21,12 +27,24 @@ inline std::optional<CurveProjection> projectCurveAdmission(
     const CurveEvaluator& curve,
     const std::vector<double>& times, const std::vector<double>& arcs,
     const std::vector<Eigen::Vector3d>& points, const Eigen::Vector3d& body,
-    double seed_time, double seed_arc, double backward, double forward, double join_limit=.0125) {
+    double seed_time, double seed_arc, double backward, double forward, double join_limit=.0125,
+    CurveAdmissionPolicy policy=CurveAdmissionPolicy::StrictState,double origin_arc=0.) {
+  const bool rolling=policy==CurveAdmissionPolicy::NativeRolling;
+  const double maximum=rolling?scan_planner::RollingCurveConnectionPolicy::max_connector_m:
+    scan_planner::RollingCurveConnectionPolicy::numerical_origin_tolerance_m;
   if (!body.allFinite() || !std::isfinite(seed_time) || !std::isfinite(seed_arc) ||
       !std::isfinite(backward) || !std::isfinite(forward) || backward<0. || forward<0. ||
-      !std::isfinite(join_limit) || join_limit<=0. || join_limit>.0125 ||
+      (policy!=CurveAdmissionPolicy::StrictState&&!rolling)||
+      !std::isfinite(join_limit) || join_limit<=0. || join_limit>maximum ||
+      (rolling&&forward>scan_planner::RollingCurveConnectionPolicy::max_forward_arc_m)||
+      (rolling&&(!std::isfinite(origin_arc)||origin_arc<0.||seed_arc<origin_arc-1e-9||
+        seed_arc>origin_arc+scan_planner::RollingCurveConnectionPolicy::max_forward_arc_m+1e-9))||
       times.size()<2 || times.size()!=arcs.size() || times.size()!=points.size()) return {};
-  const double from=std::max(0.,seed_arc-backward), to=std::min(arcs.back(),seed_arc+forward);
+  const double from=std::max(rolling?origin_arc:0.,seed_arc-backward);
+  const double to=std::min(arcs.back(),rolling?
+    std::min(seed_arc+forward,origin_arc+scan_planner::RollingCurveConnectionPolicy::max_forward_arc_m):
+    seed_arc+forward);
+  if(from>to)return {};
   CurveProjection result{seed_time,seed_arc,curve.evaluateDeBoorT(seed_time)};
   double nearest=(result.position-body).squaredNorm();
   const auto lower=std::lower_bound(arcs.begin(),arcs.end(),from);

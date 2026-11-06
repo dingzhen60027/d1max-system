@@ -15,4 +15,5 @@
 @media(prefers-reduced-motion:reduce){.live-configuration summary svg{transition:none}}
 .navigation-profile-selector{display:flex;gap:.5rem;padding:1rem 1.5rem 0;flex-wrap:wrap}
 .navigation-launch-page{max-width:960px}.navigation-launch-page .live-planning-launch{gap:0}.navigation-launch-actions{display:flex;flex-wrap:wrap;gap:12px;padding-top:24px}.navigation-launch-actions [data-slot=button]{height:44px;min-width:112px;padding:0 20px;font-size:15px;gap:9px}
+.navigation-launch-mode{display:flex;align-items:center;gap:16px;padding-top:24px;font-size:14px;color:var(--muted-foreground)}.navigation-launch-mode [data-slot=select-trigger]{min-width:148px;color:var(--foreground)}
 @media(max-width:480px){.navigation-launch-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}.navigation-launch-actions [data-slot=button]{min-width:0;width:100%}.navigation-launch-actions [data-slot=button]:last-child{grid-column:1/-1}}

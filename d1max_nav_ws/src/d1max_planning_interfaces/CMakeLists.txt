@@ -14,12 +14,20 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/LocalNavigationState.msg" "msg/RouteProgress.msg"
   "msg/ExecutionVersion.msg" "msg/ExecutionPermit.msg" "msg/MotionDemand.msg"
   "msg/TrajectoryValidation.msg" "msg/StopReport.msg" "msg/SDKExecutionState.msg"
+  "msg/SDKExecutionRetirement.msg"
+  "msg/ModeTransitionRequest.msg" "msg/ModeTransitionState.msg"
   "msg/MotionValidation.msg" "msg/SDKStationaryEvidence.msg"
   "msg/ExecutionHandoffGrant.msg" "msg/PreparedMotionDemand.msg" "msg/ExecutionCommitAck.msg"
-  "msg/SupportReference.msg"
+  "msg/SupportReference.msg" "msg/SupportRegion.msg"
+  "msg/StairSurfaceModel.msg" "msg/StairBoundaryModel.msg"
   "msg/TrajectoryAdmission.msg" "msg/TrackerGeometryReceipt.msg"
-  "msg/ReferenceProposal.msg" "msg/ReferenceReceipt.msg"
+  "msg/ReferenceProposal.msg" "msg/ReferenceReceipt.msg" "msg/RouteDeliveryReceipt.msg"
+  "msg/TaskExecutionLease.msg" "msg/LocalMotionCommand.msg" "msg/LocalExecutionStatus.msg"
+  "msg/TaskCommandFeedback.msg"
+  "msg/LocalTrajectoryCommit.msg" "msg/TrajectorySplice.msg"
   "srv/ExecutionGrant.srv"
   DEPENDENCIES builtin_interfaces geometry_msgs nav_msgs scan_planner_msgs std_msgs sensor_msgs)
 ament_export_dependencies(rosidl_default_runtime)
+install(DIRECTORY include/ DESTINATION include/${PROJECT_NAME})
+ament_export_include_directories(include/${PROJECT_NAME})
 ament_package()

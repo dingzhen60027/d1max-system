@@ -24,6 +24,8 @@ def node():
     node.core.filtered.clear()
     node.now_s = Mock(return_value=10.22)
     node.last_error = ""
+    node.get_logger = Mock(return_value=Mock())
+    node.predictor_status = {}
     node.future = None
     node.reset_client = Mock()
     node.map_pub = Mock()
@@ -36,7 +38,12 @@ def node():
     node.local_state_pub = Mock()
     node.last_local_state_identity = None
     node.last_local_state_event = 0.0
+    node.last_local_state_lease = None
     node.last_local_unavailable = None
+    node.pose_continuity=None
+    node.pose_continuity_alignment=None
+    node.pose_continuity_sequence=0
+    node.pose_continuity_pub=Mock()
     return node
 
 
@@ -123,6 +130,101 @@ def test_soft_local_expiry_sends_one_watermark_without_suppressing_new_sensor_sa
     newer = node.local_state_pub.publish.call_args.args[0]
     assert newer.usable and newer.source_stamp == stamp_time(10.36)
     assert node.last_local_unavailable is None
+
+
+def test_local_unavailable_diagnostic_distinguishes_target_expiry_from_imu_age_without_new_lease(node):
+    node = local_wire_boundary(node)
+    node.core.limits = replace(node.core.limits, max_imu_age=.1)
+    node.predictor_status = {"reason": "tracking"}
+    assert node.publish_local(node.core.local[-1])
+    original = node.local_state_pub.publish.call_args.args[0]
+    node.publish_local_unavailable(10.289)  # 89 ms: target TTL 80, IMU TTL 100.
+    assert node.local_state_pub.publish.call_count == 1
+    assert not node.get_logger().info.called
+    node.publish_local_unavailable(10.30)  # The originally issued lease now expires.
+    event = node.local_state_pub.publish.call_args.args[0]
+    assert not event.usable and event.reason == 'local_navigation_unavailable'
+    text = node.get_logger().info.call_args.args[0]
+    assert text.startswith('LocalStateUnavailable ')
+    detail = json.loads(text.split(' ', 1)[1])
+    assert detail['source_timing']['target_age_sec'] == pytest.approx(.1)
+    assert detail['source_timing']['target_timeout_sec'] == .08
+    assert detail['source_timing']['imu_age_sec'] == pytest.approx(.1)
+    assert detail['source_timing']['imu_timeout_sec'] == .1
+    assert detail['prediction_reason'] == 'tracking'
+    assert detail['event_source_ns'] == round(10.2*1e9)+1
+    assert original.valid_until == stamp_time(10.3)
+    assert detail['issued_valid_until_ns'] == 10_300_000_000
+    assert detail['unavailable_trigger'] == 'issued_local_state_lease_expired'
+    node.publish_local_unavailable(10.30)
+    assert node.get_logger().info.call_count == 1
+    assert node.local_state_pub.publish.call_count == 2
+
+
+def test_recorded_100_204ms_imu_boundary_keeps_original_89ms_consumption_lease(node):
+    """10-23 16:23:36: already-issued state is not a new IMU integration."""
+    node = local_wire_boundary(node)
+    node.core.limits = replace(node.core.limits, max_prediction_horizon=.35,
+                              max_imu_age=.1, max_coast=.1)
+    state = replace(node.core.local[-1], source_stamp=9.998308,
+                    imu_stamp=10.110246, extrapolation=.089754)
+    node.core.local[-1] = state
+    node.core.raw_local = state
+    node.now_s.return_value = 10.2
+    assert node.core.local_ready(10.2)
+    assert node.publish_local(state)
+    original = node.local_state_pub.publish.call_args.args[0]
+    now = 10.21045  # IMU age 100.204 ms; issued state only 10.450 ms old.
+    assert node.core.local_timing(now)['imu_age_sec'] == pytest.approx(.100204)
+    assert not node.core.local_ready(now) and node.core.local_valid and not node.core.fault
+    node.predictor_status = {'reason': 'imu_stale'}
+    assert node.core.push_local(pending_local(now), now)
+    node.publish_local_unavailable(now)
+    assert node.local_state_pub.publish.call_count == 1
+    assert original.valid_until == stamp_time(10.3)
+    assert original.imu_stamp == stamp_time(10.110246)
+    assert original.source_stamp == stamp_time(10.2)
+    for now in (10.22, 10.26, 10.299999999):
+        node.publish_local_unavailable(now)
+        assert not node.publish_local(state)  # Duplicate callback cannot recharge it.
+    assert node.local_state_pub.publish.call_count == 1
+    node.publish_local_unavailable(10.3)
+    event = node.local_state_pub.publish.call_args.args[0]
+    assert not event.usable and event.source_stamp == stamp_time(10.200000001)
+    assert node.local_state_pub.publish.call_count == 2
+    node.publish_local_unavailable(10.4)
+    assert node.local_state_pub.publish.call_count == 2
+
+
+@pytest.mark.parametrize('change', ['invalid_local', 'session', 'map'])
+def test_existing_lease_never_masks_invalid_measurement_or_wire_identity_change(node, change):
+    node = local_wire_boundary(node)
+    assert node.publish_local(node.core.local[-1])
+    if change == 'invalid_local':
+        assert node.core.push_local(pending_local(10.21, 'waiting_lio'), 10.21)
+    else:
+        node.wire_session['id' if change == 'session' else 'version_id'] = 'different'
+    node.publish_local_unavailable(10.22)
+    event = node.local_state_pub.publish.call_args.args[0]
+    assert node.local_state_pub.publish.call_count == 2 and not event.usable
+    assert (event.session_id, event.map_version_id) == ('session', 'map')
+    if change != 'invalid_local':
+        assert event.reason == 'localization_reset'
+
+
+@pytest.mark.parametrize('failure', ['construction', 'publication'])
+def test_failed_typed_publication_does_not_cache_an_unissued_lease(node, failure):
+    node = local_wire_boundary(node)
+    if failure == 'construction':
+        state = replace(node.core.local[-1], imu_stamp=0.)
+    else:
+        state = node.core.local[-1]
+        node.local_state_pub.publish.side_effect = ValueError('publisher_failed')
+    with pytest.raises(ValueError):
+        node.publish_local(state)
+    assert node.last_local_state_identity is None and node.last_local_state_lease is None
+    node.publish_local_unavailable(10.25)
+    assert node.local_state_pub.publish.call_count == (1 if failure == 'publication' else 0)
 
 
 def test_ros_numpy_covariance_is_converted_before_strict_contract(node):

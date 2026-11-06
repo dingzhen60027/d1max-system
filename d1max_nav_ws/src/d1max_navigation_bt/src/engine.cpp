@@ -30,6 +30,7 @@ struct Runtime {
   std::string reason;
   Clock::time_point now{Clock::now()};
   double active_time{0.0};
+  bool hasCommittedRoute{false};
 
   void explain(const BT::TreeNode& node, const std::string& why) {
     active_node = node.name();
@@ -83,11 +84,25 @@ public:
                      Runtime& runtime)
       : BT::DecoratorNode(name, config), runtime_(runtime) {}
   static BT::PortsList providedPorts() {
-    return {BT::InputPort<double>("timeout_s", 30.0, "Bounded positive continuous input wait")};
+    return {BT::InputPort<double>("timeout_s", 30.0, "Bounded positive continuous input wait"),
+      BT::InputPort<bool>("keep_committed_route_on_local_failure",false,
+        "Keep the same committed route through recoverable local input waits")};
   }
   BT::NodeStatus tick() override {
     const auto ready = runtime_.backend->inputsReady(runtime_.task);
     const auto now = runtime_.now;
+    const auto timeout = getInput<double>("timeout_s").value();
+    // Before a committed route (and for legacy policy), the original episode
+    // deadline still wins over late readiness. Persistent local waiting only
+    // preserves this task/child; all motion evidence keeps its own deadlines.
+    const bool persistent_local_wait=getInput<bool>("keep_committed_route_on_local_failure").value()&&runtime_.hasCommittedRoute;
+    if (!persistent_local_wait&&paused_ && std::chrono::duration<double>(now - paused_at_).count() >= timeout) {
+      runtime_.explain(*this, "navigation_input_wait_timeout:" +
+        (ready.ready ? std::string("confirming_navigation_recovery") :
+          ready.reason.empty() ? std::string("waiting_for_navigation_inputs") : ready.reason));
+      haltChild();
+      return BT::NodeStatus::FAILURE;
+    }
     const auto monotonic=std::chrono::duration<double>(now.time_since_epoch()).count();
     const bool admitted=recovery_.observe(ready.ready,monotonic,ready.source_ns,ready.source_identity);
     if (!admitted) {
@@ -100,15 +115,6 @@ public:
       last_tick_ = now;
       runtime_.explain(*this, ready.ready?"confirming_navigation_recovery":
         ready.reason.empty()?"waiting_for_navigation_inputs":ready.reason);
-      const auto timeout = getInput<double>("timeout_s").value();
-      if (timeout > 0 && std::chrono::duration<double>(now - paused_at_).count() >= timeout) {
-        runtime_.explain(*this, "navigation_input_wait_timeout:" + runtime_.reason);
-        // A decorator returning FAILURE is no longer RUNNING, so its parent
-        // need not call halt() on it. Explicitly cancel a retained RUNNING
-        // child here; otherwise a timed-out async action can remain alive.
-        haltChild();
-        return BT::NodeStatus::FAILURE;
-      }
       return BT::NodeStatus::RUNNING;
     }
     if (last_ready_) {
@@ -201,6 +207,7 @@ public:
     // A real result received while paused is not still pending work. Its
     // transport owner already enforces dispatch-to-result deadline/retirement.
     if(result.status!=BT::NodeStatus::RUNNING) {
+      if(result.status==BT::NodeStatus::SUCCESS)runtime_.hasCommittedRoute=true;
       runtime_.explain(*this,result.reason);return result.status;
     }
     const auto timing=runtime_.backend->routeTiming(runtime_.task);
@@ -345,6 +352,7 @@ public:
     runtime_.reasons.clear();
     runtime_.transitions.clear();
     runtime_.active_time = 0;
+    runtime_.hasCommittedRoute = false;
     runtime_.active_node.clear();
     runtime_.reason = "task_accepted";
     rebuild();

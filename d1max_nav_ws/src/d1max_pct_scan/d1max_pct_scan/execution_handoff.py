@@ -10,6 +10,7 @@ import math
 
 from .atomic_projection_state import stamp_ns
 from .command_admission import CommandAdmission
+from .execution_timing import stationary_velocity_within
 from .execution_safety import Decision, ExecutionSafety, binding, fresh, version
 
 
@@ -121,16 +122,15 @@ class ExecutionHandoffAdmission:
         commands=self.initial_submissions[p.sequence][1]
         retain_unresolved(commands,(demand.sequence,demand.motion_validation_sequence),demand)
 
-    @staticmethod
-    def _submitted_command(message,demand,p):
+    def _submitted_command(self,message,demand,p):
         at=stamp_ns(message.applied_at)
         return (message.demand_sequence==demand.sequence
             and message.motion_validation_sequence==demand.motion_validation_sequence
             and message.demand_source_stamp==demand.source_stamp
             and message.demand_body_source_stamp==demand.body_source_stamp
             and message.applied_velocity==demand.velocity
-            and fresh(demand.source_stamp,at,100_000_000)
-            and fresh(demand.body_source_stamp,at,100_000_000)
+            and fresh(demand.source_stamp,at,self.core.command_pipeline_bound_ns)
+            and fresh(demand.body_source_stamp,at,self.core.command_pipeline_bound_ns)
             and fresh(message.body_source_stamp,at,100_000_000)
             and stamp_ns(demand.source_stamp)<=at<=stamp_ns(demand.valid_until)
             and stamp_ns(p.source_stamp)<=at<=stamp_ns(p.valid_until)
@@ -152,17 +152,29 @@ class ExecutionHandoffAdmission:
         return True
 
     def _stationary_matches(self,g,now_ns):
+        # Physical acceptance is a reporting fact, not a substitute for (or
+        # veto of) this original SDK stopping witness. CandidateSafety keeps
+        # the same bound runtime-model SHA as the ordinary safety gate.
         policy=self.core.stationary_policy
         e=g.stationary_evidence;a=g.incumbent
         source=stamp_ns(e.source_stamp);received=stamp_ns(e.received_stamp)
         lower=stamp_ns(e.capture_lower_bound);upper=stamp_ns(e.capture_upper_bound)
         speed=e.measured_linear_mps;yaw=e.measured_angular_radps
         delay=e.mc_capture_delay_bound_sec
+        anchor=min(source,received)
+        # Match SDK/Owner/Tracker's original MC witness contract. Only the
+        # explicitly approximate live clock may lead receipt within its
+        # recorded capture bound. Freshness and the fixed lease use the
+        # conservative original minimum; never restamp or borrow future age.
+        if not math.isfinite(delay) or not 0<delay<=.25:return False
+        capture_bound_ns=round(delay*1e9)
         latest=self.stationary[-1] if self.stationary else None
         return (latest is not None and latest.usable and task_binding(latest)==task_binding(e)
             and latest.writer_commit_sequence==e.writer_commit_sequence
             and latest.applied_trajectory_id==e.applied_trajectory_id
             and latest.zero_write_sequence==e.zero_write_sequence
+            and latest.mc_clock_epoch==e.mc_clock_epoch
+            and latest.mc_raw_stamp_ns>=e.mc_raw_stamp_ns
             and any(e==published for published in self.stationary)
             and e.schema_version==1 and e.usable and e.nonzero_blocked
             and version(e.version)==version(a.version) and e.applied_trajectory_id==a.trajectory_id
@@ -170,18 +182,20 @@ class ExecutionHandoffAdmission:
             and e.zero_write_sequence>0 and e.mc_raw_stamp_ns>0 and bool(e.mc_clock_epoch)
             and e.time_basis==('source_delta_host_anchor_approximate' if self.core.mode=='live'
                               else 'isolated_simulated_source_clock')
-            and (self.core.mode!='live' or e.physical_acceptance_verified)
-            and fresh(e.source_stamp,now_ns,250_000_000)
+            and (source-received<=capture_bound_ns if self.core.mode=='live' else source<=received)
+            and 0<anchor<=now_ns and now_ns-anchor<=250_000_000
             and fresh(e.received_stamp,now_ns,250_000_000)
-            and now_ns<stamp_ns(e.valid_until)<=source+250_000_000
+            and now_ns<stamp_ns(e.valid_until)<=anchor+250_000_000
             and stamp_ns(g.transition_deadline)<=stamp_ns(e.valid_until)
-            and 0<stamp_ns(e.zero_ack_at)<lower<=upper<=received
+            and stamp_ns(g.valid_until)<=stamp_ns(e.valid_until)
+            and stamp_ns(g.candidate.valid_until)<=stamp_ns(e.valid_until)
+            and stamp_ns(g.source_stamp)>=received
+            and 0<stamp_ns(e.zero_ack_at)<lower<=anchor and upper==received
+            and upper-lower<=capture_bound_ns+abs(source-received)+1_000
             and lower-stamp_ns(e.zero_ack_at)>=round(policy['reentry_duration_s']*1e9)
-            and math.isfinite(delay) and 0<=delay<=.25
             and math.isfinite(e.stationary_duration_sec) and e.stationary_duration_sec>=policy['reentry_duration_s']
             and e.stationary_samples>=policy['minimum_new_samples']
-            and math.isfinite(speed) and 0<=speed<=policy['linear_threshold_mps']
-            and math.isfinite(yaw) and 0<=yaw<=policy['angular_threshold_radps'])
+            and stationary_velocity_within(e,policy))
 
     def on_permit(self,message):
         if (self.failed_write_binding is not None and message.allowed and not message.revoked
@@ -264,8 +278,10 @@ class ExecutionHandoffAdmission:
             c=CandidateSafety(self.core.session,self.core.mode,max_speed=self.core.max_speed,
                 max_yaw=self.core.max_yaw,braking_model_sha256=self.core.braking_model_sha256,
                 sensor_source_age_s=self.core.sensor_max_age_ns/1e9,
-                stationary_policy=self.core.stationary_policy)
-            c.raw=self.core.raw;c.proofs=self.core.proofs;c.proof_history=self.core.proof_history
+                stationary_policy=self.core.stationary_policy,
+                kinematic_profile=self.core.kinematic_profile,
+                command_pipeline_bound_s=self.core.command_pipeline_bound_ns/1e9)
+            c.proofs=self.core.proofs;c.proof_history=self.core.proof_history
             c.invalidated_through=self.core.invalidated_through;c.motion_proofs=self.core.motion_proofs
             if not c.on_permit(b):return False
             self.candidate=c;self.prepared.clear()
@@ -278,7 +294,7 @@ class ExecutionHandoffAdmission:
             current=fresh(message.applied_at,now_ns,350_000_000)
             if (not self.enabled or message.schema_version!=1 or message.sequence<=self.last_ack_sequence
                     or task_binding(message,acknowledgement=True)!=self.execution_binding
-                    or not 0<at<=now_ns or not message.applied and not current
+                    or not 0<at<=now_ns
                     or message.applied and self.execution_revoked_at is not None and at>self.execution_revoked_at):
                 return False
             g=self.grant
@@ -327,7 +343,17 @@ class ExecutionHandoffAdmission:
                         or version(message.incumbent_version)!=version(g.incumbent.version)):
                     return False
                 if not message.applied:
-                    if message.commit_sequence!=self.commit_sequence or not self._ack_binding(message,p):return False
+                    # Exact no-write is a software retirement fact, not an
+                    # expiring permission. Late delivery must release only
+                    # its original transaction; it never renews the incumbent
+                    # or candidate lease and cannot authorize any command.
+                    if (self.grant is None or self.candidate is None or self.pending_revoked
+                            or self.grant.handoff_id!=g.handoff_id
+                            or message.write_submitted or message.write_acknowledged
+                            or not stamp_ns(g.source_stamp)<=at
+                            or message.previous_commit_sequence!=self.commit_sequence
+                            or message.commit_sequence!=self.commit_sequence
+                            or not self._ack_binding(message,p)):return False
                     self.last_ack_sequence=message.sequence
                     if transaction is not None:transaction['retired']=True
                     if self.grant is not None and self.grant.handoff_id==g.handoff_id:self._retire_pending()
@@ -393,13 +419,13 @@ class ExecutionHandoffAdmission:
             and m.expected_commit_sequence==g.expected_commit_sequence
             and binding(d)==binding(g.candidate) and d.trajectory_id==g.candidate.trajectory_id
             and d.permit_sequence==g.candidate.sequence
-            and fresh(m.entry_source_stamp,now_ns,100_000_000)
+            and fresh(m.entry_source_stamp,now_ns,self.core.command_pipeline_bound_ns)
             and stamp_ns(m.entry_source_stamp)==stamp_ns(d.body_source_stamp)==stamp_ns(m.measured_pose.header.stamp)
             and m.measured_pose.header.frame_id=='d1max_loc_odom'
             and a.accepted and a.sequence>0 and version(a.version)==version(d.version)
             and a.trajectory_id==d.trajectory_id and a.validation_sequence==d.validation_sequence
             and stamp_ns(a.body_source_stamp)==stamp_ns(m.entry_source_stamp)
-            and fresh(a.checked_at,now_ns,100_000_000) and now_ns<stamp_ns(a.valid_until)
+            and fresh(a.checked_at,now_ns,self.core.command_pipeline_bound_ns) and now_ns<stamp_ns(a.valid_until)
             and distance(m.measured_pose.pose.position,m.curve_entry_pose.position)<=.0125
             and distance(m.measured_twist.linear,m.curve_entry_twist.linear)<=.05
             and math.isfinite(m.curve_time) and m.curve_time>=0
@@ -449,7 +475,7 @@ class ExecutionHandoffAdmission:
         ordinary=self.ordinary.validation(message,now_ns)
         prepared=[]
         for key,m in reversed(tuple(self.prepared.items())):
-            if now_ns>=stamp_ns(m.demand.valid_until) or not fresh(m.demand.source_stamp,now_ns,100_000_000):
+            if now_ns>=stamp_ns(m.demand.valid_until) or not fresh(m.demand.source_stamp,now_ns,self.core.command_pipeline_bound_ns):
                 del self.prepared[key];continue
             if key in self.core.motion_proofs:
                 result=self.prepared_demand(m,now_ns)

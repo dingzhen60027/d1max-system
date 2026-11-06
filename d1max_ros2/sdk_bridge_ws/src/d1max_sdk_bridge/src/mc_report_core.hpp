@@ -6,6 +6,7 @@
 #include <stdexcept>
 #include <string>
 #include <utility>
+#include "mc_capture_time.hpp"
 
 namespace d1monitor {
 // Fixed storage, O(1) callback copy, discard oldest on overflow. Externally locked.
@@ -143,7 +144,7 @@ struct McReport {
     // SDK timestamp epoch is undocumented: retain uint64 ns and use source
     // deltas anchored to the first host receipt. This is approximate, NOT PTP.
     const auto candidate=anchor_source?anchor_wall+(source-anchor_source)*1e-9:received;
-    if(!std::isfinite(received)||!std::isfinite(candidate)||std::abs(candidate-received)>=stale_sec){++timestamp_rejections;return false;}
+    if(!mcMappedTimeConsistent(candidate,received,stale_sec)){++timestamp_rejections;return false;}
     if(!anchor_source){anchor_source=source;anchor_wall=received;}
     if(last_arrival<0||arrival-last_arrival>=stale_sec){stable_since=arrival;timings.clear();}
     last_source=source;last_arrival=arrival;stamp_unix=candidate;++samples;

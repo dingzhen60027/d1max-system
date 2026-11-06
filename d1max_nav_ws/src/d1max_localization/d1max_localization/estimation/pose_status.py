@@ -46,5 +46,5 @@ def continuous_pose_status(value, *, now, mono, received_mono, epoch, seed,
             or stamp <= 0 or not -.01 <= now-stamp <= ttl
             or stamp > envelope+.01):
         return False, 'paused', 'pose_output_source_stale'
-    state = 'coasting' if value.get('quality') == 'coasting' else 'tracking'
+    state = 'coasting' if value.get('quality') in ('coasting','imu_gap_coasting_pose_only') else 'tracking'
     return True, state, 'fresh_continuous_pose'

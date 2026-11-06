@@ -123,18 +123,150 @@ def source_processing_provenance(config):
     original = Path(original).resolve()
     if record.get('source_sha256') != sha256(original):
         raise ValueError('Processing original source_sha256 mismatch')
-    return {'manifest_path': str(manifest_path),
+    provenance = {'manifest_path': str(manifest_path),
             'manifest_sha256': hashlib.sha256(manifest_bytes).hexdigest(),
             'processing_schema': record['processing_schema'], 'planning_only': True,
             'geometry_operation': record['geometry_operation'], 'frame_id': record['frame_id'],
             'output_path': str(source), 'output_sha256': record['output_sha256'],
             'original_source_pcd': str(original), 'original_source_sha256': record['source_sha256']}
+    stair = record.get('stair_regularization')
+    if stair is not None:
+        if (record['processing_schema'] != 'd1max.crossfloor_planning/v1'
+                or not isinstance(stair, dict)
+                or stair.get('schema') != 'd1max.stair_regularization.v1'
+                or stair.get('source_sha256') != record['source_sha256']
+                or stair.get('output_map_sha256') != record['output_sha256']):
+            raise ValueError('Invalid stair regularization provenance')
+        dependencies = {}
+        for name in ('input_map', 'output_map', 'mapping'):
+            value = stair.get(name + '_file')
+            if not isinstance(value, str) or not value:
+                raise ValueError('Missing stair regularization artifact')
+            path = (manifest_path.parent / value).resolve(strict=True)
+            expected = stair.get(name + '_sha256')
+            if not path.is_file() or sha256(path) != expected:
+                raise ValueError('Stair regularization artifact hash mismatch')
+            if name == 'output_map' and path != source:
+                raise ValueError('Stair regularization output does not match PCD')
+            dependencies[str(path)] = expected
+        provenance['stair_regularization_schema'] = stair['schema']
+        provenance['stair_mapping_sha256'] = stair['mapping_sha256']
+        provenance['processing_dependency_hashes'] = dependencies
+    structure, prior = record.get('stair_structured_support'), record.get('stair_structured_cost')
+    if prior is not None:
+        if (stair is None or not isinstance(structure, dict) or not isinstance(prior, dict)
+                or prior.get('schema') != 'd1max.stair_structured_cost/v1'
+                or prior.get('policy') != 'source_supported_terrain_seeds_with_retained_entities'
+                or prior.get('model_sha256') != structure.get('model_sha256')
+                or prior.get('evidence_sha256') != structure.get('evidence_sha256')):
+            raise ValueError('Invalid structured stair cost provenance')
+        for name in ('model', 'evidence'):
+            relative = Path(structure[name+'_file'])
+            if relative.is_absolute() or '..' in relative.parts:
+                raise ValueError('Structured stair artifact must be package relative')
+            path = (manifest_path.parent/relative).resolve(strict=True)
+            if not path.is_relative_to(manifest_path.parent) or sha256(path) != structure[name+'_sha256']:
+                raise ValueError('Structured stair artifact hash mismatch')
+            provenance['processing_dependency_hashes'][str(path)] = structure[name+'_sha256']
+        provenance['stair_structured_cost'] = dict(prior)
+        provenance['stair_structured_support'] = dict(structure)
+    parametric = record.get('parametric_stair_geometry')
+    if parametric is not None:
+        from .stair_model_geometry import ParametricStairModel
+        if (not isinstance(parametric, dict)
+                or parametric.get('schema') != 'd1max.parametric_stair_geometry_binding/v1'
+                or parametric.get('source_map_sha256') != record['source_sha256']
+                or parametric.get('planning_map_sha256') != record['output_sha256']):
+            raise ValueError('Invalid parametric stair geometry provenance')
+        relative = Path(parametric.get('model_file', ''))
+        if not str(relative) or relative.is_absolute() or '..' in relative.parts:
+            raise ValueError('Parametric stair model must be package relative')
+        path = (manifest_path.parent/relative).resolve(strict=True)
+        if not path.is_relative_to(manifest_path.parent) or sha256(path) != parametric.get('model_sha256'):
+            raise ValueError('Parametric stair model hash mismatch')
+        model = ParametricStairModel.from_dict(json.loads(path.read_text()))
+        if (model.record['source_map_sha256'] != record['source_sha256']
+                or model.record['planning_map_sha256'] != record['output_sha256']):
+            raise ValueError('Parametric stair model input identity mismatch')
+        provenance.setdefault('processing_dependency_hashes', {})[str(path)] = parametric['model_sha256']
+        provenance['parametric_stair_geometry'] = dict(parametric)
+    return provenance
+
+
+def apply_structured_prior(payload, config, processing, output, planning_points):
+    """Explicit offline terrain prior, separate from observations and raw PCT.
+
+    The unchanged official-equation tensor is retained. Only independently
+    supported stair terrain seeds are recomputed; the runtime consumes the
+    resulting tensor, not a display-only overlay or a live obstacle exemption.
+    """
+    if not processing or 'stair_structured_cost' not in processing:
+        return payload, None
+    from d1max_pct_scan.pointcloud_helpers.stair_structured_cost import apply_structured_stair_cost
+    from d1max_pct_scan.pointcloud_helpers.pcd_io import read_pcd
+    structure = processing['stair_structured_support']
+    directory = Path(processing['manifest_path']).parent
+    model = json.loads((directory/structure['model_file']).read_text())
+    with np.load(directory/structure['evidence_file'], allow_pickle=False) as archive:
+        arrays = {key: archive[key] for key in archive.files}
+    baseline = output/'structured_cost_base.npz'
+    np.savez_compressed(baseline, **payload)
+    result = apply_structured_stair_cost(payload['data'], center=payload['center'],
+        resolution=float(payload['resolution']), traversability=config['pct']['traversability'],
+        model=model, support_arrays=arrays,
+        original_source_xyz=read_pcd(processing['original_source_pcd']).xyz,
+        # Entity protection always uses the full retained, hash-bound cloud,
+        # not tomography's optional ROI/voxel/outlier preprocessing result.
+        planning_xyz=read_pcd(processing['output_path']).xyz, input_tomogram_sha256=sha256(baseline),
+        planning_sha256=processing['output_sha256'])
+    evidence = output/'structured_cost_evidence.npz'
+    np.savez_compressed(evidence, **result['arrays'])
+    payload = dict(payload, data=result['data'],
+        stair_structured_cost_schema=processing['stair_structured_cost']['schema'],
+        stair_structured_model_sha256=structure['model_sha256'],
+        stair_structured_evidence_sha256=structure['evidence_sha256'],
+        stair_structured_base_sha256=sha256(baseline),
+        stair_structured_cost_evidence_sha256=sha256(evidence),
+        stair_structured_data_sha256=hashlib.sha256(np.ascontiguousarray(result['data']).tobytes()).hexdigest())
+    (output/'structured_cost_report.json').write_text(json.dumps(result['diagnostics'], indent=2,
+                                                               allow_nan=False)+'\n')
+    return payload, result['diagnostics']
 
 
 def verify_processing_unchanged(provenance):
     if provenance and (sha256(provenance['manifest_path']) != provenance['manifest_sha256']
                        or sha256(provenance['original_source_pcd']) != provenance['original_source_sha256']):
         raise RuntimeError('Source processing manifest/original source changed during build; result is not published')
+    if provenance:
+        for path, expected in provenance.get('processing_dependency_hashes', {}).items():
+            if sha256(path) != expected:
+                raise RuntimeError('Stair processing evidence changed during build; result is not published')
+
+
+def apply_parametric_geometry(payload, config, processing, output):
+    """Explicit model-derived ground stage; original and prior tensors retained."""
+    if not processing or 'parametric_stair_geometry' not in processing:
+        return payload, None
+    from .stair_model_geometry import apply_parametric_stair_geometry, SCHEMA
+    from d1max_pct_scan.pointcloud_helpers.pcd_io import read_pcd
+    descriptor = processing['parametric_stair_geometry']
+    model_path = Path(processing['manifest_path']).parent/descriptor['model_file']
+    baseline = output/'parametric_geometry_base.npz'
+    np.savez_compressed(baseline, **payload)
+    result = apply_parametric_stair_geometry(payload, config['pct'],
+        json.loads(model_path.read_text()), read_pcd(processing['output_path']).xyz)
+    evidence = output/'parametric_geometry_evidence.npz'
+    np.savez_compressed(evidence, **result['arrays'])
+    payload = dict(payload, data=result['data'], ground_semantics='explicit_static_stair_model_with_input_derived_other_surfaces',
+        ceiling_semantics='retained_above_model_terrain_returns_or_nan_unobserved_else_input_derived',
+        parametric_stair_geometry_schema=SCHEMA,
+        parametric_stair_model_sha256=descriptor['model_sha256'],
+        parametric_stair_base_sha256=sha256(baseline),
+        parametric_stair_evidence_sha256=sha256(evidence),
+        parametric_stair_data_sha256=hashlib.sha256(result['data'].tobytes()).hexdigest())
+    (output/'parametric_geometry_report.json').write_text(json.dumps(result['diagnostics'], indent=2,
+                                                                  allow_nan=False)+'\n')
+    return payload, result['diagnostics']
 
 
 def preprocess(points, config):
@@ -226,10 +358,18 @@ def build(config_path):
                         'original_source_sha256': processing['original_source_sha256'],
                         'ground_semantics': 'input_derived_surface',
                         'ceiling_semantics': 'input_derived_upper_surface_or_nan_unobserved'})
+        for key in ('stair_regularization_schema', 'stair_mapping_sha256'):
+            if key in processing:
+                payload[key] = processing[key]
     if sha256(source) != source_hash or sha256(config_path) != config_hash:
         raise RuntimeError('Source/config changed while building; result is not published')
     verify_processing_unchanged(processing)
     output = unique_output(config['output_directory'])
+    payload, structured_cost = apply_structured_prior(payload, config, processing, output, points)
+    payload, parametric_geometry = apply_parametric_geometry(payload, config, processing, output)
+    verify_processing_unchanged(processing)
+    if sha256(source) != source_hash or sha256(config_path) != config_hash:
+        raise RuntimeError('Source/config changed during structured prior build; result is not published')
     npz_path, pickle_path = output / 'tomogram.npz', output / 'tomogram.pickle'
     # Safe loader path contains arrays/scalars/Unicode, never object dtype.
     np.savez_compressed(npz_path, **payload)
@@ -285,6 +425,20 @@ def build(config_path):
                         ceiling_semantics=payload['ceiling_semantics'])
         manifest['limitations'].append(
             'Conditioned geometry is planning-only, not a localization reference or original 3D geometry; a single rigid TF cannot undo a spatially varying Z shift.')
+    if structured_cost is not None:
+        manifest['stair_structured_cost'] = structured_cost
+        manifest['tensor_channels'][0:3] = ['structure_supported_inflated_cost',
+            'structure_supported_cost_difference_x', 'structure_supported_cost_difference_y']
+        manifest['differences_from_upstream_runtime'].append(
+            'Explicit source-supported stair terrain prior before the unchanged inflation formula; '
+            'raw tensor and cell-level witnesses retained. Not observations or live free space.')
+    if parametric_geometry is not None:
+        manifest['parametric_stair_geometry'] = parametric_geometry
+        manifest['tensor_channels'][3] = 'explicit_static_stair_model_or_input_derived_ground_z'
+        manifest['differences_from_upstream_runtime'].append(
+            'Explicit bounded source-frame stair model replaces associated static planning ground; '
+            'original PCD, pre-model tensor, ceilings and cell-level intervention evidence retained. '
+            'This is not measured tread geometry or live free-space evidence.')
     verify_processing_unchanged(processing)
     if sha256(source) != source_hash or sha256(config_path) != config_hash:
         raise RuntimeError('Source/config changed before publication; result is not published')

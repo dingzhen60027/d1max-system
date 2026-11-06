@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 #include "d1max_trajectory_tracker/navigation_state_contract.hpp"
+#include "d1max_trajectory_tracker/navigation_state_diagnostics.hpp"
 using namespace d1max_trajectory_tracker;
 
 namespace {
@@ -17,6 +18,18 @@ d1max_planning_interfaces::msg::NavigationState state() {
   l.pose.pose.orientation.w=g.pose.pose.orientation.w=1.;
   l.pose.pose.position.x=1.; g.pose.pose.position.x=1001.;
   return s;
+}
+d1max_planning_interfaces::msg::LocalNavigationState localState(
+    const d1max_planning_interfaces::msg::NavigationState& pair=state()) {
+  d1max_planning_interfaces::msg::LocalNavigationState local;
+  local.schema_version=2;local.session_id=pair.session_id;local.map_version_id=pair.map_version_id;
+  local.localization_epoch=pair.localization_epoch;local.localization_seed_id=pair.localization_seed_id;
+  local.local_odometry=pair.local_odometry;local.source_stamp=pair.source_stamp;
+  local.posterior_stamp=pair.posterior_stamp;local.imu_stamp=pair.imu_stamp;
+  local.extrapolation_sec=pair.extrapolation_sec;local.usable=pair.usable;
+  local.valid_until=local.source_stamp;local.valid_until.nanosec+=100000000U;
+  if(local.valid_until.nanosec>=1000000000U){++local.valid_until.sec;local.valid_until.nanosec-=1000000000U;}
+  return local;
 }
 }
 
@@ -122,16 +135,13 @@ TEST(NavigationStateContract, InvalidGlobalHalfCannotHideBehindValidLocalHalf) {
   EXPECT_FALSE(decodeNavigationState(s,configuration(),o,reason));
 }
 TEST(NavigationStateContract, IndependentLocalTransportHasNoGlobalDependencyOrRestamping) {
-  const auto pair=state();d1max_planning_interfaces::msg::LocalNavigationState local;
-  local.schema_version=1;local.session_id=pair.session_id;local.map_version_id=pair.map_version_id;
-  local.localization_epoch=pair.localization_epoch;local.localization_seed_id=pair.localization_seed_id;
-  local.local_odometry=pair.local_odometry;local.source_stamp=pair.source_stamp;
-  local.posterior_stamp=pair.posterior_stamp;local.imu_stamp=pair.imu_stamp;
-  local.extrapolation_sec=pair.extrapolation_sec;local.usable=true;
+  const auto pair=state();auto local=localState(pair);
   Odom output;std::string reason;
   ASSERT_TRUE(decodeLocalNavigationState(local,configuration(),output,reason));
   EXPECT_DOUBLE_EQ(output.position.x(),1.);EXPECT_DOUBLE_EQ(output.stamp,100.123456789);
   EXPECT_EQ(output.source_stamp_ns,100123456789LL);
+  EXPECT_TRUE(output.provider_contract);EXPECT_TRUE(output.provider_usable);
+  EXPECT_EQ(output.provider_valid_until_ns,100223456789LL);
   EXPECT_EQ(output.localization_epoch,3U);EXPECT_EQ(output.schema_version,2U);
   auto global_unavailable=pair;global_unavailable.usable=false;
   EXPECT_FALSE(decodeNavigationState(global_unavailable,configuration(),output,reason));
@@ -141,12 +151,8 @@ TEST(NavigationStateContract, IndependentLocalTransportHasNoGlobalDependencyOrRe
 TEST(NavigationStateContract, LocalTransportRejectsInvalidIdentitySourceFrameAndGeometry) {
   const auto pair=state();
   for(int variant=0;variant<11;++variant) {
-    d1max_planning_interfaces::msg::LocalNavigationState local;
-    local.schema_version=1;local.session_id=pair.session_id;local.map_version_id=pair.map_version_id;
-    local.localization_epoch=pair.localization_epoch;local.localization_seed_id=pair.localization_seed_id;
-    local.local_odometry=pair.local_odometry;local.source_stamp=pair.source_stamp;
-    local.posterior_stamp=pair.posterior_stamp;local.imu_stamp=pair.imu_stamp;local.usable=true;
-    if(variant==0)local.schema_version=2;
+    auto local=localState(pair);
+    if(variant==0)local.schema_version=1;
     if(variant==1)local.session_id="old";
     if(variant==2)local.map_version_id="other";
     if(variant==3)local.localization_epoch=0;
@@ -167,11 +173,100 @@ TEST(NavigationStateContract, UnixSourceNanosecondsArePreservedIndependentlyOfDo
   Odom out;std::string reason;
   ASSERT_TRUE(decodeNavigationState(pair,configuration(),out,reason));
   EXPECT_EQ(out.source_stamp_ns,1791002417245872020LL);
-  d1max_planning_interfaces::msg::LocalNavigationState local;
-  local.schema_version=1;local.session_id=pair.session_id;local.map_version_id=pair.map_version_id;
-  local.localization_epoch=pair.localization_epoch;local.localization_seed_id=pair.localization_seed_id;
-  local.local_odometry=pair.local_odometry;local.source_stamp=pair.source_stamp;
-  local.posterior_stamp=pair.posterior_stamp;local.imu_stamp=pair.imu_stamp;local.usable=true;
+  const auto local=localState(pair);
   ASSERT_TRUE(decodeLocalNavigationState(local,configuration(),out,reason));
   EXPECT_EQ(out.source_stamp_ns,1791002417245872020LL);
+  EXPECT_EQ(out.provider_valid_until_ns,1791002417345872020LL);
+}
+
+TEST(NavigationStateContract, ProviderCoastAndDeliveryAreSeparateButOriginalDeadlineIsNotRenewed) {
+  auto local=localState();local.imu_stamp.nanosec-=94600000U;
+  local.posterior_stamp.sec=99;local.posterior_stamp.nanosec=917756789U;
+  local.extrapolation_sec=.0946;Odom out;std::string reason;
+  ASSERT_TRUE(decodeLocalNavigationState(local,configuration(),out,reason));
+  EXPECT_EQ(sourceEvidenceFailure(out,100.149356789,configuration()),nullptr);
+  EXPECT_STREQ(sourceEvidenceFailure(out,100.223456789,configuration()),"local_state_provider_expired");
+  const auto original_deadline=out.provider_valid_until_ns;
+  NavigationStateIngress ingress;ASSERT_TRUE(ingress.inspect(local,configuration(),100.149356789));
+  ++local.valid_until.nanosec;
+  EXPECT_FALSE(ingress.inspect(local,configuration(),100.15)); // duplicate cannot renew
+  EXPECT_EQ(out.provider_valid_until_ns,original_deadline);
+}
+TEST(NavigationStateContract, ProviderExpiryAndRawEvidenceRemainStrictAtOriginalSource) {
+  for(int variant=0;variant<8;++variant) {
+    auto local=localState();
+    if(variant==0){local.valid_until.sec=0;local.valid_until.nanosec=0;}
+    if(variant==1)local.valid_until=local.source_stamp;
+    if(variant==2)++local.valid_until.nanosec; // 100 ms + 1 ns is not a valid lease
+    if(variant==3)local.posterior_stamp.sec=99; // original posterior age 1 s
+    if(variant==4){local.imu_stamp.nanosec-=100000001U;local.extrapolation_sec=.100000001;}
+    if(variant==5)++local.imu_stamp.nanosec;
+    if(variant==6)local.extrapolation_sec=NAN;
+    if(variant==7)local.extrapolation_sec=.01;
+    Odom out;std::string reason;
+    EXPECT_FALSE(decodeLocalNavigationState(local,configuration(),out,reason))<<variant;
+  }
+}
+TEST(NavigationStateContract, LegacyOutputCannotInheritProviderAuthorityOrExpiry) {
+  Odom out;std::string reason;
+  ASSERT_TRUE(decodeLocalNavigationState(localState(),configuration(),out,reason));
+  ASSERT_TRUE(out.provider_contract);
+  auto pair=state();pair.imu_stamp.nanosec-=94600000U;pair.extrapolation_sec=.0946;
+  ASSERT_TRUE(decodeNavigationState(pair,configuration(),out,reason));
+  EXPECT_FALSE(out.provider_contract);EXPECT_FALSE(out.provider_usable);EXPECT_EQ(out.provider_valid_until_ns,0);
+  EXPECT_STREQ(sourceEvidenceFailure(out,100.149356789,configuration()),"body_imu_not_fresh");
+}
+TEST(NavigationStateIngress, LocalSchemaSourceOrderingAndContextResetRemainStrict) {
+  NavigationStateIngress ingress;auto local=localState();
+  ASSERT_TRUE(ingress.inspect(local,configuration(),100.13));
+  auto expired_duplicate=local;expired_duplicate.usable=false;
+  EXPECT_FALSE(ingress.inspect(expired_duplicate,configuration(),100.4));
+  auto old_schema=local;old_schema.schema_version=1;old_schema.source_stamp.nanosec+=10000000U;
+  EXPECT_FALSE(ingress.inspect(old_schema,configuration(),100.15));
+  auto newer=local;newer.source_stamp.nanosec+=20000000U;newer.usable=false;
+  EXPECT_TRUE(ingress.inspect(newer,configuration(),100.15));
+  EXPECT_FALSE(ingress.inspect(local,configuration(),100.16));
+  ControlIdentity expected;expected.localization_epoch=3;expected.localization_seed_id="seed3";
+  auto reset=newer;reset.localization_epoch=4;reset.localization_seed_id="reset";
+  EXPECT_TRUE(navigationContextReset(reset,configuration(),expected,100.16));
+  reset.session_id="foreign";EXPECT_FALSE(navigationContextReset(reset,configuration(),expected,100.16));
+}
+
+TEST(NavigationStateDiagnostics, UnavailableEventRetainsItsOriginalCauseAndLastAcceptedMeasurement) {
+  NavigationStateDiagnostics trace;auto valid=localState();
+  valid.reason="continuous_local_measurement";
+  trace.record(valid,100130000000LL,true,true,"independent_source_bound_local_body_state");
+  auto unavailable=valid;unavailable.usable=false;unavailable.reason="local_navigation_unavailable";
+  ++unavailable.source_stamp.nanosec;
+  unavailable.posterior_stamp={};unavailable.imu_stamp={};unavailable.valid_until={};
+  trace.record(unavailable,100213000000LL,false,false,"local_navigation_state_identity_or_source_invalid");
+  EXPECT_EQ(trace.latest().provider_reason,"local_navigation_unavailable");
+  EXPECT_EQ(trace.latest().received_ns,100213000000LL);
+  EXPECT_EQ(trace.latest().source_ns,100123456790LL);
+  EXPECT_EQ(trace.latest().imu_ns,0);
+  EXPECT_FALSE(trace.latest().usable);EXPECT_FALSE(trace.latest().decoded);
+  EXPECT_EQ(trace.lastAccepted().source_ns,100123456789LL);
+  EXPECT_EQ(trace.lastAccepted().imu_ns,100123456789LL);
+  EXPECT_EQ(trace.lastAccepted().valid_until_ns,100223456789LL);
+  // The logger records that a provider revoked before its former 100 ms
+  // consumption deadline; it does not reinterpret or extend that deadline.
+  EXPECT_GT(trace.lastAccepted().valid_until_ns,trace.latest().received_ns);
+  EXPECT_EQ(valid.source_stamp.nanosec,123456789U);
+}
+
+TEST(NavigationStateDiagnostics, RejectedBodyAndMalformedTimeDoNotReplaceAcceptedEvidence) {
+  NavigationStateDiagnostics trace;auto input=localState();
+  trace.record(input,100130000000LL,true,true,"accepted");
+  auto rejected=input;rejected.source_stamp.nanosec+=20000000U;
+  rejected.localization_epoch=4;rejected.localization_seed_id="reset";
+  trace.record(rejected,100150000000LL,true,false,"localization_identity_changed");
+  EXPECT_EQ(trace.latest().epoch,4U);EXPECT_FALSE(trace.latest().accepted);
+  EXPECT_EQ(trace.lastAccepted().epoch,3U);
+  rejected.source_stamp.nanosec=1000000000U;
+  rejected.reason=std::string(500,'x');rejected.reason[2]='\n';
+  trace.record(rejected,100160000000LL,false,false,"malformed");
+  EXPECT_EQ(trace.latest().source_ns,-1);
+  EXPECT_EQ(trace.latest().provider_reason.size(),160U);
+  EXPECT_EQ(trace.latest().provider_reason[2],' ');
+  EXPECT_EQ(trace.lastAccepted().source_ns,100123456789LL);
 }

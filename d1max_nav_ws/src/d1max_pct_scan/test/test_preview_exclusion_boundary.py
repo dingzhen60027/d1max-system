@@ -56,7 +56,7 @@ def test_all_filtered_callback_reports_counts_without_publishing_or_renewing_sou
     node.on_rays(payload(points))
     node.tick()
     with pytest.raises(PreviewExcludedScan):
-        node.inflight[0].result(timeout=2.)
+        node.inflight[0][0].result(timeout=2.)
     node.tick()
     assert not node.publisher.messages
     assert node.last_published == [0, 0]
@@ -82,7 +82,7 @@ def test_callback_preserves_full_scan_times_and_reports_distinct_audit_drop_coun
     points = mixed_points()
     node.on_rays(payload(points))
     node.tick()
-    node.inflight[0].result(timeout=2.)
+    node.inflight[0][0].result(timeout=2.)
     node.tick()
     assert len(node.publisher.messages) == 1
     message = node.publisher.messages[0]
@@ -102,7 +102,7 @@ def test_worker_completed_with_old_filter_cannot_publish_or_update_lease(node):
     ready(node)
     node.on_rays(payload(mixed_points()))
     node.tick()
-    node.inflight[0].result(timeout=2.)
+    node.inflight[0][0].result(timeout=2.)
     node.core.preview_exclusion = from_session(preview_session(pad=.01), 'body')
     node.tick()
     assert not node.publisher.messages

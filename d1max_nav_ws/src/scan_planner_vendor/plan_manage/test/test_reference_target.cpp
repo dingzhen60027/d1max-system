@@ -153,6 +153,74 @@ TEST(ReferenceTarget, ShortFinalLegStillRequiresRealNonHoverDisplacement) {
   const auto reached_path=line(.15);
   EXPECT_FALSE(selectReferenceTarget(reached_path,reached_path.points.front(),0.,4.,{},freeMap).valid);
 }
+TEST(ReferenceTarget, TypedFinalGoalCanReconnectAfterMeasuredProgressReachedEndpoint) {
+ const auto path=line(1.);const Point body(1.3,0.,.55);
+ EXPECT_FALSE(selectReferenceTarget(path,body,path.length(),4.,{},freeMap).valid);
+ ReferenceTargetOptions options;
+ options.final_endpoint_reseed=scan_planner::FinalEndpointReseed{path.points.back(),.2,.15,true};
+ const auto result=selectReferenceTarget(path,body,path.length(),4.,options,freeMap);
+ ASSERT_TRUE(result.valid);EXPECT_EQ(result.reason,"reference_target_final_endpoint_reseed");
+ EXPECT_DOUBLE_EQ(result.arc,path.length());EXPECT_TRUE(result.point.isApprox(path.points.back()));
+ const auto connector=path.slice(path.length(),result.arc,body);
+ ASSERT_EQ(connector.size(),2U);EXPECT_TRUE(connector.front().isApprox(body));
+ EXPECT_TRUE(connector.back().isApprox(path.points.back()));EXPECT_EQ(path.points.size(),2U);
+}
+TEST(ReferenceTarget, ExhaustedWindowIsNotAnObstacleAndNewWindowCanAdvance) {
+ const auto path=line(1.);std::size_t queries=0;
+ const auto occupancy=[&](const Point&,double){++queries;return 0;};
+ const Point body(1.,0.,.55);
+ const auto exhausted=selectReferenceTarget(path,body,path.length(),4.,{},occupancy);
+ EXPECT_FALSE(exhausted.valid);EXPECT_EQ(exhausted.reason,"waiting_reference_extension");
+ EXPECT_EQ(queries,0U);EXPECT_EQ(exhausted.queries,0U);
+ EXPECT_TRUE(exhausted.point.isApprox(body));
+ const auto extended=selectReferenceTarget(line(5.),body,path.length(),4.,{},occupancy);
+ EXPECT_TRUE(extended.valid);EXPECT_GT(extended.point.x(),body.x());
+ EXPECT_GT(queries,0U);
+}
+TEST(ReferenceTarget, FinalEndpointReconnectRequiresSameGoalSupportAndOutsideExistingTolerance) {
+ const auto path=line(1.);ReferenceTargetOptions options;
+ options.final_endpoint_reseed=scan_planner::FinalEndpointReseed{Point(2.,0.,.55),.2,.15,true};
+ EXPECT_FALSE(selectReferenceTarget(path,Point(1.3,0.,.55),path.length(),4.,options,freeMap).valid);
+ options.final_endpoint_reseed->goal=path.points.back();
+ EXPECT_FALSE(selectReferenceTarget(path,Point(1.19,0.,.55),path.length(),4.,options,freeMap).valid);
+ options.final_endpoint_reseed->actual_and_endpoint_supported=false;
+ EXPECT_FALSE(selectReferenceTarget(path,Point(1.3,0.,.55),path.length(),4.,options,freeMap).valid);
+ options.final_endpoint_reseed->actual_and_endpoint_supported=true;
+ options.final_endpoint_reseed->goal_xy_tolerance=std::numeric_limits<double>::quiet_NaN();
+ EXPECT_FALSE(selectReferenceTarget(path,Point(1.3,0.,.55),path.length(),4.,options,freeMap).valid);
+}
+TEST(ReferenceTarget, NativeConnectionReseedCanSelectFinalEndpointInsideGoalToleranceWithoutNearZeroSolve) {
+ const auto path=line(1.);ReferenceTargetOptions options;
+ options.final_endpoint_reseed=scan_planner::FinalEndpointReseed{path.points.back(),.2,.15,true,true,.15};
+ EXPECT_TRUE(selectReferenceTarget(path,Point(1.16,0.,.55),path.length(),4.,options,freeMap).valid);
+ EXPECT_FALSE(selectReferenceTarget(path,Point(1.15,0.,.55),path.length(),4.,options,freeMap).valid);
+ EXPECT_FALSE(selectReferenceTarget(path,Point(1.00001,0.,.55),path.length(),4.,options,freeMap).valid);
+ options.final_endpoint_reseed->measured_connection_reseed=false;
+ EXPECT_FALSE(selectReferenceTarget(path,Point(1.16,0.,.55),path.length(),4.,options,freeMap).valid);
+}
+TEST(ReferenceTarget, FinalEndpointReconnectRejectsOccupiedUnknownOutsideAndBlockedApproachHeading) {
+ const auto path=line(1.);ReferenceTargetOptions options;
+ options.final_endpoint_reseed=scan_planner::FinalEndpointReseed{path.points.back(),.2,.15,true};
+ for(int state:{1,2,-1}) {
+   const auto result=selectReferenceTarget(path,Point(1.3,0.,.55),path.length(),4.,options,
+     [=](const Point&,double){return state;});
+   EXPECT_FALSE(result.valid);EXPECT_EQ(result.queries,1U);
+ }
+ const auto result=selectReferenceTarget(path,Point(1.3,0.,.55),path.length(),4.,options,
+   [](const Point&,double yaw){return std::abs(yaw)>1. ? 2:0;});
+ EXPECT_FALSE(result.valid);EXPECT_EQ(result.free_queries,1U);EXPECT_EQ(result.unknown_queries,1U);
+}
+TEST(ReferenceTarget, FinalEndpointSelectionStillRequiresCollisionCheckedActualConnector) {
+ const auto path=line(1.);const Point body(1.4,0.,.55);ReferenceTargetOptions options;
+ options.final_endpoint_reseed=scan_planner::FinalEndpointReseed{path.points.back(),.2,.15,true};
+ const auto wall=[](const Point& p,double){return p.x()>1.1&&p.x()<1.2?1:0;};
+ const auto target=selectReferenceTarget(path,body,path.length(),4.,options,wall);
+ ASSERT_TRUE(target.valid);
+ std::vector<Point> connector;std::string reason;
+ EXPECT_FALSE(scan_planner::buildCollisionAwareReference(path.slice(path.length(),target.arc,body),.02,
+   wall,[](const Point&,const Point&){return std::vector<Point>{};},connector,reason));
+ EXPECT_EQ(reason,"failed_reference_search");
+}
 
 TEST(ReferenceTarget, QueryBudgetFailsClosedWithoutUnboundedWork) {
   const auto path=line(100.);

@@ -24,18 +24,21 @@ def test_default_session_selects_official_policy_without_changing_robot_or_rays(
     assert strict['grid_map.require_observed_free'] is True
     assert official['grid_map.use_projected_rays'] is True
     assert official['grid_map.require_localization_context'] is True
-    assert official['optimization.lambda_reference'] == 0.
+    # D1 actual-start rolling keeps its smooth forward guide as a soft cost;
+    # this is independent of the native occupied/unknown policy selection.
+    assert official['optimization.lambda_reference'] == 1.
     assert official['optimization.lambda_collision'] == 1.
     assert official['optimization.lambda_feasibility'] == .1
     assert official['grid_map.resolution'] == .05
-    assert [official['grid_map.sliding_map_size_'+axis] for axis in 'xyz'] == [10., 10., 5.]
-    # Higher map precision, never smaller D1 collision geometry or less clearance.
+    assert [official['grid_map.sliding_map_size_'+axis] for axis in 'xyz'] == [12., 12., 3.]
+    # D1 operator-selected box, independent from occupancy evidence policy.
     assert official['grid_map.double_cylinder_radius'] == .29
     assert official['grid_map.double_cylinder_offset'] == pytest.approx(.20)
     from d1max_pct_scan.robot_profile import load_robot_profile
     profile=load_robot_profile(live_session.paths.nav_root()/'src/d1max_scan_planner/config/d1max_robot.yaml')
-    assert official['grid_map.obstacles_inflation_z_up'] == profile['engineering']['obstacle_dilation_up_m']
-    assert official['grid_map.obstacles_inflation_z_down'] == profile['engineering']['obstacle_dilation_down_m']
+    assert official['grid_map.collision_model'] == 'oriented_box'
+    assert official['grid_map.obstacles_inflation_z_up'] == profile['engineering']['box_body_below_m']
+    assert official['grid_map.obstacles_inflation_z_down'] == profile['engineering']['box_body_above_m']
     # The no-motion heading/revalidation lifecycle is explicitly scoped to the
     # official projected-ray preview; it must never leak into strict execution.
     assert {key for key in official if official[key] != strict[key]} == {

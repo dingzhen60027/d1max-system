@@ -8,6 +8,7 @@ import time
 import uuid
 from copy import deepcopy
 import numpy as np
+import yaml
 
 import rclpy
 from rclpy.node import Node
@@ -19,23 +20,25 @@ from geometry_msgs.msg import PoseWithCovarianceStamped, PointStamped, Point
 from nav_msgs.msg import Odometry
 from std_msgs.msg import String, Bool, Empty, ColorRGBA
 from sensor_msgs.msg import PointCloud2
-from visualization_msgs.msg import Marker, InteractiveMarkerFeedback
+from visualization_msgs.msg import Marker, MarkerArray, InteractiveMarkerFeedback
 from d1max_navigation_bt_interfaces.action import Navigate
 from d1max_navigation_bt_interfaces.srv import ConfirmExecution, PrepareInitialPose
 from interactive_markers.interactive_marker_server import InteractiveMarkerServer
 from interactive_markers.menu_handler import MenuHandler
 from d1max_pct_planner.preview_markers import pose_marker
+from d1max_pct_planner.selection_markers import selection_evidence_markers
 from .live_ui_contract import (initial_pose_command, initial_pose_feedback,
                                checked_session_status, source_status_fresh, localization_preview_state,
                                floor_initial_body_z)
 from .live_diagnostics import diagnostics, body_identity, body_visual_state
 from .live_goal_editor import goal_position
+from .live_goal_selection import LiveGoalSelection
 from .live_view_reload import preview_reload_session
-from .bt_presentation import tree_presentation
+from .bt_presentation import awaiting_goal_owner, tree_presentation
 
 
 BODY_AXIS_LENGTH_M = .9
-BODY_AXIS_WIDTH_M = .05
+BODY_AXIS_WIDTH_M = .02
 
 
 def execution_menu_capable(session):
@@ -51,8 +54,25 @@ def execution_menu_capable(session):
             and session.get('motion_control_enabled') is True)
 
 
-def body_axes_marker(body, lifetime_sec):
-    """Local RGB axes at the measured pose, not an offset or a new pose sample."""
+def body_outline_bounds(session):
+    """Read the uninflated robot proxy once for display in the body frame."""
+    try:
+        profile = session.get('robot_profile_snapshot')
+        if profile is None:
+            profile = yaml.safe_load(Path(session['robot_profile']).read_text())
+        geometry = profile['engineering']
+        length, width, below, above = (geometry[key] for key in
+            ('box_length_m', 'box_width_m', 'box_body_below_m', 'box_body_above_m'))
+        if any(type(v) not in (int, float) or not math.isfinite(v) or v <= 0.
+               for v in (length, width, below, above)):
+            return None
+        return ((-length/2., -width/2., -below), (length/2., width/2., above))
+    except (OSError, KeyError, TypeError, ValueError, yaml.YAMLError):
+        return None
+
+
+def body_axes_marker(body, lifetime_sec, outline=None):
+    """One measured-pose marker holds RGB axes and an optional wireframe body."""
     marker = Marker()
     marker.header = body.header
     # Keep the old marker identity so RViz replaces the former arrow in-place.
@@ -66,6 +86,19 @@ def body_axes_marker(body, lifetime_sec):
                           ((0., 0., BODY_AXIS_LENGTH_M), (0., 0., 1.))):
         marker.points.extend((Point(), Point(x=endpoint[0], y=endpoint[1], z=endpoint[2])))
         marker.colors.extend(ColorRGBA(r=rgb[0], g=rgb[1], b=rgb[2], a=1.) for _ in range(2))
+    if outline is not None:
+        low, high = outline
+        corners = tuple((x, y, z) for x in (low[0], high[0])
+                        for y in (low[1], high[1]) for z in (low[2], high[2]))
+        # Flip exactly one of the three corner bits: twelve unique edges,
+        # no filled faces. Use the same pose, lifetime and ID as the axes.
+        for index, start in enumerate(corners):
+            for bit in (1, 2, 4):
+                end = index ^ bit
+                if index < end:
+                    marker.points.extend(Point(x=p[0], y=p[1], z=p[2])
+                                         for p in (start, corners[end]))
+                    marker.colors.extend(ColorRGBA(r=1., g=1., b=1., a=1.) for _ in range(2))
     # The caller supplies only the unexpired part of the original source lease.
     marker.lifetime = Duration(seconds=max(1e-9, lifetime_sec)).to_msg()
     return marker
@@ -76,6 +109,7 @@ class LiveView(Node):
         super().__init__('d1max_live_view')
         self.directory = directory
         self.session = json.loads((directory / 'session.json').read_text())
+        self.body_outline = body_outline_bounds(self.session)
         self.single_floor = self.session.get('pipeline_contract') == 'single_floor_v3'
         # Keep the existing display field for execution-menu compatibility.
         # A simulated execution intent is not a physical motion capability.
@@ -83,9 +117,15 @@ class LiveView(Node):
         self.physical_motion_capable = (self.session.get('motion_control_enabled') is True
             and (not self.single_floor or self.session.get('transport_mode') == 'live'))
         self.typed_view = None
+        self.committed_route_view = None
         if self.single_floor:
+            from .pose_continuity_view import PoseContinuityView
+            self.pose_continuity_view=PoseContinuityView(self.session['id'],self.session['version_id'])
             from .typed_view_state import TypedViewState
+            from .committed_route_view import CommittedRouteView, session_route_provenance
             self.typed_view = TypedViewState(self.session['id'], self.session['version_id'])
+            self.committed_route_view = CommittedRouteView(self.session['id'], self.session['version_id'],
+                expected_provenance=session_route_provenance(self.session))
         self.frame = self.session['frame_id']
         self.last_state = {}
         self.state_at = 0.
@@ -98,9 +138,23 @@ class LiveView(Node):
         self.global_at = self.scan_at = 0.
         self.bt_state, self.bt_at = {}, 0.
         self.goal_pose = None
+        self.goal_selection = None
+        self.goal_selection_error = ''
+        if self.single_floor:
+            try:
+                self.goal_selection = LiveGoalSelection.from_session(self.session)
+            except (ValueError, OSError, KeyError) as error:
+                # A map error is an editable UI diagnostic, not a reason to
+                # kill localization or create an unvalidated navigation goal.
+                self.goal_selection_error = str(error)
+        self.goal_marker_signature = None
+        self.goal_visual_dirty = False
         self.goal_has_yaw = False
         self.goal_request_sequence = 0
         self.goal_request_pending = False
+        self.goal_request_active = False
+        self.goal_submission_signature = None
+        self.goal_request_task_id = None
         self.goal_request_deadline = 0.
         self.execute_binding = None
         self.execute_request_id = None
@@ -108,7 +162,12 @@ class LiveView(Node):
         self.execute_sequence = 0
         self.execute_deadline = 0.
         self.initial_floor = self.session.get('current_floor', 'floor1')
-        self.initial_ground_bridge = None
+        self.initial_ground_bridge = (self.goal_selection.bridge if self.goal_selection is not None else None)
+        choices = getattr(self.goal_selection, 'floor_choices', [])
+        self.initial_floor_choices = (tuple(choice['floor_id'] for choice in choices)
+            if isinstance(choices, list) else ()) if self.single_floor else ('floor1', 'floor2')
+        if self.initial_floor_choices and self.initial_floor not in self.initial_floor_choices:
+            self.initial_floor = self.initial_floor_choices[0]
         self.goal_surfaces = None
         self.map_layer_metadata = {}
         self.pending_goal_surface = None
@@ -144,13 +203,27 @@ class LiveView(Node):
         latched = QoSProfile(depth=1, reliability=ReliabilityPolicy.RELIABLE,
                              durability=DurabilityPolicy.TRANSIENT_LOCAL)
         self.goal_editor_pub = self.create_publisher(String, '/d1max/live_planning/goal_editor_status', latched)
+        self.goal_support_pub = self.create_publisher(MarkerArray,
+            '/d1max/live_planning/goal_support', latched)
+        self.create_subscription(String, '/d1max/live_planning/edit_goal3d', self.edit_goal, 10)
         self.create_subscription(Empty, '/d1max/live_planning/activate_goal3d', self.activate_goal, 10)
         self.create_subscription(String, '/d1max/live_planning/map_layer_status', self.on_map_metadata, latched)
         self.create_subscription(PointCloud2, '/d1max/live_planning/traversable_surface', self.on_surfaces, latched)
         if self.single_floor:
             from d1max_planning_interfaces.msg import NavigationState
+            from d1max_navigation_bt_interfaces.msg import InitialPoseOutcome, RouteReference, RouteSnapshot
             self.create_subscription(NavigationState, '/d1max/localization/navigation/state',
                                      self.on_atomic_state, qos_profile_sensor_data)
+            self.create_subscription(String, '/d1max/localization/navigation/pose_continuity',
+                                     self.on_pose_continuity, qos_profile_sensor_data)
+            self.create_subscription(InitialPoseOutcome, '/d1max/localization/initial_pose/outcome',
+                                     self.on_initial_pose_outcome, latched)
+            if self.session.get('planning_scope') == 'global_route':
+                self.create_subscription(RouteSnapshot, '/d1max/live_planning/bt/route_snapshot',
+                                         self.on_route_snapshot, latched)
+            else:
+                self.create_subscription(RouteReference, '/d1max/live_planning/committed_route',
+                                         self.on_committed_route, latched)
         else:
             self.create_subscription(String, '/d1max/localization/status', self.status, 10)
         self.create_subscription(PoseWithCovarianceStamped, '/d1max/live_planning/initialpose', self.initial, 10)
@@ -170,17 +243,29 @@ class LiveView(Node):
             self.menu.insert('规划到此处', callback=self.commit_goal)
         self.yaw_menu = self.menu.insert('指定终点朝向', callback=self.toggle_goal_yaw)
         self.menu.setCheckState(self.yaw_menu, MenuHandler.UNCHECKED)
+        self.ground_menu = self.menu.insert('贴地拖动', callback=lambda _: self.set_goal_mode('ground'))
+        self.free_menu = self.menu.insert('自由 XYZ', callback=lambda _: self.set_goal_mode('free'))
+        self.menu.insert('贴到当前地面', callback=self.snap_goal_ground)
+        self.menu.setCheckState(self.ground_menu, MenuHandler.CHECKED)
+        self.menu.setCheckState(self.free_menu, MenuHandler.UNCHECKED)
+        choices = getattr(self.goal_selection, 'region_choices', [])
+        if isinstance(choices, list) and len(choices) > 1:
+            floor_menu = self.menu.insert('目标区域')
+            self.menu.insert('按高度选择', parent=floor_menu,
+                             callback=lambda _: self.select_goal_floor(None))
+            for choice in choices:
+                self.menu.insert(choice['label'], parent=floor_menu,
+                    callback=lambda _, floor=choice['floor_id']: self.select_goal_floor(floor))
         if self.motion_capable:
             self.menu.insert('执行已预览路线', callback=self.confirm_execution)
         self.menu.insert('取消任务（不是机器人急停）', callback=self.cancel)
         initial_menu = self.menu.insert('初始楼层')
-        self.menu.insert('一楼', parent=initial_menu,
-                         callback=lambda _: self.select_initial_floor('floor1'))
-        if not self.single_floor:
-            self.menu.insert('二楼', parent=initial_menu,
-                             callback=lambda _: self.select_initial_floor('floor2'))
+        for floor in self.initial_floor_choices:
+            self.menu.insert({'floor1': '一楼', 'floor2': '二楼'}.get(floor, floor), parent=initial_menu,
+                             callback=lambda _, selected=floor: self.select_initial_floor(selected))
         self.create_timer(.2, self.tick)
         self.create_timer(.05, self.publish_body)
+        self.create_timer(.05, self.refresh_goal_visual)
 
     def source_now_s(self):
         # Sensor/task headers use the ROS clock, including isolated bag time.
@@ -206,6 +291,25 @@ class LiveView(Node):
         self.body = deepcopy(message.global_odometry)
         self.body_received = self.typed_view.received
         self.body_sample_context = self.typed_view.state.identity
+        self.pose_continuity_view.bind_real_pose()
+
+    def on_pose_continuity(self, message):
+        try:
+            state=self.typed_view.state
+            self.pose_continuity_view.observe(json.loads(message.data),
+                identity=state.identity if state else None,
+                now_ns=self.get_clock().now().nanoseconds,monotonic=time.monotonic())
+        except (ValueError,TypeError,KeyError):return
+
+    def on_committed_route(self, message):
+        # Read-only copy of the same audited envelope displayed in RViz. This
+        # is a result/history cache, never another task or reference publisher.
+        self.committed_route_view.receive(message)
+
+    def on_route_snapshot(self, message):
+        # Compute-only results are never promoted into execution references.
+        if self.session.get('planning_scope') == 'global_route':
+            self.committed_route_view.receive_snapshot(message)
 
     def on_map_metadata(self, message):
         try:
@@ -274,12 +378,30 @@ class LiveView(Node):
         if self.goal_pose is None:
             return
         p = self.goal_pose.position
+        evidence = LiveView.goal_evidence(self)
+        selection = getattr(self, 'goal_selection', None)
         self.goal_editor_pub.publish(String(data=json.dumps({
-            'mode': 'LIVE_GOAL_EDITOR_NO_MOTION', 'session_id': self.session['id'],
+            'schema': 1, 'mode': 'LIVE_GOAL_EDITOR_NO_MOTION', 'session_id': self.session['id'],
             'received_at_unix': time.time(), 'frame_id': self.frame, 'motion_enabled': False,
-            'selection_mode': 'free_xyz', 'goal_xyz': [p.x, p.y, p.z],
+            'selection_mode': selection.mode if selection else 'free',
+            'goal_xyz': [p.x, p.y, p.z], 'goal_validation': evidence,
+            'floor_choices': selection.floor_choices if selection else [],
+            'region_choices': selection.region_choices if selection else [],
             'has_goal_yaw': self.goal_has_yaw,
-            'can_submit': LiveView.localization_ready(self)})))
+            # The BT can wait for localization. Geometry validity belongs to
+            # this draft and must not flicker with a localization heartbeat.
+            'can_submit': evidence['valid']}, ensure_ascii=False, allow_nan=False)))
+
+    def goal_evidence(self):
+        selection = getattr(self, 'goal_selection', None)
+        if selection is not None:
+            return selection.feedback()
+        if getattr(self, 'single_floor', False):
+            return dict(valid=False, reason='目标地图未就绪', reason_code='selection_map_unavailable',
+                        detail=getattr(self, 'goal_selection_error', ''))
+        # Preserve the legacy editor only in its historical entry; the formal
+        # runtime never uses this compatibility branch to bypass map evidence.
+        return dict(valid=True, reason='legacy_free_xyz')
 
     def on_body(self, message):
         if (message.header.frame_id != self.frame or message.child_frame_id != 'd1max_loc_base_link'):
@@ -307,17 +429,34 @@ class LiveView(Node):
         marker.header.stamp = self.get_clock().now().to_msg()
         marker.ns, marker.id = 'measured_body', 0
         stamp = (self.body.header.stamp.sec + self.body.header.stamp.nanosec * 1e-9) if self.body else 0.
+        display_body=self.body
         if getattr(self, 'single_floor', False):
             ttl = self.typed_view.lease(now_ns=self.get_clock().now().nanoseconds, monotonic=now)
             visual = dict(visible=ttl > 0., lifetime_sec=ttl)
+            continuity=getattr(self,'pose_continuity_view',None)
+            if ttl<=0 and continuity is not None:
+                state=self.typed_view.state
+                lease=continuity.lease(identity=state.identity if state else None,
+                    now_ns=self.get_clock().now().nanoseconds,monotonic=now)
+                if lease>0:
+                    # This body is local to rendering. Do not replace self.body,
+                    # typed state, localization_ready, goals or any permission.
+                    value=continuity.sample;display_body=Odometry()
+                    display_body.header.frame_id=value['frame_id']
+                    display_body.header.stamp.sec,display_body.header.stamp.nanosec=divmod(value['estimate_stamp_ns'],10**9)
+                    display_body.child_frame_id=value['body_frame']
+                    p,q=display_body.pose.pose.position,display_body.pose.pose.orientation
+                    p.x,p.y,p.z=value['position'];q.x,q.y,q.z,q.w=value['orientation']
+                    visual=dict(visible=True,lifetime_sec=lease)
         else:
             visual = body_visual_state(self.last_state, session_id=self.session['id'], now=wall,
                 body_stamp=stamp, body_receipt_age=now-self.body_received,
                 state_receipt_age=now-self.state_at, body_context=self.body_sample_context,
                 body_barrier=self.body_barrier)
-        marker.action = Marker.ADD if self.body is not None and visual['visible'] else Marker.DELETE
+        marker.action = Marker.ADD if display_body is not None and visual['visible'] else Marker.DELETE
         if marker.action == Marker.ADD:
-            marker = body_axes_marker(self.body, visual['lifetime_sec'])
+            marker = body_axes_marker(display_body, visual['lifetime_sec'],
+                                      getattr(self, 'body_outline', None))
         if not self.retired_body_caption:
             # Retire the old caption before the first axes update, never after
             # every ADD: a depth-one RViz subscriber can drop the useful marker
@@ -362,6 +501,9 @@ class LiveView(Node):
             navigation = navigation if isinstance(navigation, dict) else {}
             hard_invalid = bool(state.get('local_fault') or navigation.get('fault'))
             if context != self.body_context or hard_invalid:
+                continuity=getattr(self,'pose_continuity_view',None)
+                if continuity is not None:
+                    continuity.withdraw()
                 self.body = None
                 self.body_received = 0.
                 self.body_sample_context = None
@@ -370,14 +512,17 @@ class LiveView(Node):
             self.last_state, self.state_at = state, time.monotonic()
 
     def initial(self, message):
-        self.reason_scope = 'input'
+        if not getattr(self, 'single_floor', False):
+            self.reason_scope = 'input'
         try:
             stamp = message.header.stamp.sec + message.header.stamp.nanosec * 1e-9
             p, q = message.pose.pose.position, message.pose.pose.orientation
             if self.initial_ground_bridge is None:
                 if getattr(self, 'single_floor', False):
-                    from .source_identity import SourceIdentityBridge
-                    self.initial_ground_bridge = SourceIdentityBridge.from_artifacts(self.session['planning_manifest'])
+                    # Reuse the same session-bound ground evidence as the goal
+                    # editor. A failed map binding cannot fall back to an
+                    # unpinned bridge or silently guess the first floor.
+                    raise ValueError('初值地图未就绪：'+self.goal_selection_error)
                 else:
                     from .pointcloud_helpers.ground_path_bridge import GroundPathBridge
                     self.initial_ground_bridge = GroundPathBridge.from_artifacts(self.session['planning_manifest'])
@@ -391,8 +536,6 @@ class LiveView(Node):
                 from .typed_view_state import seed_command
                 command = seed_command(message, now=LiveView.source_now_s(self), session_id=self.session['id'],
                                        body_z=body_z, command_id=uuid.uuid4().hex)
-                if not self.initial_pose_client.service_is_ready():
-                    raise ValueError('等待行为树初值准入服务')
                 request = PrepareInitialPose.Request()
                 request.schema_version = 1
                 request.operation = request.PREPARE
@@ -401,8 +544,11 @@ class LiveView(Node):
                 request.body_pose = deepcopy(message)
                 request.body_pose.pose.pose.position.z = body_z  # Ground -> body exactly once.
                 self.initial_pose_transaction.begin(request, command, time.monotonic())
-                self.reason = self.initial_pose_transaction.reason
-                self.get_logger().info(self.reason)
+                # Latest valid input replaces one pending UI intent. Removing
+                # the RPC registration is not a BT/SDK cancellation; the new
+                # PREPARE performs the unchanged owner admission/retirement.
+                LiveView._forget_initial_pose_rpc(self, self.initial_pose_future)
+                self.get_logger().info(self.initial_pose_transaction.reason)
                 return
             else:
                 command = initial_pose_command(frame=message.header.frame_id, stamp=stamp,
@@ -417,52 +563,74 @@ class LiveView(Node):
             self.last_seed_id = command['id']
             self.reason = '已提交机身初值；等待连续匹配确认'
         except (ValueError, OSError, KeyError) as error:
+            if getattr(self, 'single_floor', False):
+                self.initial_pose_transaction.reject_input(str(error), self.session['id'])
+                self.get_logger().info(str(error))
+                return
             self.reason = str(error)
         self.get_logger().info(self.reason)
 
+    def _forget_initial_pose_rpc(self, future):
+        if future is None or self.initial_pose_future is not future:
+            return
+        self.initial_pose_future = None
+        self.initial_pose_request = None
+        try:
+            self.initial_pose_client.remove_pending_request(future)
+        except (RuntimeError, RCLError, KeyError) as error:
+            # The current binding is already detached. A late transport error
+            # must not clear or fail the replacement's state.
+            self.get_logger().warning('旧初值回执登记已弃用：' + str(error))
+
+    def on_initial_pose_outcome(self, message):
+        self.initial_pose_transaction.observe_outcome(message,
+            map_version_id=self.session['version_id'], now_ns=self.get_clock().now().nanoseconds)
+
     def poll_initial_pose(self):
         transaction = self.initial_pose_transaction
-        if self.initial_pose_future is not None:
-            if not self.initial_pose_future.done():
+        future, sent = self.initial_pose_future, self.initial_pose_request
+        if future is not None:
+            if not transaction.matches(sent):
+                LiveView._forget_initial_pose_rpc(self, future)
+            elif not future.done():
                 if time.monotonic()-self.initial_pose_rpc_at <= 2.:
                     return
-                transaction.fail('初值准入回执超时；未应用初值，等待任务退役状态')
-                self.initial_pose_client.remove_pending_request(self.initial_pose_future)
-                self.initial_pose_future = None
-                self.reason = transaction.reason
-                return
-            try:
-                command = transaction.receive(self.initial_pose_request, self.initial_pose_future.result(), time.monotonic())
-                if command is not None:
-                    # New command issue time, not the original pose/sensor time.
-                    # The immutable intent source stamp travels separately.
-                    command['created_at'] = time.time()
-                    path = self.directory / 'initial_pose.tmp'
-                    path.write_text(json.dumps(command))
-                    os.replace(path, self.directory / 'initial_pose.json')
-                    self.last_seed_id = command['id']
-            except (ValueError, OSError, RuntimeError, RCLError) as error:
-                transaction.fail('初值提交结果不确定，需核对：'+str(error))
-            self.initial_pose_future = None
-            self.reason = transaction.reason
+                transaction.fail('初值准入回执超时，未写入新初值；可重新给初值',
+                                 request=sent, phase='timeout')
+                LiveView._forget_initial_pose_rpc(self, future)
+            else:
+                try:
+                    command = transaction.receive(sent, future.result(), time.monotonic())
+                    if command is not None and transaction.owns(sent):
+                        # New command issue time, not the original pose/sensor
+                        # time. The immutable intent stamp travels separately.
+                        command['created_at'] = time.time()
+                        path = self.directory / 'initial_pose.tmp'
+                        path.write_text(json.dumps(command))
+                        os.replace(path, self.directory / 'initial_pose.json')
+                        self.last_seed_id = command['id']
+                        transaction.mark_submitted(sent)
+                except (ValueError, OSError, RuntimeError, RCLError) as error:
+                    transaction.fail('初值提交结果不确定，需核对：'+str(error),
+                                     request=sent, phase='uncertain')
+                LiveView._forget_initial_pose_rpc(self, future)
         request = transaction.request(time.monotonic())
         if request is None:
+            # request() also expires the transaction. Its independent feedback
+            # is rendered below, not hidden behind a stale generic goal notice.
             return
         if not self.initial_pose_client.service_is_ready():
-            self.reason = '等待行为树初值准入服务'
+            transaction.waiting_service()
             return
         try:
             self.initial_pose_request = request
             self.initial_pose_future = self.initial_pose_client.call_async(request)
             self.initial_pose_rpc_at = time.monotonic()
         except (RuntimeError, RCLError) as error:
-            transaction.fail('初值准入发送失败：'+str(error))
-            self.reason = transaction.reason
+            transaction.fail('初值准入发送失败：'+str(error), request=request)
 
     def select_initial_floor(self, floor_id):
-        if getattr(self, 'single_floor', False) and floor_id != 'floor1':
-            return
-        if floor_id not in ('floor1', 'floor2'):
+        if floor_id not in getattr(self, 'initial_floor_choices', ()):
             return
         self.initial_floor = floor_id
         self.reason_scope = 'input'
@@ -476,13 +644,21 @@ class LiveView(Node):
                 or not all(math.isfinite(x) and abs(x) < 10000 for x in position)):
             self.reason = '3D 目标的坐标或时间无效'
             return
-        marker = pose_marker('goal', position, (0, 0, 0, 1), self.frame, 1.5)
-        marker.description = '3D GOAL · 右键规划'
-        self.goal_pose = marker.pose
-        self.markers.insert(marker, feedback_callback=self.on_feedback)
-        self.menu.apply(self.markers, 'goal')
-        self.markers.applyChanges()
-        self.reason = '拖 XYZ 调整目标；右键提交，可选终点朝向'
+        selection = getattr(self, 'goal_selection', None)
+        if selection is not None:
+            position = selection.edit(position)['xyz']
+        from geometry_msgs.msg import Pose
+        previous = self.goal_pose
+        self.goal_pose = Pose()
+        self.goal_pose.position.x, self.goal_pose.position.y, self.goal_pose.position.z = map(float, position)
+        # Reactivation focuses an existing draft, including its chosen heading.
+        if previous is not None:
+            self.goal_pose.orientation = deepcopy(previous.orientation)
+        else:
+            self.goal_pose.orientation.w = 1.
+        self.goal_visual_dirty = True
+        LiveView.refresh_goal_visual(self)
+        self.reason = '拖动目标；右键规划'
         self.publish_goal_editor()
 
     def on_feedback(self, feedback):
@@ -492,18 +668,133 @@ class LiveView(Node):
         if not all(math.isfinite(x) and abs(x) < 10000 for x in (p.x, p.y, p.z)):
             return
         if feedback.event_type in (InteractiveMarkerFeedback.POSE_UPDATE, InteractiveMarkerFeedback.MOUSE_UP):
-            self.goal_pose = feedback.pose
+            q = feedback.pose.orientation
+            if not all(math.isfinite(v) for v in (q.x, q.y, q.z, q.w)) or math.hypot(q.x,q.y,q.z,q.w) < 1e-9:
+                return
+            self.goal_pose = deepcopy(feedback.pose)
+            selection = getattr(self, 'goal_selection', None)
+            if selection is not None:
+                point = selection.edit((p.x, p.y, p.z))['xyz']
+                self.goal_pose.position.x, self.goal_pose.position.y, self.goal_pose.position.z = map(float, point)
+            self.goal_visual_dirty = True
+            # Coalesce rendering at 20 Hz; queries are local immutable-grid
+            # reads. No planner calls or marker reinsertion on every mouse event.
+            if feedback.event_type == InteractiveMarkerFeedback.MOUSE_UP:
+                LiveView.refresh_goal_visual(self)
+                self.publish_goal_editor()
+
+    def refresh_goal_visual(self):
+        if not getattr(self, 'goal_visual_dirty', False) or self.goal_pose is None:
+            return
+        self.goal_visual_dirty = False
+        evidence = LiveView.goal_evidence(self)
+        selection = getattr(self, 'goal_selection', None)
+        ground = selection is not None and selection.mode == 'ground'
+        p, q = self.goal_pose.position, self.goal_pose.orientation
+        signature = (ground, evidence['valid'])
+        if signature != self.goal_marker_signature:
+            marker = pose_marker('goal', (p.x,p.y,p.z), (q.x,q.y,q.z,q.w), self.frame, 1.5,
+                                 valid=evidence['valid'], ground_follow=ground)
+            marker.description = '目标 · 右键规划' if evidence['valid'] else '目标 · 调整到地面'
+            self.markers.insert(marker, feedback_callback=self.on_feedback)
+            self.menu.apply(self.markers, 'goal')
+            self.goal_marker_signature = signature
+        else:
+            self.markers.setPose('goal', self.goal_pose)
+        self.markers.applyChanges()
+        from std_msgs.msg import Header
+        header = Header(frame_id=self.frame, stamp=self.get_clock().now().to_msg())
+        self.goal_support_pub.publish(MarkerArray(markers=selection_evidence_markers(
+            'goal', (p.x,p.y,p.z), evidence, header, 0)))
+
+    def set_goal_mode(self, mode):
+        selection = getattr(self, 'goal_selection', None)
+        if selection is None:
+            return
+        selection.set_mode(mode)
+        if self.goal_pose is not None:
+            p = self.goal_pose.position
+            point = selection.edit((p.x,p.y,p.z))['xyz']
+            self.goal_pose.position.x, self.goal_pose.position.y, self.goal_pose.position.z = map(float, point)
+        self.menu.setCheckState(self.ground_menu, MenuHandler.CHECKED if mode == 'ground' else MenuHandler.UNCHECKED)
+        self.menu.setCheckState(self.free_menu, MenuHandler.CHECKED if mode == 'free' else MenuHandler.UNCHECKED)
+        self.menu.reApply(self.markers)
+        self.goal_visual_dirty = True
+        LiveView.refresh_goal_visual(self)
+        self.publish_goal_editor()
+
+    def snap_goal_ground(self, _=None):
+        selection = getattr(self, 'goal_selection', None)
+        if selection is None or self.goal_pose is None:
+            return
+        try:
+            point = selection.snap_ground()['xyz']
+            self.goal_pose.position.x, self.goal_pose.position.y, self.goal_pose.position.z = map(float, point)
+        except ValueError:
+            self.reason = '这里没有可用地面；请调整 XY'
+        self.goal_visual_dirty = True
+        LiveView.refresh_goal_visual(self)
+        self.publish_goal_editor()
+
+    def select_goal_floor(self, floor_id):
+        selection = getattr(self, 'goal_selection', None)
+        if selection is None or self.goal_pose is None:
+            return
+        try:
+            point = selection.set_floor(floor_id)['xyz']
+            self.goal_pose.position.x, self.goal_pose.position.y, self.goal_pose.position.z = map(float,point)
+        except ValueError:
+            return
+        self.goal_visual_dirty = True
+        LiveView.refresh_goal_visual(self)
+        self.publish_goal_editor()
+
+    def edit_goal(self, message):
+        """Session-bound draft edits only. Never publish a navigation intent."""
+        if len(message.data) > 4096 or self.goal_pose is None:
+            return
+        try:
+            edit = json.loads(message.data)
+            if (edit.get('schema') != 1 or edit.get('session_id') != self.session['id']
+                    or edit.get('frame_id') != self.frame):
+                return
+            selection = getattr(self, 'goal_selection', None)
+            if selection is None:
+                return
+            mode = edit.get('selection_mode', selection.mode)
+            point = edit.get('goal_xyz')
+            # Validate the whole command before mutating either mode or pose.
+            if mode not in ('ground', 'free') or (point is not None and (
+                    not isinstance(point, list) or len(point) != 3
+                    or any(isinstance(v, bool) or not isinstance(v, (int,float))
+                           or not math.isfinite(v) or abs(v) >= 10000 for v in point))):
+                return
+            selection.set_mode(mode)
+            if point is not None:
+                xyz = selection.edit(point)['xyz']
+                self.goal_pose.position.x, self.goal_pose.position.y, self.goal_pose.position.z = map(float,xyz)
+            if edit.get('operation') == 'snap_ground':
+                self.snap_goal_ground()
+            self.set_goal_mode(mode)
+        except (ValueError, TypeError, AttributeError):
+            return
 
     def commit_goal(self, feedback, *, request_execution=False):
         if self.goal_pose is None:
+            return
+        evidence = LiveView.goal_evidence(self)
+        if not evidence['valid']:
+            self.reason = '目标无效：'+evidence.get('reason', '请调整到可通行地面')
+            self.reason_scope = 'input'
+            self.publish_goal_editor()
             return
         if request_execution and not self.motion_capable:
             self.reason='当前入口仅提供规划预览'
             return
         # The task owner waits for localization. A UI callback between valid
         # pose updates must not drop an otherwise explicit navigation goal.
-        if self.goal_request_pending or not self.navigate_client.server_is_ready():
-            self.reason = '导航任务服务未就绪或正在接收目标'
+        if not self.navigate_client.server_is_ready():
+            self.reason = '导航任务服务未就绪'
             return
         goal = Navigate.Goal()
         goal.schema_version, goal.goal_kind = 2, '3d'
@@ -512,17 +803,45 @@ class LiveView(Node):
         goal.goal.pose = deepcopy(self.goal_pose)
         goal.has_goal_yaw, goal.goal_yaw_tolerance_rad = self.goal_has_yaw, math.radians(10.)
         goal.request_execution=bool(request_execution)
+        p, q = goal.goal.pose.position, goal.goal.pose.orientation
+        signature = (self.frame, p.x, p.y, p.z, q.x, q.y, q.z, q.w,
+                     goal.has_goal_yaw, goal.goal_yaw_tolerance_rad, goal.request_execution)
+        # Every explicit user submission is a new intent, including the same
+        # XYZ after a failure or while an old result waits for retirement.
+        # Action UUID/source admission (not equal geometry) handles replay.
+        # A new intent reaches the single BT owner immediately even while the
+        # previous goal-acceptance RPC is pending; marker dragging alone does
+        # not call this method or cancel the current task.
+        # Do not send an unscoped Empty cancel here: it could arrive after the
+        # replacement and cancel the new task instead of the old one.
         self.goal_request_sequence += 1
         sequence = self.goal_request_sequence
+        self.goal_submission_signature = signature
+        self.goal_request_task_id = None
         self.goal_request_pending = True
+        self.goal_request_active = True
         self.goal_request_deadline = time.monotonic()+5.
+        # A route confirmation belongs to the old intent, not the editable
+        # marker. Retire its UI wait now; a late ACK cannot rename this target.
+        self.execute_sequence = getattr(self, 'execute_sequence', 0)+1
+        self.execute_pending = False
+        self.execute_binding = self.execute_request_id = None
         self.reason = '导航目标已提交' if request_execution else '目标已提交，等待规划'
         self.reason_scope = 'planning'
         self.goal_submitted_at = LiveView.source_now_s(self)
+        def feedback(message):
+            if sequence != self.goal_request_sequence:
+                return
+            task_id = getattr(getattr(message, 'feedback', None), 'task_id', None)
+            if isinstance(task_id, str) and 0 < len(task_id) <= 128:
+                # UUID-scoped Action feedback names this exact BT task. Wall
+                # time alone cannot distinguish a late A route from new C.
+                self.goal_request_task_id = task_id
         try:
-            future = self.navigate_client.send_goal_async(goal)
+            future = self.navigate_client.send_goal_async(goal, feedback_callback=feedback)
         except Exception as error:
             self.goal_request_pending = False
+            self.goal_request_active = False
             self.reason = '目标提交失败：'+type(error).__name__
             return
         def accepted(future):
@@ -533,11 +852,18 @@ class LiveView(Node):
                         handle.cancel_goal_async()
                     return
                 self.goal_request_pending = False
+                self.goal_request_active = bool(handle.accepted)
                 self.reason = (('导航目标已接收' if request_execution else '目标已接收，等待路线预览')
                                if handle.accepted else '目标被任务管理器拒绝')
+                if handle.accepted:
+                    def completed(_):
+                        if sequence == self.goal_request_sequence:
+                            self.goal_request_active = False
+                    handle.get_result_async().add_done_callback(completed)
             except Exception as error:
                 if sequence == self.goal_request_sequence:
                     self.goal_request_pending = False
+                    self.goal_request_active = False
                     self.reason = '目标提交失败：'+type(error).__name__
         future.add_done_callback(accepted)
 
@@ -555,6 +881,10 @@ class LiveView(Node):
             return
         state = self.bt_state
         binding = tuple(state.get(key, '') for key in ('task_id', 'route_id', 'route_hash'))
+        if (self.goal_request_pending or (self.goal_request_sequence > 0
+                and binding[0] != getattr(self, 'goal_request_task_id', None))):
+            self.reason = '等待当前目标的路线预览'
+            return
         if (state.get('schema') != 2 or state.get('session_id') != self.session['id']
                 or not 0 <= time.monotonic()-self.bt_at <= .6 or not all(binding)):
             self.reason = '没有可确认的当前路线预览'
@@ -599,6 +929,8 @@ class LiveView(Node):
     def cancel(self, _):
         self.goal_request_sequence += 1
         self.goal_request_pending = False
+        self.goal_request_active = False
+        self.goal_submission_signature = self.goal_request_task_id = None
         self.execute_sequence = getattr(self, 'execute_sequence', 0)+1
         self.execute_pending = False
         self.cancel_pub.publish(Empty())
@@ -610,6 +942,8 @@ class LiveView(Node):
         if self.goal_request_pending and now >= self.goal_request_deadline:
             self.goal_request_sequence += 1
             self.goal_request_pending = False
+            self.goal_request_active = False
+            self.goal_submission_signature = self.goal_request_task_id = None
             self.reason = '目标接收超时；迟到的接收结果将取消'
         if self.execute_pending and now >= self.execute_deadline:
             self.execute_sequence += 1
@@ -641,27 +975,53 @@ class LiveView(Node):
         scan_state = self.scan_state if (0 <= now-self.scan_at < 1 and source_status_fresh(
             self.scan_state, stamp_field='received_at_unix', now=wall, timeout=1.)) else {}
         feedback = initial_pose_feedback(s, self.last_seed_id) if fresh else None
-        report = diagnostics(s, global_state, scan_state,
-            session_id=self.session['id'], now=wall, feedback=feedback)
-        if getattr(self, 'single_floor', False):
-            ready = LiveView.localization_ready(self)
-            # Do not manufacture legacy matcher confirmation fields. The
-            # atomic message is the producer's accepted navigation output.
-            report.update(preview_ready=ready, map_identity_valid=ready,
-                localization_degraded=False, localization_quality_detail='',
-                output_quality='tracking' if ready else 'output_waiting')
-            report['stages']['localization'] = dict(label='已定位' if ready else '等待定位',
-                tone='ready' if ready else 'muted', detail='')
-            report['navigation_admission'] = dict(ready=False, label='由任务执行许可管理',
-                tone='muted', detail='', blockers=[])
-            report['notice'] = ''
-            feedback = None
         bt_state = getattr(self, 'bt_state', {})
         bt_state = bt_state if (0 <= now-getattr(self, 'bt_at', 0.) < 1. and source_status_fresh(
             bt_state, stamp_field='received_at_unix', now=wall, timeout=1.)) else {}
+        waiting_goal_owner = awaiting_goal_owner(bt_state,
+            pending=getattr(self, 'goal_request_pending', False),
+            active=getattr(self, 'goal_request_active', False),
+            task_id=getattr(self, 'goal_request_task_id', None))
+        typed = None
+        initial_feedback = None
+        if getattr(self, 'single_floor', False):
+            typed = self.typed_view.display_context(now_ns=self.get_clock().now().nanoseconds,
+                                                   monotonic=now)
+            transaction = getattr(self, 'initial_pose_transaction', None)
+            if transaction is not None:
+                sample = self.typed_view.state
+                transaction.observe_ready(typed.identity, ready=typed.ready,
+                    source_ns=sample.source_ns if sample is not None else 0)
+                initial_feedback = transaction.feedback()
+        report = diagnostics(s, global_state, scan_state,
+            session_id=self.session['id'], now=wall, feedback=feedback,
+            navigation_context=typed, committed_route_view=getattr(self, 'committed_route_view', None),
+            owner_state={} if waiting_goal_owner else bt_state,
+            planning_scope=self.session.get('planning_scope', 'navigation'),
+            initial_pose_status=initial_feedback)
+        if typed is not None:
+            feedback = None
         report['behavior_tree'] = tree_presentation(bt_state)
+        if waiting_goal_owner:
+            # Old task geometry may remain visible while retirement finishes,
+            # but an old failure/trajectory cannot describe this new request.
+            # Keep self.bt_state intact: this is not a second task authority.
+            report['behavior_tree'] = dict(
+                label='切换目标' if bt_state else '等待当前任务状态',
+                detail='等待当前目标的任务状态',
+                task_id=getattr(self, 'goal_request_task_id', None) or '',
+                root_status='', active_node='', nodes=[], transitions=[])
+            report['stages']['global'] = dict(label='等待当前目标路线', tone='muted', detail='')
+            report['stages']['local'] = dict(label='等待新路线', tone='muted', detail='')
+            report['local_target'] = report['reference_horizon_m'] = report['plan_id'] = None
+        if (self.session.get('planning_scope') == 'global_route'
+                and report['behavior_tree']['label'] == '任务完成'):
+            report['behavior_tree']['label'] = '全局规划完成'
+            report['behavior_tree']['detail'] = '仅生成路线，不表示机器人已到达'
         reason = self.reason
-        if self.reason_scope == 'planning':
+        if waiting_goal_owner:
+            reason = report['behavior_tree']['label']
+        elif self.reason_scope == 'planning':
             # A submission notice must not outlive the actual request. Display
             # the same authoritative stage as the panel, including expiry and
             # failure; never leave "waiting for planning" after goal revocation.
@@ -682,6 +1042,7 @@ class LiveView(Node):
                 'mode': self.session['mode'], 'motion_enabled': False, 'motion_capable': self.motion_capable,
                 'physical_motion_capable': self.physical_motion_capable,
                 'reason': reason, 'seed_feedback': feedback,
+                'initial_pose_feedback': initial_feedback,
                 'scan_status': scan_state, 'global_status': global_state,
                 'behavior_tree': report['behavior_tree']}
             try:

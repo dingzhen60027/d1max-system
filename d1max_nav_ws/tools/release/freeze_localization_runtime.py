@@ -52,10 +52,56 @@ unset _d1max_localization_dependencies_prefix _d1max_localization_package
     return dict(prefix=str(prefix),copied_files=len(files),rebuilt_from_source=False)
 
 
+def record_rebuilt_package(nav_root, release, built_prefix, package='faster_lio'):
+    """Record a copied native rebuild, without copying or starting anything.
+
+    Call after replacing the complete package install. The untouched Livox
+    runtime retains its original copy evidence; changed files must match the
+    actual isolated install byte-for-byte, not an old workspace symlink.
+    """
+    nav_root=Path(nav_root).resolve(strict=True)
+    release=Path(release).resolve(strict=True)
+    built_prefix=Path(built_prefix).resolve(strict=True)
+    descriptor=json.loads((release/'release.json').read_text())
+    if (release/descriptor['sealed_manifest']).exists():
+        raise ValueError('sealed_release_not_mutable')
+    if package!='faster_lio':raise ValueError('unsupported_rebuilt_localization_package')
+    root=release/'localization_dependencies'
+    target=root/'install'/package
+    provenance_path=root/'runtime_copy_provenance.json'
+    value=json.loads(provenance_path.read_text())
+    source=nav_root/'src'/package
+    if not source.is_dir() or not target.is_dir() or not built_prefix.is_dir():
+        raise ValueError('actual_source_and_package_install_required')
+    count=0
+    for built in built_prefix.rglob('*'):
+        if not built.is_file() or '__pycache__' in built.parts:continue
+        copied=target/built.relative_to(built_prefix)
+        digest=sha(built)
+        if not copied.is_file() or sha(copied)!=digest:
+            raise ValueError('rebuilt_install_bytes_mismatch:'+str(copied))
+        value['files'][str(copied)]=dict(source_path=str(built.resolve()),
+            sha256=digest,source_sha256=digest)
+        count+=1
+    if not count:raise ValueError('empty_rebuilt_localization_package')
+    value['operation']='source_component_rebuild_with_runtime_copy'
+    value['rebuilt_from_source']=True
+    value['rebuilt_packages']=sorted(set(value.get('rebuilt_packages',()))|{package})
+    value.setdefault('rebuilds',{})[package]=dict(built_prefix=str(built_prefix),
+        source_root=str(source),source_files={str(p.relative_to(source)):sha(p)
+            for p in source.rglob('*') if p.is_file() and '__pycache__' not in p.parts})
+    provenance_path.write_text(json.dumps(value,indent=2)+'\n')
+    return dict(package=package,verified_rebuilt_files=count,physical_acceptance=False)
+
+
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--nav-root',required=True);parser.add_argument('--release',required=True)
-    args=parser.parse_args();print(json.dumps(freeze(args.nav_root,args.release)))
+    parser.add_argument('--rebuilt-prefix',help='Already copied, isolated Faster-LIO package install')
+    args=parser.parse_args()
+    result=(record_rebuilt_package(args.nav_root,args.release,args.rebuilt_prefix)
+            if args.rebuilt_prefix else freeze(args.nav_root,args.release))
+    print(json.dumps(result))
 
 
 if __name__=='__main__':main()

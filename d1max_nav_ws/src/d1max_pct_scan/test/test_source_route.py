@@ -1,4 +1,5 @@
 from copy import deepcopy
+import json
 from types import SimpleNamespace
 
 import numpy as np
@@ -133,6 +134,41 @@ def test_uncovered_route_edges_are_not_silently_promoted():
 def test_source_support_belongs_to_exact_original_map():
     with pytest.raises(ValueError, match='hash_mismatch'):
         builder(SourceSupport({}, 'd'*64))
+
+
+def test_artifact_builder_passes_mapping_and_keeps_measured_source_ownership(tmp_path):
+    from d1max_pct_scan.pointcloud_helpers.ground_path_bridge import StairGroundMapping
+    from d1max_pct_scan.source_route import digest_file
+    source = np.array([[0.,0.,0.],[.1,0.,0.],[0.,0.,3.],[.1,0.,3.],
+                       [.5,0.,1.],[.6,0.,1.],[.5,0.,1.6]],dtype=np.float64)
+    path = tmp_path/'source.pcd'
+    path.write_bytes(('VERSION .7\nFIELDS x y z\nSIZE 8 8 8\nTYPE F F F\n'
+        'COUNT 1 1 1\nWIDTH 7\nHEIGHT 1\nPOINTS 7\nDATA binary\n').encode()+source.tobytes())
+    source_hash = digest_file(path)
+    stage = tmp_path/'stage.json'; stage.write_text('{}')
+    (tmp_path/'audit').mkdir()
+    evidence = tmp_path/'audit/floor_evidence.npz'
+    np.savez(evidence, floor1_source_indices=np.array([0,1]),floor1_support=np.ones(2,dtype=bool),
+        floor2_source_indices=np.array([2,3]),floor2_support=np.ones(2,dtype=bool))
+    manifest = tmp_path/'manifest.json'
+    manifest.write_text(json.dumps(dict(source_path=str(path),source_sha256=source_hash,
+        floor_processing_manifest=str(stage),floor_processing_manifest_sha256=digest_file(stage),
+        configuration=dict(floor_evidence_sha256=digest_file(evidence)))))
+    original = source[[4,5]]
+    mapping = StairGroundMapping(dict(source_sha256=source_hash,mapping_sha256='b'*64,
+        surfaces=[dict(id=1,kind='landing_plane')],max_displacement_m=.08,
+        association_max_distance_m=.12),dict(source_indices=np.array([4,5],dtype=np.int64),
+        source_xyz=original,planning_xyz=original+[0.,0.,.08],surface_id=np.ones(2,dtype=np.int32)),
+        source_xyz=source)
+    bridge = SimpleNamespace(source_frame='d1max_loc_map',planning_frame='d1max_multifloor_planning',
+        floors={'floor1':None,'floor2':None},protected_regions=[dict(min=[.4,-1.,.5],max=[.7,1.,2.])],
+        stair_mapping=mapping)
+    built = SourceRouteBuilder.from_artifacts(manifest,SimpleNamespace(sha256='c'*64),bridge)
+    assert built.support.stair_mapping is mapping
+    assert np.array_equal(built.support.trees['stairs'].data,original)
+    assert np.array_equal(built.support.trees['floor1'].data,source[:2])
+    assert set(map(tuple,built.support.trees['stair_upper'].data)) == set(map(tuple,source[[2,3,4,5]]))
+    assert tuple(source[6]) not in set(map(tuple,built.support.trees['stairs'].data))
 
 
 @pytest.mark.parametrize('layers', [[4.1, 4., 4.], [True, True, True], [4, 4], [-1, 4, 4]])

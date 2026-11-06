@@ -544,12 +544,20 @@ LaserMapping::LaserMapping(const std::string &name) : Node(name) {
     preprocess_.reset(new PointCloudPreprocess());
     p_imu_.reset(new ImuProcess());
     InitROS();
+    // Start only after construction of every ROS entity has succeeded. A
+    // partially constructed node must never leave a joinable reporter thread.
+    if(robust_mode_)StartRobustTraceReporter();
     
 }
 
 
 void LaserMapping::Run() {
-    if(robust_mode_){RobustRecovery();RobustStatus();}
+    if(robust_mode_){
+        if(robust_coast_pending_&&!robust_fault_&&robust_last_good_>0&&
+           now().seconds()-robust_last_good_>robust_coast_gap_+.25)
+            RequestImuRecovery("imu_gap"); // No new verified scan within the original model horizon.
+        RobustRecovery();RobustStatus();
+    }
     if(mapping_imu_guard_)MappingInputStatus();
     if(mapping_input_fault_)return;
     if (!SyncPackages()) {
@@ -560,7 +568,9 @@ void LaserMapping::Run() {
     scan_undistort_->clear();
     const bool mapping_will_propagate = mapping_imu_guard_ && p_imu_->Initialized() && !measures_.imu_.empty();
     p_imu_->integration_noise_scale = robust_mode_ ? robust_scan_noise_scale_ : 1.0;
+    const auto imu_phase=BeginRobustPhase(LocalizationPipelineTrace::ImuProcessBegin,lidar_end_time_);
     p_imu_->Process(measures_, kf_, scan_undistort_);
+    EndRobustPhase(LocalizationPipelineTrace::ImuProcessEnd,lidar_end_time_,imu_phase);
     if(mapping_will_propagate){
         mapping_last_propagated_end_=measures_.lidar_end_time_;
         mapping_has_propagated_=true;
@@ -607,22 +617,47 @@ void LaserMapping::Run() {
         [&, this]() {
             // iterated state estimation
             double solve_H_time = 0;
+            const auto solve_phase=BeginRobustPhase(LocalizationPipelineTrace::SolveBegin,lidar_end_time_);
             // update the observation model, will call nn and point-to-plane residual computation
             kf_.update_iterated_dyn_share_modified(options::LASER_POINT_COV, solve_H_time);
             // save the state
             state_point_ = kf_.get_x();
             euler_cur_ = SO3ToEuler(state_point_.rot);
             pos_lidar_ = state_point_.pos + state_point_.rot * state_point_.offset_T_L_I;
+            EndRobustPhase(LocalizationPipelineTrace::SolveEnd,lidar_end_time_,solve_phase);
         },
         "IEKF Solve and Update");
 
-    if(robust_mode_ && (effect_feat_num_<robust_min_features_ || !state_point_.pos.allFinite()
-          || !state_point_.vel.allFinite() || !state_point_.rot.coeffs().allFinite() || !kf_.get_P().allFinite())) {
-        robust_reason_="weak_geometry";
-        if(robust_last_good_>0 && lidar_end_time_-robust_last_good_>.5)robust_fault_=true;
-        return;
+    if(robust_mode_) {
+        const auto quality=AssessLocalizationRegistration(effect_feat_num_,robust_min_features_,state_point_,kf_.get_P());
+        if(quality!=LocalizationRegistrationDisposition::Accepted) {
+            const bool numeric_fault=quality==LocalizationRegistrationDisposition::NonfiniteFilter;
+            robust_reason_=numeric_fault?"nonfinite_filter_state":"weak_geometry";
+            if(numeric_fault)robust_fault_=true;
+            // No posterior, TF/cloud or map increment from this scan. Finite
+            // weak geometry stays in the same epoch and keeps admitting later
+            // scans; it cannot become a permanent fault merely through elapsed
+            // time since last good geometry. Never clear an existing clock fault.
+            PublishRobustSample(false);
+            return;
+        }
     }
-    if(robust_mode_){robust_last_good_=lidar_end_time_;robust_reason_="tracking";robust_recovering_=false;}
+    if(robust_mode_){
+        if(robust_coast_pending_)++robust_coast_recoveries_;
+        robust_coast_pending_=false;
+        robust_last_good_=lidar_end_time_;robust_reason_="tracking";robust_recovering_=false;
+    }
+    // The accepted scan-end posterior is complete here. Map insertion and
+    // diagnostics do not modify its state/covariance, but can delay delivery
+    // past the downstream predictor's original source horizon. In live
+    // localization publish it once, before that maintenance work. The same
+    // worker still owns the filter and publication; no timestamps, quality
+    // checks, mapping-mode order or estimator deadlines change.
+    const bool posterior_published_early = robust_mode_ && !run_in_offline_ &&
+                                           static_cast<bool>(pub_odom_aft_mapped_);
+    if (posterior_published_early) {
+        PublishOdometry(pub_odom_aft_mapped_);
+    }
     LogFrontendState();
     // update local map
     Timer::Evaluate([&, this]() { MapIncremental(); }, "    Incremental Mapping");
@@ -639,7 +674,7 @@ void LaserMapping::Run() {
             PublishPath(pub_path_);
         }
     } else {
-        if (pub_odom_aft_mapped_) {
+        if (pub_odom_aft_mapped_ && !posterior_published_early) {
             PublishOdometry(pub_odom_aft_mapped_);
         }
         if (path_pub_en_ || path_save_en_) {
@@ -955,6 +990,7 @@ void LaserMapping::PrintState(const state_ikfom &s) {
 }
 
 void LaserMapping::MapIncremental() {
+    const auto phase=BeginRobustPhase(LocalizationPipelineTrace::MapBegin,lidar_end_time_);
     PointVector points_to_add;
     PointVector point_no_need_downsample;
 
@@ -1012,6 +1048,7 @@ void LaserMapping::MapIncremental() {
             ivox_->AddPoints(point_no_need_downsample);
         },
         "    IVox Add Points");
+    EndRobustPhase(LocalizationPipelineTrace::MapEnd,lidar_end_time_,phase);
 }
 
 /**
@@ -1201,8 +1238,13 @@ void LaserMapping::PublishOdometry(const rclcpp::Publisher<nav_msgs::msg::Odomet
     Eigen::Matrix<double,6,6> twist_cov=twist_j*P*twist_j.transpose();
     twist_cov.block<3,3>(3,3).diagonal()+=p_imu_->cov_gyr_;
     for(int i=0;i<6;++i)for(int j=0;j<6;++j)odom_aft_mapped_.twist.covariance[6*i+j]=twist_cov(i,j);
-    pub_odom_aft_mapped->publish(odom_aft_mapped_);
+    // The ordered local_sample is the authoritative posterior for continuous
+    // localization. A slow legacy Odometry publisher must not delay delivery
+    // of this already completed snapshot. Both retain the exact scan-end time.
     if(robust_mode_)PublishRobustSample(!robust_fault_.load()&&!robust_imu_clock_reset_.load());
+    const auto legacy_phase=BeginRobustPhase(LocalizationPipelineTrace::LegacyOdomBegin,lidar_end_time_);
+    pub_odom_aft_mapped->publish(odom_aft_mapped_);
+    EndRobustPhase(LocalizationPipelineTrace::LegacyOdomEnd,lidar_end_time_,legacy_phase);
     if(!publish_tf_)return;
     // static tf::TransformBroadcaster br;
     // tf::Transform transform;
@@ -1283,6 +1325,7 @@ void LaserMapping::PublishFrameWorld() {
 
 // void LaserMapping::PublishFrameBody(const ros::Publisher &pub_laser_cloud_body) {
 void LaserMapping::PublishFrameBody(const rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr pub_laser_cloud_body) {
+    const auto phase=BeginRobustPhase(LocalizationPipelineTrace::BodyCloudBegin,lidar_end_time_);
     int size = scan_undistort_->points.size();
     PointCloudType::Ptr laser_cloud_imu_body(new PointCloudType(size, 1));
 
@@ -1297,6 +1340,7 @@ void LaserMapping::PublishFrameBody(const rclcpp::Publisher<sensor_msgs::msg::Po
     // laserCloudmsg.header.stamp = ros::Time().fromSec(lidar_end_time_);
     laserCloudmsg.header.frame_id = tf_imu_frame_;
     pub_laser_cloud_body->publish(laserCloudmsg);
+    EndRobustPhase(LocalizationPipelineTrace::BodyCloudEnd,lidar_end_time_,phase);
     publish_count_ -= options::PUBFRAME_PERIOD;
 }
 

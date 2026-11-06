@@ -57,6 +57,10 @@ public:
 #ifndef FROZEN_CURVE_EVIDENCE
     ,int *query_failure_state
 #endif
+#ifdef PREVIEW_CANDIDATE_CONNECTION
+    ,MeasuredConnectionPolicy connection=MeasuredConnectionPolicy::CandidateAdmission,
+    double preview_connector_m=NoMotionPreviewConnectionPolicy::max_connector_m
+#endif
   );
 };
 __METHOD__
@@ -97,6 +101,32 @@ int main() {
       ",\"captured_state\":"<<state<<",\"unknown_diagnostic_count\":"<<unknown<<
       ",\"phase\":\""<<phase<<"\"}";
   }
+#ifdef PREVIEW_CANDIDATE_CONNECTION
+  for(int scenario=4;scenario<9;++scenario) {
+    SCANPlannerManager manager;auto& map=*manager.grid_map_;
+    Eigen::MatrixXd controls(3,7);
+    for(int i=0;i<controls.cols();++i)controls.col(i)=Eigen::Vector3d(.3+(i-1)*.05,0.,.55);
+    UniformBspline curve(controls,3,.5);CurveCheckEvidence evidence=CurveCheckEvidence::Uncertified;
+    if(scenario==5)map.setOccupied({.525,.325,.55}); // Actual displaced footprint, outside original curve.
+    if(scenario==6)map.setOccupied({.975,.025,.55}); // Original whole-curve remainder.
+    manager.measured_body_pose_.position.y()=scenario==7?.16:.06;
+    int state=0;
+    const bool strict=manager.checkWholeTrajectoryCollision(curve,50000,0.,false,0.,{},nullptr,&state);
+    state=0;
+    const bool safe=manager.checkWholeTrajectoryCollision(curve,50000,0.,false,0.,{},&evidence,&state,
+      MeasuredConnectionPolicy::PreviewCandidateGeometry,scenario==8?.16:.15);
+    const bool occupied=scenario==5||scenario==6;
+    const auto expected_evidence=scenario==4?CurveCheckEvidence::Clear:
+      occupied?CurveCheckEvidence::Occupied:CurveCheckEvidence::Uncertified;
+    const bool expected=!strict&&(scenario==4?safe:!safe)&&evidence==expected_evidence&&
+      (occupied?state==1:state==0);
+    failures+=!expected;
+    std::cout<<",{\"scenario\":"<<scenario<<",\"actual_query\":"<<map.getPlanningInflateOccupancy(manager.measured_body_pose_.position,0.)<<
+      ",\"safe\":"<<(safe?"true":"false")<<",\"strict_safe\":"<<(strict?"true":"false")<<
+      ",\"evidence\":"<<int(evidence)<<",\"captured_state\":"<<state<<
+      ",\"phase\":\""<<(safe?"preview_geometry_clear":occupied?"actual_occupied":"uncertified_geometry")<<"\"}";
+  }
+#endif
   std::cout<<"]\n";return failures?1:0;
 }
 '''
@@ -114,6 +144,7 @@ def main():
     end = source.index('  bool SCANPlannerManager::commitPreviewCandidate()', start)
     method = source[start:end]
     frozen = 'int *query_failure_state' not in method
+    preview_connection = 'MeasuredConnectionPolicy connection' in method
     # Release builds intentionally omit test executables. In that case reuse
     # the actual node's generated compiler/link inputs, not guessed libraries.
     target = 'test_initial_yaw_native'
@@ -133,6 +164,8 @@ def main():
         compile_command = ['/usr/bin/c++'] + flags['CXX_DEFINES'] + flags['CXX_INCLUDES'] + flags['CXX_FLAGS']
         if frozen:
             compile_command.append('-DFROZEN_CURVE_EVIDENCE')
+        if preview_connection:
+            compile_command.append('-DPREVIEW_CANDIDATE_CONNECTION')
         subprocess.run(compile_command + ['-c', str(cpp), '-o', str(obj)], check=True)
         # Link only the extracted method harness; never include the production
         # main/FSM objects or launch a node. Retain its real installed libraries.
@@ -153,6 +186,7 @@ def main():
                 source_sha256=hashlib.sha256(source.encode()).hexdigest(),
                 method_sha256=hashlib.sha256(method.encode()).hexdigest(),
                 frozen_method=frozen,returncode=result.returncode,
+                preview_candidate_connection=preview_connection,
                 generated_native_target=target,
                 native_scenarios=json.loads(result.stdout),stderr=result.stderr,
                 source_scope='actual manager method + production GridMap/UniformBspline/whole checker; passive clock/logging only',

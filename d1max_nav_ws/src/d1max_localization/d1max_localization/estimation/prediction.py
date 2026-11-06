@@ -43,6 +43,12 @@ class PredictionLimits:
     soft_imu_gap: float = 0.015
     max_gap_rotation: float = 0.08
     history_sec: float = 2.0
+    # Position/visualization only. Neither evaluate() nor typed motion leases
+    # use these larger model bounds. 500ms missing IMU + scan/processing budget.
+    pose_only_horizon: float = .75
+    pose_only_imu_gap: float = .5
+    pose_only_distance: float = .25
+    pose_only_rotation: float = .30
 
 
 class InertialPredictor:
@@ -67,6 +73,10 @@ class InertialPredictor:
             or limits.soft_imu_gap > limits.max_imu_gap
             or limits.max_horizon > 0.5
             or limits.history_sec > 5.0
+            or limits.pose_only_horizon > .75
+            or limits.pose_only_imu_gap > .5
+            or limits.pose_only_distance > .25
+            or limits.pose_only_rotation > .30
         ):
             raise ValueError("unbounded inertial prediction")
         self.limits = limits
@@ -326,3 +336,69 @@ class InertialPredictor:
         self.reason = ("predicting_coast" if coasting else
                        "predicting_degraded_imu_gap" if self.degraded else "predicting")
         return MotionState(now, Pose3(p, q), v, angular, pc, tc, t, values[-1][0], unsupported)
+
+    def evaluate_pose_only(self, now):
+        """Bounded CV/rate model, never a usable motion state or new posterior.
+
+        Replay the unchanged numerical core only through a contiguous REAL IMU
+        prefix, then advance by its velocity/rate with growing uncertainty.
+        A later endpoint cannot interpolate across the missing interval.
+        """
+        if (self.fault or not self.valid or self.snapshot is None
+                or not fresh(self.snapshot[0],now,self.limits.pose_only_horizon,future=0.)):
+            return None
+        source=self.snapshot[0]
+        values=[v for v in self.imu if v[0]<=now]
+        left=next((i for i in range(len(values)-1,-1,-1) if values[i][0]<=source),None)
+        if left is None:return None
+        last=left
+        restart=None
+        for i in range(left,len(values)-1):
+            a,b=values[i],values[i+1]
+            gap=b[0]-a[0]
+            turn=gap*max(math.sqrt(sum(w*w for w in a[2])),math.sqrt(sum(w*w for w in b[2])))
+            if gap>self.limits.max_imu_gap+1e-6 or turn>self.limits.max_gap_rotation:
+                restart=i+1
+                break
+            last=i+1
+        imu=values[last][0]
+        model_end=values[restart][0] if restart is not None else now
+        if not 0<=model_end-imu<=self.limits.pose_only_imu_gap+1e-6:return None
+        target=max(source,imu)
+        # No recursive mutation of the owner's clock/high-water or buffers.
+        # This is the SAME pinned real-IMU integrator, not another LIO owner.
+        prefix=InertialPredictor(self.limits,self.odom,self.tracking)
+        prefix.snapshot=self.snapshot;prefix.valid=True;prefix.epoch=self.epoch
+        prefix.imu=deque(values[:last+1],maxlen=1024)
+        basis=prefix.evaluate(target)
+        if basis is None:return None
+        duration=model_end-target
+        angular=tuple(values[last][2][j]-self.snapshot[3][j] for j in range(3))
+        speed=math.sqrt(sum(v*v for v in basis.world_velocity))
+        turn=math.sqrt(sum(w*w for w in angular))*duration
+        if restart is not None:
+            new_angular=tuple(values[restart][2][j]-self.snapshot[3][j] for j in range(3))
+            turn=max(turn,math.sqrt(sum(w*w for w in new_angular))*duration)
+        if duration<=0 or speed*duration>self.limits.pose_only_distance or turn>self.limits.pose_only_rotation:return None
+        p=tuple(basis.pose.position[j]+basis.world_velocity[j]*duration for j in range(3))
+        q=quaternion_multiply(basis.pose.orientation,rotation_step(angular,duration))
+        pc,tc=list(basis.pose_covariance),list(basis.twist_covariance)
+        for i in range(3):
+            pc[7*i]+=.25*self.limits.coast_accel_sigma**2*duration**4
+            pc[7*(i+3)]+=.25*self.limits.coast_angular_accel_sigma**2*duration**4+.04*duration**2
+            tc[7*i]+=self.limits.coast_accel_sigma**2*duration**2
+            tc[7*(i+3)]+=self.limits.coast_angular_accel_sigma**2*duration**2
+        model=MotionState(model_end,Pose3(p,q),basis.world_velocity,angular,pc,tc,source,imu,model_end-imu)
+        if restart is not None:
+            # IMU has returned. The unknown interval was MODELLED, not
+            # interpolated. Its resulting uncertain state may now integrate
+            # actual post-gap samples; original LIO provenance stays source.
+            resumed=InertialPredictor(self.limits,self.odom,self.tracking)
+            resumed.snapshot=(model_end,model.pose,model.world_velocity,*self.snapshot[3:7],pc,tc)
+            resumed.valid=True;resumed.epoch=self.epoch
+            resumed.imu=deque(values[restart:],maxlen=1024)
+            result=resumed.evaluate(now)
+            if result is None:return None
+            return MotionState(result.stamp,result.pose,result.world_velocity,result.angular,
+                result.pose_covariance,result.twist_covariance,source,result.imu_stamp,result.extrapolation)
+        return model

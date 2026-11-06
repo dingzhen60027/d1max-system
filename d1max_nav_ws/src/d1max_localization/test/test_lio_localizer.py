@@ -12,6 +12,7 @@ from d1max_localization.math_utils import Pose3
 from d1max_localization.startup_relocalization import StartupRelocalization
 from d1max_localization.global_registration import RegistrationConfig
 from d1max_localization.global_lio_localizer import GlobalLioLocalizer
+from d1max_localization.registration_gravity import QueryGravityHistory
 
 
 @pytest.fixture
@@ -26,6 +27,10 @@ def node(tmp_path):
     n.frontend={};n.frontend_at=0.;n.robot_at=100.;n.head_direction=1
     n.path=deque();n.pose_times=deque();n.active_seed='old';n.confirmed_seed='old';n.verified_confirmations=3
     n.last_output=0.;n.last_path=0.;n.last_command=None;n.command_result=None;n.last_error=''
+    n.last_applied_initial_intent_ns=0
+    n.last_applied_initial_intent_id=None
+    n.last_attempted_initial_intent_ns=0
+    n.last_attempted_initial_intent_id=None
     n.directory=tmp_path;n.session={'id':'test'};n.epoch_changed_at=0.
     for name in ('path_pub','local_pub','prediction_pub','tf','global_pub','pose_pub','icp_pub','seed_pub'):
         setattr(n,name,Mock())
@@ -76,6 +81,27 @@ def test_fatal_fault_not_cleared_by_same_epoch_samples(node):
     sample(node,t=100.1);status(node,1)
     assert node.core.fault=='imu_clock_reset' and not node.seed_ready()
     node.local_pub.publish.assert_not_called()
+
+
+def test_finite_weak_geometry_pauses_registration_without_clearing_seed_or_anchor(node):
+    sample(node);status(node,1)
+    node.core.seed(Pose3((5.,0.,0.),(0.,0.,0.,1.)),100.)
+    node.active_seed=node.confirmed_seed='seed';node.verified_confirmations=3
+    node.p['navigation_output_enabled']=True
+    node.alignment_pub=Mock();node.last_verified=None
+    anchor=node.core.anchor;history=list(node.core.local)
+    sample(node,valid=False,t=100.1,reason='weak_geometry',
+        last_good_posterior_sec=100.,finite_filter_state=True)
+    status(node,1,ready=False,reason='weak_geometry')
+    assert node.core.local_epoch==1 and not node.core.fault and not node.core.stream_valid
+    assert node.active_seed==node.confirmed_seed=='seed' and node.verified_confirmations==3
+    assert node.core.anchor==anchor and list(node.core.local)==history
+    invalid=json.loads(node.alignment_pub.publish.call_args.args[0].data)
+    assert not invalid['valid'] and not invalid['fault'] and invalid['seed_id']=='seed'
+    sample(node,t=100.2);status(node,1)
+    assert node.core.stream_valid and node.front_ready() and node.core.local_fresh(100.2)
+    assert node.core.anchor==anchor and node.active_seed==node.confirmed_seed=='seed'
+    node.seed_pub.publish.assert_not_called()
 
 
 @pytest.mark.parametrize('changes',[{'epoch':True},{'epoch':-1},{'position':[float('nan'),0.,0.]},
@@ -179,14 +205,17 @@ def test_status_keeps_matching_and_continuous_pose_and_motion_facts_separate(nod
 def startup_node(node):
     node.__class__=GlobalLioLocalizer
     node.startup=StartupRelocalization('test')
+    node.query_gravity=QueryGravityHistory(node.p['odom_frame'],node.p['tracking_frame'])
+    node.query_gravity_status={};node.map_gravity_contract=None
     node.registration_config=RegistrationConfig()
-    node.relocalization_worker=Mock(state='ready')
+    node.relocalization_worker=None
     node.relocalization_scan=None;node.relocalization_index={}
     node.active_seed=node.confirmed_seed=None;node.verified_confirmations=0
     node.startup.map_sha256='a'*64
     for i in range(9):sample(node,t=99.2+i*.1)
     status(node,1)
     assert node.startup.capture(99.95,100.)
+    node.relocalization_worker=Mock(state='ready')
     return node
 
 
@@ -214,15 +243,101 @@ def test_manual_seed_cancels_worker_and_cannot_be_overwritten(node):
     assert n.startup.reason.startswith('manual_seed') and n.startup.request is None
 
 
-def test_global_failure_stays_manual_without_looping_worker(node):
+def test_global_failure_has_bounded_new_attempt_not_infinite_worker_loop(node):
     n=startup_node(node);worker=n.relocalization_worker
     worker.poll.return_value=dict(kind='result',accepted=False,reason='ambiguous_place_or_floor',
         request_id=n.startup.request['request_id'],map_sha256='a'*64)
     n.poll_relocalization(100.)
     assert n.startup.state=='failed' and n.relocalization_worker is None
     worker.close.assert_called_once();n.seed_pub.publish.assert_not_called()
+    # This epoch has one remaining attempt; retry never supplies a map pose.
+    assert n.retry_automatic_relocalization()
+    assert n.startup.state=='waiting_lio' and n.startup.attempts==1
+    n.startup.attempts=2;n.startup.fail('ambiguous_place_or_floor')
+    assert not n.retry_automatic_relocalization()
+
+
+def test_real_reset_retires_worker_scan_anchor_and_verification_then_reopens_fresh_search(node):
+    n=startup_node(node);worker=n.relocalization_worker
+    old_result=dict(kind='result',accepted=True,request_id=n.startup.request['request_id'],
+        map_sha256='a'*64,candidate=dict(transform=[[1,0,0,3],[0,1,0,2],[0,0,1,0],[0,0,0,1]]))
+    n.core.seed(Pose3((5.,0.,0.),(0.,0.,0.,1.)),100.)
+    n.active_seed=n.confirmed_seed='old-seed';n.verified_confirmations=3
+    n.startup.mark_seed('old-seed',100.,'manual')
+    n.startup.verification('old-seed','old-seed',True,100.)
+    n.relocalization_scan=object();n.relocalization_index=dict(kind='index_ready',map_sha256='a'*64)
+    sample(n,epoch=2,valid=False,t=100.01,reason='imu_reinitializing')
+    worker.close.assert_called_once()
+    assert n.relocalization_worker is None and n.relocalization_scan is None
+    assert n.core.anchor is None and n.active_seed is n.confirmed_seed is None
+    assert not n.relocalization_index and not n.startup.history
+    assert n.startup.state=='waiting_lio' and n.startup.attempts==0
+    assert n.startup.accept(old_result,100.01) is None
+    for i in range(9):sample(n,epoch=2,t=100.1+i*.1)
+    status(n,2)
+    assert n.seed_ready() and n.startup.capture(100.85,100.9)
+    assert n.startup.request['epoch']==2 and n.core.anchor is None
+
+
+def test_failed_automatic_confirmation_retires_seed_before_retry_and_rejects_late_match(node):
+    n=startup_node(node)
+    n.core.seed(Pose3((5.,0.,0.),(0.,0.,0.,1.)),100.)
+    n.publish_seed(Pose3((5.,0.,0.),(0.,0.,0.,1.)),100.)
+    n.startup.manual_seed_epoch=None  # Fixture represents an automatic application.
+    old_seed=n.active_seed
+    n.startup.verification(old_seed,None,False,116.)
+    local_before=list(n.core.local)
+    assert n.retry_automatic_relocalization()
+    assert n.active_seed is n.confirmed_seed is None and n.core.anchor is None
+    assert n.core.local_epoch==1 and list(n.core.local)==local_before
+    late=String(data=json.dumps(dict(schema=1,seed_ns=old_seed,confirmations=3)))
+    n.on_verified(late)
+    assert n.confirmed_seed is None and n.core.anchor is None
+
+
+def test_current_manual_confirmation_failure_does_not_clear_manual_seed(node):
+    n=startup_node(node)
+    n.core.seed(Pose3((5.,0.,0.),(0.,0.,0.,1.)),100.)
+    n.publish_seed(Pose3((5.,0.,0.),(0.,0.,0.,1.)),100.)
+    current=n.active_seed;anchor=n.core.anchor
+    n.startup.verification(current,None,False,116.)
+    assert not n.retry_automatic_relocalization()
+    assert n.active_seed==current and n.core.anchor==anchor
+
+
+def test_failed_auto_attempt_with_remaining_budget_does_not_publish_terminal_startup_failure(node, monkeypatch):
+    n=startup_node(node)
+    n.relocalization_worker.poll.return_value=dict(kind='result',accepted=False,reason='ambiguous_place_or_floor',
+        request_id=n.startup.request['request_id'],map_sha256='a'*64)
+    n.read_command=Mock()
+    n.startup_status_sequence=0;n.relocalization_map_sha256='a'*64
+    n.relocalization_status_pub=Mock()
+    n.relocalization_scan_status={}
+    monkeypatch.setattr(LioLocalizer,'tick',lambda self:None)
+    n.tick()
+    snapshot=json.loads(n.relocalization_status_pub.publish.call_args.args[0].data)
+    assert snapshot['state']=='waiting_lio' and snapshot['attempts']==1
+    assert snapshot['attempt_limit']==2 and snapshot['attempt_scope']=='local_epoch'
+    assert not n.seed_pub.publish.called and n.core.anchor is None
+    n.startup.attempts=2;n.startup.fail('ambiguous_place_or_floor')
+    n.tick()
+    assert json.loads(n.relocalization_status_pub.publish.call_args.args[0].data)['state']=='failed'
+
+
+def test_manual_application_before_ready_worker_result_cancels_only_auto_attempt(node):
+    n=startup_node(node);worker=n.relocalization_worker
+    pending=n.startup.request['request_id']
+    command=dict(id='manual-wins',session_id='test',created_at=time.time(),reference='tracking',x=5.,y=2.,z=0.,yaw=0.)
+    (n.directory/'initial_pose.json').write_text(json.dumps(command))
+    n.read_command()
     n.poll_relocalization(100.)
-    assert n.relocalization_worker is None
+    assert n.command_result['accepted'] and n.startup.seed_epoch==1
+    assert n.startup.manual_seed_epoch==1 and n.startup.state=='confirming'
+    worker.poll.assert_not_called()
+    late=dict(request_id=pending,map_sha256='a'*64,accepted=True,
+              candidate=dict(transform=[[1,0,0,99],[0,1,0,0],[0,0,1,0],[0,0,0,1]]))
+    assert n.startup.accept(late,100.) is None
+    assert n.seed_pub.publish.call_count==1 and n.core.anchor.position[0]==5.
 
 
 def test_index_lifecycle_reports_have_original_map_identity_and_fenced_sequence(node, monkeypatch):

@@ -287,6 +287,57 @@ def test_pending_goal_wait_is_finite_and_does_not_retry_after_expiry(monkeypatch
     assert not attempts and node.goal_deadline_monotonic is None
 
 
+def test_new_goal_after_epoch_reset_does_not_inherit_historical_confirmed_identity(monkeypatch):
+    node, clock, _, _, _, attempts = lifecycle(monkeypatch)
+    node._last_confirmed_identity = IDENTITY  # Historical epoch4, not fresh proof.
+    node.localizer.update(local_epoch=5, active_seed_ns=None, confirmed_seed_ns=None)
+    node.navigation.update(epoch=5, seed_id=None, valid=False)
+    node.confirmed_identity = lambda: (_ for _ in ()).throw(ValueError('new_epoch_unconfirmed'))
+    node.planning_context = lambda: (_ for _ in ()).throw(ValueError('waiting_new_epoch'))
+    LiveGlobalPlanner._new_goal(node, _operator_goal(clock, x=7.), kind='2d')
+    assert node.waiting_goal['identity'] is None and node.pause.intent is None
+    assert node.cached_result is None and not node.active_reference and not attempts
+    recovered = replace(IDENTITY, epoch=5, confirmed_seed='verified-epoch5')
+    node.localizer.update(active_seed_ns=recovered.confirmed_seed, confirmed_seed_ns=recovered.confirmed_seed)
+    node.navigation.update(seed_id=recovered.confirmed_seed, valid=True)
+    node.confirmed_identity = lambda: recovered
+    node.planning_context = lambda: (5, recovered.confirmed_seed)
+    LiveGlobalPlanner._start_waiting_goal(node)
+    assert node.waiting_goal is None and len(attempts) == 1
+    assert node.pause.intent.identity == recovered and node.pause.intent.xyz[0] == 7.
+    assert node.pause.intent.user_stamp == 160.
+
+
+def test_newest_goal_during_epoch_recovery_replaces_old_intent_without_old_route_resurrection(monkeypatch):
+    node, clock, _, _, _, attempts = lifecycle(monkeypatch)
+    node.confirmed_identity = lambda: (_ for _ in ()).throw(ValueError('new_epoch_unconfirmed'))
+    node.planning_context = node.confirmed_identity
+    LiveGlobalPlanner._new_goal(node, _operator_goal(clock, x=7.), kind='2d')
+    first = node.waiting_goal
+    clock.wall += .1; clock.mono += .1
+    LiveGlobalPlanner._new_goal(node, _operator_goal(clock, x=9.), kind='2d')
+    assert node.waiting_goal is not first and node.waiting_goal['message'].pose.position.x == 9.
+    assert node.cached_result is None and node.pause.intent is None and not node.active_reference
+    recovered = replace(IDENTITY, epoch=5, confirmed_seed='verified-epoch5')
+    node.confirmed_identity = lambda: recovered
+    node.planning_context = lambda: (5, recovered.confirmed_seed)
+    LiveGlobalPlanner._start_waiting_goal(node)
+    assert len(attempts) == 1 and node.pause.intent.xyz[0] == 9.
+    assert node.pause.intent.identity == recovered
+
+
+def test_cancelled_new_goal_waiting_relocalization_cannot_resurrect_on_ready(monkeypatch):
+    node, clock, _, _, _, attempts = lifecycle(monkeypatch)
+    node.confirmed_identity = lambda: (_ for _ in ()).throw(ValueError('new_epoch_unconfirmed'))
+    node.planning_context = node.confirmed_identity
+    LiveGlobalPlanner._new_goal(node, _operator_goal(clock), kind='2d')
+    LiveGlobalPlanner.on_cancel(node, None)
+    node.confirmed_identity = lambda: replace(IDENTITY, epoch=5, confirmed_seed='new')
+    node.planning_context = lambda: (5, 'new')
+    LiveGlobalPlanner._start_waiting_goal(node)
+    assert node.waiting_goal is None and node.pause.intent is None and not attempts
+
+
 @pytest.mark.parametrize('change', ['epoch', 'seed', 'map', 'fault'])
 def test_waiting_goal_never_rebinds_to_changed_localization_identity(monkeypatch, change):
     node, clock, _, _, _, attempts = lifecycle(monkeypatch)

@@ -9,9 +9,16 @@
 #include <future>
 #include <deque>
 #include <iterator>
+#include <tuple>
+#include <array>
+#include <functional>
 #include <plan_env/collision_snapshot_pool.hpp>
 #include <plan_env/pending_snapshot_request.hpp>
 #include <plan_manage/execution_validator.hpp>
+#include <plan_manage/role_executors.hpp>
+#include <plan_manage/owner_solve_completion.hpp>
+#include <plan_manage/reference_receipt_history.hpp>
+#include <plan_manage/rolling_reference.hpp>
 #include <nav_msgs/msg/odometry.hpp>
 #include <nav_msgs/msg/path.hpp>
 #include <rclcpp/rclcpp.hpp>
@@ -64,8 +71,48 @@ namespace scan_planner
     SCANPlannerManager::Ptr planner_manager_;
     SCANPlannerManager::Ptr solve_worker_;
     CollisionSnapshotPool snapshot_pool_;
+    // The live GridMap has exactly one ROS writer group. Formal planning
+    // borrows one exclusive immutable query view for each owner transaction;
+    // no FSM callback reads live buffers while a ray batch is being fused.
+    GridMap::Ptr grid_map_writer_;
+    rclcpp::CallbackGroup::SharedPtr map_writer_group_;
+    // Coalesced retry of an already completed fusion transaction. These are
+    // owned by the writer callback group, never a queue of old map copies.
+    bool map_validation_publication_pending_{false};
+    bool map_solver_publication_pending_{false};
+    rclcpp::TimerBase::SharedPtr map_publication_timer_;
+    void publishMapSnapshots();
+    unsigned owner_map_depth_{0};
+    CollisionSnapshotPool::PublicationTiming owner_snapshot_timing_{};
+    enum class OwnerInput : std::size_t { Odom, Progress, Proposal, TypedPath, Path, Goal, Count };
+    std::array<std::function<void()>,static_cast<std::size_t>(OwnerInput::Count)> owner_inputs_;
+    std::array<std::uint64_t,static_cast<std::size_t>(OwnerInput::Count)> owner_input_orders_{};
+    class OwnerMapScope {
+      SCANReplanFSM& owner_;
+      GridMap::Ptr previous_;
+      bool entered_{false},borrowed_{false};
+    public:
+      explicit OwnerMapScope(SCANReplanFSM& owner);
+      ~OwnerMapScope();
+      explicit operator bool()const{return entered_;}
+      OwnerMapScope(const OwnerMapScope&)=delete;
+      OwnerMapScope& operator=(const OwnerMapScope&)=delete;
+    };
+    void deferOwnerInput(OwnerInput input,std::uint64_t order,std::function<void()> callback);
+    void dispatchOwnerInput(OwnerInput input,std::uint64_t order,std::function<void()> callback);
+    void drainOwnerInputs();
     std::unique_ptr<ExecutionValidator> execution_validator_;
     std::optional<ew::ReferenceProposal> execution_proposal_;
+    // Scheduling intent only. Keep through snapshot/rate waits; consume when
+    // a solve actually starts. Never reuse an old task's acquired-body intent.
+    std::optional<ew::ExecutionVersion> actual_body_seed_request_;
+    // One original request, never a renewed source/deadline. A compatible
+    // rolling tail may wait for a reserved splice; cancellations never wait.
+    ew::ReferenceProposal::ConstSharedPtr deferred_rolling_proposal_;
+    std::chrono::steady_clock::time_point rolling_retry_priority_until_{};
+    std::string execution_transport_mode_;
+    double continuation_max_jerk_{.7};
+    ReferenceReceiptHistory<ew::ReferenceProposal,ew::ReferenceReceipt> execution_receipt_history_;
     rclcpp::TimerBase::SharedPtr validation_snapshot_timer_;
     rclcpp::Subscription<ew::ReferenceProposal>::SharedPtr execution_proposal_sub_;
     rclcpp::Subscription<ew::SupportReference>::SharedPtr execution_support_sub_;
@@ -77,7 +124,11 @@ namespace scan_planner
     rclcpp::Subscription<ew::ExecutionHandoffGrant>::SharedPtr execution_handoff_sub_;
     rclcpp::Subscription<ew::PreparedMotionDemand>::SharedPtr execution_prepared_sub_;
     rclcpp::Subscription<ew::ExecutionCommitAck>::SharedPtr execution_commit_ack_sub_;
+    rclcpp::Subscription<ew::LocalTrajectoryCommit>::SharedPtr execution_local_commit_sub_;
+    rclcpp::Publisher<ew::LocalTrajectoryCommit>::SharedPtr execution_local_commit_result_pub_;
+    rclcpp::Subscription<ew::TaskExecutionLease>::SharedPtr execution_task_lease_sub_;
     bool force_visible_side_target_{false},blocked_entry_replan_pending_{false};
+    std::optional<std::pair<ew::ExecutionVersion,std::int64_t>> collision_replan_incumbent_;
     Eigen::Vector3d blocked_entry_position_{Eigen::Vector3d::Zero()};
     rclcpp::Publisher<ew::ReferenceReceipt>::SharedPtr execution_receipt_pub_;
     rclcpp::CallbackGroup::SharedPtr execution_control_group_;
@@ -85,8 +136,12 @@ namespace scan_planner
       std::optional<SCANPlannerManager::SolvedCandidate> candidate;
       std::string failure;
       double solve_ms{0.},queue_ms{0.};
+      std::chrono::steady_clock::time_point finished_at{};
+      std::int64_t body_source_ns{0};
     };
     std::future<WorkerResult> solve_future_;
+    std::optional<CompletedOwnerSolve<WorkerResult>> completed_solve_;
+    std::optional<RetiredOwnerSolveFailure> retired_solve_failure_;
     SolveBudget::Ptr active_solve_budget_;
     PendingSnapshotRequest pending_snapshot_request_;
     bool solve_worker_enabled_{true};
@@ -97,6 +152,7 @@ namespace scan_planner
     std::int64_t solve_predecessor_id_{0};
     double solve_predecessor_measured_time_{0.};
     double snapshot_copy_ms_{0.};
+    std::size_t solve_snapshot_bytes_{0};
     d1max_planning_interfaces::msg::ReferencePath reference_metadata_;
     std::optional<d1max_planning_interfaces::msg::TrackingProgress> tracking_progress_;
     // Both inputs retain acquisition time. Callback order is not a motion
@@ -109,6 +165,9 @@ namespace scan_planner
     std::deque<OdomSourceSample> odom_source_history_;
     d1max_planning_interfaces::msg::TrackingProgress::ConstSharedPtr pending_tracking_progress_;
     bool require_schema_v2_{false};
+    bool planning_only_{false};
+    bool local_follower_{false};
+    bool fixed_stair_reference_continuity_{false};
     PlanningVisualization::Ptr visualization_;
     scan_planner_msgs::msg::DataDisp data_disp_;
 
@@ -120,8 +179,6 @@ namespace scan_planner
     double planning_horizon_;
     double emergency_time_;
     double rviz_goal_height_;
-    double self_inflation_z_up_, self_inflation_z_down_;
-    double self_double_cylinder_radius_, self_double_cylinder_offset_;
     double body_height_;
     double reference_path_z_offset_{0.0};
     double reference_start_tolerance_{1.0};
@@ -129,9 +186,9 @@ namespace scan_planner
     bool strict_input_frames_{false};
     bool odom_twist_in_body_frame_{false};
     rclcpp::Time last_odom_time_;
-    rclcpp::Time last_cloud_time_, last_replan_time_;
-    bool have_fresh_cloud_{false};
+    rclcpp::Time last_replan_time_;
     double max_replan_interval_{0.0};
+    double min_replan_interval_{0.0};
     double failed_replan_cooldown_{0.5}, failed_replan_body_distance_{0.15};
     double reference_goal_xy_tolerance_{.20}, reference_goal_z_tolerance_{.15};
     double reference_target_forward_margin_{1.0}, reference_target_backward_margin_{2.0};
@@ -163,6 +220,10 @@ namespace scan_planner
     std::string last_local_debug_phase_;
     std::string last_attempt_failure_phase_;
     bool have_local_debug_state_{false};
+    using ExecutionDebugKey=std::tuple<ew::ExecutionVersion,std::int64_t,std::string>;
+    std::optional<ExecutionDebugKey> last_execution_debug_key_;
+    std::chrono::steady_clock::time_point last_execution_debug_publish_{},last_data_display_publish_{};
+    std::optional<std::pair<ew::ExecutionVersion,std::int64_t>> last_visualized_committed_;
     std::uint64_t accepted_curve_generation_{0};
     std::int64_t accepted_curve_id_{-1};
     std::uint64_t predecessor_id_{0};
@@ -201,7 +262,7 @@ namespace scan_planner
     rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr goal_sub_;
     rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr odom_sub_;
     rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr execution_body_sub_;
-    rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr cloud_health_sub_;
+    rclcpp::Subscription<ew::LocalNavigationState>::SharedPtr execution_local_body_sub_;
     rclcpp::Subscription<nav_msgs::msg::Path>::SharedPtr path_sub_;
     rclcpp::Subscription<d1max_planning_interfaces::msg::ReferencePath>::SharedPtr typed_path_sub_;
     rclcpp::Subscription<d1max_planning_interfaces::msg::TrackingProgress>::SharedPtr tracking_progress_sub_;
@@ -216,6 +277,8 @@ namespace scan_planner
     /* helper functions */
     bool callReboundReplan(bool flag_use_poly_init, bool flag_randomPolyTraj); // front-end and back-end method
     bool pollSolveWorker();
+    bool solveWorkPending() const;
+    void collectSolveCompletion();
     void cancelSolveWorker();
     void cancelSnapshotAcquisition();
     bool snapshotAcquisitionCurrent();
@@ -225,6 +288,8 @@ namespace scan_planner
     std::optional<Eigen::Vector3d> odometryPositionAtSource(std::int64_t source_ns,
                                                          const std::string &frame) const;
     bool callEmergencyStop(Eigen::Vector3d stop_pos);                          // front-end and back-end method
+    bool refreshPlanningBodyFromInbox();
+    void finishOwnerBodyUpdate();
     bool planFromCurrentTraj();
     void setStartStateFromOdomOrCurrentTraj();
 
@@ -249,8 +314,12 @@ namespace scan_planner
     void finishProcess();
     void waitForChangedEnvironment();
     bool failedAttemptRetryReady(double monotonic_now);
+    bool keepPendingSpliceForOrdinaryReplan();
     bool environmentChangedSinceFailure();
     bool keepPreviewIncumbentForPeriodicReplan();
+    std::optional<double> planningOnlyCommittedCurveTime() const;
+    NoMotionPreviewProgress planningOnlyCommittedProgress() const;
+    bool tryReplanPlanningOnlyConnection(const NoMotionPreviewProgress& progress);
     bool shouldReplanUncertifiedPreview();
     void publishSelfInflationMarker();
     double getOdomYaw() const;
@@ -259,11 +328,21 @@ namespace scan_planner
 
     /* ROS functions */
     void execFSMCallback();
+    void execFSMOwnerCallback();
     void checkCollisionCallback();
     void rvizGoalCallback(const geometry_msgs::msg::PoseStamped::ConstSharedPtr &msg);
     void waypointCallback(const nav_msgs::msg::Path::ConstSharedPtr &msg);
     void pathCallback(const nav_msgs::msg::Path::ConstSharedPtr &msg);
     void typedPathCallback(const d1max_planning_interfaces::msg::ReferencePath::ConstSharedPtr &msg);
+    void replaceTypedReference(const d1max_planning_interfaces::msg::ReferencePath::ConstSharedPtr &msg,
+                               const std::vector<Eigen::Vector3d> *prepared);
+    void installReferenceWaypoints(const std::vector<Eigen::Vector3d> &waypoints);
+    void receiveReferenceProposal(ew::ReferenceProposal::ConstSharedPtr msg,const std::string &mode);
+    std::optional<std::vector<Eigen::Vector3d>> prepareRollingReference(const ew::ReferencePath &msg) const;
+    void installRollingReference(const ew::ReferencePath &msg,const std::vector<Eigen::Vector3d> &waypoints);
+    void processDeferredRollingProposal();
+    bool rollingReferenceBusy();
+    void rejectDeferredRollingProposal(const std::string &reason,bool retry_priority);
     void publishTrajectory(const scan_planner_msgs::msg::Bspline &trajectory);
     void odometryCallback(const nav_msgs::msg::Odometry::ConstSharedPtr &msg);
     void go2ExecutionFrozenCallback(const std_msgs::msg::Bool::ConstSharedPtr &msg);
@@ -281,6 +360,7 @@ namespace scan_planner
     }
 
     void init(rclcpp::Node *node);
+    std::vector<ExecutorRole> executorRoles()const;
 
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
   };

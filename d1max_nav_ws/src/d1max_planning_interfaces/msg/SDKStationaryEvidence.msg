@@ -24,6 +24,11 @@ uint32 stationary_samples
 float64 stationary_duration_sec
 float64 measured_linear_mps
 float64 measured_angular_radps
+# Original 3D norms above remain unchanged. Empty means spatial_norm_3d.
+string velocity_metric
+float64 measured_planar_mps
+# Absolute body-Z speed; planar policy must check this independently.
+float64 measured_vertical_mps
 bool nonzero_blocked
 bool usable
 bool physical_acceptance_verified

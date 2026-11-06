@@ -5,6 +5,7 @@ geometry identity are deliberately distinct; callbacks never restamp sensors.
 """
 import math
 from .source_route_ros import from_message
+from .bt_task_identity import BoundedTaskHistory, task_ordinal
 
 
 class RouteIngress:
@@ -16,9 +17,32 @@ class RouteIngress:
         self.last_stamp = 0.
         self.last_stamp_ns = 0
         self.active_identity = None
-        self.retired = set()
+        self.retirement_history = BoundedTaskHistory(session_id, legacy_limit=128)
+        # Compatibility-only tombstones; formal BT tasks use a constant-space
+        # watermark and therefore have no per-session target-count ceiling.
+        self.retired = self.retirement_history.legacy
 
-    def accept(self, message, *, now, context):
+    def is_retired(self, identity):
+        # A newer *unadmitted* cancellation cannot revoke the explicit current
+        # owner. Its exact retry/cancel still resolves through the old domain.
+        return (identity != self.active_identity
+                and self.retirement_history.contains(identity[0], legacy_key=identity))
+
+    def _retirement_capacity_available(self, identity):
+        history=self.retirement_history
+        if not history.can_remember(identity[0], legacy_key=identity):
+            return False
+        if task_ordinal(self.session_id,identity[0]) is not None or identity in self.retired:
+            return True
+        owner=self.active_identity
+        if (owner is None or owner==identity or owner in self.retired
+                or task_ordinal(self.session_id,owner[0]) is not None):
+            return True
+        # Legacy names cannot be forgotten safely. Reserve the current legacy
+        # owner's future tombstone before acknowledging unrelated cancels.
+        return len(self.retired)+1 < history.legacy_limit
+
+    def accept(self, message, *, now, context, retire_unadmitted=False):
         sec, nsec = message.source_stamp.sec, message.source_stamp.nanosec
         if sec < 0 or not 0 <= nsec < 1_000_000_000:
             raise ValueError('committed_route_delivery_timestamp_invalid')
@@ -44,8 +68,9 @@ class RouteIngress:
         if source.path.header.stamp != message.source_stamp:
             raise ValueError('committed_route_delivery_stamp_mismatch')
         snapshot = from_message(source)
+        task_ordinal(self.session_id, message.task_id)
         if message.active:
-            if identity in self.retired:
+            if self.is_retired(identity):
                 raise ValueError('retired_committed_route_cannot_resume')
             if context != (self.session_id, source.localization_epoch, source.localization_seed_id):
                 raise ValueError('committed_route_localization_context_mismatch')
@@ -53,16 +78,19 @@ class RouteIngress:
                 raise ValueError('committed_route_not_ready')
             if self.active_identity is not None and self.active_identity != identity:
                 raise ValueError('old_committed_route_not_retired')
+            if not self._retirement_capacity_available(identity):
+                raise ValueError('route_session_retirement_capacity_exceeded')
             self.active_identity = identity
         else:
             # An old task's cancellation cannot erase a newer committed route.
-            if self.active_identity != identity:
+            if self.active_identity != identity and not retire_unadmitted:
                 return None
             # Do not partially mutate the owner if the bounded session is full.
-            if identity not in self.retired and len(self.retired) >= 128:
+            if not self._retirement_capacity_available(identity):
                 raise ValueError('route_session_retirement_capacity_exceeded')
-            self.retired.add(identity)
-            self.active_identity = None
+            self.retirement_history.remember(message.task_id, legacy_key=identity)
+            if self.active_identity == identity:
+                self.active_identity = None
         self.last_sequence, self.last_stamp = message.delivery_sequence, stamp
         self.last_stamp_ns = stamp_ns
         return snapshot

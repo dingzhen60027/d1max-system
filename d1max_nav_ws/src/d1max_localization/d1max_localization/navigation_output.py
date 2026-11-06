@@ -102,7 +102,12 @@ class NavigationOutput(Node):
         self.local_state_pub = self.create_publisher(LocalNavigationState, PREFIX+'navigation/local_state', 5)
         self.last_local_state_identity = None
         self.last_local_state_event = 0.
+        self.last_local_state_lease = None
         self.last_local_unavailable = None
+        self.pose_continuity = None
+        self.pose_continuity_alignment = None
+        self.pose_continuity_sequence = 0
+        self.pose_continuity_pub = self.create_publisher(String,PREFIX+'navigation/pose_continuity',5)
         self.pose_pub = self.create_publisher(PoseStamped, PREFIX + "pose", 20)
         self.path_pub = self.create_publisher(Path, PREFIX + "trajectory", 2)
         self.status_pub = self.create_publisher(String, PREFIX + "navigation/status", 10)
@@ -309,10 +314,17 @@ class NavigationOutput(Node):
         key = self.core.key()
         if key and self.wire_session.get('id') and self.wire_session.get('version_id'):
             from .navigation_wire import local_body_message
-            self.local_state_pub.publish(local_body_message(local=local_message,
+            typed = local_body_message(local=local_message,
                 session_id=self.wire_session['id'],map_version_id=self.wire_session['version_id'],
                 epoch=self.core.epoch,seed_id=str(key[1]),posterior_stamp=state.source_stamp,
-                imu_stamp=state.imu_stamp,extrapolation_sec=state.extrapolation))
+                imu_stamp=state.imu_stamp,extrapolation_sec=state.extrapolation)
+            self.local_state_pub.publish(typed)
+            # Cache only a successfully published contract, including its
+            # ORIGINAL deadline. A callback/timer can never extend this lease.
+            self.last_local_state_lease = (
+                typed.session_id, typed.map_version_id,
+                typed.source_stamp.sec*10**9+typed.source_stamp.nanosec,
+                typed.valid_until.sec*10**9+typed.valid_until.nanosec)
             self.last_local_state_identity = (self.core.epoch,str(key[1]))
             self.last_local_state_event = state.stamp
             self.last_local_unavailable = None
@@ -351,8 +363,14 @@ class NavigationOutput(Node):
         # Build both members from the SAME output sample, not two latest
         # subscribers. Epoch/seed are estimator-owned, never supplied by tasks.
         key = self.core.key()
+        raw = self.core.local_at(local.stamp, raw=True)
+        if key and raw is not None and self.core.last_output_key==key:
+            # Freeze the offset at this ACTUAL same-time pair. A later raw
+            # local sample or a soft control-unavailable notice cannot change
+            # the coordinates of a position-only prediction's old anchor.
+            self.pose_continuity_alignment=(key,compose(pose,inverse(local.pose)),
+                                           compose(local.pose,inverse(raw.pose)))
         if key and self.wire_session.get('id') and self.wire_session.get('version_id'):
-            raw = self.core.local_at(local.stamp, raw=True)
             if raw is not None:
                 local_pose, _, _, local_cov, _ = body_state(local, self.extrinsic)
                 _, local_linear, local_angular, _, local_tc = body_state(raw, self.extrinsic)
@@ -412,18 +430,73 @@ class NavigationOutput(Node):
         output_source = next((state for state in reversed(self.core.local)
                               if round(state.stamp * 1e9) == output_ns), None)
         coasting = bool(output_source and output_source.extrapolation > .025 + 1e-6)
+        model=self.pose_continuity
+        model_valid=bool(model and model['available'] and not valid and not fault and self.future is None
+            and self.core.key()==(model['localization_epoch'],model['localization_seed_id'])
+            and fresh(model['estimate_stamp_ns']*1e-9,now,timeout)
+            and round(now*1e9)<=model['valid_until_ns'])
+        if model_valid:stamp=model['estimate_stamp_ns']*1e-9
         return {
             'schema': 1, 'epoch': self.core.epoch,
             'seed_id': self.core.key()[1] if self.core.key() else None,
             'frame_id': self.p['map_frame'], 'body_frame': self.p['body_frame'],
             'received_at_unix': now, 'output_stamp_sec': stamp,
-            'pose_timeout_sec': timeout, 'valid': valid, 'pose_valid': valid,
+            'pose_timeout_sec': timeout, 'valid': valid or model_valid, 'pose_valid': valid or model_valid,
             'fault': fault, 'reset_pending': self.future is not None,
             'motion_control_enabled': False, 'output_clock': 'local_motion_samples',
-            'quality': ('fault' if fault else 'coasting' if valid and coasting else
+            'quality': ('fault' if fault else 'imu_gap_coasting_pose_only' if model_valid else 'coasting' if valid and coasting else
                         'tracking' if valid else 'paused'),
-            'reason': self.core.output_attempt_reason,
+            'reason': 'bounded_missing_imu_model_not_motion_usable' if model_valid else self.core.output_attempt_reason,
+            'motion_usable': valid,
+            'posterior_stamp_ns': model['posterior_stamp_ns'] if model_valid else None,
+            'imu_stamp_ns': model['imu_stamp_ns'] if model_valid else None,
         }
+
+    def publish_pose_continuity(self, state=None, *, horizon=.75, imu_gap=.5):
+        """One public TF writer; model geometry never enters EKF/typed control.
+
+        Map/odom smoothing offset is the last REAL paired output. Retaining it
+        for a finite prediction is not a new map correction or measurement.
+        """
+        now=self.now_s();key=self.core.key()
+        alignment=self.pose_continuity_alignment
+        available=bool(state is not None and key and alignment and alignment[0]==key
+            and not self.core.fault and not self.core.filter_fault and self.future is None
+            and state.stamp>self.core.last_output
+            and fresh(state.stamp,now,self.core.limits.local_timeout,future=0.)
+            and state.source_stamp<=state.stamp and state.imu_stamp<=state.stamp
+            and fresh(state.source_stamp,now,horizon,future=0.)
+            and fresh(state.imu_stamp,now,imu_gap,future=0.))
+        self.pose_continuity_sequence+=1
+        value=dict(schema=1,sequence=self.pose_continuity_sequence,estimate_stamp_ns=round(now*1e9),
+            session_id=self.wire_session.get('id',''),
+            map_version_id=self.wire_session.get('version_id',''),localization_epoch=self.core.epoch,
+            localization_seed_id=str(key[1]) if key else '',frame_id=self.p['map_frame'],body_frame=self.p['body_frame'],
+            available=available,motion_usable=False,quality='imu_gap_coasting_pose_only' if available else 'unavailable',
+            reason='bounded_missing_imu_model_not_motion_usable' if available else 'no_bounded_position_model')
+        if available:
+            _,anchor,offset=alignment
+            local_pose=compose(offset,state.pose)
+            global_pose=compose(anchor,local_pose)
+            from .lio_fusion import rotate_pose_covariance
+            global_covariance=rotate_pose_covariance(state.pose_covariance,compose(anchor,offset).orientation)
+            local_state=MotionState(state.stamp,local_pose,state.world_velocity,state.angular,
+                state.pose_covariance,state.twist_covariance,state.source_stamp,state.imu_stamp,state.extrapolation)
+            local_body=body_state(local_state,self.extrinsic)[0]
+            global_state=MotionState(state.stamp,global_pose,rotate_vector(anchor.orientation,state.world_velocity),
+                state.angular,global_covariance,state.twist_covariance,state.source_stamp,state.imu_stamp,state.extrapolation)
+            body,_,_,pc,_=body_state(global_state,self.extrinsic)
+            value.update(estimate_stamp_ns=round(state.stamp*1e9),posterior_stamp_ns=round(state.source_stamp*1e9),
+                imu_stamp_ns=round(state.imu_stamp*1e9),
+                valid_until_ns=min(round(state.source_stamp*1e9)+round(horizon*1e9),
+                                   round(state.imu_stamp*1e9)+round(imu_gap*1e9)),
+                position=list(body.position),orientation=list(body.orientation),pose_covariance=pc)
+            self.tf.sendTransform(transform(self.p['odom_frame'],self.p['body_frame'],local_body,state.stamp))
+            self.tf.sendTransform(transform(self.p['map_frame'],self.p['odom_frame'],anchor,state.stamp))
+        self.pose_continuity=value
+        if key is None or (alignment and alignment[0]!=key) or self.core.fault or self.core.filter_fault:
+            self.pose_continuity_alignment=None
+        self.pose_continuity_pub.publish(String(data=json.dumps(value,allow_nan=False)))
 
     def publish_local_unavailable(self, now):
         """One explicit revocation per episode, never a pose heartbeat.
@@ -431,22 +504,39 @@ class NavigationOutput(Node):
         Soft expiry uses the last measurement watermark + 1 ns, so it cannot
         suppress a newer causal sample merely because transport was delayed.
         Epoch/seed loss is hard. Map/EKF freshness alone does not revoke odom.
+        A pending next prediction cannot retract the consumption lease already
+        issued for a valid source. This does not generate or republish a pose.
         """
         identity=self.last_local_state_identity
         if identity is None:
             return
         key=self.core.key()
-        changed=(self.core.epoch!=identity[0] or not key or str(key[1])!=identity[1])
+        lease=self.last_local_state_lease
+        wire_changed=bool(lease and lease[:2] != (
+            self.wire_session.get('id'), self.wire_session.get('version_id')))
+        changed=(wire_changed or self.core.epoch!=identity[0] or not key or str(key[1])!=identity[1])
         if not changed and self.core.local_ready(now):
+            return
+        # local_ready checks whether a NEW output can be made at this clock
+        # (including the current IMU age). Typed consumers instead consume a
+        # previously admitted source until its signed valid_until. Mixing these
+        # two checks revoked valid states for a 0.204 ms IMU boundary crossing.
+        # Only missing-input/age cases retain the old lease; a fault, invalid
+        # measurement, reset or wire identity change still revokes immediately.
+        now_ns=round(now*1e9)
+        if (not changed and not self.core.fault and self.core.local_valid and lease
+                and lease[2] <= now_ns < lease[3]):
             return
         reason='localization_reset' if changed else ('hard_localization_lost'
             if self.core.fault else 'local_navigation_unavailable')
-        token=(identity,reason)
+        token=(identity,lease[:2] if lease else None,reason)
         if self.last_local_unavailable==token:
             return
         from d1max_planning_interfaces.msg import LocalNavigationState
-        event=LocalNavigationState(schema_version=1,session_id=self.wire_session['id'],
-            map_version_id=self.wire_session['version_id'],localization_epoch=max(identity[0],self.core.epoch),
+        # Revoke the old contract's recipients if the wire identity changed;
+        # publishing the reset only under the new map/session would be ignored.
+        event=LocalNavigationState(schema_version=2,session_id=lease[0] if lease else self.wire_session['id'],
+            map_version_id=lease[1] if lease else self.wire_session['version_id'],localization_epoch=max(identity[0],self.core.epoch),
             localization_seed_id=identity[1],usable=False,reason=reason)
         watermark=max(round(self.last_local_state_event*1e9)+1,1)
         # The envelope is an unavailable event; no geometry or renewed sensor
@@ -454,6 +544,23 @@ class NavigationOutput(Node):
         if changed: watermark=max(watermark,round(now*1e9))
         event.source_stamp.sec,event.source_stamp.nanosec=divmod(watermark,10**9)
         self.local_state_pub.publish(event)
+        # This is the existing once-per-episode revocation, not a new gate or
+        # a heartbeat. Preserve the cause and original source ages before the
+        # wire's intentionally empty unavailable payload reaches consumers.
+        self.get_logger().info("LocalStateUnavailable " + json.dumps({
+            "at_unix": now, "reason": reason, "event_source_ns": watermark,
+            "epoch": event.localization_epoch, "seed": event.localization_seed_id,
+            "local_valid": self.core.local_valid, "fault": self.core.fault,
+            "issued_source_ns": lease[2] if lease else None,
+            "issued_valid_until_ns": lease[3] if lease else None,
+            "unavailable_trigger": ('localization_identity_changed' if changed else
+                'localization_fault' if self.core.fault else
+                'local_measurement_invalid' if not self.core.local_valid else
+                'issued_local_state_lease_expired' if lease and now_ns >= lease[3] else
+                'local_source_unavailable'),
+            "prediction_reason": self.predictor_status.get("reason"),
+            "source_timing": self.core.local_timing(now),
+        }, allow_nan=False))
         self.last_local_unavailable=token
 
     def tick(self):
@@ -492,7 +599,7 @@ class NavigationOutput(Node):
             valid and alignment_age is not None
             and alignment_age > self.core.limits.filter_timeout
         )
-        quality = ("fault" if fault else pose_status['quality'] if valid else
+        quality = ("fault" if fault else pose_status['quality'] if pose_status['pose_valid'] else
                    "initializing" if not self.core.reset_ack_at else "paused")
         value = {
             "schema": 1,
@@ -501,6 +608,8 @@ class NavigationOutput(Node):
             "received_at_unix": now,
             "valid": valid,
             "pose_valid": pose_status['pose_valid'],
+            "position_output_available": pose_status['pose_valid'],
+            "control_output_available": valid,
             "output_stamp_sec": pose_status['output_stamp_sec'],
             "pose_timeout_sec": pose_status['pose_timeout_sec'],
             "frame_id": self.p['map_frame'],

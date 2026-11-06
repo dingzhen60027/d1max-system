@@ -5,6 +5,7 @@ import {Badge} from '@/components/ui/badge'
 import {Card,CardContent} from '@/components/ui/card'
 import {Alert,AlertDescription} from '@/components/ui/alert'
 import {Spinner} from '@/components/ui/spinner'
+import {Select,SelectContent,SelectItem,SelectTrigger,SelectValue} from '@/components/ui/select'
 import {navigationLaunchStatus} from './navigation-launch-status.mjs'
 import {createNavigationOverviewCoordinator} from './navigation-overview-coordinator.mjs'
 
@@ -12,10 +13,11 @@ import {createNavigationOverviewCoordinator} from './navigation-overview-coordin
 export default function NavigationLaunch() {
  const [data,setData]=useState(null),[pending,setPending]=useState(''),[error,setError]=useState(''),[readError,setReadError]=useState('')
  const [nowUnix,setNowUnix]=useState(()=>Date.now()/1000)
+ const [selectedPurpose,setSelectedPurpose]=useState('planning_only')
  const alive=useRef(false),writing=useRef(false),overview=useRef(null)
- const request=async(action,write=false)=>{
+ const request=async(action,write=false,body={})=>{
   const response=await fetch('/api/navigation-session/'+action,write?
-   {method:'POST',headers:{'Content-Type':'application/json'},body:'{}',signal:AbortSignal.timeout(['start','stop'].includes(action)?6500:100000)}:
+   {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),signal:AbortSignal.timeout(['start','stop'].includes(action)?6500:100000)}:
    {signal:AbortSignal.timeout(6500)})
   const value=await response.json().catch(()=>({}))
   if(!response.ok){
@@ -27,14 +29,17 @@ export default function NavigationLaunch() {
  }
  if(!overview.current)overview.current=createNavigationOverviewCoordinator({
   read:()=>request('overview'),
-  onValue:value=>{if(alive.current){setData(value);setReadError('');setNowUnix(Date.now()/1000);setError('')}},
+  // A successful poll proves readability, not that a rejected write succeeded.
+  // Keep the action error until the next explicit action; worker diagnostics
+  // remain separately authoritative in the returned lifecycle snapshot.
+  onValue:value=>{if(alive.current){setData(value);setReadError('');setNowUnix(Date.now()/1000)}},
   onError:e=>{console.error('导航状态读取失败',e);if(alive.current)setReadError('状态读取失败')},
  })
  const refresh=useCallback(()=>overview.current.refresh(),[])
  useEffect(()=>{alive.current=true;void refresh();const timer=setInterval(refresh,1500)
   const clock=setInterval(()=>setNowUnix(Date.now()/1000),500)
   return()=>{alive.current=false;overview.current.invalidate();clearInterval(timer);clearInterval(clock)}},[refresh])
- const view=navigationLaunchStatus(data,{pending,readError,nowUnix})
+ const view=navigationLaunchStatus(data,{pending,readError,nowUnix,selectedPurpose})
  useEffect(()=>{
   if(data?.worker_error||data?.startup_error)console.error('导航生命周期失败',{
    operation:data.worker_operation,error:data.worker_error||data.startup_error})
@@ -42,11 +47,11 @@ export default function NavigationLaunch() {
  },[data?.worker_error,data?.startup_error,data?.worker_operation,data?.view_error])
  const message=view.workerError||error||(view.viewError?'RViz未打开':'')
  const act=async action=>{
-  const current=navigationLaunchStatus(data,{pending,readError,nowUnix:Date.now()/1000})
+  const current=navigationLaunchStatus(data,{pending,readError,nowUnix:Date.now()/1000,selectedPurpose})
   if(writing.current||!({start:current.canStart,stop:current.canStop,connect:current.canConnect,
    'view/global':current.canView})[action])return
   writing.current=true;overview.current.beginWrite();setPending(action);setError('')
-  try{const value=await request(action,true);if(alive.current){setData(value);setReadError('');setNowUnix(Date.now()/1000)}}
+  try{const value=await request(action,true,['start','connect'].includes(action)?{purpose:current.purpose}:{});if(alive.current){setData(value);setReadError('');setNowUnix(Date.now()/1000)}}
   catch(e){
    console.error('导航操作失败',{action,error:e,status:e.status,response:e.response})
    if(alive.current)setError(({start:'启动请求失败',stop:'退出请求失败',connect:'连接失败','view/global':'RViz未打开'})[action]||'操作失败')
@@ -59,6 +64,13 @@ export default function NavigationLaunch() {
   <Card className="live-planning-launch"><CardContent>
    <div className="live-connection-row"><div className="live-connection-copy"><strong>{view.connectionLabel}</strong></div>
     <Button variant="outline" disabled={!view.canConnect} onClick={()=>act('connect')}>{pending==='connect'?<Spinner/>:<Plug/>}连接机器狗</Button>
+   </div>
+   <div className="navigation-launch-mode"><span>启动模式</span>
+    <Select value={view.purpose} disabled={!view.canSelectPurpose} onValueChange={value=>{
+     if(!writing.current&&view.canSelectPurpose&&['planning_only','execution'].includes(value))setSelectedPurpose(value)
+    }}><SelectTrigger aria-label="启动模式"><SelectValue>{view.purposeLabel}</SelectValue></SelectTrigger>
+     <SelectContent><SelectItem value="planning_only">仅预览</SelectItem><SelectItem value="execution">运动导航</SelectItem></SelectContent>
+    </Select>
    </div>
    <div className="navigation-launch-actions">
     <Button size="lg" disabled={!view.canStart} onClick={()=>act('start')}>{pending==='start'?<Spinner/>:<Play/>}启动</Button>

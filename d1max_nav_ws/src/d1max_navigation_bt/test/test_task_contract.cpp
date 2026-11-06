@@ -1,7 +1,9 @@
 #include "d1max_navigation_bt/task_contract.hpp"
 #include "d1max_navigation_bt/route_contract.hpp"
+#include "d1max_navigation_bt/runtime_policy.hpp"
 #include <gtest/gtest.h>
 #include <limits>
+#include <rclcpp_action/types.hpp>
 
 using namespace d1max_navigation_bt;
 
@@ -59,6 +61,67 @@ TEST(GoalAdmission, CancelAllInvalidatesAlreadyReservedSlightlyFutureIntent) {
   ASSERT_TRUE(admission.reserve(100040000000LL,100000000000LL).empty());
   admission.fenceAll(100010000000LL);
   EXPECT_EQ(admission.commit(100040000000LL,100050000000LL),"goal_source_precedes_admission_barrier");
+}
+
+TEST(GoalAdmission, DelayedManualTakeoverRetiresPreEventFutureSkewReservationOnly) {
+  GoalAdmission admission;
+  ASSERT_TRUE(admission.reserve(100040000000LL,100000000000LL,"old").empty());
+  admission.fenceAcceptedBefore(100010000000LL);
+  EXPECT_EQ(admission.commit(100040000000LL,100050000000LL,"old"),
+    "goal_request_superseded_before_submission");
+  ASSERT_TRUE(admission.reserve(100060000000LL,100060000000LL,"new").empty());
+  // A retained duplicate old boundary never cancels the new operator intent.
+  admission.fenceAcceptedBefore(100010000000LL);
+  EXPECT_TRUE(admission.commit(100060000000LL,100070000000LL,"new").empty());
+}
+namespace {
+std::string actionRequest(unsigned char value) {
+  rclcpp_action::GoalUUID uuid{};uuid.back()=value;
+  return rclcpp_action::to_string(uuid);
+}
+}
+TEST(GoalAdmission, SameRosSourceDifferentActionUuidsCanReplaceWithoutInventingTime) {
+  GoalAdmission admission;constexpr std::int64_t at=100000000000LL;
+  const auto a=actionRequest(1),b=actionRequest(2),c=actionRequest(3);
+  ASSERT_TRUE(admission.reserve(at,at,a).empty());
+  ASSERT_TRUE(admission.commit(at,at,a).empty());
+  ASSERT_TRUE(admission.reserve(at,at,b).empty());
+  ASSERT_TRUE(admission.reserve(at,at,c).empty());
+  EXPECT_EQ(admission.commit(at,at,b),"goal_request_superseded_before_submission");
+  EXPECT_EQ(admission.commit(at,at,a),"goal_request_superseded_before_submission");
+  EXPECT_TRUE(admission.commit(at,at,c).empty());
+  EXPECT_EQ(admission.reserve(at,at,c),"goal_request_replayed");
+  EXPECT_EQ(admission.commit(at,at,c),"goal_request_superseded_before_submission");
+}
+TEST(GoalAdmission, TargetedOldUuidCancelDoesNotFenceSameStampNewAction) {
+  GoalAdmission admission;constexpr std::int64_t at=100000000000LL;
+  const auto a=actionRequest(1),b=actionRequest(2);
+  ASSERT_TRUE(admission.reserve(at,at,a).empty());
+  ASSERT_TRUE(admission.commit(at,at,a).empty());
+  ASSERT_TRUE(admission.reserve(at,at,b).empty());
+  admission.fenceRequest(a);
+  EXPECT_TRUE(admission.commit(at,at,b).empty());
+}
+TEST(GoalAdmission, CancelAllPoseResetAndSourceAgeStillFenceActionIdentity) {
+  GoalAdmission admission;constexpr std::int64_t at=100000000000LL;
+  ASSERT_TRUE(admission.reserve(at,at,actionRequest(1)).empty());
+  admission.fenceAll(at);
+  EXPECT_EQ(admission.commit(at,at,actionRequest(1)),"goal_source_precedes_admission_barrier");
+  EXPECT_EQ(admission.reserve(at,at,actionRequest(2)),"goal_source_precedes_admission_barrier");
+  EXPECT_EQ(admission.reserve(at-6000000000LL,at,actionRequest(3)),"goal_source_precedes_admission_barrier");
+  EXPECT_TRUE(admission.reserve(at+100000000LL,at+100000000LL,actionRequest(4)).empty());
+  EXPECT_TRUE(admission.commit(at+100000000LL,at+100000000LL,actionRequest(4)).empty());
+  EXPECT_EQ(admission.reserve(at+100000000LL,at+6100000000LL,actionRequest(5)),"goal_source_stamp_stale");
+  EXPECT_EQ(admission.reserve(at+6200000000LL,at+6100000000LL,actionRequest(6)),"goal_source_stamp_in_future");
+}
+TEST(GoalAdmission, TopicCompatibilityRemainsTimeOrderedWhenActionsShareAStamp) {
+  GoalAdmission admission;constexpr std::int64_t at=100000000000LL;
+  ASSERT_TRUE(admission.reserve(at,at,actionRequest(1)).empty());
+  ASSERT_TRUE(admission.commit(at,at,actionRequest(1)).empty());
+  EXPECT_EQ(admission.reserve(at,at),"goal_source_replayed_or_reordered");
+  ASSERT_TRUE(admission.reserve(at+1,at+1).empty());
+  EXPECT_EQ(admission.commit(at,at+1,actionRequest(1)),"goal_request_superseded_before_submission");
+  EXPECT_TRUE(admission.commit(at+1,at+1).empty());
 }
 namespace {
 const RouteBinding binding{"session", "task", "route", std::string(64,'a')};
@@ -135,6 +198,23 @@ TEST(Confirmation, StaleContextAndUnverifiedGeometryNeverAuthorize) {
   EXPECT_FALSE(confirm(l,"a",false,true,false,true).authorized);
   EXPECT_FALSE(confirm(l,"a",false,false,true,true).authorized);
   EXPECT_FALSE(l.authorized());
+}
+TEST(Confirmation, ConditionedRouteFlagCannotVetoPreparedTaskFollowerOrGrantWithoutPreparation) {
+  ConfirmationLedger ledger;
+  const bool original_route_flag=false;
+  auto missing=confirm(ledger,"same-intent",false,true,
+    confirmationGeometryReady("task_follower_v1",original_route_flag,false));
+  EXPECT_FALSE(missing.authorized);
+  auto prepared=confirm(ledger,"same-intent",false,true,
+    confirmationGeometryReady("task_follower_v1",original_route_flag,true));
+  ASSERT_TRUE(prepared.authorized);
+  auto duplicate=confirm(ledger,"same-intent",false,true,
+    confirmationGeometryReady("task_follower_v1",original_route_flag,true));
+  EXPECT_TRUE(duplicate.duplicate);
+  EXPECT_EQ(duplicate.confirmation_id,prepared.confirmation_id);
+  EXPECT_FALSE(original_route_flag); // No map/route acceptance fact was rewritten.
+  ledger.revoke();
+  EXPECT_FALSE(confirm(ledger,"same-intent",false,true,true).authorized);
 }
 TEST(GoalExecutionIntent, StartupAndPreviewGoalsHaveNoImplicitIntent) {
   GoalExecutionIntent idle;

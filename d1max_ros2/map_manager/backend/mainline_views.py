@@ -5,7 +5,6 @@ remain outside this one-way dependent systemd group's lifecycle.
 """
 from contextlib import contextmanager
 import fcntl
-import hashlib
 import json
 import math
 import os
@@ -19,6 +18,7 @@ import time
 import uuid
 
 from .localization import Systemd
+from .mainline_release import _digest
 
 
 CORE_UNIT = 'd1max-single-floor-navigation.service'
@@ -87,7 +87,7 @@ class OwnedNavigationViews:
         except (KeyError, TypeError, OSError):
             raise ValueError('view_session_binding_invalid') from None
         expected_session = state.get('session_sha256')
-        if expected_session and hashlib.sha256((directory / 'session.json').read_bytes()).hexdigest() != expected_session:
+        if expected_session and _digest(directory / 'session.json') != expected_session:
             raise ValueError('view_session_binding_changed')
         # Cleanup does not execute a dispatcher or load a release. Its authority
         # is the admitted session and the exact viewer invocation below; a
@@ -104,14 +104,14 @@ class OwnedNavigationViews:
             raise ValueError('view_entrypoint_unavailable')
         expected = state.get('entrypoint_sha256')
         if (entry.name == 'navigation_entry.sh' and not expected
-                or expected and hashlib.sha256(entry.read_bytes()).hexdigest() != expected):
+                or expected and _digest(entry) != expected):
             raise ValueError('view_entrypoint_changed')
         if entry.name == 'navigation_entry.sh':
             compatibility_entry = self.nav_root / 'tools/single_floor_entry.sh'
             expected_dependency = state.get('compatibility_entrypoint_sha256')
             if (not expected_dependency or compatibility_entry.is_symlink()
                     or not compatibility_entry.is_file()
-                    or hashlib.sha256(compatibility_entry.read_bytes()).hexdigest() != expected_dependency):
+                    or _digest(compatibility_entry) != expected_dependency):
                 raise ValueError('view_entrypoint_dependency_changed')
         return identifier, directory, release, entry
 

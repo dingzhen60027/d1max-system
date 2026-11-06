@@ -1,7 +1,8 @@
 """Startup-stage extension of the pinned LIO seed owner, not a second owner.
 
-The base LioLocalizer remains byte-identical for the sealed release. The new
-launch runs THIS subclass instead of (never alongside) the old seed owner.
+The launch runs THIS subclass instead of (never alongside) the base seed
+owner. Manual reseeding shares the base owner's ordered application boundary;
+this subclass adds startup registration, not a second manual-seed consumer.
 """
 from dataclasses import fields
 import json
@@ -18,6 +19,7 @@ from .lio_localizer import LioLocalizer, PREFIX, seconds, pose_from
 from .global_registration import RegistrationConfig, file_sha256
 from .startup_relocalization import StartupConfig, StartupRelocalization
 from .relocalization_worker import RegistrationWorker
+from .registration_gravity import load_map_gravity_contract, QueryGravityHistory
 
 
 def augment(data, snapshot):
@@ -51,7 +53,16 @@ class GlobalLioLocalizer(LioLocalizer):
         self.relocalization_map_sha256=file_sha256(path) if enabled and path.is_file() else None
         expected=self.session.get('input_hashes',{}).get(str(path.resolve()))
         if expected and expected!=self.relocalization_map_sha256 and enabled:
-            self.startup.fail('localization_map_differs_from_session_snapshot')
+            self.startup.fail('localization_map_differs_from_session_snapshot', persistent=True)
+        gravity_record=self.declare_parameter('global_relocalization.gravity.map_contract_json','{}').value
+        self.map_gravity_contract=None
+        self.query_gravity=QueryGravityHistory(self.p['odom_frame'],self.p['tracking_frame'])
+        self.query_gravity_status=dict(reason='waiting_lio_gravity_posterior')
+        if enabled:
+            try:
+                self.map_gravity_contract=load_map_gravity_contract(
+                    gravity_record,self.relocalization_map_sha256,self.p['map_frame'])
+            except ValueError as error:self.startup.fail(str(error), persistent=True)
         self.relocalization_worker=None;self.relocalization_scan=None;self.relocalization_index={}
         self.relocalization_scan_status={};self.seed_origin='manual'
         self.startup_status_sequence=0
@@ -77,7 +88,7 @@ class GlobalLioLocalizer(LioLocalizer):
         self.relocalization_worker=None;self.relocalization_scan=None
 
     def on_relocalization_scan(self,message):
-        if not self.startup.enabled or self.startup.ever_seeded:return
+        if not self.startup.enabled or self.startup.seeded_current_epoch:return
         age=self.now_s()-seconds(message);count=message.width*message.height
         reason=('tracking_frame_mismatch' if message.header.frame_id!=self.p['tracking_frame'] else
                 'scan_source_stale_or_future' if not 0<=age<=self.startup.config.max_source_age_s else
@@ -92,14 +103,32 @@ class GlobalLioLocalizer(LioLocalizer):
         if not hasattr(self,'startup'):return
         if self.core.local_epoch!=self.startup.epoch:
             self.startup.reset_epoch(self.core.local_epoch)
-            if self.startup.ever_seeded:self.stop_relocalization_worker()
+            # Epoch/source ownership changes retire the old search regardless
+            # of whether its candidate ever became a seed. No old result, scan
+            # or index-ready report may initialize the new epoch.
+            self.stop_relocalization_worker()
+            self.relocalization_index = {}
+            self.relocalization_scan_status = {}
+            if self.startup.ever_seeded and self.startup.config.automatic_epoch_recovery:
+                self.last_error = '局部里程计已重新初始化；等待静止和新鲜扫描后自动全局重定位'
         try:
             value=json.loads(message.data);t=int(value.get('stamp_ns',0))*1.e-9
+            if value.get('valid') is False:
+                self.observe_query_gravity(value)
             if (value.get('valid') is True and value.get('epoch')==self.core.local_epoch
                     and self.core.stream_valid and self.core.local
                     and abs(self.core.local[-1][0]-t)<1.e-6 and not self.core.fault):
                 self.startup.observe(self.core.local_epoch,self.core.local[-1][0],self.core.local[-1][1],value['linear'],value['angular'])
+                self.observe_query_gravity(value)
         except (ValueError,KeyError,TypeError):pass
+
+    def observe_query_gravity(self,value):
+        try:
+            self.query_gravity.observe(value,self.now_s())
+            self.query_gravity_status=dict(reason='posterior_available' if value.get('valid') else 'lio_posterior_invalid',
+                epoch=self.query_gravity.epoch,samples=len(self.query_gravity.samples))
+        except (ValueError,KeyError,TypeError) as error:
+            self.query_gravity_status=dict(reason=str(error),epoch=self.query_gravity.epoch)
 
     def publish_seed(self,pose,stamp):
         # Manual input, startup candidate and bounded local recovery all pass
@@ -112,7 +141,14 @@ class GlobalLioLocalizer(LioLocalizer):
 
     def poll_relocalization(self,now):
         if not self.startup.enabled:return
-        if self.startup.ever_seeded or self.startup.state=='failed':self.stop_relocalization_worker();return
+        if self.startup.state == 'failed':
+            if not self.retry_automatic_relocalization():
+                self.stop_relocalization_worker()
+                return
+        if (self.startup.seeded_current_epoch
+                or self.startup.state in ('disabled', 'manual_required_after_local_reset')):
+            self.stop_relocalization_worker()
+            return
         if self.relocalization_worker is None:
             try:
                 path=Path(self.map_pcd or self.session.get('map_pcd',''))
@@ -133,7 +169,7 @@ class GlobalLioLocalizer(LioLocalizer):
                 pose=self.startup.accept(result,now)
                 if pose is not None:
                     self.core.seed(pose,now)
-                    self.seed_origin='global'
+                    self.seed_origin='global_epoch_recovery' if self.startup.ever_localized else 'global'
                     try:self.publish_seed(pose,now)
                     finally:self.seed_origin='manual'
                 elif self.startup.state=='failed':self.stop_relocalization_worker();return
@@ -143,14 +179,32 @@ class GlobalLioLocalizer(LioLocalizer):
         message=self.relocalization_scan
         if message is None:
             self.startup.state='waiting_scan';self.startup.reason='waiting_fresh_deskewed_tracking_scan';return
+        query_ns=message.header.stamp.sec*1000000000+message.header.stamp.nanosec
+        query_gravity=self.query_gravity.at(query_ns,self.core.local_epoch,now)
+        if query_gravity is None:
+            self.startup.state='waiting_scan';self.startup.reason='waiting_exact_scan_gravity_posterior';return
         request=self.startup.capture(seconds(message),now)
         if request is None:return
         try:
             from .relocalization_cloud import pointcloud_xyz
             points=pointcloud_xyz(message,self.registration_config.max_scan_points)
-            if not self.relocalization_worker.submit(points,request['request_id']):self.startup.fail('global_worker_not_ready')
+            gravity=dict(schema=1,map=self.map_gravity_contract,query=query_gravity)
+            if not self.relocalization_worker.submit(points,request['request_id'],gravity):self.startup.fail('global_worker_not_ready')
         except (ValueError,OSError,EOFError,BrokenPipeError) as error:self.startup.fail(str(error))
         finally:self.relocalization_scan=None
+
+    def retry_automatic_relocalization(self):
+        previous_seed = self.startup.seed_id
+        if not self.startup.retry(automatic=True):
+            return False
+        self.stop_relocalization_worker()
+        if previous_seed is not None and self.active_seed == previous_seed:
+            self.core.revoke_unconfirmed_seed()
+            self.active_seed = self.confirmed_seed = None
+            self.verified_confirmations = 0
+            self.last_verified = None
+            self.publish_alignment()
+        return True
 
     def tick(self):
         if hasattr(self,'startup'):
@@ -158,11 +212,17 @@ class GlobalLioLocalizer(LioLocalizer):
             now=self.now_s();self.poll_relocalization(now)
             valid=(self.continuous_pose(now)[0] if self.p.get('navigation_output_enabled') else self.core.tracking(now))
             self.startup.verification(self.active_seed,self.confirmed_seed,valid,now)
+            # Consume a permitted bounded retry before publishing lifecycle
+            # failure. Otherwise a single confirmation timeout would abort a
+            # waiting BT goal even though this owner has another real attempt.
+            if self.startup.state == 'failed':
+                self.retry_automatic_relocalization()
             # Lifecycle progress while ROS time is paused is not a sensor
             # observation. The sequence fences duplicate/late status reports.
             self.startup_status_sequence+=1
             self.startup_snapshot=self.startup.status()
             self.startup_snapshot.update(index=self.relocalization_index,scan=self.relocalization_scan_status,
+                gravity=dict(map=self.map_gravity_contract,query=self.query_gravity_status),
                 requested_map_sha256=self.relocalization_map_sha256,
                 status_sequence=self.startup_status_sequence,received_at_unix=now)
             self.relocalization_status_pub.publish(String(data=json.dumps(self.startup_snapshot,allow_nan=False)))

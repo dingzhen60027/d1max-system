@@ -1,9 +1,9 @@
-"""Offline specification of an immutable map -> continuous-odom control anchor.
+"""Immutable map -> continuous-odom anchor and legacy preview specifications.
 
-This module is deliberately not motion admission. The current TaggedBspline and
-localization transport do not carry this contract. A YAML acceptance flag cannot
-invent that missing integration. Source nanoseconds, geometry and task identity
-are never refreshed by a coordinate conversion.
+The v3 mainline transports anchors through continuous_reference_transport and
+typed local navigation state. The blocker helper below belongs only to the old
+motion_stack preview; it is not the mainline integration status. Coordinate
+conversion never refreshes source timestamps, geometry or task identity.
 """
 from dataclasses import dataclass
 import hashlib

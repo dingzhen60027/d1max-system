@@ -8,6 +8,8 @@ const NOW=1791015000
 const view=(data,options={})=>navigationLaunchStatus(data,{nowUnix:NOW,...options})
 const ready={phase:'stopped',busy:false,owned:false,snapshot_at_unix:NOW,
  can_start:true,can_stop:false,can_view:false,can_connect:false,
+ purpose:'execution',can_select_purpose:true,
+ purpose_capabilities:{planning_only:{can_start:true,can_connect:true},execution:{can_start:true,can_connect:true}},
  connection:{active:true,phase:'connected',health:{sdk_fresh:true,lidar_fresh:true},replay:false}}
 const active={...ready,phase:'running',busy:true,owned:true,can_start:false,can_stop:true,can_view:true}
 const settle=()=>new Promise(done=>setImmediate(done))
@@ -16,6 +18,10 @@ const panelAst=parse(panel,{sourceType:'module',plugins:['jsx']})
 const component=panelAst.program.body.find(node=>node.type==='ExportDefaultDeclaration').declaration
 const actionNode=component.body.body.flatMap(node=>node.declarations||[]).find(node=>node.id.name==='act').init
 const actionCode=panel.slice(actionNode.start,actionNode.end)
+const coordinatorAssignment=component.body.body.find(node=>node.type==='IfStatement'&&
+ node.consequent?.expression?.right?.callee?.name==='createNavigationOverviewCoordinator')
+const onValueNode=coordinatorAssignment.consequent.expression.right.arguments[0].properties.find(node=>node.key.name==='onValue').value
+const onValueCode=panel.slice(onValueNode.start,onValueNode.end)
 function overviewFixture() {
  const requests=[],values=[],errors=[]
  const coordinator=createNavigationOverviewCoordinator({
@@ -24,21 +30,23 @@ function overviewFixture() {
  })
  return {coordinator,requests,values,errors}
 }
-function actionFixture() {
+function actionFixture(selectedPurpose='planning_only',overrides={}) {
  const requests=[],writes=[],writing={current:false},alive={current:true}
- const state={data:{...ready,snapshot_at_unix:Date.now()/1000},pending:'',error:'',readError:''}
+ const state={data:{...ready,...overrides,snapshot_at_unix:Date.now()/1000},pending:'',error:'',readError:''}
+ const applyOverview=Function('alive','setData','setReadError','setNowUnix','setError','return ('+onValueCode+')')(
+  alive,value=>{state.data=value},value=>{state.readError=value},()=>{},value=>{state.error=value})
  const coordinator=createNavigationOverviewCoordinator({
   read:()=>new Promise((resolve,reject)=>requests.push({resolve,reject})),
-  onValue:value=>{state.data=value;state.readError='';state.error=''},
+  onValue:applyOverview,
   onError:()=>{state.readError='状态读取失败'},
  })
  // Execute the actual component handler against deferred, entirely local I/O.
- const act=Function('navigationLaunchStatus','data','pending','readError','writing','overview',
+ const act=Function('navigationLaunchStatus','data','pending','readError','selectedPurpose','writing','overview',
   'setPending','setError','setData','setReadError','setNowUnix','request','alive','console','return ('+actionCode+')')(
-  navigationLaunchStatus,state.data,'','',writing,{current:coordinator},
+  navigationLaunchStatus,state.data,'','',selectedPurpose,writing,{current:coordinator},
   value=>{state.pending=value},value=>{state.error=value},value=>{state.data=value},
   value=>{state.readError=value},()=>{},
-  (action,write)=>new Promise((resolve,reject)=>writes.push({action,write,resolve,reject})),alive,{error:()=>{}},
+  (action,write,body)=>new Promise((resolve,reject)=>writes.push({action,write,body,resolve,reject})),alive,{error:()=>{}},
  )
  return {act,coordinator,requests,writes,writing,alive,state}
 }
@@ -49,6 +57,53 @@ test('overview polls coalesce into one bounded read',async()=>{
  await settle();assert.equal(requests.length,1)
  requests[0].resolve(ready);assert.equal(await first,true)
  assert.deepEqual(values,[ready])
+})
+test('stopped mode defaults to preview without replacing an admitted running purpose',()=>{
+ assert.equal(view(ready).purpose,'planning_only')
+ assert.equal(view(ready).purposeLabel,'仅预览');assert.equal(view(ready).canSelectPurpose,true)
+ assert.equal(view(ready,{selectedPurpose:'execution'}).purpose,'execution')
+ for(const phase of ['connecting','preparing','starting','running','stopping','failed','needs_review']){
+  const result=view({...active,phase,purpose:'execution'})
+  assert.equal(result.purpose,'execution');assert.equal(result.purposeLabel,'运动导航')
+  assert.equal(result.canSelectPurpose,false);assert.equal(result.canStart,false);assert.equal(result.canConnect,false)
+ }
+ assert.equal(view({...active,purpose:'planning_only'},{selectedPurpose:'execution'}).purposeLabel,'仅预览')
+ assert.equal(view({...active,purpose:undefined}).purposeLabel,'模式待核对')
+})
+test('mode selection and mode-specific capabilities require fresh explicit backend flags',()=>{
+ const allowed={...ready,can_connect:true}
+ for(const data of [{...allowed,busy:true},{...allowed,quarantined:true},{...allowed,can_select_purpose:false}])
+  assert.equal(view(data).canSelectPurpose,false)
+ for(const options of [{pending:'start'},{pending:'connect'},{readError:'timeout'},{nowUnix:NOW+6}]){
+  const result=view(allowed,options)
+  assert.equal(result.canSelectPurpose,false);assert.equal(result.canStart,false);assert.equal(result.canConnect,false)
+ }
+ for(const purpose_capabilities of [undefined,{}, {planning_only:{can_start:'true',can_connect:1}}]){
+  const result=view({...allowed,purpose_capabilities})
+  assert.equal(result.canStart,false);assert.equal(result.canConnect,false)
+ }
+ const previewOnly={...allowed,purpose_capabilities:{planning_only:{can_start:true,can_connect:true},
+  execution:{can_start:false,can_connect:false}}}
+ assert.equal(view(previewOnly).canStart,true);assert.equal(view(previewOnly).canConnect,true)
+ assert.equal(view(previewOnly,{selectedPurpose:'execution'}).canStart,false)
+ assert.equal(view(previewOnly,{selectedPurpose:'execution'}).canConnect,false)
+ assert.equal(view(allowed,{selectedPurpose:'invented'}).canStart,false)
+})
+test('actual connect and start handlers send the selected purpose once and other writes stay empty',async()=>{
+ for(const selectedPurpose of ['planning_only','execution'])for(const action of ['connect','start']){
+  const fixture=actionFixture(selectedPurpose,{can_connect:true})
+  const operation=fixture.act(action);await fixture.act(action)
+  assert.equal(fixture.writes.length,1)
+  assert.deepEqual(fixture.writes[0].body,{purpose:selectedPurpose})
+  fixture.alive.current=false;fixture.coordinator.invalidate()
+  fixture.writes[0].resolve({...fixture.state.data,phase:action==='start'?'preparing':'connecting',purpose:selectedPurpose})
+  await operation
+ }
+ for(const action of ['stop','view/global']){
+  const fixture=actionFixture('planning_only',{...active,snapshot_at_unix:Date.now()/1000})
+  const operation=fixture.act(action);assert.deepEqual(fixture.writes[0].body,{})
+  fixture.alive.current=false;fixture.coordinator.invalidate();fixture.writes[0].resolve(fixture.state.data);await operation
+ }
 })
 test('old overview cannot overwrite an accepted snapshot',async()=>{
  const {coordinator,requests,values}=overviewFixture()
@@ -94,7 +149,21 @@ test('a rejected request releases the actual handler while authoritative reconci
  await settle();assert.equal(fixture.requests.length,1)
  const failed={...fixture.state.data,phase:'failed',can_start:false,can_stop:true,worker_error:'准备失败'}
  fixture.requests[0].resolve(failed);await settle()
- assert.equal(fixture.state.error,'');assert.equal(navigationLaunchStatus(fixture.state.data).workerError,'启动失败')
+ assert.equal(fixture.state.error,'启动请求失败');assert.equal(navigationLaunchStatus(fixture.state.data).workerError,'启动失败')
+})
+test('a successful unchanged overview does not erase an explicitly rejected lifecycle write',async()=>{
+ const fixture=actionFixture(),operation=fixture.act('start')
+ fixture.writes[0].reject(Object.assign(Error('another task is starting'),{status:409}));await operation
+ await settle();assert.equal(fixture.state.error,'启动请求失败')
+ fixture.state.readError='状态读取失败'
+ fixture.requests[0].resolve({...fixture.state.data});await settle()
+ assert.equal(fixture.state.error,'启动请求失败');assert.equal(fixture.state.readError,'')
+ assert.equal(navigationLaunchStatus(fixture.state.data).canStart,true)
+ const retry=fixture.act('start')
+ assert.equal(fixture.state.error,'') // only the next explicit write clears it
+ fixture.writes[1].resolve({...fixture.state.data,phase:'preparing',can_start:false,can_stop:true})
+ await retry;await settle();fixture.requests[1].resolve({...fixture.state.data});await settle()
+ assert.equal(fixture.state.error,'');assert.equal(navigationLaunchStatus(fixture.state.data).canStop,true)
 })
 test('an obsolete failed GET does not restore a read error after acceptance',async()=>{
  const {coordinator,requests,values,errors}=overviewFixture()
@@ -193,20 +262,22 @@ test('unknown expired and failed reads disable every capability and hide cached 
 test('worker failures use concise operation labels while details remain in the console',()=>{
  assert.equal(view({...ready,worker_error:' 准备失败 ',startup_error:'旧启动失败'}).workerError,'启动失败')
  assert.equal(view({...ready,worker_error:'异常堆栈'.repeat(500),worker_operation:'stop'}).workerError,'退出未完成')
+ assert.equal(view({...ready,worker_error:'connection rejected',worker_operation:'connect'}).workerError,'连接失败')
  for(const worker_error of ['',null,{},17])
   assert.equal(view({...ready,worker_error,startup_error:' 核心启动失败 '}).workerError,'启动失败')
  assert.equal(view({...ready,worker_error:{error:'不可直接显示'}}).workerError,'')
  assert.match(panel,/const message=view\.workerError\|\|error\|\|/)
  assert.match(panel,/console\.error\('导航生命周期失败',\{/)
  assert.match(panel,/operation:data\.worker_operation,error:data\.worker_error\|\|data\.startup_error/)
- assert.match(panel,/onValue:value=>[^\n]*setError\(''\)/)
+ assert.doesNotMatch(onValueCode,/setError\(''\)/)
 })
 test('every backend lifecycle phase has a concise label',()=>{
- for(const [phase,label] of Object.entries({preparing:'准备中',starting:'启动中',stopping:'退出中',running:'运行中',
+ for(const [phase,label] of Object.entries({connecting:'连接中',preparing:'准备中',starting:'启动中',stopping:'退出中',running:'运行中',
   conflict:'待核对',needs_review:'待核对',failed:'待核对'}))
   assert.equal(view({...ready,phase,can_start:false}).label,label)
  assert.equal(view(ready).label,'可启动')
  assert.equal(view({...ready,can_start:false}).label,'未启动')
+ assert.equal(view({...ready,phase:'connecting',connection:{active:false,phase:'stopped'}}).connectionLabel,'连接中')
 })
 test('an active monitor does not disguise an explicitly disconnected SDK',()=>{
  const data={...ready,can_start:false,connection:{active:true,phase:'running',health:{sdk_fresh:false,lidar_fresh:false,

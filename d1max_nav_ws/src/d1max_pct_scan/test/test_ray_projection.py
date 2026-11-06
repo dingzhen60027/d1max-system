@@ -16,6 +16,18 @@ CTX = MapContext('session', 1, 'seed', 1, EPOCH-1)
 IDENTITY = Pose3((0., 0., 0.), (0., 0., 0., 1.))
 
 
+@pytest.mark.parametrize('gap_ns', [60_238_592, 80_000_000, 280_000_000])
+def test_pose_gap_reports_original_bracket_without_changing_rejection(gap_ns):
+    history = [(EPOCH, IDENTITY), (EPOCH+gap_ns, IDENTITY)]
+    with pytest.raises(ProjectionError, match='local_pose_bracketing_gap') as caught:
+        interpolate_many(history, np.array([EPOCH+20_000_000]), 60_000_000)
+    assert caught.value.pose_gap == dict(left_ns=EPOCH, right_ns=EPOCH+gap_ns,
+                                         ray_ns=EPOCH+20_000_000, limit_ns=60_000_000)
+    # An exactly acquired endpoint is not a missing interpolation bracket.
+    positions, _ = interpolate_many(history, np.array([EPOCH+gap_ns]), 60_000_000)
+    assert np.array_equal(positions, np.zeros((1, 3)))
+
+
 def planar(x=0., y=0., yaw=0.):
     return Pose3((x, y, 0.), (0., 0., math.sin(yaw/2), math.cos(yaw/2)))
 

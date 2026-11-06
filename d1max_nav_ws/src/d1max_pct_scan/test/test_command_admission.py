@@ -1,7 +1,7 @@
 from copy import deepcopy
 import pytest
 from d1max_pct_scan.command_admission import CommandAdmission
-from test_execution_safety import fixture,motion_proof,NOW,stamp
+from test_execution_safety import fixture,motion_proof,suffix_fixture,NOW,stamp
 
 
 def pending():
@@ -22,13 +22,29 @@ def test_async_proof_keeps_original_command_and_source_time():
     assert out.output.velocity==demand.velocity and not queue.pending
 
 
-@pytest.mark.parametrize('change',['model','velocity','body_time','ray_watermark','expired','invalid'])
+def test_suffix_command_verdict_can_arrive_before_curve_delivery_without_progress_subscription():
+    core,permit,demand,curve=suffix_fixture()
+    core.motion_proofs.clear()
+    queue=CommandAdmission(core)
+    assert queue.demand(demand,NOW).reason=='waiting_command_sweep'
+    curve=deepcopy(curve);curve.sequence+=1
+    sweep=motion_proof(demand);sweep.sequence=3;sweep.trajectory_validation_sequence=curve.sequence
+    assert queue.proof(sweep,NOW).reason=='waiting_native_curve_proof'
+    results=queue.validation(curve,NOW+1_000_000)
+    assert len(results)==1 and results[0].allowed
+    assert results[0].output.source_stamp==demand.source_stamp
+    assert results[0].output.body_source_stamp==demand.body_source_stamp
+    assert results[0].output.valid_until==demand.valid_until
+    assert not hasattr(core,'progress') and not queue.pending
+
+
+@pytest.mark.parametrize('change',['model','velocity','body_time','check_order','expired','invalid'])
 def test_actual_command_proof_rejects_dangerous_mismatches(change):
     _,queue,_,demand=pending();proof=motion_proof(demand)
     if change=='model':proof.braking_model_sha256='d'*64
     elif change=='velocity':proof.velocity.angular.z=.3
     elif change=='body_time':proof.demand_body_source_stamp=stamp(NOW+1)
-    elif change=='ray_watermark':proof.rear_ray_source_stamp=stamp(NOW-1)
+    elif change=='check_order':proof.check_begin=stamp(NOW+1)
     elif change=='expired':proof.valid_until=stamp(NOW)
     else:proof.valid=False;proof.reason='occupied_on_braking_sweep'
     result=queue.proof(proof,NOW)
@@ -127,7 +143,7 @@ def test_command_proof_before_its_named_curve_proof_waits_then_resolves_original
 
 
 @pytest.mark.parametrize('change',['intervening_negative','latest_negative','old_revision','control_expired',
-                                  'body_expired','raw_missing','raw_expired','foreign_curve'])
+                                  'body_expired','decision_expired','foreign_curve'])
 def test_new_sweep_cannot_resurrect_stale_negative_or_foreign_commands(change):
     core,queue,demand,current,sweep,now=phase_fixture()
     if change=='intervening_negative':
@@ -143,16 +159,30 @@ def test_new_sweep_cannot_resurrect_stale_negative_or_foreign_commands(change):
         original=next(iter(queue.pending.values()))
         original.body_source_stamp=stamp(NOW-80_000_000)
         sweep.demand_body_source_stamp=deepcopy(original.body_source_stamp)
-    elif change=='raw_missing':
-        core.raw[1].clear()
-    elif change=='raw_expired':
-        sweep.front_ray_source_stamp=stamp(NOW-600_000_000)
+    elif change=='decision_expired':
+        sweep.valid_until=stamp(now)
     elif change=='foreign_curve':
         sweep.trajectory_id+=1
     core.on_validation(current)
     result=queue.proof(sweep,now)
     assert not result.allowed
     assert result.output is None or result.output.hold
+
+
+def test_scan_positive_sweep_with_new_sensor_watermarks_resolves_without_ray_topic_join():
+    core,queue,demand,current,sweep,now=phase_fixture()
+    # SCAN's map/source admission is authoritative; these source stamps do not
+    # need a matching message delivered to this downstream command join.
+    current.front_ray_source_stamp=stamp(NOW-1)
+    current.rear_ray_source_stamp=stamp(NOW-2)
+    sweep.front_ray_source_stamp=stamp(NOW-3)
+    sweep.rear_ray_source_stamp=stamp(NOW-4)
+    core.on_validation(current)
+    out=queue.proof(sweep,now)
+    assert out.allowed and out.output.source_stamp==demand.source_stamp
+    assert out.output.body_source_stamp==demand.body_source_stamp
+    assert out.output.valid_until==demand.valid_until
+    assert out.output.velocity==demand.velocity and not queue.pending
 
 
 def test_missing_curve_delivery_cannot_hold_pending_past_original_control_source_ttl():

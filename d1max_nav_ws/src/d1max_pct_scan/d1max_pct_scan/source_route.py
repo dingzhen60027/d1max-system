@@ -6,6 +6,7 @@ source-return audit below measures support; it deliberately does not manufacture
 a certified geometric error bound, foot-placement proof, or collision envelope.
 """
 from dataclasses import dataclass
+from copy import deepcopy
 import hashlib
 import json
 import math
@@ -177,12 +178,103 @@ def validate_snapshot(v):
         raise ValueError('route_snapshot_goal_yaw_invalid')
 
 
+def _coalesce_continuous_execution_segments(value):
+    """Normalize NEW geometry before hashing; never rewrite a committed route.
+
+    PCT may split an ordinary corridor into several topological segments. Those
+    seams need no mode/floor transition and must not become finite local stop
+    targets. Preserve their original identities as geometry evidence, while a
+    continuous same-floor/general run has one execution owner. The caller has
+    already validated original coverage: merging must not hide malformed input.
+    """
+    original = value['segments']
+    runs = []
+    for segment in original:
+        previous = runs[-1][-1] if runs else None
+        same_run = (previous is not None
+            and previous['kind'] in ('floor', 'landing')
+            and segment['kind'] in ('floor', 'landing')
+            and previous['required_mode'] == segment['required_mode'] == 'general'
+            and previous['floor_id'] == segment['floor_id']
+            and segment['floor_id'] in ('floor1', 'floor2')
+            and previous['end_index'] == segment['begin_index']
+            and bool(previous['exit_portal_id'])
+            and previous['exit_portal_id'] == segment['entry_portal_id']
+            and previous['direction'] == segment['direction']
+            and previous['execution_eligible'] == segment['execution_eligible']
+            and previous['eligibility_reason'] == segment['eligibility_reason'])
+        if same_run:
+            runs[-1].append(segment)
+        else:
+            runs.append([segment])
+    if all(len(run) == 1 for run in runs):
+        return  # Exact historical bytes/hash survive when there is no merge.
+    merged, groups = [], []
+    edges = list(value['edge_segments'])
+    for run in runs:
+        first, last = run[0], run[-1]
+        segment = dict(first)
+        segment.update(end_index=last['end_index'], target_layer_id=last['target_layer_id'],
+                       exit_portal_id=last['exit_portal_id'])
+        merged.append(segment)
+        if len(run) > 1:
+            edges[first['begin_index']:last['end_index']] = [first['segment_id']]*(last['end_index']-first['begin_index'])
+            groups.append(dict(execution_segment_id=first['segment_id'],
+                source_segment_ids=[part['segment_id'] for part in run],
+                internal_portal_ids=[part['exit_portal_id'] for part in run[:-1]],
+                begin_index=first['begin_index'], end_index=last['end_index']))
+    value['geometry_evidence']['execution_segment_coalescing'] = dict(
+        schema=1, policy='continuous_same_floor_general_before_route_hash',
+        original_segments=deepcopy(original), original_edge_segments=list(value['edge_segments']),
+        merged_groups=groups)
+    value['segments'], value['edge_segments'] = merged, edges
+
+
+def original_stair_record_lineage(manifest_path, manifest, source_count):
+    """Return the explicitly hash-bound, canonical original-record selection.
+
+    Captured input paths are historical provenance, not a runtime search path.
+    Only the package-local artifact with their exact recorded hash is read.
+    Maps without that existing contract provide no independent riser evidence.
+    """
+    captured=manifest.get('support_consistency_repair',{}).get('captured_at_build_inputs',{})
+    matches=[value for name,value in captured.items() if Path(name).name=='record_lineage.npz']
+    if not matches:return None
+    if len(matches)!=1 or not _digest(matches[0]):
+        raise ValueError('raw_stair_record_lineage_binding_invalid')
+    path=Path(manifest_path).resolve().parent/'record_lineage.npz'
+    if digest_file(path)!=matches[0]:raise ValueError('raw_stair_record_lineage_changed')
+    with np.load(path,allow_pickle=False) as archive:
+        retained=archive['retained_source_indices'].copy()
+    if (retained.ndim!=1 or not np.issubdtype(retained.dtype,np.integer)
+            or len(np.unique(retained))!=len(retained) or np.any(retained<0)
+            or np.any(retained>=source_count)):
+        raise ValueError('raw_stair_record_lineage_indices_invalid')
+    retained.flags.writeable=False
+    return retained,path,matches[0]
+
+
 class SourceSupport:
     """Bounded source-return proximity audit, not traversability certification."""
-    def __init__(self, points_by_label, source_map_sha256, *, radius_m=.12):
+    def __init__(self, points_by_label, source_map_sha256, *, radius_m=.12, stair_mapping=None,
+                 raw_stair_evidence=None, raw_stair_evidence_sha256=''):
         if not _digest(source_map_sha256) or not .01 <= radius_m <= .3:
             raise ValueError('source_support_provenance_invalid')
         self.source_hash, self.radius = source_map_sha256, float(radius_m)
+        if stair_mapping is not None and stair_mapping.source_hash != source_map_sha256:
+            raise ValueError('source_support_stair_mapping_hash_mismatch')
+        self.stair_mapping = stair_mapping
+        # Separate original observations: never inserted into terrain trees
+        # and never treated as classified support by audit()/terrain fitting.
+        self.raw_stair_evidence=None
+        self.raw_stair_evidence_sha256=raw_stair_evidence_sha256
+        if raw_stair_evidence is not None:
+            raw=np.asarray(raw_stair_evidence,dtype=float).reshape((-1,3))
+            if not _digest(raw_stair_evidence_sha256) or not np.isfinite(raw).all():
+                raise ValueError('raw_stair_evidence_provenance_invalid')
+            if len(raw):
+                self.raw_stair_evidence=cKDTree(raw.copy())
+                self.raw_stair_evidence.data.flags.writeable=False
         self.trees = {}
         for label, points in points_by_label.items():
             p = np.asarray(points, dtype=float).reshape(-1, 3)
@@ -229,7 +321,8 @@ class SourceSupport:
 
 class SourceRouteBuilder:
     def __init__(self, *, bridge, source_map_sha256, conditioning_sha256,
-                 tomogram_sha256, support=None, tomogram=None):
+                 tomogram_sha256, support=None, tomogram=None,
+                 stair_model=None, stair_model_sha256=''):
         if any(not _digest(v) for v in (source_map_sha256, conditioning_sha256, tomogram_sha256)):
             raise ValueError('source_route_provenance_required')
         identity = getattr(bridge,'projection_kind',None) == 'source_identity'
@@ -238,6 +331,14 @@ class SourceRouteBuilder:
         if support is not None and support.source_hash != source_map_sha256:
             raise ValueError('source_support_hash_mismatch')
         self.bridge, self.support, self.tomogram = bridge, support, tomogram
+        if stair_model is not None and (not _digest(stair_model_sha256)
+                or stair_model.frame_id != SOURCE_FRAME
+                or stair_model.record['source_map_sha256'] != source_map_sha256):
+            raise ValueError('source_route_stair_model_identity_mismatch')
+        self.stair_model, self.stair_model_sha256 = stair_model, stair_model_sha256
+        if stair_model is not None:
+            from .pointcloud_helpers.ground_path_bridge import ParametricGroundPathBridge
+            self.bridge = ParametricGroundPathBridge(bridge, stair_model, stair_model_sha256)
         self.provenance = dict(source_map_sha256=source_map_sha256,
             conditioning_sha256=conditioning_sha256, tomogram_sha256=tomogram_sha256)
 
@@ -271,19 +372,40 @@ class SourceRouteBuilder:
         protected = np.zeros(len(xyz), dtype=bool)
         for region in bridge.protected_regions:
             protected |= np.all((xyz >= region['min']) & (xyz <= region['max']), axis=1)
-        # Stair points retain original coordinates. Their proximity evidence
-        # has NOT classified support planes and therefore cannot certify gait.
+        raw_stair=None;raw_stair_hash=''
+        # The lineage is an already bound original-record selection. Never
+        # resurrect historical visibility removals as new riser evidence, nor
+        # derive this set from the regularized planning coordinates.
+        lineage=original_stair_record_lineage(final_path,final,len(xyz))
+        if lineage is not None:
+            retained,_,raw_stair_hash=lineage
+            retained_mask=np.zeros(len(xyz),dtype=bool);retained_mask[retained]=True
+            raw_stair=xyz[protected & retained_mask]
+        # A regularized planning map carries original row ownership. Keep the
+        # measured rows, not the fitted surface, as downstream support. Legacy
+        # maps retain their ROI selection and PCT association behavior.
+        stair_mapping = getattr(bridge, 'stair_mapping', None)
         stair = xyz[protected]
+        if stair_mapping is not None:
+            stair, _ = stair_mapping.association_pairs(stair)
         by_label['stairs'] = stair
         for label, floor in (('stair_lower', 'floor1'), ('stair_upper', 'floor2')):
             by_label[label] = np.concatenate((stair, by_label[floor]))
+        from .navigation_map_package import load_parametric_stair_model
+        stair_model, stair_model_hash, _ = load_parametric_stair_model(final_path, final)
         return cls(bridge=bridge, source_map_sha256=final['source_sha256'],
             conditioning_sha256=digest_file(final_path), tomogram_sha256=tomogram.sha256,
-            support=SourceSupport(by_label, final['source_sha256']))
+            support=SourceSupport(by_label, final['source_sha256'], stair_mapping=stair_mapping,
+                raw_stair_evidence=raw_stair,raw_stair_evidence_sha256=raw_stair_hash),
+            stair_model=stair_model, stair_model_sha256=stair_model_hash)
+
+    def _planning_ground(self, points, labels):
+        """The same ground-only bridge as target selection and localization queries."""
+        return self.bridge.to_localization_ground(points, labels)
 
     def build(self, result, points, labels, *, map_version_id):
         points = _points(points)
-        converted = self.bridge.to_localization_ground(points, labels)
+        converted = self._planning_ground(points, labels)
         xyz = _points(converted.xyz, len(points))
         layers = _native_layers(result['layer_ids'], len(points))
         source_layers = result.get('source_layer_ids')
@@ -296,9 +418,18 @@ class SourceRouteBuilder:
                                  **{'from': 'start', 'to': 'goal'})]
             direction = 'same_floor'
         else:
-            if direction not in ('lower_to_upper', 'upper_to_lower'):
-                raise ValueError('source_route_explicit_crossfloor_direction_required')
             raw_segments = result.get('segments', [])
+            # An arbitrary target on the intermediate landing is still stair
+            # terrain, not floor1/floor2. Reuse the existing same_floor wire
+            # direction only for a route wholly on that landing; each segment
+            # retains landing/stair semantics and original source ownership.
+            landing_only = (result.get('route_type') == 'partial_stair'
+                and direction == 'same_floor' and bool(raw_segments)
+                and all(s.get('name') == 'stair_landing' and s.get('kind') == 'landing'
+                        for s in raw_segments)
+                and all(label == 'stairs' for label in labels))
+            if direction not in ('lower_to_upper', 'upper_to_lower') and not landing_only:
+                raise ValueError('source_route_explicit_crossfloor_direction_required')
         support = (self.support.audit(xyz, labels) if self.support is not None else
                    dict(available=False, all_samples_supported=False,
                         reason='original_measured_support_unavailable'))
@@ -323,10 +454,19 @@ class SourceRouteBuilder:
                     or not isinstance(name, str)):
                 raise ValueError('source_route_segment_range_invalid')
             is_stair = name.startswith('stair_')
-            kind = ('stair_down' if direction == 'upper_to_lower' else 'stair_up') if is_stair else 'floor'
+            is_landing = name == 'stair_landing'
+            if is_landing and segment.get('kind') != 'landing':
+                raise ValueError('source_route_stair_landing_kind_required')
+            if is_landing:
+                kind, floor_id = 'landing', 'stairs'
+            elif is_stair:
+                kind = 'stair_down' if direction == 'upper_to_lower' else 'stair_up'
+                floor_id = name
+            else:
+                kind, floor_id = 'floor', labels[a]
             sid = str(name)
             segments.append(dict(segment_id=sid, kind=kind,
-                floor_id=labels[a] if not is_stair else name,
+                floor_id=floor_id,
                 begin_index=a, end_index=b, source_layer_id=source_layers[a],
                 target_layer_id=source_layers[b], entry_portal_id=segment['from'],
                 exit_portal_id=segment['to'], required_mode='stair' if is_stair else 'general',
@@ -341,6 +481,11 @@ class SourceRouteBuilder:
             ground_to_body_height_applications=0,
             source_swept_volume_verified=False,
             blockers=[reason, 'physical_body_height_and_collision_envelope_unverified'])
+        model_projection = converted.diagnostics.get('parametric_stair_model')
+        if model_projection is not None:
+            # This is explicit model provenance, not observed_source_support.
+            # Keep the independent measured audit, including any actual gaps.
+            evidence['parametric_stair_model'] = deepcopy(model_projection)
         if identity:
             evidence.update(coordinate_transfer_error_bound_m=0.,static_route_checked=self.tomogram is not None,
                 measured_ceiling_checked=ceiling_checked,physical_execution_authorized=False,
@@ -349,10 +494,15 @@ class SourceRouteBuilder:
                 tree=self.support.trees[labels[0]]
                 ids=tree.query(xyz,workers=1)[1]
                 evidence['observed_source_support_xyz']=tree.data[np.unique(ids)].tolist()
-        return RouteSnapshot.create(dict(schema_version=SCHEMA, map_version_id=map_version_id,
+        value = dict(schema_version=SCHEMA, map_version_id=map_version_id,
             **self.provenance, frame_id=SOURCE_FRAME, point_reference='ground',
             direction=direction, xyz=xyz.tolist(), layer_ids=layers,
             source_layer_ids=source_layers, point_floor_ids=list(labels),
             edge_segments=edge_ids, segments=segments, geometry_evidence=evidence,
             preview_ready=True, execution_eligible=eligible, eligibility_reason=reason,
-            has_goal_yaw=False, goal_yaw=0., goal_yaw_tolerance_rad=.15))
+            has_goal_yaw=False, goal_yaw=0., goal_yaw_tolerance_rad=.15)
+        # Validate the original PCT ownership before normalization, so a
+        # duplicate ID, overlap or uncovered edge cannot be hidden by a merge.
+        validate_snapshot(value)
+        _coalesce_continuous_execution_segments(value)
+        return RouteSnapshot.create(value)

@@ -16,33 +16,121 @@ def recorded_map():
 
 @pytest.mark.skipif(recorded_map() is None or not recorded_map().is_dir(),reason='requires the release map package')
 def test_real_artifact_preparation_is_odom_typed_no_preview_exclusion(tmp_path,monkeypatch):
+    monkeypatch.setattr(paths,'template_root',lambda:Path(__file__).resolve().parents[3])
     def forbidden(*a,**kw): raise AssertionError('prepare attempted to launch a process')
     monkeypatch.setattr('subprocess.Popen',forbidden)
     session=prepare(tmp_path/'session',session_id='unit-preparation',map_directory=recorded_map())
     assert session['physical_acceptance'] is False
     assert 'preview_ray_exclusion' not in session
+    entity=session['entity_self_filter']
+    assert entity['mode']=='filter'
+    assert entity['body_frame']=='d1max_loc_base_link'
+    assert entity['pose_source']=='fixed_standing_cad'
+    assert entity['joint_source']=='not_available_not_required'
+    assert 'joint_state_topic' not in entity
+    assert entity['measurement_padding_m']==.005
+    from d1max_pct_scan.robot_self_geometry import RobotSelfModel
+    from d1max_pct_scan.single_floor_session import sha
+    model=RobotSelfModel.load(entity['model_manifest'])
+    for asset in model.asset_paths:
+        assert session['input_hashes'][str(asset.resolve())]==sha(asset)
     assert session['local_planning_frame']=='d1max_loc_odom'
     def params(name): return yaml.safe_load((tmp_path/'session'/name).read_text())['/**']['ros__parameters']
     assert params('scan.yaml')['fsm.reference_path_z_offset']==0.
-    assert params('scan.yaml')['grid_map.require_observed_free'] is True
-    assert params('scan.yaml')['grid_map.integration_rate_hz']==5.
-    assert session['local_state_contract']=='continuous_odom_v1'
-    assert session['handoff_contract']=='writer_applied_cas_v3'
-    assert params('scan.yaml')['fsm.writer_handoff_enabled'] is True
-    assert params('tracker.yaml')['writer_handoff_enabled'] is True
-    assert params('safety.yaml')['writer_handoff_enabled'] is True
+    from d1max_pct_scan.reference_geometry_contract import NATIVE_START_DISTANCE_M
+    assert params('scan.yaml')['fsm.reference_start_tolerance']==NATIVE_START_DISTANCE_M
+    assert params('scan.yaml')['grid_map.box_length']==pytest.approx(1.03)
+    assert params('scan.yaml')['grid_map.box_width']==pytest.approx(.40)
+    assert params('scan.yaml')['grid_map.stair_subvoxel_collision'] is True
+    assert 'planar_clearance_m' not in params('scan.yaml')
+    assert params('scan.yaml')['fsm.max_replan_interval']==.05
+    assert params('scan.yaml')['fsm.min_replan_interval']==0.
+    assert params('scan.yaml')['optimization.lambda_planar_curvature']==.2
+    assert params('scan.yaml')['optimization.preferred_turn_radius']==1.
+    assert params('scan.yaml')['optimization.soft_clearance_distance']==.15
+    assert params('scan.yaml')['optimization.soft_clearance_budget_ms']==30.
+    assert params('scan.yaml')['fsm.failed_replan_cooldown']==.2
+    assert params('scan.yaml')['grid_map.require_observed_free'] is False
+    assert session['scan_collision_policy']=='official'
+    assert session['execution_collision_policy']=='official'
+    assert session['scan_planning_collision_policy']=='official'
+    assert params('scan.yaml')['fsm.trajectory_geometry_policy']=='official_inflated_geometry'
+    assert params('scan.yaml')['grid_map.integration_rate_hz']==10.
+    assert session['local_planning_window']['integration_rate_hz']==10.
+    assert session['local_planning_window']['visualization_rate_hz']==3.
+    gravity=yaml.safe_load((tmp_path/'session/localization.yaml').read_text())['lio_localizer']['ros__parameters'][
+            'global_relocalization.gravity.map_contract_json']
+    record=json.loads(gravity)
+    assert session['registration_map_gravity']['map_sha256']==record['map_sha256']
+    assert session['registration_map_gravity']['physical_calibration_verified'] is False
+    for item in record['evidence'].values():
+        assert session['input_hashes'][str(Path(item['path']).resolve())]==item['sha256']
+    assert session['local_state_contract']=='continuous_odom_v2'
+    assert session['handoff_contract']=='local_executor_v1'
+    assert session['execution_architecture']=='task_follower_v1'
+    assert params('scan.yaml')['fsm.writer_handoff_enabled'] is False
+    assert params('scan.yaml')['fsm.local_follower_enabled'] is True
+    assert params('scan.yaml')['fsm.navigation_map_version_id']==params('reference.yaml')['map_version_id']
+    assert params('scan.yaml')['fsm.planning_only'] is False
+    # Presence in the shared template does not enable the geometry-only branch
+    # in execution; the native purpose flag, not these distances, selects it.
+    assert params('scan.yaml')['manager.preview_candidate_connector_m']==.15
+    assert params('scan.yaml')['manager.preview_candidate_projection_window_m']==.5
+    assert 'manager.max_yaw_rate' not in params('scan.yaml')
+    assert 'manager.tangent_rate_diagnostic_limit' not in params('scan.yaml')
+    assert session['local_pipeline_contract']=='local_executor_v1'
+    assert params('tracker.yaml')['writer_handoff_enabled'] is False
+    # Formal tracking reports versioned measured progress/holding. The old
+    # unversioned Go2 preview Bool must not be another execution state owner.
+    assert 'frozen_topic' not in params('tracker.yaml')
+    node_source=(paths.template_root()/'src/d1max_trajectory_tracker/src/trajectory_tracker.cpp').read_text()
+    assert 'frozen_pub_' not in node_source
+    session_source=(paths.template_root()/'src/d1max_pct_scan/d1max_pct_scan/single_floor_session.py').read_text()
+    assert "'planning/go2_execution_frozen':" not in session_source
+    assert not (tmp_path/'session/safety.yaml').exists()
+    assert params('reference.yaml')['geometry_owner']=='local_executor'
+    assert params('bt.yaml')['execution_architecture']=='task_follower_v1'
     assert params('tracker.yaml')['local_state_enabled'] is True
     assert params('reference.yaml')['local_state_enabled'] is True
     assert params('reference.yaml')['map_evidence_max_age_s']==params('scan.yaml')['grid_map.cloud_pose_max_age']==session['perception_timeout_s']==.5
     assert params('bt_adapter.yaml')['local_state_enabled'] is True
     assert params('mock_sdk.yaml')['execution_mc_delay_bound_s']==.02
+    assert session['execution_mode_policy']=='fixed_stair'
+    assert session['execution_stair_runtime_parameter_source']=='general_runtime_reuse'
+    assert params('reference.yaml')['execution_mode_policy']=='fixed_stair'
+    assert params('scan.yaml')['fsm.execution_mode_policy']=='fixed_stair'
+    assert params('mock_sdk.yaml')['execution_mode_policy']=='fixed_stair'
+    assert params('mock_sdk.yaml')['execution_stair_runtime_parameter_source']=='general_runtime_reuse'
     assert params('mock_sdk.yaml')['local_state_enabled'] is True
     assert params('mock_sdk.yaml')['local_navigation_state_topic']=='/d1max/localization/navigation/local_state'
     assert params('tracker.yaml')['planning_frame']=='d1max_loc_odom'
     assert params('tracker.yaml')['max_speed']==.3
+    assert params('tracker.yaml')['controller_frequency_hz']==session['controller_frequency_hz']==20.
+    assert params('tracker.yaml')['diagnostics_frequency_hz']==5.
+    assert params('tracker.yaml')['max_jerk']==.70
+    assert params('scan.yaml')['fsm.continuation_max_jerk']==params('tracker.yaml')['max_jerk']
+    assert params('tracker.yaml')['max_yaw_jerk']==4.
+    assert params('tracker.yaml')['heading_threshold']==.8
+    assert params('tracker.yaml')['velocity_damping_gain']==0.
+    assert params('tracker.yaml')['yaw_damping_gain']==.4
+    assert params('tracker.yaml')['kp_position']==.8
+    assert params('tracker.yaml')['kp_yaw']==.9
+    assert params('tracker.yaml')['max_acceleration']==.35
+    assert params('tracker.yaml')['max_yaw_acceleration']==.8
+    assert params('tracker.yaml')['lookahead']==1.2
+    assert params('tracker.yaml')['min_lookahead_distance_m']==.40
+    assert params('tracker.yaml')['max_lookahead_distance_m']==.80
+    assert session['motion_model']=='holonomic'
+    assert session['kinematic_profile']=='holonomic_xyyaw'
+    assert params('tracker.yaml')['motion_model']=='holonomic'
+    assert params('tracker.yaml')['align_then_forward'] is session['align_then_forward'] is True
+    assert params('scan.yaml')['manager.align_then_forward'] is True
+    assert params('tracker.yaml')['steering_error_scale_rad']==.02
+    assert params('tracker.yaml')['holonomic_yaw_policy']==params('scan.yaml')['manager.body_heading_policy']=='path_tangent'
+    assert params('scan.yaml')['fsm.kinematic_profile']=='holonomic_xyyaw'
     assert params('tracker.yaml')['execution_braking_model_sha256']==session['execution_braking_model_sha256']
-    assert params('safety.yaml')['max_speed']==.3
-    assert params('safety.yaml')['max_yaw']==.5
+    assert params('mock_sdk.yaml')['execution_task_writer_enabled'] is True
+    assert params('mock_sdk.yaml')['execution_v3_enabled'] is False
     assert params('bt_adapter.yaml')['execution_mode']=='single_floor'
     assert params('reference.yaml')['planning_manifest']==session['planning_manifest']
     assert params('tracker.yaml')['support_topic']=='/d1max/live_planning/execution/support'
@@ -62,13 +150,56 @@ def test_real_artifact_preparation_is_odom_typed_no_preview_exclusion(tmp_path,m
     assert params('global.yaml')['readiness_timeout_s']==params('global.yaml')['commit_wait_timeout_s']==30.
     assert params('bt.yaml')['compute_readiness_timeout_s']==params('bt_adapter.yaml')['readiness_timeout_s']==30.
     assert params('reference.yaml')['async_support_preparation'] is True
-    assert session['execution_timing']['required_reaction_bound_s']==pytest.approx(.67)
+    assert session['execution_timing']['required_reaction_bound_s']==pytest.approx(.77)
+    assert params('tracker.yaml')['command_pipeline_bound_s']==session['execution_timing']['command_pipeline_bound_s']==.2
+    assert params('tracker.yaml')['writer_period_s']==session['execution_timing']['writer_period_s']==.05
+    from d1max_pct_scan.single_floor_session import validate_tracking_parameters
+    validate_tracking_parameters(tmp_path/'session',session)
+    tracker_file=tmp_path/'session/tracker.yaml'
+    tracker_text=tracker_file.read_text()
+    changed=yaml.safe_load(tracker_text)
+    changed['/**']['ros__parameters']['controller_frequency_hz']=50.
+    tracker_file.write_text(yaml.safe_dump(changed))
+    with pytest.raises(ValueError,match='inconsistent_tracking_controller_parameters'):
+        validate_tracking_parameters(tmp_path/'session',session)
+    tracker_file.write_text(tracker_text)
+    changed=yaml.safe_load(tracker_text)
+    changed['/**']['ros__parameters']['writer_period_s']=.10
+    tracker_file.write_text(yaml.safe_dump(changed))
+    with pytest.raises(ValueError,match='inconsistent_tracking_controller_parameters'):
+        validate_tracking_parameters(tmp_path/'session',session)
+    tracker_file.write_text(tracker_text)
+    # All controllers and native footprint checks consume the same heading
+    # policy; changing only one side must not produce a runnable new package.
+    scan_file=tmp_path/'session/scan.yaml';scan_text=scan_file.read_text()
+    changed=yaml.safe_load(scan_text)
+    changed['/**']['ros__parameters']['manager.align_then_forward']=False
+    scan_file.write_text(yaml.safe_dump(changed))
+    with pytest.raises(ValueError,match='inconsistent_native_tracking_heading_contract'):
+        validate_tracking_parameters(tmp_path/'session',session)
+    scan_file.write_text(scan_text)
+    changed=yaml.safe_load(scan_text)
+    changed['/**']['ros__parameters']['fsm.continuation_max_jerk']=1.4
+    scan_file.write_text(yaml.safe_dump(changed))
+    with pytest.raises(ValueError,match='inconsistent_continuation_scheduling_profile'):
+        validate_tracking_parameters(tmp_path/'session',session)
+    scan_file.write_text(scan_text)
+    for parameter in ('velocity_damping_gain','yaw_damping_gain','max_jerk','max_yaw_jerk',
+                      'steering_enter_angle_rad','steering_exit_angle_rad','steering_error_scale_rad'):
+        changed=yaml.safe_load(tracker_text)
+        changed['/**']['ros__parameters'][parameter]+= .031
+        tracker_file.write_text(yaml.safe_dump(changed))
+        with pytest.raises(ValueError,match='inconsistent_tracking_controller_parameters'):
+            validate_tracking_parameters(tmp_path/'session',session)
+    tracker_file.write_text(tracker_text)
     assert params('bt.yaml')['stationary_linear_threshold_mps']==params('tracker.yaml')['stationary_linear_threshold_mps']==.03
+    assert params('bt.yaml')['stationary_velocity_metric']==params('tracker.yaml')['stationary_velocity_metric']==session['stationary_evidence'].get('velocity_metric','spatial_norm_3d')
     assert params('bt.yaml')['stationary_minimum_samples']==params('tracker.yaml')['stationary_minimum_samples']==3
     assert session['perception_projector']['max_input_points']==100000
     from d1max_pct_scan.single_floor_session import sha
     for relative in ('src/d1max_navigation_bt/trees/navigate_with_global_relocalization.xml',
                      'src/d1max_pct_scan/config/navigation_runtime.yaml',
+                     'src/d1max_pct_scan/config/motion_tracking.yaml',
                      'src/d1max_localization/config/global_relocalization.yaml',
                      'src/d1max_navigation/rviz/localization_test.rviz'):
         template=paths.template_root()/relative
@@ -181,6 +312,7 @@ def test_live_localization_preflight_accepts_consistent_selected_install_without
 
 @pytest.mark.skipif(recorded_map() is None or not recorded_map().is_dir(),reason='requires the release map package')
 def test_live_planning_only_retains_real_geometry_without_motion_pipeline(tmp_path,monkeypatch):
+    monkeypatch.setattr(paths,'template_root',lambda:Path(__file__).resolve().parents[3])
     from d1max_pct_scan.single_floor_session import validate_planning_only_parameters
     def forbidden(*a,**kw):raise AssertionError('planning preparation launched a process or requested acceptance')
     monkeypatch.setattr('subprocess.Popen',forbidden)
@@ -201,20 +333,47 @@ def test_live_planning_only_retains_real_geometry_without_motion_pipeline(tmp_pa
     def params(name):return yaml.safe_load((directory/name).read_text())['/**']['ros__parameters']
     assert params('bt.yaml')['execution_purpose']=='planning_only'
     assert params('bt.yaml')['preview_only'] is True
+    assert params('tracker.yaml')['demand_topic']=='/d1max/live_planning/preview/demand'
     assert params('scan.yaml')['fsm.execution_protocol'] is True
-    assert params('scan.yaml')['grid_map.require_observed_free'] is True
-    assert params('tracker.yaml')['demand_topic']=='/d1max/live_planning/preview/demand_unrouted'
+    assert params('scan.yaml')['grid_map.box_length']==pytest.approx(1.03)
+    assert params('scan.yaml')['grid_map.box_width']==pytest.approx(.40)
+    assert 'planar_clearance_m' not in params('scan.yaml')
+    assert session['scan_collision_policy']=='official'
+    assert session['scan_planning_collision_policy']=='official'
+    assert session['execution_collision_policy']=='official'
+    assert params('scan.yaml')['grid_map.require_observed_free'] is False
+    assert params('scan.yaml')['grid_map.planning_collision_policy']=='official'
+    assert params('scan.yaml')['fsm.trajectory_geometry_policy']=='official_inflated_geometry'
+    assert params('scan.yaml')['fsm.planning_only'] is False
+    assert params('scan.yaml')['manager.preview_candidate_connector_m']==.15
+    assert params('scan.yaml')['manager.preview_candidate_projection_window_m']==.5
+    assert 'manager.max_yaw_rate' not in params('scan.yaml')
+    assert 'manager.tangent_rate_diagnostic_limit' not in params('scan.yaml')
+    assert session['local_pipeline_contract']=='local_executor_v1'
+    assert session['local_planning_window']==dict(size_m=[12.,12.,3.],resolution_m=.05,reference_horizon_m=4.,
+        integration_rate_hz=10.,visualization_rate_hz=3.)
+    assert params('reference.yaml')['reference_horizon_m']==params('scan.yaml')['fsm.planning_horizon']==params('scan.yaml')['manager.planning_horizon']==4.
+    assert [params('scan.yaml')['grid_map.sliding_map_size_'+axis] for axis in ('x','y','z')]==[12.,12.,3.]
+    assert [params('scan.yaml')['grid_map.local_update_range_'+axis] for axis in ('x','y','z')]==[6.,6.,1.5]
+    assert params('scan.yaml')['grid_map.use_projected_rays'] is True
+    assert params('scan.yaml')['grid_map.preview_only'] is False
+    assert params('scan.yaml')['grid_map.cloud_pose_max_age']==.5
     validate_planning_only_parameters(directory,session)
     monkeypatch.setattr('ament_index_python.packages.get_package_prefix',lambda name:'/isolated/'+name)
     commands=runtime_commands(directory,session)
-    assert {'localization','global','reference','scan','tracker','navigator'}<=set(commands)
+    assert {'localization','global','reference','scan','navigator'}<=set(commands)
+    assert 'tracker' in commands
+    assert 'local_follower' in commands['tracker'][0]
     assert not {'mock_sdk','sdk','safety'}&set(commands)
+    assert not any(Path(cmd[0]).name=='trajectory_tracker' for cmd in commands.values())
     assert not any('sdk_execution' in str(cmd) or 'execution_safety_node' in str(cmd) for cmd in commands.values())
     for layout in ('global','local'):
         cfg=yaml.safe_load((directory/(layout+'_planning.rviz')).read_text())
         assert cfg['Panels'][0]['Motion Capable'] is False
     for name,key,value in (('bt.yaml','preview_only',False),
                            ('bt.yaml','execution_purpose','execution'),
+                           ('scan.yaml','fsm.writer_handoff_enabled',True),
+                           ('component_health.yaml','motion_pipeline',True),
                            ('tracker.yaml','demand_topic','/d1max/live_planning/execution/demand')):
         original=(directory/name).read_text()
         content=yaml.safe_load(original);content['/**']['ros__parameters'][key]=value
@@ -222,9 +381,148 @@ def test_live_planning_only_retains_real_geometry_without_motion_pipeline(tmp_pa
         with pytest.raises(ValueError,match='capability_mismatch'):
             validate_planning_only_parameters(directory,session)
         (directory/name).write_text(original)
-    (directory/'safety.yaml').write_text('{}')
-    with pytest.raises(ValueError,match='forbids_motion_pipeline'):
-        validate_planning_only_parameters(directory,session)
+    for value in (True,None,0,1,'false'):
+        original=(directory/'scan.yaml').read_text()
+        content=yaml.safe_load(original);content['/**']['ros__parameters']['grid_map.require_observed_free']=value
+        (directory/'scan.yaml').write_text(yaml.safe_dump(content))
+        with pytest.raises(ValueError,match='inconsistent_planning_geometry_or_motion_evidence_policy'):
+            validate_planning_only_parameters(directory,session)
+        (directory/'scan.yaml').write_text(original)
+    for name in ('safety.yaml','mock_sdk.yaml'):
+        (directory/name).write_text('{}')
+        with pytest.raises(ValueError,match='forbids_motion_pipeline'):
+            validate_planning_only_parameters(directory,session)
+        (directory/name).unlink()
+
+
+@pytest.mark.skipif(recorded_map() is None or not recorded_map().is_dir(),reason='requires the release map package')
+def test_live_execution_uses_default_runtime_parameters_without_calibration_report(tmp_path,monkeypatch):
+    from d1max_pct_scan import single_floor_session as entry
+    root=Path(__file__).resolve().parents[3]
+    monkeypatch.setattr(paths,'template_root',lambda:root)
+    def forbidden(*args,**kwargs):raise AssertionError('prepare must not start robot/ROS processes')
+    monkeypatch.setattr('subprocess.Popen',forbidden)
+    checked=[]
+    def parameters(record):
+        checked.append(Path(record))
+        content=json.loads(Path(record).read_text())
+        assert content['record_kind']=='runtime_motion_profile'
+        assert content['physical_acceptance_verified'] is False
+        assert 'records' not in content and 'evidence_id' not in content
+        return dict(valid=True,physically_verified=False,kinematic_profile=content['kinematic_profile'],
+                    max_speed_mps=content['measurements']['max_speed_mps'],max_yaw_radps=content['measurements']['max_yaw_radps'])
+    monkeypatch.setattr(entry,'check_acceptance',parameters)
+    record=root/'src/d1max_pct_scan/config/runtime_motion_profile.json'
+    robot_profile=root/'src/d1max_scan_planner/config/d1max_robot.yaml'
+    self_filter=root/'src/d1max_pct_scan/config/entity_self_filter.yaml'
+    original_hashes={path:entry.sha(path) for path in (record,robot_profile,self_filter)}
+    directory=tmp_path/'runtime'
+    session=prepare(directory,session_id='runtime-default',transport_mode='live',
+        expected_sdk_session='actual-existing-sdk',map_directory=recorded_map())
+    assert checked==[record]
+    assert session['physical_acceptance_record']==''
+    assert session['physical_acceptance'] is False
+    assert session['runtime_motion_profile']==str(record)
+    assert session['motion_control_enabled'] is True
+    assert session['motion_parameter_basis']=='vendor_nominal_engineering_and_operator_observation'
+    assert session['body_height_calibration_status']=='engineering_nominal_not_physically_verified'
+    assert session['body_height_calibration_id'].startswith('runtime_profile_sha256:')
+    assert session['execution_braking_model_sha256']==entry.sha(record)
+    def params(name):return yaml.safe_load((directory/name).read_text())['/**']['ros__parameters']
+    assert params('bt.yaml')['execution_record_sha256']==entry.sha(record)
+    assert params('scan.yaml')['fsm.execution_braking_model_sha256']==entry.sha(record)
+    assert params('tracker.yaml')['execution_braking_model_sha256']==entry.sha(record)
+    # Session-only planning clearance changes the shared native XY kernel,
+    # not the robot/self model or SDK writer's already-bound profile identity.
+    scan=params('scan.yaml')
+    assert scan['grid_map.box_length']==pytest.approx(1.03)
+    assert scan['grid_map.box_width']==pytest.approx(.40)
+    assert session['scan_planar_clearance_m']==.05
+    assert 'planar_clearance_m' not in scan
+    assert session['scan_stair_planar_clearance_m']==.025
+    assert 'stair_planar_clearance_m' not in scan
+    assert scan['grid_map.box_nominal_length']==.93
+    assert scan['grid_map.box_nominal_width']==.30
+    assert scan['grid_map.stair_planar_clearance']==.025
+    for side in ('below','above'):
+        assert scan['grid_map.body_'+side]==scan['grid_map.planning_body_'+side]==.25
+    assert scan['grid_map.body_height']==.50
+    assert scan['optimization.dist0']==.28
+    assert scan['optimization.soft_clearance_distance']==.15
+    assert scan['optimization.soft_clearance_budget_ms']==30.
+    assert {path:entry.sha(path) for path in original_hashes}==original_hashes
+    assert json.loads(record.read_text())['robot_profile_sha256']==original_hashes[robot_profile]
+    assert session['body_height_calibration_id']=='runtime_profile_sha256:'+original_hashes[record]
+    assert session['input_hashes'][str(robot_profile.resolve())]==original_hashes[robot_profile]
+    timing=json.loads(record.read_text())['execution_timing']
+    assert session['perception_timeout_s']==timing['sensor_source_age_bound_s']==.6
+    assert params('scan.yaml')['grid_map.cloud_pose_max_age']==session['perception_timeout_s']
+    assert params('reference.yaml')['map_evidence_max_age_s']==session['perception_timeout_s']
+    # Construct the actual receiving component with generated parameters too:
+    # matching YAML values alone cannot catch a stale constructor ceiling.
+    from d1max_pct_scan.continuous_reference_node import ReferenceCallbacks
+    reference=ReferenceCallbacks(params('reference.yaml'),lambda *_:None,lambda:0,lambda:0.)
+    assert reference.map_evidence_age_ns==600_000_000
+    assert reference.close()
+    assert params('scan.yaml')['grid_map.preview_only'] is False
+    for name in ('bt.yaml','tracker.yaml'):
+        assert params(name)['command_pipeline_bound_s']==timing['command_pipeline_bound_s']==.1
+        assert params(name)['stationary_velocity_metric']=='planar_xy_with_vertical_guard_v1'
+    assert params('tracker.yaml')['writer_period_s']==timing['writer_period_s']==.05
+    assert params('tracker.yaml')['command_response_enabled'] is True
+    assert params('tracker.yaml')['forward_response_reference']==.3
+    assert params('tracker.yaml')['yaw_response_reference']==.5
+    assert params('tracker.yaml')['max_input_rate']==1.6
+    assert params('tracker.yaml')['max_input_acceleration']==12.
+    # The controller and the sole SDK writer describe the exact same static
+    # response; changing a generated coefficient alone is not a new profile.
+    from d1max_pct_scan.single_floor_session import validate_tracking_parameters
+    validate_tracking_parameters(directory,session)
+    tracker_path=directory/'tracker.yaml';tracker_original=tracker_path.read_text()
+    changed=yaml.safe_load(tracker_original)
+    changed['/**']['ros__parameters']['yaw_response_effective_fraction']=.19
+    tracker_path.write_text(yaml.safe_dump(changed))
+    with pytest.raises(ValueError,match='inconsistent_tracking_controller_parameters'):
+        validate_tracking_parameters(directory,session)
+    tracker_path.write_text(tracker_original)
+    assert not (directory/'safety.yaml').exists()
+    assert params('bt.yaml')['preview_only'] is False
+    assert params('scan.yaml')['fsm.planning_only'] is False
+    assert params('scan.yaml')['grid_map.require_observed_free'] is False
+    assert params('scan.yaml')['grid_map.planning_collision_policy']=='official'
+
+
+@pytest.mark.parametrize('purpose',['planning_only','execution'])
+def test_scan_collision_policy_is_shared_across_purposes_without_launching(tmp_path,purpose):
+    from d1max_pct_scan.single_floor_session import validate_collision_policy_parameters
+    motion=purpose=='execution'
+    session=dict(purpose=purpose,execution_purpose=purpose,transport_mode='live',
+        motion_control_enabled=motion,mode='SINGLE_FLOOR_PLANNING_ONLY' if not motion else 'SINGLE_FLOOR_EXECUTION',
+        physical_acceptance_record='',execution_braking_model_record='',execution_braking_model_sha256='',
+        scan_collision_policy='official',scan_planning_collision_policy='official',
+        trajectory_geometry_policy='official_inflated_geometry',execution_collision_policy='official')
+    scan={'grid_map.require_observed_free':False,'grid_map.planning_collision_policy':'official',
+        'fsm.trajectory_geometry_policy':'official_inflated_geometry','fsm.planning_only':False}
+    tracker={'trajectory_geometry_policy':'official_inflated_geometry'}
+    def save(name,value):(tmp_path/name).write_text(yaml.safe_dump({'/**':{'ros__parameters':value}}))
+    save('scan.yaml',scan)
+    if motion:save('tracker.yaml',tracker)
+    validate_collision_policy_parameters(tmp_path,session)
+    for value in (True,None,0,1,'observed_free'):
+        save('scan.yaml',dict(scan,**{'grid_map.require_observed_free':value}))
+        with pytest.raises(ValueError,match='inconsistent_planning_geometry_or_motion_evidence_policy'):
+            validate_collision_policy_parameters(tmp_path,session)
+    save('scan.yaml',scan)
+    for field,value in (('scan_collision_policy','observed_free'),
+                        ('scan_planning_collision_policy','observed_free'),
+                        ('trajectory_geometry_policy','observed_free'),
+                        ('execution_collision_policy','observed_free')):
+        with pytest.raises(ValueError,match='inconsistent_planning_geometry_or_motion_evidence_policy'):
+            validate_collision_policy_parameters(tmp_path,dict(session,**{field:value}))
+    if motion:
+        save('tracker.yaml',{'trajectory_geometry_policy':'observed_free'})
+        with pytest.raises(ValueError,match='inconsistent_planning_geometry_or_motion_evidence_policy'):
+            validate_collision_policy_parameters(tmp_path,session)
 
 
 @pytest.mark.parametrize('kwargs',[

@@ -20,6 +20,7 @@ import uuid
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request
+from pydantic import BaseModel, ConfigDict
 from .live_planning import ALLOWED_ORIGINS, EmptyRequest
 from .localization import Systemd
 from .mainline_release import (MainlineReleaseProbe,root_dispatchers,verify_release_files,
@@ -34,6 +35,13 @@ CONFLICTS=('d1max-live-planning-view.service','d1max-localization-managed.servic
     'd1max-nav2-localization-test.service','d1max-pct-preview.service','d1max-pct-scan.service')
 MAINLINE={'entry_module':'d1max_pct_scan.navigation_session','task_owner':'BehaviorTree.CPP'}
 TASK_WRITER_PROTOCOL='task_follower_v1'
+
+
+class NavigationPurposeRequest(BaseModel):
+    model_config=ConfigDict(extra='forbid')
+    # Empty requests retain the admitted launch configuration for old clients.
+    # The current UI always sends one of the two explicit purposes.
+    purpose: Literal['planning_only','execution'] | None = None
 
 
 class MonitorStatusProbe:
@@ -257,8 +265,25 @@ class SingleFloorRuntime:
         try:yield
         finally:self.lock.release()
 
-    def _activation(self,operation=None):
+    def _launch_config(self,purpose=None):
         a=activation_launch_config(private_json(self.activation))
+        if purpose is not None:
+            if purpose not in PURPOSES:raise ValueError('navigation_purpose_invalid')
+            if purpose=='execution' and a.get('purpose')!='execution':
+                raise ValueError('navigation_execution_not_configured')
+            a={**a,'purpose':purpose}
+        return a
+
+    def _requested_purpose(self,purpose):
+        if purpose is not None and purpose not in PURPOSES:
+            raise HTTPException(422,'无效导航模式')
+        try:return self._launch_config(purpose).get('purpose')
+        except (OSError,ValueError,KeyError,TypeError):
+            if purpose is not None:raise HTTPException(409,'当前发布版本未配置该导航模式') from None
+            return None
+
+    def _activation(self,operation=None):
+        a=self._launch_config(operation.get('requested_purpose') if operation else None)
         if a.get('schema_version')!=3 or a.get('profile')!='single_floor_live':raise ValueError('activation_schema')
         if a.get('purpose') not in PURPOSES:raise ValueError('explicit_activation_purpose_required')
         release=Path(a['release_root']).resolve(strict=True)
@@ -541,8 +566,14 @@ class SingleFloorRuntime:
         route_path=Path(session['crossfloor_route_config']).resolve(strict=True)
         if not route_path.is_relative_to(release):return None
         route=yaml.safe_load(regular_text(route_path))
-        floors=route.get('floor_ids') or [route['floor_id']]
-        return dict(floors=[str(f) for f in floors],stairs_enabled=route.get('stairs_enabled') is True)
+        capabilities=session.get('map_capabilities')
+        if capabilities is not None:
+            floors=capabilities['floor_ids']
+            stairs=capabilities['stairs_planning_enabled']
+        else:
+            floors=route.get('floor_ids') or [route['floor_id']]
+            stairs=route.get('stairs_enabled') is True
+        return dict(floors=[str(f) for f in floors],stairs_enabled=stairs)
 
     def _scope(self):
         """Display-only coverage of the activated release; never a launch input.
@@ -591,6 +622,15 @@ class SingleFloorRuntime:
 
     @staticmethod
     def _writer_blocker(health,purpose):
+        if purpose=='planning_only':
+            # The mainline task writer forcibly disables automatic takeover in
+            # the SDK constructor. It is safe to reuse this *disarmed capability*
+            # without reconnecting: preview never grants a task or emits Move.
+            # A known older per-curve writer is not the same connection contract.
+            if isinstance(health,dict) and (health.get('execution_v3_enabled') is True
+                    or health.get('execution_protocol')=='curve_cas_v3'):
+                return '当前 SDK 使用旧运动通道，请先停止数据连接，再连接当前主线'
+            return ''
         if purpose!='execution':return ''
         if (not isinstance(health,dict) or health.get('execution_protocol')!=TASK_WRITER_PROTOCOL
                 or health.get('execution_task_writer_enabled') is not True):
@@ -626,17 +666,20 @@ class SingleFloorRuntime:
             except (OSError,ValueError,KeyError,TypeError):activation={}
             configured_purpose=activation.get('purpose')
             if configured_purpose not in PURPOSES:configured_purpose=None
-            purpose=state.get('purpose') if operation is not None or owned and (busy or phase in ('failed','needs_review')) else configured_purpose
+            purpose=(operation.get('requested_purpose') or state.get('purpose')) if operation is not None else \
+                state.get('purpose') if owned and (busy or phase in ('failed','needs_review')) else configured_purpose
             if purpose not in PURPOSES:purpose=None
             release=self.release_probe.snapshot()
             configured=release.get('readiness')=='ready' and configured_purpose is not None
             monitor=self._connection() if connection else {'active':False,'phase':'unchecked','health':{}}
             running_binding=owned and bool(state.get('session_sha256')) and (busy or phase in ('failed','needs_review'))
+            admission_valid=False
             try:
                 if running_binding:
                     # The next launch configuration must not rebind the SDK
                     # identity or capability of this already admitted core.
                     _,admitted=self._bound_session(state)
+                    admission_valid=True
                     expected_session=admitted.get('expected_sdk_session');dynamic=False
                 else:
                     dynamic=activation.get('sdk_session_policy')=='bind_current_on_start'
@@ -660,6 +703,21 @@ class SingleFloorRuntime:
             release={**release,'scope':scope,'running_id':running_id,
                      'running_manifest_sha256':running_manifest,
                      'running_matches_configured':running_matches}
+            selectable=not busy and phase=='stopped' and not state.get('quarantined') and not self.closed
+            connectable=selectable and monitor.get('active') is False and monitor.get('phase') not in \
+                {'checking','connecting','disconnecting','starting','stopping','unchecked','unavailable'} \
+                and monitor.get('health',{}).get('replay') is not True
+            capabilities={}
+            for choice in ('planning_only','execution'):
+                available=configured and (choice=='planning_only' or configured_purpose=='execution')
+                choice_blocker=self._data_blocker(monitor,expected_session) if expected_session or dynamic else 'SDK 启动绑定未配置'
+                if not choice_blocker:choice_blocker=self._writer_blocker(monitor.get('health',{}),choice)
+                capabilities[choice]=dict(can_start=available and selectable and not choice_blocker,
+                    can_connect=connectable and (choice=='planning_only' or configured_purpose=='execution'),
+                    start_blocker=(release.get('reason') if not configured else
+                        '当前发布版本未配置运动执行' if not available else choice_blocker
+                        or ('当前服务需要先停止或核对退出结果' if not selectable else '')))
+            if any(c['can_start'] for c in capabilities.values()):blocker=''
             return dict(profile='single_floor_live',phase=phase,busy=busy,session_id=state.get('id'),
                 pid=int(unit.get('MainPID') or 0) if owned else None,exit_code=unit.get('ExecMainStatus') if owned else state.get('exit_code'),
                 release_configured=configured,owned=owned,
@@ -680,27 +738,33 @@ class SingleFloorRuntime:
                 startup_error=state.get('startup_error',''),
                 startup_report=startup or state.get('startup_report'),
                 stop_report=state.get('stop_report'),
-                can_start=configured and data_ready and not busy and phase=='stopped' and not state.get('quarantined'),
-                can_stop=bool(operation is not None and operation['kind'] in ('start','connect') and not operation['cancel'].is_set()
+                can_select_purpose=selectable,purpose_capabilities=capabilities,
+                connection_requested_purpose=state.get('connection_purpose'),
+                can_start=any(c['can_start'] for c in capabilities.values()),
+                can_stop=bool(operation is not None and operation['kind'] in ('start','connect','view') and not operation['cancel'].is_set()
                     or operation is None and state and (owned and core_busy or views_busy or self.helper is not None)),
-                can_view=operation is None and owned and unit['ActiveState']=='active'
-                    and bool(startup and startup['phase']=='started') and phase=='running' and not state.get('quarantined'),
-                can_connect=not busy and phase=='stopped' and not state.get('quarantined')
-                    and monitor.get('active') is False and monitor.get('phase') not in
-                        {'checking','connecting','disconnecting','starting','stopping','unchecked','unavailable'}
-                    and monitor.get('health',{}).get('replay') is not True,
+                # This is permission to open a display, not proof that RViz or
+                # the functional graph is ready. A start already owns one
+                # automatic open; clicks during that start coalesce with it.
+                can_view=owned and unit['ActiveState']=='active' and int(unit.get('MainPID') or 0)>0
+                    and bool(unit.get('InvocationID')) and admission_valid
+                    and phase in ('starting','running') and not state.get('quarantined')
+                    and not (startup and startup['phase']=='failed')
+                    and (operation is None or operation['kind']=='start' and not operation['cancel'].is_set()),
+                can_connect=any(c['can_connect'] for c in capabilities.values()),
                 snapshot_at_unix=time.time())
         except (OSError,ValueError,KeyError,TypeError,RuntimeError,subprocess.SubprocessError):
             return dict(profile='single_floor_live',phase='conflict',busy=True,error='服务所有权或退出状态待核对',
                 purpose=None,scope=None,motion_capable=False,execution_available=False,owned=False,
                 mainline={**MAINLINE,'entrypoint':str(self.nav/'tools/navigation_entry.sh')},
                 release={},can_start=False,can_stop=False,can_view=False,can_connect=False,
+                can_select_purpose=False,purpose_capabilities={p:dict(can_start=False,can_connect=False) for p in PURPOSES},
                 worker_error=state.get('worker_error','') if 'state' in locals() else '',
                 worker_operation=state.get('worker_operation','') if 'state' in locals() else '',
                 worker_status_code=state.get('worker_status_code') if 'state' in locals() else None,
                 start_blocker='服务所有权或退出状态待核对',snapshot_at_unix=time.time())
 
-    def connect(self):
+    def connect(self,purpose=None):
         # Explicit operator action, never part of start() or a status read.
         with self._admission():
             if self.closed or self.operation is not None:
@@ -711,7 +775,8 @@ class SingleFloorRuntime:
                 raise HTTPException(409,'导航服务正在切换或 Web 正在退出')
             if current['busy'] or current.get('quarantined') or current['phase']!='stopped':
                 raise HTTPException(409,'导航运行中或退出待核对，不重连数据会话')
-            self._accept('connect',self._state())
+            requested=self._requested_purpose(purpose) or 'planning_only'
+            self._accept('connect',self._state(),requested_purpose=requested)
         return self.snapshot(connection=True)
 
     def _connect_owned(self,lifecycle):
@@ -735,7 +800,7 @@ class SingleFloorRuntime:
             monitor=status['monitor']
             if not isinstance(monitor,dict):raise HTTPException(503,'连接状态待核对')
             if monitor.get('active') is True:
-                protocol_blocker=self._writer_blocker(monitor.get('health',{}),'execution')
+                protocol_blocker=self._writer_blocker(monitor.get('health',{}),lifecycle['requested_purpose'])
                 if protocol_blocker:raise HTTPException(409,protocol_blocker)
                 raise HTTPException(409,'已有机器狗数据会话，不重复连接')
             health=monitor.get('health',{})
@@ -758,6 +823,7 @@ class SingleFloorRuntime:
                 self._check_operation(lifecycle)
                 self.monitor_probe.update(connected)
                 self._commit(lifecycle,{**lifecycle['prior'],'phase':'stopped','quarantined':False,
+                    'connection_purpose':lifecycle['requested_purpose'],
                     'worker_error':'','worker_operation':'','worker_status_code':None})
 
     def _open_view(self,state,layout,*,lifecycle=None):
@@ -778,23 +844,41 @@ class SingleFloorRuntime:
             state.setdefault('views',{})['single']=record;state['view_error']=''
             if lifecycle:self._commit(lifecycle,state)
             else:persist(self.state_path,state)
-        except (OSError,ValueError,KeyError,TypeError,subprocess.SubprocessError) as error:
+        except (OSError,ValueError,KeyError,TypeError,RuntimeError,subprocess.SubprocessError) as error:
             state['view_error']='RViz 未打开（'+self._startup_error({'error':str(error)})+'）'
             if lifecycle:self._commit(lifecycle,state)
             else:persist(self.state_path,state)
             raise HTTPException(409,state['view_error']) from None
 
     def open_view(self,layout):
-        with self.transaction():
-            if self.operation is not None:raise HTTPException(409,'导航服务正在切换')
-            state=self._state();unit=self._unit()
-            if unit.get('ActiveState')!='active' or not self._owned(state,unit):
-                raise HTTPException(409,'请先启动本次主线导航服务')
-            directory=Path(state['directory'])
-            if directory.parent!=self.root/'sessions' or digest(directory/'session.json')!=state['session_sha256']:
-                raise HTTPException(409,'本次导航会话绑定变化，不能打开视图')
-            self._open_view(state,layout)
-            return self.snapshot(connection=True)
+        if layout not in ('global','local'):raise HTTPException(422,'无效 RViz 布局')
+        with self._admission():
+            generation=self.generation;operation=self.operation;state=self._state()
+            if (self.closed or operation is not None and
+                    (operation['kind']!='start' or operation['cancel'].is_set())):
+                raise HTTPException(409,'导航服务正在切换')
+        # systemd/session reads and all display work stay outside the state
+        # lock, so overview and an explicit stop remain immediately available.
+        unit=self._unit()
+        if (unit.get('ActiveState')!='active' or not int(unit.get('MainPID') or 0) or not unit.get('InvocationID')
+                or not self._owned(state,unit)
+                or state.get('phase') not in ('starting','running') or state.get('quarantined')):
+            raise HTTPException(409,'请先启动本次主线导航服务')
+        try: self._bound_session(state)
+        except (OSError,ValueError,KeyError,TypeError):
+            raise HTTPException(409,'本次导航会话绑定变化，不能打开视图') from None
+        startup=self._startup_evidence(state)
+        if startup and startup['phase']=='failed':raise HTTPException(409,'本次导航运行图启动失败')
+        with self._admission():
+            if self.closed or self.generation!=generation or self.operation is not operation:
+                raise HTTPException(409,'导航服务正在切换')
+            if operation is None:
+                self._accept('view',state,view_layout=layout)
+            # During start the sealed, active core already has one automatic
+            # global open queued on this same worker. Never launch a competitor.
+            elif layout!='global':
+                raise HTTPException(409,'启动期间请等待同一 RViz 窗口打开后再切换布局')
+        return self.snapshot(connection=True)
 
     def _start_owned(self,lifecycle):
         with self._startup_lease():
@@ -827,7 +911,7 @@ class SingleFloorRuntime:
                 a={**a,'expected_sdk_session':health['sdk_session']}
             protocol_blocker=self._writer_blocker(health,a['purpose'])
             if protocol_blocker:raise HTTPException(409,protocol_blocker)
-            if (a.get('runtime_motion_profile') and
+            if (a['purpose']=='execution' and a.get('runtime_motion_profile') and
                     health.get('execution_profile_sha256')!=a['motion_profile_sha256']):
                 raise HTTPException(409,'SDK 与导航运动配置不一致')
             identifier=uuid.uuid4().hex;directory=self.root/'sessions'/identifier
@@ -836,15 +920,13 @@ class SingleFloorRuntime:
             # The entry is release-agnostic; the activated release is named explicitly.
             release=str(Path(a['release_root']).resolve(strict=True))
             env={**os.environ,'D1MAX_RELEASE':release,'D1MAX_NAV_ROOT':str(self.nav),'D1MAX_NAV_TRANSPORT':'live'}
-            operation='prepare';launched=False
+            operation='prepare';launched=False;display_attempted=False
             try:
                 command=[entry,'prepare','--session',str(directory),'--transport-mode','live',
-                    '--purpose',a['purpose'],'--expected-sdk-session',a['expected_sdk_session']]
+                    '--purpose',a['purpose'],'--expected-sdk-session',a['expected_sdk_session'],'--seal']
                 if a['purpose']=='execution':
                     command+=['--motion-profile' if a.get('runtime_motion_profile') else '--acceptance-record',a['motion_profile_record']]
-                self._run_helper(lifecycle,command,check=True,capture_output=True,text=True,timeout=40,env=env)
-                operation='seal'
-                self._run_helper(lifecycle,[entry,'seal','--session',str(directory)],check=True,capture_output=True,text=True,timeout=30,env=env)
+                self._run_helper(lifecycle,command,check=True,capture_output=True,text=True,timeout=70,env=env)
                 session=private_json(directory/'session.json')
                 if (session.get('pipeline_contract')!='single_floor_v3' or session.get('transport_mode')!='live'
                         or session.get('purpose')!=a['purpose']
@@ -887,6 +969,17 @@ class SingleFloorRuntime:
                         and unit.get('InvocationID')):
                     state.update(pid=int(unit['MainPID']),invocation_id=unit['InvocationID'])
                     state=self._commit(lifecycle,state)
+                # The sealed session and exact active core are enough to
+                # start its display. Core verification/spawn continues in its
+                # own process; a display is never functional readiness or a
+                # motion grant. This same worker retains late viewer records
+                # before honouring cancellation and cleaning up.
+                if unit.get('ActiveState')=='active' and self._owned(state,unit):
+                    self._check_operation(lifecycle)
+                    display_attempted=True
+                    try:self._open_view(state,'global',lifecycle=lifecycle)
+                    except HTTPException:pass  # Display failure is not a core failure.
+                    self._check_operation(lifecycle)
                 operation='startup'
                 startup,unit,reconciled=self._wait_for_startup(state,lifecycle)
                 state['startup_report']=startup
@@ -898,6 +991,14 @@ class SingleFloorRuntime:
                         +('；未启动运行组件，可修复后重新启动' if reconciled and not startup['children_started']
                           else '；本次进程已清理，可修复后重新启动' if reconciled else '；退出与退役待核对'))
                 state['phase']='running';state=self._commit(lifecycle,state)
+                if not display_attempted:
+                    # Type=exec may still show activating on the first query.
+                    # Once the exact core has ACKed startup, make its one
+                    # automatic display attempt; never retry an earlier failure.
+                    self._check_operation(lifecycle)
+                    display_attempted=True
+                    try:self._open_view(state,'global',lifecycle=lifecycle)
+                    except HTTPException:pass
             except (OSError,ValueError,KeyError,TypeError,subprocess.SubprocessError) as error:
                 # Never kill an unverified unit or retry an uncertain launch.
                 if launched:
@@ -909,9 +1010,6 @@ class SingleFloorRuntime:
                     raise HTTPException(503,'启动结果待确认，请检查本次会话；禁止重复启动') from None
                 message='主线会话准备失败，未启动导航进程' if operation=='prepare' else '主线会话校验失败，未启动导航进程'
                 raise HTTPException(409,message) from None
-            self._check_operation(lifecycle)
-            try:self._open_view(state,'global',lifecycle=lifecycle)
-            except HTTPException:pass  # Display failure is not a core failure.
             self._check_operation(lifecycle)
 
     def _stop_owned(self,lifecycle):
@@ -946,7 +1044,26 @@ class SingleFloorRuntime:
                     if reconciled:
                         self._commit(lifecycle,reconciled,cleanup=True)
                         return
-                if lifecycle['prior'].get('phase')=='stopped' and not lifecycle['prior'].get('quarantined') and self._all_groups_empty(self._unit()):
+                    if (lifecycle['kind']=='start' and lifecycle.get('admitted') and lifecycle.get('launched')
+                            and lifecycle['cancel'].is_set() and self._all_groups_empty(self._unit())):
+                        # This launch may have been collected before its startup
+                        # or shutdown ACK. Empty owned groups prove process
+                        # cleanup, not whether its graph ran or retired a task.
+                        # Keep the NEW admission and those unknown facts; the
+                        # previous session's stopped phase proves none of them.
+                        startup=self._startup_evidence(state)
+                        self._commit(lifecycle,{**state,'phase':'stopped','quarantined':False,
+                            'views':{},'view_error':'','startup_report':startup,
+                            'startup_error':self._startup_error(startup) if startup and startup['phase']=='failed' else state.get('startup_error',''),
+                            'stop_report':{'session_id':state['id'],
+                                'software_started':startup['children_started'] if startup else None,
+                                'request_accepted':False,'software_retired':False,'physical_stop_confirmed':False,
+                                'cleanup_confirmed':True,'cleanup_evidence':'observed_empty_core_and_view_groups',
+                                'reason':'cancelled_launch_process_cleanup'}},cleanup=True)
+                        return
+                if (state.get('id')==lifecycle['prior'].get('id')
+                        and lifecycle['prior'].get('phase')=='stopped' and not lifecycle['prior'].get('quarantined')
+                        and self._all_groups_empty(self._unit())):
                     self._commit(lifecycle,{**self._state(),'phase':'stopped','quarantined':False},cleanup=True)
                     return
                 raise HTTPException(409,'进程已退出，但本次清理与退役证据待核对')
@@ -983,7 +1100,7 @@ class SingleFloorRuntime:
             if not clean:raise HTTPException(409,'进程已退出，但停止与退役未确认，需人工核对')
 
     def _cancel_owned(self,lifecycle):
-        if lifecycle.get('launched') or lifecycle['kind']=='stop':
+        if lifecycle.get('launched') or lifecycle['kind'] in ('stop','view'):
             self._stop_owned(lifecycle)
             return
         unit=self._unit()
@@ -1009,6 +1126,11 @@ class SingleFloorRuntime:
         try:
             if lifecycle['kind']=='start':self._start_owned(lifecycle)
             elif lifecycle['kind']=='connect':self._connect_owned(lifecycle)
+            elif lifecycle['kind']=='view':
+                self._check_operation(lifecycle)
+                try:self._open_view(self._state(),lifecycle['view_layout'],lifecycle=lifecycle)
+                except HTTPException:pass  # Keep display errors separate from core health.
+                self._check_operation(lifecycle)
             else:self._stop_owned(lifecycle)
         except LifecycleCancelled:
             try:self._cancel_owned(lifecycle)
@@ -1039,14 +1161,16 @@ class SingleFloorRuntime:
                          worker_status_code=error.status_code if isinstance(error,HTTPException) else 503)
             self._commit(lifecycle,state,cleanup=True)
 
-    def _accept(self,kind,state,*,requested_purpose=None):
+    def _accept(self,kind,state,*,requested_purpose=None,view_layout=None):
         self.generation+=1
         lifecycle=dict(id=uuid.uuid4().hex,generation=self.generation,kind=kind,cancel=threading.Event(),prior=state,
-                       state=state,admitted=bool(state.get('session_sha256')) if kind=='stop' else False)
+                       state=state,view_layout=view_layout,requested_purpose=requested_purpose,
+                       admitted=bool(state.get('session_sha256')) if kind in ('stop','view') else False)
         self.operation=lifecycle
         accepted=({'purpose':requested_purpose} if kind=='start' else {**state})
-        accepted.update(phase={'start':'preparing','stop':'stopping','connect':'connecting'}[kind],quarantined=False,
-                        worker_error='',worker_operation='',worker_status_code=None,startup_error='')
+        if kind!='view':
+            accepted.update(phase={'start':'preparing','stop':'stopping','connect':'connecting'}[kind],quarantined=False,
+                            worker_error='',worker_operation='',worker_status_code=None,startup_error='')
         if kind=='stop':accepted.setdefault('stop_requested_at_unix',time.time())
         try:
             self._commit(lifecycle,accepted)
@@ -1054,13 +1178,14 @@ class SingleFloorRuntime:
             self.worker.start()
         except Exception:
             self.operation=None;self.worker=None
-            try:persist(self.state_path,{**state,'worker_error':'lifecycle_worker_unavailable','worker_operation':kind,
-                'worker_status_code':503,'generation':self.generation})
+            failure=({'view_error':'RViz 未打开（view_worker_unavailable）'} if kind=='view' else
+                {'worker_error':'lifecycle_worker_unavailable','worker_operation':kind,'worker_status_code':503})
+            try:persist(self.state_path,{**state,**failure,'generation':self.generation})
             except (OSError,ValueError,TypeError):pass
             self.changed.notify_all()
             raise HTTPException(503,'导航操作未受理，请核对 Web 状态') from None
 
-    def start(self):
+    def start(self,purpose=None):
         with self._admission():
             if self.closed or self.operation is not None:raise HTTPException(409,'导航服务正在切换或 Web 正在退出')
         current=self.snapshot()
@@ -1074,8 +1199,7 @@ class SingleFloorRuntime:
                 except (OSError,ValueError,KeyError,TypeError,RuntimeError,subprocess.SubprocessError):
                     raise HTTPException(409,'上次导航会话绑定或退出状态待核对，不重复启动') from None
                 if reconciled:state=reconciled
-            try:purpose=activation_launch_config(private_json(self.activation)).get('purpose')
-            except (OSError,ValueError,KeyError,TypeError):purpose=None
+            purpose=self._requested_purpose(purpose)
             # The retired admission remains immutable until a NEW session has
             # been prepared. In particular a preview->execution switch must
             # not change lifecycle.prior or the failure/cancellation fallback.
@@ -1084,10 +1208,10 @@ class SingleFloorRuntime:
 
     def _request_stop(self):
         if self.operation is not None:
-            if self.operation['kind'] in ('start','connect') and not self.operation['cancel'].is_set():
+            if self.operation['kind'] in ('start','connect','view') and not self.operation['cancel'].is_set():
                 self.generation+=1;self.operation['cancel'].set()
                 state=self._state();state.update(phase='stopping')
-                if self.operation['kind']=='start':state['stop_requested_at_unix']=time.time()
+                if self.operation['kind'] in ('start','view'):state['stop_requested_at_unix']=time.time()
                 self._commit(self.operation,state,cleanup=True)
         else:
             state=self._state();unit=self._unit()
@@ -1123,18 +1247,18 @@ def _create_session_router(runtime,shared_lock,other_busy,*,prefix):
     @router.post('/view/{layout}',status_code=202)
     def view(layout:Literal['global','local'],_request:EmptyRequest):return runtime.open_view(layout)
     @router.post('/connect',status_code=202)
-    def connect(_request:EmptyRequest):
+    def connect(_request:NavigationPurposeRequest):
         if not shared_lock.acquire(False):raise HTTPException(409,'其他任务正在启动')
         try:
             if other_busy():raise HTTPException(409,'请先停止建图、录包或其他导航')
-            return runtime.connect()
+            return runtime.connect(_request.purpose)
         finally:shared_lock.release()
     @router.post('/start',status_code=202)
-    def start(_request:EmptyRequest):
+    def start(_request:NavigationPurposeRequest):
         if not shared_lock.acquire(False):raise HTTPException(409,'其他任务正在启动')
         try:
             if other_busy():raise HTTPException(409,'请先停止建图、录包或其他导航')
-            return runtime.start()
+            return runtime.start(_request.purpose)
         finally:shared_lock.release()
     @router.post('/stop',status_code=202)
     def stop(_request:EmptyRequest):return runtime.stop()

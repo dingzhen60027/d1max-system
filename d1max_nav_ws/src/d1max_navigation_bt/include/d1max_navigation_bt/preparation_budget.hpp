@@ -37,7 +37,8 @@ struct PreparationLimits {
 // evidence: reset needs distinct source times from genuine native body proofs.
 class PreparationBudget {
 public:
-  explicit PreparationBudget(PreparationLimits limits={}):limits_(limits){limits_.validate();}
+  explicit PreparationBudget(PreparationLimits limits={},bool keep_committed_route_on_local_failure=false)
+    :limits_(limits),keep_committed_route_on_local_failure_(keep_committed_route_on_local_failure){limits_.validate();}
   std::string observe(PreparationStage stage,double now,std::int64_t evidence_ns=0) {
     if(!failure_.empty())return failure_;
     if(!std::isfinite(now)||(last_&&now<*last_))return failure_="preparation_clock_invalid";
@@ -48,12 +49,13 @@ public:
       if(episode_active_)episode_elapsed_+=dt;
     }
     last_=now;previous_=stage;
-    // A newly arrived good sample cannot resurrect a task whose original
-    // deadline has already elapsed (including a delayed owner callback).
+    // Legacy policy latches its deadline. Persistent local preparation keeps
+    // the same already-committed route; it does not admit a trajectory or
+    // renew source evidence, and the caller starts it only after Follow.
     static constexpr const char*names[]{"pose","map","reference","trajectory"};
-    for(std::size_t i=0;i<waits_.size();++i)if(waits_[i]>=limits_.waits[i])
+    for(std::size_t i=0;i<waits_.size();++i)if(!keep_committed_route_on_local_failure_&&waits_[i]>=limits_.waits[i])
       return failure_=std::string("follow_")+names[i]+"_timeout";
-    if(episode_active_&&episode_elapsed_>=limits_.episode)
+    if(!keep_committed_route_on_local_failure_&&episode_active_&&episode_elapsed_>=limits_.episode)
       return failure_="follow_preparation_episode_timeout";
     if(isWait(stage)) {episode_active_=true;good_since_.reset();good_samples_=0;}
     else if(stage==PreparationStage::Ready&&episode_active_) {
@@ -71,6 +73,6 @@ private:
   PreparationLimits limits_;std::array<double,4> waits_{};
   std::optional<double>last_,good_since_;PreparationStage previous_{PreparationStage::Dormant};
   double episode_elapsed_{};std::int64_t last_evidence_ns_{};unsigned good_samples_{};bool episode_active_{};
-  std::string failure_;
+  std::string failure_;bool keep_committed_route_on_local_failure_=false;
 };
 } // namespace d1max_navigation_bt

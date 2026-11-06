@@ -1,6 +1,9 @@
-from setuptools import setup
+from setuptools import Extension, setup
 from glob import glob
 setup(name='d1max_pct_scan',version='0.1.0',
+ ext_modules=[Extension('d1max_pct_scan._mesh_ray_native',
+    sources=['d1max_pct_scan/_mesh_ray_native.cpp'], language='c++',
+    extra_compile_args=['-std=c++17','-O3','-fvisibility=hidden','-fno-fast-math','-ffp-contract=off'])],
  packages=['d1max_pct_scan','d1max_pct_scan.pointcloud_helpers'],
  # Install the original audited helpers verbatim, from their single source.
  # Runtime imports must not depend on a workspace CWD or inject tools/ into

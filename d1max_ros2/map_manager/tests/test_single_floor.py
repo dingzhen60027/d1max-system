@@ -369,6 +369,111 @@ class SingleFloorTests(unittest.TestCase):
         stopped=self.stop_settled()
         self.assertEqual(stopped['phase'],'stopped');self.assertFalse(stopped['motion_capable'])
 
+    def test_explicit_preview_uses_same_entry_without_mutating_execution_activation(self):
+        self.runtime_navigation_activation()
+        original=self.runtime.activation.read_bytes()
+        # Preview consumes actual SDK/lidar data, not writer calibration or a
+        # motion-profile match. The connection is not changed by graph start.
+        self.monitor.health.update(execution_record_valid=False,execution_profile_sha256='b'*64)
+        self.runtime.start('planning_only');state=self.settle()
+        prepare=next(x for x in self.calls if len(x)>1 and x[1]=='prepare')
+        self.assertEqual(prepare[:2],[str(self.entry),'prepare'])
+        self.assertEqual(prepare[prepare.index('--purpose')+1],'planning_only')
+        self.assertNotIn('--motion-profile',prepare);self.assertNotIn('--acceptance-record',prepare)
+        self.assertEqual(state['purpose'],'planning_only')
+        self.assertFalse(state['motion_capable']);self.assertFalse(state['execution_available'])
+        self.assertEqual(self.runtime.activation.read_bytes(),original)
+        self.assertEqual(self.monitor.start_requests,[])
+        self.assertEqual(self.monitor.calls,1)
+        self.assertFalse(state['can_select_purpose'])
+        for purpose in ('planning_only','execution'):
+            self.assertFalse(state['purpose_capabilities'][purpose]['can_start'])
+            self.assertFalse(state['purpose_capabilities'][purpose]['can_connect'])
+        with self.assertRaises(HTTPException):self.runtime.start('execution')
+        self.assertEqual(self.runtime.snapshot()['purpose'],'planning_only')
+
+    def test_preview_and_execution_capabilities_are_not_merged_with_writer_admission(self):
+        readonly=self.monitor.manager()['monitor']
+        readonly['health'].update(execution_task_writer_enabled=False,execution_protocol='',execution_record_valid=False)
+        self.monitor_probe.snapshot.return_value=readonly
+        state=self.runtime.snapshot(connection=True)
+        self.assertTrue(state['can_start']);self.assertTrue(state['can_select_purpose'])
+        self.assertTrue(state['purpose_capabilities']['planning_only']['can_start'])
+        self.assertFalse(state['purpose_capabilities']['execution']['can_start'])
+        self.assertIn('旧控制协议',state['purpose_capabilities']['execution']['start_blocker'])
+        self.monitor_probe.snapshot.return_value=self.monitor.manager()['monitor']
+        state=self.runtime.snapshot(connection=True)
+        self.assertTrue(state['purpose_capabilities']['planning_only']['can_start'])
+        self.assertTrue(state['purpose_capabilities']['execution']['can_start'])
+
+    def test_preview_reuses_disarmed_mainline_writer_but_not_known_old_v3_connection(self):
+        self.runtime.start('planning_only');self.settle()
+        self.assertEqual(self.monitor.start_requests,[])
+        self.stop_settled()
+        self.monitor.health.update(execution_protocol='curve_cas_v3',execution_v3_enabled=True,
+            execution_task_writer_enabled=False)
+        self.runtime.start('planning_only')
+        with self.assertRaises(HTTPException) as error:self.settle()
+        self.assertIn('旧运动通道',error.exception.detail)
+        self.assertEqual(self.monitor.start_requests,[])
+        self.assertEqual(sum(x[0]=='systemd-run' for x in self.calls),1)
+
+    def test_execution_request_does_not_invent_missing_release_capability(self):
+        self.planning_activation()
+        self.monitor_probe.snapshot.return_value=self.monitor.manager()['monitor']
+        state=self.runtime.snapshot(connection=True)
+        self.assertTrue(state['can_start'])
+        self.assertTrue(state['purpose_capabilities']['planning_only']['can_start'])
+        self.assertFalse(state['purpose_capabilities']['execution']['can_start'])
+        with self.assertRaises(HTTPException):self.runtime.start('execution')
+        with self.assertRaises(HTTPException):self.runtime.connect('execution')
+        self.assertFalse(any(x[0]=='systemd-run' for x in self.calls))
+        self.assertEqual(self.monitor.start_requests,[])
+
+    def test_explicit_connect_records_purpose_without_rebinding_retired_session(self):
+        self.start_settled();old=self.runtime._state();self.stop_settled()
+        self.monitor.ready=False
+        self.runtime.connect('planning_only');state=self.settle()
+        self.assertEqual(state['connection_requested_purpose'],'planning_only')
+        current=self.runtime._state()
+        for key in ('id','directory','session_sha256','purpose'):
+            self.assertEqual(current[key],old[key])
+        self.assertEqual(self.monitor.start_requests[0].keys(),{'request_id','instance'})
+        self.assertEqual(sum(x[0]=='systemd-run' for x in self.calls),1)
+
+    def test_connection_capabilities_allow_mode_choice_only_while_navigation_stopped(self):
+        self.monitor.ready=False
+        self.monitor_probe.snapshot.return_value=self.monitor.manager()['monitor']
+        state=self.runtime.snapshot(connection=True)
+        self.assertTrue(state['can_select_purpose']);self.assertTrue(state['can_connect'])
+        self.assertTrue(all(x['can_connect'] for x in state['purpose_capabilities'].values()))
+        self.planning_activation()
+        state=self.runtime.snapshot(connection=True)
+        self.assertTrue(state['purpose_capabilities']['planning_only']['can_connect'])
+        self.assertFalse(state['purpose_capabilities']['execution']['can_connect'])
+        self.monitor.ready=True;self.start_settled()
+        with self.assertRaises(HTTPException):self.runtime.connect('execution')
+
+    def test_http_explicit_purpose_is_pinned_during_preparation_and_invalid_modes_rejected(self):
+        app=FastAPI();app.include_router(create_navigation_session_router(self.runtime,threading.Lock(),lambda:False))
+        client=TestClient(app)
+        for value in ('preview','isolated_mock',True,{},['execution']):
+            self.assertEqual(client.post('/api/navigation-session/start',json={'purpose':value}).status_code,422)
+        entered=threading.Event();release=threading.Event();original=self.runtime.helper_runner
+        def slow_prepare(cmd,**kwargs):
+            if len(cmd)>1 and cmd[1]=='prepare':
+                entered.set();self.assertTrue(release.wait(2.))
+            return original(cmd,**kwargs)
+        self.runtime.helper_runner=slow_prepare
+        try:
+            response=client.post('/api/navigation-session/start',json={'purpose':'planning_only'})
+            self.assertEqual(response.status_code,202);self.assertTrue(entered.wait(1.))
+            self.assertEqual(response.json()['purpose'],'planning_only')
+            self.assertFalse(response.json()['can_select_purpose'])
+            self.assertEqual(client.post('/api/navigation-session/start',json={'purpose':'execution'}).status_code,409)
+        finally:release.set()
+        self.assertEqual(self.settle()['purpose'],'planning_only')
+
     def test_planning_only_still_requires_sealed_entry_and_release(self):
         self.planning_activation();self.entry.write_text('modified')
         with self.assertRaises(HTTPException) as error:self.start_settled()
@@ -550,7 +655,10 @@ class SingleFloorTests(unittest.TestCase):
 
     def test_activated_release_is_named_to_every_entry_call(self):
         self.start_settled()
-        self.assertEqual(self.envs,[str(self.release.resolve())]*2)
+        self.assertEqual(self.envs,[str(self.release.resolve())])
+        prepare=next(command for command in self.calls if len(command)>1 and command[1]=='prepare')
+        self.assertIn('--seal',prepare)
+        self.assertFalse(any(len(command)>1 and command[1]=='seal' for command in self.calls))
         start=next(x for x in self.calls if x[0]=='systemd-run')
         self.assertIn('--setenv=D1MAX_RELEASE='+str(self.release.resolve()),start)
 
@@ -695,7 +803,7 @@ class SingleFloorTests(unittest.TestCase):
         for prefix in ('/api/navigation-session','/api/single-floor'):
             with self.subTest(prefix=prefix):
                 self.assertEqual(client.post(prefix+'/start',json={'goal':[1,2,3]}).status_code,422)
-                self.assertEqual(client.post(prefix+'/start',json={'purpose':'execution'}).status_code,422)
+                self.assertEqual(client.post(prefix+'/start',json={'purpose':'preview'}).status_code,422)
                 self.assertEqual(client.post(prefix+'/start',json={},headers={'origin':'https://foreign.invalid'}).status_code,403)
                 for suffix in ('/goal','/confirm','/initial-pose','/execution-permit'):
                     self.assertEqual(client.post(prefix+suffix,json={}).status_code,404)
@@ -794,6 +902,13 @@ for prefix in ('/api/navigation-session', '/api/single-floor'):
         self.assertEqual(self.runtime.snapshot()['release']['scope'],{'floors':['floor1'],'stairs_enabled':False})
         route.write_text('floor_id: floor1\nfloor_ids: [floor1, floor2]\nstairs_enabled: true\n')
         self.assertEqual(self.runtime.snapshot()['scope'],{'floors':['floor1','floor2'],'stairs_enabled':True})
+        # Historical crossfloor route.yaml has lower/upper ranges, not the
+        # newer single-floor keys. Coverage is the verified package capability.
+        route.write_text('floor_z_ranges: {lower: [-1, 0], upper: [2.8, 3.5]}\n')
+        session.write_text(json.dumps({'crossfloor_route_config':str(route),
+            'map_capabilities':{'floor_ids':['floor1','floor2'],
+                                'stairs_planning_enabled':True}}))
+        self.assertEqual(self.runtime.snapshot()['scope'],{'floors':['floor1','floor2'],'stairs_enabled':True})
         outside=Path(self.tmp.name)/'outside.yaml';outside.write_text('floor_id: floor9\n')
         session.write_text(json.dumps({'crossfloor_route_config':str(outside)}))
         self.assertIsNone(self.runtime.snapshot()['scope'])
@@ -872,12 +987,13 @@ for prefix in ('/api/navigation-session', '/api/single-floor'):
         self.assertTrue(state['view_error'])
         self.assertFalse(any(c[:3]==['systemctl','--user','stop'] for c in self.calls))
 
-    def test_type_exec_does_not_open_view_without_core_started_ack(self):
+    def test_early_display_does_not_promote_missing_core_started_ack(self):
         self.startup_phase=None;self.prepared_changes["runtime_policy"]={"worker_startup_timeout_s":.01}
         with self.assertRaises(HTTPException) as error:self.start_settled()
         self.assertEqual(error.exception.status_code,503)
         self.assertIn('core_startup_timeout',error.exception.detail)
-        self.views.open.assert_not_called()
+        self.views.open.assert_called_once()
+        self.assertFalse(self.runtime.snapshot()['can_view'])
         self.assertTrue(self.runtime._state()['quarantined'])
         self.assertNotEqual(self.runtime._state()['phase'],'running')
 
@@ -1142,7 +1258,10 @@ for prefix in ('/api/navigation-session', '/api/single-floor'):
                 self.unit.update(ActiveState='inactive',Description='',MainPID='0',InvocationID='')
                 with self.assertRaises(HTTPException):self.start_settled()
                 self.assertNotEqual(self.runtime._state()['phase'],'running')
-        self.views.open.assert_not_called()
+        # Display can start while the owned core verifies/spawns; it cannot
+        # promote any invalid ACK into functional startup or motion readiness.
+        self.assertEqual(self.views.open.call_count,5)
+        self.assertFalse(self.runtime.snapshot()['can_view'])
 
     def test_preview_failed_ack_cannot_clear_a_residual_or_foreign_view_group(self):
         self.planning_activation();self.startup_phase='failed';self.startup_children=False
@@ -1184,10 +1303,14 @@ for prefix in ('/api/navigation-session', '/api/single-floor'):
             with self.assertRaises(HTTPException):self.runtime.start()
             # A failed or closed presentation cannot restart the core or SDK.
             self.views.open.side_effect=ValueError('offline view closed')
-            with self.assertRaises(HTTPException):self.runtime.open_view('global')
-            self.assertEqual(self.runtime.snapshot()['phase'],'running')
+            self.runtime.open_view('global')
+            failed_view=self.settle()
+            self.assertEqual(failed_view['phase'],'running')
+            self.assertIn('offline',failed_view['view_error'])
+            self.assertTrue(failed_view['can_view'])
             self.views.open.side_effect=None
-            self.assertEqual(self.runtime.open_view('global')['phase'],'running')
+            self.runtime.open_view('global')
+            self.assertEqual(self.settle()['phase'],'running')
             stopped=self.stop_settled()
             self.assertEqual(stopped['phase'],'stopped')
             self.assertTrue(stopped['stop_report']['software_retired'])
@@ -1241,6 +1364,7 @@ for prefix in ('/api/navigation-session', '/api/single-floor'):
         state=self.start_settled()
         self.assertIn('navigation_core_not_running',state['view_error'])
         self.assertNotIn('桌面',state['view_error'])
+        self.views.open.assert_called_once()  # No automatic retry after the ACK.
 
     def test_session_tampering_blocks_cleanup_and_stale_drain_does_not_retire(self):
         self.planning_activation();self.start_settled();state=self.runtime._state()
@@ -1258,12 +1382,13 @@ for prefix in ('/api/navigation-session', '/api/single-floor'):
 
     def test_open_view_requires_core_and_exact_session(self):
         with self.assertRaises(HTTPException):self.runtime.open_view('local')
-        self.start_settled();self.runtime.open_view('local')
+        self.start_settled();self.runtime.open_view('local');self.settle()
         self.assertEqual(self.views.open.call_args.args[1],'local')
         self.assertEqual(self.runtime._state()['view_contract'],'single_window_layout_v1')
         self.assertEqual(set(self.runtime._state()['views']),{'single'})
         state=self.runtime._state()
         persist(Path(state['directory'])/'session.json',{'id':'tampered'})
+        self.assertFalse(self.runtime.snapshot()['can_view'])
         with self.assertRaises(HTTPException):self.runtime.open_view('global')
 
     def test_physical_stop_is_distinct_from_software_exit(self):
@@ -1292,7 +1417,7 @@ for prefix in ('/api/navigation-session', '/api/single-floor'):
 
     def assert_execution_cleanup_preserves_failed_retirement(self,overview,drain,*,cleanup_reason='execution_owned_stop_cleanup'):
         self.assertEqual(overview['phase'],'stopped');self.assertFalse(overview['quarantined'])
-        self.assertTrue(overview['can_start']);self.assertFalse(overview['busy'])
+        self.assertEqual(overview['can_start'],not self.runtime.closed);self.assertFalse(overview['busy'])
         report=overview['stop_report']
         self.assertTrue(report['cleanup_confirmed']);self.assertTrue(report['request_accepted'])
         self.assertFalse(report['software_retired']);self.assertFalse(report['physical_stop_confirmed'])
@@ -1653,11 +1778,13 @@ for prefix in ('/api/navigation-session', '/api/single-floor'):
         self.assertFalse(any(command[0]=='systemd-run' for command in self.calls))
         with self.assertRaises(LifecycleCancelled):self.runtime._commit(operation,{'phase':'running'})
 
-    def test_cancel_during_seal_does_not_launch_or_reuse_old_generation(self):
+    def test_cancel_during_combined_prepare_seal_does_not_launch_or_reuse_old_generation(self):
         entered=threading.Event();release=threading.Event();original=self.runtime.helper_runner
         def helper(command,**kwargs):
-            if command[1]=='seal':entered.set();self.assertTrue(release.wait(3.))
-            return original(command,**kwargs)
+            result=original(command,**kwargs)
+            if command[1]=='prepare' and '--seal' in command:
+                entered.set();self.assertTrue(release.wait(3.))
+            return result
         self.runtime.helper_runner=helper
         try:
             self.runtime.start();self.assertTrue(entered.wait(1.));old=self.runtime.operation
@@ -1685,6 +1812,84 @@ for prefix in ('/api/navigation-session', '/api/single-floor'):
         self.assertEqual(self.settle()['phase'],'stopped')
         self.views.open.assert_not_called()
         self.assertEqual(sum(command[:3]==['systemctl','--user','stop'] for command in self.calls),1)
+
+    def cancel_collected_start(self,purpose,*,startup_phase=None,before_cancel=None):
+        self.startup_phase=startup_phase
+        entered=threading.Event();release=threading.Event();original=self.runtime.runner
+        def runner(command,**kwargs):
+            result=original(command,**kwargs)
+            if command[0]=='systemd-run':
+                self.unit.update(ActiveState='inactive',Description='',MainPID='0',InvocationID='')
+                entered.set();self.assertTrue(release.wait(3.))
+            return result
+        self.runtime.runner=runner
+        try:
+            self.runtime.start(purpose);self.assertTrue(entered.wait(1.))
+            admitted=self.runtime._state()
+            if before_cancel:before_cancel(admitted)
+            self.runtime.stop()
+        finally:
+            release.set()
+        try:return admitted,self.settle(raise_error=False)
+        finally:self.runtime.runner=original;self.startup_phase='started'
+
+    def test_cancel_collected_new_launch_records_current_cleanup_without_old_retirement(self):
+        for purpose in ('planning_only','execution'):
+            for startup_phase in (None,'started'):
+                with self.subTest(purpose=purpose,startup_phase=startup_phase):
+                    self.start_settled();self.stop_settled();prior=self.runtime._state()
+                    self.monitor_probe.snapshot.return_value=self.monitor.manager()['monitor']
+                    admitted,stopped=self.cancel_collected_start(purpose,startup_phase=startup_phase)
+                    self.assertNotEqual(admitted['id'],prior['id'])
+                    self.assertEqual(stopped['session_id'],admitted['id'])
+                    self.assertEqual(stopped['phase'],'stopped');self.assertFalse(stopped['quarantined'])
+                    self.assertTrue(stopped['can_start']);self.assertFalse(stopped['can_stop'])
+                    report=stopped['stop_report']
+                    self.assertEqual(report['reason'],'cancelled_launch_process_cleanup')
+                    self.assertEqual(report['session_id'],admitted['id'])
+                    self.assertTrue(report['cleanup_confirmed'])
+                    self.assertEqual(report['software_started'],None if startup_phase is None else True)
+                    self.assertFalse(report['request_accepted'])
+                    self.assertFalse(report['software_retired']);self.assertFalse(report['physical_stop_confirmed'])
+                    self.assertFalse((Path(admitted['directory'])/'shutdown.json').exists())
+                    self.assertEqual((Path(admitted['directory'])/'core_startup.json').exists(),startup_phase is not None)
+                    # A repeated exit preserves these facts, then a new start gets
+                    # a fresh admission instead of reusing the cancelled goal graph.
+                    self.assertEqual(self.stop_settled()['stop_report'],report)
+                    restarted=self.start_settled()
+                    self.assertEqual(restarted['phase'],'running')
+                    self.assertNotEqual(restarted['session_id'],admitted['id'])
+                    self.stop_settled()
+
+    def test_first_launch_cancellation_can_retry_after_observed_process_cleanup(self):
+        self.monitor_probe.snapshot.return_value=self.monitor.manager()['monitor']
+        admitted,stopped=self.cancel_collected_start('planning_only')
+        self.assertEqual(stopped['phase'],'stopped');self.assertTrue(stopped['can_start'])
+        self.assertEqual(stopped['stop_report']['session_id'],admitted['id'])
+        self.assertIsNone(stopped['stop_report']['software_started'])
+        self.assertFalse(stopped['stop_report']['software_retired'])
+        self.assertFalse(stopped['stop_report']['physical_stop_confirmed'])
+        self.assertEqual(self.start_settled()['phase'],'running')
+
+    def test_cancel_collected_launch_does_not_clear_changed_admission_or_residual_view(self):
+        for fault in ('changed_admission','residual_view'):
+            with self.subTest(fault=fault):
+                fixture=SingleFloorTests();fixture.setUp()
+                try:
+                    fixture.start_settled();fixture.stop_settled()
+                    def interfere(state):
+                        if fault=='changed_admission':
+                            persist(Path(state['directory'])/'session.json',{'id':'changed'})
+                        else:
+                            show=fixture.system.show
+                            fixture.system.show=lambda name:({'ActiveState':'inactive','MainPID':'0','ControlGroup':'fixture-residual'}
+                                if name==VIEW_UNIT else show(name))
+                            fixture.system.populated=lambda unit:unit.get('ControlGroup')=='fixture-residual'
+                    _,failed=fixture.cancel_collected_start('execution',before_cancel=interfere)
+                    self.assertTrue(fixture.runtime._state()['quarantined']);self.assertFalse(failed['can_start'])
+                    self.assertTrue(failed['worker_error'])
+                    self.assertFalse((failed.get('stop_report') or {}).get('cleanup_confirmed',False))
+                finally:fixture.doCleanups()
 
     def test_cancel_after_uncertain_launch_never_stops_foreign_replacement(self):
         entered=threading.Event();release=threading.Event();original=self.runtime.runner
@@ -1836,6 +2041,147 @@ for prefix in ('/api/navigation-session', '/api/single-floor'):
         self.assertEqual(self.settle()['phase'],'stopped');self.assertEqual(len(records),1)
         command=next(command for command in self.calls if command[:3]==['systemctl','--user','stop'])
         self.assertEqual(command[3:],[UNIT,VIEW_UNIT])
+
+    def test_sealed_active_core_opens_display_before_ack_and_coalesces_start_clicks(self):
+        self.startup_phase=None
+        opened=threading.Event()
+        def open_display(state,layout):
+            self.assertEqual(state['phase'],'starting')
+            self.assertTrue(state['session_sha256'])
+            self.assertFalse((Path(state['directory'])/'core_startup.json').exists())
+            opened.set()
+            return dict(layout=layout,pid=432,invocation_id='view-invocation')
+        self.views.open.side_effect=open_display
+        try:
+            self.runtime.start();self.assertTrue(opened.wait(1.))
+            lifecycle=self.runtime.operation;state=self.runtime._state()
+            snapshot=self.runtime.snapshot()
+            self.assertEqual(snapshot['phase'],'starting')
+            self.assertTrue(snapshot['can_view']);self.assertTrue(snapshot['can_stop'])
+            self.assertFalse(snapshot['execution_available'])
+            for _ in range(3):
+                self.assertEqual(self.runtime.open_view('global')['phase'],'starting')
+                self.assertIs(self.runtime.operation,lifecycle)
+            self.views.open.assert_called_once()
+            self.assertEqual(sum(command[0]=='systemd-run' for command in self.calls),1)
+            self.assertEqual(self.monitor.start_requests,[])
+            persist(Path(state['directory'])/'core_startup.json',dict(schema=1,session_id=state['id'],
+                phase='started',children_started=True,error='',recorded_at_unix=time.time()))
+            self.assertEqual(self.settle()['phase'],'running')
+            self.views.open.assert_called_once()
+        finally:
+            if self.runtime.operation is not None:self.runtime.stop();self.settle(raise_error=False)
+
+    def test_preparing_or_failed_core_does_not_admit_display(self):
+        self.start_settled();state=self.runtime._state()
+        persist(Path(state['directory'])/'core_startup.json',dict(schema=1,session_id=state['id'],
+            phase='failed',children_started=True,error='offline startup failure',recorded_at_unix=time.time()))
+        self.assertFalse(self.runtime.snapshot()['can_view'])
+        self.views.open.reset_mock()
+        with self.assertRaises(HTTPException):self.runtime.open_view('global')
+        self.views.open.assert_not_called()
+        self.unit.update(MainPID='0')
+        self.assertFalse(self.runtime.snapshot()['can_view'])
+
+    def test_initial_activating_core_gets_one_display_attempt_after_started_ack(self):
+        original=self.runtime._unit;initial={'seen':False};opened_phases=[]
+        def unit():
+            value=original()
+            if (threading.current_thread().name=='mainline-lifecycle'
+                    and value.get('ActiveState')=='active' and not initial['seen']):
+                initial['seen']=True
+                return {**value,'ActiveState':'activating'}
+            return value
+        def open_display(state,layout):
+            opened_phases.append(state['phase'])
+            return dict(layout=layout,pid=432,invocation_id='view-invocation')
+        self.runtime._unit=unit;self.views.open.side_effect=open_display
+        self.assertEqual(self.start_settled()['phase'],'running')
+        self.assertTrue(initial['seen']);self.assertEqual(opened_phases,['running'])
+        self.views.open.assert_called_once()
+        self.assertEqual(sum(command[0]=='systemd-run' for command in self.calls),1)
+        self.assertEqual(self.monitor.start_requests,[])
+
+    def test_manual_display_http_is_short_and_stop_cleans_a_late_view_record(self):
+        self.start_settled()
+        entered=threading.Event();release=threading.Event();busy={'value':False};cleaned=[]
+        class View(OwnedNavigationViews):
+            def open(inner,state,layout,*,on_record=None):
+                entered.set()
+                if not release.wait(3.):raise ValueError('offline_view_wait_timeout')
+                # Simulate systemd returning the exact newly-created owner
+                # after stop was already accepted. It is cleanup authority.
+                record=dict(unit=VIEW_UNIT,core_id=state['id'],pid=432,invocation_id='late-view')
+                busy['value']=True;on_record(record)
+                return record
+            def preflight_stop(inner,state):return state.get('views',{})
+            def stop(inner,state):
+                cleaned.append(state['views']['single']);busy['value']=False;return {}
+        show=self.system.show
+        self.system.show=lambda name: {'ActiveState':'active','MainPID':'432'} if name==VIEW_UNIT and busy['value'] else show(name)
+        self.runtime.views=View(self.nav,self.system,self.run_mock)
+        app=FastAPI();app.include_router(create_navigation_session_router(self.runtime,threading.Lock(),lambda:False))
+        client=TestClient(app)
+        try:
+            before=time.perf_counter();accepted=client.post('/api/navigation-session/view/global',json={})
+            self.assertEqual(accepted.status_code,202);self.assertLess(time.perf_counter()-before,.5)
+            self.assertTrue(entered.wait(1.));view_operation=self.runtime.operation
+            self.assertEqual(view_operation['kind'],'view')
+            before=time.perf_counter();overview=client.get('/api/navigation-session/overview')
+            self.assertLess(time.perf_counter()-before,.5)
+            self.assertTrue(overview.json()['can_stop']);self.assertFalse(overview.json()['can_view'])
+            self.assertEqual(client.post('/api/navigation-session/view/global',json={}).status_code,409)
+            before=time.perf_counter();stopping=client.post('/api/navigation-session/stop',json={})
+            self.assertEqual(stopping.status_code,202);self.assertLess(time.perf_counter()-before,.5)
+            self.assertEqual(stopping.json()['phase'],'stopping')
+            self.assertTrue(view_operation['cancel'].is_set())
+        finally:release.set()
+        stopped=self.settle()
+        self.assertEqual(stopped['phase'],'stopped');self.assertFalse(busy['value'])
+        self.assertEqual([record['invocation_id'] for record in cleaned],['late-view'])
+        command=next(command for command in self.calls if command[:3]==['systemctl','--user','stop'])
+        self.assertEqual(command[3:],[UNIT,VIEW_UNIT])
+        self.assertEqual(sum(command[0]=='systemd-run' for command in self.calls),1)
+        self.assertEqual(self.monitor.start_requests,[])
+        self.assertEqual(self.runtime._state()['views'],{})
+        with self.assertRaises(LifecycleCancelled):self.runtime._commit(view_operation,{'phase':'running'})
+
+    def test_stop_during_view_admission_cannot_enqueue_a_late_display(self):
+        self.start_settled();self.views.open.reset_mock()
+        original=self.runtime._unit;intercept={'value':True}
+        def unit():
+            result=original()
+            if intercept['value']:
+                intercept['value']=False
+                self.runtime.stop()
+            return result
+        self.runtime._unit=unit
+        with self.assertRaises(HTTPException):self.runtime.open_view('global')
+        self.assertEqual(self.settle()['phase'],'stopped')
+        self.views.open.assert_not_called()
+
+    def test_display_runtime_failure_is_reopenable_without_changing_core_health(self):
+        self.start_settled();self.views.open.side_effect=RuntimeError('offline_display_failure')
+        self.runtime.open_view('global');failed=self.settle()
+        self.assertEqual(failed['phase'],'running');self.assertFalse(failed['quarantined'])
+        self.assertFalse(failed['worker_error']);self.assertTrue(failed['can_view'])
+        self.assertIn('offline_display_failure',failed['view_error'])
+        self.views.open.side_effect=None
+        self.runtime.open_view('global');reopened=self.settle()
+        self.assertEqual(reopened['phase'],'running');self.assertEqual(reopened['view_error'],'')
+        self.assertEqual(sum(command[0]=='systemd-run' for command in self.calls),1)
+        self.assertEqual(self.monitor.start_requests,[])
+
+    def test_unavailable_display_worker_does_not_claim_navigation_startup_failed(self):
+        self.start_settled();self.views.open.reset_mock()
+        with patch('backend.single_floor.threading.Thread.start',side_effect=RuntimeError('no_thread')):
+            with self.assertRaises(HTTPException):self.runtime.open_view('global')
+        failed=self.runtime.snapshot()
+        self.assertEqual(failed['phase'],'running');self.assertFalse(failed['quarantined'])
+        self.assertFalse(failed['worker_error']);self.assertTrue(failed['can_view'])
+        self.assertIn('view_worker_unavailable',failed['view_error'])
+        self.views.open.assert_not_called()
+        self.runtime.open_view('global');self.assertEqual(self.settle()['view_error'],'')
 
 
 if __name__=='__main__':unittest.main()

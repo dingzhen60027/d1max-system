@@ -1,7 +1,7 @@
-"""Local Web boundary for the owned Nav2 session; never talks to the robot SDK.
+"""Read/cleanup compatibility boundary for historical Nav2 sessions.
 
-The ROS command client repeats session, freshness, and motion admission checks.
-No browser-supplied executable, ROS name, filesystem path, or speed is accepted.
+New tasks belong exclusively to navigation_session and the BT navigator. Keep
+status, stop and disarm so an older owned session can still be retired.
 """
 from __future__ import annotations
 
@@ -14,8 +14,6 @@ from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field
-
-from .grid_maps import atomic_json
 
 OWNER = 'D1MAX_NAVIGATION_V1:'
 
@@ -117,36 +115,10 @@ class NavigationRuntime:
             raise HTTPException(409, '无法确认导航会话，禁止切换或清理地图；请先核对 Nav2 状态')
         return current.get('version_id') if current['busy'] else None
 
-    def start(self, request, version):
-        with self.lock:
-            current = self.snapshot()
-            if current['busy']:
-                raise HTTPException(409, 'Nav2 已运行或状态待核对，禁止重复启动')
-            if not version['selected'] or version['archived'] or not version['complete']:
-                raise HTTPException(409, '请选择完整且未归档的单层地图')
-            if request.mode == 'sim' and request.enable_motion:
-                raise HTTPException(422, '离线仿真禁止启用 SDK 运动能力')
-            if request.mode == 'live':
-                # Never let the CLI recursively start localization while this
-                # request holds the Web map/lifecycle lock.
-                local = self.localization.snapshot()
-                if local.get('phase') != 'running' or local.get('version_id') != request.version_id:
-                    raise HTTPException(409, '先在定位页启动同一地图的实机定位，再启动 Nav2')
-                connection = local.get('connection') or {}
-                health = connection.get('health') or {}
-                if not (connection.get('active') and health.get('sdk_fresh') and health.get('lidar_fresh')
-                        and health.get('replay') is False):
-                    raise HTTPException(409, '实机导航需要新鲜的 SDK 和雷达数据；禁止用回放代替')
-            args = ['start', '--mode', request.mode, '--web-owned']
-            if not request.show_rviz:
-                args.append('--headless')
-            if request.enable_motion:
-                args.append('--enable-motion')
-            result = self.call(*args)
-            self.health_cache = ({}, 0., None)
-            atomic_json(self.owner_path, {'session_id': result.get('navigation_session_id') or result.get('session_id'),
-                                         'session': result.get('session'), 'version_id': request.version_id})
-            return self.snapshot()
+    def start(self, request, version=None):
+        # Retire the alternative task owner, not the mainline startup path.
+        # In particular, do not acquire a map lock or probe SDK/localization.
+        raise HTTPException(410, '请使用导航页启动')
 
     def stop(self):
         with self.lock:
@@ -158,13 +130,13 @@ class NavigationRuntime:
             return current
 
     def command(self, request):
+        if request.operation == 'arm':
+            raise HTTPException(410, '请使用当前导航任务执行')
         with self.lock:
             current = self.snapshot()
             if (current['phase'] != 'running' or current.get('session_id') != request.session_id
                     or current.get('version_id') != request.version_id):
                 raise HTTPException(409, '导航会话或地图已变化，请刷新后重新操作')
-            if request.operation == 'arm' and (current.get('mode') != 'live' or not current['enable_motion']):
-                raise HTTPException(409, '此会话没有实机运动能力；仿真不需要解锁')
             # The ROS client is authoritative for fresh gate/SDK state. In
             # particular, a status screen is never an authorization token.
             args = ['command', '--operation', request.operation, '--session-id', request.session_id,
@@ -203,10 +175,7 @@ def create_navigation_router(runtime, grid, shared_lock, other_busy):
 
     @router.post('/start', status_code=202)
     def start(request: StartNavigation):
-        with shared_lock, grid.lock:
-            if other_busy() or grid.job['running']:
-                raise HTTPException(409, '请先结束建图、数据采集或地图处理任务')
-            return runtime.start(request, grid.item(request.version_id))
+        return runtime.start(request)
 
     @router.post('/stop')
     def stop():

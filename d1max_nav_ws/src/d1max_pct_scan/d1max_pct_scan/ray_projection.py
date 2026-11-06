@@ -4,6 +4,7 @@ One scan uses one exact-pair map_from_odom correction; only LOCAL tracking
 motion is interpolated per point. Endpoint and its sensor origin share the
 same transform. There is no ground removal or invented free-space evidence.
 """
+from array import array
 from collections import deque
 from dataclasses import dataclass, fields as dataclass_fields, replace
 import math
@@ -23,10 +24,27 @@ FIELDS = (
 RAY_DTYPE = np.dtype({'names': [x[0] for x in FIELDS],
                      'formats': ['<f4'] * 7 + ['<u2', '<u2', '<u4', '<u4'] + ['<f8'] * 3,
                      'offsets': [x[1] for x in FIELDS], 'itemsize': 64})
+# Raw acquisition remains the unmodified 64-byte contract. Only projected
+# batches containing self returns use this explicit extension; never overload
+# intensity/source metadata or turn an invalid/no-return beam into free space.
+PROJECTED_CENSORED_FIELDS = FIELDS + (('ray_kind', 64, 2, 1),)
+PROJECTED_CENSORED_DTYPE = np.dtype({
+    'names': [x[0] for x in PROJECTED_CENSORED_FIELDS],
+    'formats': [RAY_DTYPE.fields[x[0]][0] for x in FIELDS] + ['u1'],
+    'offsets': [x[1] for x in PROJECTED_CENSORED_FIELDS], 'itemsize': 68})
+MEASURED_HIT, SELF_CENSORED = 0, 1
 
 
 class ProjectionError(ValueError):
     """Invalid observation: drop it, never use it to clear occupancy."""
+
+
+class PoseCoverageGap(ProjectionError):
+    """Original missing interpolation bracket, for bounded passive diagnostics."""
+    def __init__(self, left_ns, right_ns, ray_ns, limit_ns):
+        super().__init__('local_pose_bracketing_gap')
+        self.pose_gap = dict(left_ns=int(left_ns), right_ns=int(right_ns),
+                            ray_ns=int(ray_ns), limit_ns=int(limit_ns))
 
 
 class AwaitingCoverage(ProjectionError):
@@ -38,6 +56,13 @@ class PreviewExcludedScan(ProjectionError):
     def __init__(self, count, digest):
         super().__init__('preview_exclusion_removed_entire_scan')
         self.count, self.digest = count, digest
+
+
+class EntityFilteredScan(ProjectionError):
+    """Only model hits remained: do not manufacture an observed-free scan."""
+    def __init__(self, report):
+        super().__init__('entity_self_filter_removed_entire_scan')
+        self.report = report
 
 
 @dataclass(frozen=True)
@@ -114,6 +139,15 @@ class Projected:
     exclusion_matched: int = 0
     exclusion_dropped: int = 0
     projection_frame: str = 'map'
+    entity_filter_digest: str = ''
+    entity_filter_report: dict = None
+    # Owned final PointCloud2 storage. points is a view of this same buffer;
+    # neither aliases raw input. Build it in the worker, not the ROS callback.
+    wire_data: array = None
+
+    @property
+    def wire_fields(self):
+        return PROJECTED_CENSORED_FIELDS if self.points.dtype == PROJECTED_CENSORED_DTYPE else FIELDS
 
 
 def session_settings(session, localization):
@@ -147,7 +181,7 @@ def session_settings(session, localization):
     if result['projection_frame'] == 'odom':
         result['output_topic'] = '/d1max/live_planning/rays_odom'
     result['typed_navigation_state'] = session.get('pipeline_contract') == 'single_floor_v3'
-    result['independent_local_state'] = session.get('local_state_contract') == 'continuous_odom_v1'
+    result['independent_local_state'] = session.get('local_state_contract') == 'continuous_odom_v2'
     result['map_version_id'] = session.get('version_id', '')
     if result['typed_navigation_state'] and (result['projection_frame'] != 'odom'
             or not result['map_version_id'] or 'preview_ray_exclusion' in session):
@@ -169,6 +203,8 @@ def session_settings(session, localization):
     result['sensor_ids'] = (0, 1) if mode == 'dual' else (0,) if mode == 'front' else (1,)
     from .preview_ray_exclusion import from_session
     result['preview_exclusion'] = from_session(session, result['body_frame'])
+    from .robot_self_filter import settings_from_session
+    result['entity_filter_settings'] = settings_from_session(session)
     return result
 
 
@@ -182,8 +218,15 @@ def checked_pose(position, orientation):
     return Pose3(tuple(p), tuple(q))
 
 
-def decode_rays(*, data, fields, point_step, row_step, width, height, bigendian,
-                header_ns, frame_id, expected_frame, max_points=MAX_ACQUISITION_POINTS):
+def decode_ray_envelope(*, data, fields, point_step, row_step, width, height, bigendian,
+                        header_ns, frame_id, expected_frame, max_points=MAX_ACQUISITION_POINTS):
+    """Bounded zero-copy queue admission, NOT valid obstacle/free evidence.
+
+    This checks the wire layout, source identity and complete acquisition span.
+    The worker must validate_ray_samples before projecting/publishing anything.
+    Keeping the full field scans off the ROS callback lets pose/identity updates
+    remain responsive while obsolete pending observations are overwritten.
+    """
     if type(max_points) is not int or not 1 <= max_points <= MAX_ACQUISITION_POINTS:
         raise ProjectionError('invalid_acquisition_point_budget')
     if (type(header_ns) is not int or not 0 < header_ns < 2**63
@@ -193,20 +236,33 @@ def decode_rays(*, data, fields, point_step, row_step, width, height, bigendian,
             or len(fields) != len(FIELDS) or set(fields) != set(FIELDS)):
         raise ProjectionError('invalid_raw_ray_schema_or_frame')
     points = np.frombuffer(data, dtype=RAY_DTYPE, count=width)
+    sensor = int(points['sensor_id'][0])
+    if sensor not in (0, 1) or np.any(points['sensor_id'] != sensor):
+        raise ProjectionError('mixed_or_invalid_sensor_identity')
+    offsets = points['offset_time']
+    minimum, maximum = int(offsets.min()), int(offsets.max())
+    if minimum != 0 or maximum > 150000000:
+        raise ProjectionError('inconsistent_ray_timestamps')
+    return RawRays(points, header_ns, header_ns+maximum, sensor)
+
+
+def validate_ray_samples(raw):
+    """Complete original sample checks; failures never become clearing rays."""
+    points, header_ns, sensor = raw.points, raw.start_ns, raw.sensor_id
     # Do not reinterpret invalid endpoints/times as max-range clearing rays.
     for name in ('x', 'y', 'z', 'origin_x', 'origin_y', 'origin_z',
                  'timestamp', 'source_timestamp', 'raw_timestamp'):
         if not np.isfinite(points[name]).all():
             raise ProjectionError('nonfinite_raw_ray')
-    sensor = int(points['sensor_id'][0])
     if sensor not in (0, 1) or np.any(points['sensor_id'] != sensor):
         raise ProjectionError('mixed_or_invalid_sensor_identity')
-    if len(points) > 1 and np.any(np.diff(points['source_index'].astype(np.int64)) <= 0):
+    if len(points) > 1 and np.any(points['source_index'][1:] <= points['source_index'][:-1]):
         raise ProjectionError('nonmonotonic_source_indices')
     offsets = points['offset_time'].astype(np.int64)
     source = points['source_timestamp']
     mapped = points['timestamp']
     if (int(offsets.min()) != 0 or int(offsets.max()) > 150000000
+            or raw.end_ns != header_ns+int(offsets.max())
             or np.min(mapped) <= 0 or np.max(mapped) >= 2147483647.
             or np.max(np.abs((mapped - source) - (mapped[0] - source[0]))) > 1e-6
             or np.max(np.abs((source - np.min(source)) * 1e9 - offsets)) > 1000.
@@ -216,13 +272,37 @@ def decode_rays(*, data, fields, point_step, row_step, width, height, bigendian,
     for name in ('origin_x', 'origin_y', 'origin_z'):
         if np.max(np.abs(points[name] - points[name][0])) > 1e-6:
             raise ProjectionError('raw_origin_not_fixed_extrinsic')
-    return RawRays(points, header_ns, header_ns + int(offsets.max()), sensor)
+    return raw
+
+
+def decode_rays(**arguments):
+    """Complete synchronous decoding for pure/offline callers."""
+    return validate_ray_samples(decode_ray_envelope(**arguments))
+
+
+def project_validated_rays(snapshot, raw, context, *, now_ns, authorized_pose_ns):
+    """Worker-only validation + geometry, with no live histories or ROS calls."""
+    return snapshot.project(validate_ray_samples(raw), context,
+                            now_ns=now_ns, authorized_pose_ns=authorized_pose_ns)
 
 
 def rotate_many(quaternions, vectors):
     """Unit quaternion rotation, vectorized without allocating N 3x3 matrices."""
     q = np.asarray(quaternions, dtype=float)
     vectors = np.asarray(vectors, dtype=float)
+    if q.shape == (4,):
+        # Fixed extrinsics rotate every beam by the same quaternion. Keep the
+        # exact cross-product arithmetic/order, but avoid two N x 3 cross
+        # products (and their internal moveaxis/copy temporaries).
+        x, y, z = (vectors[..., axis] for axis in range(3))
+        tx = 2. * (q[1]*z-q[2]*y)
+        ty = 2. * (q[2]*x-q[0]*z)
+        tz = 2. * (q[0]*y-q[1]*x)
+        output = np.empty_like(vectors)
+        output[..., 0] = (x+q[3]*tx)+(q[1]*tz-q[2]*ty)
+        output[..., 1] = (y+q[3]*ty)+(q[2]*tx-q[0]*tz)
+        output[..., 2] = (z+q[3]*tz)+(q[0]*ty-q[1]*tx)
+        return output
     t = 2. * np.cross(q[..., :3], vectors)
     return vectors + q[..., 3:4] * t + np.cross(q[..., :3], t)
 
@@ -260,7 +340,7 @@ def acquisition_groups(offsets):
     return np.unique(offsets, return_inverse=True)
 
 
-def transform_indexed_endpoints(matrices, indices, points):
+def transform_indexed_endpoints(matrices, indices, points, translations=None):
     """Same three-term dot products without an N x 3 x 3 matrix expansion."""
     output = np.empty((len(points), 3), dtype=float)
     scratch = np.empty(len(points), dtype=float)
@@ -270,6 +350,9 @@ def transform_indexed_endpoints(matrices, indices, points):
         for column, name in ((1, 'y'), (2, 'z')):
             np.take(matrices[:, axis, column], indices, out=scratch)
             np.multiply(scratch, points[name], out=scratch)
+            np.add(output[:, axis], scratch, out=output[:, axis])
+        if translations is not None:
+            np.take(translations[:, axis], indices, out=scratch)
             np.add(output[:, axis], scratch, out=output[:, axis])
     return output
 
@@ -291,7 +374,9 @@ def interpolate_many(history, times_ns, max_gap_ns):
     lo = np.where(exact, hi, np.maximum(0, hi - 1))
     gaps = stamps[hi] - stamps[lo]
     if np.any(gaps > max_gap_ns):
-        raise ProjectionError('local_pose_bracketing_gap')
+        index = int(np.argmax(gaps))
+        raise PoseCoverageGap(stamps[lo[index]], stamps[hi[index]],
+                              times_ns[index], max_gap_ns)
     alpha = np.divide(times_ns - stamps[lo], gaps, out=np.zeros(len(times_ns)), where=gaps > 0)
     positions = np.asarray([pose.position for _, pose in history], dtype=float)
     quaternions = np.asarray([pose.orientation for _, pose in history], dtype=float)
@@ -312,12 +397,14 @@ def interpolate_many(history, times_ns, max_gap_ns):
 
 
 class RayProjectorCore:
-    def __init__(self, limits=Limits(), preview_exclusion=None, *, projection_frame='map'):
+    def __init__(self, limits=Limits(), preview_exclusion=None, *, projection_frame='map',
+                 entity_filter=None, joint_poses=None):
         if projection_frame not in ('map', 'odom'):
             raise ValueError('projection_frame must explicitly be map or odom')
         self.limits = limits
         self.projection_frame = projection_frame
         self.preview_exclusion = preview_exclusion
+        self.entity_filter, self.joint_poses = entity_filter, joint_poses
         self.context = None
         self.local = deque(maxlen=limits.max_history_samples)
         self.global_pending = {}
@@ -360,7 +447,8 @@ class RayProjectorCore:
     def projection_snapshot(self):
         """Small immutable-value history copy; geometry may run off the ROS thread."""
         snapshot = RayProjectorCore(self.limits, self.preview_exclusion,
-                                    projection_frame=self.projection_frame)
+                                    projection_frame=self.projection_frame,
+                                    entity_filter=self.entity_filter, joint_poses=self.joint_poses)
         snapshot.context = self.context
         snapshot.local = deque(self.local, maxlen=self.limits.max_history_samples)
         snapshot.alignments = deque(self.alignments, maxlen=self.limits.max_history_samples)
@@ -378,7 +466,9 @@ class RayProjectorCore:
                 or projected.projection_frame != self.projection_frame
                 or projected.start_ns <= self.last_input[projected.sensor_id]
                 or projected.exclusion_digest != (self.preview_exclusion.digest
-                                                  if self.preview_exclusion else '')):
+                                                  if self.preview_exclusion else '')
+                or projected.entity_filter_digest != (self.entity_filter.digest
+                                                  if self.entity_filter else '')):
             raise ProjectionError('projection_context_changed_or_already_committed')
         self.sequence += 1
         self.last_input[projected.sensor_id] = projected.start_ns
@@ -494,8 +584,7 @@ class RayProjectorCore:
         tracking_origin = (np.einsum('nij,j->ni', local_rotation,
                                     np.asarray(self.ray_to_tracking.position)) + translation)
         translations = tracking_origin @ map_rotation.T + np.asarray(correction.position)
-        world_endpoints = transform_indexed_endpoints(matrices, time_index, points)
-        world_endpoints += translations[time_index]
+        world_endpoints = transform_indexed_endpoints(matrices, time_index, points, translations)
         # Origins are identical for beams acquired at the exact same instant.
         # Keep that exact-time table compact until writing each wire field.
         world_origins = np.einsum('nij,j->ni', matrices, origin) + translations
@@ -503,30 +592,60 @@ class RayProjectorCore:
         # acquisition times. Never shorten the scan's temporal admission window.
         exclusion = self.preview_exclusion
         matched = np.zeros(len(points), dtype=bool)
-        if exclusion is not None:
+        entity_report = None
+        entity_dropped = np.zeros(len(points), dtype=bool)
+        if exclusion is not None or self.entity_filter is not None:
             body_from_ray = compose(self.body_to_tracking, self.ray_to_tracking)
             endpoints = np.column_stack([points[name] for name in ('x', 'y', 'z')])
-            matched = exclusion.matches(transform_many(body_from_ray, endpoints), raw.sensor_id)
+            endpoints_body = transform_many(body_from_ray, endpoints)
+            if exclusion is not None:
+                matched = exclusion.matches(endpoints_body, raw.sensor_id)
+            if self.entity_filter is not None:
+                origin_body = transform_many(body_from_ray, origin.reshape(1, 3))[0]
+                result = self.entity_filter.classify(endpoints_body, origin_body,
+                    raw.start_ns+points['offset_time'].astype(np.int64),
+                    sensor_id=raw.sensor_id, poses=self.joint_poses if
+                    self.joint_poses is not None and self.joint_poses.identity == context else None)
+                entity_dropped, entity_report = result.mask, result.report
         dropped = matched if exclusion is not None and exclusion.mode == 'preview_drop_rays' else np.zeros(len(points), dtype=bool)
         if dropped.all():
-            # No observation => no sequence/last-input update or source lease.
+            # Preview exclusion still removes whole rays and grants no source
+            # lease. It must not acquire the entity filter's prefix semantics.
             raise PreviewExcludedScan(len(points), exclusion.digest)
-        # Structured ndarray.copy performs a separate strided copy per field.
-        # The decoded wire buffer is contiguous: one byte copy preserves every
-        # acquisition field exactly and owns its memory independently of input.
-        output = (points.view(np.uint8).copy().view(RAY_DTYPE)
-                  if points.flags.c_contiguous else points.copy())
+        # Validate ALL original rays before applying the existing entity mask.
+        # Packing directly into the final ROS array avoids copying the complete
+        # projected frame again on the pose/status callback thread. Selection
+        # changes storage only: all-ray temporal coverage and masks are above.
+        keep = ~dropped if np.any(dropped) else None
+        selected = points if keep is None else points[keep]
+        censored = entity_dropped if keep is None else entity_dropped[keep]
+        if np.any(censored):
+            # A classified self hit suppresses ONLY its occupied endpoint.
+            # Its measured segment before that endpoint remains observed free;
+            # the endpoint voxel itself is neither cleared nor marked occupied.
+            # No endpoint extension/model replacement is performed here.
+            wire_data = array('B', [0]) * (len(selected)*68)
+            output = np.frombuffer(wire_data, dtype=PROJECTED_CENSORED_DTYPE)
+            output.view(np.uint8).reshape(-1, 68)[:, :64] = np.ascontiguousarray(
+                selected).view(np.uint8).reshape(-1, 64)
+            output['ray_kind'] = np.where(censored, SELF_CENSORED, MEASURED_HIT)
+        else:
+            wire_data = array('B')
+            wire_data.frombytes(memoryview(np.ascontiguousarray(selected)).cast('B'))
+            output = np.frombuffer(wire_data, dtype=RAY_DTYPE)
         for world, names, indices in ((world_endpoints, ('x', 'y', 'z'), None),
                 (world_origins, ('origin_x', 'origin_y', 'origin_z'), time_index)):
             if not np.isfinite(world).all() or np.max(np.abs(world)) > 1e6:
                 raise ProjectionError('invalid_projected_geometry')
             for axis, name in enumerate(names):
-                output[name] = world[:, axis] if indices is None else world[indices, axis]
-        if np.any(dropped):
-            output = output[~dropped]
+                values = world[:, axis] if indices is None else world[indices, axis]
+                output[name] = values if keep is None else values[keep]
         self.sequence += 1
         self.last_input[raw.sensor_id] = raw.start_ns
         return Projected(output, raw.start_ns, raw.end_ns, alignment_ns,
                          raw.sensor_id, context, self.sequence,
-                         exclusion.digest if exclusion else '', int(matched.sum()), int(dropped.sum()),
-                         self.projection_frame)
+                         exclusion.digest if exclusion else '', int(matched.sum()),
+                         int(matched.sum()) if exclusion is not None and exclusion.mode == 'preview_drop_rays' else 0,
+                         self.projection_frame,
+                         self.entity_filter.digest if self.entity_filter else '', entity_report,
+                         wire_data)

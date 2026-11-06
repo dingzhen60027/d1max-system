@@ -15,6 +15,8 @@ import time
 
 import numpy as np
 
+from .registration_gravity import gravity_error, validate_registration_gravity
+
 
 @dataclass(frozen=True)
 class RegistrationConfig:
@@ -41,6 +43,7 @@ class RegistrationConfig:
     ambiguity_margin: float = .06
     distinct_position_m: float = 1.
     distinct_rotation_rad: float = .25
+    gravity_max_error_rad: float = math.radians(30.)
     search_timeout_s: float = 25.
     index_timeout_s: float = 120.
     threads: int = 2
@@ -61,6 +64,7 @@ class RegistrationConfig:
                 and self.stride_z_m <= self.tile_z_m / 2
                 and .4 <= self.min_inlier_ratio <= 1 and self.max_rmse_m <= .3
                 and self.ambiguity_margin <= .3 and self.search_timeout_s <= 60
+                and self.gravity_max_error_rad <= math.radians(45.)
                 and self.index_timeout_s <= 180 and self.threads <= 4
                 and self.max_index_points <= 2000000 and self.max_map_points <= 500000
                 and self.max_tiles <= 512 and self.candidates <= 16 and self.hypotheses_per_tile <= 4):
@@ -102,12 +106,42 @@ def normalized(features):
     return features / np.maximum(np.linalg.norm(features, axis=1, keepdims=True), 1.e-12)
 
 
-def select_candidate(candidates, config):
-    """Merge the same place, but never merge different floors or orientations."""
+def select_candidate(candidates, config, gravity=None, *, geometry_only=False):
+    """Gravity feasibility precedes ranking/ambiguity; never flatten terrain.
+
+    Explicit geometry_only is an offline diagnostic of the old ranking, NOT
+    an initialization-eligible result. No missing-evidence +Z fallback exists.
+    """
+    if geometry_only:
+        context = None
+    else:
+        try:
+            context = validate_registration_gravity(gravity)
+        except ValueError as error:
+            return dict(accepted=False, reason=str(error), candidates=[],
+                        initialization_eligible=False)
+    diagnostics = dict(mode='geometry_only_not_initialization_eligible' if geometry_only else 'query_map_gravity',
+        max_error_rad=config.gravity_max_error_rad, input_count=len(candidates), rejected_count=0,
+        rejected_candidates=[], raw_top_candidates=[])
+    if context is not None:
+        diagnostics['contract'] = context
     clusters = []
-    for item in sorted(candidates, key=lambda v: v['score'], reverse=True):
+    for rank, original in enumerate(sorted(candidates, key=lambda v: v['score'], reverse=True), 1):
+        item = dict(original, raw_rank=rank)
         transform = np.asarray(item['transform'])
-        if not (transform.shape == (4, 4) and np.isfinite(transform).all()):
+        if not (transform.shape == (4, 4) and np.isfinite(transform).all()
+                and np.allclose(transform[3], (0, 0, 0, 1), atol=1.e-6)
+                and np.allclose(transform[:3, :3].T @ transform[:3, :3], np.eye(3), atol=1.e-5)
+                and np.isclose(np.linalg.det(transform[:3, :3]), 1., atol=1.e-5)):
+            continue
+        if context is not None:
+            item['gravity_error_rad'] = gravity_error(transform, context)
+        if rank <= 16:
+            diagnostics['raw_top_candidates'].append(item)
+        if context is not None and item['gravity_error_rad'] > config.gravity_max_error_rad:
+            diagnostics['rejected_count'] += 1
+            if len(diagnostics['rejected_candidates']) < 16:
+                diagnostics['rejected_candidates'].append(dict(item, rejection_reason='gravity_inconsistent'))
             continue
         duplicate = False
         for old in clusters:
@@ -119,8 +153,11 @@ def select_candidate(candidates, config):
                 break
         if not duplicate:
             clusters.append(item)
-    result = dict(accepted=False, reason='no_geometric_match', candidates=clusters[:16])
+    result = dict(accepted=False, reason='no_geometric_match', candidates=clusters[:16],
+                  gravity_filter=diagnostics, initialization_eligible=not geometry_only)
     if not clusters:
+        if diagnostics['rejected_count']:
+            result['reason'] = 'all_candidates_gravity_inconsistent'
         return result
     best = clusters[0]
     if (best['inlier_ratio'] < config.min_inlier_ratio or best['rmse_m'] > config.max_rmse_m
@@ -132,7 +169,10 @@ def select_candidate(candidates, config):
     if gap is not None and gap < config.ambiguity_margin:
         result['reason'] = 'ambiguous_place_or_floor'
         return result
-    result.update(accepted=True, reason='coarse_candidate_requires_confirmation', candidate=best)
+    if geometry_only:
+        result.update(reason='geometry_only_not_initialization_eligible', candidate=best)
+    else:
+        result.update(accepted=True, reason='coarse_candidate_requires_confirmation', candidate=best)
     return result
 
 
@@ -224,7 +264,13 @@ class GlobalMapIndex:
         self.centers = np.asarray(centers)
         self.offsets = np.asarray(offsets, dtype=np.int64)
 
-    def search(self, points, request_id='offline'):
+    def search(self, points, request_id='offline', gravity=None, *, geometry_only=False):
+        if not geometry_only:
+            try:
+                gravity = validate_registration_gravity(gravity, self.map_sha256)
+            except ValueError as error:
+                return dict(accepted=False, reason=str(error), request_id=request_id,
+                            initialization_eligible=False)
         import open3d as o3d
         from scipy.spatial.distance import cdist
         started = time.monotonic()
@@ -312,7 +358,7 @@ class GlobalMapIndex:
                 proposals.append(dict(tile=tile, trial=trial, transform=transform.tolist(),
                     inlier_ratio=ratio, rmse_m=rmse, information_ratio=information,
                     score=ratio * math.exp(-rmse / .2)))
-        result = select_candidate(proposals, c)
+        result = select_candidate(proposals, c, gravity, geometry_only=geometry_only)
         result.update(request_id=request_id, map_sha256=self.map_sha256, config_sha256=self.config_sha256,
             elapsed_s=time.monotonic() - started, evaluated_tiles=shortlist, indexed_tiles=len(self.centers),
             retrieval_is_heuristic=True, global_uniqueness_proven=False,
