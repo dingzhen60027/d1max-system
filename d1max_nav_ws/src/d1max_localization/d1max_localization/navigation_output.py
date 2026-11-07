@@ -161,7 +161,12 @@ class NavigationOutput(Node):
             value = json.loads(message.data)
             old_epoch = self.core.epoch
             old_sequence = self.core.local_sequence
-            if not self.core.push_local(value, self.now_s()):
+            old_transition = self.core.local_transition_sequence
+            accepted = self.core.push_local(value, self.now_s())
+            if self.core.local_transition_sequence != old_transition:
+                self.get_logger().info("LocalStateTransition " + json.dumps(
+                    self.core.local_transition, allow_nan=False))
+            if not accepted:
                 return
             self.predictor_status = {
                 k: value.get(k)
@@ -560,6 +565,8 @@ class NavigationOutput(Node):
                 'local_source_unavailable'),
             "prediction_reason": self.predictor_status.get("reason"),
             "source_timing": self.core.local_timing(now),
+            "local_transition": self.core.local_transition,
+            "local_rejected_samples": self.core.local_rejected_samples,
         }, allow_nan=False))
         self.last_local_unavailable=token
 
@@ -642,6 +649,11 @@ class NavigationOutput(Node):
             "output_resume_count": self.core.output_resume_count,
             "prediction": self.predictor_status,
             "local_source_timing": self.core.local_timing(now),
+            "local_admission": {
+                "rejected_samples": self.core.local_rejected_samples,
+                "pending_reason": self.core.local_rejection_reason,
+                "last_transition": self.core.local_transition,
+            },
             "correction_smoothing": {
                 "local_translation_residual_m": self.core.local_residual[0],
                 "local_rotation_residual_rad": self.core.local_residual[1],

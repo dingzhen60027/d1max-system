@@ -3,7 +3,7 @@
   "entry_module": "d1max_pct_scan.single_floor_session",
   "entrypoint": "tools/navigation_entry.sh",
   "release_directory": "experiments/navigation_runtime",
-  "release_manifest_sha256": "5268861d5f8cc148ba1af6f2b8d9ce11145a3a5630affb6afd519c84e50a9cec",
+  "release_manifest_sha256": "d6d83a62846b2c7385f9fbacdcb68069e94a2768471505b7b1cac357f305946e",
   "motion_purpose": "execution",
   "preview_purpose": "planning_only",
   "transport": "rmw_zenoh_cpp",

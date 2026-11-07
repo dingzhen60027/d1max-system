@@ -41,6 +41,7 @@
 - /sdk_bridge_ws/src/d1max_sdk_bridge/vendor/
 - /urdf_ws/
 - /symlink_install_manifest.txt
+- /src/d1max_pct_planner/test/fixtures/corridor_clipped_anchor_20261015.npz
 - /diagnostics/*runtime*.json
 # Keep reproducible experiment source/notes, not recordings, temporary runs,
 # duplicated upstream checkouts, generated reports or installed workspaces.

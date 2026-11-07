@@ -49,6 +49,8 @@
 **/Log/*
 !**/Log/.gitkeep
 d1max_nav_ws/symlink_install_manifest.txt
+# Measured map crop supplied locally for the corridor regression.
+d1max_nav_ws/src/d1max_pct_planner/test/fixtures/corridor_clipped_anchor_20261015.npz
 d1max_nav_ws/experiments/legbot_source_audit_20260924/
 d1max_nav_ws/experiments/**/ws/
 d1max_nav_ws/experiments/**/runs/

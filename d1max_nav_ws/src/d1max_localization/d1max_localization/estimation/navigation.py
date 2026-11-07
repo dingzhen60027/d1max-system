@@ -107,6 +107,37 @@ class NavigationState:
         self.alignment_barrier = 0.0
         self.local_residual = self.map_residual = (0.0, 0.0)
         self.output_resume_count = 0
+        self.local_transition = {}
+        self.local_transition_sequence = 0
+        self.local_rejected_samples = 0
+        self.local_rejection_reason = ""
+
+    def record_local_transition(self, previous, measured, now, reason, accepted):
+        """Bounded admission evidence, never a measurement or renewed lease."""
+        if not accepted:
+            self.local_rejected_samples += 1
+            self.local_rejection_reason = reason
+        prior = self.local_transition
+        if (not accepted and prior and prior["reason"] == reason
+                and not prior["accepted"] and 0 <= now-prior["at_unix"] < 1.0):
+            return
+        self.local_transition_sequence += 1
+        delta = pose_innovation(measured.pose, previous.pose)
+        self.local_transition = dict(
+            sequence=self.local_transition_sequence, at_unix=now, reason=reason,
+            accepted=accepted, rejected_samples=self.local_rejected_samples,
+            previous_target_ns=round(previous.stamp*1e9),
+            target_ns=round(measured.stamp*1e9), dt_sec=measured.stamp-previous.stamp,
+            previous_posterior_ns=round(previous.source_stamp*1e9),
+            posterior_ns=round(measured.source_stamp*1e9),
+            imu_ns=round(measured.imu_stamp*1e9),
+            posterior_changed=measured.source_stamp > previous.source_stamp,
+            previous_position=list(previous.pose.position), position=list(measured.pose.position),
+            previous_orientation=list(previous.pose.orientation), orientation=list(measured.pose.orientation),
+            translation_m=math.hypot(delta.translation_xy, delta.translation_z),
+            rotation_rad=delta.rotation,
+            world_velocity=list(measured.world_velocity),
+        )
 
     def push_local(self, value, now):
         epoch, valid = epoch_header(value, now, self.limits.local_timeout)
@@ -173,6 +204,9 @@ class NavigationState:
             self.alignment_target = None
             self.alignment_barrier = 0.0
             self.local_residual = self.map_residual = (0.0, 0.0)
+            self.local_transition = {}
+            self.local_rejection_reason = ""
+        previous_local_valid = self.local_valid
         # No new estimate is possible while waiting for the next real IMU or
         # scan-end posterior. These non-fault statuses do not revoke a previous
         # real sample; local_ready still checks its ORIGINAL target and IMU TTL.
@@ -198,25 +232,31 @@ class NavigationState:
         if state:
             if self.fault:
                 return False
+            raw = state
+            previous = self.raw_local
+            replacement = bool(previous and state.source_stamp > previous.source_stamp)
+            raw_jump = False
             if self.raw_local is not None:
-                previous = self.raw_local
                 dt = state.stamp - previous.stamp
                 delta = pose_innovation(state.pose, previous.pose)
-                if (
+                raw_jump = (
                     math.hypot(delta.translation_xy, delta.translation_z)
                     > 0.03 + self.limits.max_speed * dt
                     or delta.rotation > 0.03 + self.limits.max_angular_rate * dt
-                ):
-                    self.fault = "local_pose_jump"
-                    self.local_valid = False
-                    self.last_output_key = None
+                )
+                if raw_jump and not replacement:
+                    # Same-posterior propagation must describe actual motion.
+                    # Reject this sample without latching a frame-reset fault:
+                    # the last accepted source still expires on its own clock.
+                    self.local_valid = previous_local_valid
+                    self.record_local_transition(previous, raw, now, "local_pose_jump", False)
                     return False
-            raw = state
             if self.local:
                 try:
                     if state.stamp-self.local[-1].stamp > self.limits.max_prediction_horizon:
                         state, self.local_residual = resume_local(
-                            self.local[-1], self.raw_local, state, self.limits)
+                            self.local[-1], self.raw_local, state, self.limits,
+                            rejected_transition=bool(self.local_rejection_reason))
                         self.output_resume_count += 1
                         # resume_local preserves the same odom coordinates
                         # using a new measured LIO endpoint; do not require
@@ -225,10 +265,18 @@ class NavigationState:
                     else:
                         state, self.local_residual = continuous_local(self.local[-1], state, self.limits)
                 except ValueError as error:
-                    self.fault = str(error)
-                    self.local_valid = False
-                    self.last_output_key = None
+                    # A new LIO posterior may correct a prediction over its
+                    # whole scan interval. It is not motion during this one
+                    # 20-ms delivery interval. The existing continuity bounds
+                    # decide admission, with no stair-specific wider limits.
+                    # An outlier is unavailable input, not proof of a reset.
+                    self.local_valid = previous_local_valid
+                    self.record_local_transition(previous, raw, now, str(error), False)
                     return False
+            if raw_jump or self.local_rejection_reason:
+                self.record_local_transition(previous, raw, now,
+                    "posterior_correction_admitted" if raw_jump else "local_input_resumed", True)
+            self.local_rejection_reason = ""
             self.raw_local = raw
             self.raw_history.append(raw)
             self.local.append(state)

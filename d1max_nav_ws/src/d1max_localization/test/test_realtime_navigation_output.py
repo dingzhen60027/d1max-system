@@ -48,6 +48,81 @@ def test_same_realtime_policy_does_not_enlarge_imu_or_rotation_deadlines():
     assert other.evaluate(100.05) is None and other.reason=='coast_rotation'
 
 
+def test_real_predictor_delayed_landing_posterior_keeps_same_navigation_epoch():
+    predictor = CausalInertialPredictor(PredictionLimits(max_horizon=.35))
+    nav = NavigationState(replace(NavigationLimits(), max_prediction_horizon=.35))
+    assert predictor.accept(snapshot(100.), 100.)
+    for i in range(43):
+        stamp = 99.995+i*.005
+        assert predictor.push_imu(stamp, (0., 0., 9.81), (0., 0., 0.), stamp)
+    before = predictor.evaluate(100.18)
+    assert nav.push_local(prediction_envelope(predictor, before, 100.18, 1), 100.18)
+    # A delayed scan corrects the vertical prediction by one 18-cm tread.
+    # It corrects a 100-ms posterior interval; receipt is only 20 ms later.
+    landed = snapshot(100.10)
+    landed['received_at_unix'] = 100.20
+    landed['position'][2] = -.18
+    assert predictor.accept(landed, 100.20)
+    state = predictor.evaluate(100.20)
+    assert state is not None
+    assert nav.push_local(prediction_envelope(predictor, state, 100.20, 2), 100.20)
+    assert nav.epoch == 1 and not nav.fault and nav.local_ready(100.20)
+    assert nav.raw_local.pose.position[2] == pytest.approx(-.18)
+    assert nav.local[-1].source_stamp == pytest.approx(100.10)
+    assert nav.local[-1].imu_stamp <= nav.local[-1].stamp
+    assert nav.local_transition['translation_m'] == pytest.approx(.18)
+    assert nav.local_transition['reason'] == 'posterior_correction_admitted'
+
+
+@pytest.mark.parametrize('direction', [-1., 0., 1.])
+def test_real_imu_step_motion_and_delayed_scans_preserve_fifty_hz_output(direction):
+    import math
+    from d1max_localization.math_utils import rotate_vector, quaternion_conjugate
+    from d1max_localization.estimation.prediction import rotation_step
+
+    predictor = CausalInertialPredictor(PredictionLimits(max_horizon=.35))
+    nav = NavigationState(replace(NavigationLimits(), max_prediction_horizon=.35))
+
+    def physical(t):
+        s = min(1., max(0., (t-100.3)/.4))
+        h = 10*s**3-15*s**4+6*s**5
+        dz = direction*.18*(30*s**2-60*s**3+30*s**4)/.4
+        ddz = direction*.18*(60*s-180*s**2+120*s**3)/.4**2
+        pitch = direction*.20*math.sin(math.pi*s)
+        omega = direction*.20*math.pi*math.cos(math.pi*s)/.4 if 0 < s < 1 else 0.
+        return (.3*(t-100.), 0., direction*.18*h), (.3, 0., dz), ddz, pitch, omega
+
+    imu_index = 0
+    posterior_stamp = None
+    for tick in range(76):
+        now = 100.+tick*.02
+        while 99.895+imu_index*.005 <= now+1e-9:
+            stamp = 99.895+imu_index*.005
+            _, _, acc_z, pitch, omega = physical(stamp)
+            orientation = rotation_step((0., 1., 0.), pitch)
+            acc = rotate_vector(quaternion_conjugate(orientation), (0., 0., 9.81+acc_z))
+            assert predictor.push_imu(stamp, acc, (0., omega, 0.), now)
+            imu_index += 1
+        anchor = 99.9+(tick//5)*.1
+        if anchor != posterior_stamp and tick not in (20, 21, 22, 23, 24):
+            point, velocity, _, pitch, _ = physical(anchor)
+            posterior = snapshot(anchor)
+            posterior.update(received_at_unix=now, position=point,
+                             orientation=rotation_step((0., 1., 0.), pitch))
+            posterior['inertial']['world_velocity'] = list(velocity)
+            assert predictor.accept(posterior, now)
+            posterior_stamp = anchor
+        state = predictor.evaluate(now)
+        assert state is not None, (now, predictor.reason)
+        assert nav.push_local(prediction_envelope(predictor, state, now, tick+1), now)
+        assert nav.local_ready(now) and not nav.fault and nav.epoch == 1
+        expected, _, _, _, _ = physical(now)
+        assert max(abs(a-b) for a, b in zip(state.pose.position, expected)) < .002
+        assert nav.local[-1].stamp == pytest.approx(now)
+        assert nav.local[-1].source_stamp == state.source_stamp
+    assert nav.local_sequence == 76 and nav.local_rejected_samples == 0
+
+
 def test_unavailable_timer_envelope_never_fabricates_pose_or_source_time():
     predictor=CausalInertialPredictor()
     assert predictor.accept(snapshot(100.),100.)

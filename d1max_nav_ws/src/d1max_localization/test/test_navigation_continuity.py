@@ -61,6 +61,72 @@ def test_smoothing_never_hides_divergence_or_reanchors_long_outage():
         continuous_local(motion(10., 0.), motion(11., 1.5), limits)
 
 
+@pytest.mark.parametrize('height', [-.18, .18])
+def test_scan_posterior_height_correction_is_not_a_twenty_ms_robot_jump(height):
+    nav = locked()
+    key = nav.key()
+    before = nav.local[-1]
+    value = local(10.22)
+    value.update(position=[0., 0., height], source_stamp_ns=str(round(10.20*1e9)))
+    assert nav.push_local(value, 10.22)
+    assert nav.local_ready(10.22) and not nav.fault and nav.key() == key
+    assert nav.raw_local.pose.position[2] == height
+    assert abs(nav.local[-1].pose.position[2]-before.pose.position[2]) <= .003+1e-9
+    event = nav.local_transition
+    assert event['accepted'] and event['reason'] == 'posterior_correction_admitted'
+    assert event['translation_m'] == pytest.approx(.18)
+    assert event['dt_sec'] == pytest.approx(.02)
+    assert event['posterior_changed']
+    assert event['previous_position'] == list(before.pose.position)
+    # Subsequent real predictions of that same posterior remain admissible;
+    # correction never becomes physical vertical velocity or a new source.
+    for i in range(1, 8):
+        now = 10.22+i*.02
+        value.update(stamp_ns=str(round(now*1e9)), imu_stamp_ns=str(round(now*1e9)),
+                     received_at_unix=now)
+        assert nav.push_local(value, now)
+        assert nav.local_ready(now) and nav.raw_local.source_stamp == pytest.approx(10.20)
+        assert nav.local[-1].world_velocity == (0., 0., 0.)
+
+
+def test_single_prediction_outlier_can_recover_without_hard_lost_event():
+    nav = locked()
+    previous, key, sequence = nav.raw_local, nav.key(), nav.local_sequence
+    bad = local(10.22, x=1.)
+    bad['source_stamp_ns'] = str(round(previous.source_stamp*1e9))
+    assert not nav.push_local(bad, 10.22)
+    assert not nav.fault and nav.raw_local == previous
+    assert nav.local_sequence == sequence and nav.key() == key
+    assert nav.local_rejection_reason == 'local_pose_jump'
+    assert nav.push_local(local(10.24), 10.24)
+    assert nav.local_ready(10.24) and not nav.local_rejection_reason
+    assert nav.local_transition['reason'] == 'local_input_resumed'
+    assert not nav.fault and nav.key() == key
+
+
+def test_persistent_discontinuity_expires_old_input_and_cannot_adopt_a_new_frame():
+    nav = locked()
+    previous, sequence, key = nav.raw_local, nav.local_sequence, nav.key()
+    for i in range(1, 61):
+        now = 10.20+i*.02
+        assert not nav.push_local(local(now, x=1.), now)
+    assert nav.raw_local == previous and nav.local_sequence == sequence
+    assert not nav.local_ready(now) and nav.key() == key and not nav.fault
+    assert nav.local_rejected_samples == 60
+    assert nav.local_transition_sequence <= 3  # bounded logging, no 50-Hz flood
+    # Recovery uses a new genuine, consistent sample, not a repeated pose or
+    # clearing the fault with a heartbeat. A real upstream reset is still hard.
+    assert nav.push_local(local(now+.02), now+.02)
+    assert nav.local_ready(now+.02) and nav.output_resume_count == 1
+    fault = dict(schema=1, epoch=1, valid=False, fault=True,
+                 received_at_unix=now+.04, reason='nonfinite_filter_state')
+    assert nav.push_local(fault, now+.04)
+    assert nav.fault == 'nonfinite_filter_state' and not nav.local_ready(now+.04)
+    assert not nav.push_local(local(now+.06), now+.06)
+    assert nav.push_local(local(now+.08, epoch=2), now+.08)
+    assert not nav.fault and nav.map_contract is None
+
+
 def test_global_correction_has_rate_bound_and_residual_covariance():
     core = locked()
     first = core.output(10.2)

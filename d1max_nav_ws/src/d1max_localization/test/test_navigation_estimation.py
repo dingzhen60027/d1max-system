@@ -409,11 +409,19 @@ def test_unknown_reset_is_not_retried_even_for_new_seed():
     assert core.output(10.21) is None and core.reason == "filter_reset_unknown"
 
 
-def test_local_and_global_jump_fail_closed():
+def test_unconfirmed_local_jump_rejects_sample_without_resetting_task_identity():
     core = locked()
     assert core.output(10.2)
+    key, source, sequence = core.key(), core.local[-1].stamp, core.local_sequence
     assert not core.push_local(local(10.22, x=1.0), 10.22)
-    assert core.fault == "local_pose_jump" and core.output(10.22) is None
+    assert not core.fault and core.key() == key
+    assert core.local[-1].stamp == source and core.local_sequence == sequence
+    assert core.local_rejection_reason == "local_correction_diverged"
+    assert core.push_local(local(10.24), 10.24)
+    assert not core.local_rejection_reason and core.local[-1].stamp == 10.24
+
+
+def test_global_jump_still_fails_closed():
     core = locked()
     assert core.output(10.2)
     core.push_local(local(10.22), 10.22)

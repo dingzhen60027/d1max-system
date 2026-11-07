@@ -132,6 +132,32 @@ def test_soft_local_expiry_sends_one_watermark_without_suppressing_new_sensor_sa
     assert node.last_local_unavailable is None
 
 
+def test_rejected_prediction_does_not_revoke_old_lease_or_end_task_and_resumes(node):
+    node = local_wire_boundary(node)
+    node.motion_pub = Mock()
+    node.publish_aligned = Mock()
+    assert node.publish_local(node.core.local[-1])
+    original = node.local_state_pub.publish.call_args.args[0]
+    bad = local(10.22, x=1.)
+    node.on_local(String(data=json.dumps(bad)))
+    node.publish_local_unavailable(10.22)
+    assert node.local_state_pub.publish.call_count == 1
+    assert node.last_local_state_lease[2] == round(10.20*1e9)
+    assert not node.core.fault
+    diagnostic = json.loads(node.get_logger().info.call_args.args[0].split(' ', 1)[1])
+    assert diagnostic['position'] == [1., 0., 0.] and not diagnostic['accepted']
+    node.publish_local_unavailable(10.34)
+    event = node.local_state_pub.publish.call_args.args[0]
+    assert not event.usable and event.reason == 'local_navigation_unavailable'
+    assert event.source_stamp != original.source_stamp
+    node.now_s.return_value = 10.36
+    node.on_local(String(data=json.dumps(local(10.36))))
+    message = node.local_state_pub.publish.call_args.args[0]
+    assert message.usable and message.localization_epoch == original.localization_epoch
+    assert message.localization_seed_id == original.localization_seed_id
+    assert node.last_local_unavailable is None and not node.core.fault
+
+
 def test_local_unavailable_diagnostic_distinguishes_target_expiry_from_imu_age_without_new_lease(node):
     node = local_wire_boundary(node)
     node.core.limits = replace(node.core.limits, max_imu_age=.1)

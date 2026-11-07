@@ -1,5 +1,30 @@
 # 发布整理与验证边界 — 2026-10-04
 
+## 2026-11-07 定位连续性同步验证
+
+本次在发布副本运行四份相关定位测试：`test_navigation_estimation.py`、
+`test_navigation_continuity.py`、`test_navigation_output.py`、
+`test_realtime_navigation_output.py`，共 **143 项通过**。
+使用本机 Humble 和已安装的接口类型；测试未创建 ROS 节点或连接 SDK。
+这次没有重新编译整套导航，也没有新的实机运动验收。
+
+复现命令（先加载 ROS 2 和相匹配的生成接口环境，在仓库根目录执行）：
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 \
+PYTHONPATH="$PWD/d1max_nav_ws/src/d1max_localization:${PYTHONPATH:-}" \
+python3 -m pytest -q -p no:cacheprovider \
+  d1max_nav_ws/src/d1max_localization/test/test_navigation_estimation.py \
+  d1max_nav_ws/src/d1max_localization/test/test_navigation_continuity.py \
+  d1max_nav_ws/src/d1max_localization/test/test_navigation_output.py \
+  d1max_nav_ws/src/d1max_localization/test/test_realtime_navigation_output.py
+```
+
+前序同输入对照及默认包验证见
+[修复报告](d1max_nav_ws/docs/reports/LOCAL_POSTERIOR_HANDOFF_20261107.md)。
+其中 `experiments/` 路径指原开发机上的证据目录，不随本次源码同步发布。
+近障碍绕行问题仍为已诊断、待修复，不能用定位单元测试通过代替其现场验证。
+
 ## 2026-11-06 同步的实际工作区验证
 
 生产 GridMap 的同输入离线对照复现了两处清除链缺陷：双雷达观测在重复裁剪时丢失，

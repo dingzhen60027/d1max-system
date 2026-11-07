@@ -43,6 +43,18 @@ def residual_covariance(values, translation, rotation):
     return result
 
 
+def motion_prediction(previous, measured):
+    """Propagate actual twist separately from a posterior's pose correction."""
+    dt = measured.stamp-previous.stamp
+    velocity = tuple((a+b)*.5 for a, b in
+                     zip(previous.world_velocity, measured.world_velocity))
+    angular = tuple((a+b)*.5 for a, b in zip(previous.angular, measured.angular))
+    return Pose3(
+        tuple(p + v*dt for p, v in zip(previous.pose.position, velocity)),
+        quaternion_multiply(previous.pose.orientation, rotation_step(angular, dt)),
+    )
+
+
 def continuous_local(previous, measured, limits):
     """Smooth posterior replacement/catch-up while preserving measured motion.
 
@@ -53,13 +65,7 @@ def continuous_local(previous, measured, limits):
     dt = measured.stamp - previous.stamp
     if not 0 < dt <= limits.max_prediction_horizon + 1e-6:
         raise ValueError("local_continuity_gap")
-    velocity = tuple((a+b)*.5 for a, b in
-                     zip(previous.world_velocity, measured.world_velocity))
-    angular = tuple((a+b)*.5 for a, b in zip(previous.angular, measured.angular))
-    predicted = Pose3(
-        tuple(p + v*dt for p, v in zip(previous.pose.position, velocity)),
-        quaternion_multiply(previous.pose.orientation, rotation_step(angular, dt)),
-    )
+    predicted = motion_prediction(previous, measured)
     distance, angle = residual(predicted, measured.pose)
     if distance > limits.max_local_residual or angle > limits.max_local_angle:
         raise ValueError("local_correction_diverged")
@@ -71,7 +77,7 @@ def continuous_local(previous, measured, limits):
         measured.pose_covariance, distance, angle)), (distance, angle)
 
 
-def resume_local(previous_public, previous_raw, measured, limits):
+def resume_local(previous_public, previous_raw, measured, limits, *, rejected_transition=False):
     """Resume the SAME odometry epoch using its measured endpoint displacement.
 
     The missing interval stays missing: no IMU integration across it, no
@@ -79,6 +85,13 @@ def resume_local(previous_public, previous_raw, measured, limits):
     while applying the actual new LIO displacement. A gap is availability
     loss, not proof that the coordinate frame or estimator has failed.
     """
+    if rejected_transition:
+        # Waiting after an outlier must not eventually admit that same offset
+        # merely because dt grew large. A normal input outage still uses the
+        # existing measured endpoint contract below without this extra branch.
+        distance, angle = residual(motion_prediction(previous_raw, measured), measured.pose)
+        if distance > limits.max_local_residual or angle > limits.max_local_angle:
+            raise ValueError("local_correction_diverged")
     predicted = compose(previous_public.pose,
                         compose(inverse(previous_raw.pose), measured.pose))
     distance, angle = residual(predicted, measured.pose)
