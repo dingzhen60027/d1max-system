@@ -1,4 +1,6 @@
-![D1 Max Navigation](docs/assets/navigation-cover.svg)
+# D1 Max 导航系统
+
+https://github.com/user-attachments/assets/98762b15-f5b5-4052-ac03-6ae482ae10e1
 
 面向 D1 Max 轮足机器人的导航系统，覆盖点云建图、定位、路径规划与运动控制，面向室内外及多楼层场景。
 
